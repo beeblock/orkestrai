@@ -729,6 +729,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Switching only a terminal profile now shows the correct profile confirmation, and the focused terminal view sends that selection to the backend instead of dropping it.',
         'Usage and the Workbench footer now key rows by the unique provider/profile routing id, preventing duplicate-key crashes and showing the profile name for each account.',
         'After restart confirmation, Windows and Linux install the verified update silently and relaunch the app without showing the installer wizard.',
+        'Side panels now stay below the 36px Windows title bar while keeping their bottom edge inside the viewport.',
       ],
     },
     {

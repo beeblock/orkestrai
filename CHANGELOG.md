@@ -44,6 +44,11 @@ pt-BR, English, and Spanish translations.
   confirms the restart, then relaunches the updated app without exposing the
   installer wizard.
 
+- Side panels such as the Attention Center no longer open underneath the
+  Windows title bar's minimize, maximize, and close buttons. They now start
+  below that 36px strip instead of the very top of the window, matching
+  where the rest of the app's content already begins.
+
 ## 0.20.1 - 2026-08-25
 
 ### Fixed

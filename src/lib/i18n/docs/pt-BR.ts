@@ -733,6 +733,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Trocar somente o perfil de um terminal agora mostra a confirmação correta de perfil, e a view focada envia essa seleção ao backend em vez de descartá-la.',
         'Usage e o rodapé do Workbench agora identificam linhas pelo id único de roteamento provider/perfil, evitando erros de chave duplicada e mostrando o nome de cada conta.',
         'Após confirmar a reinicialização, Windows e Linux instalam a atualização verificada em silêncio e reabrem o app sem mostrar o assistente do instalador.',
+        'Painéis laterais agora ficam abaixo da barra de título de 36px do Windows e mantêm a borda inferior dentro da área visível.',
       ],
     },
     {
