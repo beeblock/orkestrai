@@ -48,6 +48,8 @@ pt-BR, English, and Spanish translations.
   Windows title bar's minimize, maximize, and close buttons. They now start
   below that 36px strip instead of the very top of the window, matching
   where the rest of the app's content already begins.
+- The terminal theme submenu now scrolls inside its own height limit instead
+  of overflowing past the bottom of the screen.
 
 ## 0.20.1 - 2026-08-25
 

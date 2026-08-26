@@ -678,7 +678,7 @@
             <SwatchBook size={14} />
             {m['term.theme']()}
           </DropdownMenu.SubTrigger>
-          <DropdownMenu.SubContent sideOffset={6} class="max-h-80 w-52">
+          <DropdownMenu.SubContent sideOffset={6} class="max-h-80 w-52 overflow-y-auto">
             <DropdownMenu.RadioGroup
               value={currentTheme}
               onValueChange={(value: string) => data.onThemeChange?.(id, value as TerminalThemeName)}

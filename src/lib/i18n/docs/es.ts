@@ -730,6 +730,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Usage y el pie de Workbench ahora identifican las filas por el id único de enrutamiento provider/perfil, evitando claves duplicadas y mostrando el nombre de cada cuenta.',
         'Después de confirmar el reinicio, Windows y Linux instalan la actualización verificada en silencio y vuelven a abrir la app sin mostrar el asistente del instalador.',
         'Los paneles laterales ahora quedan debajo de la barra de título de 36px de Windows y mantienen el borde inferior dentro del área visible.',
+        'El submenú de tema de la terminal ahora se desplaza dentro de su propio límite en vez de desbordarse fuera de la pantalla.',
       ],
     },
     {
