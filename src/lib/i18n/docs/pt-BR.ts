@@ -730,6 +730,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'O par perfil/provider é validado antes de persistir o terminal; credenciais permanecem no armazenamento seguro e nunca entram nos dados do canvas.',
         'Adicionado um campo Pasta no diálogo de Novo workspace, e um ícone de mais no cabeçalho de cada pasta que abre o diálogo com ela pré-selecionada como destino.',
         'Workspaces comuns ou baseados em preset são persistidos diretamente no destino validado, evitando criação parcial na raiz quando a pasta é inválida.',
+        'Trocar somente o perfil de um terminal agora mostra a confirmação correta de perfil, e a view focada envia essa seleção ao backend em vez de descartá-la.',
       ],
     },
     {

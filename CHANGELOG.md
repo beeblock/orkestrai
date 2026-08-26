@@ -32,6 +32,12 @@ pt-BR, English, and Spanish translations.
   destination folder, so a failed move can no longer leave a partially filed
   workspace at the sidebar root.
 
+### Fixed
+
+- Switching only a terminal's Provider Profile now shows a profile-specific
+  confirmation instead of claiming the provider changed. The focused terminal
+  view also sends the selected profile to the backend instead of dropping it.
+
 ## 0.20.1 - 2026-08-25
 
 ### Fixed

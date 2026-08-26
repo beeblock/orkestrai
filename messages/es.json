@@ -1270,6 +1270,7 @@
   "term.profile_empty": "Sin perfiles — crea uno en la Central de Providers",
   "term.provider_switch_error": "No se pudo cambiar el provider.",
   "term.provider_switched": "Provider cambiado a {provider}.",
+  "term.profile_switched": "Perfil cambiado a {profile}.",
   "terminal_theme.midnight": "Medianoche",
   "terminal_theme.paper": "Papel",
   "providers.title": "Central de Providers",

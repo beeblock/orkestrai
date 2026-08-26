@@ -55,7 +55,7 @@
     /** Promise da pagina: providers carregados (para o respawn nao correr a race). */
     providersReady?: Promise<void>;
     providers?: AgentProviderInfo[];
-    onProviderChange?: (id: string, provider: string, profileId?: string | null) => Promise<void>;
+    onProviderChange?: (id: string, provider: string, profileId?: string | null, profileLabel?: string | null) => Promise<void>;
     onRuntimeChange?: (id: string, selection: { mode: 'default' | 'native' | 'wsl'; wslDistribution: string | null; wslWorkingDir: string | null }) => Promise<void>;
     onRoleChange?: (id: string, role: string | null) => void;
     onDelete: (id: string) => void;
@@ -246,14 +246,14 @@
   let switchingProvider = $state(false);
   let providerError = $state('');
 
-  async function changeProvider(provider: string, profileId: string | null = null) {
+  async function changeProvider(provider: string, profileId: string | null = null, profileLabel: string | null = null) {
     if (!provider || (provider === currentProvider && profileId === currentProfileId) || switchingProvider) return;
     switchingProvider = true;
     providerError = '';
     try {
       forceRespawn = false;
       respawnAgentSessionId = null;
-      await data.onProviderChange?.(id, provider, profileId);
+      await data.onProviderChange?.(id, provider, profileId, profileLabel);
     } catch {
       providerError = m['term.provider_switch_error']();
       setTimeout(() => (providerError = ''), 6_000);
@@ -280,7 +280,8 @@
 
   async function changeProfile(profileId: string | null) {
     if (!currentProvider) return;
-    await changeProvider(currentProvider, profileId);
+    const profileLabel = profileId ? profiles.find((profile) => profile.id === profileId)?.name ?? null : m['term.profile_default']();
+    await changeProvider(currentProvider, profileId, profileLabel);
   }
 
   async function changeRuntime(selection: { mode: 'default' | 'native' | 'wsl'; wslDistribution: string | null; wslWorkingDir: string | null }) {

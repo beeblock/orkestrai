@@ -1270,6 +1270,7 @@
   "term.profile_empty": "No profiles — create one in the Provider Center",
   "term.provider_switch_error": "Could not change the provider.",
   "term.provider_switched": "Provider changed to {provider}.",
+  "term.profile_switched": "Profile changed to {profile}.",
   "terminal_theme.midnight": "Midnight",
   "terminal_theme.paper": "Paper",
   "providers.title": "Provider Center",

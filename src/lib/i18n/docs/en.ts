@@ -726,6 +726,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'The profile/provider pair is validated before the terminal is persisted; credentials remain in secure storage and never enter canvas data.',
         'Added a Folder field to the New workspace dialog, and a plus icon on each folder\'s header that opens the dialog with that folder pre-selected as the destination.',
         'Regular and preset-based workspaces are persisted directly in the validated destination, preventing partial creation at the sidebar root when the folder is invalid.',
+        'Switching only a terminal profile now shows the correct profile confirmation, and the focused terminal view sends that selection to the backend instead of dropping it.',
       ],
     },
     {

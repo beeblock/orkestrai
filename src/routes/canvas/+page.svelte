@@ -1161,8 +1161,9 @@
       providers.find((item) => item.tui?.command === payload.command);
   }
 
-  async function changeNodeProvider(id: string, provider: string, profileId?: string | null) {
+  async function changeNodeProvider(id: string, provider: string, profileId?: string | null, profileLabel?: string | null) {
     if (!activeWorkspace) return;
+    const previousProvider = (nodes.find((node) => node.id === id)?.payload as { provider?: string } | undefined)?.provider;
     const updated = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}/provider`, {
       method: 'PUT',
       body: JSON.stringify({ provider, profileId: profileId ?? null }),
@@ -1170,7 +1171,11 @@
     nodes = nodes.map((node) => node.id === id
       ? { ...node, data: { ...node.data, payload: updated.payload } }
       : node);
-    toast.success(m['term.provider_switched']({ provider: providerForNode(updated)?.displayName ?? provider }));
+    if (previousProvider !== provider) {
+      toast.success(m['term.provider_switched']({ provider: providerForNode(updated)?.displayName ?? provider }));
+    } else {
+      toast.success(m['term.profile_switched']({ profile: profileLabel ?? m['term.profile_default']() }));
+    }
   }
 
   async function changeNodeRuntime(

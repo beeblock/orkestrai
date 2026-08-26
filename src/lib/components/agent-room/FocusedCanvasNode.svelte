@@ -129,13 +129,18 @@
     await patchNode(targetId, { payload: { ...(target.payload as Record<string, unknown>), ...partial } });
   }
 
-  async function changeProvider(targetId: string, provider: string) {
+  async function changeProvider(targetId: string, provider: string, profileId?: string | null, profileLabel?: string | null) {
+    const previousProvider = ((workspaceNodes.find((item) => item.id === targetId) ?? node).payload as TerminalNodePayload).provider;
     const updated = await api<CanvasNode>(`/api/agent-room/workspaces/${workspace.id}/nodes/${targetId}/provider`, {
       method: 'PUT',
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, profileId: profileId ?? null }),
     });
     onNodeUpdated(updated);
-    toast.success(m['term.provider_switched']({ provider: providerFor(updated)?.displayName ?? provider }));
+    if (previousProvider !== provider) {
+      toast.success(m['term.provider_switched']({ provider: providerFor(updated)?.displayName ?? provider }));
+    } else {
+      toast.success(m['term.profile_switched']({ profile: profileLabel ?? m['term.profile_default']() }));
+    }
   }
 
   async function changeRuntime(
