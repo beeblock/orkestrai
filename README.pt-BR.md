@@ -32,6 +32,10 @@ agentes não é persistida.
   mostram a colaboração entre os agentes enquanto ela acontece. Duplique formas
   estilizadas com Cmd/Ctrl+D ou copie e cole arranjos visuais completos mantendo
   seu layout relativo.
+- **Criação organizada de workspaces:** crie um workspace comum ou baseado em
+  preset diretamente dentro de uma pasta aninhada validada da barra lateral,
+  pelo cabeçalho da pasta ou pelo diálogo de Novo workspace, sem um item
+  intermediário na raiz.
 - **Workbench configurável:** mantenha terminais, quadros, notas, portais,
   arquivos, fluxos e uso abertos em abas verticais por padrão ou horizontais
   opcionais, e organize até oito artefatos ao vivo em divisões redimensionáveis
@@ -158,8 +162,10 @@ agentes não é persistida.
 - **Fluxos que combinam com o trabalho:** nomeie, dê cores e ordene até dez etapas
   do quadro. Líder e agentes descobrem e atualizam o mesmo processo sozinhos.
 - **Visões operacionais do time:** instale funções especializadas por um
-  catálogo com 12 roles e acompanhe título, etapa e responsável de cada tarefa,
-  além do estado Git de cada andar.
+  catálogo com 12 roles ou descubra definições reutilizáveis em
+  `.orkestrai/roles/` de outra pasta de projeto selecionada, e acompanhe título,
+  etapa, responsável e estado Git de cada andar. Roles importadas têm limites,
+  são validadas e ficam confinadas ao projeto escolhido.
 - **Ponte nativa para agentes:** a CLI `orkestrai` e o servidor MCP incluídos no
   app expõem comandos tipados para mensagens, tarefas, notas, portais,
   dispositivos móveis, andares, roles e notificações desktop. O Codex recebe
@@ -190,9 +196,9 @@ agentes não é persistida.
   compacto do terminal, junto aos controles de provider, role, recarga e Maestro.
 - **Controles operacionais:** gerencie portas de portais locais, configure rotinas
   recorrentes e instale skills pelo marketplace.
-- **Central de Providers:** detecte localmente as oito CLIs compatíveis, siga a
-  instalação adequada ao sistema e o login oficial, e veja capacidades sem
-  enviar credenciais dos providers ao Orkestrai.
+- **Central de Providers:** detecte localmente as nove CLIs compatíveis, siga a
+  instalação adequada ao sistema e o login oficial, e escolha perfis de conta
+  nomeados ao criar agentes sem persistir credenciais no canvas.
 - **Barra de agentes pessoal:** escolha qualquer serviço em um menu Agentes
   compacto e fixe até quatro favoritos prontos entre workspaces e reinícios.
 - **Providers substituíveis:** troque um membro de Claude para Codex, Kimi ou

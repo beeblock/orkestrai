@@ -32,6 +32,9 @@ common credentials redacted; normal agent output is not persisted.
   offscreen graphs while active conversations retain their visual signal.
   Duplicate styled shapes with Cmd/Ctrl+D or copy and paste complete visual
   arrangements while preserving their relative layout.
+- **Organized workspace creation:** create a regular or preset-based workspace
+  directly inside a validated nested sidebar folder, either from the folder
+  header or the New workspace dialog, without an intermediate root-level item.
 - **Persistent Portal sessions:** authentication cookies, web storage, and the
   last navigated URL survive app restarts. Login flows opened with `window.open`
   stay in a sandboxed Orkestrai Portal window that shares the same session.
@@ -273,7 +276,10 @@ common credentials redacted; normal agent output is not persisted.
 - **Workflows that fit the work:** name, color, and reorder up to ten board
   stages. Leads and agents discover and update the same stages automatically.
 - **Operational team views:** install specialized roles from a 12-role catalog
-  and inspect each task title, stage, assignee, and Git state across every floor.
+  or discover reusable `.orkestrai/roles/` definitions from another selected
+  project folder, then inspect each task title, stage, assignee, and Git state
+  across every floor. Imported roles stay bounded, validated, and confined to
+  the selected project.
 - **Native agent bridge:** the bundled `orkestrai` CLI and MCP server expose
   typed commands for messages, tasks, notes, portals, mobile devices, floors,
   roles, and desktop notifications. Codex receives the Orkestrai and official

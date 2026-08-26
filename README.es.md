@@ -32,6 +32,10 @@ normal de los agentes no se guarda.
   conexiones muestran la colaboración entre agentes mientras ocurre. Duplica
   formas estilizadas con Cmd/Ctrl+D o copia y pega arreglos visuales completos
   conservando su distribución relativa.
+- **Creación organizada de workspaces:** crea un workspace normal o basado en
+  preset directamente dentro de una carpeta anidada validada de la barra
+  lateral, desde el encabezado de la carpeta o el diálogo de Nuevo workspace,
+  sin un elemento intermedio en la raíz.
 - **Workbench configurable:** mantén abiertas terminales, tableros, notas,
   portales, archivos, flujos y uso en pestañas verticales por defecto u
   horizontales opcionales, y organiza hasta ocho artefactos en vivo en divisiones
@@ -163,8 +167,10 @@ normal de los agentes no se guarda.
 - **Flujos que corresponden al trabajo:** nombra, colorea y ordena hasta diez
   etapas del tablero. Líder y agentes descubren y actualizan el mismo proceso.
 - **Vistas operativas del equipo:** instala funciones especializadas desde un
-  catálogo de 12 roles y consulta el título, etapa y responsable de cada tarea,
-  además del estado Git de cada piso.
+  catálogo de 12 roles o descubre definiciones reutilizables en
+  `.orkestrai/roles/` desde otra carpeta de proyecto seleccionada, y consulta
+  título, etapa, responsable y estado Git de cada piso. Los roles importados
+  tienen límites, se validan y quedan confinados al proyecto elegido.
 - **Puente nativo para agentes:** la CLI `orkestrai` y el servidor MCP incluidos
   exponen comandos tipados para mensajes, tareas, notas, portales, dispositivos
   móviles, pisos, roles y notificaciones de escritorio. Codex recibe las
@@ -195,9 +201,10 @@ normal de los agentes no se guarda.
   compacto de la terminal, junto a los controles de provider, rol, recarga y Maestro.
 - **Controles operativos:** administra puertos de portales locales, configura
   rutinas recurrentes e instala skills desde el marketplace.
-- **Central de Providers:** detecta localmente las ocho CLIs compatibles, sigue
-  la instalación adecuada al sistema y el inicio de sesión oficial, y consulta
-  capacidades sin enviar credenciales de providers a Orkestrai.
+- **Central de Providers:** detecta localmente las nueve CLIs compatibles, sigue
+  la instalación adecuada al sistema y el inicio de sesión oficial, y elige
+  perfiles de cuenta con nombre al crear agentes sin persistir credenciales en
+  el canvas.
 - **Barra de agentes personal:** elige cualquier servicio desde un menú Agentes
   compacto y fija hasta cuatro favoritos listos entre workspaces y reinicios.
 - **Providers reemplazables:** cambia un miembro de Claude a Codex, Kimi u otro
