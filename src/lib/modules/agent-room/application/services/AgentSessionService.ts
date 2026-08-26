@@ -43,6 +43,9 @@ export class AgentSessionService {
   }
 
   async ensure(workspaceId: string, nodeId: string): Promise<EnsuredAgentSession> {
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
+    if (workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
     const target = await workspaceRepository.getNode(nodeId);
     if (!target || target.workspaceId !== workspaceId || target.type !== 'terminal') {
       throw new Error('AGENT_NOT_FOUND');
@@ -55,18 +58,17 @@ export class AgentSessionService {
     }
     if (!payload.command) throw new Error('AGENT_COMMAND_UNAVAILABLE');
 
-    const workspace = await workspaceRepository.getWorkspace(workspaceId);
-    let cwd = workspace?.workingDir ?? '.';
+    let cwd = workspace.workingDir;
     if (target.floorId) {
       const floor = await floorService.get(target.floorId);
       if (floor?.path) cwd = floor.path;
     }
 
     const adapter = payload.provider && hasAgentAdapter(payload.provider) ? getAgentAdapter(payload.provider) : null;
-    const runtime = workspace ? terminalExecutionRuntime(workspace, payload) : { kind: 'native' as const };
+    const runtime = terminalExecutionRuntime(workspace, payload);
     const trackingStartedAt = Date.now();
     const wslContext = runtime.kind === 'wsl'
-      ? await preflightWslLaunch({ runtime, command: payload.command, hostCwd: cwd, workspaceRoot: workspace?.workingDir })
+      ? await preflightWslLaunch({ runtime, command: payload.command, hostCwd: cwd, workspaceRoot: workspace.workingDir })
       : null;
     const tracker = wslContext && runtime.kind === 'wsl'
       ? agentSessionTrackerForRuntime(
@@ -102,7 +104,7 @@ export class AgentSessionService {
       args: [...(payload.args ?? []), ...mcpArgs, ...(!resumableAgentSessionId ? (payload.initialRoleArgs ?? []) : []), ...conversationArgs],
       cwd,
       label: title,
-      workspace: workspace?.name ?? null,
+      workspace: workspace.name,
       workspaceId,
       nodeId: target.id,
       provider: payload.provider ?? null,
@@ -114,7 +116,7 @@ export class AgentSessionService {
       },
       forwardEnvToWsl: Object.keys(profileEnv),
       runtime,
-      workspaceRoot: workspace?.workingDir,
+      workspaceRoot: workspace.workingDir,
     });
     const activeAgentSessionId = resumableAgentSessionId;
     if (activeAgentSessionId) tracker.bind(session.id, activeAgentSessionId);

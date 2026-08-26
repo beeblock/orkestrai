@@ -146,6 +146,7 @@
     if (code === 'WSL_DIRECTORY_NOT_FOUND') return m['term.wsl_directory_missing']();
     if (code === 'WSL_COMMAND_NOT_FOUND') return m['term.wsl_command_missing']({ provider: provider ?? m['term.provider_fallback']() });
     if (code === 'WSL_SPAWN_FAILED') return m['term.wsl_start_failed']();
+    if (code === 'WORKSPACE_SUSPENDED') return m['term.workspace_suspended']();
     return String(fallback ?? m['term.ws_error']());
   }
 

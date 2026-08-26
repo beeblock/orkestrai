@@ -5,6 +5,19 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.21.1 - 2026-08-26
+
+### Fixed
+
+- Unloading a workspace now persists a suspended state, clears its live PTYs,
+  stops task-driven session creation and background automation enqueueing, and
+  leaves it idle across navigation and app restarts. Only explicitly opening
+  that workspace resumes it.
+- Internal CLI or server child invocations that reach Electron's Windows
+  single-instance handler no longer restore or focus the Orkestrai window.
+  Normal app launches, tray actions, menu actions, notification clicks, and
+  collaboration links keep their existing foreground behavior.
+
 ## 0.21.0 - 2026-08-26
 
 ### Added

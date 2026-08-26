@@ -16,6 +16,7 @@ class FakeSocket extends EventEmitter {
 describe('PTY WebSocket protocol', () => {
   afterEach(() => {
     delete (globalThis as { __orkestraiResolveProviderProfileEnv?: unknown }).__orkestraiResolveProviderProfileEnv;
+    delete (globalThis as { __orkestraiCanStartWorkspaceSession?: unknown }).__orkestraiCanStartWorkspaceSession;
     vi.restoreAllMocks();
   });
 
@@ -82,6 +83,30 @@ describe('PTY WebSocket protocol', () => {
     expect(JSON.stringify(created)).not.toContain('runtime-only');
     const sessionId = String((created?.session as { id?: string } | undefined)?.id ?? '');
     if (sessionId) ptySessionManager.kill(sessionId);
+    socket.emit('close');
+  });
+
+  it('refuses to recreate a terminal while its workspace is suspended', async () => {
+    const create = vi.spyOn(ptySessionManager, 'create');
+    (globalThis as {
+      __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
+    }).__orkestraiCanStartWorkspaceSession = vi.fn(async () => false);
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+
+    socket.emit('message', JSON.stringify({
+      type: 'create',
+      command: '/bin/cat',
+      cwd: '/tmp',
+      workspaceId: 'workspace-paused',
+    }));
+
+    await vi.waitFor(() => expect(socket.frames).toContainEqual({
+      type: 'error',
+      code: 'WORKSPACE_SUSPENDED',
+      message: 'Workspace suspended.',
+    }));
+    expect(create).not.toHaveBeenCalled();
     socket.emit('close');
   });
 });

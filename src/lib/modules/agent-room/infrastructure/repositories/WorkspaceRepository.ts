@@ -71,6 +71,9 @@ function mapWorkspace(model: AgentWorkspace): Workspace {
     syncAgentInstructionFiles: Boolean(model.getAttribute('sync_agent_instruction_files')),
     repositoryRoots: parseRepositoryRoots(model.getAttribute('repository_roots_json') as string | null),
     hooks: parseJsonObject(model.getAttribute('hooks_json') as string | null),
+    suspendedAt: model.getAttribute('suspended_at')
+      ? toIso(model.getAttribute('suspended_at'))
+      : null,
     groupId: model.getAttribute('group_id') ?? null,
     position: Number(model.getAttribute('position') ?? 0),
     createdAt: toIso(model.getAttribute('created_at')),
@@ -131,6 +134,15 @@ export class WorkspaceRepository {
   async getWorkspace(id: string): Promise<Workspace | null> {
     const model = await AgentWorkspace.find(id);
     return model ? mapWorkspace(model) : null;
+  }
+
+  async setWorkspaceSuspended(id: string, suspended: boolean): Promise<Workspace | null> {
+    const model = await AgentWorkspace.find(id);
+    if (!model) return null;
+    const current = model.getAttribute('suspended_at');
+    if (Boolean(current) === suspended) return mapWorkspace(model);
+    await model.update({ suspended_at: suspended ? new Date() : null });
+    return this.getWorkspace(id);
   }
 
   async createWorkspace(input: {

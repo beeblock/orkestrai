@@ -13,7 +13,7 @@ export const DOCS_ES: DocsCatalog = {
     {
       id: 'workspaces',
       title: 'Workspaces',
-      body: `Un workspace = un equipo en un proyecto: directorio de trabajo, ícono y layout del canvas guardados. Créalo con el botón + en la barra lateral. Varios workspaces corren al mismo tiempo — los agentes siguen vivos en background al cambiar. Las instrucciones en AGENTS.md/CLAUDE.md se inyectan en los agentes (edita con el lápiz junto al nombre). El botón ⏻ (Descargar) cierra las terminales vivas del workspace activo — libera memoria/CPU sin borrar nada: el layout queda guardado y cada agente retoma la conversación al reabrir la terminal. En macOS, los proyectos dentro de Descargas, Documentos o Escritorio requieren consentimiento del sistema; si el acceso expira, Canvas y Workbench muestran Autorizar carpeta para elegir nuevamente el mismo directorio y continuar sin reiniciar la app.`,
+      body: `Un workspace = un equipo en un proyecto: directorio de trabajo, ícono y layout del canvas guardados. Créalo con el botón + en la barra lateral. Varios workspaces corren al mismo tiempo — los agentes siguen vivos en background al cambiar. Las instrucciones en AGENTS.md/CLAUDE.md se inyectan en los agentes (edita con el lápiz junto al nombre). El botón ⏻ (Descargar) cierra sus terminales vivas y mantiene el workspace en pausa entre navegaciones y reinicios de la app, sin borrar nada. Abre ese workspace explícitamente para reanudar sus agentes y conversaciones. En macOS, los proyectos dentro de Descargas, Documentos o Escritorio requieren consentimiento del sistema; si el acceso expira, Canvas y Workbench muestran Autorizar carpeta para elegir nuevamente el mismo directorio y continuar sin reiniciar la app.`,
     },
     {
       id: 'workspace-folders',
@@ -715,6 +715,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '26 ago 2026 · 0.21.1',
+      title: 'Orkestrai 0.21.1: workspaces en pausa y Windows en segundo plano',
+      summary: 'La descarga ahora es persistente y los runtimes internos ya no roban el foco en Windows.',
+      items: [
+        'Descargar un workspace persiste su estado en pausa y detiene las terminales vivas, la creación de sesiones por tareas y el encolado de automatizaciones en segundo plano, manteniéndolo inactivo entre navegaciones y reinicios hasta que lo abras explícitamente.',
+        'Los workspaces en pausa se identifican en Canvas y Workbench, mientras su layout y las conversaciones exactas de los agentes quedan guardados para la siguiente apertura explícita.',
+        'Las invocaciones internas de la CLI y el servidor ya no activan el foco de instancia única en Windows; abrir intencionalmente la app, la bandeja, las notificaciones y los enlaces de colaboración sigue funcionando normalmente.',
+      ],
+    },
     {
       date: '26 ago 2026 · 0.21.0',
       title: 'Orkestrai 0.21.0: Roles portátiles y creación más rápida de workspaces',

@@ -61,6 +61,7 @@
     readProviderCache,
     readWorkspaceListCache,
     readWorkspaceViewCache,
+    clearWorkspaceViewCache,
     removeWorkspaceViewCache,
     writeProviderCache,
     writeWorkspaceListCache,
@@ -966,8 +967,11 @@
       if (selectionRequestId === 0) {
         workspaces = workspaceList;
         writeWorkspaceListCache(workspaceList);
-        const requestedWorkspaceId = params.get('workspace') || localStorage.getItem('orkestrai.activeWorkspaceId');
-        const requestedWorkspace = workspaceList.find((workspace) => workspace.id === requestedWorkspaceId) ?? workspaceList[0];
+        const explicitWorkspaceId = params.get('workspace');
+        const rememberedWorkspaceId = localStorage.getItem('orkestrai.activeWorkspaceId');
+        const requestedWorkspace = workspaceList.find((workspace) => workspace.id === explicitWorkspaceId)
+          ?? workspaceList.find((workspace) => workspace.id === rememberedWorkspaceId && !workspace.suspendedAt)
+          ?? workspaceList.find((workspace) => !workspace.suspendedAt);
         if (requestedWorkspace) {
           await selectWorkspace(requestedWorkspace.id);
           const requestedNodeId = params.get('node');
@@ -1241,7 +1245,9 @@
     const requestId = ++selectionRequestId;
     errorMessage = '';
     permissionWorkspace = null;
-    const cached = !options.force ? readWorkspaceViewCache(id) : null;
+    const cached = !options.force && !workspaces.find((workspace) => workspace.id === id)?.suspendedAt
+      ? readWorkspaceViewCache(id)
+      : null;
     if (cached) {
       activeWorkspace = cached.workspace;
       floors = cached.floors;
@@ -1252,17 +1258,22 @@
       edges = cached.edges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
     }
     try {
+      const resumedWorkspace = changingWorkspace
+        ? await api<Workspace>(`/api/agent-room/workspaces/${id}/load`, { method: 'POST' })
+        : null;
       const providerStatusRequest = api<{ providers: AgentProviderInfo[] }>(
         `/api/agent-room/status?workspaceId=${encodeURIComponent(id)}`
       );
       const [workspace, canvasNodes, canvasEdges, floorList] = await Promise.all([
-        api<Workspace>(`/api/agent-room/workspaces/${id}`),
+        resumedWorkspace ?? api<Workspace>(`/api/agent-room/workspaces/${id}`),
         api<CanvasNode[]>(`/api/agent-room/workspaces/${id}/nodes`),
         api<CanvasEdge[]>(`/api/agent-room/workspaces/${id}/edges`),
         api<Floor[]>(`/api/agent-room/workspaces/${id}/floors`),
       ]);
       if (requestId !== selectionRequestId) return;
       activeWorkspace = workspace;
+      workspaces = workspaces.map((item) => item.id === workspace.id ? workspace : item);
+      writeWorkspaceListCache(workspaces);
       localStorage.setItem('orkestrai.activeWorkspaceId', workspace.id);
       if (changingWorkspace) {
         leaderDictationState = 'idle';
@@ -1376,11 +1387,20 @@
     if (!activeWorkspace) return;
     unloading = true;
     try {
-      const result = await api<{ killedSessions: number }>(`/api/agent-room/workspaces/${activeWorkspace.id}/unload`, {
+      const workspaceId = activeWorkspace.id;
+      const result = await api<{ killedSessions: number; workspace: Workspace }>(`/api/agent-room/workspaces/${workspaceId}/unload`, {
         method: 'POST',
       });
-      const canvasNodes = await api<CanvasNode[]>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`);
-      nodes = canvasNodes.filter((node) => (node.floorId ?? null) === visibleFloorId).map(toFlowNode);
+      selectionRequestId += 1;
+      workspaces = workspaces.map((workspace) => workspace.id === workspaceId ? result.workspace : workspace);
+      writeWorkspaceListCache(workspaces);
+      clearWorkspaceViewCache(workspaceId);
+      activeWorkspace = null;
+      nodes = [];
+      edges = [];
+      floors = [];
+      localStorage.removeItem('orkestrai.activeWorkspaceId');
+      history.replaceState(null, '', '/canvas');
       const count = result?.killedSessions ?? 0;
       unloadMessage = count > 0
         ? count === 1
@@ -2296,9 +2316,9 @@
         {:else}
         {#each visibleWorkspaces as workspace (workspace.id)}
           <li class:active={activeWorkspace?.id === workspace.id}>
-            <HeaderIconButton label={activity[workspace.id] ? m['canvas.ws_active_sessions']({ name: workspace.name, count: activity[workspace.id] }) : workspace.name} side="right" class="workspace-item" onclick={() => selectWorkspace(workspace.id)}>
+            <HeaderIconButton label={workspace.suspendedAt ? m['canvas.ws_suspended']({ name: workspace.name }) : activity[workspace.id] ? m['canvas.ws_active_sessions']({ name: workspace.name, count: activity[workspace.id] }) : workspace.name} side="right" class="workspace-item" onclick={() => selectWorkspace(workspace.id)}>
               <span class="workspace-icon">
-                {#if activity[workspace.id]}<span class="live-dot rail" aria-hidden="true"></span>{/if}
+                {#if workspace.suspendedAt}<Power size={10} class="text-[var(--app-text-muted)]" aria-hidden="true" />{:else if activity[workspace.id]}<span class="live-dot rail" aria-hidden="true"></span>{/if}
                 <WorkspaceIcon name={workspace.icon} size={14} />
               </span>
             </HeaderIconButton>
@@ -2366,7 +2386,9 @@
           <WorkspaceIcon name={workspace.icon} size={14} />
         </span>
         <span class="workspace-name">{workspace.name}</span>
-        {#if activity[workspace.id]}
+        {#if workspace.suspendedAt}
+          <Power size={11} class="text-[var(--app-text-muted)]" aria-label={m['canvas.ws_suspended']({ name: workspace.name })} />
+        {:else if activity[workspace.id]}
           <span class="live-dot" role="status" aria-label={m['canvas.active_sessions_aria']({ count: activity[workspace.id] })}></span>
         {/if}
       </button>

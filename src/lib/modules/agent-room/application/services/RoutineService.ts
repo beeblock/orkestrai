@@ -424,6 +424,8 @@ export class RoutineService {
   }
 
   private async enqueue(routine: Routine, triggerType: AutomationTriggerType, triggerKey: string, input: Record<string, unknown>): Promise<boolean> {
+    const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);
+    if (!workspace || workspace.suspendedAt) return false;
     const idempotencyKey = `${routine.id}:${triggerKey}`;
     if (await AgentRoutineRun.query().where('idempotency_key', idempotencyKey).first()) return false;
     const run = await this.createRun(routine, triggerType, triggerKey, input);

@@ -15,6 +15,7 @@ const path = require('node:path');
 const net = require('node:net');
 const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-policy.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
+const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse } = require('./portal-policy.cjs');
 
 const isDev = !app.isPackaged;
@@ -972,6 +973,11 @@ if (!gotLock) {
     const invite = findCollaborationInvite(argv);
     if (invite) {
       void receiveCollaborationInvite(invite);
+      return;
+    }
+    if (isBackgroundRuntimeInvocation(argv)) {
+      // Never log raw argv: bridge commands may contain user prompts or paths.
+      diagnostics?.write('info', 'app', 'Ignored a background runtime second-instance activation.');
       return;
     }
     if (mainWindow) {

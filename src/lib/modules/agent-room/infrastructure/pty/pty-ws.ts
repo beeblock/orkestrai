@@ -49,6 +49,7 @@ const wsGlobal = globalThis as unknown as {
   __orkestraiWsClients?: Set<WebSocket>;
   __orkestraiBroadcast?: (payload: Record<string, unknown>) => void;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
+  __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
 };
 const allSockets = (wsGlobal.__orkestraiWsClients ??= new Set<WebSocket>());
 wsGlobal.__orkestraiBroadcast = (payload) => {
@@ -130,6 +131,17 @@ export function handlePtyConnection(socket: WebSocket): void {
         case 'create': {
           if (typeof message.command !== 'string' || !message.command.trim()) {
             throw new Error('Informe o comando da sessão PTY.');
+          }
+          if (message.workspaceId && wsGlobal.__orkestraiCanStartWorkspaceSession) {
+            const canStart = await wsGlobal.__orkestraiCanStartWorkspaceSession(message.workspaceId);
+            if (!canStart) {
+              send({
+                type: 'error',
+                code: 'WORKSPACE_SUSPENDED',
+                message: 'Workspace suspended.',
+              });
+              break;
+            }
           }
           const trackingStartedAt = Date.now();
           const resolvedCwd = resolveCwd(message.cwd);

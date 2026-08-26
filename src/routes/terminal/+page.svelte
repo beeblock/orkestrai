@@ -20,6 +20,7 @@
     BookMarked,
     MessageSquareText,
     MessageCircleMore,
+    Power,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as InputGroup from '$lib/components/ui/input-group';
@@ -358,7 +359,12 @@
     }
   }
 
-  async function loadWorkspace(workspaceId: string) {
+  async function loadWorkspace(workspaceId: string, options: { resume?: boolean } = {}) {
+    if (options.resume) {
+      const resumed = await api<Workspace>(`/api/agent-room/workspaces/${workspaceId}/load`, { method: 'POST' });
+      workspaces = workspaces.map((workspace) => workspace.id === workspaceId ? resumed : workspace);
+      writeWorkspaceListCache(workspaces);
+    }
     const pending = workspaceLoadRequests.get(workspaceId);
     if (pending) return pending;
     const cached = readWorkspaceViewCache(workspaceId);
@@ -572,7 +578,7 @@
       return;
     }
     expandedWorkspaceIds = [...expandedWorkspaceIds, workspaceId];
-    if (!loadedWorkspaceIds.includes(workspaceId)) await loadWorkspace(workspaceId).catch(() => undefined);
+    if (!loadedWorkspaceIds.includes(workspaceId)) await loadWorkspace(workspaceId, { resume: true }).catch(() => undefined);
   }
 
   function updateNode(updated: CanvasNode) {
@@ -874,14 +880,16 @@
         } catch {
           pendingFile = null;
         }
-        const requestedWorkspace = params.get('workspace')
-          || pendingFile?.workspaceId
-          || localStorage.getItem('orkestrai.activeWorkspaceId');
-        const initialWorkspace = workspaceList.find((workspace) => workspace.id === requestedWorkspace) ?? workspaceList[0] ?? null;
+        const explicitWorkspace = params.get('workspace') || pendingFile?.workspaceId || null;
+        const rememberedWorkspace = localStorage.getItem('orkestrai.activeWorkspaceId');
+        const initialWorkspace = workspaceList.find((workspace) => workspace.id === explicitWorkspace)
+          ?? workspaceList.find((workspace) => workspace.id === rememberedWorkspace && !workspace.suspendedAt)
+          ?? workspaceList.find((workspace) => !workspace.suspendedAt)
+          ?? null;
         selectedWorkspaceId = initialWorkspace?.id ?? null;
         expandedWorkspaceIds = initialWorkspace ? [initialWorkspace.id] : [];
         if (initialWorkspace) {
-          const workspaceLoad = loadWorkspace(initialWorkspace.id);
+          const workspaceLoad = loadWorkspace(initialWorkspace.id, { resume: explicitWorkspace === initialWorkspace.id });
           if (loadedWorkspaceIds.includes(initialWorkspace.id)) loading = false;
           await workspaceLoad;
           if (destroyed) return;
@@ -1159,7 +1167,9 @@
               {#if expanded}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}
               <WorkspaceIcon name={workspace.icon} size={14} />
               <span class="min-w-0 flex-1 truncate font-medium">{workspace.name}</span>
-              {#if workspaceAttention(workspace.id)}
+              {#if workspace.suspendedAt}
+                <Power size={11} class="text-[var(--app-text-muted)]" aria-label={m['canvas.ws_suspended']({ name: workspace.name })} />
+              {:else if workspaceAttention(workspace.id)}
                 <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-[8px] font-semibold tabular-nums text-[var(--app-warning)]" title={m['control_center.summary_attention']()}>{workspaceAttention(workspace.id)}</span>
               {:else if controlCenters[workspace.id]?.counts.working}
                 <span class="h-1.5 w-1.5 rounded-full bg-[var(--app-success)]" role="status" aria-label={m['control_center.summary_working']()}></span>

@@ -62,3 +62,7 @@ export function removeWorkspaceViewCache(workspaceId: string): void {
     };
   }
 }
+
+export function clearWorkspaceViewCache(workspaceId: string): void {
+  workspaceSnapshots.delete(workspaceId);
+}

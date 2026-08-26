@@ -51,6 +51,14 @@ export class WorkspaceController extends Controller {
     }
   }
 
+  async resumeWorkspace(event: any) {
+    try {
+      return this.json({ data: await workspaceService.resumeWorkspace(event.params.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Workspace nao encontrado.', 404);
+    }
+  }
+
   async updateWorkspace(event: any) {
     try {
       const input = await UpdateWorkspaceRequest.validate(event);

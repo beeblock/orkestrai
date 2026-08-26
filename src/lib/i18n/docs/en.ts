@@ -13,7 +13,7 @@ export const DOCS_EN: DocsCatalog = {
     {
       id: 'workspaces',
       title: 'Workspaces',
-      body: `A workspace = a team on a project: working directory, icon and canvas layout saved. Create it with the + button in the sidebar. Several workspaces run at the same time — agents stay alive in the background when you switch. Instructions in AGENTS.md/CLAUDE.md are injected into the agents (edit with the pencil next to the name). The ⏻ button (Unload) shuts down the live terminals of the active workspace — frees memory/CPU without deleting anything: the layout stays saved and each agent resumes the conversation when the terminal reopens. On macOS, projects in Downloads, Documents, or Desktop require system consent; if access expires, Canvas and Workbench show Authorize folder so you can select the same directory again and continue without restarting the app.`,
+      body: `A workspace = a team on a project: working directory, icon and canvas layout saved. Create it with the + button in the sidebar. Several workspaces run at the same time — agents stay alive in the background when you switch. Instructions in AGENTS.md/CLAUDE.md are injected into the agents (edit with the pencil next to the name). The ⏻ button (Unload) shuts down its live terminals and keeps the workspace paused across navigation and app restarts, without deleting anything. Open that workspace explicitly to resume its agents and conversations. On macOS, projects in Downloads, Documents, or Desktop require system consent; if access expires, Canvas and Workbench show Authorize folder so you can select the same directory again and continue without restarting the app.`,
     },
     {
       id: 'workspace-folders',
@@ -715,6 +715,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Aug 26, 2026 · 0.21.1',
+      title: 'Orkestrai 0.21.1: workspaces stay paused and Windows stays in the background',
+      summary: 'Unload is now persistent, and internal runtime launches no longer steal Windows focus.',
+      items: [
+        'Unloading a workspace persists its paused state, stops live terminals, task-driven session creation, and background automation enqueueing, and keeps it idle across navigation and app restarts until you explicitly open it again.',
+        'Paused workspaces are identified in Canvas and Workbench, while their layout and exact agent conversations remain saved for the next explicit open.',
+        'Internal CLI and server runtime invocations no longer trigger Windows single-instance focus; intentional app launches, tray actions, notifications, and collaboration links still open normally.',
+      ],
+    },
     {
       date: 'Aug 26, 2026 · 0.21.0',
       title: 'Orkestrai 0.21.0: portable Roles and faster workspace setup',

@@ -85,6 +85,17 @@ export class WorkspaceService {
     return workspace;
   }
 
+  async resumeWorkspace(id: string) {
+    const existing = await workspaceRepository.getWorkspace(id);
+    if (!existing) throw new Error('Workspace nao encontrado.');
+    const workspace = existing.suspendedAt
+      ? await workspaceRepository.setWorkspaceSuspended(id, false)
+      : existing;
+    if (!workspace) throw new Error('Workspace nao encontrado.');
+    await this.ensureProvisioned(workspace);
+    return workspace;
+  }
+
   /**
    * Reparo idempotente: workspaces criados antes do provisionamento zero-config
    * (ou cujos arquivos foram apagados) recuperam skill + token da ponte ao
@@ -644,8 +655,11 @@ export class WorkspaceService {
    * limpa os sessionIds, liberando processos sem perder o layout.
    */
   async unloadWorkspace(id: string) {
-    await this.get(id);
-    return this.unloadWorkspaceSessions(id);
+    const workspace = await workspaceRepository.setWorkspaceSuspended(id, true);
+    if (!workspace) throw new Error('Workspace nao encontrado.');
+    const result = await this.unloadWorkspaceSessions(id);
+    this.notifyStructureChanged(id);
+    return { ...result, workspace };
   }
 
   private async unloadWorkspaceSessions(id: string) {

@@ -68,4 +68,20 @@ describe('workspace automations', () => {
     expect(history[0].status).toBe('succeeded');
     expect(history[0].input).toMatchObject({ id: 'source', title: 'Campaign' });
   });
+
+  it('does not enqueue background automation while the workspace is suspended', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'paused automation', workingDir: '/tmp' });
+    const automation = await routineService.createAutomation(workspace.id, form({
+      name: 'Paused handoff', triggerType: 'task', taskEvent: 'completed',
+      actionType: 'create_task', taskTitle: 'Should not run', notificationMessage: null,
+    }));
+    await workspaceRepository.setWorkspaceSuspended(workspace.id, true);
+
+    const dispatched = await routineService.dispatchEvent(new AutomationTriggerReceived(
+      workspace.id, 'task', 'completed', 'task:paused:completed', { id: 'paused' },
+    ));
+
+    expect(dispatched).toBe(0);
+    expect(await routineService.history(automation.id)).toHaveLength(0);
+  });
 });

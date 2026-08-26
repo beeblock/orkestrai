@@ -612,6 +612,8 @@ export type Workspace = {
   repositoryRoots: WorkspaceRepositoryRoot[];
   /** Hooks de ciclo de vida de andares (setup/run/teardown). */
   hooks: WorkspaceHooks;
+  /** Non-null while terminal activity is explicitly suspended by the user. */
+  suspendedAt: string | null;
   /** Pasta na barra lateral (null = raiz). */
   groupId: string | null;
   /** Posicao dentro da pasta (ou da raiz), para ordenacao estavel. */

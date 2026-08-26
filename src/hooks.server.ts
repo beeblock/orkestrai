@@ -10,14 +10,20 @@ import type { Handle } from '@sveltejs/kit';
 import { auth } from './app.js';
 import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
 import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
+import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
 const globalRef = globalThis as unknown as {
   __orkestraiRoutineScheduler?: boolean;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
+  __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
 };
 globalRef.__orkestraiResolveProviderProfileEnv = (profileId, providerId, options) =>
   providerProfileService.resolveEnv(profileId, providerId, options);
+globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
+  const workspace = await workspaceRepository.getWorkspace(workspaceId);
+  return Boolean(workspace && !workspace.suspendedAt);
+};
 if (!globalRef.__orkestraiRoutineScheduler) {
   globalRef.__orkestraiRoutineScheduler = true;
   routineService.startScheduler();
