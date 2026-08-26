@@ -50,6 +50,8 @@ pt-BR, English, and Spanish translations.
   where the rest of the app's content already begins.
 - The terminal theme submenu now scrolls inside its own height limit instead
   of overflowing past the bottom of the screen.
+- Interactive native buttons and role-based controls now use a pointer cursor,
+  while disabled controls retain their non-interactive cursor.
 
 ## 0.20.1 - 2026-08-25
 

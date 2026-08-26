@@ -731,6 +731,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'After restart confirmation, Windows and Linux install the verified update silently and relaunch the app without showing the installer wizard.',
         'Side panels now stay below the 36px Windows title bar while keeping their bottom edge inside the viewport.',
         'The terminal theme submenu now scrolls within its own boundary instead of overflowing past the screen.',
+        'Interactive native buttons and role-based controls now use a pointer cursor, while disabled controls keep their non-interactive cursor.',
       ],
     },
     {

@@ -735,6 +735,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Após confirmar a reinicialização, Windows e Linux instalam a atualização verificada em silêncio e reabrem o app sem mostrar o assistente do instalador.',
         'Painéis laterais agora ficam abaixo da barra de título de 36px do Windows e mantêm a borda inferior dentro da área visível.',
         'O submenu de tema do terminal agora rola dentro do próprio limite em vez de transbordar para fora da tela.',
+        'Botões nativos interativos e controles com role agora usam cursor de ponteiro, enquanto controles desabilitados mantêm o cursor não interativo.',
       ],
     },
     {

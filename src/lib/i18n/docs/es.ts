@@ -731,6 +731,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Después de confirmar el reinicio, Windows y Linux instalan la actualización verificada en silencio y vuelven a abrir la app sin mostrar el asistente del instalador.',
         'Los paneles laterales ahora quedan debajo de la barra de título de 36px de Windows y mantienen el borde inferior dentro del área visible.',
         'El submenú de tema de la terminal ahora se desplaza dentro de su propio límite en vez de desbordarse fuera de la pantalla.',
+        'Los botones nativos interactivos y los controles con role ahora usan un cursor de puntero, mientras los controles deshabilitados mantienen su cursor no interactivo.',
       ],
     },
     {

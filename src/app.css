@@ -21,6 +21,12 @@ html {
   border-radius: 4px;
 }
 
+/* Browsers keep native buttons on the default cursor even when interactive. */
+button:not(:disabled),
+[role='button']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  cursor: pointer;
+}
+
 /* Numeros tabulares em dados numericos */
 .tabular,
 code,
