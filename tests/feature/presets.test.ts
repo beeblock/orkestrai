@@ -9,6 +9,7 @@ import { routineService } from '$lib/modules/agent-room/application/services/Rou
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { boardColumnService } from '$lib/modules/agent-room/application/services/BoardColumnService.js';
 import { mcpService } from '$lib/modules/agent-room/application/services/McpService.js';
+import { workspaceGroupService } from '$lib/modules/agent-room/application/services/WorkspaceGroupService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 
@@ -187,6 +188,23 @@ describe('PresetService', () => {
     expect(roleArgsFor('codex')?.[1]).toContain('developer_instructions=');
     expect(roleArgsFor('kimi')?.[0]).toBe('--agent-file');
     expect(roleArgsFor('kimi')?.[1]).toContain('.orkestrai/roles/');
+  });
+
+  it('creates a preset workspace directly in the selected destination group', async () => {
+    const group = await workspaceGroupService.create({ name: 'Preset projects' });
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-preset-group-'));
+
+    const applied = await presetService.apply('builtin:svelar-team', {
+      name: 'Grouped Svelar app',
+      workingDir: dir,
+      locale: 'en',
+      groupId: group.id,
+    });
+
+    expect(await workspaceRepository.getWorkspace(applied.workspaceId)).toMatchObject({
+      groupId: group.id,
+      position: 0,
+    });
   });
 
   it('installs the Orkestrai contributing consensus team and its complete workflow', async () => {

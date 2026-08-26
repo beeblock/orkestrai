@@ -45,6 +45,10 @@ export class WorkspaceGroupService {
     return this.repository.list();
   }
 
+  async assertExists(id: string): Promise<void> {
+    await this.requireGroup(id);
+  }
+
   async create(input: { name: string; parentId?: string | null }): Promise<WorkspaceGroup> {
     const name = input.name.trim();
     if (!name) throw groupError('group_name_required');

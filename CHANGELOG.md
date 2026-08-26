@@ -24,6 +24,13 @@ pt-BR, English, and Spanish translations.
 - Profile references are validated against the selected provider before a
   terminal is persisted, while credential values remain in secure storage and
   enter only the spawned process environment.
+- The "New workspace" dialog now has a Folder field, so a workspace can be
+  filed into an existing sidebar folder right when it's created instead of
+  dragging it there afterward. A plus icon on each folder's header also
+  opens the dialog with that folder already selected as the destination.
+- Regular and preset-based workspaces are persisted directly in the validated
+  destination folder, so a failed move can no longer leave a partially filed
+  workspace at the sidebar root.
 
 ## 0.20.1 - 2026-08-25
 

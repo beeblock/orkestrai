@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { WorkspaceGroupError, workspaceGroupService } from '$lib/modules/agent-room/application/services/WorkspaceGroupService.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
+import { CreateWorkspaceDto } from '$lib/modules/agent-room/application/dto/WorkspaceDtos.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 
 async function makeWorkspace(name: string) {
@@ -72,6 +74,30 @@ describe('WorkspaceGroupService', () => {
     expect((await workspaceRepository.getWorkspace(first.id))?.groupId).toBeNull();
 
     await expect(workspaceGroupService.moveWorkspace('nao-existe', group.id)).rejects.toBeInstanceOf(WorkspaceGroupError);
+  });
+
+  it('creates a workspace directly in its validated destination group', async () => {
+    const group = await workspaceGroupService.create({ name: 'Client work' });
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-workspace-direct-group-'));
+
+    const workspace = await workspaceService.create(new CreateWorkspaceDto(
+      'Grouped project', dir, null, null, 'native', null, null, false, {}, [], group.id,
+    ));
+
+    expect(workspace.groupId).toBe(group.id);
+    expect(workspace.position).toBe(0);
+  });
+
+  it('rejects an unknown destination before persisting the workspace', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-workspace-invalid-group-'));
+    const before = await workspaceRepository.listWorkspaces();
+
+    await expect(workspaceService.create(new CreateWorkspaceDto(
+      'Invalid destination', dir, null, null, 'native', null, null, false, {}, [],
+      '018f0000-0000-7000-8000-000000000001',
+    ))).rejects.toMatchObject({ code: 'group_not_found' });
+
+    expect(await workspaceRepository.listWorkspaces()).toHaveLength(before.length);
   });
 
   it('suporta arvore de 3+ niveis (Trabalho > Projeto 1 > workspaces)', async () => {

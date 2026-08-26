@@ -18,7 +18,7 @@ export const DOCS_EN: DocsCatalog = {
     {
       id: 'workspace-folders',
       title: 'Organize workspaces into folders',
-      body: `Group workspaces into folders in the sidebar once you have several projects (per client, per team, per environment). Type a name in "New folder" at the bottom of the list to create one at the root; drag a workspace onto a folder's header to file it there, or drag it onto empty space in the list to send it back to the root. Folders nest inside other folders the same way, with no depth limit — drag one folder onto another to make it a subfolder, or use the "new subfolder" icon in any folder's header to create one already inside it; a folder can never be dropped into itself or into one of its own subfolders. Double-click a folder's name or use its pencil icon to rename it, and each folder remembers whether it's collapsed across restarts. Deleting a folder (trash icon, with confirmation) is never destructive: every workspace and subfolder inside it moves up to the root instead of being removed.`,
+      body: `Group workspaces into folders in the sidebar once you have several projects (per client, per team, per environment). Type a name in "New folder" at the bottom of the list to create one at the root; drag a workspace onto a folder's header to file it there, or drag it onto empty space in the list to send it back to the root. A new workspace can start inside a folder right away too: use the plus icon in that folder's header, or pick any folder from the Folder field in the New workspace dialog itself. Folders nest inside other folders the same way, with no depth limit — drag one folder onto another to make it a subfolder, or use the "new subfolder" icon in any folder's header to create one already inside it; a folder can never be dropped into itself or into one of its own subfolders. Double-click a folder's name or use its pencil icon to rename it, and each folder remembers whether it's collapsed across restarts. Deleting a folder (trash icon, with confirmation) is never destructive: every workspace and subfolder inside it moves up to the root instead of being removed.`,
     },
     {
       id: 'wsl-runtime',
@@ -717,13 +717,15 @@ Header: Authorization = Bearer {{accessToken}}`,
   changelog: [
     {
       date: 'Aug 26, 2026 · 0.21.0',
-      title: 'Orkestrai 0.21.0: portable Roles and profile-first agents',
-      summary: 'Reuse specialist Roles across projects and select the right provider account when creating an agent.',
+      title: 'Orkestrai 0.21.0: portable Roles and faster workspace setup',
+      summary: 'Reuse specialist Roles, select the right provider account, and file a workspace into its folder during creation.',
       items: [
         'Added a "Discover from another folder..." button next to Roles\' existing repository discovery: pick any folder in a native dialog and Orkestrai imports every `role.json` found under its `.orkestrai/roles/` directory.',
         'Imported role files are size- and count-bounded, validated before persistence, confined to the selected project, and never overwrite an existing workspace role.',
         'Added a Profile field to the New agent dialog for providers with multi-account Provider Profiles configured.',
         'The profile/provider pair is validated before the terminal is persisted; credentials remain in secure storage and never enter canvas data.',
+        'Added a Folder field to the New workspace dialog, and a plus icon on each folder\'s header that opens the dialog with that folder pre-selected as the destination.',
+        'Regular and preset-based workspaces are persisted directly in the validated destination, preventing partial creation at the sidebar root when the folder is invalid.',
       ],
     },
     {

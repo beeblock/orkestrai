@@ -144,6 +144,7 @@ export class WorkspaceRepository {
     syncAgentInstructionFiles?: boolean;
     repositoryRoots?: WorkspaceRepositoryRoot[];
     hooks?: WorkspaceHooks;
+    groupId?: string | null;
   }): Promise<Workspace> {
     const name = input.name.trim();
     const workingDir = input.workingDir.trim();
@@ -162,8 +163,8 @@ export class WorkspaceRepository {
       sync_agent_instruction_files: input.syncAgentInstructionFiles ?? false,
       repository_roots_json: JSON.stringify(input.repositoryRoots ?? []),
       hooks_json: JSON.stringify(input.hooks ?? {}),
-      group_id: null,
-      position: await this.nextWorkspacePosition(null),
+      group_id: input.groupId ?? null,
+      position: await this.nextWorkspacePosition(input.groupId ?? null),
     });
     return mapWorkspace(model);
   }

@@ -61,7 +61,8 @@ export class CreateWorkspaceDto {
     public readonly wslWorkingDir: string | null = null,
     public readonly syncAgentInstructionFiles = false,
     public readonly hooks: WorkspaceHooks = {},
-    public readonly repositoryRoots: WorkspaceRepositoryRoot[] = []
+    public readonly repositoryRoots: WorkspaceRepositoryRoot[] = [],
+    public readonly groupId: string | null = null,
   ) {}
 
   static from(input: CreateWorkspaceInput): CreateWorkspaceDto {
@@ -75,7 +76,8 @@ export class CreateWorkspaceDto {
       input.wslWorkingDir ?? null,
       false,
       {},
-      input.repositoryRoots
+      input.repositoryRoots,
+      input.groupId ?? null,
     );
   }
 }

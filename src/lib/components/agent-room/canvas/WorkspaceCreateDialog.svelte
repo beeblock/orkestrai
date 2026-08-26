@@ -10,7 +10,7 @@
   import * as Select from '$lib/components/ui/select';
   import WorkspaceIcon from '../WorkspaceIcon.svelte';
   import { createWorkspaceSchema } from '$lib/modules/agent-room/contracts/schemas/workspaceSchemas.js';
-  import type { Workspace } from '$lib/modules/agent-room/domain/types.js';
+  import type { Workspace, WorkspaceGroup } from '$lib/modules/agent-room/domain/types.js';
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
@@ -27,15 +27,40 @@
   type Props = {
     open: boolean;
     initialPresetId?: string;
+    groups?: WorkspaceGroup[];
+    initialGroupId?: string | null;
     onCreated: (workspace: Workspace) => void;
     onClose: () => void;
   };
 
-  let { open, initialPresetId = '', onCreated, onClose }: Props = $props();
+  let { open, initialPresetId = '', groups = [], initialGroupId = null, onCreated, onClose }: Props = $props();
 
   let submitError = $state('');
   let presets = $state<PresetSummary[]>([]);
   let presetId = $state('');
+
+  // Lista achatada com indentacao — as pastas tem profundidade ilimitada.
+  const groupOptions = $derived.by(() => {
+    const byParent = new Map<string | null, WorkspaceGroup[]>();
+    for (const group of groups) {
+      const list = byParent.get(group.parentId) ?? [];
+      list.push(group);
+      byParent.set(group.parentId, list);
+    }
+    for (const list of byParent.values()) list.sort((a, b) => a.position - b.position);
+    const result: Array<{ id: string; name: string; depth: number }> = [];
+    const visited = new Set<string>();
+    const walk = (parentId: string | null, depth: number) => {
+      for (const group of byParent.get(parentId) ?? []) {
+        if (visited.has(group.id)) continue;
+        visited.add(group.id);
+        result.push({ id: group.id, name: group.name, depth });
+        walk(group.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return result;
+  });
   let runtimeKind = $state<'native' | 'wsl'>('native');
   let wslDistribution = $state('');
   let wslWorkingDir = $state('');
@@ -58,6 +83,12 @@
 
   $effect(() => {
     if (open && initialPresetId) presetId = initialPresetId;
+  });
+
+  let lastOpen = false;
+  $effect(() => {
+    if (open && !lastOpen) $formData.groupId = initialGroupId;
+    lastOpen = open;
   });
 
   const desktop = typeof window !== 'undefined'
@@ -163,6 +194,30 @@ const form = superForm(defaults(zod(schema)), {
         </Form.Control>
         <Form.FieldErrors />
       </Form.Field>
+
+      {#if groupOptions.length}
+        <Form.Field {form} name="groupId">
+          <Form.Control>
+            {#snippet children({ props })}
+              <Form.Label>{m['dlg.ws_folder_label']()}</Form.Label>
+              <Select.Root type="single" value={$formData.groupId || '__root__'} onValueChange={(value: string) => ($formData.groupId = value === '__root__' ? null : value)}>
+                <Select.Trigger {...props} class="w-full">
+                  {$formData.groupId ? groupOptions.find((option) => option.id === $formData.groupId)?.name : m['dlg.ws_folder_root']()}
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="__root__" label={m['dlg.ws_folder_root']()} />
+                  {#each groupOptions as option (option.id)}
+                    <Select.Item value={option.id} label={option.name}>
+                      <span style:padding-left={`${option.depth * 12}px`}>{option.name}</span>
+                    </Select.Item>
+                  {/each}
+                </Select.Content>
+              </Select.Root>
+            {/snippet}
+          </Form.Control>
+          <Form.FieldErrors />
+        </Form.Field>
+      {/if}
 
       {#if wsl.supported}
         <div class="grid gap-4 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2">

@@ -1595,6 +1595,7 @@ export const TOURS_EN: Tour[] = [
       { id: 'open-canvas-sidebar', title: 'Open the sidebar', body: 'Expand the Canvas sidebar (the panel toggle in its header) to see the full workspace list.', action: { kind: 'openPage', path: '/canvas?workspace={workspace}' } },
       { id: 'create-workspace-folder', title: 'Create a folder', body: 'Type a name in New folder at the bottom of the list and confirm. It appears at the root, ready to receive workspaces.' },
       { id: 'file-workspace-into-folder', title: 'File a workspace into it', body: 'Drag any workspace onto the folder header to move it there; drag it onto empty space in the list to send it back to the root.' },
+      { id: 'create-workspace-in-folder', title: 'Create a workspace already inside a folder', body: 'Hover a folder\'s header and use the plus icon to open New workspace with that folder pre-selected as the destination, or pick any folder from the Folder field in the dialog itself — no dragging needed afterward.' },
       { id: 'nest-workspace-folders', title: 'Nest and manage folders', body: 'Drag one folder onto another to make it a subfolder, or use the "new subfolder" icon in a folder\'s header to create one already inside it — there\'s no depth limit. Rename with the pencil icon or a double-click, and delete with the trash icon: workspaces and subfolders inside always move up to the root instead of being removed.' },
     ],
   },

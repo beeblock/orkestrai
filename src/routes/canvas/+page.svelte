@@ -431,6 +431,7 @@
   // Formulario de novo workspace
   let showWorkspaceForm = $state(false);
   let initialPresetId = $state('');
+  let pendingWorkspaceGroupId = $state<string | null>(null);
   let showOnboarding = $state(false);
   let requestedTourId = $state<string | null>(null);
   let councilOpen = $state(false);
@@ -2275,8 +2276,10 @@
     <WorkspaceCreateDialog
       open={showWorkspaceForm}
       {initialPresetId}
+      groups={workspaceGroups}
+      initialGroupId={pendingWorkspaceGroupId}
       onCreated={handleWorkspaceCreated}
-      onClose={() => { showWorkspaceForm = false; initialPresetId = ''; }}
+      onClose={() => { showWorkspaceForm = false; initialPresetId = ''; pendingWorkspaceGroupId = null; }}
     />
 
     {#if sidebarCollapsed}
@@ -2413,6 +2416,9 @@
           >{node.group.name}</span>
         {/if}
         <span class="ws-group-actions">
+          <HeaderIconButton label={m['canvas.new_ws_here']()} side="right" onclick={() => { initialPresetId = ''; pendingWorkspaceGroupId = node.group.id; showWorkspaceForm = true; }}>
+            <Plus size={12} />
+          </HeaderIconButton>
           <HeaderIconButton label={m['canvas.new_subfolder']()} side="right" onclick={() => startCreateSubfolder(node.group.id)}>
             <FolderPlus size={12} />
           </HeaderIconButton>

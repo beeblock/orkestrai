@@ -18,7 +18,7 @@ export const DOCS_ES: DocsCatalog = {
     {
       id: 'workspace-folders',
       title: 'Organiza workspaces en carpetas',
-      body: `Agrupa workspaces en carpetas en la barra lateral cuando tengas varios proyectos (por cliente, por equipo, por entorno). Escribe un nombre en "Nueva carpeta" al final de la lista para crear una en la raíz; arrastra un workspace sobre el encabezado de una carpeta para guardarlo ahí, o arrástralo al espacio vacío de la lista para devolverlo a la raíz. Las carpetas se anidan dentro de otras carpetas de la misma forma, sin límite de profundidad — arrastra una carpeta sobre otra para convertirla en subcarpeta, o usa el ícono de "nueva subcarpeta" en el encabezado de cualquier carpeta para crear una ya dentro de ella; una carpeta nunca puede soltarse dentro de sí misma o de una subcarpeta suya. Haz doble clic en el nombre de la carpeta o usa su ícono de lápiz para renombrarla, y cada carpeta recuerda si está colapsada entre reinicios. Eliminar una carpeta (ícono de papelera, con confirmación) nunca es destructivo: cada workspace y subcarpeta dentro de ella sube a la raíz en lugar de eliminarse.`,
+      body: `Agrupa workspaces en carpetas en la barra lateral cuando tengas varios proyectos (por cliente, por equipo, por entorno). Escribe un nombre en "Nueva carpeta" al final de la lista para crear una en la raíz; arrastra un workspace sobre el encabezado de una carpeta para guardarlo ahí, o arrástralo al espacio vacío de la lista para devolverlo a la raíz. Un workspace nuevo también puede empezar ya dentro de una carpeta: usa el ícono de más en su encabezado, o elige cualquier carpeta en el campo Carpeta del propio diálogo de nuevo workspace. Las carpetas se anidan dentro de otras carpetas de la misma forma, sin límite de profundidad — arrastra una carpeta sobre otra para convertirla en subcarpeta, o usa el ícono de "nueva subcarpeta" en el encabezado de cualquier carpeta para crear una ya dentro de ella; una carpeta nunca puede soltarse dentro de sí misma o de una subcarpeta suya. Haz doble clic en el nombre de la carpeta o usa su ícono de lápiz para renombrarla, y cada carpeta recuerda si está colapsada entre reinicios. Eliminar una carpeta (ícono de papelera, con confirmación) nunca es destructivo: cada workspace y subcarpeta dentro de ella sube a la raíz en lugar de eliminarse.`,
     },
     {
       id: 'wsl-runtime',
@@ -717,13 +717,15 @@ Header: Authorization = Bearer {{accessToken}}`,
   changelog: [
     {
       date: '26 ago 2026 · 0.21.0',
-      title: 'Orkestrai 0.21.0: Roles portátiles y agentes con Perfil al crearlos',
-      summary: 'Reutiliza Roles especialistas entre proyectos y elige la cuenta correcta del provider al crear un agente.',
+      title: 'Orkestrai 0.21.0: Roles portátiles y creación más rápida de workspaces',
+      summary: 'Reutiliza Roles especialistas, elige la cuenta correcta del provider y archiva el workspace en una carpeta durante la creación.',
       items: [
         'Agregado el botón "Descubrir en otra carpeta..." junto al discover del repositorio ya existente en Roles: elige cualquier carpeta en un diálogo nativo y Orkestrai importa cada `role.json` encontrada dentro de `.orkestrai/roles/` ahí.',
         'Los archivos de rol importados tienen límites de tamaño y cantidad, se validan antes de persistir, quedan confinados al proyecto seleccionado y nunca sobrescriben un rol existente en el workspace.',
         'Agregado un campo Perfil en el diálogo de Nuevo agente para providers con Perfiles de multi-cuenta configurados.',
         'El par perfil/provider se valida antes de persistir la terminal; las credenciales permanecen en el almacenamiento seguro y nunca entran en los datos del canvas.',
+        'Agregado un campo Carpeta en el diálogo de Nuevo workspace, y un ícono de más en el encabezado de cada carpeta que abre el diálogo con ella preseleccionada como destino.',
+        'Los workspaces normales o basados en preset se guardan directamente en el destino validado, evitando una creación parcial en la raíz cuando la carpeta es inválida.',
       ],
     },
     {

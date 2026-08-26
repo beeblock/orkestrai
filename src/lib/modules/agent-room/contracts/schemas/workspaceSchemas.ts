@@ -24,6 +24,7 @@ export const createWorkspaceSchema = z.object({
   wslDistribution: z.string().trim().nullish(),
   wslWorkingDir: z.string().trim().nullish(),
   repositoryRoots: workspaceRepositoryRootsSchema.default([]),
+  groupId: z.string().trim().uuid().nullish(),
 });
 
 export const updateWorkspaceSchema = z.object({

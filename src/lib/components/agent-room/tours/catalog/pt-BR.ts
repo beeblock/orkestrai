@@ -1599,6 +1599,7 @@ export const TOURS_PT: Tour[] = [
       { id: 'open-canvas-sidebar', title: 'Abra a barra lateral', body: 'Expanda a barra lateral do Canvas (o botão de recolher no cabeçalho dela) pra ver a lista completa de workspaces.', action: { kind: 'openPage', path: '/canvas?workspace={workspace}' } },
       { id: 'create-workspace-folder', title: 'Crie uma pasta', body: 'Digite um nome em Nova pasta no fim da lista e confirme. Ela aparece na raiz, pronta pra receber workspaces.' },
       { id: 'file-workspace-into-folder', title: 'Guarde um workspace nela', body: 'Arraste qualquer workspace pro cabeçalho da pasta pra movê-lo pra lá; arraste pro espaço vazio da lista pra mandar de volta pra raiz.' },
+      { id: 'create-workspace-in-folder', title: 'Crie um workspace já dentro de uma pasta', body: 'Passe o mouse no cabeçalho de uma pasta e use o ícone de mais pra abrir o Novo workspace com essa pasta pré-selecionada como destino, ou escolha qualquer pasta no campo Pasta do próprio diálogo — sem precisar arrastar depois.' },
       { id: 'nest-workspace-folders', title: 'Aninhe e gerencie pastas', body: 'Arraste uma pasta sobre outra pra transformá-la em subpasta, ou use o ícone de "nova subpasta" no cabeçalho de uma pasta pra criar uma já dentro dela — sem limite de profundidade. Renomeie com o ícone de lápis ou duplo-clique, e apague com o ícone de lixeira: workspaces e subpastas dentro sempre sobem pra raiz em vez de serem removidos.' },
     ],
   },

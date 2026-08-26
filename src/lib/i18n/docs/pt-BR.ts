@@ -22,7 +22,7 @@ export const DOCS_PT: DocsCatalog = {
     {
       id: 'workspace-folders',
       title: 'Organize workspaces em pastas',
-      body: `Agrupe workspaces em pastas na barra lateral quando tiver vários projetos (por cliente, por time, por ambiente). Digite um nome em "Nova pasta" no fim da lista pra criar uma na raiz; arraste um workspace pro cabeçalho de uma pasta pra guardá-lo lá, ou arraste pro espaço vazio da lista pra mandar de volta pra raiz. Pastas aninham dentro de outras pastas do mesmo jeito, sem limite de profundidade — arraste uma pasta sobre outra pra transformá-la em subpasta, ou use o ícone de "nova subpasta" no cabeçalho de qualquer pasta pra criar uma já dentro dela; uma pasta nunca pode ser solta dentro dela mesma ou de uma subpasta sua. Dê duplo-clique no nome da pasta ou use o ícone de lápis pra renomear, e cada pasta lembra se está recolhida entre reinícios. Apagar uma pasta (ícone de lixeira, com confirmação) nunca é destrutivo: todo workspace e subpasta dentro dela sobe pra raiz em vez de ser removido.`,
+      body: `Agrupe workspaces em pastas na barra lateral quando tiver vários projetos (por cliente, por time, por ambiente). Digite um nome em "Nova pasta" no fim da lista pra criar uma na raiz; arraste um workspace pro cabeçalho de uma pasta pra guardá-lo lá, ou arraste pro espaço vazio da lista pra mandar de volta pra raiz. Um workspace novo também pode nascer já dentro de uma pasta: use o ícone de mais no cabeçalho dela, ou escolha qualquer pasta no campo Pasta do próprio diálogo de novo workspace. Pastas aninham dentro de outras pastas do mesmo jeito, sem limite de profundidade — arraste uma pasta sobre outra pra transformá-la em subpasta, ou use o ícone de "nova subpasta" no cabeçalho de qualquer pasta pra criar uma já dentro dela; uma pasta nunca pode ser solta dentro dela mesma ou de uma subpasta sua. Dê duplo-clique no nome da pasta ou use o ícone de lápis pra renomear, e cada pasta lembra se está recolhida entre reinícios. Apagar uma pasta (ícone de lixeira, com confirmação) nunca é destrutivo: todo workspace e subpasta dentro dela sobe pra raiz em vez de ser removido.`,
     },
     {
       id: 'wsl-runtime',
@@ -721,13 +721,15 @@ Header: Authorization = Bearer {{accessToken}}`,
   changelog: [
     {
       date: '26 ago 2026 · 0.21.0',
-      title: 'Orkestrai 0.21.0: Roles portáteis e agentes com Perfil na criação',
-      summary: 'Reuse Roles especialistas entre projetos e escolha a conta certa do provider ao criar um agente.',
+      title: 'Orkestrai 0.21.0: Roles portáteis e criação mais rápida de workspaces',
+      summary: 'Reuse Roles especialistas, escolha a conta certa do provider e arquive o workspace numa pasta durante a criação.',
       items: [
         'Adicionado o botão "Descobrir em outra pasta..." ao lado do discover do repositório já existente em Roles: escolha qualquer pasta num diálogo nativo e o Orkestrai importa toda `role.json` encontrada dentro de `.orkestrai/roles/` ali.',
         'Arquivos de role importados têm limites de tamanho e quantidade, são validados antes da persistência, ficam confinados ao projeto selecionado e nunca sobrescrevem uma role existente no workspace.',
         'Adicionado um campo Perfil no diálogo de Novo agente para providers com Perfis de multi-conta configurados.',
         'O par perfil/provider é validado antes de persistir o terminal; credenciais permanecem no armazenamento seguro e nunca entram nos dados do canvas.',
+        'Adicionado um campo Pasta no diálogo de Novo workspace, e um ícone de mais no cabeçalho de cada pasta que abre o diálogo com ela pré-selecionada como destino.',
+        'Workspaces comuns ou baseados em preset são persistidos diretamente no destino validado, evitando criação parcial na raiz quando a pasta é inválida.',
       ],
     },
     {

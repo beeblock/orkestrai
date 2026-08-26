@@ -13,6 +13,7 @@ import { roleService } from './RoleService.js';
 import { providerProfileService } from './ProviderProfileService.js';
 import { floorService } from './FloorService.js';
 import { controlCenterService } from './ControlCenterService.js';
+import { workspaceGroupService } from './WorkspaceGroupService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
   CreateCanvasEdgeDto,
@@ -150,6 +151,7 @@ export class WorkspaceService {
   }
 
   async create(dto: CreateWorkspaceDto) {
+    if (dto.groupId) await workspaceGroupService.assertExists(dto.groupId);
     const resolvedRuntime = await resolveWorkspaceRuntime({
       runtimeKind: dto.runtimeKind,
       workingDir: dto.workingDir,
@@ -168,6 +170,7 @@ export class WorkspaceService {
       syncAgentInstructionFiles: dto.syncAgentInstructionFiles,
       hooks: dto.hooks,
       repositoryRoots: this.assertRepositoryRoots(dto.repositoryRoots),
+      groupId: dto.groupId,
     });
     this.writeInstructionFiles(workspace);
     // Provisiona a ponte (token + skill) ja no nascimento do workspace:

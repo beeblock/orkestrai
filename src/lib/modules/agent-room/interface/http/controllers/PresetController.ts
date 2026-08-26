@@ -2,6 +2,7 @@ import { Controller } from '@beeblock/svelar/routing';
 import { z } from 'zod';
 import { presetService } from '$lib/modules/agent-room/application/services/PresetService.js';
 import { normalizePresetLocale } from '$lib/modules/agent-room/application/catalogs/BuiltinPresetCatalog.js';
+import { ApplyPresetRequest } from '$lib/modules/agent-room/interface/http/requests/PresetRequests.js';
 
 const createPresetSchema = z.object({
   workspaceId: z.string().trim().min(1, 'Informe o workspace.'),
@@ -10,15 +11,6 @@ const createPresetSchema = z.object({
   description: z.string().trim().nullish(),
 });
 
-const applyPresetSchema = z.object({
-  workspaceId: z.string().trim().optional(),
-  name: z.string().trim().optional(),
-  workingDir: z.string().trim().optional(),
-  runtimeKind: z.enum(['native', 'wsl']).optional(),
-  wslDistribution: z.string().trim().nullish(),
-  wslWorkingDir: z.string().trim().nullish(),
-  locale: z.enum(['pt-BR', 'en', 'es']).optional(),
-});
 const publishTeamPackSchema = z.object({
   version: z.string().trim().min(5).max(40),
   releaseNotes: z.string().trim().max(8_000).nullish(),
@@ -105,7 +97,7 @@ export class PresetController extends Controller {
   /** Aplica: { workspaceId } (merge) ou { name, workingDir } (novo workspace). */
   async apply(event: any) {
     try {
-      const input = applyPresetSchema.parse(await event.request.json());
+      const input = await ApplyPresetRequest.validate(event);
       if (input.workspaceId) {
         return this.json({ data: await presetService.apply(event.params.id, { workspaceId: input.workspaceId, locale: input.locale }) });
       }
@@ -119,6 +111,7 @@ export class PresetController extends Controller {
           runtimeKind: input.runtimeKind,
           wslDistribution: input.wslDistribution,
           wslWorkingDir: input.wslWorkingDir,
+          groupId: input.groupId,
           locale: input.locale,
         }),
       });
