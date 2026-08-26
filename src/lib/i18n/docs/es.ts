@@ -728,6 +728,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Los workspaces normales o basados en preset se guardan directamente en el destino validado, evitando una creación parcial en la raíz cuando la carpeta es inválida.',
         'Cambiar solo el perfil de una terminal ahora muestra la confirmación correcta del perfil, y la vista enfocada envía esa selección al backend en vez de descartarla.',
         'Usage y el pie de Workbench ahora identifican las filas por el id único de enrutamiento provider/perfil, evitando claves duplicadas y mostrando el nombre de cada cuenta.',
+        'Después de confirmar el reinicio, Windows y Linux instalan la actualización verificada en silencio y vuelven a abrir la app sin mostrar el asistente del instalador.',
       ],
     },
     {

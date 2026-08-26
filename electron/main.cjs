@@ -805,7 +805,8 @@ ipcMain.handle('orkestrai:update-check', async () => {
 ipcMain.handle('orkestrai:update-state', () => latestUpdateState);
 
 ipcMain.handle('orkestrai:update-install', () => {
-  if (automaticUpdateInstallSupported) autoUpdater?.quitAndInstall();
+  // Install silently and relaunch after the verified update replaces this build.
+  if (automaticUpdateInstallSupported) autoUpdater?.quitAndInstall(true, true);
 });
 
 ipcMain.handle('orkestrai:app-version', () => app.getVersion());

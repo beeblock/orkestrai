@@ -40,6 +40,9 @@ pt-BR, English, and Spanish translations.
 - Usage panels no longer crash from duplicate Svelte keys when a provider has
   multiple profiles. Rows use the unique routing id and display the profile
   name so accounts remain distinguishable.
+- Installing an update on Windows and Linux now runs silently after the user
+  confirms the restart, then relaunches the updated app without exposing the
+  installer wizard.
 
 ## 0.20.1 - 2026-08-25
 
