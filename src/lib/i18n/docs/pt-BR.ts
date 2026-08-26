@@ -731,6 +731,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Adicionado um campo Pasta no diálogo de Novo workspace, e um ícone de mais no cabeçalho de cada pasta que abre o diálogo com ela pré-selecionada como destino.',
         'Workspaces comuns ou baseados em preset são persistidos diretamente no destino validado, evitando criação parcial na raiz quando a pasta é inválida.',
         'Trocar somente o perfil de um terminal agora mostra a confirmação correta de perfil, e a view focada envia essa seleção ao backend em vez de descartá-la.',
+        'Usage e o rodapé do Workbench agora identificam linhas pelo id único de roteamento provider/perfil, evitando erros de chave duplicada e mostrando o nome de cada conta.',
       ],
     },
     {

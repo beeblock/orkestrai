@@ -37,6 +37,9 @@ pt-BR, English, and Spanish translations.
 - Switching only a terminal's Provider Profile now shows a profile-specific
   confirmation instead of claiming the provider changed. The focused terminal
   view also sends the selected profile to the backend instead of dropping it.
+- Usage panels no longer crash from duplicate Svelte keys when a provider has
+  multiple profiles. Rows use the unique routing id and display the profile
+  name so accounts remain distinguishable.
 
 ## 0.20.1 - 2026-08-25
 

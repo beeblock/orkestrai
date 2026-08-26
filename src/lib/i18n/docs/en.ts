@@ -727,6 +727,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Added a Folder field to the New workspace dialog, and a plus icon on each folder\'s header that opens the dialog with that folder pre-selected as the destination.',
         'Regular and preset-based workspaces are persisted directly in the validated destination, preventing partial creation at the sidebar root when the folder is invalid.',
         'Switching only a terminal profile now shows the correct profile confirmation, and the focused terminal view sends that selection to the backend instead of dropping it.',
+        'Usage and the Workbench footer now key rows by the unique provider/profile routing id, preventing duplicate-key crashes and showing the profile name for each account.',
       ],
     },
     {

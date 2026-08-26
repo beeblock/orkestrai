@@ -4,6 +4,7 @@
   import { Activity, TriangleAlert } from '@lucide/svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { usageSeverity } from '$lib/modules/agent-room/domain/usage.js';
+  import { usageRoutingId } from '$lib/modules/agent-room/domain/usage-routing.js';
   import type { ProviderUsage, UsageWindow } from '$lib/modules/agent-room/application/services/UsageService.js';
   import { usageProviderDefinition } from '$lib/modules/agent-room/domain/usage-providers.js';
   import { retainUsageFeed, usageStore } from './usage-store.svelte.js';
@@ -27,9 +28,10 @@
   function summary(usage: ProviderUsage): string {
     const meta = usageProviderDefinition(usage.provider);
     if (usage.error || !usage.windows.length) return `${meta.name}: ${m['workbench.usage_unavailable']()}`;
+    const providerLabel = usage.profileName ? `${meta.name} · ${usage.profileName}` : meta.name;
     return usage.windows
       .map((window) => m['workbench.usage_summary']({
-        provider: meta.name,
+        provider: providerLabel,
         window: windowLabel(window),
         percent: window.usedPercent,
       }))
@@ -54,7 +56,7 @@
     {#if usageStore.loading && !usageStore.values.length}
       <span class="text-[10px] text-[var(--app-text-muted)]">{m['workbench.usage_loading']()}</span>
     {:else}
-      {#each usageStore.values.filter((usage) => usage.windows.length > 0 || usage.error) as usage (usage.provider)}
+      {#each usageStore.values.filter((usage) => usage.windows.length > 0 || usage.error) as usage (usageRoutingId(usage))}
         {@const meta = usageProviderDefinition(usage.provider)}
         <Tooltip.Root>
           <Tooltip.Trigger>
@@ -67,7 +69,7 @@
                 onclick={openUsage}
               >
                 {#if meta.icon}<img src={meta.icon} width="12" height="12" alt="" class="size-3 object-contain" />{/if}
-                <span class="font-medium">{meta.name}</span>
+                <span class="font-medium">{meta.name}{#if usage.profileName} · {usage.profileName}{/if}</span>
                 {#if usage.error || !usage.windows.length}
                   <TriangleAlert size={10} class="text-[var(--app-warning)]" aria-hidden="true" />
                 {:else}

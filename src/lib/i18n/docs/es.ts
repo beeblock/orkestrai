@@ -727,6 +727,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Agregado un campo Carpeta en el diálogo de Nuevo workspace, y un ícono de más en el encabezado de cada carpeta que abre el diálogo con ella preseleccionada como destino.',
         'Los workspaces normales o basados en preset se guardan directamente en el destino validado, evitando una creación parcial en la raíz cuando la carpeta es inválida.',
         'Cambiar solo el perfil de una terminal ahora muestra la confirmación correcta del perfil, y la vista enfocada envía esa selección al backend en vez de descartarla.',
+        'Usage y el pie de Workbench ahora identifican las filas por el id único de enrutamiento provider/perfil, evitando claves duplicadas y mostrando el nombre de cada cuenta.',
       ],
     },
     {

@@ -6,6 +6,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
   import { usageSeverity } from '$lib/modules/agent-room/domain/usage.js';
+  import { usageRoutingId } from '$lib/modules/agent-room/domain/usage-routing.js';
   import type { UsageWindow } from '$lib/modules/agent-room/application/services/UsageService.js';
   import { USAGE_PROVIDERS, usageProviderDefinition, type UsageDiagnostic } from '$lib/modules/agent-room/domain/usage-providers.js';
   import { refreshUsage, retainUsageFeed, usageStore } from '../usage-store.svelte.js';
@@ -112,12 +113,12 @@
     {/each}
   {/if}
 
-  {#each usages as usage (usage.provider)}
+  {#each usages as usage (usageRoutingId(usage))}
     {@const meta = usageProviderDefinition(usage.provider)}
     <section class="usage-card">
       <div class="usage-card-header">
         {#if meta.icon}<img src={meta.icon} width="18" height="18" alt="" class="provider-icon" />{:else}<Bot size={18} class="text-[var(--app-text-muted)]" aria-hidden="true" />{/if}
-        <span class="provider-name">{meta.name}</span>
+        <span class="provider-name">{meta.name}{#if usage.profileName} · {usage.profileName}{/if}</span>
         {#if usage.plan}<span class="plan-badge">{usage.plan}</span>{/if}
       </div>
 
