@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   openPath: (path) => ipcRenderer.invoke('orkestrai:open-path', path),
   /** Copia texto pelo clipboard nativo, inclusive no Chromium do Windows. */
   writeClipboardText: (value) => ipcRenderer.invoke('orkestrai:clipboard-write', value),
+  /** Cola texto no elemento focado sem expor o conteudo do clipboard ao renderer. */
+  pasteClipboardText: () => ipcRenderer.invoke('orkestrai:clipboard-paste-text'),
   openFigmaPluginFolder: () => ipcRenderer.invoke('orkestrai:figma-plugin-folder'),
   /** Mantém o menu nativo no mesmo idioma selecionado dentro do app. */
   setMenuLocale: (locale) => ipcRenderer.invoke('orkestrai:menu-locale', locale),

@@ -371,7 +371,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'atalhos',
       title: 'Atalhos',
-      body: `⌘P paleta · ⌘K (ou Ctrl+K) buscar na documentação de qualquer tela · ⌘2 Central de Providers · ⌘⇧A próxima atenção · ⌘⇧T organizar os nós selecionados ou todo o canvas quando nada está selecionado · Cmd/Ctrl+D duplicar formas selecionadas · Cmd/Ctrl+C e Cmd/Ctrl+V copiar e colar formas selecionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nova nota · L conectar selecionados · Alt+1…9 focar terminal · Alt+Espaço ditado por voz · ⌘F buscar no terminal · ⌘Z desfazer · Backspace excluir. No Windows, a barra de título estilizada oferece Arquivo, Editar, Visualizar, Workspace, Janela e Ajuda sem perder os controles da janela; macOS e Linux mantêm seus menus de plataforma.`,
+      body: `⌘P paleta · ⌘K (ou Ctrl+K) buscar na documentação de qualquer tela · ⌘2 Central de Providers · ⌘⇧A próxima atenção · ⌘⇧T organizar os nós selecionados ou todo o canvas quando nada está selecionado · Cmd/Ctrl+D duplicar formas selecionadas · Cmd/Ctrl+C e Cmd/Ctrl+V copiar e colar formas selecionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nova nota · L conectar selecionados · Alt+1…9 focar terminal · Alt+Espaço ditado por voz · ⌘F buscar no terminal · ⌘Z desfazer · Backspace excluir. Nos terminais do Windows, Ctrl+V cola o texto do clipboard nativo; quando não há texto, o atalho original da CLI continua disponível para colar imagem. No Windows, a barra de título estilizada oferece Arquivo, Editar, Visualizar, Workspace, Janela e Ajuda sem perder os controles da janela; macOS e Linux mantêm seus menus de plataforma.`,
     },
   ],
   useCases: [
@@ -719,6 +719,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '27 ago 2026 · 0.21.2',
+      title: 'Orkestrai 0.21.2: colar confiável nos terminais do Windows',
+      summary: 'Ctrl+V agora cola o texto copiado em vez de ser confundido com um comando para colar imagem pelas CLIs de agentes.',
+      items: [
+        'Terminais no Windows detectam texto no clipboard nativo e disparam um paste real do xterm, incluindo o bracketed paste usado por CLIs interativas.',
+        'O conteúdo do clipboard permanece dentro do Electron e nunca é exposto pela ponte do renderer; somente a janela focada do Orkestrai pode solicitar a colagem.',
+        'Quando o clipboard não contém texto, Ctrl+V preserva o caractere de controle original para que providers com suporte a colar imagem mantenham esse fluxo.',
+      ],
+    },
     {
       date: '26 ago 2026 · 0.21.1',
       title: 'Orkestrai 0.21.1: workspaces permanecem pausados e o Windows fica em segundo plano',

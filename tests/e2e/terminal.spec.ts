@@ -136,7 +136,7 @@ test.describe('terminais PTY', () => {
     }
   });
 
-  test('copia a selecao do terminal com atalho e clique direito', async ({ page, request, context }) => {
+  test('copia a selecao e cola texto com os atalhos nativos do Windows', async ({ page, request, context }) => {
     const runId = Date.now();
     const marker = `ORKESTRAI_COPY_${runId}`;
     const workspaceResponse = await request.post('/api/agent-room/workspaces', {
@@ -144,6 +144,9 @@ test.describe('terminais PTY', () => {
     });
     const workspace = (await workspaceResponse.json()).data as { id: string };
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'Win32' });
+    });
 
     try {
       await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
@@ -175,6 +178,13 @@ test.describe('terminais PTY', () => {
       await output.dblclick({ force: true });
       await output.click({ button: 'right', force: true });
       await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(marker);
+
+      const pasteMarker = `ORKESTRAI_PASTE_${runId}`;
+      await page.evaluate((text) => navigator.clipboard.writeText(text), `echo ${pasteMarker}`);
+      await input.focus();
+      await page.keyboard.press('Control+V');
+      await page.keyboard.press('Enter');
+      await expect(terminal.locator('.terminal-container')).toContainText(pasteMarker, { timeout: 10_000 });
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }

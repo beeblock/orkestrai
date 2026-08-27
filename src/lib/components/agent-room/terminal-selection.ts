@@ -50,3 +50,16 @@ export function isTerminalCopyShortcut(event: Pick<KeyboardEvent, 'type' | 'key'
     && !event.shiftKey
     && event.key.toLowerCase() === 'c';
 }
+
+export function isWindowsTerminalPasteShortcut(
+  event: Pick<KeyboardEvent, 'type' | 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>,
+  platform: string
+) {
+  return platform.toLowerCase().startsWith('win')
+    && event.type === 'keydown'
+    && event.ctrlKey
+    && !event.metaKey
+    && !event.altKey
+    && !event.shiftKey
+    && event.key.toLowerCase() === 'v';
+}

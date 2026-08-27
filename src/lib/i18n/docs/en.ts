@@ -367,7 +367,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'atalhos',
       title: 'Shortcuts',
-      body: `⌘P palette · ⌘K (or Ctrl+K) search documentation from any screen · ⌘2 Provider Center · ⌘⇧A next attention · ⌘⇧T organize selected nodes, or the whole canvas when none are selected · Cmd/Ctrl+D duplicate selected shapes · Cmd/Ctrl+C and Cmd/Ctrl+V copy and paste selected shapes · ⌘G group · ⌘⇧G ungroup · N new note · L connect selected · Alt+1…9 focus terminal · Alt+Space voice dictation · ⌘F search terminal · ⌘Z undo · Backspace delete. On Windows, the styled title bar provides File, Edit, View, Workspace, Window, and Help while preserving window controls; macOS and Linux keep their platform menus.`,
+      body: `⌘P palette · ⌘K (or Ctrl+K) search documentation from any screen · ⌘2 Provider Center · ⌘⇧A next attention · ⌘⇧T organize selected nodes, or the whole canvas when none are selected · Cmd/Ctrl+D duplicate selected shapes · Cmd/Ctrl+C and Cmd/Ctrl+V copy and paste selected shapes · ⌘G group · ⌘⇧G ungroup · N new note · L connect selected · Alt+1…9 focus terminal · Alt+Space voice dictation · ⌘F search terminal · ⌘Z undo · Backspace delete. In Windows terminals, Ctrl+V pastes native clipboard text; when the clipboard has no text, the original CLI shortcut remains available for image paste. On Windows, the styled title bar provides File, Edit, View, Workspace, Window, and Help while preserving window controls; macOS and Linux keep their platform menus.`,
     },
   ],
   useCases: [
@@ -715,6 +715,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Aug 27, 2026 · 0.21.2',
+      title: 'Orkestrai 0.21.2: reliable terminal paste on Windows',
+      summary: 'Ctrl+V now pastes copied text instead of being mistaken for an image-paste command by agent CLIs.',
+      items: [
+        'Windows terminals detect text in the native clipboard and dispatch a real xterm paste, including bracketed-paste handling used by interactive CLIs.',
+        'Clipboard contents stay inside Electron and are never exposed through the renderer bridge; only the focused Orkestrai window can request the paste.',
+        'When the clipboard contains no text, Ctrl+V keeps its original control character so providers that support image paste retain that workflow.',
+      ],
+    },
     {
       date: 'Aug 26, 2026 · 0.21.1',
       title: 'Orkestrai 0.21.1: workspaces stay paused and Windows stays in the background',

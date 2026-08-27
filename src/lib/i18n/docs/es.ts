@@ -367,7 +367,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'atalhos',
       title: 'Atajos',
-      body: `⌘P paleta · ⌘K (o Ctrl+K) buscar en la documentación desde cualquier pantalla · ⌘2 Central de Providers · ⌘⇧A próxima atención · ⌘⇧T organizar los nodos seleccionados o todo el canvas cuando no hay selección · Cmd/Ctrl+D duplicar formas seleccionadas · Cmd/Ctrl+C y Cmd/Ctrl+V copiar y pegar formas seleccionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nueva nota · L conectar seleccionados · Alt+1…9 enfocar terminal · Alt+Espacio dictado por voz · ⌘F buscar en la terminal · ⌘Z deshacer · Backspace eliminar. En Windows, la barra de título estilizada ofrece Archivo, Editar, Ver, Workspace, Ventana y Ayuda sin perder los controles de la ventana; macOS y Linux conservan sus menús de plataforma.`,
+      body: `⌘P paleta · ⌘K (o Ctrl+K) buscar en la documentación desde cualquier pantalla · ⌘2 Central de Providers · ⌘⇧A próxima atención · ⌘⇧T organizar los nodos seleccionados o todo el canvas cuando no hay selección · Cmd/Ctrl+D duplicar formas seleccionadas · Cmd/Ctrl+C y Cmd/Ctrl+V copiar y pegar formas seleccionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nueva nota · L conectar seleccionados · Alt+1…9 enfocar terminal · Alt+Espacio dictado por voz · ⌘F buscar en la terminal · ⌘Z deshacer · Backspace eliminar. En las terminales de Windows, Ctrl+V pega el texto del portapapeles nativo; cuando no hay texto, el atajo original de la CLI sigue disponible para pegar imágenes. En Windows, la barra de título estilizada ofrece Archivo, Editar, Ver, Workspace, Ventana y Ayuda sin perder los controles de la ventana; macOS y Linux conservan sus menús de plataforma.`,
     },
   ],
   useCases: [
@@ -715,6 +715,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '27 ago 2026 · 0.21.2',
+      title: 'Orkestrai 0.21.2: pegado confiable en terminales de Windows',
+      summary: 'Ctrl+V ahora pega el texto copiado en vez de ser confundido con un comando para pegar imágenes por las CLIs de agentes.',
+      items: [
+        'Las terminales de Windows detectan texto en el portapapeles nativo y disparan un pegado real de xterm, incluido el bracketed paste usado por CLIs interactivas.',
+        'El contenido del portapapeles permanece dentro de Electron y nunca se expone mediante el puente del renderer; solo la ventana enfocada de Orkestrai puede solicitar el pegado.',
+        'Cuando el portapapeles no contiene texto, Ctrl+V conserva el carácter de control original para que los providers con pegado de imágenes mantengan ese flujo.',
+      ],
+    },
     {
       date: '26 ago 2026 · 0.21.1',
       title: 'Orkestrai 0.21.1: workspaces en pausa y Windows en segundo plano',

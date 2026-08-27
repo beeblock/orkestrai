@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTerminalCopyShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange } from '$lib/components/agent-room/terminal-selection.js';
+import { isTerminalCopyShortcut, isWindowsTerminalPasteShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange } from '$lib/components/agent-room/terminal-selection.js';
 
 describe('terminal selection geometry', () => {
   it('mapeia coordenadas pelo retangulo visual escalado', () => {
@@ -34,5 +34,14 @@ describe('terminal selection geometry', () => {
     expect(isTerminalCopyShortcut(event, false)).toBe(false);
     expect(isTerminalCopyShortcut({ ...event, key: 'x' }, true)).toBe(false);
     expect(isTerminalCopyShortcut({ ...event, type: 'keyup' }, true)).toBe(false);
+  });
+
+  it('intercepta somente Ctrl+V simples no Windows para colar texto', () => {
+    const event = { type: 'keydown', key: 'v', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false };
+    expect(isWindowsTerminalPasteShortcut(event, 'win32')).toBe(true);
+    expect(isWindowsTerminalPasteShortcut(event, 'Win64')).toBe(true);
+    expect(isWindowsTerminalPasteShortcut(event, 'darwin')).toBe(false);
+    expect(isWindowsTerminalPasteShortcut({ ...event, shiftKey: true }, 'win32')).toBe(false);
+    expect(isWindowsTerminalPasteShortcut({ ...event, type: 'keyup' }, 'win32')).toBe(false);
   });
 });

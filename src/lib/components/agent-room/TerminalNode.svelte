@@ -20,7 +20,7 @@
   import { speakText } from './voice-speech.js';
   import { voiceModelsReadyForUse } from './voice-model-status.js';
   import { terminalDictationInput } from './terminal-dictation.js';
-  import { isTerminalCopyShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange, type TerminalCell } from './terminal-selection.js';
+  import { isTerminalCopyShortcut, isWindowsTerminalPasteShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange, type TerminalCell } from './terminal-selection.js';
   import { workingDirectoryFromOsc } from './terminal-working-directory.js';
   import { audioSignalIsEmpty } from '$lib/modules/agent-room/domain/voice-audio.js';
   import {
@@ -355,6 +355,29 @@
     }
   }
 
+  async function pasteTerminalClipboard(terminal: Terminal) {
+    const desktop = (window as typeof window & {
+      orkestraiDesktop?: {
+        pasteClipboardText?: () => Promise<boolean>;
+        platform?: string;
+      };
+    }).orkestraiDesktop;
+    try {
+      if (desktop?.pasteClipboardText && await desktop.pasteClipboardText()) return;
+      if (!desktop?.pasteClipboardText) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          terminal.paste(text);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to the original Ctrl+V control character. Agent CLIs use
+      // it for image paste when the clipboard does not contain text.
+    }
+    sendInput?.('\x16');
+  }
+
   onMount(() => {
     let fontSize = 13;
     let fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -375,6 +398,14 @@
     terminal.attachCustomKeyEventHandler((event) => {
       if (isTerminalCopyShortcut(event, terminal.hasSelection())) {
         void copyTerminalSelection(terminal);
+        return false;
+      }
+      const desktopPlatform = (window as typeof window & { orkestraiDesktop?: { platform?: string } })
+        .orkestraiDesktop?.platform;
+      if (isWindowsTerminalPasteShortcut(event, desktopPlatform ?? navigator.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        void pasteTerminalClipboard(terminal);
         return false;
       }
       if (event.type !== 'keydown') return true;

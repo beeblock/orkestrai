@@ -5,6 +5,16 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.21.2 - 2026-08-27
+
+### Fixed
+
+- `Ctrl+V` in Windows terminals now pastes native clipboard text into xterm
+  instead of forwarding the control character to agent CLIs, where Codex and
+  other tools could misinterpret it as an image-paste request. When the
+  clipboard has no text, the original control character is preserved so CLI
+  image paste remains available.
+
 ## 0.21.1 - 2026-08-26
 
 ### Fixed

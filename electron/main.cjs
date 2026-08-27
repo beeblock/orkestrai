@@ -847,6 +847,16 @@ ipcMain.handle('orkestrai:clipboard-write', (_event, value) => {
   return true;
 });
 
+ipcMain.handle('orkestrai:clipboard-paste-text', (event) => {
+  // Do not expose clipboard contents to the renderer. Only confirm that the
+  // focused main window has text, then let Chromium dispatch its native paste
+  // event to the focused xterm textarea.
+  if (!mainWindow || event.sender !== mainWindow.webContents || !mainWindow.isFocused()) return false;
+  if (!clipboard.readText()) return false;
+  event.sender.paste();
+  return true;
+});
+
 ipcMain.handle('orkestrai:collaboration-invite-consume', () => {
   const invite = pendingCollaborationInvite;
   pendingCollaborationInvite = null;
