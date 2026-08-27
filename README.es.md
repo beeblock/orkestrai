@@ -61,6 +61,15 @@ normal de los agentes no se guarda.
   scripts Bruno permanecen deliberadamente en el runtime QuickJS seguro oficial:
   no se habilita el acceso NodeVM inseguro al filesystem, procesos ni módulos
   locales arbitrarios del equipo.
+- **Flujos nativos de imágenes:** conecta Notas, referencias ordenadas de Imagen
+  PNG/JPEG/WebP y un agente Codex activo a un nodo Generar imágenes en el mismo
+  canvas; el mismo nodo se abre en Workbench. El Codex conectado usa la tool
+  nativa `image_gen.imagegen` de su propia sesión autenticada, con una llamada por
+  resultado y transparencia PNG real solicitada en el prompt. Orkestrai nunca solicita ni almacena una clave de API
+  de imagen. Valida los destinos preasignados dentro del workspace antes de que
+  los resultados vuelvan como nodos Imagen conectados, con procedencia e
+  historial limitado, listos para alimentar otra rama. Personas, CLI y tools MCP
+  tipadas operan el mismo flujo visible.
 - **Dispositivos móviles integrados:** agrega un nodo persistente de Dispositivo
   móvil desde la barra del Canvas; Workbench lista y abre el mismo nodo y la misma
   sesión. Controla iPhone y iPad Simulators en Macs Apple Silicon o AVDs Android

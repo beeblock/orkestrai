@@ -53,6 +53,7 @@ Uso:
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
   orkestrai note create <titulo> [--content <texto>] [--connect <agente|all>]
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
+  orkestrai image list | image read <nodeId> | image run <nodeId> [--prompt <texto>] [--count <1-4>] [--transparent] [--output <pasta>] [--prefix <nome>] | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design apply <nodeId> <operations-json> --revision <n> [--summary <texto>] [--task <taskId>]
   orkestrai design import-code <nodeId> <arquivo> --format html|svelte|react|vue --name <nome> --revision <n> [--css <arquivo>]
@@ -569,6 +570,59 @@ export async function run(argv, options = {}) {
         return data.ok ? 0 : 2;
       }
       throw new Error('Uso: orkestrai api <list|reference|read|import|create|replace|sync-status|pull|push|export|run|run-runner> ...');
+    }
+    case 'image': {
+      const [action, nodeId] = rest;
+      if (action === 'list') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/image-workflows');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          for (const workflow of data) out(`- ${workflow.title} [${workflow.status}] (${workflow.nodeId}) · ${workflow.references.length} refs · ${workflow.outputs.length} outputs`);
+          if (!data.length) out('(nenhum fluxo de imagem)');
+        }
+        return 0;
+      }
+      if (action === 'read' && nodeId) {
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`);
+        out(JSON.stringify(data, null, 2));
+        return 0;
+      }
+      if (action === 'run' && nodeId) {
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`, {
+          prompt: flags.prompt,
+          count: flags.count,
+          transparentBackground: flags.transparent === undefined ? undefined : Boolean(flags.transparent),
+          outputDirectory: flags.output,
+          filePrefix: flags.prefix,
+          from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Run ${data.runId} preparado para image_gen.imagegen. Destinos: ${data.outputPaths.join(', ')}`);
+        return 0;
+      }
+      if (action === 'complete' && nodeId) {
+        const [runId, ...outputPaths] = rest.slice(2);
+        if (!runId || !outputPaths.length) throw new Error('Uso: orkestrai image complete <nodeId> <runId> <outputPath...>');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/complete`, { runId, outputPaths, from: selfAgent });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Fluxo concluido: ${data.outputPaths.length} imagem(ns) materializada(s).`);
+        return 0;
+      }
+      if (action === 'fail' && nodeId) {
+        const runId = rest[2];
+        if (!runId) throw new Error('Uso: orkestrai image fail <nodeId> <runId> [--error image_gen_tool_failed]');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/fail`, { runId, errorCode: flags.error ?? 'image_gen_tool_failed', from: selfAgent });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Falha registrada no run ${data.run.id}.`);
+        return 0;
+      }
+      if (action === 'cancel' && nodeId) {
+        const data = await bridge(config, 'DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(data.cancelled ? `Execucao ${data.runId} cancelada.` : 'Nenhuma execucao ativa.');
+        return 0;
+      }
+      throw new Error('Uso: orkestrai image <list|read|run|complete|fail|cancel> ...');
     }
     case 'design': {
       const [action, nodeId, ...values] = rest;

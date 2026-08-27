@@ -39,7 +39,7 @@ export const updateWorkspaceSchema = z.object({
   repositoryRoots: workspaceRepositoryRootsSchema.optional(),
 });
 
-export const canvasNodeTypeSchema = z.enum(['terminal', 'note', 'fileTree', 'editor', 'diff', 'portal', 'apiClient', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'usage', 'device', 'design']);
+export const canvasNodeTypeSchema = z.enum(['terminal', 'note', 'fileTree', 'editor', 'diff', 'portal', 'apiClient', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'imageWorkflow', 'usage', 'device', 'design']);
 
 export const createCanvasNodeSchema = z.object({
   type: canvasNodeTypeSchema,

@@ -1600,6 +1600,56 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'creative-image-workflow',
+    icon: 'Images',
+    title: 'Create consistent images with your team',
+    tagline: 'Brief, references, agent, generation, and reusable outputs in one canvas flow.',
+    steps: [
+      {
+        id: 'create-director',
+        title: 'Add a creative director',
+        body: 'I create a Codex agent that can inspect and run the same image workflow you see. Keep a live Codex connected and use an authenticated account or plan with ImageGen available whenever you want to generate or edit images.',
+        action: { kind: 'createAgent', title: 'Creative Director', provider: 'codex' },
+        check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Creative Director' },
+      },
+      {
+        id: 'create-brief',
+        title: 'Write the reusable visual brief',
+        body: 'I create a note for palette, character traits, art direction, exclusions, and consistency rules. Its content is appended to every run while it remains connected.',
+        action: { kind: 'createNote', title: 'Visual Brief', content: '# Visual brief\n\n## Character\n\n## Art direction\n\n## Palette\n\n## Keep consistent\n' },
+        check: { kind: 'nodeExists', nodeType: 'note', titleIncludes: 'Visual Brief' },
+      },
+      {
+        id: 'create-workflow',
+        title: 'Create the native image workflow',
+        body: 'I create a workflow for two transparent variations. The connected Codex uses its native ImageGen tool and copies results to generated/images in this workspace.',
+        action: { kind: 'createImageWorkflow', title: 'Image Generation', prompt: 'Create two polished, consistent character poses using the connected visual brief and reference images.' },
+        check: { kind: 'nodeExists', nodeType: 'imageWorkflow', titleIncludes: 'Image Generation' },
+      },
+      {
+        id: 'connect-context',
+        title: 'Connect context and executor',
+        body: 'I connect the note and agent to the workflow. Typed connections make their roles explicit: notes become prompt context, Image nodes become ordered references, and the terminal is recorded as executor.',
+        action: [
+          { kind: 'connect', fromTitle: 'Visual Brief', toTitle: 'Image Generation' },
+          { kind: 'connect', fromTitle: 'Creative Director', toTitle: 'Image Generation' },
+        ],
+        check: { kind: 'edgeExists', fromTitle: 'Visual Brief', toTitle: 'Image Generation' },
+      },
+      {
+        id: 'add-references',
+        title: 'Add ordered references',
+        body: 'Add existing images from the Image menu and connect them in the order shown by the numbered thumbnails. No API key is needed: the connected Codex uses image_gen.imagegen through an authenticated account or plan with ImageGen available.',
+      },
+      {
+        id: 'run-and-reuse',
+        title: 'Generate and continue the graph',
+        body: 'Click Generate or ask the Creative Director to use image_workflow_read and image_workflow_run. Codex makes one native ImageGen call per output, copies the files into the workspace, and confirms them with image_workflow_complete. Each result appears as a connected Image node with provenance and history.',
+        check: { kind: 'nodeExists', nodeType: 'imageWorkflow', titleIncludes: 'Image Generation' },
+      },
+    ],
+  },
+  {
     id: 'desktop-diagnostics',
     icon: 'Activity',
     title: 'Diagnose the desktop app',

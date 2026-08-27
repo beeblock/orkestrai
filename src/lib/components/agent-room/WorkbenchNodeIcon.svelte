@@ -6,6 +6,7 @@
     GitCompareArrows,
     Globe2,
     Image as ImageIcon,
+    Sparkles,
     Repeat2,
     SquareKanban,
     SquareTerminal,
@@ -35,6 +36,7 @@
 {:else if type === 'editor'}<FileCode2 {size} aria-hidden="true" />
 {:else if type === 'diff'}<GitCompareArrows {size} aria-hidden="true" />
 {:else if type === 'image'}<ImageIcon {size} aria-hidden="true" />
+{:else if type === 'imageWorkflow'}<Sparkles {size} aria-hidden="true" />
 {:else if type === 'flow'}<Workflow {size} aria-hidden="true" />
 {:else if type === 'loop'}<Repeat2 {size} aria-hidden="true" />
 {:else if type === 'usage'}<Gauge {size} aria-hidden="true" />

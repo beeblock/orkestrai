@@ -70,6 +70,8 @@
   import TasksCanvasNode from '$lib/components/agent-room/canvas/TasksCanvasNode.svelte';
   import FlowCanvasNode from '$lib/components/agent-room/canvas/FlowCanvasNode.svelte';
   import ImageCanvasNode from '$lib/components/agent-room/canvas/ImageCanvasNode.svelte';
+  import ImageWorkflowCanvasNode from '$lib/components/agent-room/canvas/ImageWorkflowCanvasNode.svelte';
+  import ImageToolbarMenu from '$lib/components/agent-room/canvas/ImageToolbarMenu.svelte';
   import ToolbarButton from '$lib/components/agent-room/canvas/ToolbarButton.svelte';
   import RoutinePanel from '$lib/components/agent-room/canvas/RoutinePanel.svelte';
   import RolesPanel from '$lib/components/agent-room/canvas/RolesPanel.svelte';
@@ -100,7 +102,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Image as ImageIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Workflow, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Workflow, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -129,6 +131,7 @@
     tasks: TasksCanvasNode,
     flow: FlowCanvasNode,
     image: ImageCanvasNode,
+    imageWorkflow: ImageWorkflowCanvasNode,
     usage: UsageCanvasNode,
     device: DeviceCanvasNode,
     design: DesignCanvasNode,
@@ -520,7 +523,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'usage' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -553,6 +556,7 @@
     tasks: async (rect) => { await addTasksNode(rect); },
     flow: async (rect) => { await addFlowNode(rect); },
     image: async (rect) => { await addImageNode(rect); },
+    imageWorkflow: async (rect) => { await addImageWorkflowNode(rect); },
     usage: async (rect) => { await addUsageNode(rect); },
     design: async (rect) => { await addDesignNode(rect); },
   };
@@ -1207,6 +1211,7 @@
           targetId: otherId,
           targetTitle: String(other?.data?.title ?? other?.type ?? m['canvas.fallback_node']()),
           targetType: String(other?.type ?? m['canvas.fallback_node']()),
+          targetPayload: (other?.data?.payload ?? {}) as Record<string, unknown>,
           direction: (outgoing ? 'out' : 'in') as 'out' | 'in',
         };
       });
@@ -1692,6 +1697,32 @@
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'image', title: m['node.image'](), ...position, ...nodeSize(rect, 220, 160, 320, 240), payload: {}, floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
+  async function addImageWorkflowNode(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'imageWorkflow',
+        title: m['image_workflow.title'](),
+        ...position,
+        ...nodeSize(rect, 390, 440, 440, 560),
+        payload: {
+          schemaVersion: 1,
+          prompt: '',
+          count: 1,
+          transparentBackground: false,
+          outputDirectory: 'generated/images',
+          filePrefix: 'orkestrai-image',
+          status: 'idle',
+          history: [],
+        },
+        floorId: visibleFloorId,
+      }),
     });
     nodes = [...nodes, toFlowNode(node)];
   }
@@ -2579,9 +2610,7 @@
             <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
               <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
             </ToolbarButton>
-            <ToolbarButton label={m['tool.image']()} active={drawTool === 'image'} onclick={() => toggleDrawTool('image')}>
-              <ImageIcon size={15} class="tool-icon-svg" /> {m['node.image']()}
-            </ToolbarButton>
+            <ImageToolbarMenu active={drawTool === 'image' || drawTool === 'imageWorkflow'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} />
             <DesignToolbarMenu
               active={drawTool === 'design' || designExplorationOpen}
               onBlank={() => toggleDrawTool('design')}

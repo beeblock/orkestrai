@@ -14,6 +14,7 @@
   import TasksCanvasNode from './canvas/TasksCanvasNode.svelte';
   import FlowCanvasNode from './canvas/FlowCanvasNode.svelte';
   import ImageCanvasNode from './canvas/ImageCanvasNode.svelte';
+  import ImageWorkflowCanvasNode from './canvas/ImageWorkflowCanvasNode.svelte';
   import UsageCanvasNode from './canvas/UsageCanvasNode.svelte';
   import DesignCanvasNode from './canvas/DesignCanvasNode.svelte';
   import WorkbenchFileView from './WorkbenchFileView.svelte';
@@ -67,6 +68,7 @@
     tasks: TasksCanvasNode,
     flow: FlowCanvasNode,
     image: ImageCanvasNode,
+    imageWorkflow: ImageWorkflowCanvasNode,
     usage: UsageCanvasNode,
     design: DesignCanvasNode,
   };
@@ -167,6 +169,7 @@
           targetId,
           targetTitle: target?.title ?? target?.type ?? m['canvas.fallback_node'](),
           targetType: target?.type ?? m['canvas.fallback_node'](),
+          targetPayload: (target?.payload ?? {}) as Record<string, unknown>,
           direction: (outgoing ? 'out' : 'in') as 'out' | 'in',
         };
       });

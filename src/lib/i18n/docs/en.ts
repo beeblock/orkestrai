@@ -290,6 +290,11 @@ Header: Authorization = Bearer {{accessToken}}`,
       body: `The Image tool (bottom bar) creates a visual reference node on the canvas: mockup, screenshot, architecture diagram. Paste with Ctrl+V or click to pick the file — the image is saved in the workspace (.orkestrai/images/). Connect the node to the leader (or to a specific agent, like the designer) to make clear who should use that reference, and say in chat what to do with it. Double-click the title to rename; the image icon in the header swaps the file.`,
     },
     {
+      id: 'image-workflows',
+      title: 'Native image generation workflows',
+      body: `Open the Image menu in the Canvas toolbar and choose Generate images. This workflow is part of the existing canvas: connect Notes for palette, character rules, art direction, exclusions, or campaign context; connect up to five ordered PNG, JPEG, or WebP Image references; and connect a live Codex agent as executor. An authenticated Codex account or plan with ImageGen available is required; no OpenAI API key is needed. Numbered thumbnails show the exact reference order. Enter a prompt, choose one to four outputs, optionally request a genuine transparent PNG background, and set a relative workspace folder (generated/images by default) plus a safe filename prefix. Generate delegates the run to that Codex session, which reads the exact contract with image_workflow_read and calls its authenticated built-in image_gen.imagegen tool once per requested output. Orkestrai never requests or stores an image API key, never calls an image provider endpoint directly, and does not invent model, quality, size, or format controls that the native tool does not expose. The executor copies each native result to its preallocated workspace destination and calls image_workflow_complete. Orkestrai accepts only that assigned Codex and those exact paths, then validates file signature and size before creating connected Image nodes with input hash, source workflow, run id, output index, duration, and bounded history. Outputs can feed another workflow as references. Cancel invalidates the active run so a late completion cannot be materialized; it cannot interrupt a native tool call already in progress. CLI and MCP list, read, start, complete, fail, and cancel the same visible workflow.`,
+    },
+    {
       id: 'visual-annotations',
       title: 'Shapes and visual annotations',
       body: `Use Shapes in the Canvas toolbar to draw rectangles, rounded boxes, ellipses, diamonds, and editable curved arrows around the work. Double-click to edit the text; the style control changes fill, opacity, border, dash, typography, and arrow anchors. Select a shape and use its duplicate action or Cmd/Ctrl+D to preserve its exact size, text, style, and arrow geometry with a small offset. Cmd/Ctrl+C and Cmd/Ctrl+V copy and paste one or several selected shapes while keeping their relative spacing; every copy is a separate persistent node that remains independently editable.`,
@@ -708,6 +713,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Saved commands', 'safe auto-run', 'shells and WSL'],
     },
     {
+      id: 'creative-image-workflow',
+      title: 'Generate a consistent character and its variations',
+      body: 'Add a Codex Creative Director, a Visual Brief note, and a Generate images workflow. Use an authenticated Codex account or plan with ImageGen available; no OpenAI API key is needed. Connect the note and the live Codex to the workflow, then connect character references in the numbered order. Request genuine transparent PNG output, keep generated/images as the workspace folder, and run the node. The assigned Codex reads the contract, uses its built-in image_gen.imagegen tool with referenced_image_paths, copies each result to the assigned destination, and completes the run. Every validated result becomes a connected Image node, so approved poses can feed the next branch without losing prompt context or provenance. A non-Codex leader can coordinate the work but must connect or delegate it to Codex.',
+      tags: ['Codex ImageGen', 'transparent PNG', 'agent workflow'],
+    },
+    {
       id: 'desktop-diagnostics',
       title: 'Diagnose a desktop action that does not respond',
       body: 'Open View > Developer tools and reproduce the problem while watching Console. Then choose Help > Open logs folder and share orkestrai.log with support. The rotating local log includes renderer errors, internal-server failures, and unexpected exits; common credentials are redacted and normal agent output is not persisted.',
@@ -715,6 +726,18 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Aug 27, 2026 · 0.22.0',
+      title: 'Orkestrai 0.22.0: native image workflows for people and agents',
+      summary: 'Build reusable image-generation graphs from briefs, references, and agents without leaving the workspace.',
+      items: [
+        'Image Generation nodes combine their prompt with connected Note context, up to five ordered Image references, and a connected live Codex, then add every validated output back to the canvas and the selected workspace folder.',
+        'The Codex executor uses its authenticated built-in image_gen.imagegen tool once per requested output; references are passed through referenced_image_paths and genuine transparent PNG output is requested in the prompt.',
+        'Orkestrai never asks for or stores an image API key and never calls a provider endpoint directly. Only the assigned Codex can complete the run, and exact paths, signatures, sizes, and public errors are bounded before persistence.',
+        'Runs keep traceable history and provenance, while typed CLI/MCP read, start, complete, fail, and cancel tools plus a guided creative-team tour let leaders operate the same visible workflow.',
+        'The panel states that ImageGen requires an authenticated Codex account or plan without asking for an OpenAI API key.',
+      ],
+    },
     {
       date: 'Aug 27, 2026 · 0.21.2',
       title: 'Orkestrai 0.21.2: reliable terminal paste on Windows',

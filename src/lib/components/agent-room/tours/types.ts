@@ -6,6 +6,7 @@ export type TourAction =
   | { kind: 'createTasksBoard' }
   | { kind: 'createUsage'; title: string }
   | { kind: 'createApiClient'; title: string }
+  | { kind: 'createImageWorkflow'; title: string; prompt: string }
   | { kind: 'createShape'; title: string; shape?: 'rectangle' | 'rounded' | 'ellipse' | 'diamond' | 'arrow' }
   | { kind: 'createDevice'; title: string }
   | { kind: 'createDesign'; title: string }

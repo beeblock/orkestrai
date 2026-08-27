@@ -95,6 +95,15 @@ common credentials redacted; normal agent output is not persisted.
   in a portable collection file. Bruno scripts deliberately stay in its official
   safe QuickJS runtime: unsafe NodeVM access to the host filesystem, processes,
   and arbitrary local modules is not enabled.
+- **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
+  references, and a live Codex agent to a Generate images node on the same
+  canvas; the same node opens in Workbench. The connected Codex uses its
+  authenticated built-in `image_gen.imagegen` tool, with one call per requested
+  output and true PNG alpha requested in the prompt. Orkestrai never asks for or stores an image
+  API key. It validates the preallocated workspace destinations before outputs
+  return as connected Image nodes with provenance and bounded run history,
+  ready to feed another branch. Humans, the bundled CLI, and typed MCP tools
+  operate that same visible workflow.
 - **Integrated mobile devices:** add a persistent Mobile Device node from the
   Canvas toolbar; Workbench lists and opens that same node and session. Control
   iPhone and iPad Simulators on Apple Silicon Macs, or Android AVDs and explicitly

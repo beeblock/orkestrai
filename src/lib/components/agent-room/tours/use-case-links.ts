@@ -6,6 +6,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'council-decision': 'council-perspectives',
   'api-client-workflow': 'api-client',
   'visual-annotations': 'visual-annotations',
+  'creative-image-workflow': 'creative-image-workflow',
   'visual-qa': 'qa-visual',
   'mobile-qa': 'mobile-device-testing',
   'research-summary': 'pesquisa-resumo',

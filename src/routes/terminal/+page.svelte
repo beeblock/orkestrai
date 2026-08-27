@@ -160,6 +160,7 @@
     'editor',
     'diff',
     'image',
+    'imageWorkflow',
     'flow',
     'loop',
     'usage',
@@ -203,7 +204,7 @@
   const EXPLORER_GROUPS: Array<{ id: 'agents' | 'work' | 'content' | 'tools'; types: CanvasNodeType[] }> = [
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
-    { id: 'content', types: ['note', 'image', 'design'] },
+    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'design'] },
     { id: 'tools', types: ['portal', 'apiClient', 'device', 'diff', 'usage'] },
   ];
 
@@ -620,6 +621,7 @@
     if (node.type === 'editor') return m['terminal_browser.kind_editor']();
     if (node.type === 'diff') return m['terminal_browser.kind_diff']();
     if (node.type === 'image') return m['terminal_browser.kind_image']();
+    if (node.type === 'imageWorkflow') return m['image_workflow.title']();
     if (node.type === 'flow') return m['terminal_browser.kind_flow']();
     if (node.type === 'loop') return m['terminal_browser.kind_loop']();
     if (node.type === 'usage') return m['terminal_browser.kind_usage']();

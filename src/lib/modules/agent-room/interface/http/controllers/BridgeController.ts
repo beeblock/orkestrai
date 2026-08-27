@@ -48,6 +48,10 @@ import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/mod
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
 import { ContributeHuddleTurnDto } from '$lib/modules/agent-room/application/dto/HuddleDtos.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
+import { ImageWorkflowError, imageWorkflowService } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
+import { CompleteImageWorkflowAction, FailImageWorkflowAction, RunSavedImageWorkflowAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
+import { CompleteImageWorkflowDto, FailImageWorkflowDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
+import { BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, FailImageWorkflowRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -161,6 +165,82 @@ export class BridgeController extends Controller {
       return this.json({ data: await apiClientService.list(workspace.id, agentNodeId || null) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao listar clientes de API.', 401);
+    }
+  }
+
+  async listImageWorkflows(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await imageWorkflowService.list(workspace.id) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to list image workflows.', 401);
+    }
+  }
+
+  async readImageWorkflow(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await imageWorkflowService.read(workspace.id, event.params.nodeId) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Image workflow not found.', 404);
+    }
+  }
+
+  async runImageWorkflow(event: any) {
+    try {
+      const input = await BridgeRunImageWorkflowRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = input.from
+        ? (await bridgeService.listAgents(workspace.id)).find((agent) => (
+            agent.nodeId === input.from || agent.title.toLowerCase() === input.from?.toLowerCase()
+          ))?.nodeId ?? null
+        : null;
+      const result = await new RunSavedImageWorkflowAction().execute(
+        workspace.id,
+        event.params.nodeId,
+        input,
+        actor,
+      );
+      return this.json({ data: result }, 201);
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to run image workflow.');
+    }
+  }
+
+  async completeImageWorkflow(event: any) {
+    try {
+      const input = await CompleteImageWorkflowRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = (await bridgeService.listAgents(workspace.id)).find((agent) => agent.nodeId === input.from)?.nodeId;
+      if (!actor) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+      return this.json({ data: await new CompleteImageWorkflowAction().execute(
+        CompleteImageWorkflowDto.from(workspace.id, event.params.nodeId, input, actor),
+      ) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to complete image workflow.');
+    }
+  }
+
+  async failImageWorkflow(event: any) {
+    try {
+      const input = await FailImageWorkflowRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = (await bridgeService.listAgents(workspace.id)).find((agent) => agent.nodeId === input.from)?.nodeId;
+      if (!actor) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+      return this.json({ data: await new FailImageWorkflowAction().execute(
+        FailImageWorkflowDto.from(workspace.id, event.params.nodeId, input, actor),
+      ) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to report image workflow failure.');
+    }
+  }
+
+  async cancelImageWorkflow(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await imageWorkflowService.cancel(workspace.id, event.params.nodeId) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to cancel image workflow.');
     }
   }
 
@@ -1052,5 +1132,11 @@ export class BridgeController extends Controller {
 
   private errorResponse(error: unknown, fallback: string, status = 400) {
     return this.json({ error: error instanceof Error ? error.message : fallback }, status);
+  }
+
+  private imageWorkflowError(error: unknown, fallback: string, status = 400) {
+    if (error instanceof ImageWorkflowError) return this.json({ error: error.code }, error.status);
+    if (error instanceof z.ZodError) return this.json({ error: error.issues[0]?.message ?? 'image_workflow_validation_failed' }, 422);
+    return this.json({ error: fallback }, status);
   }
 }

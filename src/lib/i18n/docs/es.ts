@@ -290,6 +290,11 @@ Header: Authorization = Bearer {{accessToken}}`,
       body: `La herramienta Imagen (barra inferior) crea un nodo de referencia visual en el canvas: mockup, screenshot, diagrama de arquitectura. Pega con Ctrl+V o haz clic para elegir el archivo — la imagen queda guardada en el workspace (.orkestrai/images/). Conecta el nodo al líder (o a un agente específico, como el diseñador) para dejar claro quién debe usar esa referencia, y di en el chat qué hacer con ella. Doble clic en el título renombra; el ícono de imagen en el encabezado cambia el archivo.`,
     },
     {
+      id: 'image-workflows',
+      title: 'Flujos nativos de generación de imágenes',
+      body: `Abre el menú Imagen en la barra del Canvas y elige Generar imágenes. El flujo forma parte del canvas existente: conecta Notas para paleta, reglas del personaje, dirección de arte, restricciones o contexto de campaña; conecta hasta cinco referencias ordenadas de Imagen PNG, JPEG o WebP; y conecta un agente Codex activo como ejecutor. Se requiere una cuenta o suscripción de Codex autenticada con ImageGen disponible; no se necesita una clave de API de OpenAI. Las miniaturas numeradas muestran el orden exacto. Escribe el prompt, elige de uno a cuatro resultados, solicita opcionalmente un fondo PNG realmente transparente y define una carpeta relativa del workspace (generated/images por defecto) con un prefijo seguro. Generar delega la ejecución a esa sesión de Codex, que lee el contrato exacto con image_workflow_read y llama a su tool nativa autenticada image_gen.imagegen una vez por resultado. Orkestrai nunca solicita ni almacena una clave de API de imagen, nunca llama directamente a un endpoint del provider y no inventa controles de modelo, calidad, tamaño o formato que la tool nativa no expone. El ejecutor copia cada resultado nativo al destino preasignado en el workspace y llama a image_workflow_complete. Orkestrai solo acepta ese Codex y esas rutas exactas, luego valida la firma y el tamaño antes de crear nodos Imagen conectados con hash de inputs, flujo de origen, id de ejecución, índice del resultado, duración e historial limitado. Los resultados pueden alimentar otro flujo como referencias. Cancelar invalida el run activo para impedir que se materialice una finalización tardía; no interrumpe una llamada nativa que ya está en curso. CLI y MCP listan, leen, inician, completan, registran fallos y cancelan el mismo flujo visible.`,
+    },
+    {
       id: 'visual-annotations',
       title: 'Formas y anotaciones visuales',
       body: `Usa Formas en la barra del Canvas para dibujar rectángulos, cajas redondeadas, elipses, rombos y flechas curvas editables alrededor del trabajo. Haz doble clic para editar el texto; el control de estilo cambia fondo, opacidad, borde, trazo, tipografía y anclas de la flecha. Selecciona una forma y usa la acción de duplicar o Cmd/Ctrl+D para conservar exactamente tamaño, texto, estilo y geometría de la flecha con un pequeño desplazamiento. Cmd/Ctrl+C y Cmd/Ctrl+V copian y pegan una o varias formas seleccionadas manteniendo el espaciado relativo; cada copia es un nodo persistente separado y se puede editar de forma independiente.`,
@@ -708,6 +713,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Comandos guardados', 'autoejecución segura', 'shells y WSL'],
     },
     {
+      id: 'creative-image-workflow',
+      title: 'Genera un personaje consistente y sus variaciones',
+      body: 'Agrega un Director Creativo Codex, una nota Brief Visual y un flujo Generar imágenes. Usa una cuenta o suscripción de Codex autenticada con ImageGen disponible; no se necesita una clave de API de OpenAI. Conecta la nota y el Codex activo al flujo y luego las referencias del personaje en el orden numerado. Solicita PNG con transparencia real, conserva generated/images como carpeta del workspace y ejecuta el nodo. El Codex asignado lee el contrato, usa su tool nativa image_gen.imagegen con referenced_image_paths, copia cada resultado al destino asignado y completa el run. Cada resultado validado se vuelve un nodo Imagen conectado, así las poses aprobadas alimentan la siguiente rama sin perder contexto del prompt ni procedencia. Un líder que no sea Codex puede coordinar el trabajo, pero debe conectar o delegar la ejecución a un Codex.',
+      tags: ['Codex ImageGen', 'PNG transparente', 'flujo con agente'],
+    },
+    {
       id: 'desktop-diagnostics',
       title: 'Diagnosticar una acción del escritorio que no responde',
       body: 'Abre Ver > Herramientas de desarrollo y reproduce el problema observando Console. Luego elige Ayuda > Abrir carpeta de logs y comparte orkestrai.log con soporte. El log local rotativo incluye errores del renderer, fallos del servidor interno y cierres inesperados; las credenciales comunes se ocultan y la salida normal de los agentes no se guarda.',
@@ -715,6 +726,18 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '27 ago 2026 · 0.22.0',
+      title: 'Orkestrai 0.22.0: flujos nativos de imagen para personas y agentes',
+      summary: 'Construye grafos reutilizables de generación de imágenes a partir de briefs, referencias y agentes sin salir del workspace.',
+      items: [
+        'Los nodos de Generación de Imágenes combinan el prompt con el contexto de Notas conectadas, hasta cinco referencias ordenadas de Imagen y un Codex activo conectado, y luego devuelven cada resultado validado al canvas y a la carpeta elegida del workspace.',
+        'El ejecutor Codex usa su tool nativa autenticada image_gen.imagegen una vez por resultado; las referencias se pasan mediante referenced_image_paths y la transparencia PNG real se solicita en el prompt.',
+        'Orkestrai nunca solicita ni almacena una clave de API de imagen y nunca llama directamente a un endpoint del provider. Solo el Codex asignado completa el run, y las rutas exactas, firmas, tamaños y errores públicos se limitan antes de persistir.',
+        'Los runs conservan historial y procedencia trazables, mientras las tools tipadas de CLI/MCP para leer, iniciar, completar, fallar y cancelar, además de un tour de equipo creativo, permiten que el líder opere el mismo flujo visible.',
+        'El panel avisa que ImageGen requiere una cuenta o suscripción autenticada de Codex sin solicitar una clave de API de OpenAI.',
+      ],
+    },
     {
       date: '27 ago 2026 · 0.21.2',
       title: 'Orkestrai 0.21.2: pegado confiable en terminales de Windows',

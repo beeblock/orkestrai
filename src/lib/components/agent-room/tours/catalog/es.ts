@@ -1600,6 +1600,56 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'creative-image-workflow',
+    icon: 'Images',
+    title: 'Crea imágenes consistentes con tu equipo',
+    tagline: 'Brief, referencias, agente, generación y resultados reutilizables en un solo flujo.',
+    steps: [
+      {
+        id: 'create-director',
+        title: 'Agrega un director creativo',
+        body: 'Creo un agente Codex que puede inspeccionar y ejecutar el mismo flujo de imagen que ves. Mantén un Codex activo conectado y usa una cuenta o suscripción autenticada con ImageGen disponible cuando quieras generar o editar imágenes.',
+        action: { kind: 'createAgent', title: 'Director Creativo', provider: 'codex' },
+        check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Director Creativo' },
+      },
+      {
+        id: 'create-brief',
+        title: 'Escribe el brief visual reutilizable',
+        body: 'Creo una nota para paleta, rasgos del personaje, dirección de arte, exclusiones y reglas de consistencia. Su contenido entra en cada ejecución mientras siga conectada.',
+        action: { kind: 'createNote', title: 'Brief Visual', content: '# Brief visual\n\n## Personaje\n\n## Dirección de arte\n\n## Paleta\n\n## Mantener consistente\n' },
+        check: { kind: 'nodeExists', nodeType: 'note', titleIncludes: 'Brief Visual' },
+      },
+      {
+        id: 'create-workflow',
+        title: 'Crea el flujo nativo de imagen',
+        body: 'Creo un flujo para dos variaciones transparentes. El Codex conectado usa su herramienta ImageGen nativa y copia los resultados a generated/images en este workspace.',
+        action: { kind: 'createImageWorkflow', title: 'Generación de Imágenes', prompt: 'Crea dos poses de personaje pulidas y consistentes usando el brief visual y las imágenes de referencia conectadas.' },
+        check: { kind: 'nodeExists', nodeType: 'imageWorkflow', titleIncludes: 'Generación de Imágenes' },
+      },
+      {
+        id: 'connect-context',
+        title: 'Conecta contexto y ejecutor',
+        body: 'Conecto la nota y el agente al flujo. Las conexiones tipadas hacen explícito cada papel: las notas son contexto del prompt, los nodos Imagen son referencias ordenadas y el terminal queda registrado como ejecutor.',
+        action: [
+          { kind: 'connect', fromTitle: 'Brief Visual', toTitle: 'Generación de Imágenes' },
+          { kind: 'connect', fromTitle: 'Director Creativo', toTitle: 'Generación de Imágenes' },
+        ],
+        check: { kind: 'edgeExists', fromTitle: 'Brief Visual', toTitle: 'Generación de Imágenes' },
+      },
+      {
+        id: 'add-references',
+        title: 'Agrega referencias ordenadas',
+        body: 'Agrega imágenes desde el menú Imagen y conéctalas en el orden de las miniaturas numeradas. No se necesita clave de API: el Codex conectado usa image_gen.imagegen mediante una cuenta o suscripción autenticada con ImageGen disponible.',
+      },
+      {
+        id: 'run-and-reuse',
+        title: 'Genera y continúa el grafo',
+        body: 'Haz clic en Generar o pide al Director Creativo usar image_workflow_read e image_workflow_run. Codex hace una llamada ImageGen nativa por resultado, copia los archivos al workspace y confirma con image_workflow_complete. Cada resultado aparece como nodo Imagen con procedencia e historial.',
+        check: { kind: 'nodeExists', nodeType: 'imageWorkflow', titleIncludes: 'Generación de Imágenes' },
+      },
+    ],
+  },
+  {
     id: 'desktop-diagnostics',
     icon: 'Activity',
     title: 'Diagnosticar la aplicación de escritorio',

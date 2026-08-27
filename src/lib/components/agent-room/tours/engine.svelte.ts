@@ -227,6 +227,29 @@ async function runAction(action: TourAction): Promise<void> {
         });
         break;
       }
+      case 'createImageWorkflow': {
+        await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'imageWorkflow',
+            title: action.title,
+            ...nextPosition(),
+            width: 440,
+            height: 560,
+            payload: {
+              schemaVersion: 1,
+              prompt: action.prompt,
+              count: 2,
+              transparentBackground: true,
+              outputDirectory: 'generated/images',
+              filePrefix: 'creative-image',
+              status: 'idle',
+              history: [],
+            },
+          }),
+        });
+        break;
+      }
       case 'createShape': {
         await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
           method: 'POST',

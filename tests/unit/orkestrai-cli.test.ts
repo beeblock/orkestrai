@@ -46,6 +46,18 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { nodeId: 'api2', title: 'Agent API', fingerprint: 'a'.repeat(64), collection: { requests: [] } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/api-clients')) {
           res.end(JSON.stringify({ data: [{ nodeId: 'api1', title: 'Project API', requests: [{ requestId: 'r1', method: 'GET', name: 'Health', url: 'https://example.test/health', authType: 'bearer' }] }] }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows') {
+          res.end(JSON.stringify({ data: [{ nodeId: 'img1', title: 'Character poses', status: 'idle', references: [{ nodeId: 'ref1' }], outputs: [] }] }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'GET') {
+          res.end(JSON.stringify({ data: { nodeId: 'img1', title: 'Character poses', status: 'idle', config: { prompt: 'Create a pose' } } }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { runId: '00000000-0000-7000-8000-000000000001', outputPaths: ['generated/images/pose-1.png', 'generated/images/pose-2.png'] } }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1/complete' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { outputPaths: ['generated/images/pose-1.png', 'generated/images/pose-2.png'], outputNodeIds: ['out1', 'out2'] } }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1/fail' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { run: { id: '00000000-0000-7000-8000-000000000001', status: 'failed' } } }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'DELETE') {
+          res.end(JSON.stringify({ data: { cancelled: true, runId: 'run1' } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/agents')) {
           const identified = req.url.includes('agentNodeId=n1');
           res.end(JSON.stringify({ data: {
@@ -533,6 +545,35 @@ describe('orkestrai CLI', () => {
     expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/api-clients/api1/export', body: { kind: 'postman', path: 'exports', from: 'n1' } });
     expect(await run(['api', 'run-runner', 'api1', 'smoke', '--max-executions', '20'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/api-clients/api1/runners/smoke/execute', body: { variables: {}, maxExecutions: 20, from: 'n1' } });
+  });
+
+  it('lista, le, prepara, conclui, falha e cancela fluxos nativos de imagem pela ponte', async () => {
+    const { lines, out } = capture();
+    const env = { ORKESTRAI_NODE_ID: 'n1' };
+
+    expect(await run(['image', 'list'], { cwd, out, env })).toBe(0);
+    expect(lines.join('\n')).toContain('Character poses');
+    expect(await run(['image', 'read', 'img1'], { cwd, out, env })).toBe(0);
+    expect(lines.join('\n')).toContain('Create a pose');
+    expect(await run(['image', 'run', 'img1', '--prompt', 'Create another pose', '--transparent', '--count', '2'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({
+      method: 'POST',
+      url: '/api/agent-room/bridge/image-workflows/img1',
+      body: { prompt: 'Create another pose', transparentBackground: true, count: '2', from: 'n1' },
+    });
+    const runId = '00000000-0000-7000-8000-000000000001';
+    expect(await run(['image', 'complete', 'img1', runId, 'generated/images/pose-1.png', 'generated/images/pose-2.png'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({
+      method: 'POST', url: '/api/agent-room/bridge/image-workflows/img1/complete',
+      body: { runId, outputPaths: ['generated/images/pose-1.png', 'generated/images/pose-2.png'], from: 'n1' },
+    });
+    expect(await run(['image', 'fail', 'img1', runId, '--error', 'image_gen_output_missing'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({
+      method: 'POST', url: '/api/agent-room/bridge/image-workflows/img1/fail',
+      body: { runId, errorCode: 'image_gen_output_missing', from: 'n1' },
+    });
+    expect(await run(['image', 'cancel', 'img1'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'DELETE', url: '/api/agent-room/bridge/image-workflows/img1' });
   });
 
   it('port devolve uma porta livre (sem precisar de workspace.json)', async () => {

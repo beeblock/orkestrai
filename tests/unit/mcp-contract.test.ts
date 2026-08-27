@@ -19,6 +19,7 @@ import { createAgentApiClientSchema, executeAgentApiClientRunnerSchema, exportAg
 import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
+import { bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, failImageWorkflowSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
 
 /**
  * Contrato MCP x ponte: TODA tool e dirigida contra a rota e o schema REAIS
@@ -77,6 +78,12 @@ const EXPECTED: Record<string, Expectation> = {
   api_client_export: { method: 'POST', path: /\/bridge\/api-clients\/n1\/export$/, schema: exportAgentApiClientSchema },
   api_client_run_runner: { method: 'POST', path: /\/bridge\/api-clients\/n1\/runners\/runner1\/execute$/, schema: executeAgentApiClientRunnerSchema },
   api_client_execute: { method: 'POST', path: /\/bridge\/api-clients\/n1\/execute$/, schema: apiClientExecuteSchema },
+  image_workflow_list: { method: 'GET', path: /\/bridge\/image-workflows$/ },
+  image_workflow_read: { method: 'GET', path: /\/bridge\/image-workflows\/n1$/ },
+  image_workflow_run: { method: 'POST', path: /\/bridge\/image-workflows\/n1$/, schema: bridgeRunImageWorkflowSchema },
+  image_workflow_complete: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/complete$/, schema: completeImageWorkflowSchema },
+  image_workflow_fail: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/fail$/, schema: failImageWorkflowSchema },
+  image_workflow_cancel: { method: 'DELETE', path: /\/bridge\/image-workflows\/n1$/ },
   design_list: { method: 'GET', path: /\/bridge\/designs$/ },
   design_read: { method: 'GET', path: /\/bridge\/designs\/n1$/ },
   design_audit: { method: 'GET', path: /\/bridge\/designs\/n1\/quality$/ },
@@ -133,6 +140,11 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   api_client_push: { nodeId: 'n1' },
   api_client_export: { nodeId: 'n1', kind: 'postman', path: '.orkestrai/exports' },
   api_client_run_runner: { nodeId: 'n1', runnerId: 'runner1', variables: { tenant: 'alpha' }, maxExecutions: 20 },
+  image_workflow_read: { nodeId: 'n1' },
+  image_workflow_run: { nodeId: 'n1', prompt: 'Create a transparent character pose.', transparentBackground: true, count: 2 },
+  image_workflow_complete: { nodeId: 'n1', runId: '00000000-0000-7000-8000-000000000010', outputPaths: ['generated/images/pose-1.png'] },
+  image_workflow_fail: { nodeId: 'n1', runId: '00000000-0000-7000-8000-000000000010', errorCode: 'image_gen_tool_failed' },
+  image_workflow_cancel: { nodeId: 'n1' },
   design_read: { nodeId: 'n1' },
   design_audit: { nodeId: 'n1' },
   design_apply_template: {
@@ -363,7 +375,7 @@ describe('contrato MCP x bridge (todas as tools)', () => {
   });
 
   it('tools de maestro sem identidade (selfAgent null) dao erro claro, nao 422', async () => {
-    for (const tool of ['recruit', 'dismiss', 'portal_create', 'api_client_read', 'api_client_import', 'api_client_create', 'api_client_replace', 'api_client_sync_status', 'api_client_pull', 'api_client_push', 'api_client_export', 'api_client_run_runner']) {
+    for (const tool of ['recruit', 'dismiss', 'portal_create', 'api_client_read', 'api_client_import', 'api_client_create', 'api_client_replace', 'api_client_sync_status', 'api_client_pull', 'api_client_push', 'api_client_export', 'api_client_run_runner', 'image_workflow_run', 'image_workflow_complete', 'image_workflow_fail']) {
       const input = new PassThrough();
       const chunks: string[] = [];
       const done = runMcpServer({

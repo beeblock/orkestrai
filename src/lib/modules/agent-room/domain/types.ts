@@ -217,7 +217,7 @@ export type AgentModelOption = {
 // Canvas / Workspaces
 // ---------------------------------------------------------------------------
 
-export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'usage' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'device' | 'design';
+export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'device' | 'design';
 export type CanvasEdgeStyle = 'cord' | 'circuit';
 export type WorkspaceRuntimeKind = 'native' | 'wsl';
 export type WorkspaceExecutionRuntime =
@@ -669,6 +669,65 @@ export type NoteNodePayload = {
   attachments?: WorkspaceAttachment[];
 };
 
+export type ImageWorkflowRun = {
+  id: string;
+  status: 'succeeded' | 'failed' | 'cancelled';
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  actorNodeId: string | null;
+  executorNodeId: string | null;
+  contextNodeIds: string[];
+  referenceNodeIds: string[];
+  inputHash: string;
+  tool: 'image_gen.imagegen';
+  promptSnapshot: string;
+  requestedOutputs: number;
+  transparentBackground: boolean;
+  outputPaths: string[];
+  outputNodeIds: string[];
+  errorCode: string | null;
+};
+
+export type ImageWorkflowActiveRun = {
+  id: string;
+  startedAt: string;
+  actorNodeId: string | null;
+  executorNodeId: string;
+  contextNodeIds: string[];
+  referenceNodeIds: string[];
+  referencePaths: string[];
+  outputPaths: string[];
+  inputHash: string;
+  promptSnapshot: string;
+  requestedOutputs: number;
+  transparentBackground: boolean;
+};
+
+export type ImageWorkflowNodePayload = {
+  schemaVersion?: 1;
+  prompt?: string;
+  count?: number;
+  transparentBackground?: boolean;
+  outputDirectory?: string;
+  filePrefix?: string;
+  status?: 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  activeRunId?: string | null;
+  activeRun?: ImageWorkflowActiveRun | null;
+  lastError?: string | null;
+  history?: ImageWorkflowRun[];
+};
+
+export type ImageNodePayload = {
+  path?: string;
+  generatedBy?: {
+    workflowNodeId: string;
+    runId: string;
+    outputIndex: number;
+    inputHash: string;
+  };
+};
+
 export type UsageNodePayload = {
   enabled?: boolean;
   sourceProvider?: string;
@@ -859,7 +918,7 @@ export type ApiClientNodePayload = {
   };
 };
 
-export type CanvasNodePayload = TerminalNodePayload | NoteNodePayload | ApiClientNodePayload | Record<string, unknown>;
+export type CanvasNodePayload = TerminalNodePayload | NoteNodePayload | ApiClientNodePayload | ImageWorkflowNodePayload | ImageNodePayload | Record<string, unknown>;
 
 export type CanvasNode = {
   id: string;

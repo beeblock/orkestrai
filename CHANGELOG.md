@@ -5,6 +5,38 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.22.0 - 2026-08-27
+
+### Added
+
+- Native Image Generation nodes combine a written prompt with connected Note
+  context, ordered Image references, and a connected live Codex executor in the
+  same canvas graph. The same workflow opens in Workbench; generated files stay
+  inside a chosen workspace folder and return as connected Image nodes that can
+  feed the next branch.
+- A live Codex connected to the workflow executes its authenticated built-in
+  `image_gen.imagegen` tool. Prompt-only generation and up to five ordered
+  PNG/JPEG/WebP references are supported, with one native call for each of one
+  to four requested PNG outputs and genuine alpha requested in the prompt.
+- Every run records bounded history and provenance, including the exact context,
+  references, assigned Codex executor, prompt, input hash, output paths, and
+  duration. Completion validates the exact preallocated workspace paths before
+  materializing any Image node; cancellation invalidates the active run.
+- Leaders and creative agents can inspect and coordinate the same native
+  workflows through typed Orkestrai CLI and MCP tools. The assigned Codex uses
+  explicit read, complete, and fail tools, and a guided use case builds the
+  creative director, visual brief, workflow, and typed connections.
+- The workflow states in the UI that an authenticated Codex account or plan
+  with ImageGen access is required, while no OpenAI API key is needed.
+
+### Security
+
+- Orkestrai never requests, receives, stores, or logs an image API key and does
+  not call an image provider endpoint directly. Image generation access belongs
+  to the authenticated Codex session. Only the connected live Codex can claim
+  and complete its run; reference files, exact output paths, file signatures,
+  sizes, and public error values are validated and bounded before persistence.
+
 ## 0.21.2 - 2026-08-27
 
 ### Fixed

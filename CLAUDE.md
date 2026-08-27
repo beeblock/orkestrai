@@ -124,6 +124,7 @@ Este projeto roda dentro de um workspace do Orkestrai. Você tem a CLI `orkestra
 - `orkestrai usage` — cotas reais e recomendação do nó Usage; líderes consultam antes de delegar e roteiam novas tarefas ao recommendedProvider quando shouldFallback=true.
 - `orkestrai ask "<Agente>" "<mensagem>"` — fala com outro agente e aguarda a resposta.
 - `orkestrai note read/write/edit/create` — notas compartilhadas no canvas.
+- `image_workflow_list/read/run/complete/fail/cancel` — fluxos nativos de imagem compartilhados com a UI. Somente um Codex conectado executa: leia o contrato, use a tool nativa `image_gen.imagegen` com `referenced_image_paths`, copie os resultados para os destinos do workspace e confirme com `image_workflow_complete`. Nunca peça chave de API nem use API/script paralelo.
 - `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.
 - `orkestrai floor create/preview/land` — andares (worktrees git) isolados por frente.
 - `orkestrai ask "<Agente>" "<mensagem>"` — só afirme que falou/consultou alguém quando a ponte retornar uma resposta confirmada; timeout ou erro NÃO contam como conversa.
