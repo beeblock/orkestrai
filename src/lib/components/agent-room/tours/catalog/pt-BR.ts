@@ -1631,7 +1631,7 @@ export const TOURS_PT: Tour[] = [
         title: 'Monte a etapa do personagem',
         body: 'Eu crio e conecto o primeiro workflow. Ele pedirá três masters transparentes e salvará os PNGs em generated/images/xyz-character.',
         action: [
-          { kind: 'createImageWorkflow', title: '01 — Personagem Master', position: { x: 620, y: 60 }, prompt: 'Crie três imagens master de corpo inteiro da Formiga Atômica descrita no briefing conectado. Cada resultado deve ser uma pose distinta, manter exatamente a mesma identidade visual e usar fundo PNG realmente transparente com canal alpha.', count: 3, transparentBackground: true, outputDirectory: 'generated/images/xyz-character', filePrefix: 'atomic-ant-master' },
+          { kind: 'createImageWorkflow', title: '01 — Personagem Master', position: { x: 620, y: 60 }, prompt: 'Crie três imagens master de corpo inteiro da Formiga Atômica descrita no briefing conectado. Cada resultado deve ser uma pose distinta e manter exatamente a mesma identidade visual.', count: 3, transparentBackground: true, outputDirectory: 'generated/images/xyz-character', filePrefix: 'atomic-ant-master' },
           { kind: 'connect', fromTitle: 'Briefing do Personagem XYZ', toTitle: '01 — Personagem Master' },
           { kind: 'connect', fromTitle: 'Diretor Criativo XYZ', toTitle: '01 — Personagem Master' },
         ],
@@ -1650,7 +1650,7 @@ export const TOURS_PT: Tour[] = [
         body: 'Eu gero um logo PNG de teste da marca XYZ, crio a segunda etapa e conecto automaticamente o primeiro master aprovado, o logo, os dois briefings e o mesmo Codex.',
         action: [
           { kind: 'createSampleImage', title: 'Logo de Teste XYZ', path: '.orkestrai/tours/xyz-sample-logo.png', label: 'XYZ', background: '#7C4DFF', foreground: '#FFFFFF', position: { x: 1140, y: 920 } },
-          { kind: 'createImageWorkflow', title: '02 — Personagem com Marca', position: { x: 1600, y: 60 }, prompt: 'Use a primeira referência como identidade exata do personagem e a segunda como logo exato da marca XYZ. Crie duas poses promocionais de corpo inteiro com o logo aplicado de forma natural e legível na roupa. Preserve rosto, antenas, anatomia, roupa, paleta e estilo do personagem. Entregue PNG com fundo realmente transparente.', count: 2, transparentBackground: true, outputDirectory: 'generated/images/xyz-branded', filePrefix: 'atomic-ant-xyz' },
+          { kind: 'createImageWorkflow', title: '02 — Personagem com Marca', position: { x: 1600, y: 60 }, prompt: 'Use a primeira referência como identidade exata do personagem e a segunda como logo exato da marca XYZ. Crie duas poses promocionais de corpo inteiro com o logo aplicado de forma natural e legível na roupa. Preserve rosto, antenas, anatomia, roupa, paleta e estilo do personagem.', count: 2, transparentBackground: true, outputDirectory: 'generated/images/xyz-branded', filePrefix: 'atomic-ant-xyz' },
           { kind: 'connect', fromTitle: 'Diretor Criativo XYZ', toTitle: '02 — Personagem com Marca' },
           { kind: 'connect', fromTitle: 'Briefing do Personagem XYZ', toTitle: '02 — Personagem com Marca' },
           { kind: 'connect', fromTitle: 'Campanha da Marca XYZ', toTitle: '02 — Personagem com Marca' },

@@ -205,6 +205,9 @@
       image_workflow_output_missing: m['image_workflow.error_output_missing'],
       image_workflow_output_path_mismatch: m['image_workflow.error_output_path'],
       image_workflow_output_format_invalid: m['image_workflow.error_output_format'],
+      image_workflow_output_dimensions_invalid: m['image_workflow.error_output_dimensions'],
+      image_workflow_output_alpha_missing: m['image_workflow.error_output_alpha'],
+      image_workflow_timed_out: m['image_workflow.error_timeout'],
     };
     return labels[code]?.() ?? m['image_workflow.error_generic']();
   }

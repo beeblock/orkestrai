@@ -104,6 +104,7 @@ async function evaluateChecks(): Promise<void> {
     ));
     if (workflow?.payload?.status === 'failed' || workflow?.payload?.status === 'cancelled') {
       tourState.actionDoneFor = null;
+      tourState.error = m['tour.image_workflow_retries_exhausted']({ title: workflow.title ?? runningWorkflowAction.title });
     }
   }
   // Tour termina quando o ultimo passo tem check e ele passou (auto-conclusao).

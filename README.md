@@ -101,10 +101,12 @@ common credentials redacted; normal agent output is not persisted.
   configure the workflow, attach, remove, or reorder context and references,
   request one to ten outputs, run or cancel generation, and remove the workflow
   through the same typed bridge. It uses its authenticated built-in
-  `image_gen.imagegen` tool, with one internal call per requested output and true
-  PNG alpha requested in the prompt. Orkestrai never asks for or stores an image
-  API key. It validates the preallocated workspace destinations before outputs
-  return as connected Image nodes with provenance and bounded run history,
+  `image_gen.imagegen` tool. Every result is validated independently; when the
+  node requires transparency, Orkestrai decodes the PNG and verifies real alpha
+  pixels, then directs Codex to correct an opaque or fake-checkerboard result up
+  to three times. Orkestrai never asks for or stores an image API key. It validates
+  the preallocated workspace destinations before outputs return as connected
+  Image nodes with provenance and bounded run history,
   ready to feed another branch. Humans, the bundled CLI, and typed MCP tools
   operate that same visible workflow without a parallel automation state.
   The guided use case can materialize and execute a complete Character → Brand

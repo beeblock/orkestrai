@@ -49,9 +49,9 @@ import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/sc
 import { ContributeHuddleTurnDto } from '$lib/modules/agent-room/application/dto/HuddleDtos.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
 import { ImageWorkflowError, imageWorkflowService } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
-import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
-import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
-import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
+import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction, ValidateImageWorkflowOutputAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
+import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
+import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -284,6 +284,20 @@ export class BridgeController extends Controller {
       ) });
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to complete image workflow.');
+    }
+  }
+
+  async validateImageWorkflowOutput(event: any) {
+    try {
+      const input = await ValidateImageWorkflowOutputRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = (await bridgeService.listAgents(workspace.id)).find((agent) => agent.nodeId === input.from)?.nodeId;
+      if (!actor) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+      return this.json({ data: await new ValidateImageWorkflowOutputAction().execute(
+        ValidateImageWorkflowOutputDto.from(workspace.id, event.params.nodeId, input, actor),
+      ) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to validate image workflow output.');
     }
   }
 

@@ -81,6 +81,12 @@ export const completeImageWorkflowSchema = z.object({
   from: z.string().trim().min(1).max(120),
 });
 
+export const validateImageWorkflowOutputSchema = z.object({
+  runId: z.string().uuid(),
+  outputPath: relativeFileSchema,
+  from: z.string().trim().min(1).max(120),
+});
+
 export const failImageWorkflowSchema = z.object({
   runId: z.string().uuid(),
   errorCode: z.enum(['image_gen_tool_failed', 'image_gen_output_missing', 'image_gen_cancelled']).default('image_gen_tool_failed'),
@@ -96,4 +102,5 @@ export type ConnectImageWorkflowNodeInput = z.infer<typeof connectImageWorkflowN
 export type AddImageWorkflowReferenceInput = z.infer<typeof addImageWorkflowReferenceSchema>;
 export type ImageWorkflowActorInput = z.infer<typeof imageWorkflowActorSchema>;
 export type CompleteImageWorkflowInput = z.infer<typeof completeImageWorkflowSchema>;
+export type ValidateImageWorkflowOutputInput = z.infer<typeof validateImageWorkflowOutputSchema>;
 export type FailImageWorkflowInput = z.infer<typeof failImageWorkflowSchema>;

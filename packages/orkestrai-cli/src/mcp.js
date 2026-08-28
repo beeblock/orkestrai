@@ -87,6 +87,7 @@ const TOOLS = [
     outputDirectory: { type: 'string' }, filePrefix: { type: 'string' },
   }, required: ['nodeId'] } },
   { name: 'image_workflow_complete', description: 'Depois de usar image_gen.imagegen e copiar os resultados para os destinos pre-alocados, valida os arquivos e cria os Image nodes com proveniencia.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runId: { type: 'string' }, outputPaths: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'string' } } }, required: ['nodeId', 'runId', 'outputPaths'] } },
+  { name: 'image_workflow_validate', description: 'Valida um output individual antes de concluir o run. Confirma PNG integro e, quando solicitado, alpha real; retorna uma instrucao corretiva para retry automatico.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runId: { type: 'string' }, outputPath: { type: 'string' } }, required: ['nodeId', 'runId', 'outputPath'] } },
   { name: 'image_workflow_fail', description: 'Registra uma falha publica e limitada quando a tool nativa nao consegue concluir o run.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runId: { type: 'string' }, errorCode: { type: 'string', enum: ['image_gen_tool_failed', 'image_gen_output_missing', 'image_gen_cancelled'] } }, required: ['nodeId', 'runId'] } },
   { name: 'image_workflow_cancel', description: 'Cancela a execucao ativa de um fluxo de imagem.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'image_workflow_delete', description: 'Remove do canvas um fluxo controlado por este Codex; uma execucao ativa e invalidada antes da remocao.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
@@ -278,6 +279,9 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'image_workflow_complete':
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/complete`, { runId: args.runId, outputPaths: args.outputPaths, from: selfAgent });
+    case 'image_workflow_validate':
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/validate`, { runId: args.runId, outputPath: args.outputPath, from: selfAgent });
     case 'image_workflow_fail':
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/fail`, { runId: args.runId, errorCode: args.errorCode ?? 'image_gen_tool_failed', from: selfAgent });

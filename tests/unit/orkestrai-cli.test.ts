@@ -64,6 +64,8 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { reference: { nodeId: 'ref2', title: 'Character', path: 'references/character.png' }, workflow: { nodeId: 'img1' } } }));
         } else if (req.url === '/api/agent-room/bridge/image-workflows/img1/complete' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { outputPaths: ['generated/images/pose-1.png', 'generated/images/pose-2.png'], outputNodeIds: ['out1', 'out2'] } }));
+        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1/validate' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { path: 'generated/images/pose-1.png', valid: true, errorCode: null, repair: null } }));
         } else if (req.url === '/api/agent-room/bridge/image-workflows/img1/fail' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { run: { id: '00000000-0000-7000-8000-000000000001', status: 'failed' } } }));
         } else if (req.url === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'DELETE') {
@@ -599,6 +601,11 @@ describe('orkestrai CLI', () => {
       body: { prompt: 'Create a complete carousel', transparentBackground: true, count: '10', from: 'n1' },
     });
     const runId = '00000000-0000-7000-8000-000000000001';
+    expect(await run(['image', 'validate', 'img1', runId, 'generated/images/pose-1.png'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({
+      method: 'POST', url: '/api/agent-room/bridge/image-workflows/img1/validate',
+      body: { runId, outputPath: 'generated/images/pose-1.png', from: 'n1' },
+    });
     expect(await run(['image', 'complete', 'img1', runId, 'generated/images/pose-1.png', 'generated/images/pose-2.png'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({
       method: 'POST', url: '/api/agent-room/bridge/image-workflows/img1/complete',

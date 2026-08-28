@@ -19,7 +19,7 @@ import { createAgentApiClientSchema, executeAgentApiClientRunnerSchema, exportAg
 import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
-import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
+import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
 
 /**
  * Contrato MCP x ponte: TODA tool e dirigida contra a rota e o schema REAIS
@@ -87,6 +87,7 @@ const EXPECTED: Record<string, Expectation> = {
   image_workflow_add_reference: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/references$/, schema: addImageWorkflowReferenceSchema },
   image_workflow_run: { method: 'POST', path: /\/bridge\/image-workflows\/n1$/, schema: bridgeRunImageWorkflowSchema },
   image_workflow_complete: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/complete$/, schema: completeImageWorkflowSchema },
+  image_workflow_validate: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/validate$/, schema: validateImageWorkflowOutputSchema },
   image_workflow_fail: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/fail$/, schema: failImageWorkflowSchema },
   image_workflow_cancel: { method: 'DELETE', path: /\/bridge\/image-workflows\/n1$/, schema: imageWorkflowActorSchema },
   image_workflow_delete: { method: 'POST', path: /\/bridge\/image-workflows\/n1\/remove$/, schema: imageWorkflowActorSchema },
@@ -154,6 +155,7 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   image_workflow_add_reference: { nodeId: 'n1', path: 'references/character.png', title: 'Character', order: 0 },
   image_workflow_run: { nodeId: 'n1', prompt: 'Create ten transparent character poses.', transparentBackground: true, count: 10 },
   image_workflow_complete: { nodeId: 'n1', runId: '00000000-0000-7000-8000-000000000010', outputPaths: ['generated/images/pose-1.png'] },
+  image_workflow_validate: { nodeId: 'n1', runId: '00000000-0000-7000-8000-000000000010', outputPath: 'generated/images/pose-1.png' },
   image_workflow_fail: { nodeId: 'n1', runId: '00000000-0000-7000-8000-000000000010', errorCode: 'image_gen_tool_failed' },
   image_workflow_cancel: { nodeId: 'n1' },
   image_workflow_delete: { nodeId: 'n1' },

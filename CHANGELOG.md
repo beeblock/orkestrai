@@ -16,8 +16,9 @@ pt-BR, English, and Spanish translations.
   feed the next branch.
 - A live Codex connected to the workflow executes its authenticated built-in
   `image_gen.imagegen` tool. Prompt-only generation and up to five ordered
-  PNG/JPEG/WebP references are supported, with one native call for each of one
-  to ten requested PNG outputs and genuine alpha requested in the prompt.
+  PNG/JPEG/WebP references are supported for one to ten requested PNG outputs;
+  each result is generated independently and may receive bounded corrective
+  edits when server-side validation rejects its alpha channel.
 - Every run records bounded history and provenance, including the exact context,
   references, assigned Codex executor, prompt, input hash, output paths, and
   duration. Completion validates the exact preallocated workspace paths before
@@ -37,6 +38,15 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Transparent image workflows now enforce one canonical RGBA/alpha contract from
+  the node toggle, validate decoded PNG pixels server-side, and automatically
+  correct an opaque or fake-checkerboard output up to three times before giving
+  up. Each output is validated independently through the typed bridge, completed
+  runs cannot materialize fake transparency, and abandoned executions have a
+  bounded timeout instead of leaving the guided use case waiting indefinitely.
+- Packaged macOS startup restores the executable bit on node-pty's extracted
+  spawn helper, so dependency installation or archive metadata cannot leave
+  every terminal unable to launch.
 - Codex terminals created interactively from Canvas now receive the current
   packaged Orkestrai MCP as an ephemeral launch override before any `resume`
   subcommand. A valid but stale global Codex MCP entry can no longer hide new

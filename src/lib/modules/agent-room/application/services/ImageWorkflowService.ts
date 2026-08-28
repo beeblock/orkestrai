@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { basename, relative, resolve, sep } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
+import { PNG } from 'pngjs';
 import type {
   CanvasNode,
   ImageNodePayload,
@@ -35,8 +36,22 @@ const MAX_REFERENCE_TOTAL_BYTES = 80 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_OUTPUTS = 10;
 const MAX_OUTPUT_TOTAL_BYTES = MAX_OUTPUT_BYTES * MAX_OUTPUTS;
+const MAX_OUTPUT_DIMENSION = 8_192;
+const MAX_OUTPUT_PIXELS = 40_000_000;
+const MIN_TRANSPARENT_PIXEL_RATIO = 0.005;
 const MAX_CONTEXT_LENGTH = 16_000;
 const HISTORY_LIMIT = 12;
+const MAX_ATTEMPTS_PER_OUTPUT = 3;
+const MIN_RUN_TIMEOUT_MS = 20 * 60 * 1_000;
+const RUN_TIMEOUT_PER_OUTPUT_MS = 9 * 60 * 1_000;
+const MAX_RUN_TIMEOUT_MS = 90 * 60 * 1_000;
+
+const TRANSPARENT_OUTPUT_CONTRACT = [
+  'NON-NEGOTIABLE FILE OUTPUT: return an RGBA PNG with a real alpha channel.',
+  'Every pixel outside the subject must be fully transparent (alpha 0).',
+  'Do not draw or render a checkerboard, grid, white background, colored background, studio backdrop, shadow plane, glow, or fake transparency.',
+  'Transparency is a file-format requirement, not a visual description. Keep the subject and required branding fully opaque and preserve clean antialiased edges.',
+].join(' ');
 
 export class ImageWorkflowError extends Error {
   constructor(public readonly code: string, public readonly status = 422) {
@@ -54,6 +69,32 @@ function imageMime(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/webp'
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   if (String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
   return null;
+}
+
+function inspectPng(bytes: Uint8Array): { width: number; height: number; hasGenuineTransparency: boolean } {
+  if (imageMime(bytes) !== 'image/png' || bytes.length < 33 || String.fromCharCode(...bytes.slice(12, 16)) !== 'IHDR') {
+    throw new ImageWorkflowError('image_workflow_output_format_invalid');
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  if (!width || !height || width > MAX_OUTPUT_DIMENSION || height > MAX_OUTPUT_DIMENSION || width * height > MAX_OUTPUT_PIXELS) {
+    throw new ImageWorkflowError('image_workflow_output_dimensions_invalid');
+  }
+  try {
+    const decoded = PNG.sync.read(Buffer.from(bytes), { checkCRC: true });
+    const requiredTransparentPixels = Math.max(1, Math.ceil(width * height * MIN_TRANSPARENT_PIXEL_RATIO));
+    let transparentPixels = 0;
+    for (let index = 3; index < decoded.data.length; index += 4) {
+      if (decoded.data[index] === 0 && ++transparentPixels >= requiredTransparentPixels) {
+        return { width, height, hasGenuineTransparency: true };
+      }
+    }
+    return { width, height, hasGenuineTransparency: false };
+  } catch (error) {
+    if (error instanceof ImageWorkflowError) throw error;
+    throw new ImageWorkflowError('image_workflow_output_format_invalid');
+  }
 }
 
 function connectedNodes(workflow: CanvasNode, nodes: CanvasNode[], edges: Awaited<ReturnType<typeof workspaceRepository.listEdges>>) {
@@ -91,9 +132,7 @@ function contextPrompt(prompt: string, contexts: CanvasNode[], transparentBackgr
     if (!content) return [];
     return [`Context from ${JSON.stringify(node.title ?? 'Note')}:\n${content.slice(0, MAX_CONTEXT_LENGTH)}`];
   });
-  const transparent = transparentBackground
-    ? 'Output contract: genuinely transparent background with a real alpha channel. Preserve the alpha channel in the final PNG. Avoid checkerboard patterns, white or colored backdrops, and fake transparency.'
-    : '';
+  const transparent = transparentBackground ? TRANSPARENT_OUTPUT_CONTRACT : '';
   const body = [prompt, ...blocks].filter(Boolean).join('\n\n');
   if (!transparent) return body.slice(0, 48_000);
   const separator = '\n\n';
@@ -349,8 +388,10 @@ export class ImageWorkflowService {
       `You are the Codex executor for workflow ${execution.workflowNodeId}, run ${execution.runId}.`,
       'Call image_workflow_read for this node to obtain the exact prompt, reference paths, and preallocated output paths.',
       'Use the built-in image_gen.imagegen tool only. Do not ask for an API key, do not call the OpenAI Images API directly, and do not use scripts/image_gen.py.',
-      'Use referenced_image_paths when references exist. Make one built-in tool call per requested output, create only the assigned parent directory when needed, copy each returned file to its assigned workspace output path, then call image_workflow_complete.',
-      'If generation cannot finish, call image_workflow_fail with the run id and a supported public error code.',
+      `Produce every requested output. For each output, copy the native result to its assigned workspace path and call image_workflow_validate before moving to the next output. You may make up to ${MAX_ATTEMPTS_PER_OUTPUT} built-in tool calls per output.`,
+      'When validation reports missing genuine alpha, make a corrective image edit: use that invalid output as the reference, preserve the subject exactly, remove the entire rendered background/checkerboard, and enforce the transparency contract from the workflow prompt. Replace the same assigned file and validate it again.',
+      'Use the original referenced_image_paths for the first attempt. For a corrective alpha edit, use the invalid assigned output as the reference so identity, composition, and branding are preserved.',
+      'After every assigned output validates, call image_workflow_complete once. Only call image_workflow_fail after the allowed corrective attempts are exhausted or the native tool itself cannot run.',
     ].join('\n');
     try {
       await bridgeService.sendOneWay(dto.workspaceId, { to: execution.executor.nodeId, message, kind: 'image-workflow' });
@@ -455,12 +496,10 @@ export class ImageWorkflowService {
 
     let totalBytes = 0;
     for (const path of dto.outputPaths) {
-      const file = await filesystemService.readBinary(dto.workspaceId, path).catch(() => null);
-      if (!file) throw new ImageWorkflowError('image_workflow_output_missing');
-      if (file.data.length > MAX_OUTPUT_BYTES) throw new ImageWorkflowError('image_workflow_output_too_large');
-      totalBytes += file.data.length;
+      const validation = await this.validateOutputFile(dto.workspaceId, path, active.transparentBackground);
+      totalBytes += validation.bytes;
       if (totalBytes > MAX_OUTPUT_TOTAL_BYTES) throw new ImageWorkflowError('image_workflow_outputs_too_large');
-      if (imageMime(file.data) !== 'image/png') throw new ImageWorkflowError('image_workflow_output_format_invalid');
+      if (!validation.valid) throw new ImageWorkflowError(validation.errorCode!);
     }
 
     const [nodes, edges] = await Promise.all([workspaceRepository.listNodes(dto.workspaceId), workspaceRepository.listEdges(dto.workspaceId)]);
@@ -511,6 +550,27 @@ export class ImageWorkflowService {
     return this.finishFailure(dto.workspaceId, dto.nodeId, dto.runId, dto.errorCode);
   }
 
+  async validateOutput(workspaceId: string, nodeId: string, runId: string, outputPath: string, actorNodeId: string) {
+    const workflow = await workspaceRepository.getNode(nodeId);
+    if (!workflow || workflow.workspaceId !== workspaceId || workflow.type !== 'imageWorkflow') throw new ImageWorkflowError('image_workflow_not_found', 404);
+    const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
+    const active = payload.activeRun;
+    if (payload.status !== 'running' || !active || active.id !== runId) throw new ImageWorkflowError('image_workflow_run_not_active', 409);
+    if (active.executorNodeId !== actorNodeId) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    if (!active.outputPaths.includes(outputPath)) throw new ImageWorkflowError('image_workflow_output_path_mismatch');
+    const result = await this.validateOutputFile(workspaceId, outputPath, active.transparentBackground);
+    return {
+      path: outputPath,
+      valid: result.valid,
+      errorCode: result.errorCode,
+      retryable: result.errorCode === 'image_workflow_output_alpha_missing' || result.errorCode === 'image_workflow_output_missing',
+      transparentBackground: active.transparentBackground,
+      repair: result.errorCode === 'image_workflow_output_alpha_missing'
+        ? 'Use this invalid output as referenced_image_paths, preserve the subject and branding exactly, remove the entire background/checkerboard, output RGBA PNG with alpha 0 outside the subject, replace the same file, and validate again.'
+        : null,
+    };
+  }
+
   async status(workspaceId: string, nodeId: string) {
     const [node, nodes, edges, agents] = await Promise.all([
       workspaceRepository.getNode(nodeId), workspaceRepository.listNodes(workspaceId),
@@ -521,6 +581,20 @@ export class ImageWorkflowService {
     if (payload.status === 'running' && !payload.activeRun) {
       await workspaceRepository.updateNode(node.id, { payload: nextPayload(payload, {}, { status: 'failed', activeRunId: null, activeRun: null, lastError: 'image_workflow_interrupted' }) });
       broadcast(workspaceId, node.id);
+    }
+    if (payload.status === 'running' && payload.activeRun) {
+      const executorAlive = agents.some((agent) => agent.nodeId === payload.activeRun?.executorNodeId && agent.sessionAlive);
+      const elapsed = Date.now() - new Date(payload.activeRun.startedAt).getTime();
+      const timeout = Math.min(MAX_RUN_TIMEOUT_MS, Math.max(MIN_RUN_TIMEOUT_MS, payload.activeRun.requestedOutputs * RUN_TIMEOUT_PER_OUTPUT_MS));
+      if (!executorAlive || !Number.isFinite(elapsed) || elapsed > timeout) {
+        await this.finishFailure(
+          workspaceId,
+          node.id,
+          payload.activeRun.id,
+          executorAlive ? 'image_workflow_timed_out' : 'image_workflow_executor_offline',
+        );
+        return this.status(workspaceId, nodeId);
+      }
     }
     const connectedCodex = connectedNodes(node, nodes, edges).map(({ node: connected }) => connected).filter((connected) => (
       connected.type === 'terminal' && (connected.payload as TerminalNodePayload).provider === 'codex'
@@ -569,6 +643,25 @@ export class ImageWorkflowService {
     return { workflowNodeId: node.id, run };
   }
 
+  private async validateOutputFile(workspaceId: string, path: string, transparentBackground: boolean) {
+    const file = await filesystemService.readBinary(workspaceId, path).catch(() => null);
+    if (!file) return { valid: false, errorCode: 'image_workflow_output_missing', bytes: 0 };
+    if (file.data.length > MAX_OUTPUT_BYTES) return { valid: false, errorCode: 'image_workflow_output_too_large', bytes: file.data.length };
+    try {
+      const png = inspectPng(file.data);
+      if (transparentBackground && !png.hasGenuineTransparency) {
+        return { valid: false, errorCode: 'image_workflow_output_alpha_missing', bytes: file.data.length };
+      }
+      return { valid: true, errorCode: null, bytes: file.data.length, width: png.width, height: png.height };
+    } catch (error) {
+      return {
+        valid: false,
+        errorCode: error instanceof ImageWorkflowError ? error.code : 'image_workflow_output_format_invalid',
+        bytes: file.data.length,
+      };
+    }
+  }
+
   private executionSpec(workspace: Workspace, workflow: CanvasNode, active: ImageWorkflowActiveRun, agents: Awaited<ReturnType<typeof bridgeService.listAgents>>) {
     const executor = agents.find((agent) => agent.nodeId === active.executorNodeId);
     return {
@@ -581,10 +674,16 @@ export class ImageWorkflowService {
         prompt: active.promptSnapshot,
         referenced_image_paths: active.referencePaths.map((path) => agentPath(workspace, path)),
         calls: active.requestedOutputs,
+        maxAttemptsPerOutput: MAX_ATTEMPTS_PER_OUTPUT,
       },
       workspaceRoot: workspace.runtimeKind === 'wsl' && workspace.wslWorkingDir ? workspace.wslWorkingDir : workspace.workingDir,
       outputPaths: active.outputPaths,
       outputAbsolutePaths: active.outputPaths.map((path) => agentPath(workspace, path)),
+      validation: {
+        tool: 'image_workflow_validate',
+        arguments: { nodeId: workflow.id, runId: active.id, outputPath: '<one assigned output path>' },
+        genuineAlphaRequired: active.transparentBackground,
+      },
       completion: { tool: 'image_workflow_complete', arguments: { nodeId: workflow.id, runId: active.id, outputPaths: active.outputPaths } },
       failure: { tool: 'image_workflow_fail', arguments: { nodeId: workflow.id, runId: active.id, errorCode: 'image_gen_tool_failed' } },
     };

@@ -1627,7 +1627,7 @@ export const TOURS_EN: Tour[] = [
         title: 'Build the character stage',
         body: 'I create and connect the first workflow. It requests three transparent masters and saves the PNG files under generated/images/xyz-character.',
         action: [
-          { kind: 'createImageWorkflow', title: '01 — Character Master', position: { x: 620, y: 60 }, prompt: 'Create three polished full-body master images of the Atomic Ant described by the connected brief. Each result must use a distinct pose, preserve exactly the same visual identity, and have a genuinely transparent PNG background with an alpha channel.', count: 3, transparentBackground: true, outputDirectory: 'generated/images/xyz-character', filePrefix: 'atomic-ant-master' },
+          { kind: 'createImageWorkflow', title: '01 — Character Master', position: { x: 620, y: 60 }, prompt: 'Create three polished full-body master images of the Atomic Ant described by the connected brief. Each result must use a distinct pose and preserve exactly the same visual identity.', count: 3, transparentBackground: true, outputDirectory: 'generated/images/xyz-character', filePrefix: 'atomic-ant-master' },
           { kind: 'connect', fromTitle: 'XYZ Character Brief', toTitle: '01 — Character Master' },
           { kind: 'connect', fromTitle: 'XYZ Creative Director', toTitle: '01 — Character Master' },
         ],
@@ -1646,7 +1646,7 @@ export const TOURS_EN: Tour[] = [
         body: 'I generate a sample XYZ logo PNG, create the second stage, and automatically connect the first approved master, the logo, both briefs, and the same Codex.',
         action: [
           { kind: 'createSampleImage', title: 'XYZ Sample Logo', path: '.orkestrai/tours/xyz-sample-logo.png', label: 'XYZ', background: '#7C4DFF', foreground: '#FFFFFF', position: { x: 1140, y: 920 } },
-          { kind: 'createImageWorkflow', title: '02 — Branded Character', position: { x: 1600, y: 60 }, prompt: 'Use the first reference as the character exact identity and the second as the exact XYZ brand logo. Create two full-body promotional poses with the logo applied naturally and legibly to the outfit. Preserve the face, antennae, anatomy, outfit, palette, and style. Deliver a PNG with a genuinely transparent background.', count: 2, transparentBackground: true, outputDirectory: 'generated/images/xyz-branded', filePrefix: 'atomic-ant-xyz' },
+          { kind: 'createImageWorkflow', title: '02 — Branded Character', position: { x: 1600, y: 60 }, prompt: 'Use the first reference as the character exact identity and the second as the exact XYZ brand logo. Create two full-body promotional poses with the logo applied naturally and legibly to the outfit. Preserve the face, antennae, anatomy, outfit, palette, and style.', count: 2, transparentBackground: true, outputDirectory: 'generated/images/xyz-branded', filePrefix: 'atomic-ant-xyz' },
           { kind: 'connect', fromTitle: 'XYZ Creative Director', toTitle: '02 — Branded Character' },
           { kind: 'connect', fromTitle: 'XYZ Character Brief', toTitle: '02 — Branded Character' },
           { kind: 'connect', fromTitle: 'XYZ Brand Campaign', toTitle: '02 — Branded Character' },

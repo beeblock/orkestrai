@@ -9,6 +9,7 @@ import {
   imageWorkflowActorSchema,
   runImageWorkflowSchema,
   updateImageWorkflowSchema,
+  validateImageWorkflowOutputSchema,
   type AddImageWorkflowReferenceInput,
   type BridgeRunImageWorkflowInput,
   type CompleteImageWorkflowInput,
@@ -18,6 +19,7 @@ import {
   type ImageWorkflowActorInput,
   type RunImageWorkflowInput,
   type UpdateImageWorkflowInput,
+  type ValidateImageWorkflowOutputInput,
 } from '../../../contracts/schemas/imageWorkflowSchemas.js';
 
 export class RunImageWorkflowRequest extends FormRequest {
@@ -61,6 +63,12 @@ export class CompleteImageWorkflowRequest extends FormRequest {
   rules() { return completeImageWorkflowSchema; }
   authorize(): boolean { return true; }
   passedValidation(data: unknown): CompleteImageWorkflowInput { return completeImageWorkflowSchema.parse(data); }
+}
+
+export class ValidateImageWorkflowOutputRequest extends FormRequest {
+  rules() { return validateImageWorkflowOutputSchema; }
+  authorize(): boolean { return true; }
+  passedValidation(data: unknown): ValidateImageWorkflowOutputInput { return validateImageWorkflowOutputSchema.parse(data); }
 }
 
 export class FailImageWorkflowRequest extends FormRequest {

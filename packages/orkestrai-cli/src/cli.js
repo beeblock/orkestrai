@@ -53,7 +53,7 @@ Uso:
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
   orkestrai note create <titulo> [--content <texto>] [--connect <agente|all>]
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
-  orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
+  orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design apply <nodeId> <operations-json> --revision <n> [--summary <texto>] [--task <taskId>]
   orkestrai design import-code <nodeId> <arquivo> --format html|svelte|react|vue --name <nome> --revision <n> [--css <arquivo>]
@@ -666,6 +666,16 @@ export async function run(argv, options = {}) {
         else out(`Fluxo concluido: ${data.outputPaths.length} imagem(ns) materializada(s).`);
         return 0;
       }
+      if (action === 'validate' && nodeId) {
+        const runId = rest[2];
+        const outputPath = rest[3];
+        if (!runId || !outputPath) throw new Error('Uso: orkestrai image validate <nodeId> <runId> <outputPath>');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/validate`, { runId, outputPath, from: selfAgent });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else if (data.valid) out(`Output validado: ${data.path}.`);
+        else out(`Output invalido (${data.errorCode}): ${data.repair ?? data.path}`);
+        return data.valid ? 0 : 2;
+      }
       if (action === 'fail' && nodeId) {
         const runId = rest[2];
         if (!runId) throw new Error('Uso: orkestrai image fail <nodeId> <runId> [--error image_gen_tool_failed]');
@@ -688,7 +698,7 @@ export async function run(argv, options = {}) {
         else out(`Fluxo removido: ${data.nodeId}.`);
         return 0;
       }
-      throw new Error('Uso: orkestrai image <list|read|create|update|connect|disconnect|reference|run|complete|fail|cancel|delete> ...');
+      throw new Error('Uso: orkestrai image <list|read|create|update|connect|disconnect|reference|run|validate|complete|fail|cancel|delete> ...');
     }
     case 'design': {
       const [action, nodeId, ...values] = rest;

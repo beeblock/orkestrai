@@ -6,6 +6,7 @@ import type {
   FailImageWorkflowInput,
   RunImageWorkflowInput,
   UpdateImageWorkflowInput,
+  ValidateImageWorkflowOutputInput,
 } from '../../contracts/schemas/imageWorkflowSchemas.js';
 
 export class CreateImageWorkflowDto {
@@ -48,6 +49,20 @@ export class CompleteImageWorkflowDto {
 
   static from(workspaceId: string, nodeId: string, input: CompleteImageWorkflowInput, actorNodeId: string) {
     return new CompleteImageWorkflowDto(workspaceId, nodeId, input.runId, input.outputPaths, actorNodeId);
+  }
+}
+
+export class ValidateImageWorkflowOutputDto {
+  constructor(
+    public readonly workspaceId: string,
+    public readonly nodeId: string,
+    public readonly runId: string,
+    public readonly outputPath: string,
+    public readonly actorNodeId: string,
+  ) {}
+
+  static from(workspaceId: string, nodeId: string, input: ValidateImageWorkflowOutputInput, actorNodeId: string) {
+    return new ValidateImageWorkflowOutputDto(workspaceId, nodeId, input.runId, input.outputPath, actorNodeId);
   }
 }
 

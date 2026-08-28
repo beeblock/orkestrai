@@ -14,8 +14,21 @@ import {
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
+import { PNG as PngCodec } from 'pngjs';
 
-const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+function pngBytes(transparent: boolean): Uint8Array {
+  const image = new PngCodec({ width: 20, height: 20 });
+  for (let index = 0; index < image.data.length; index += 4) {
+    image.data[index] = 220;
+    image.data[index + 1] = 30;
+    image.data[index + 2] = 60;
+    image.data[index + 3] = transparent && index < image.data.length / 2 ? 0 : 255;
+  }
+  return Uint8Array.from(PngCodec.sync.write(image));
+}
+
+const PNG = pngBytes(true);
+const OPAQUE_PNG = pngBytes(false);
 
 function config(overrides: Record<string, unknown> = {}) {
   return imageWorkflowConfigSchema.parse({
@@ -129,6 +142,9 @@ describe('ImageWorkflowService', () => {
       failure: { tool: 'image_workflow_fail' },
     });
     expect(result.tool.prompt).toContain('real alpha channel');
+    expect(result.tool.prompt).toContain('alpha 0');
+    expect(result.tool.maxAttemptsPerOutput).toBe(3);
+    expect(result.validation).toMatchObject({ tool: 'image_workflow_validate', genuineAlphaRequired: true });
     expect(result.outputPaths).toHaveLength(2);
     expect(result.outputPaths.every((path: string) => path.startsWith('generated/images/atomic-ant-'))).toBe(true);
   });
@@ -235,6 +251,9 @@ describe('ImageWorkflowService', () => {
     const message = send.mock.calls[0][1].message;
     expect(message).toContain('Do not ask for an API key');
     expect(message).toContain('do not call the OpenAI Images API directly');
+    expect(message).toContain('up to 3 built-in tool calls per output');
+    expect(message).toContain('image_workflow_validate');
+    expect(message).toContain('corrective image edit');
     expect(message).toContain('image_workflow_complete');
   });
 
@@ -291,6 +310,58 @@ describe('ImageWorkflowService', () => {
       contextNodeIds: ['note-1'], referenceNodeIds: ['reference-1'], outputNodeIds: ['output-1'],
     });
     expect(state.getWorkflow().payload).toMatchObject({ status: 'succeeded', activeRun: null, lastError: null });
+  });
+
+  it('rejects fake transparency and accepts a corrected RGBA output without ending the run', async () => {
+    const state = setupWorkflow({ references: false });
+    let output = OPAQUE_PNG;
+    vi.spyOn(filesystemService, 'readBinary').mockImplementation(async (_workspaceId, path) => ({
+      data: path.includes('generated/images') ? output : PNG,
+      contentType: 'image/png',
+      name: path.split('/').at(-1) ?? 'image.png',
+    }));
+    const service = new ImageWorkflowService();
+    const execution = await service.begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config(), 'agent-1'));
+
+    const invalid = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+    expect(invalid).toMatchObject({
+      valid: false,
+      errorCode: 'image_workflow_output_alpha_missing',
+      retryable: true,
+      transparentBackground: true,
+    });
+    expect(invalid.repair).toContain('remove the entire background/checkerboard');
+    expect(state.getWorkflow().payload).toMatchObject({ status: 'running', activeRunId: execution.runId });
+
+    const premature = await service.complete({
+      workspaceId: 'workspace-1', nodeId: 'workflow-1', runId: execution.runId,
+      outputPaths: execution.outputPaths, actorNodeId: 'agent-1',
+    }).catch((error) => error);
+    expect(premature).toMatchObject({ code: 'image_workflow_output_alpha_missing' });
+    expect(state.getWorkflow().payload).toMatchObject({ status: 'running', activeRunId: execution.runId });
+
+    output = PNG;
+    expect(await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    )).toMatchObject({ valid: true, errorCode: null });
+  });
+
+  it('ends an abandoned run after its bounded timeout', async () => {
+    const state = setupWorkflow({ references: false });
+    const service = new ImageWorkflowService();
+    const execution = await service.begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config({ count: 2 }), 'agent-1'));
+    state.getWorkflow().payload.activeRun.startedAt = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
+
+    const status = await service.status('workspace-1', 'workflow-1');
+
+    expect(status).toMatchObject({ running: false, runId: null, lastError: 'image_workflow_timed_out' });
+    expect(state.getWorkflow().payload.history.at(-1)).toMatchObject({
+      id: execution.runId,
+      status: 'failed',
+      errorCode: 'image_workflow_timed_out',
+    });
   });
 
   it('persists and reuses outputs across character, brand, and ten-image carousel stages', async () => {

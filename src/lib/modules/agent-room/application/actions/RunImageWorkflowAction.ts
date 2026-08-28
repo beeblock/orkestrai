@@ -1,4 +1,4 @@
-import type { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, RunImageWorkflowDto, UpdateImageWorkflowDto } from '../dto/ImageWorkflowDtos.js';
+import type { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, RunImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '../dto/ImageWorkflowDtos.js';
 import { imageWorkflowService } from '../services/ImageWorkflowService.js';
 import type { BridgeRunImageWorkflowInput } from '../../contracts/schemas/imageWorkflowSchemas.js';
 
@@ -37,6 +37,12 @@ export class AddImageWorkflowReferenceAction {
 export class CompleteImageWorkflowAction {
   execute(dto: CompleteImageWorkflowDto) {
     return imageWorkflowService.complete(dto);
+  }
+}
+
+export class ValidateImageWorkflowOutputAction {
+  execute(dto: ValidateImageWorkflowOutputDto) {
+    return imageWorkflowService.validateOutput(dto.workspaceId, dto.nodeId, dto.runId, dto.outputPath, dto.actorNodeId);
   }
 }
 

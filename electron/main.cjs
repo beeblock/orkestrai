@@ -425,9 +425,19 @@ function ensureNativePty(userDataDir) {
     const srcVersion = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8')).version;
     const destPkg = path.join(dest, 'package.json');
     const destVersion = fs.existsSync(destPkg) ? JSON.parse(fs.readFileSync(destPkg, 'utf8')).version : null;
-    if (srcVersion !== destVersion) {
+    const platformDir = `${process.platform}-${process.arch}`;
+    const srcPty = path.join(src, 'prebuilds', platformDir, 'pty.node');
+    const destPty = path.join(dest, 'prebuilds', platformDir, 'pty.node');
+    const srcHelper = path.join(src, 'prebuilds', platformDir, 'spawn-helper');
+    const destHelper = path.join(dest, 'prebuilds', platformDir, 'spawn-helper');
+    const cacheIncomplete = !fs.existsSync(destPty)
+      || (process.platform === 'darwin' && fs.existsSync(srcHelper) && !fs.existsSync(destHelper));
+    if (srcVersion !== destVersion || cacheIncomplete) {
       fs.rmSync(dest, { recursive: true, force: true });
       fs.cpSync(src, dest, { recursive: true });
+    }
+    if (process.platform === 'darwin' && fs.existsSync(destHelper)) {
+      fs.chmodSync(destHelper, 0o755);
     }
     return dest;
   } catch (error) {
