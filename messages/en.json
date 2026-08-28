@@ -1179,6 +1179,7 @@
   "term.maestro_disable": "Disable Maestro Mode",
   "term.remove_terminal": "Remove terminal",
   "term.no_command": "No command associated.",
+  "term.preparing_agent": "Preparing the agent session…",
   "term.send": "Send",
   "term.no_session": "No session provided.",
   "term.ws_error": "WebSocket connection to the server failed.",

@@ -42,7 +42,6 @@ export const GET: RequestHandler = async ({ url }) => {
           command: tui.command,
           args: tui.args,
           env: tui.env,
-          resumeArgs: adapter.resumeArgs(),
           exactResumeArgs: adapter.resumeArgs('__ORKESTRAI_SESSION_ID__'),
           freshSessionArgs: adapter.freshSessionArgs?.('__ORKESTRAI_SESSION_ID__') ?? null,
         },

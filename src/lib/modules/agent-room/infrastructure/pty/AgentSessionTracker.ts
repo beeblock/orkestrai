@@ -83,13 +83,6 @@ export class AgentSessionTracker {
     return this.findByStrategy(storage, cwd, since, exclude ?? this.claimed, 'oldest');
   }
 
-  /** Session-id mais RECENTE que nenhum terminal do workspace reivindicou
-      (lookup de respawn: cobre o watch que expirou antes da 1a mensagem). */
-  findLatestUnclaimedSessionId(storage: string | undefined, cwd: string, exclude?: Set<string>): string | null {
-    const excludeIds = new Set<string>([...this.claimed, ...(exclude ?? [])]);
-    return this.findByStrategy(storage, cwd, 0, excludeIds, 'newest');
-  }
-
   /** Sessao mais recente do workspace sem considerar reivindicacoes de outros
       terminais. Usada apenas para reparar metadata persistida; o chamador ainda
       precisa confirmar o turno exato antes de aceitar a sessao. */

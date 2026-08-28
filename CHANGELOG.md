@@ -29,6 +29,14 @@ pt-BR, English, and Spanish translations.
 - The workflow states in the UI that an authenticated Codex account or plan
   with ImageGen access is required, while no OpenAI API key is needed.
 
+### Fixed
+
+- A newly created or recovered agent terminal no longer falls back to
+  provider-wide shortcuts such as `resume --last` or `--continue`. It resumes
+  only the exact conversation already attributed to that canvas node; without
+  a confirmed ID, it starts a clean conversation so agents sharing a workspace
+  cannot inherit one another's context.
+
 ### Security
 
 - Orkestrai never requests, receives, stores, or logs an image API key and does

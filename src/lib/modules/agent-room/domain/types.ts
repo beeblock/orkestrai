@@ -66,7 +66,6 @@ export type AgentProviderInfo = {
     command: string;
     args: string[];
     env?: Record<string, string>;
-    resumeArgs?: string[] | null;
     /** Args exatos com o token abaixo no lugar do id real da conversa. */
     exactResumeArgs?: string[] | null;
     /** Args de conversa nova com o token abaixo no lugar do id reservado. */

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Ellipsis, Globe2, History, ListRestart, MonitorCog, Paperclip, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { ArrowLeftRight, BadgeCheck, Ellipsis, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { AgentRole } from '$lib/modules/agent-room/application/services/RoleService.js';
@@ -33,6 +33,7 @@
     terminalCommandFingerprint,
     type SavedTerminalCommand,
   } from '$lib/modules/agent-room/domain/terminal-commands.js';
+  import { safeAgentRespawn } from '$lib/modules/agent-room/domain/terminal-session-launch.js';
 
   export type MentionTarget = { id: string; title: string; type: string };
 
@@ -44,8 +45,6 @@
     workspaceRuntime: WorkspaceExecutionRuntime;
     workspaceId: string;
     payload: TerminalNodePayload;
-    /** Avalia os args de resume do provider NA HORA do respawn. */
-    resumeArgsFor?: () => string[] | null;
     /** Avalia os args de resume exato por session-id NA HORA do respawn. */
     exactResumeArgsFor?: (agentSessionId: string) => string[] | null;
     /** Template que reserva um id novo na CLI e elimina races entre agentes. */
@@ -76,13 +75,11 @@
   let terminalNode = $state<{ focus: () => void; write: (input: string) => void } | undefined>();
   let ownsCreatedSession = $state(untrack(() => !data.payload.sessionId));
   let restartGeneration = $state(0);
+  let providerMetadataReady = $state(untrack(() => !data.payload.provider));
 
   // Quando a sessao morre (restart do app), recria com os args de resume do
   // provider para retomar o contexto da conversa anterior.
   let forceRespawn = $state(false);
-  /** Session-id descoberto no momento do respawn (cobre o caso do watch ter
-      expirado antes da primeira mensagem — Claude grava o jsonl so na 1a msg). */
-  let respawnAgentSessionId = $state<string | null>(null);
   let councilOpen = $state(false);
   let runtimeOpen = $state(false);
   let commandsOpen = $state(false);
@@ -97,6 +94,24 @@
       ? data.payload.currentWorkingDir
       : data.workingDir
   );
+
+  onMount(() => {
+    const provider = data.payload.provider;
+    const ready = data.providersReady;
+    if (!provider || !ready) {
+      providerMetadataReady = true;
+      return;
+    }
+
+    let cancelled = false;
+    providerMetadataReady = false;
+    void ready.then(() => {
+      if (!cancelled) providerMetadataReady = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   $effect(() => {
     if (!actionsOpen) return;
@@ -127,23 +142,9 @@
   });
 
   async function resolveRespawn() {
-    const payload = data.payload as TerminalNodePayload & { provider?: string };
     // Espera os providers carregarem — sem eles o respawn sairia sem os args
     // de resume (race no restart do app: attach falha antes do status voltar).
     await (data.providersReady ?? Promise.resolve());
-    if (!respawnAgentSessionId && payload.provider && !payload.agentSessionId) {
-      try {
-        const response = await fetch(
-          `/api/agent-room/sessions/latest?provider=${encodeURIComponent(payload.provider)}&cwd=${encodeURIComponent(data.workingDir)}&workspaceId=${encodeURIComponent(data.workspaceId)}&nodeId=${encodeURIComponent(id)}`
-        );
-        const result = await response.json();
-        respawnAgentSessionId = result.data?.agentSessionId ?? null;
-        if (respawnAgentSessionId) data.onAgentSessionFound?.(id, respawnAgentSessionId);
-      } catch {
-        // Sem um id confirmado, WSL inicia limpo em vez de adivinhar a
-        // conversa mais recente de outra distribuicao ou terminal.
-      }
-    }
     ownsCreatedSession = false;
     forceRespawn = true;
   }
@@ -252,7 +253,6 @@
     providerError = '';
     try {
       forceRespawn = false;
-      respawnAgentSessionId = null;
       await data.onProviderChange?.(id, provider, profileId, profileLabel);
     } catch {
       providerError = m['term.provider_switch_error']();
@@ -286,7 +286,6 @@
 
   async function changeRuntime(selection: { mode: 'default' | 'native' | 'wsl'; wslDistribution: string | null; wslWorkingDir: string | null }) {
     forceRespawn = false;
-    respawnAgentSessionId = null;
     await data.onRuntimeChange?.(id, selection);
   }
 
@@ -487,8 +486,9 @@
     });
   }
 
-  // Resume exato quando temos o session-id real da CLI; senao, fallback
-  // para "a sessao mais recente do diretorio".
+  // Resume somente com o session-id real atribuido a este node. Sem id exato,
+  // nasce uma conversa limpa: `--last`/`--continue` pode apontar para outro
+  // agente ativo no mesmo diretorio.
   const agentEnv = $derived({
     ...((data.payload as TerminalNodePayload).env ?? {}),
     ORKESTRAI_NODE_ID: id,
@@ -496,29 +496,15 @@
   });
   const respawnRequest = $derived.by(() => {
     const payload = data.payload as TerminalNodePayload & { agentSessionId?: string };
-    const exactId = payload.agentSessionId ?? respawnAgentSessionId;
-    const exactArgs = exactId ? (data.exactResumeArgsFor?.(exactId) ?? null) : null;
-    if (exactArgs) {
-      return {
-        command: data.payload.command ?? '',
-        args: [...(data.payload.args ?? []), ...exactArgs],
-        cwd: launchWorkingDir,
-        env: agentEnv,
-        profileId: currentProfileId,
-        runtime: data.executionRuntime,
-        workspaceRoot: data.workspaceRoot,
-      };
-    }
-    const genericArgs = data.executionRuntime.kind === 'wsl' ? null : (data.resumeArgsFor?.() ?? null);
+    const conversation = safeAgentRespawn(
+      payload.args ?? [],
+      payload.agentSessionId ?? null,
+      data.exactResumeArgsFor,
+      data.freshSessionArgsFor?.(),
+    );
     return {
       command: data.payload.command ?? '',
-      args:
-        genericArgs && genericArgs.length
-          ? [...(data.payload.args ?? []), ...genericArgs]
-          : (data.payload.args ?? []),
-      freshSessionArgs: !exactId && (!genericArgs || genericArgs.length === 0)
-        ? (data.freshSessionArgsFor?.() ?? undefined)
-        : undefined,
+      ...conversation,
       cwd: launchWorkingDir,
       env: agentEnv,
       profileId: currentProfileId,
@@ -797,7 +783,7 @@
         {voiceOn}
         onToggleVoice={toggleVoice}
       />
-    {:else if data.payload.command}
+    {:else if data.payload.command && providerMetadataReady}
       {#key createSessionKey}
         <TerminalNode
           bind:this={terminalNode}
@@ -820,6 +806,13 @@
           onToggleVoice={toggleVoice}
         />
       {/key}
+    {:else if data.payload.command}
+      <div class="grid h-full place-items-center text-[11px] text-[var(--app-text-muted)]" role="status">
+        <span class="inline-flex items-center gap-2">
+          <LoaderCircle size={14} class="animate-spin" />
+          {m['term.preparing_agent']()}
+        </span>
+      </div>
     {:else}
       <p class="terminal-empty">{m['term.no_command']()}</p>
     {/if}

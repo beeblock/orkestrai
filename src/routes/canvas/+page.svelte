@@ -1085,7 +1085,6 @@
         payload: node.payload,
         // Closures: avaliadas na hora do respawn (providers ja carregados) —
         // avaliar aqui congelaria undefined no restart (providers ainda vazios).
-        resumeArgsFor: () => resumeArgsFor(node),
         exactResumeArgsFor: (agentSessionId: string) => exactResumeArgsFor(node)?.(agentSessionId) ?? null,
         freshSessionArgsFor: () => freshSessionArgsFor(node),
         sessionStorageFor: () => sessionStorageFor(node),
@@ -1149,10 +1148,6 @@
     if (!template) return undefined;
     return (agentSessionId: string) =>
       template.map((arg) => arg.replace('__ORKESTRAI_SESSION_ID__', agentSessionId));
-  }
-
-  function resumeArgsFor(node: CanvasNode): string[] | null {
-    return providerForNode(node)?.tui?.resumeArgs ?? null;
   }
 
   function freshSessionArgsFor(node: CanvasNode): string[] | null {

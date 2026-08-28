@@ -208,7 +208,6 @@
         executionRuntime: terminalExecutionRuntime(workspace, payload),
         workspaceRuntime,
         payload: node.payload,
-        resumeArgsFor: () => provider?.tui?.resumeArgs ?? null,
         exactResumeArgsFor: (agentSessionId: string) => provider?.tui?.exactResumeArgs?.map(
           (arg) => arg.replace('__ORKESTRAI_SESSION_ID__', agentSessionId)
         ) ?? null,

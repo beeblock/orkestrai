@@ -736,6 +736,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Orkestrai never asks for or stores an image API key and never calls a provider endpoint directly. Only the assigned Codex can complete the run, and exact paths, signatures, sizes, and public errors are bounded before persistence.',
         'Runs keep traceable history and provenance, while typed CLI/MCP read, start, complete, fail, and cancel tools plus a guided creative-team tour let leaders operate the same visible workflow.',
         'The panel states that ImageGen requires an authenticated Codex account or plan without asking for an OpenAI API key.',
+        'New or recovered agents never resume another terminal\'s latest conversation: Orkestrai resumes only the exact ID attributed to the node and starts a clean conversation when that link does not exist yet.',
       ],
     },
     {

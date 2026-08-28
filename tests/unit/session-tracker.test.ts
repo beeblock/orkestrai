@@ -86,24 +86,6 @@ describe('AgentSessionTracker', () => {
     expect(foundB).not.toBe(foundA);
   });
 
-  it('findLatestUnclaimedSessionId retorna a mais recente fora da exclusao', () => {
-    const cwd = join(tmpdir(), 'projeto-respawn-' + Date.now());
-    const { home, tracker } = isolatedTracker();
-
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
-    mkdirSync(claudeDir, { recursive: true });
-    touch(join(claudeDir, 'velha.jsonl'), new Date(Date.now() - 3_600_000));
-    touch(join(claudeDir, 'media.jsonl'), new Date(Date.now() - 60_000));
-    touch(join(claudeDir, 'nova.jsonl'), new Date());
-
-    // Sem exclusao: a mais recente. Excluindo-a: a segunda mais recente.
-    expect(tracker.findLatestUnclaimedSessionId(claudeAdapter.sessionStorage, cwd)).toBe('nova');
-    expect(tracker.findLatestUnclaimedSessionId(claudeAdapter.sessionStorage, cwd, new Set(['nova']))).toBe('media');
-    tracker.claim('nova');
-    expect(tracker.findLatestUnclaimedSessionId(claudeAdapter.sessionStorage, cwd)).toBe('media');
-    expect(tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('nova');
-  });
-
   it('ignora transcripts de subagentes do claude', () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), 'projeto-claude-subagent-' + Date.now());
@@ -129,7 +111,7 @@ describe('AgentSessionTracker', () => {
     utimesSync(empty, new Date(), new Date());
     touch(join(claudeDir, 'sessao-valida.jsonl'), new Date(Date.now() - 5_000));
 
-    expect(tracker.findLatestUnclaimedSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-valida');
+    expect(tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-valida');
   });
 
   it('ignora transcript do claude que ainda contem apenas snapshots de startup', () => {
@@ -144,7 +126,7 @@ describe('AgentSessionTracker', () => {
     utimesSync(snapshotOnly, new Date(), new Date());
     touch(join(claudeDir, 'sessao-retomavel.jsonl'), new Date(Date.now() - 5_000));
 
-    expect(tracker.findLatestUnclaimedSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-retomavel');
+    expect(tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-retomavel');
   });
 
   it('vincula a sessao do Codex somente ao workspace do terminal', () => {
@@ -310,7 +292,7 @@ describe('AgentSessionTracker', () => {
     expect(first).toBe('calm-river');
     tracker.claim(first!);
     expect(tracker.findAgentSessionId(devinAdapter.sessionStorage, cwd, since)).toBe('bright-piano');
-    expect(tracker.findLatestUnclaimedSessionId(devinAdapter.sessionStorage, cwd)).toBe('bright-piano');
+    expect(tracker.findLatestAgentSessionId(devinAdapter.sessionStorage, cwd)).toBe('bright-piano');
   });
 });
 

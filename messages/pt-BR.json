@@ -1179,6 +1179,7 @@
   "term.maestro_disable": "Desativar Modo Maestro",
   "term.remove_terminal": "Remover terminal",
   "term.no_command": "Sem comando associado.",
+  "term.preparing_agent": "Preparando a sessão do agente…",
   "term.send": "Enviar",
   "term.no_session": "Nenhuma sessão informada.",
   "term.ws_error": "Falha na conexão WebSocket com o servidor.",
