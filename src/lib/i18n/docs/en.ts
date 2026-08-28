@@ -293,6 +293,9 @@ Header: Authorization = Bearer {{accessToken}}`,
       id: 'image-workflows',
       title: 'Native image generation workflows',
       body: `Open the Image menu in the Canvas toolbar and choose Generate images. This workflow is part of the existing canvas: connect Notes for palette, character rules, art direction, exclusions, or campaign context; connect up to five ordered PNG, JPEG, or WebP Image references; and connect a live Codex agent as executor. An authenticated Codex account or plan with ImageGen available is required; no OpenAI API key is needed. Numbered thumbnails show the exact reference order. Enter a prompt, choose one to ten outputs, optionally request a genuine transparent PNG background, and set a relative workspace folder (generated/images by default) plus a safe filename prefix. Generate delegates one logical run to that Codex session; the native tool contract has no count parameter, so the agent automatically makes one authenticated image_gen.imagegen call per requested output and reports one combined run. Orkestrai never requests or stores an image API key, never calls an image provider endpoint directly, and does not invent model, quality, size, or format controls that the native tool does not expose. A connected Codex has full typed control over this visible workflow through image_workflow_*: it can create and configure a draft without executing it, connect, disconnect, or reorder Notes and Images, add reference files from the workspace, claim and run generation, complete or cancel it, and remove the workflow. The executor copies each native result to its preallocated workspace destination and calls image_workflow_complete. Orkestrai accepts only that connected Codex and those exact paths, then validates file signature and size before creating connected Image nodes with input hash, source workflow, run id, output index, duration, and bounded history. Outputs can feed another workflow as references. Cancel invalidates the active run so a late completion cannot be materialized; it cannot interrupt a native tool call already in progress. Canvas, Workbench, CLI, and MCP operate the same persisted graph without parallel automation state.`,
+      bullets: [
+        'Every Codex terminal started from Canvas receives the MCP launcher from the current Orkestrai installation as a session-only override. An old global Codex configuration cannot hide image_workflow_* tools, and the user-owned config file is never rewritten.',
+      ],
     },
     {
       id: 'visual-annotations',
@@ -739,6 +742,8 @@ Header: Authorization = Bearer {{accessToken}}`,
         'The guided use case now builds and validates Character → Brand → Carousel: it creates briefs and a sample logo, waits for real outputs, and automatically connects each result to the next stage.',
         'The panel states that ImageGen requires an authenticated Codex account or plan without asking for an OpenAI API key.',
         'New or recovered agents never resume another terminal\'s latest conversation: Orkestrai resumes only the exact ID attributed to the node and starts a clean conversation when that link does not exist yet.',
+        'Interactive Codex terminals always receive the current packaged MCP before resume, packaged builds retain the complete WebADB runtime closure, and image workflow calls no longer fail because of a stale global MCP or a missing Android support module.',
+        'Unavailable Portals use bounded backoff with manual retry; stale board requests return not found; Windows ConPTY cleanup and local health probes no longer flood logs with expected errors.',
       ],
     },
     {

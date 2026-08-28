@@ -37,6 +37,25 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Codex terminals created interactively from Canvas now receive the current
+  packaged Orkestrai MCP as an ephemeral launch override before any `resume`
+  subcommand. A valid but stale global Codex MCP entry can no longer hide new
+  tools such as `image_workflow_*`; native and WSL sessions remain isolated and
+  user-owned `config.toml` files stay untouched.
+- Packaged builds now retain the complete WebADB runtime dependency closure.
+  Loading the shared Bridge controller for image workflows can no longer fail
+  with a missing `@yume-chan/struct` module before generation starts.
+- An unavailable Portal retries with bounded exponential backoff and exposes a
+  visible manual Retry action instead of calling Electron every three seconds
+  indefinitely and flooding the desktop log.
+- Stale task-column requests made while a workspace is being removed now return
+  a stable not-found response instead of racing default-column insertion into a
+  deleted workspace and producing a SQLite foreign-key error.
+- Windows PTY cleanup now handles the expected race where a ConPTY shell exits
+  before `AttachConsole`, avoiding repeated helper stacks without switching to
+  the slower experimental bundled ConPTY DLL.
+- The desktop server exposes a minimal `/health` response for local diagnostics
+  and health probes instead of recording a noisy not-found error.
 - A newly created or recovered agent terminal no longer falls back to
   provider-wide shortcuts such as `resume --last` or `--continue`. It resumes
   only the exact conversation already attributed to that canvas node; without

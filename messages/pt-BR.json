@@ -540,6 +540,7 @@
   "portal.address": "Endereço do portal",
   "portal.name": "Nome do portal",
   "portal.rename": "Renomear portal",
+  "portal.retry": "Tentar novamente",
   "portal.design_inspect": "Inspecionar design",
   "portal.design_cancel": "Parar inspeção",
   "portal.design_pick_hint": "Passe pela página e clique no elemento que deseja discutir. Pressione Esc para cancelar.",

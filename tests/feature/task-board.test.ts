@@ -81,6 +81,13 @@ describe('TaskBoardService', () => {
     await expect(boardColumnService.remove(workspace.id, columns[0].id)).rejects.toThrow('padrão');
   });
 
+  it('does not create default columns for a workspace that was already removed', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'deleted-board', workingDir: '/tmp' });
+    await workspaceRepository.deleteWorkspace(workspace.id);
+
+    await expect(boardColumnService.list(workspace.id)).rejects.toThrow('WORKSPACE_NOT_FOUND');
+  });
+
   it('despacha o prompt no terminal ao atribuir (loop continuo)', async () => {
     const { workspace, terminal, session } = await createWorkspaceWithTerminal();
 

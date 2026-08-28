@@ -18,7 +18,8 @@ describe('safeAgentRespawn', () => {
       (id) => ['resume', id],
       null,
     )).toEqual({
-      args: ['--model', 'gpt-5.6-sol', 'resume', 'conversation-director'],
+      args: ['--model', 'gpt-5.6-sol'],
+      conversationArgs: ['resume', 'conversation-director'],
     });
   });
 

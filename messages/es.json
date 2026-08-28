@@ -540,6 +540,7 @@
   "portal.address": "Dirección del portal",
   "portal.name": "Nombre del portal",
   "portal.rename": "Renombrar portal",
+  "portal.retry": "Reintentar",
   "portal.design_inspect": "Inspeccionar diseño",
   "portal.design_cancel": "Detener inspección",
   "portal.design_pick_hint": "Recorre la página y haz clic en el elemento que quieres comentar. Presiona Escape para cancelar.",

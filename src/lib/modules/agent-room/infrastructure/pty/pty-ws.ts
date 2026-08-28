@@ -27,11 +27,12 @@ import { ptySessionManager } from './PtySessionManager.ts';
 import { agentSessionTracker, agentSessionTrackerForRuntime, type AgentSessionTracker } from './AgentSessionTracker.ts';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
 import { preflightWslLaunch, WslLaunchError, type WslTrackingContext } from '../WslRuntime.ts';
+import { codexMcpLaunchForRuntime, codexMcpOverrideArgs } from '../codex-mcp-config.ts';
 
 export const PTY_WS_PATH = '/ws/agent-room/pty';
 
 type ClientMessage =
-  | { type: 'create'; command: string; args?: string[]; freshSessionArgs?: string[]; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string }
+  | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string }
   | { type: 'attach'; sessionId: string; cols?: number; rows?: number }
   | { type: 'input'; sessionId: string; data: string }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
@@ -167,6 +168,10 @@ export function handlePtyConnection(socket: WebSocket): void {
             ? message.freshSessionArgs!.map((arg) => String(arg).replace('__ORKESTRAI_SESSION_ID__', freshSessionId))
             : [];
           if (freshSessionId) tracker.claim(freshSessionId);
+          const runtime = message.runtime ?? { kind: 'native' as const };
+          const providerArgs = message.provider === 'codex'
+            ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
+            : [];
           let profileEnv: Record<string, string> = {};
           if (message.profileId) {
             if (!message.provider) throw new Error('A provider is required when launching a profile.');
@@ -180,7 +185,9 @@ export function handlePtyConnection(socket: WebSocket): void {
             command: message.command.trim(),
             args: [
               ...(Array.isArray(message.args) ? message.args.map(String) : []),
+              ...providerArgs,
               ...freshSessionArgs,
+              ...(Array.isArray(message.conversationArgs) ? message.conversationArgs.map(String) : []),
             ],
             cwd: resolvedCwd,
             cols: message.cols,

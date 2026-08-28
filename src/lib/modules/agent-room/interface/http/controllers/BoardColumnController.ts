@@ -12,7 +12,11 @@ function requestOf(schema: unknown) {
 
 export class BoardColumnController extends Controller {
   async index(event: any) {
-    return this.json({ data: await boardColumnService.list(event.params.id) });
+    try {
+      return this.json({ data: await boardColumnService.list(event.params.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao listar colunas.');
+    }
   }
 
   async store(event: any) {
@@ -42,6 +46,7 @@ export class BoardColumnController extends Controller {
   }
 
   private errorResponse(error: unknown, fallback: string, status = 400) {
-    return this.json({ error: error instanceof Error ? error.message : fallback }, status);
+    const message = error instanceof Error ? error.message : fallback;
+    return this.json({ error: message }, message === 'WORKSPACE_NOT_FOUND' ? 404 : status);
   }
 }

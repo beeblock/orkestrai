@@ -1,6 +1,7 @@
 import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentBoardColumn } from '../../domain/models/AgentBoardColumn.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
+import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
 
 export type BoardColumn = {
   id: string;
@@ -51,6 +52,7 @@ function notifyWorkspaceChanged(workspaceId: string) {
 
 export class BoardColumnService {
   private async ensureDefaults(workspaceId: string): Promise<void> {
+    if (!await AgentWorkspace.find(workspaceId)) throw new Error('WORKSPACE_NOT_FOUND');
     const existing = await AgentBoardColumn.query().where('workspace_id', workspaceId).get();
     const keys = new Set(existing.map((column) => String(column.getAttribute('key'))));
     const now = new Date().toISOString();
@@ -73,7 +75,9 @@ export class BoardColumnService {
           .where('workspace_id', workspaceId)
           .where('key', column.key)
           .get();
-        if (!insertedByAnotherRequest.length) throw error;
+        if (insertedByAnotherRequest.length) continue;
+        if (!await AgentWorkspace.find(workspaceId)) throw new Error('WORKSPACE_NOT_FOUND');
+        throw error;
       }
     }
   }

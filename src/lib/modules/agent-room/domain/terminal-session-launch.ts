@@ -1,5 +1,6 @@
 export type SafeAgentRespawn = {
   args: string[];
+  conversationArgs?: string[];
   freshSessionArgs?: string[];
 };
 
@@ -17,7 +18,7 @@ export function safeAgentRespawn(
 ): SafeAgentRespawn {
   const exactResumeArgs = agentSessionId ? exactResumeArgsFor?.(agentSessionId) : null;
   if (exactResumeArgs?.length) {
-    return { args: [...baseArgs, ...exactResumeArgs] };
+    return { args: [...baseArgs], conversationArgs: [...exactResumeArgs] };
   }
 
   return {

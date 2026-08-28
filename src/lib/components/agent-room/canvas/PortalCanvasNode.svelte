@@ -74,7 +74,8 @@
   let deviceToolbarOpen = $state(false);
   let frame: (PortalWebviewElement | HTMLIFrameElement) | null = $state(null);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
-  let retryTimer: ReturnType<typeof setInterval> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryAttempt = 0;
   let urlPersistTimer: ReturnType<typeof setTimeout> | null = null;
   let portalReady = $state(false);
   let portalError = $state('');
@@ -124,9 +125,12 @@
     return frame && 'executeJavaScript' in frame ? frame : null;
   }
 
-  function clearRetry() {
-    if (retryTimer) clearInterval(retryTimer);
+  const RETRY_DELAYS_MS = [3_000, 6_000, 12_000, 24_000, 30_000, 30_000, 30_000, 30_000] as const;
+
+  function clearRetry(resetAttempts = true) {
+    if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
+    if (resetAttempts) retryAttempt = 0;
   }
 
   function markReady() {
@@ -144,16 +148,25 @@
     const url = targetUrl();
     const webview = desktopFrame();
     if (!url || !webview) return;
-    void webview.loadURL(url).catch((error) => {
-      portalError = error instanceof Error ? error.message : String(error);
-    });
+    void webview.loadURL(url).catch((error) => markUnavailable(error instanceof Error ? error.message : String(error)));
+  }
+
+  function scheduleRetry() {
+    if (retryTimer || !targetUrl()) return;
+    const delay = RETRY_DELAYS_MS[retryAttempt];
+    if (delay === undefined) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      retryAttempt += 1;
+      retryLoad();
+    }, delay);
   }
 
   function markUnavailable(detail: string) {
     portalReady = false;
     portalError = detail;
     if (inspecting) void cancelInspection();
-    if (!retryTimer && targetUrl()) retryTimer = setInterval(retryLoad, 3_000);
+    scheduleRetry();
   }
 
   function persistNavigatedUrl(event: Event) {
@@ -274,9 +287,15 @@
     if (!/^https?:\/\//.test(url)) url = `https://${url}`;
     if (inspecting) await cancelInspection();
     resetCapture();
+    clearRetry();
     address = url;
     portalReady = false;
     data.onUrlChange?.(id, url);
+    retryLoad();
+  }
+
+  function retryNow() {
+    clearRetry();
     retryLoad();
   }
 
@@ -602,6 +621,10 @@
         <div class="portal-status" role="status">
           <Navigation size={15} />
           <span>{m['portal.design_disconnected']({ detail: portalError })}</span>
+          <button type="button" class="nodrag" onclick={retryNow}>
+            <RotateCcw size={13} />
+            {m['portal.retry']()}
+          </button>
         </div>
       {/if}
     </div>
@@ -887,6 +910,32 @@
     color: var(--app-text);
     font-size: 10px;
     box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
+  }
+
+  .portal-status span {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .portal-status button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    border-left: 1px solid color-mix(in srgb, var(--app-warning) 45%, transparent);
+    background: transparent;
+    color: inherit;
+    padding: 1px 0 1px 8px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .portal-status button:hover {
+    color: var(--app-warning);
   }
 
   .portal-element-preview :global(*) {

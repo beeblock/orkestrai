@@ -127,10 +127,24 @@ describe('packaged updater', () => {
     expect(packageJson.devDependencies?.['electron-updater']).toBeUndefined();
   });
 
+  it('pins the complete WebADB runtime closure for packaged builds', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
+    for (const dependency of [
+      '@yume-chan/async',
+      '@yume-chan/event',
+      '@yume-chan/no-data-view',
+      '@yume-chan/struct',
+    ]) {
+      expect(packageJson.dependencies?.[dependency]).toBeTruthy();
+    }
+    expect(packageJson.build?.files).toContain('src/lib/modules/agent-room/infrastructure/codex-mcp-config.ts');
+  });
+
   it('requires trusted signing for releases while preserving the local ad-hoc fallback', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
     const packageScript = readFileSync(path.resolve('scripts/package-macos.sh'), 'utf8');
     const signerPatch = readFileSync(path.resolve('patches/@electron+osx-sign+1.3.3.patch'), 'utf8');
+    const nodePtyPatch = readFileSync(path.resolve('patches/node-pty+1.1.0.patch'), 'utf8');
     const workflow = readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8');
     const preflight = readFileSync(path.resolve('.agents/skills/orkestrai-release/scripts/preflight.sh'), 'utf8');
     expect(packageJson.build?.mac?.notarize).toBe(true);
@@ -139,6 +153,9 @@ describe('packaged updater', () => {
     expect(packageScript).toContain('-c.mac.notarize=false');
     expect(packageScript).toContain('ORKESTRAI_REQUIRE_MAC_SIGNING');
     expect(packageScript).toContain('ORKESTRAI_MAC_OPEN_FILE_LIMIT');
+    expect(packageScript).toContain('[[ -L "$ROOT_DIR/node_modules"');
+    expect(packageScript).toContain('npm ci');
+    expect(packageScript).toContain('ORKESTRAI_MAC_STAGED=true');
     expect(packageScript).toContain('ORKESTRAI_MAC_OPEN_FILE_LIMIT:-unlimited');
     expect(packageScript).toContain('ulimit -n "$requested_open_file_limit"');
     expect(packageScript).toContain('macOS open-file limit: %s');
@@ -147,6 +164,8 @@ describe('packaged updater', () => {
     expect(signerPatch).toContain('const binaryFileCheckLimit = 64;');
     expect(signerPatch).toContain('await acquireBinaryFileCheck();');
     expect(signerPatch).toContain('releaseBinaryFileCheck();');
+    expect(nodePtyPatch).toContain('error.message.includes("AttachConsole failed")');
+    expect(nodePtyPatch).toContain('consoleProcessList = [shellPid];');
     expect(workflow).toContain("ORKESTRAI_REQUIRE_MAC_SIGNING: 'true'");
     expect(workflow).toContain('scripts/package-macos.sh --arm64 --x64');
     expect(workflow).toContain('codesign --verify --deep --strict');

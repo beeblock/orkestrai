@@ -36,6 +36,7 @@
   export type CreatePtyRequest = {
     command: string;
     args?: string[];
+    conversationArgs?: string[];
     freshSessionArgs?: string[];
     cwd: string;
     env?: Record<string, string>;

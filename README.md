@@ -110,6 +110,9 @@ common credentials redacted; normal agent output is not persisted.
   The guided use case can materialize and execute a complete Character → Brand
   → Carousel chain, including reusable briefs, a sample logo, persisted outputs,
   and automatic reference wiring between stages.
+  Every interactive Codex terminal receives the MCP launcher from the current
+  Orkestrai installation as a session-only override, so stale global Codex
+  configuration cannot hide the image workflow tools.
 - **Integrated mobile devices:** add a persistent Mobile Device node from the
   Canvas toolbar; Workbench lists and opens that same node and session. Control
   iPhone and iPad Simulators on Apple Silicon Macs, or Android AVDs and explicitly

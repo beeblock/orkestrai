@@ -4,6 +4,37 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# electron-builder cannot reliably collect transitive production dependencies
+# when the project-level node_modules is a symlink to another checkout. Package
+# from a clean temporary install in that case so local test builds match CI.
+if [[ -L "$ROOT_DIR/node_modules" && "${ORKESTRAI_MAC_STAGED:-false}" != "true" ]]; then
+  if [[ ! -d "$ROOT_DIR/build" ]]; then
+    printf 'ERROR: Run npm run build before packaging macOS.\n' >&2
+    exit 1
+  fi
+
+  stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/orkestrai-macos-package.XXXXXX")"
+  cleanup_stage() {
+    rm -rf "$stage_dir"
+  }
+  trap cleanup_stage EXIT
+
+  printf 'node_modules is a symlink; creating a clean packaging stage at %s\n' "$stage_dir"
+  git ls-files --cached --others --exclude-standard -z \
+    | rsync -a --from0 --files-from=- "$ROOT_DIR/" "$stage_dir/"
+  rsync -a "$ROOT_DIR/build/" "$stage_dir/build/"
+
+  (
+    cd "$stage_dir"
+    npm ci
+    ORKESTRAI_MAC_STAGED=true bash scripts/package-macos.sh "$@"
+  )
+
+  mkdir -p "$ROOT_DIR/release"
+  rsync -a "$stage_dir/release/" "$ROOT_DIR/release/"
+  exit 0
+fi
+
 builder_args=(--mac "$@" --publish never)
 required_signing_env=(
   CSC_LINK
