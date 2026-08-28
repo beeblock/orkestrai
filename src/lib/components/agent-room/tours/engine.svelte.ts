@@ -89,7 +89,21 @@ async function evaluateChecks(): Promise<void> {
     if (checkPasses(step.check, snap)) {
       tourState.autoCompleted.add(step.id);
       // Avanca automaticamente se o passo atual foi concluido pelo usuario.
-      if (i === tourState.stepIndex && i < steps.length - 1) tourState.stepIndex = i + 1;
+      if (i === tourState.stepIndex && i < steps.length - 1) {
+        tourState.stepIndex = i + 1;
+        tourState.actionDoneFor = null;
+      }
+    }
+  }
+  const current = steps[tourState.stepIndex];
+  const currentActions = current?.action ? (Array.isArray(current.action) ? current.action : [current.action]) : [];
+  const runningWorkflowAction = currentActions.find((action) => action.kind === 'runImageWorkflow');
+  if (current && runningWorkflowAction?.kind === 'runImageWorkflow' && tourState.actionDoneFor === current.id) {
+    const workflow = snap.nodes.find((node) => (
+      node.type === 'imageWorkflow' && (node.title ?? '').toLowerCase() === runningWorkflowAction.title.toLowerCase()
+    ));
+    if (workflow?.payload?.status === 'failed' || workflow?.payload?.status === 'cancelled') {
+      tourState.actionDoneFor = null;
     }
   }
   // Tour termina quando o ultimo passo tem check e ele passou (auto-conclusao).
@@ -157,9 +171,13 @@ export function tourCompleteCurrent(): void {
 }
 
 /** Encontra um no por titulo (criacao de arestas/alvos). */
-async function findNodeId(title: string): Promise<string | null> {
+async function findNode(title: string): Promise<WorkspaceSnapshot['nodes'][number] | null> {
   const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
-  return nodes?.find((node) => (node.title ?? '').toLowerCase() === title.toLowerCase())?.id ?? null;
+  return nodes?.find((node) => (node.title ?? '').toLowerCase() === title.toLowerCase()) ?? null;
+}
+
+async function findNodeId(title: string): Promise<string | null> {
+  return (await findNode(title))?.id ?? null;
 }
 
 let positionSeq = 0;
@@ -168,16 +186,54 @@ function nextPosition() {
   return { x: 80 + (positionSeq % 5) * 340, y: 80 + Math.floor(positionSeq / 5) * 300 };
 }
 
+async function ensureEdge(sourceNodeId: string, targetNodeId: string): Promise<void> {
+  const edges = await api<WorkspaceSnapshot['edges']>(`/api/agent-room/workspaces/${workspaceId}/edges`);
+  const exists = edges?.some((edge) => (
+    (edge.sourceNodeId === sourceNodeId && edge.targetNodeId === targetNodeId)
+    || (edge.sourceNodeId === targetNodeId && edge.targetNodeId === sourceNodeId)
+  ));
+  if (exists) return;
+  const created = await api(`/api/agent-room/workspaces/${workspaceId}/edges`, {
+    method: 'POST',
+    body: JSON.stringify({ sourceNodeId, targetNodeId }),
+  });
+  if (!created) throw new Error(m['tour.action_failed']());
+}
+
+function sampleBrandMarkBase64(action: Extract<TourAction, { kind: 'createSampleImage' }>): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error(m['tour.sample_image_failed']());
+
+  context.clearRect(0, 0, 512, 512);
+  context.fillStyle = action.background;
+  context.beginPath();
+  context.roundRect(56, 56, 400, 400, 96);
+  context.fill();
+  context.fillStyle = action.foreground;
+  context.font = '800 148px system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(action.label.slice(0, 4), 256, 264);
+  const dataUrl = canvas.toDataURL('image/png');
+  const base64 = dataUrl.split(',')[1];
+  if (!base64) throw new Error(m['tour.sample_image_failed']());
+  return base64;
+}
+
 /** Executa UMA acao (chamada em sequencia por tourRunAction). */
 async function runAction(action: TourAction): Promise<void> {
     switch (action.kind) {
       case 'createAgent': {
+        if (await findNode(action.title)) break;
         await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
           method: 'POST',
           body: JSON.stringify({
             type: 'terminal',
             title: action.title,
-            ...nextPosition(),
+            ...(action.position ?? nextPosition()),
             width: 560,
             height: 340,
             payload: { command: action.provider, provider: action.provider, ...(action.leader ? { maestro: true } : {}) },
@@ -186,9 +242,10 @@ async function runAction(action: TourAction): Promise<void> {
         break;
       }
       case 'createNote': {
+        if (await findNode(action.title)) break;
         await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
           method: 'POST',
-          body: JSON.stringify({ type: 'note', title: action.title, ...nextPosition(), width: 360, height: 260, payload: { content: action.content } }),
+          body: JSON.stringify({ type: 'note', title: action.title, ...(action.position ?? nextPosition()), width: 360, height: 260, payload: { content: action.content } }),
         });
         break;
       }
@@ -228,26 +285,86 @@ async function runAction(action: TourAction): Promise<void> {
         break;
       }
       case 'createImageWorkflow': {
+        if (await findNode(action.title)) break;
         await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
           method: 'POST',
           body: JSON.stringify({
             type: 'imageWorkflow',
             title: action.title,
-            ...nextPosition(),
+            ...(action.position ?? nextPosition()),
             width: 440,
             height: 560,
             payload: {
               schemaVersion: 1,
               prompt: action.prompt,
-              count: 2,
-              transparentBackground: true,
-              outputDirectory: 'generated/images',
-              filePrefix: 'creative-image',
+              count: action.count ?? 2,
+              transparentBackground: action.transparentBackground ?? true,
+              outputDirectory: action.outputDirectory ?? 'generated/images',
+              filePrefix: action.filePrefix ?? 'creative-image',
               status: 'idle',
               history: [],
             },
           }),
         });
+        break;
+      }
+      case 'createSampleImage': {
+        if (await findNode(action.title)) break;
+        const written = await api(`/api/agent-room/workspaces/${workspaceId}/fs/write-binary`, {
+          method: 'PUT',
+          body: JSON.stringify({ path: action.path, base64: sampleBrandMarkBase64(action) }),
+        });
+        if (!written) throw new Error(m['tour.sample_image_failed']());
+        const created = await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'image',
+            title: action.title,
+            ...(action.position ?? nextPosition()),
+            width: 280,
+            height: 240,
+            payload: { path: action.path },
+          }),
+        });
+        if (!created) throw new Error(m['tour.sample_image_failed']());
+        break;
+      }
+      case 'connectWorkflowOutput': {
+        const [source, target, nodes] = await Promise.all([
+          findNode(action.fromWorkflowTitle),
+          findNode(action.toWorkflowTitle),
+          api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
+        ]);
+        if (!source || source.type !== 'imageWorkflow' || !target || target.type !== 'imageWorkflow') {
+          throw new Error(m['tour.image_workflow_not_found']());
+        }
+        const outputs = (nodes ?? []).filter((node) => (
+          node.type === 'image'
+          && (node.payload?.generatedBy as { workflowNodeId?: unknown } | undefined)?.workflowNodeId === source.id
+        )).sort((left, right) => (
+          Number((left.payload?.generatedBy as { outputIndex?: unknown } | undefined)?.outputIndex ?? 0)
+          - Number((right.payload?.generatedBy as { outputIndex?: unknown } | undefined)?.outputIndex ?? 0)
+        ));
+        const output = outputs[action.outputIndex];
+        if (!output) throw new Error(m['tour.image_workflow_output_missing']());
+        await ensureEdge(output.id, target.id);
+        break;
+      }
+      case 'runImageWorkflow': {
+        const workflow = await findNode(action.title);
+        if (!workflow || workflow.type !== 'imageWorkflow') throw new Error(m['tour.image_workflow_not_found']());
+        const payload = workflow.payload ?? {};
+        const result = await api(`/api/agent-room/workspaces/${workspaceId}/image-workflows/${workflow.id}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            prompt: String(payload.prompt ?? ''),
+            count: Number(payload.count ?? 1),
+            transparentBackground: Boolean(payload.transparentBackground),
+            outputDirectory: String(payload.outputDirectory ?? 'generated/images'),
+            filePrefix: String(payload.filePrefix ?? 'creative-image'),
+          }),
+        });
+        if (!result) throw new Error(m['tour.image_workflow_run_failed']());
         break;
       }
       case 'createShape': {
@@ -319,11 +436,8 @@ async function runAction(action: TourAction): Promise<void> {
       }
       case 'connect': {
         const [sourceNodeId, targetNodeId] = await Promise.all([findNodeId(action.fromTitle), findNodeId(action.toTitle)]);
-        if (!sourceNodeId || !targetNodeId) throw new Error('Crie os dois agentes antes de conectar.');
-        await api(`/api/agent-room/workspaces/${workspaceId}/edges`, {
-          method: 'POST',
-          body: JSON.stringify({ sourceNodeId, targetNodeId }),
-        });
+        if (!sourceNodeId || !targetNodeId) throw new Error(m['tour.connection_nodes_missing']());
+        await ensureEdge(sourceNodeId, targetNodeId);
         break;
       }
       case 'createPortal': {
@@ -415,6 +529,8 @@ async function runAction(action: TourAction): Promise<void> {
 /** Executa a(s) acao(oes) reais do passo ("Fazer por mim") — em sequencia. */
 export async function tourRunAction(action: TourAction | TourAction[]): Promise<void> {
   if (tourState.busy) return; // clique duplo enquanto executa: ignora
+  const executedStep = tourState.tour?.steps[tourState.stepIndex] ?? null;
+  if (!executedStep) return;
   tourState.busy = true;
   tourState.error = '';
   try {
@@ -422,19 +538,19 @@ export async function tourRunAction(action: TourAction | TourAction[]): Promise<
       await runAction(single);
     }
     await evaluateChecks();
-    const current = tourState.tour?.steps[tourState.stepIndex];
-    if (!tourState.error && current) {
-      // Marca o passo como feito: o botao desabilita ate o passo virar (sem
-      // isso, clicar de novo antes do poll duplicava o agente/no criado).
-      tourState.actionDoneFor = current.id;
-      // Passo com acao SEM check nao tem o que esperar: avanca (ou conclui).
-      if (!current.check) {
-        tourState.autoCompleted.add(current.id);
+    const current = tourState.tour?.steps[tourState.stepIndex] ?? null;
+    if (!tourState.error && current?.id === executedStep.id) {
+      if (executedStep.check) {
+        // O check ainda esta pendente. Bloqueia um novo despacho ate ele
+        // concluir, falhar ou ser cancelado.
+        tourState.actionDoneFor = executedStep.id;
+      } else {
+        tourState.autoCompleted.add(executedStep.id);
         tourNext();
       }
     }
   } catch (error) {
-    tourState.error = error instanceof Error ? error.message : 'Falha na acao.';
+    tourState.error = error instanceof Error ? error.message : m['tour.action_failed']();
   } finally {
     tourState.busy = false;
   }

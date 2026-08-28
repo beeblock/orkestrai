@@ -27,6 +27,11 @@ pt-BR, English, and Spanish translations.
   Notes and Image references, claim execution, generate up to ten outputs,
   complete, cancel, or delete the flow. CLI, MCP, the guided use case, Canvas,
   and Workbench operate one persisted graph rather than parallel automation state.
+- The guided creative use case now proves the complete chain instead of stopping
+  at a sample node: it creates one Codex Creative Director, reusable character
+  and campaign briefs, a real sample-logo PNG, and sequential Character, Brand,
+  and Carousel workflows. Each step waits for validated Image outputs and wires
+  the selected result into the next stage automatically.
 - The workflow states in the UI that an authenticated Codex account or plan
   with ImageGen access is required, while no OpenAI API key is needed.
 

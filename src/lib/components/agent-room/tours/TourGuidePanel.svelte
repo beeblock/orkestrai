@@ -63,7 +63,7 @@
         {/if}
         <span class="tour-spacer"></span>
         {#if step.action}
-          <Button size="sm" disabled={tourState.busy || (tourState.actionDoneFor === step.id && !step.check)} onclick={() => step.action && tourRunAction(step.action)}>
+          <Button size="sm" disabled={tourState.busy || tourState.actionDoneFor === step.id} onclick={() => step.action && tourRunAction(step.action)}>
             {#if tourState.busy}<Loader2 size={13} class="tour-spin" aria-hidden="true" />{m['tour.doing']()}{:else}<Play size={13} aria-hidden="true" />{m['tour.do_for_me']()}{/if}
           </Button>
         {:else if step.check}

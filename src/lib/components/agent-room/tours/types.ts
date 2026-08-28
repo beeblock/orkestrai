@@ -1,12 +1,34 @@
 /** Tipos do motor de tours guiados (onboarding interativo por caso de uso). */
 
+export type TourPosition = { x: number; y: number };
+
 export type TourAction =
-  | { kind: 'createAgent'; title: string; provider: string; leader?: boolean }
-  | { kind: 'createNote'; title: string; content: string }
+  | { kind: 'createAgent'; title: string; provider: string; leader?: boolean; position?: TourPosition }
+  | { kind: 'createNote'; title: string; content: string; position?: TourPosition }
   | { kind: 'createTasksBoard' }
   | { kind: 'createUsage'; title: string }
   | { kind: 'createApiClient'; title: string }
-  | { kind: 'createImageWorkflow'; title: string; prompt: string }
+  | {
+      kind: 'createImageWorkflow';
+      title: string;
+      prompt: string;
+      count?: number;
+      transparentBackground?: boolean;
+      outputDirectory?: string;
+      filePrefix?: string;
+      position?: TourPosition;
+    }
+  | {
+      kind: 'createSampleImage';
+      title: string;
+      path: string;
+      label: string;
+      background: string;
+      foreground: string;
+      position?: TourPosition;
+    }
+  | { kind: 'connectWorkflowOutput'; fromWorkflowTitle: string; outputIndex: number; toWorkflowTitle: string }
+  | { kind: 'runImageWorkflow'; title: string }
   | { kind: 'createShape'; title: string; shape?: 'rectangle' | 'rounded' | 'ellipse' | 'diamond' | 'arrow' }
   | { kind: 'createDevice'; title: string }
   | { kind: 'createDesign'; title: string }
@@ -30,7 +52,8 @@ export type TourCheck =
   | { kind: 'mcpInstalled'; name: string }
   | { kind: 'floorExists'; nameIncludes: string }
   | { kind: 'routineExists' }
-  | { kind: 'flowRunFinished' };
+  | { kind: 'flowRunFinished' }
+  | { kind: 'imageWorkflowSucceeded'; title: string; minOutputs?: number };
 
 export type TourStep = {
   id: string;

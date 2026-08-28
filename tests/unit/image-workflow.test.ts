@@ -293,6 +293,135 @@ describe('ImageWorkflowService', () => {
     expect(state.getWorkflow().payload).toMatchObject({ status: 'succeeded', activeRun: null, lastError: null });
   });
 
+  it('persists and reuses outputs across character, brand, and ten-image carousel stages', async () => {
+    const workspace = {
+      id: 'workspace-chain', name: 'XYZ campaign', workingDir: '/workspace', runtimeKind: 'native',
+      wslDistribution: null, wslWorkingDir: null, icon: null, instructions: null,
+      syncAgentInstructionFiles: true, repositoryRoots: [], hooks: {}, suspendedAt: null,
+      groupId: null, position: 0, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(),
+    } as any;
+    const agent = {
+      id: 'agent-chain', workspaceId: workspace.id, type: 'terminal', title: 'XYZ Creative Director',
+      x: 40, y: 60, width: 560, height: 340, zIndex: 1, floorId: null,
+      payload: { provider: 'codex', sessionId: 'session-chain' },
+    } as any;
+    const characterBrief = {
+      ...agent, id: 'note-character', type: 'note', title: 'XYZ Character Brief',
+      payload: { content: 'Keep the face, antennae, outfit, and proportions consistent.' },
+    } as any;
+    const campaignBrief = {
+      ...agent, id: 'note-campaign', type: 'note', title: 'XYZ Brand Campaign',
+      payload: { content: 'Create a coherent Instagram carousel using violet and cyan.' },
+    } as any;
+    const logo = {
+      ...agent, id: 'image-logo', type: 'image', title: 'XYZ Sample Logo',
+      payload: { path: '.orkestrai/tours/xyz-sample-logo.png' },
+    } as any;
+    const nodes: any[] = [agent, characterBrief, campaignBrief, logo];
+    const edges: any[] = [];
+    let nodeSequence = 0;
+    let edgeSequence = 0;
+
+    vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue(workspace);
+    vi.spyOn(workspaceRepository, 'getNode').mockImplementation(async (id) => nodes.find((node) => node.id === id) ?? null);
+    vi.spyOn(workspaceRepository, 'listNodes').mockImplementation(async () => [...nodes]);
+    vi.spyOn(workspaceRepository, 'listEdges').mockImplementation(async () => [...edges]);
+    vi.spyOn(workspaceRepository, 'createNode').mockImplementation(async (input: any) => {
+      const node = { ...input, id: `created-node-${++nodeSequence}`, createdAt: new Date(), updatedAt: new Date() };
+      nodes.push(node);
+      return node;
+    });
+    vi.spyOn(workspaceRepository, 'updateNode').mockImplementation(async (id, changes) => {
+      const index = nodes.findIndex((node) => node.id === id);
+      nodes[index] = { ...nodes[index], ...changes, updatedAt: new Date() };
+      return nodes[index];
+    });
+    vi.spyOn(workspaceRepository, 'createEdge').mockImplementation(async (input: any) => {
+      const edge = { ...input, id: `created-edge-${++edgeSequence}` };
+      edges.push(edge);
+      return edge;
+    });
+    vi.spyOn(bridgeService, 'listAgents').mockResolvedValue([{
+      nodeId: agent.id, title: agent.title, provider: 'codex', command: 'codex',
+      sessionId: 'session-chain', sessionAlive: true, maestro: false,
+    }]);
+    vi.spyOn(filesystemService, 'readBinary').mockImplementation(async (_workspaceId, path) => ({
+      data: PNG, contentType: 'image/png', name: path.split('/').at(-1) ?? 'image.png',
+    }));
+    vi.spyOn(filesystemService, 'inspect').mockImplementation(async (_workspaceId, path) => ({
+      path: `/workspace/${path}`, name: path.split('/').at(-1) ?? 'image.png', extension: 'png', size: PNG.length,
+      modifiedAt: new Date(0).toISOString(), contentType: 'image/png', kind: 'image',
+    }));
+
+    const service = new ImageWorkflowService();
+    const createStage = async (title: string, stageConfig: ReturnType<typeof config>) => {
+      const created = await service.create(new CreateImageWorkflowDto(
+        workspace.id,
+        { from: agent.id, title, ...stageConfig },
+        agent.id,
+      ));
+      return nodes.find((node) => node.id === created.nodeId)!;
+    };
+    const connect = (workflowId: string, targetNodeId: string, order?: number) => service.connect(
+      new ConnectImageWorkflowNodeDto(
+        workspace.id, workflowId, { from: agent.id, targetNodeId, order }, agent.id,
+      ),
+    );
+    const execute = async (workflowId: string, stageConfig: ReturnType<typeof config>) => {
+      const execution = await service.begin(new RunImageWorkflowDto(workspace.id, workflowId, stageConfig, agent.id));
+      const completed = await service.complete({
+        workspaceId: workspace.id, nodeId: workflowId, runId: execution.runId,
+        outputPaths: execution.outputPaths, actorNodeId: agent.id,
+      });
+      return { execution, completed };
+    };
+
+    const characterConfig = config({ count: 1, outputDirectory: 'generated/images/xyz-character', filePrefix: 'character' });
+    const characterWorkflow = await createStage('01 — Character Master', characterConfig);
+    await connect(characterWorkflow.id, characterBrief.id);
+    const character = await execute(characterWorkflow.id, characterConfig);
+    const characterOutput = nodes.find((node) => node.id === character.completed.outputNodeIds[0])!;
+
+    const brandedConfig = config({ count: 2, outputDirectory: 'generated/images/xyz-branded', filePrefix: 'branded' });
+    const brandedWorkflow = await createStage('02 — Branded Character', brandedConfig);
+    await connect(brandedWorkflow.id, characterBrief.id);
+    await connect(brandedWorkflow.id, campaignBrief.id);
+    await connect(brandedWorkflow.id, characterOutput.id, 0);
+    await connect(brandedWorkflow.id, logo.id, 1);
+    const brandedExecution = await service.begin(new RunImageWorkflowDto(workspace.id, brandedWorkflow.id, brandedConfig, agent.id));
+    expect(brandedExecution.tool.referenced_image_paths).toEqual([
+      `/workspace/${characterOutput.payload.path}`,
+      '/workspace/.orkestrai/tours/xyz-sample-logo.png',
+    ]);
+    const branded = await service.complete({
+      workspaceId: workspace.id, nodeId: brandedWorkflow.id, runId: brandedExecution.runId,
+      outputPaths: brandedExecution.outputPaths, actorNodeId: agent.id,
+    });
+    const brandedOutput = nodes.find((node) => node.id === branded.outputNodeIds[0])!;
+
+    const carouselConfig = config({
+      count: 10, transparentBackground: false,
+      outputDirectory: 'generated/images/xyz-carousel', filePrefix: 'slide',
+    });
+    const carouselWorkflow = await createStage('03 — XYZ Carousel', carouselConfig);
+    await connect(carouselWorkflow.id, campaignBrief.id);
+    await connect(carouselWorkflow.id, brandedOutput.id, 0);
+    const carouselExecution = await service.begin(new RunImageWorkflowDto(workspace.id, carouselWorkflow.id, carouselConfig, agent.id));
+    expect(carouselExecution.tool.calls).toBe(10);
+    expect(carouselExecution.tool.referenced_image_paths).toEqual([`/workspace/${brandedOutput.payload.path}`]);
+    const carousel = await service.complete({
+      workspaceId: workspace.id, nodeId: carouselWorkflow.id, runId: carouselExecution.runId,
+      outputPaths: carouselExecution.outputPaths, actorNodeId: agent.id,
+    });
+
+    expect(carousel.outputNodeIds).toHaveLength(10);
+    expect(nodes.filter((node) => node.type === 'imageWorkflow')).toHaveLength(3);
+    expect(nodes.filter((node) => node.type === 'image' && node.payload.generatedBy)).toHaveLength(13);
+    expect(nodes.find((node) => node.id === carouselWorkflow.id)?.payload).toMatchObject({
+      status: 'succeeded', activeRun: null,
+    });
+  });
+
   it('keeps WSL reference and output paths in the agent runtime', async () => {
     const state = setupWorkflow();
     state.workspace.runtimeKind = 'wsl';

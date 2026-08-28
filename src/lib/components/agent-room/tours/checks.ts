@@ -36,5 +36,16 @@ export function checkPasses(check: TourCheck, snap: WorkspaceSnapshot): boolean 
       const run = (flow?.payload as { run?: { active?: boolean } | null } | undefined)?.run;
       return Boolean(flow) && run === null;
     }
+    case 'imageWorkflowSucceeded': {
+      const workflow = snap.nodes.find((node) => (
+        node.type === 'imageWorkflow' && (node.title ?? '').toLowerCase() === check.title.toLowerCase()
+      ));
+      if (!workflow || workflow.payload?.status !== 'succeeded') return false;
+      const outputCount = snap.nodes.filter((node) => (
+        node.type === 'image'
+        && (node.payload?.generatedBy as { workflowNodeId?: unknown } | undefined)?.workflowNodeId === workflow.id
+      )).length;
+      return outputCount >= (check.minOutputs ?? 1);
+    }
   }
 }

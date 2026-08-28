@@ -14,7 +14,7 @@ function createdTitles(tour: Tour): Set<string> {
   for (const step of tour.steps) {
     const actions = step.action ? (Array.isArray(step.action) ? step.action : [step.action]) : [];
     for (const action of actions) {
-      if (action.kind === 'createAgent' || action.kind === 'createNote' || action.kind === 'createUsage' || action.kind === 'createApiClient' || action.kind === 'createImageWorkflow' || action.kind === 'createShape' || action.kind === 'createDesign') titles.add(action.title);
+      if (action.kind === 'createAgent' || action.kind === 'createNote' || action.kind === 'createUsage' || action.kind === 'createApiClient' || action.kind === 'createImageWorkflow' || action.kind === 'createSampleImage' || action.kind === 'createShape' || action.kind === 'createDesign') titles.add(action.title);
       if (action.kind === 'createFlow') titles.add(action.title);
       if (action.kind === 'createPortal') titles.add(action.title ?? 'Portal');
     }
@@ -72,6 +72,10 @@ describe('catalogo de tours (integridade)', () => {
               expect(titles.has(action.fromTitle) || action.fromTitle === action.toTitle, `${tour.id}: connect ${action.fromTitle}`).toBe(true);
               expect(titles.has(action.toTitle) || action.fromTitle === action.toTitle, `${tour.id}: connect ${action.toTitle}`).toBe(true);
             }
+            if (action.kind === 'connectWorkflowOutput') {
+              expect(titles.has(action.fromWorkflowTitle), `${tour.id}: workflow output source ${action.fromWorkflowTitle}`).toBe(true);
+              expect(titles.has(action.toWorkflowTitle), `${tour.id}: workflow output target ${action.toWorkflowTitle}`).toBe(true);
+            }
             if (action.kind === 'createTask' && action.assigneeTitle) {
               expect(titles.has(action.assigneeTitle), `${tour.id}: task assignee ${action.assigneeTitle}`).toBe(true);
             }
@@ -109,6 +113,9 @@ describe('catalogo de tours (integridade)', () => {
             expect(titles.has(step.check.fromTitle), `${tour.id}: check edge from "${step.check.fromTitle}"`).toBe(true);
             expect(titles.has(step.check.toTitle), `${tour.id}: check edge to "${step.check.toTitle}"`).toBe(true);
           }
+          if (step.check?.kind === 'imageWorkflowSucceeded') {
+            expect(titles.has(step.check.title), `${tour.id}: check workflow "${step.check.title}"`).toBe(true);
+          }
         }
       }
     }
@@ -123,6 +130,9 @@ describe('checkPasses', () => {
       { id: 'n3', type: 'portal', title: 'Portal App' },
       { id: 'n4', type: 'flow', title: 'Pipeline', payload: { run: null },
       },
+      { id: 'n5', type: 'imageWorkflow', title: 'Character Master', payload: { status: 'succeeded' } },
+      { id: 'n6', type: 'image', title: 'Character 1', payload: { generatedBy: { workflowNodeId: 'n5', outputIndex: 0 } } },
+      { id: 'n7', type: 'image', title: 'Character 2', payload: { generatedBy: { workflowNodeId: 'n5', outputIndex: 1 } } },
     ],
     edges: [{ id: 'e1', sourceNodeId: 'n2', targetNodeId: 'n1' }],
     tasks: [{ id: 't1', title: 'Montar o time e começar', status: 'todo' }],
@@ -150,6 +160,12 @@ describe('checkPasses', () => {
     expect(checkPasses({ kind: 'floorExists', nameIncludes: 'feature' }, snap)).toBe(true);
     expect(checkPasses({ kind: 'routineExists' }, snap)).toBe(true);
     expect(checkPasses({ kind: 'flowRunFinished' }, snap)).toBe(true);
+  });
+
+  it('aguarda o workflow concluir e materializar a quantidade minima de outputs', () => {
+    expect(checkPasses({ kind: 'imageWorkflowSucceeded', title: 'Character Master', minOutputs: 2 }, snap)).toBe(true);
+    expect(checkPasses({ kind: 'imageWorkflowSucceeded', title: 'Character Master', minOutputs: 3 }, snap)).toBe(false);
+    expect(checkPasses({ kind: 'imageWorkflowSucceeded', title: 'Missing', minOutputs: 1 }, snap)).toBe(false);
   });
 });
 

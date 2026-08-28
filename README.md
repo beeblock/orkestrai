@@ -107,6 +107,9 @@ common credentials redacted; normal agent output is not persisted.
   return as connected Image nodes with provenance and bounded run history,
   ready to feed another branch. Humans, the bundled CLI, and typed MCP tools
   operate that same visible workflow without a parallel automation state.
+  The guided use case can materialize and execute a complete Character → Brand
+  → Carousel chain, including reusable briefs, a sample logo, persisted outputs,
+  and automatic reference wiring between stages.
 - **Integrated mobile devices:** add a persistent Mobile Device node from the
   Canvas toolbar; Workbench lists and opens that same node and session. Control
   iPhone and iPad Simulators on Apple Silicon Macs, or Android AVDs and explicitly
