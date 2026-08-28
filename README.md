@@ -104,7 +104,10 @@ common credentials redacted; normal agent output is not persisted.
   `image_gen.imagegen` tool. Every result is validated independently; when the
   node requires transparency, Orkestrai decodes the PNG and verifies real alpha
   pixels, then directs Codex to correct an opaque or fake-checkerboard result up
-  to three times. Orkestrai never asks for or stores an image API key. It validates
+  to three times using another native `image_gen.imagegen` edit with the rejected
+  image as its only reference. Python and other local pixel-processing tools are
+  explicitly forbidden for that correction. Orkestrai never asks for or stores
+  an image API key. It validates
   the preallocated workspace destinations before outputs return as connected
   Image nodes with provenance and bounded run history,
   ready to feed another branch. Humans, the bundled CLI, and typed MCP tools

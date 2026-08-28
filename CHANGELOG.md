@@ -41,7 +41,10 @@ pt-BR, English, and Spanish translations.
 - Transparent image workflows now enforce one canonical RGBA/alpha contract from
   the node toggle, validate decoded PNG pixels server-side, and automatically
   correct an opaque or fake-checkerboard output up to three times before giving
-  up. Each output is validated independently through the typed bridge, completed
+  up. Background correction is another native `image_gen.imagegen` edit using
+  only the rejected output as reference; Python, Pillow, ImageMagick, ffmpeg,
+  remove-bg, generated masks, and local pixel manipulation are forbidden. Each
+  output is validated independently through the typed bridge, completed
   runs cannot materialize fake transparency, and abandoned executions have a
   bounded timeout instead of leaving the guided use case waiting indefinitely.
 - Packaged macOS startup restores the executable bit on node-pty's extracted

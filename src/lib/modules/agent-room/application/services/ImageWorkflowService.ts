@@ -53,6 +53,13 @@ const TRANSPARENT_OUTPUT_CONTRACT = [
   'Transparency is a file-format requirement, not a visual description. Keep the subject and required branding fully opaque and preserve clean antialiased edges.',
 ].join(' ');
 
+const TRANSPARENT_REPAIR_PROMPT = [
+  'Generate this exact same image with a genuinely transparent background.',
+  'Preserve the subject, composition, crop, colors, typography, logo, branding, proportions, and every foreground detail exactly.',
+  'Remove only the complete background, including any rendered checkerboard, grid, white or colored backdrop, shadow plane, and background glow.',
+  'Return an RGBA PNG with alpha 0 outside the subject and clean antialiased edges.',
+].join(' ');
+
 export class ImageWorkflowError extends Error {
   constructor(public readonly code: string, public readonly status = 422) {
     super(code);
@@ -388,8 +395,9 @@ export class ImageWorkflowService {
       `You are the Codex executor for workflow ${execution.workflowNodeId}, run ${execution.runId}.`,
       'Call image_workflow_read for this node to obtain the exact prompt, reference paths, and preallocated output paths.',
       'Use the built-in image_gen.imagegen tool only. Do not ask for an API key, do not call the OpenAI Images API directly, and do not use scripts/image_gen.py.',
+      'Every visual change, including background removal, MUST be performed by another built-in image_gen.imagegen call. Never use Python, Pillow, ImageMagick, ffmpeg, remove-bg, generated masks, canvas pixel processing, or any other script/tool to alter image pixels. Shell/file commands may only create the assigned directory and copy the exact native ImageGen result to its assigned path.',
       `Produce every requested output. For each output, copy the native result to its assigned workspace path and call image_workflow_validate before moving to the next output. You may make up to ${MAX_ATTEMPTS_PER_OUTPUT} built-in tool calls per output.`,
-      'When validation reports missing genuine alpha, make a corrective image edit: use that invalid output as the reference, preserve the subject exactly, remove the entire rendered background/checkerboard, and enforce the transparency contract from the workflow prompt. Replace the same assigned file and validate it again.',
+      `When validation reports missing genuine alpha, call image_gen.imagegen again with the invalid output as its only reference and this dedicated edit prompt: ${JSON.stringify(TRANSPARENT_REPAIR_PROMPT)} Replace the same assigned file with that native result and validate it again.`,
       'Use the original referenced_image_paths for the first attempt. For a corrective alpha edit, use the invalid assigned output as the reference so identity, composition, and branding are preserved.',
       'After every assigned output validates, call image_workflow_complete once. Only call image_workflow_fail after the allowed corrective attempts are exhausted or the native tool itself cannot run.',
     ].join('\n');
@@ -565,8 +573,11 @@ export class ImageWorkflowService {
       errorCode: result.errorCode,
       retryable: result.errorCode === 'image_workflow_output_alpha_missing' || result.errorCode === 'image_workflow_output_missing',
       transparentBackground: active.transparentBackground,
+      repairTool: result.errorCode === 'image_workflow_output_alpha_missing' ? 'image_gen.imagegen' : null,
+      repairPrompt: result.errorCode === 'image_workflow_output_alpha_missing' ? TRANSPARENT_REPAIR_PROMPT : null,
+      repairReferencedImagePaths: result.errorCode === 'image_workflow_output_alpha_missing' ? [outputPath] : [],
       repair: result.errorCode === 'image_workflow_output_alpha_missing'
-        ? 'Use this invalid output as referenced_image_paths, preserve the subject and branding exactly, remove the entire background/checkerboard, output RGBA PNG with alpha 0 outside the subject, replace the same file, and validate again.'
+        ? `Call image_gen.imagegen with only this invalid output in referenced_image_paths and this prompt: ${JSON.stringify(TRANSPARENT_REPAIR_PROMPT)} Do not use Python or any non-ImageGen pixel manipulation. Replace the same file with the native result and validate again.`
         : null,
     };
   }
@@ -683,6 +694,12 @@ export class ImageWorkflowService {
         tool: 'image_workflow_validate',
         arguments: { nodeId: workflow.id, runId: active.id, outputPath: '<one assigned output path>' },
         genuineAlphaRequired: active.transparentBackground,
+        repair: active.transparentBackground ? {
+          tool: 'image_gen.imagegen',
+          prompt: TRANSPARENT_REPAIR_PROMPT,
+          referenced_image_paths: ['<the invalid assigned output path only>'],
+          forbiddenPixelTools: ['python', 'pillow', 'imagemagick', 'ffmpeg', 'remove-bg', 'generated masks', 'canvas pixel processing'],
+        } : null,
       },
       completion: { tool: 'image_workflow_complete', arguments: { nodeId: workflow.id, runId: active.id, outputPaths: active.outputPaths } },
       failure: { tool: 'image_workflow_fail', arguments: { nodeId: workflow.id, runId: active.id, errorCode: 'image_gen_tool_failed' } },

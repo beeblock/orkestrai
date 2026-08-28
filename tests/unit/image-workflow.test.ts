@@ -253,7 +253,10 @@ describe('ImageWorkflowService', () => {
     expect(message).toContain('do not call the OpenAI Images API directly');
     expect(message).toContain('up to 3 built-in tool calls per output');
     expect(message).toContain('image_workflow_validate');
-    expect(message).toContain('corrective image edit');
+    expect(message).toContain('invalid output as its only reference');
+    expect(message).toContain('MUST be performed by another built-in image_gen.imagegen call');
+    expect(message).toContain('Never use Python, Pillow, ImageMagick');
+    expect(message).toContain('Generate this exact same image with a genuinely transparent background');
     expect(message).toContain('image_workflow_complete');
   });
 
@@ -332,7 +335,10 @@ describe('ImageWorkflowService', () => {
       retryable: true,
       transparentBackground: true,
     });
-    expect(invalid.repair).toContain('remove the entire background/checkerboard');
+    expect(invalid.repairTool).toBe('image_gen.imagegen');
+    expect(invalid.repairPrompt).toContain('Generate this exact same image with a genuinely transparent background');
+    expect(invalid.repairReferencedImagePaths).toEqual([execution.outputPaths[0]]);
+    expect(invalid.repair).toContain('Do not use Python');
     expect(state.getWorkflow().payload).toMatchObject({ status: 'running', activeRunId: execution.runId });
 
     const premature = await service.complete({
