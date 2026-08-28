@@ -160,6 +160,57 @@ describe('ImageWorkflowService', () => {
     expect(new Set(result.outputPaths).size).toBe(10);
   });
 
+  it('uses a white matte before native alpha removal when multiple references are connected', async () => {
+    const state = setupWorkflow();
+    const secondReference = {
+      ...state.nodes.find((node) => node.id === 'reference-1'),
+      id: 'reference-2', title: 'Brand logo', payload: { path: 'references/brand-logo.png' },
+    } as any;
+    state.nodes.push(secondReference);
+    state.edges.push({ id: 'edge-reference-2', sourceNodeId: secondReference.id, targetNodeId: 'workflow-1' } as any);
+    vi.spyOn(filesystemService, 'inspect').mockImplementation(async (_workspaceId, path) => ({
+      path: `/workspace/${path}`, name: path.split('/').at(-1) ?? 'reference.png', extension: 'png', size: PNG.length,
+      modifiedAt: new Date(0).toISOString(), contentType: 'image/png', kind: 'image',
+    }));
+    vi.mocked(filesystemService.readBinary).mockImplementation(async (_workspaceId, path) => ({
+      data: path.startsWith('generated/images') ? OPAQUE_PNG : PNG,
+      contentType: 'image/png',
+      name: path.split('/').at(-1) ?? 'image.png',
+    }));
+
+    const service = new ImageWorkflowService();
+    const execution = await service.begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config(), 'agent-1'));
+
+    expect(execution.transparencyStrategy).toBe('white-matte-then-alpha');
+    expect(execution.tool.prompt).toContain('pure, flat, uniform white (#FFFFFF) background');
+    expect(execution.tool.prompt).toContain('separate native ImageGen edit');
+
+    const intermediate = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+    expect(intermediate).toMatchObject({
+      valid: false,
+      retryable: true,
+      expectedIntermediate: true,
+      transparencyStrategy: 'white-matte-then-alpha',
+      repairTool: 'image_gen.imagegen',
+    });
+    expect(intermediate.repairPrompt).toContain('removing its entire white matte background');
+    expect(intermediate.repairReferencedImagePaths).toEqual([execution.outputPaths[0]]);
+
+    const checkerboardFallback = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+    expect(checkerboardFallback).toMatchObject({
+      retryable: true,
+      expectedIntermediate: false,
+      failedValidationCount: 2,
+      attemptsRemaining: 1,
+    });
+    expect(checkerboardFallback.repairPrompt).toContain('Remove every checkerboard square and all background pixels');
+    expect(checkerboardFallback.repairPrompt).toContain('Do not redraw the subject');
+  });
+
   it('lets a connected Codex revise a draft and reorder context without starting generation', async () => {
     const state = setupWorkflow();
     const service = new ImageWorkflowService();
@@ -253,10 +304,10 @@ describe('ImageWorkflowService', () => {
     expect(message).toContain('do not call the OpenAI Images API directly');
     expect(message).toContain('up to 3 built-in tool calls per output');
     expect(message).toContain('image_workflow_validate');
-    expect(message).toContain('invalid output as its only reference');
+    expect(message).toContain('invalid assigned output as the reference');
     expect(message).toContain('MUST be performed by another built-in image_gen.imagegen call');
     expect(message).toContain('Never use Python, Pillow, ImageMagick');
-    expect(message).toContain('Generate this exact same image with a genuinely transparent background');
+    expect(message).toContain('exact repairPrompt returned by the validator');
     expect(message).toContain('image_workflow_complete');
   });
 
@@ -336,10 +387,27 @@ describe('ImageWorkflowService', () => {
       transparentBackground: true,
     });
     expect(invalid.repairTool).toBe('image_gen.imagegen');
-    expect(invalid.repairPrompt).toContain('Generate this exact same image with a genuinely transparent background');
+    expect(invalid.repairPrompt).toContain('Remove every checkerboard square and all background pixels');
+    expect(invalid.repairPrompt).toContain('Do not redraw the subject');
     expect(invalid.repairReferencedImagePaths).toEqual([execution.outputPaths[0]]);
     expect(invalid.repair).toContain('Do not use Python');
+    expect(invalid).toMatchObject({ failedValidationCount: 1, attemptsRemaining: 2 });
     expect(state.getWorkflow().payload).toMatchObject({ status: 'running', activeRunId: execution.runId });
+
+    const escalated = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+    expect(escalated).toMatchObject({ retryable: true, failedValidationCount: 2, attemptsRemaining: 1 });
+    expect(escalated.repairPrompt).toContain('previous native background-removal edit failed');
+    expect(escalated.repairPrompt).not.toBe(invalid.repairPrompt);
+
+    const exhausted = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+    expect(exhausted).toMatchObject({ retryable: false, failedValidationCount: 3, attemptsRemaining: 0 });
+    expect(exhausted.repairTool).toBeNull();
+    expect(exhausted.repairPrompt).toBeNull();
+    expect(exhausted.repairReferencedImagePaths).toEqual([]);
 
     const premature = await service.complete({
       workspaceId: 'workspace-1', nodeId: 'workflow-1', runId: execution.runId,

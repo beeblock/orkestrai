@@ -43,7 +43,13 @@ pt-BR, English, and Spanish translations.
   correct an opaque or fake-checkerboard output up to three times before giving
   up. Background correction is another native `image_gen.imagegen` edit using
   only the rejected output as reference; Python, Pillow, ImageMagick, ffmpeg,
-  remove-bg, generated masks, and local pixel manipulation are forbidden. Each
+  remove-bg, generated masks, and local pixel manipulation are forbidden. The
+  validator explicitly identifies a baked checkerboard as opaque pixels and
+  escalates the native cutout prompt after another failed alpha check instead
+  of repeating the same ambiguous edit. Transparent workflows with multiple
+  image references first compose the requested foreground on a uniform white
+  matte, then pass that result alone to a second native ImageGen background-removal
+  edit before alpha validation. Each
   output is validated independently through the typed bridge, completed
   runs cannot materialize fake transparency, and abandoned executions have a
   bounded timeout instead of leaving the guided use case waiting indefinitely.

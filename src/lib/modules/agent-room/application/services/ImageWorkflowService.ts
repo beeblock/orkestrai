@@ -53,12 +53,50 @@ const TRANSPARENT_OUTPUT_CONTRACT = [
   'Transparency is a file-format requirement, not a visual description. Keep the subject and required branding fully opaque and preserve clean antialiased edges.',
 ].join(' ');
 
-const TRANSPARENT_REPAIR_PROMPT = [
-  'Generate this exact same image with a genuinely transparent background.',
-  'Preserve the subject, composition, crop, colors, typography, logo, branding, proportions, and every foreground detail exactly.',
-  'Remove only the complete background, including any rendered checkerboard, grid, white or colored backdrop, shadow plane, and background glow.',
-  'Return an RGBA PNG with alpha 0 outside the subject and clean antialiased edges.',
+const WHITE_MATTE_OUTPUT_CONTRACT = [
+  'INTERMEDIATE COMPOSITING STEP: render the complete requested foreground on a pure, flat, uniform white (#FFFFFF) background.',
+  'Do not render transparency, a checkerboard, grid, gradient, environment, texture, shadow plane, or background glow in this intermediate image.',
+  'Keep the complete foreground subject, typography, logo, branding, and all intended foreground details fully visible and opaque with a clean silhouette.',
+  'This white matte will be removed by a separate native ImageGen edit before the output is accepted.',
 ].join(' ');
+
+const WHITE_MATTE_REMOVAL_PROMPT = [
+  'Edit the referenced image by removing its entire white matte background.',
+  'The white background is an intentional temporary compositing layer and must not appear in the result.',
+  'Do not return the source unchanged and do not replace white with a checkerboard, grid, color, gradient, environment, shadow plane, or glow.',
+  'Preserve the complete foreground subject, identity, composition, crop, colors, typography, logo, branding, proportions, and details.',
+  'Return only the isolated foreground as an RGBA PNG with alpha 0 outside its silhouette and clean antialiased edges.',
+].join(' ');
+
+const CHECKERBOARD_REMOVAL_PROMPT = [
+  'Isolate the subject and delete the background.',
+  'Keep the subject and all visible logos and branding unchanged.',
+  'Remove every checkerboard square and all background pixels.',
+  'Return only the subject as a true transparent RGBA PNG cutout, with alpha 0 everywhere outside the subject.',
+  'No visible checkerboard, no white or gray background, no matte, no shadow, no halo.',
+  'Do not redraw the subject.',
+].join(' ');
+
+const TRANSPARENT_REPAIR_PROMPTS = [
+  CHECKERBOARD_REMOVAL_PROMPT,
+  [
+    'The previous native background-removal edit failed machine alpha validation again and still returned an opaque image.',
+    'Reconstruct ONLY the foreground subject on a new empty transparent canvas; use the referenced image only to preserve identity and foreground details, not as a canvas to copy.',
+    'Do not render, retain, imitate, or replace the background with any checkerboard, grid, solid color, gradient, scene, shadow plane, or glow.',
+    'Preserve the subject, composition, crop, colors, typography, logo, branding, proportions, and details.',
+    'Return an RGBA PNG containing genuinely transparent pixels with alpha 0 everywhere outside the subject and clean antialiased edges.',
+  ].join(' '),
+] as const;
+
+function transparentRepairPrompt(active: ImageWorkflowActiveRun, failedValidationCount: number): string {
+  if (active.transparencyStrategy === 'white-matte-then-alpha' && failedValidationCount === 1) {
+    return WHITE_MATTE_REMOVAL_PROMPT;
+  }
+  if (active.transparencyStrategy === 'white-matte-then-alpha' && failedValidationCount === 2) {
+    return CHECKERBOARD_REMOVAL_PROMPT;
+  }
+  return TRANSPARENT_REPAIR_PROMPTS[Math.min(Math.max(0, failedValidationCount - 1), TRANSPARENT_REPAIR_PROMPTS.length - 1)];
+}
 
 export class ImageWorkflowError extends Error {
   constructor(public readonly code: string, public readonly status = 422) {
@@ -133,13 +171,20 @@ function insertOrdered(ids: string[], nodeId: string, order?: number): string[] 
   return next;
 }
 
-function contextPrompt(prompt: string, contexts: CanvasNode[], transparentBackground: boolean): string {
+function contextPrompt(
+  prompt: string,
+  contexts: CanvasNode[],
+  transparentBackground: boolean,
+  transparencyStrategy: ImageWorkflowActiveRun['transparencyStrategy'] = 'direct-alpha',
+): string {
   const blocks = contexts.flatMap((node) => {
     const content = String((node.payload as NoteNodePayload).content ?? '').trim();
     if (!content) return [];
     return [`Context from ${JSON.stringify(node.title ?? 'Note')}:\n${content.slice(0, MAX_CONTEXT_LENGTH)}`];
   });
-  const transparent = transparentBackground ? TRANSPARENT_OUTPUT_CONTRACT : '';
+  const transparent = transparentBackground
+    ? transparencyStrategy === 'white-matte-then-alpha' ? WHITE_MATTE_OUTPUT_CONTRACT : TRANSPARENT_OUTPUT_CONTRACT
+    : '';
   const body = [prompt, ...blocks].filter(Boolean).join('\n\n');
   if (!transparent) return body.slice(0, 48_000);
   const separator = '\n\n';
@@ -396,8 +441,11 @@ export class ImageWorkflowService {
       'Call image_workflow_read for this node to obtain the exact prompt, reference paths, and preallocated output paths.',
       'Use the built-in image_gen.imagegen tool only. Do not ask for an API key, do not call the OpenAI Images API directly, and do not use scripts/image_gen.py.',
       'Every visual change, including background removal, MUST be performed by another built-in image_gen.imagegen call. Never use Python, Pillow, ImageMagick, ffmpeg, remove-bg, generated masks, canvas pixel processing, or any other script/tool to alter image pixels. Shell/file commands may only create the assigned directory and copy the exact native ImageGen result to its assigned path.',
+      execution.transparencyStrategy === 'white-matte-then-alpha'
+        ? 'This run uses the white-matte-then-alpha strategy because it has multiple image references. The first native ImageGen call intentionally composes the requested foreground on pure white. Copy and validate that intermediate output; the validator will return the exact native ImageGen background-removal edit for the second call. Do not skip either stage.'
+        : 'This run uses direct alpha generation for its first native ImageGen call.',
       `Produce every requested output. For each output, copy the native result to its assigned workspace path and call image_workflow_validate before moving to the next output. You may make up to ${MAX_ATTEMPTS_PER_OUTPUT} built-in tool calls per output.`,
-      `When validation reports missing genuine alpha, call image_gen.imagegen again with the invalid output as its only reference and this dedicated edit prompt: ${JSON.stringify(TRANSPARENT_REPAIR_PROMPT)} Replace the same assigned file with that native result and validate it again.`,
+      'When validation reports missing genuine alpha, call image_gen.imagegen again with repairReferencedImagePaths and the exact repairPrompt returned by the validator. The prompt escalates after another opaque result, so never reuse or paraphrase an earlier repair prompt. Replace the same assigned file with that native result and validate it again.',
       'Use the original referenced_image_paths for the first attempt. For a corrective alpha edit, use the invalid assigned output as the reference so identity, composition, and branding are preserved.',
       'After every assigned output validates, call image_workflow_complete once. Only call image_workflow_fail after the allowed corrective attempts are exhausted or the native tool itself cannot run.',
     ].join('\n');
@@ -470,6 +518,9 @@ export class ImageWorkflowService {
     const outputPaths = Array.from({ length: dto.config.count }, (_, index) => (
       `${dto.config.outputDirectory.replace(/\/$/, '')}/${dto.config.filePrefix}-${suffix}-${index + 1}.png`
     ));
+    const transparencyStrategy: ImageWorkflowActiveRun['transparencyStrategy'] = dto.config.transparentBackground && references.length > 1
+      ? 'white-matte-then-alpha'
+      : 'direct-alpha';
     const active: ImageWorkflowActiveRun = {
       id: runId,
       startedAt: new Date().toISOString(),
@@ -480,9 +531,10 @@ export class ImageWorkflowService {
       referencePaths: references.map(({ path }) => path),
       outputPaths,
       inputHash: runHash(dto.config, contexts, references),
-      promptSnapshot: contextPrompt(dto.config.prompt, contexts, dto.config.transparentBackground),
+      promptSnapshot: contextPrompt(dto.config.prompt, contexts, dto.config.transparentBackground, transparencyStrategy),
       requestedOutputs: dto.config.count,
       transparentBackground: dto.config.transparentBackground,
+      transparencyStrategy,
     };
     await workspaceRepository.updateNode(workflow.id, {
       payload: nextPayload(existingPayload, dto.config, { status: 'running', activeRunId: runId, activeRun: active, lastError: null }),
@@ -567,17 +619,38 @@ export class ImageWorkflowService {
     if (active.executorNodeId !== actorNodeId) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
     if (!active.outputPaths.includes(outputPath)) throw new ImageWorkflowError('image_workflow_output_path_mismatch');
     const result = await this.validateOutputFile(workspaceId, outputPath, active.transparentBackground);
+    let failedValidationCount = active.alphaValidationFailures?.[outputPath] ?? 0;
+    if (result.errorCode === 'image_workflow_output_alpha_missing') {
+      failedValidationCount += 1;
+      const currentActive: ImageWorkflowActiveRun = {
+        ...active,
+        alphaValidationFailures: { ...(active.alphaValidationFailures ?? {}), [outputPath]: failedValidationCount },
+      };
+      await workspaceRepository.updateNode(workflow.id, {
+        payload: nextPayload(payload, {}, { activeRun: currentActive }),
+      });
+      broadcast(workspaceId, workflow.id);
+    }
+    const alphaRetryable = result.errorCode === 'image_workflow_output_alpha_missing'
+      && failedValidationCount < MAX_ATTEMPTS_PER_OUTPUT;
+    const repairPrompt = alphaRetryable ? transparentRepairPrompt(active, failedValidationCount) : null;
     return {
       path: outputPath,
       valid: result.valid,
       errorCode: result.errorCode,
-      retryable: result.errorCode === 'image_workflow_output_alpha_missing' || result.errorCode === 'image_workflow_output_missing',
+      retryable: alphaRetryable || result.errorCode === 'image_workflow_output_missing',
       transparentBackground: active.transparentBackground,
-      repairTool: result.errorCode === 'image_workflow_output_alpha_missing' ? 'image_gen.imagegen' : null,
-      repairPrompt: result.errorCode === 'image_workflow_output_alpha_missing' ? TRANSPARENT_REPAIR_PROMPT : null,
-      repairReferencedImagePaths: result.errorCode === 'image_workflow_output_alpha_missing' ? [outputPath] : [],
-      repair: result.errorCode === 'image_workflow_output_alpha_missing'
-        ? `Call image_gen.imagegen with only this invalid output in referenced_image_paths and this prompt: ${JSON.stringify(TRANSPARENT_REPAIR_PROMPT)} Do not use Python or any non-ImageGen pixel manipulation. Replace the same file with the native result and validate again.`
+      transparencyStrategy: active.transparencyStrategy ?? 'direct-alpha',
+      expectedIntermediate: active.transparencyStrategy === 'white-matte-then-alpha' && failedValidationCount === 1,
+      failedValidationCount,
+      attemptsRemaining: result.errorCode === 'image_workflow_output_alpha_missing'
+        ? Math.max(0, MAX_ATTEMPTS_PER_OUTPUT - failedValidationCount)
+        : null,
+      repairTool: repairPrompt ? 'image_gen.imagegen' : null,
+      repairPrompt,
+      repairReferencedImagePaths: repairPrompt ? [outputPath] : [],
+      repair: repairPrompt
+        ? `Call image_gen.imagegen with only this invalid output in referenced_image_paths and the exact repairPrompt returned in this response. Do not use Python or any non-ImageGen pixel manipulation. Replace the same file with the native result and validate again.`
         : null,
     };
   }
@@ -687,6 +760,7 @@ export class ImageWorkflowService {
         calls: active.requestedOutputs,
         maxAttemptsPerOutput: MAX_ATTEMPTS_PER_OUTPUT,
       },
+      transparencyStrategy: active.transparencyStrategy ?? 'direct-alpha',
       workspaceRoot: workspace.runtimeKind === 'wsl' && workspace.wslWorkingDir ? workspace.wslWorkingDir : workspace.workingDir,
       outputPaths: active.outputPaths,
       outputAbsolutePaths: active.outputPaths.map((path) => agentPath(workspace, path)),
@@ -696,7 +770,8 @@ export class ImageWorkflowService {
         genuineAlphaRequired: active.transparentBackground,
         repair: active.transparentBackground ? {
           tool: 'image_gen.imagegen',
-          prompt: TRANSPARENT_REPAIR_PROMPT,
+          prompt: transparentRepairPrompt(active, 1),
+          escalationPrompt: transparentRepairPrompt(active, 2),
           referenced_image_paths: ['<the invalid assigned output path only>'],
           forbiddenPixelTools: ['python', 'pillow', 'imagemagick', 'ffmpeg', 'remove-bg', 'generated masks', 'canvas pixel processing'],
         } : null,

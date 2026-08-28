@@ -701,6 +701,9 @@ export type ImageWorkflowActiveRun = {
   promptSnapshot: string;
   requestedOutputs: number;
   transparentBackground: boolean;
+  transparencyStrategy?: 'direct-alpha' | 'white-matte-then-alpha';
+  /** Machine-validation failures per output, used to escalate native ImageGen repairs. */
+  alphaValidationFailures?: Record<string, number>;
 };
 
 export type ImageWorkflowNodePayload = {

@@ -106,7 +106,11 @@ common credentials redacted; normal agent output is not persisted.
   pixels, then directs Codex to correct an opaque or fake-checkerboard result up
   to three times using another native `image_gen.imagegen` edit with the rejected
   image as its only reference. Python and other local pixel-processing tools are
-  explicitly forbidden for that correction. Orkestrai never asks for or stores
+  explicitly forbidden for that correction. Machine feedback tells ImageGen when
+  a visible checkerboard is baked into an opaque file and escalates the native
+  cutout prompt if the first correction remains opaque. With multiple references,
+  ImageGen first composes the foreground on a uniform white matte and then removes
+  that matte in a separate native edit before final alpha validation. Orkestrai never asks for or stores
   an image API key. It validates
   the preallocated workspace destinations before outputs return as connected
   Image nodes with provenance and bounded run history,
