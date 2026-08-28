@@ -77,11 +77,10 @@
   let taskDescription = $state("");
   let taskStatus = $state("");
   let leaderMessage = $state("");
-  const desktop = $derived(
-    (window as typeof window & { orkestraiDesktop?: DesktopBridge })
-      .orkestraiDesktop,
-  );
-  const desktopAvailable = $derived(Boolean(desktop) || import.meta.env.DEV);
+  const desktop = typeof window === 'undefined'
+    ? undefined
+    : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
+  const desktopAvailable = Boolean(desktop) || import.meta.env.DEV;
   const snapshot = $derived(remoteState.snapshot);
 
   function headers(): Record<string, string> {

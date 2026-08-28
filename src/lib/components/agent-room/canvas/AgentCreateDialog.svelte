@@ -52,14 +52,14 @@
   const defaultRuntime = $derived(workspace ? workspaceExecutionRuntime(workspace) : { kind: 'native' as const });
   const defaultRuntimeLabel = $derived(defaultRuntime.kind === 'wsl' ? `WSL · ${defaultRuntime.distribution}` : m['dlg.runtime_native']());
 
-  const EFFORT_LABELS: Record<string, string> = $derived({
+  const EFFORT_LABELS: Record<string, string> = {
     low: m['dlg.effort_low'](),
     medium: m['dlg.effort_medium'](),
     high: m['dlg.effort_high'](),
     xhigh: m['dlg.effort_xhigh'](),
     max: m['dlg.effort_max'](),
     ultra: m['dlg.effort_ultra'](),
-  });
+  };
 
   const selectedProvider = $derived(runtimeProvider ?? provider);
   const modelOptions = $derived(selectedProvider?.models ?? []);

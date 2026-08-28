@@ -889,15 +889,17 @@ export class BridgeController extends Controller {
 
   async portal(event: any) {
     try {
-      const input = z
-        .object({
+      const common = {
           token: z.string().trim().min(1).nullish(),
-          nodeId: z.string().trim().min(1),
-          action: z.enum(['navigate', 'eval', 'screenshot', 'dom']),
-          args: z.record(z.string(), z.unknown()).default({}),
+          nodeId: z.string().trim().min(1).max(128),
           timeoutMs: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
-        })
-        .parse(await event.request.json());
+      };
+      const input = z.discriminatedUnion('action', [
+        z.object({ ...common, action: z.literal('navigate'), args: z.object({ url: z.string().trim().min(1).max(4_096) }).strict() }),
+        z.object({ ...common, action: z.literal('eval'), args: z.object({ js: z.string().max(200_000) }).strict() }),
+        z.object({ ...common, action: z.literal('screenshot'), args: z.object({}).strict().default({}) }),
+        z.object({ ...common, action: z.literal('dom'), args: z.object({}).strict().default({}) }),
+      ]).parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       const portal = await bridgeService.resolvePortal(workspace.id, input.nodeId);
       const command = portalService.enqueue(portal.id, input.action, input.args);

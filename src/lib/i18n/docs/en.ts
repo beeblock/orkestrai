@@ -744,6 +744,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'New or recovered agents never resume another terminal\'s latest conversation: Orkestrai resumes only the exact ID attributed to the node and starts a clean conversation when that link does not exist yet.',
         'Interactive Codex terminals always receive the current packaged MCP before resume, packaged builds retain the complete WebADB runtime closure, and image workflow calls no longer fail because of a stale global MCP or a missing Android support module.',
         'Unavailable Portals use bounded backoff with manual retry; stale board requests return not found; Windows ConPTY cleanup and local health probes no longer flood logs with expected errors.',
+        'Desktop logs stay actionable: expected Portal outcomes use structured command results, microphone capture uses AudioWorklet, Electron and the updater use current APIs, and inert Svelte derivations no longer emit runtime warnings.',
       ],
     },
     {

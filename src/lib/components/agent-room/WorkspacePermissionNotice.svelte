@@ -18,12 +18,10 @@
   } = $props();
 
   let busy = $state(false);
-  const desktop = $derived(
-    typeof window === 'undefined'
-      ? undefined
-      : (window as unknown as { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop,
-  );
-  const canAuthorize = $derived(desktop?.platform === 'darwin');
+  const desktop = typeof window === 'undefined'
+    ? undefined
+    : (window as unknown as { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
+  const canAuthorize = desktop?.platform === 'darwin';
 
   function normalizedPath(value: string): string {
     return value.replace(/\/+$/, '');

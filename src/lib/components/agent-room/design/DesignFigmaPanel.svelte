@@ -45,7 +45,9 @@
   let preview = $state<SyncPreview | null>(null);
   let resolutions = $state<Record<string, 'figma' | 'local' | 'delete'>>({});
 
-  const desktop = $derived((window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop);
+  const desktop = typeof window === 'undefined'
+    ? undefined
+    : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
   const secretKey = $derived(`automation:figma:${document.workspaceId}`);
   const pendingChanges = $derived(preview?.changes.filter((change) => change.state !== 'unchanged') ?? []);
 

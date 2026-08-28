@@ -10,6 +10,7 @@
   import type { NodeConnection } from './NodeShell.svelte';
   import IconAction from './IconAction.svelte';
   import PortalViewportToolbar from './PortalViewportToolbar.svelte';
+  import { portalScriptExpression, unwrapPortalScriptResult } from './portal-script.js';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import { Button } from '$lib/components/ui/button';
@@ -117,12 +118,21 @@
     }).catch(() => {});
   }
 
+  function publicPortalError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.replace(/[\r\n]+/g, ' ').slice(0, 2_000) || 'Portal command failed.';
+  }
+
   function targetUrl() {
     return address.trim() || String(data.payload.url ?? '').trim();
   }
 
   function desktopFrame(): PortalWebviewElement | null {
     return frame && 'executeJavaScript' in frame ? frame : null;
+  }
+
+  async function executePortalScript(webview: PortalWebviewElement, source: string): Promise<unknown> {
+    return unwrapPortalScriptResult(await webview.executeJavaScript(portalScriptExpression(source)));
   }
 
   const RETRY_DELAYS_MS = [3_000, 6_000, 12_000, 24_000, 30_000, 30_000, 30_000, 30_000] as const;
@@ -200,7 +210,7 @@
 
   async function verifyLoadedPage(webview: PortalWebviewElement) {
     try {
-      const href = String(await webview.executeJavaScript('location.href') ?? '');
+      const href = String(await executePortalScript(webview, 'location.href') ?? '');
       if (href && href !== 'about:blank' && !href.startsWith('chrome-error:')) markReady();
       else if (targetUrl()) markUnavailable(href.startsWith('chrome-error:') ? 'o servidor ainda não respondeu' : 'a página ainda está vazia');
     } catch {
@@ -233,13 +243,13 @@
         }
         case 'eval': {
           await waitUntilReady();
-          const result = await webview.executeJavaScript(String(command.args.js ?? ''));
+          const result = await executePortalScript(webview, String(command.args.js ?? ''));
           await postResult(command.id, true, result);
           break;
         }
         case 'dom': {
           await waitUntilReady();
-          const html = await webview.executeJavaScript('document.documentElement.outerHTML');
+          const html = await executePortalScript(webview, 'document.documentElement.outerHTML');
           await postResult(command.id, true, String(html).slice(0, 50_000));
           break;
         }
@@ -255,7 +265,7 @@
           await postResult(command.id, false, undefined, `Acao desconhecida: ${command.action}`);
       }
     } catch (error) {
-      await postResult(command.id, false, undefined, error instanceof Error ? error.message : String(error));
+      await postResult(command.id, false, undefined, publicPortalError(error));
     }
   }
 

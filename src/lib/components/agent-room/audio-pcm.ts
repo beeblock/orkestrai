@@ -66,11 +66,12 @@ function writeAscii(view: DataView, offset: number, text: string) {
 export class PcmAudioRecorder {
   private context: AudioContext | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
-  private processor: ScriptProcessorNode | null = null;
+  private processor: AudioWorkletNode | null = null;
   private mutedOutput: GainNode | null = null;
   private chunks: Float32Array[] = [];
   private sampleRate = TARGET_RATE;
   private stopped = false;
+  private flushResolver: (() => void) | null = null;
 
   constructor(private readonly stream: MediaStream) {}
 
@@ -78,23 +79,39 @@ export class PcmAudioRecorder {
     const context = new AudioContext({ sampleRate: TARGET_RATE });
     this.context = context;
     this.sampleRate = context.sampleRate;
-    this.source = context.createMediaStreamSource(this.stream);
-    this.processor = context.createScriptProcessor(4096, 1, 1);
-    this.mutedOutput = context.createGain();
-    this.mutedOutput.gain.value = 0;
-    this.processor.onaudioprocess = (event) => {
-      if (this.stopped) return;
-      this.chunks.push(event.inputBuffer.getChannelData(0).slice());
-    };
-    this.source.connect(this.processor);
-    this.processor.connect(this.mutedOutput);
-    this.mutedOutput.connect(context.destination);
-    if (context.state === 'suspended') await context.resume();
+    try {
+      await context.audioWorklet.addModule('/audio/pcm-capture-worklet.js');
+      this.source = context.createMediaStreamSource(this.stream);
+      this.processor = new AudioWorkletNode(context, 'orkestrai-pcm-capture', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+        channelCount: 1,
+        channelCountMode: 'explicit',
+      });
+      this.processor.port.onmessage = (event: MessageEvent<{ type?: string; samples?: Float32Array }>) => {
+        if (event.data?.type === 'samples' && event.data.samples instanceof Float32Array) {
+          this.chunks.push(event.data.samples);
+        } else if (event.data?.type === 'flushed') {
+          this.flushResolver?.();
+        }
+      };
+      this.mutedOutput = context.createGain();
+      this.mutedOutput.gain.value = 0;
+      this.source.connect(this.processor);
+      this.processor.connect(this.mutedOutput);
+      this.mutedOutput.connect(context.destination);
+      if (context.state === 'suspended') await context.resume();
+    } catch (error) {
+      await this.disposeGraph();
+      throw error;
+    }
   }
 
   async stop(): Promise<PcmRecording> {
     if (this.stopped) return { wav: pcmToWavBlob(new Float32Array(), TARGET_RATE), stats: analyzeAudioSignal(new Float32Array()) };
     this.stopped = true;
+    await this.flushProcessor();
     const totalLength = this.chunks.reduce((total, chunk) => total + chunk.length, 0);
     const captured = new Float32Array(totalLength);
     let offset = 0;
@@ -116,7 +133,9 @@ export class PcmAudioRecorder {
   }
 
   private async disposeGraph(): Promise<void> {
-    if (this.processor) this.processor.onaudioprocess = null;
+    this.flushResolver?.();
+    this.flushResolver = null;
+    if (this.processor) this.processor.port.onmessage = null;
     this.source?.disconnect();
     this.processor?.disconnect();
     this.mutedOutput?.disconnect();
@@ -126,5 +145,23 @@ export class PcmAudioRecorder {
     const context = this.context;
     this.context = null;
     if (context && context.state !== 'closed') await context.close().catch(() => undefined);
+  }
+
+  private async flushProcessor(): Promise<void> {
+    const processor = this.processor;
+    if (!processor) return;
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (this.flushResolver === finish) this.flushResolver = null;
+        resolve();
+      };
+      const timer = setTimeout(finish, 500);
+      this.flushResolver = finish;
+      processor.port.postMessage({ type: 'flush' });
+    });
   }
 }

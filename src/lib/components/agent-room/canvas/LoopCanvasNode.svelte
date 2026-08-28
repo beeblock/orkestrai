@@ -35,12 +35,12 @@
   let logEl: HTMLDivElement;
   let tasks = $state<LoopTask[]>([]);
 
-  const KANBAN_COLUMNS: Array<{ status: LoopTask['status']; label: string }> = $derived([
+  const KANBAN_COLUMNS: Array<{ status: LoopTask['status']; label: string }> = [
     { status: 'backlog', label: m['loop.col_backlog']() },
     { status: 'in_progress', label: m['loop.col_doing']() },
     { status: 'testing', label: m['loop.col_review']() },
     { status: 'done', label: m['loop.col_done']() },
-  ]);
+  ];
 
   async function refreshTasks() {
     if (!data.payload.conversationId) return;

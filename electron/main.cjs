@@ -15,6 +15,7 @@ const path = require('node:path');
 const net = require('node:net');
 const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-policy.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
+const { isExpectedPortalDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse } = require('./portal-policy.cjs');
 
@@ -44,7 +45,7 @@ function initializeDiagnostics() {
   for (const level of ['warn', 'error']) {
     const original = console[level].bind(console);
     console[level] = (...values) => {
-      diagnostics?.write(level, 'main', ...values);
+      if (!isExpectedPortalDiagnostic(values)) diagnostics?.write(level, 'main', ...values);
       original(...values);
     };
   }
@@ -589,14 +590,12 @@ async function createWindow() {
     configurePortalContents(guestContents);
   });
 
-  mainWindow.webContents.on('console-message', (details, legacyLevel, legacyMessage, legacyLine, legacySource) => {
-    const level = typeof details?.level === 'string'
-      ? details.level
-      : (legacyLevel >= 3 ? 'error' : legacyLevel >= 2 ? 'warning' : 'info');
+  mainWindow.webContents.on('console-message', (_event, details) => {
+    const level = details.level;
     if (level !== 'warning' && level !== 'error') return;
-    const message = details?.message ?? legacyMessage ?? '';
-    const line = details?.lineNumber ?? legacyLine ?? 0;
-    const source = details?.sourceId ?? legacySource ?? 'renderer';
+    const message = details.message ?? '';
+    const line = details.lineNumber ?? 0;
+    const source = details.sourceId ?? 'renderer';
     diagnostics?.write(level === 'warning' ? 'warn' : 'error', 'renderer', `${source}:${line}`, message);
   });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -781,6 +780,7 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = automaticUpdateInstallSupported;
   autoUpdater.autoInstallOnAppQuit = automaticUpdateInstallSupported;
   autoUpdater.allowPrerelease = false;
+  autoUpdater.disableWebInstaller = true;
   if (!automaticUpdateInstallSupported) {
     void checkForUpdates();
     setInterval(() => void checkForUpdates(), 6 * 60 * 60 * 1000).unref();

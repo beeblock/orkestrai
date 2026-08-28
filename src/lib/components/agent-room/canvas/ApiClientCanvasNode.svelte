@@ -129,11 +129,9 @@
   const selectedRequest = $derived(requests.find((request) => request.id === selectedRequestId) ?? null);
   const orderedRequests = $derived([...requests].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)));
   const treeRows = $derived(apiClientTreeRows(folders, requests, collapsedFolderIds));
-  const desktop = $derived(
-    typeof window === 'undefined'
-      ? undefined
-      : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop
-  );
+  const desktop = typeof window === 'undefined'
+    ? undefined
+    : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
 
   $effect(() => {
     const payload = data.payload;

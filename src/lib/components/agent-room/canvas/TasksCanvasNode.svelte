@@ -65,11 +65,11 @@
     return key;
   }
 
-  const FALLBACK_COLUMNS: BoardColumn[] = $derived([
+  const FALLBACK_COLUMNS: BoardColumn[] = [
     { id: 'todo', key: 'todo', name: null, color: '#7de5ff', position: 0, builtin: true },
     { id: 'doing', key: 'doing', name: null, color: '#ffc857', position: 1, builtin: true },
     { id: 'done', key: 'done', name: null, color: '#8ec98e', position: 2, builtin: true },
-  ]);
+  ];
   let taskColumns = $state<BoardColumn[]>([]);
   const COLUMNS = $derived((taskColumns.length ? taskColumns : FALLBACK_COLUMNS).map((column) => ({
     ...column,

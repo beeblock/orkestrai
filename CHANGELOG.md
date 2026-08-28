@@ -56,6 +56,11 @@ pt-BR, English, and Spanish translations.
   the slower experimental bundled ConPTY DLL.
 - The desktop server exposes a minimal `/health` response for local diagnostics
   and health probes instead of recording a noisy not-found error.
+- Desktop diagnostics no longer record expected Portal availability or page-script
+  outcomes as internal failures. Portal evaluation errors return bounded structured
+  results, PCM capture uses `AudioWorkletNode`, Electron uses the current console
+  event contract, the updater disables the unused web installer explicitly, and inert
+  Svelte derivations were removed.
 - A newly created or recovered agent terminal no longer falls back to
   provider-wide shortcuts such as `resume --last` or `--continue`. It resumes
   only the exact conversation already attributed to that canvas node; without

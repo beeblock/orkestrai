@@ -75,7 +75,9 @@
   let disconnectPending = $state(false);
 
   const githubIntegration = $derived(integrations.find((item) => item.type === 'github') ?? null);
-  const desktop = $derived((window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop);
+  const desktop = typeof window === 'undefined'
+    ? undefined
+    : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();

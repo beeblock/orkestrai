@@ -7,7 +7,7 @@
 
   const step = $derived(tourState.tour?.steps[tourState.stepIndex] ?? null);
   const total = $derived(tourState.tour?.steps.length ?? 0);
-  const completed = $derived((id: string) => tourState.autoCompleted.has(id));
+  const completed = (id: string) => tourState.autoCompleted.has(id);
 
   function portal(node: HTMLElement) {
     document.body.appendChild(node);

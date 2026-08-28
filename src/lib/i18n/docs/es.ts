@@ -744,6 +744,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Los agentes nuevos o recuperados nunca reanudan la última conversación de otra terminal: Orkestrai reanuda solo el ID exacto atribuido al nodo e inicia una conversación limpia cuando ese vínculo aún no existe.',
         'Las terminales Codex interactivas reciben siempre el MCP actual de la aplicación antes de resume, los builds incluyen el runtime WebADB completo y las llamadas de imagen ya no fallan por un MCP global antiguo o un módulo Android ausente.',
         'Los Portales no disponibles usan reintentos progresivos limitados y retry manual; las solicitudes antiguas del tablero devuelven no encontrado; la limpieza ConPTY de Windows y los probes locales dejan de contaminar los logs con errores esperados.',
+        'Los logs del escritorio siguen siendo accionables: los resultados esperados del Portal usan respuestas estructuradas, la captura del micrófono usa AudioWorklet, Electron y el actualizador usan APIs actuales y las derivaciones Svelte inertes dejan de emitir avisos.',
       ],
     },
     {
