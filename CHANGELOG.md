@@ -17,15 +17,16 @@ pt-BR, English, and Spanish translations.
 - A live Codex connected to the workflow executes its authenticated built-in
   `image_gen.imagegen` tool. Prompt-only generation and up to five ordered
   PNG/JPEG/WebP references are supported, with one native call for each of one
-  to four requested PNG outputs and genuine alpha requested in the prompt.
+  to ten requested PNG outputs and genuine alpha requested in the prompt.
 - Every run records bounded history and provenance, including the exact context,
   references, assigned Codex executor, prompt, input hash, output paths, and
   duration. Completion validates the exact preallocated workspace paths before
   materializing any Image node; cancellation invalidates the active run.
-- Leaders and creative agents can inspect and coordinate the same native
-  workflows through typed Orkestrai CLI and MCP tools. The assigned Codex uses
-  explicit read, complete, and fail tools, and a guided use case builds the
-  creative director, visual brief, workflow, and typed connections.
+- Connected Codex agents have full typed control over the same visible workflow:
+  create and configure drafts without running them, attach, remove, or reorder
+  Notes and Image references, claim execution, generate up to ten outputs,
+  complete, cancel, or delete the flow. CLI, MCP, the guided use case, Canvas,
+  and Workbench operate one persisted graph rather than parallel automation state.
 - The workflow states in the UI that an authenticated Codex account or plan
   with ImageGen access is required, while no OpenAI API key is needed.
 

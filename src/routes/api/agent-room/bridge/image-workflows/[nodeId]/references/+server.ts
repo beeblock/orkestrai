@@ -2,5 +2,4 @@ import { BridgeController } from '$lib/modules/agent-room/interface/http/control
 
 const controller = new BridgeController();
 
-export const GET = controller.handle('listImageWorkflows');
-export const POST = controller.handle('createImageWorkflow');
+export const POST = controller.handle('addImageWorkflowReference');

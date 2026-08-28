@@ -1644,7 +1644,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'run-and-reuse',
         title: 'Genera y continúa el grafo',
-        body: 'Haz clic en Generar o pide al Director Creativo usar image_workflow_read e image_workflow_run. Codex hace una llamada ImageGen nativa por resultado, copia los archivos al workspace y confirma con image_workflow_complete. Cada resultado aparece como nodo Imagen con procedencia e historial.',
+        body: 'Pide al Director Creativo controlar el grafo mediante image_workflow_*: puede crear o revisar el borrador, conectar y ordenar notas o referencias del workspace, solicitar hasta diez resultados, ejecutar o cancelar la generación y devolver cada resultado validado a este canvas. Codex automatiza las llamadas nativas de ImageGen necesarias para el único run lógico y conserva procedencia e historial.',
         check: { kind: 'nodeExists', nodeType: 'imageWorkflow', titleIncludes: 'Generación de Imágenes' },
       },
     ],

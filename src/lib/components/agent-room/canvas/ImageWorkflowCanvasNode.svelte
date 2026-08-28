@@ -41,7 +41,7 @@
     const payload = data.payload;
     return {
       prompt: String(payload.prompt ?? ''),
-      count: Number(payload.count ?? 1),
+      count: Math.min(10, Math.max(1, Number(payload.count ?? 1))),
       transparentBackground: Boolean(payload.transparentBackground),
       outputDirectory: String(payload.outputDirectory ?? 'generated/images'),
       filePrefix: String(payload.filePrefix ?? 'orkestrai-image'),
@@ -60,6 +60,14 @@
   let running = $state(initial.running);
   let errorCode = $state<string | null>(initial.lastError);
 
+  $effect(() => {
+    prompt = String(data.payload.prompt ?? '');
+    count = Math.min(10, Math.max(1, Number(data.payload.count ?? 1)));
+    transparentBackground = Boolean(data.payload.transparentBackground);
+    outputDirectory = String(data.payload.outputDirectory ?? 'generated/images');
+    filePrefix = String(data.payload.filePrefix ?? 'orkestrai-image');
+  });
+
   const flowEdges = useEdges();
   const flowNodes = useNodes();
   const connections = $derived.by(() => flowEdges.current
@@ -77,12 +85,24 @@
         direction: outgoing ? 'out' : 'in',
       };
     }));
-  const references = $derived(connections.filter((connection) => {
+  function orderedConnections(items: ConnectedNode[], order: string[] | undefined) {
+    if (!order?.length) return items;
+    const index = new Map(order.map((nodeId, position) => [nodeId, position]));
+    return items.map((item, position) => ({ item, position })).sort((left, right) => {
+      const leftOrder = index.get(left.item.targetId);
+      const rightOrder = index.get(right.item.targetId);
+      if (leftOrder == null && rightOrder == null) return left.position - right.position;
+      if (leftOrder == null) return 1;
+      if (rightOrder == null) return -1;
+      return leftOrder - rightOrder;
+    }).map(({ item }) => item);
+  }
+  const references = $derived(orderedConnections(connections.filter((connection) => {
     if (connection.targetType !== 'image') return false;
     const generatedBy = connection.targetPayload?.generatedBy as { workflowNodeId?: unknown } | undefined;
     return generatedBy?.workflowNodeId !== id;
-  }));
-  const contexts = $derived(connections.filter((connection) => connection.targetType === 'note'));
+  }), data.payload.referenceOrder));
+  const contexts = $derived(orderedConnections(connections.filter((connection) => connection.targetType === 'note'), data.payload.contextOrder));
   const executors = $derived(connections.filter((connection) => connection.targetType === 'terminal'));
   const codexExecutors = $derived(executors.filter((connection) => connection.targetPayload?.provider === 'codex'));
   const outputs = $derived(connections.filter((connection) => {
@@ -275,7 +295,7 @@
     </section>
 
     <section class="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-[var(--app-border)] p-3">
-      <label class="space-y-1"><span class="text-[9px] font-medium text-[var(--app-text-muted)]">{m['image_workflow.count']()}</span><NativeSelect.Root size="sm" class="w-full" value={String(count)} onchange={(event) => chooseCount((event.currentTarget as HTMLSelectElement).value)}><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></NativeSelect.Root></label>
+      <label class="space-y-1"><span class="text-[9px] font-medium text-[var(--app-text-muted)]">{m['image_workflow.count']()}</span><NativeSelect.Root size="sm" class="w-full" value={String(count)} onchange={(event) => chooseCount((event.currentTarget as HTMLSelectElement).value)}>{#each Array.from({ length: 10 }, (_, index) => index + 1) as option}<option value={String(option)}>{option}</option>{/each}</NativeSelect.Root></label>
       <label class="flex min-w-0 items-center justify-between gap-3 border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2.5 py-2">
         <span class="min-w-0"><strong class="block text-[9px] text-[var(--app-text)]">{m['image_workflow.transparent']()}</strong><small class="mt-0.5 block text-[8px] leading-3 text-[var(--app-text-muted)]">{m['image_workflow.transparent_help']()}</small></span>
         <Switch checked={transparentBackground} onCheckedChange={(checked: boolean) => { transparentBackground = checked; void persist(); }} />

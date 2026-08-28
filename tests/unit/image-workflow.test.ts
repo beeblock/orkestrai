@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { imageWorkflowConfigSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
+import {
+  addImageWorkflowReferenceSchema,
+  completeImageWorkflowSchema,
+  imageWorkflowConfigSchema,
+} from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
 import { ImageWorkflowError, ImageWorkflowService } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
-import { RunImageWorkflowDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
+import {
+  ConnectImageWorkflowNodeDto,
+  CreateImageWorkflowDto,
+  RunImageWorkflowDto,
+  UpdateImageWorkflowDto,
+} from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
@@ -71,7 +80,7 @@ function setupWorkflow(options: { provider?: string; sessionAlive?: boolean; ref
     modifiedAt: new Date(0).toISOString(), contentType: 'image/png', kind: 'image',
   });
 
-  return { workspace, getWorkflow: () => workflow };
+  return { workspace, nodes, edges, executor, getWorkflow: () => workflow };
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -85,6 +94,17 @@ describe('image workflow schema', () => {
     expect(parsed).not.toHaveProperty('model');
     expect(parsed).not.toHaveProperty('quality');
     expect(parsed).not.toHaveProperty('apiKey');
+  });
+
+  it('accepts ten outputs and rejects an eleventh output or an escaping reference', () => {
+    expect(config({ count: 10 }).count).toBe(10);
+    expect(() => config({ count: 11 })).toThrow();
+    expect(completeImageWorkflowSchema.parse({
+      runId: '00000000-0000-7000-8000-000000000001',
+      outputPaths: Array.from({ length: 10 }, (_, index) => `generated/images/result-${index + 1}.png`),
+      from: 'Creative Director',
+    }).outputPaths).toHaveLength(10);
+    expect(() => addImageWorkflowReferenceSchema.parse({ path: '../private.png', from: 'Creative Director' })).toThrow();
   });
 });
 
@@ -111,6 +131,90 @@ describe('ImageWorkflowService', () => {
     expect(result.tool.prompt).toContain('real alpha channel');
     expect(result.outputPaths).toHaveLength(2);
     expect(result.outputPaths.every((path: string) => path.startsWith('generated/images/atomic-ant-'))).toBe(true);
+  });
+
+  it('prepares ten generated outputs as one automated workflow execution', async () => {
+    setupWorkflow({ references: false });
+    const result = await new ImageWorkflowService().begin(new RunImageWorkflowDto(
+      'workspace-1', 'workflow-1', config({ count: 10 }), 'agent-1',
+    ));
+
+    expect(result.tool.calls).toBe(10);
+    expect(result.outputPaths).toHaveLength(10);
+    expect(new Set(result.outputPaths).size).toBe(10);
+  });
+
+  it('lets a connected Codex revise a draft and reorder context without starting generation', async () => {
+    const state = setupWorkflow();
+    const service = new ImageWorkflowService();
+    const createEdge = vi.spyOn(workspaceRepository, 'createEdge').mockResolvedValue({ id: 'edge-extra-note' } as any);
+    const extraNote = {
+      ...state.nodes[1], id: '00000000-0000-7000-8000-000000000030', title: 'Campaign copy',
+      payload: { content: 'Carousel copy for ten slides.' },
+    } as any;
+    state.nodes.push(extraNote);
+
+    const updated = await service.update(new UpdateImageWorkflowDto(
+      'workspace-1', 'workflow-1',
+      { from: 'agent-1', prompt: 'Create a complete carousel.', count: 10 },
+      'agent-1',
+    ));
+    await service.connect(new ConnectImageWorkflowNodeDto(
+      'workspace-1', 'workflow-1',
+      { from: 'agent-1', targetNodeId: extraNote.id, order: 0 },
+      'agent-1',
+    ));
+
+    expect(updated).toMatchObject({ status: 'idle', config: { prompt: 'Create a complete carousel.', count: 10 } });
+    expect(state.getWorkflow().payload).toMatchObject({ status: 'idle' });
+    expect(state.getWorkflow().payload).not.toHaveProperty('activeRun');
+    expect(state.getWorkflow().payload.contextOrder).toEqual([extraNote.id, 'note-1']);
+    expect(createEdge).toHaveBeenCalledWith(expect.objectContaining({ targetNodeId: extraNote.id }));
+  });
+
+  it('creates a visible draft next to the Codex and connects it before returning control', async () => {
+    const state = setupWorkflow();
+    const createdWorkflow = {
+      ...state.getWorkflow(), id: 'workflow-created', title: 'Instagram carousel',
+      payload: { ...config({ count: 10 }), prompt: '', status: 'idle', history: [] },
+    } as any;
+    state.nodes.push(createdWorkflow);
+    vi.spyOn(workspaceRepository, 'createNode').mockResolvedValue(createdWorkflow);
+    const createEdge = vi.spyOn(workspaceRepository, 'createEdge').mockResolvedValue({ id: 'edge-created' } as any);
+    vi.spyOn(workspaceRepository, 'listEdges').mockResolvedValue([
+      ...state.edges,
+      { id: 'edge-created', sourceNodeId: 'agent-1', targetNodeId: 'workflow-created' },
+    ] as any);
+
+    const created = await new ImageWorkflowService().create(new CreateImageWorkflowDto(
+      'workspace-1',
+      {
+        from: 'agent-1', title: 'Instagram carousel', prompt: '', count: 10,
+        transparentBackground: false, outputDirectory: 'generated/images', filePrefix: 'carousel',
+      },
+      'agent-1',
+    ));
+
+    expect(createEdge).toHaveBeenCalledWith(expect.objectContaining({ sourceNodeId: 'agent-1', targetNodeId: 'workflow-created' }));
+    expect(created).toMatchObject({ nodeId: 'workflow-created', config: { count: 10 } });
+  });
+
+  it('rejects workflow control from a Codex that is not connected', async () => {
+    const state = setupWorkflow();
+    const outsider = {
+      ...state.executor, id: 'agent-2', title: 'Other Codex', payload: { provider: 'codex', sessionId: 'session-2' },
+    } as any;
+    state.nodes.push(outsider);
+    vi.spyOn(bridgeService, 'listAgents').mockResolvedValue([
+      { nodeId: 'agent-1', title: 'Creative Director', provider: 'codex', command: 'codex', sessionId: 'session-1', sessionAlive: true, maestro: false },
+      { nodeId: 'agent-2', title: 'Other Codex', provider: 'codex', command: 'codex', sessionId: 'session-2', sessionAlive: true, maestro: false },
+    ] as any);
+
+    const error = await new ImageWorkflowService().update(new UpdateImageWorkflowDto(
+      'workspace-1', 'workflow-1', { from: 'agent-2', prompt: 'Take over.' }, 'agent-2',
+    )).catch((caught) => caught);
+
+    expect(error).toMatchObject({ code: 'image_workflow_executor_unauthorized', status: 403 });
   });
 
   it('dispatches execution to the connected Codex without an API key or direct image endpoint', async () => {

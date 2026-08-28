@@ -53,7 +53,7 @@ Uso:
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
   orkestrai note create <titulo> [--content <texto>] [--connect <agente|all>]
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
-  orkestrai image list | image read <nodeId> | image run <nodeId> [--prompt <texto>] [--count <1-4>] [--transparent] [--output <pasta>] [--prefix <nome>] | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId>
+  orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design apply <nodeId> <operations-json> --revision <n> [--summary <texto>] [--task <taskId>]
   orkestrai design import-code <nodeId> <arquivo> --format html|svelte|react|vue --name <nome> --revision <n> [--css <arquivo>]
@@ -572,7 +572,7 @@ export async function run(argv, options = {}) {
       throw new Error('Uso: orkestrai api <list|reference|read|import|create|replace|sync-status|pull|push|export|run|run-runner> ...');
     }
     case 'image': {
-      const [action, nodeId] = rest;
+      const [action, nodeId, target] = rest;
       if (action === 'list') {
         const data = await bridge(config, 'GET', '/api/agent-room/bridge/image-workflows');
         if (flags.json) out(JSON.stringify(data, null, 2));
@@ -585,6 +585,64 @@ export async function run(argv, options = {}) {
       if (action === 'read' && nodeId) {
         const data = await bridge(config, 'GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`);
         out(JSON.stringify(data, null, 2));
+        return 0;
+      }
+      if (action === 'create') {
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/image-workflows', {
+          title: flags.title,
+          prompt: flags.prompt,
+          count: flags.count,
+          transparentBackground: flags.transparent === undefined ? undefined : true,
+          outputDirectory: flags.output,
+          filePrefix: flags.prefix,
+          from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Fluxo criado e conectado: ${data.title} (${data.nodeId}).`);
+        return 0;
+      }
+      if (action === 'update' && nodeId) {
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const transparentBackground = flags.opaque ? false : flags.transparent ? true : undefined;
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`, {
+          title: flags.title,
+          prompt: flags.prompt,
+          count: flags.count,
+          transparentBackground,
+          outputDirectory: flags.output,
+          filePrefix: flags.prefix,
+          from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Fluxo atualizado: ${data.title} (${data.nodeId}).`);
+        return 0;
+      }
+      if (action === 'connect' && nodeId && target) {
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/connections`, {
+          targetNodeId: target, order: flags.order, from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Node conectado ao fluxo: ${target}.`);
+        return 0;
+      }
+      if (action === 'disconnect' && nodeId && target) {
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const data = await bridge(config, 'DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/connections`, {
+          targetNodeId: target, from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(data.disconnected ? `Node desconectado do fluxo: ${target}.` : 'A conexao nao existia.');
+        return 0;
+      }
+      if (action === 'reference' && nodeId && target) {
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/references`, {
+          path: target, title: flags.title, order: flags.order, from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Referencia adicionada: ${data.reference.path} (${data.reference.nodeId}).`);
         return 0;
       }
       if (action === 'run' && nodeId) {
@@ -617,12 +675,20 @@ export async function run(argv, options = {}) {
         return 0;
       }
       if (action === 'cancel' && nodeId) {
-        const data = await bridge(config, 'DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`);
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const data = await bridge(config, 'DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`, { from: selfAgent });
         if (flags.json) out(JSON.stringify(data, null, 2));
         else out(data.cancelled ? `Execucao ${data.runId} cancelada.` : 'Nenhuma execucao ativa.');
         return 0;
       }
-      throw new Error('Uso: orkestrai image <list|read|run|complete|fail|cancel> ...');
+      if (action === 'delete' && nodeId) {
+        if (!selfAgent) throw new Error('Identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}/remove`, { from: selfAgent });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Fluxo removido: ${data.nodeId}.`);
+        return 0;
+      }
+      throw new Error('Uso: orkestrai image <list|read|create|update|connect|disconnect|reference|run|complete|fail|cancel|delete> ...');
     }
     case 'design': {
       const [action, nodeId, ...values] = rest;

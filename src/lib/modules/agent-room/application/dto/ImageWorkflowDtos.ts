@@ -1,8 +1,28 @@
 import type {
+  AddImageWorkflowReferenceInput,
   CompleteImageWorkflowInput,
+  ConnectImageWorkflowNodeInput,
+  CreateImageWorkflowInput,
   FailImageWorkflowInput,
   RunImageWorkflowInput,
+  UpdateImageWorkflowInput,
 } from '../../contracts/schemas/imageWorkflowSchemas.js';
+
+export class CreateImageWorkflowDto {
+  constructor(public readonly workspaceId: string, public readonly input: CreateImageWorkflowInput, public readonly actorNodeId: string) {}
+}
+
+export class UpdateImageWorkflowDto {
+  constructor(public readonly workspaceId: string, public readonly nodeId: string, public readonly input: UpdateImageWorkflowInput, public readonly actorNodeId: string) {}
+}
+
+export class ConnectImageWorkflowNodeDto {
+  constructor(public readonly workspaceId: string, public readonly nodeId: string, public readonly input: ConnectImageWorkflowNodeInput, public readonly actorNodeId: string) {}
+}
+
+export class AddImageWorkflowReferenceDto {
+  constructor(public readonly workspaceId: string, public readonly nodeId: string, public readonly input: AddImageWorkflowReferenceInput, public readonly actorNodeId: string) {}
+}
 
 export class RunImageWorkflowDto {
   constructor(

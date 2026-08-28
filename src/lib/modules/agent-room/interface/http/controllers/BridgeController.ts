@@ -49,9 +49,9 @@ import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/sc
 import { ContributeHuddleTurnDto } from '$lib/modules/agent-room/application/dto/HuddleDtos.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
 import { ImageWorkflowError, imageWorkflowService } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
-import { CompleteImageWorkflowAction, FailImageWorkflowAction, RunSavedImageWorkflowAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
-import { CompleteImageWorkflowDto, FailImageWorkflowDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
-import { BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, FailImageWorkflowRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
+import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
+import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
+import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -177,6 +177,17 @@ export class BridgeController extends Controller {
     }
   }
 
+  async createImageWorkflow(event: any) {
+    try {
+      const input = await CreateImageWorkflowRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await new CreateImageWorkflowAction().execute(new CreateImageWorkflowDto(workspace.id, input, actor)) }, 201);
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to create image workflow.');
+    }
+  }
+
   async readImageWorkflow(event: any) {
     try {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
@@ -204,6 +215,61 @@ export class BridgeController extends Controller {
       return this.json({ data: result }, 201);
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to run image workflow.');
+    }
+  }
+
+  async updateImageWorkflow(event: any) {
+    try {
+      const input = await UpdateImageWorkflowRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await new UpdateImageWorkflowAction().execute(new UpdateImageWorkflowDto(workspace.id, event.params.nodeId, input, actor)) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to update image workflow.');
+    }
+  }
+
+  async connectImageWorkflowNode(event: any) {
+    try {
+      const input = await ConnectImageWorkflowNodeRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await new ConnectImageWorkflowNodeAction().execute(new ConnectImageWorkflowNodeDto(workspace.id, event.params.nodeId, input, actor)) }, 201);
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to connect image workflow node.');
+    }
+  }
+
+  async disconnectImageWorkflowNode(event: any) {
+    try {
+      const input = await ConnectImageWorkflowNodeRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await new DisconnectImageWorkflowNodeAction().execute(new ConnectImageWorkflowNodeDto(workspace.id, event.params.nodeId, input, actor)) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to disconnect image workflow node.');
+    }
+  }
+
+  async addImageWorkflowReference(event: any) {
+    try {
+      const input = await AddImageWorkflowReferenceRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await new AddImageWorkflowReferenceAction().execute(new AddImageWorkflowReferenceDto(workspace.id, event.params.nodeId, input, actor)) }, 201);
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to add image workflow reference.');
+    }
+  }
+
+  async deleteImageWorkflow(event: any) {
+    try {
+      const input = await ImageWorkflowActorRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await imageWorkflowService.remove(workspace.id, event.params.nodeId, actor) });
+    } catch (error) {
+      return this.imageWorkflowError(error, 'Failed to delete image workflow.');
     }
   }
 
@@ -237,8 +303,10 @@ export class BridgeController extends Controller {
 
   async cancelImageWorkflow(event: any) {
     try {
+      const input = await ImageWorkflowActorRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
-      return this.json({ data: await imageWorkflowService.cancel(workspace.id, event.params.nodeId) });
+      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
+      return this.json({ data: await imageWorkflowService.cancel(workspace.id, event.params.nodeId, actor) });
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to cancel image workflow.');
     }
@@ -1128,6 +1196,14 @@ export class BridgeController extends Controller {
   /** Token do corpo (CLI legada) com fallback para o header Authorization. */
   private tokenFrom(event: any, bodyToken?: string | null): string {
     return bodyToken ?? this.requireToken(event);
+  }
+
+  private async resolveImageWorkflowActor(workspaceId: string, from: string): Promise<string> {
+    const actor = (await bridgeService.listAgents(workspaceId)).find((agent) => (
+      agent.nodeId === from || agent.title.toLowerCase() === from.toLowerCase()
+    ));
+    if (!actor) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    return actor.nodeId;
   }
 
   private errorResponse(error: unknown, fallback: string, status = 400) {

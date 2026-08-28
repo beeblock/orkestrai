@@ -4,4 +4,5 @@ const controller = new BridgeController();
 
 export const GET = controller.handle('readImageWorkflow');
 export const POST = controller.handle('runImageWorkflow');
+export const PATCH = controller.handle('updateImageWorkflow');
 export const DELETE = controller.handle('cancelImageWorkflow');

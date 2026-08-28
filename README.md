@@ -97,13 +97,16 @@ common credentials redacted; normal agent output is not persisted.
   and arbitrary local modules is not enabled.
 - **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
   references, and a live Codex agent to a Generate images node on the same
-  canvas; the same node opens in Workbench. The connected Codex uses its
-  authenticated built-in `image_gen.imagegen` tool, with one call per requested
-  output and true PNG alpha requested in the prompt. Orkestrai never asks for or stores an image
+  canvas; the same node opens in Workbench. A connected Codex can create and
+  configure the workflow, attach, remove, or reorder context and references,
+  request one to ten outputs, run or cancel generation, and remove the workflow
+  through the same typed bridge. It uses its authenticated built-in
+  `image_gen.imagegen` tool, with one internal call per requested output and true
+  PNG alpha requested in the prompt. Orkestrai never asks for or stores an image
   API key. It validates the preallocated workspace destinations before outputs
   return as connected Image nodes with provenance and bounded run history,
   ready to feed another branch. Humans, the bundled CLI, and typed MCP tools
-  operate that same visible workflow.
+  operate that same visible workflow without a parallel automation state.
 - **Integrated mobile devices:** add a persistent Mobile Device node from the
   Canvas toolbar; Workbench lists and opens that same node and session. Control
   iPhone and iPad Simulators on Apple Silicon Macs, or Android AVDs and explicitly

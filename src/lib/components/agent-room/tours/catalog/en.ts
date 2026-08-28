@@ -1644,7 +1644,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'run-and-reuse',
         title: 'Generate and continue the graph',
-        body: 'Click Generate or ask the Creative Director to use image_workflow_read and image_workflow_run. Codex makes one native ImageGen call per output, copies the files into the workspace, and confirms them with image_workflow_complete. Each result appears as a connected Image node with provenance and history.',
+        body: 'Ask the Creative Director to control the graph through image_workflow_*: it can create or revise the draft, attach and order notes or workspace references, request up to ten results, run or cancel generation, and return every validated output to this canvas. Codex automatically makes the native ImageGen calls required by the single logical run and preserves provenance and history.',
         check: { kind: 'nodeExists', nodeType: 'imageWorkflow', titleIncludes: 'Image Generation' },
       },
     ],

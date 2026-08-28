@@ -70,14 +70,26 @@ const TOOLS = [
   { name: 'api_client_execute', description: 'Executa um request salvo em um Cliente de API conectado, aplicando variaveis e autenticacao localmente.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, requestId: { type: 'string' }, variables: { type: 'object', additionalProperties: { type: 'string' } } }, required: ['nodeId', 'requestId'] } },
   { name: 'image_workflow_list', description: 'Lista os fluxos nativos operados por Codex ImageGen, suas conexoes, status, resultados e historico.', inputSchema: { type: 'object', properties: {} } },
   { name: 'image_workflow_read', description: 'Le o contrato exato do fluxo e, durante um run, retorna prompt, referenced_image_paths, destinos e chamada de conclusao. Use antes de image_gen.imagegen.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
+  { name: 'image_workflow_create', description: 'Cria um fluxo visivel no canvas, conecta este Codex como executor e salva a configuracao inicial sem iniciar a geracao.', inputSchema: { type: 'object', properties: {
+    title: { type: 'string', minLength: 1, maxLength: 120 }, prompt: { type: 'string', maxLength: 32000 },
+    count: { type: 'integer', minimum: 1, maximum: 10 }, transparentBackground: { type: 'boolean' }, outputDirectory: { type: 'string' }, filePrefix: { type: 'string' },
+  } } },
+  { name: 'image_workflow_update', description: 'Atualiza titulo, direcao criativa e configuracao de um fluxo conectado sem iniciar a geracao. Use para preparar o plano e aguardar aprovacao.', inputSchema: { type: 'object', properties: {
+    nodeId: { type: 'string' }, title: { type: 'string', minLength: 1, maxLength: 120 }, prompt: { type: 'string', maxLength: 32000 },
+    count: { type: 'integer', minimum: 1, maximum: 10 }, transparentBackground: { type: 'boolean' }, outputDirectory: { type: 'string' }, filePrefix: { type: 'string' },
+  }, required: ['nodeId'] } },
+  { name: 'image_workflow_connect', description: 'Conecta ou reordena uma Nota, Imagem ou este proprio Codex no fluxo. order e baseado em zero e define a ordem de contexto/referencia.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, targetNodeId: { type: 'string' }, order: { type: 'integer', minimum: 0, maximum: 99 } }, required: ['nodeId', 'targetNodeId'] } },
+  { name: 'image_workflow_disconnect', description: 'Remove uma conexao de contexto, referencia ou executor de um fluxo conectado.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, targetNodeId: { type: 'string' } }, required: ['nodeId', 'targetNodeId'] } },
+  { name: 'image_workflow_add_reference', description: 'Adiciona ao canvas uma imagem PNG, JPEG ou WebP existente no workspace e a conecta como referencia ordenada do fluxo.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, path: { type: 'string' }, title: { type: 'string', maxLength: 120 }, order: { type: 'integer', minimum: 0, maximum: 99 } }, required: ['nodeId', 'path'] } },
   { name: 'image_workflow_run', description: 'Assume um fluxo conectado como executor Codex. Retorna os argumentos para a tool nativa image_gen.imagegen; nao pede chave nem chama uma API de imagem pelo app.', inputSchema: { type: 'object', properties: {
     nodeId: { type: 'string' }, prompt: { type: 'string', minLength: 1, maxLength: 32000 },
-    count: { type: 'integer', minimum: 1, maximum: 4 }, transparentBackground: { type: 'boolean' },
+    count: { type: 'integer', minimum: 1, maximum: 10 }, transparentBackground: { type: 'boolean' },
     outputDirectory: { type: 'string' }, filePrefix: { type: 'string' },
   }, required: ['nodeId'] } },
-  { name: 'image_workflow_complete', description: 'Depois de usar image_gen.imagegen e copiar os resultados para os destinos pre-alocados, valida os arquivos e cria os Image nodes com proveniencia.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runId: { type: 'string' }, outputPaths: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string' } } }, required: ['nodeId', 'runId', 'outputPaths'] } },
+  { name: 'image_workflow_complete', description: 'Depois de usar image_gen.imagegen e copiar os resultados para os destinos pre-alocados, valida os arquivos e cria os Image nodes com proveniencia.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runId: { type: 'string' }, outputPaths: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'string' } } }, required: ['nodeId', 'runId', 'outputPaths'] } },
   { name: 'image_workflow_fail', description: 'Registra uma falha publica e limitada quando a tool nativa nao consegue concluir o run.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runId: { type: 'string' }, errorCode: { type: 'string', enum: ['image_gen_tool_failed', 'image_gen_output_missing', 'image_gen_cancelled'] } }, required: ['nodeId', 'runId'] } },
   { name: 'image_workflow_cancel', description: 'Cancela a execucao ativa de um fluxo de imagem.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
+  { name: 'image_workflow_delete', description: 'Remove do canvas um fluxo controlado por este Codex; uma execucao ativa e invalidada antes da remocao.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'design_list', description: 'Lista Designs, revisoes, progresso, estagnacao e gate visual. stalled = 5 min sem nova revisao; reviewStatus approved vale somente para a revisao atual.', inputSchema: { type: 'object', properties: {} } },
   { name: 'design_read', description: 'Le o scene graph completo de um Design node. Leia antes de alterar e use a revisao retornada.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'design_reference', description: 'Retorna o contrato exato e exemplos para criar Design nativo sem probes, scripts temporarios ou inspecao do app. Consulte uma vez e escreva em lotes.', inputSchema: { type: 'object', properties: { topic: { type: 'string', enum: DESIGN_REFERENCE_TOPICS, default: 'quickstart' } } } },
@@ -240,6 +252,24 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('GET', '/api/agent-room/bridge/image-workflows');
     case 'image_workflow_read':
       return bridge('GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}`);
+    case 'image_workflow_create': {
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('POST', '/api/agent-room/bridge/image-workflows', { ...args, from: selfAgent });
+    }
+    case 'image_workflow_update': {
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      const { nodeId, ...updates } = args;
+      return bridge('PATCH', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`, { ...updates, from: selfAgent });
+    }
+    case 'image_workflow_connect':
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/connections`, { targetNodeId: args.targetNodeId, order: args.order, from: selfAgent });
+    case 'image_workflow_disconnect':
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/connections`, { targetNodeId: args.targetNodeId, from: selfAgent });
+    case 'image_workflow_add_reference':
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/references`, { path: args.path, title: args.title, order: args.order, from: selfAgent });
     case 'image_workflow_run': {
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       const { nodeId, ...overrides } = args;
@@ -252,7 +282,11 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/fail`, { runId: args.runId, errorCode: args.errorCode ?? 'image_gen_tool_failed', from: selfAgent });
     case 'image_workflow_cancel':
-      return bridge('DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}`);
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('DELETE', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}`, { from: selfAgent });
+    case 'image_workflow_delete':
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('POST', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}/remove`, { from: selfAgent });
     case 'design_list':
       return bridge('GET', '/api/agent-room/bridge/designs');
     case 'design_read':

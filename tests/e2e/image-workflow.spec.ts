@@ -54,7 +54,7 @@ test.describe('native image workflows', () => {
       await expect(node).toContainText('1 referências');
       await expect(node.getByRole('button', { name: 'Conexões' })).toContainText('2');
 
-      await node.getByRole('combobox', { name: 'Resultados' }).selectOption('3');
+      await node.getByRole('combobox', { name: 'Resultados' }).selectOption('10');
       await node.getByRole('switch').click();
       await expect(node.getByRole('switch')).not.toBeChecked();
       await node.getByRole('textbox', { name: 'Pasta do workspace' }).fill('assets/generated');
@@ -62,7 +62,7 @@ test.describe('native image workflows', () => {
 
       await page.reload();
       const restored = page.locator('.canvas-image-workflow');
-      await expect(restored.getByRole('combobox', { name: 'Resultados' })).toHaveValue('3');
+      await expect(restored.getByRole('combobox', { name: 'Resultados' })).toHaveValue('10');
       await expect(restored.getByRole('switch')).not.toBeChecked();
       await expect(restored.getByRole('textbox', { name: 'Pasta do workspace' })).toHaveValue('assets/generated');
 

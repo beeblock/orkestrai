@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { relative, resolve, sep } from 'node:path';
+import { basename, relative, resolve, sep } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
 import type {
   CanvasNode,
@@ -14,7 +14,15 @@ import type {
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from './FilesystemService.js';
 import { bridgeService } from './BridgeService.js';
-import { RunImageWorkflowDto, type CompleteImageWorkflowDto, type FailImageWorkflowDto } from '../dto/ImageWorkflowDtos.js';
+import {
+  AddImageWorkflowReferenceDto,
+  CompleteImageWorkflowDto,
+  ConnectImageWorkflowNodeDto,
+  CreateImageWorkflowDto,
+  FailImageWorkflowDto,
+  RunImageWorkflowDto,
+  UpdateImageWorkflowDto,
+} from '../dto/ImageWorkflowDtos.js';
 import {
   imageWorkflowConfigSchema,
   type BridgeRunImageWorkflowInput,
@@ -25,7 +33,8 @@ const MAX_REFERENCES = 5;
 const MAX_REFERENCE_BYTES = 20 * 1024 * 1024;
 const MAX_REFERENCE_TOTAL_BYTES = 80 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
-const MAX_OUTPUT_TOTAL_BYTES = 96 * 1024 * 1024;
+const MAX_OUTPUTS = 10;
+const MAX_OUTPUT_TOTAL_BYTES = MAX_OUTPUT_BYTES * MAX_OUTPUTS;
 const MAX_CONTEXT_LENGTH = 16_000;
 const HISTORY_LIMIT = 12;
 
@@ -55,6 +64,25 @@ function connectedNodes(workflow: CanvasNode, nodes: CanvasNode[], edges: Awaite
     const node = byId.get(otherId);
     return node ? [{ node, edge }] : [];
   });
+}
+
+function orderedNodes(nodes: CanvasNode[], order: string[] | undefined): CanvasNode[] {
+  if (!order?.length) return nodes;
+  const index = new Map(order.map((id, position) => [id, position]));
+  return nodes.map((node, position) => ({ node, position })).sort((left, right) => {
+    const leftOrder = index.get(left.node.id);
+    const rightOrder = index.get(right.node.id);
+    if (leftOrder == null && rightOrder == null) return left.position - right.position;
+    if (leftOrder == null) return 1;
+    if (rightOrder == null) return -1;
+    return leftOrder - rightOrder;
+  }).map(({ node }) => node);
+}
+
+function insertOrdered(ids: string[], nodeId: string, order?: number): string[] {
+  const next = ids.filter((id) => id !== nodeId);
+  next.splice(Math.min(order ?? next.length, next.length), 0, nodeId);
+  return next;
 }
 
 function contextPrompt(prompt: string, contexts: CanvasNode[], transparentBackground: boolean): string {
@@ -143,6 +171,168 @@ export class ImageWorkflowService {
     return this.describe(node, nodes, edges);
   }
 
+  async create(dto: CreateImageWorkflowDto) {
+    const actor = await this.requireCodexActor(dto.workspaceId, dto.actorNodeId);
+    const { from: _from, title, ...config } = dto.input;
+    const workflow = await workspaceRepository.createNode({
+      workspaceId: dto.workspaceId,
+      type: 'imageWorkflow',
+      title,
+      x: actor.x + actor.width + 72,
+      y: actor.y,
+      width: 440,
+      height: 560,
+      zIndex: actor.zIndex,
+      floorId: actor.floorId,
+      payload: {
+        schemaVersion: 1,
+        ...config,
+        contextOrder: [],
+        referenceOrder: [],
+        status: 'idle',
+        activeRunId: null,
+        activeRun: null,
+        lastError: null,
+        history: [],
+      } satisfies ImageWorkflowNodePayload,
+    });
+    await workspaceRepository.createEdge({ workspaceId: dto.workspaceId, sourceNodeId: actor.id, targetNodeId: workflow.id, style: 'cord' });
+    broadcast(dto.workspaceId, workflow.id);
+    return this.read(dto.workspaceId, workflow.id);
+  }
+
+  async update(dto: UpdateImageWorkflowDto) {
+    const { workflow } = await this.requireControl(dto.workspaceId, dto.nodeId, dto.actorNodeId);
+    const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
+    if (payload.status === 'running') throw new ImageWorkflowError('image_workflow_already_running', 409);
+    const { from: _from, title, ...config } = dto.input;
+    await workspaceRepository.updateNode(workflow.id, {
+      ...(title === undefined ? {} : { title }),
+      payload: nextPayload(payload, config, {}),
+    });
+    broadcast(dto.workspaceId, workflow.id);
+    return this.read(dto.workspaceId, workflow.id);
+  }
+
+  async connect(dto: ConnectImageWorkflowNodeDto) {
+    const { workflow, nodes, edges } = await this.requireControl(dto.workspaceId, dto.nodeId, dto.actorNodeId);
+    const target = nodes.find((node) => node.id === dto.input.targetNodeId);
+    if (!target) throw new ImageWorkflowError('image_workflow_connection_target_missing', 404);
+    if (!['note', 'image', 'terminal'].includes(target.type)) throw new ImageWorkflowError('image_workflow_connection_type_invalid');
+    if (target.type === 'terminal') {
+      const provider = (target.payload as TerminalNodePayload).provider;
+      if (target.id !== dto.actorNodeId || provider !== 'codex') throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    }
+
+    const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
+    if (payload.status === 'running') throw new ImageWorkflowError('image_workflow_already_running', 409);
+    const connected = connectedNodes(workflow, nodes, edges).map(({ node }) => node);
+    const alreadyConnected = connected.some((node) => node.id === target.id);
+    if (target.type === 'note' && !alreadyConnected && connected.filter((node) => node.type === 'note').length >= 12) {
+      throw new ImageWorkflowError('image_workflow_too_many_contexts');
+    }
+    if (
+      target.type === 'image'
+      && (target.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id
+      && !alreadyConnected
+      && connected.filter((node) => node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id).length >= MAX_REFERENCES
+    ) throw new ImageWorkflowError('image_workflow_too_many_references');
+
+    let edge = edges.find((candidate) => (
+      (candidate.sourceNodeId === workflow.id && candidate.targetNodeId === target.id)
+      || (candidate.targetNodeId === workflow.id && candidate.sourceNodeId === target.id)
+    ));
+    edge ??= await workspaceRepository.createEdge({ workspaceId: dto.workspaceId, sourceNodeId: workflow.id, targetNodeId: target.id, style: 'cord' });
+
+    const changes: Partial<ImageWorkflowNodePayload> = {};
+    if (target.type === 'note') {
+      changes.contextOrder = insertOrdered(
+        payload.contextOrder ?? connected.filter((node) => node.type === 'note').map((node) => node.id),
+        target.id,
+        dto.input.order,
+      );
+    }
+    if (target.type === 'image' && (target.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id) {
+      changes.referenceOrder = insertOrdered(
+        payload.referenceOrder ?? connected.filter((node) => node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id).map((node) => node.id),
+        target.id,
+        dto.input.order,
+      );
+    }
+    if (Object.keys(changes).length) await workspaceRepository.updateNode(workflow.id, { payload: nextPayload(payload, {}, changes) });
+    broadcast(dto.workspaceId, workflow.id);
+    return { edgeId: edge.id, workflow: await this.read(dto.workspaceId, workflow.id) };
+  }
+
+  async disconnect(dto: ConnectImageWorkflowNodeDto) {
+    const { workflow, edges } = await this.requireControl(dto.workspaceId, dto.nodeId, dto.actorNodeId);
+    const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
+    if (payload.status === 'running') throw new ImageWorkflowError('image_workflow_already_running', 409);
+    const edge = edges.find((candidate) => (
+      (candidate.sourceNodeId === workflow.id && candidate.targetNodeId === dto.input.targetNodeId)
+      || (candidate.targetNodeId === workflow.id && candidate.sourceNodeId === dto.input.targetNodeId)
+    ));
+    if (!edge) return { disconnected: false, workflow: await this.read(dto.workspaceId, workflow.id) };
+    await workspaceRepository.deleteEdge(edge.id);
+    await workspaceRepository.updateNode(workflow.id, {
+      payload: nextPayload(payload, {}, {
+        contextOrder: (payload.contextOrder ?? []).filter((id) => id !== dto.input.targetNodeId),
+        referenceOrder: (payload.referenceOrder ?? []).filter((id) => id !== dto.input.targetNodeId),
+      }),
+    });
+    broadcast(dto.workspaceId, workflow.id);
+    return { disconnected: true, edgeId: edge.id, workflow: await this.read(dto.workspaceId, workflow.id) };
+  }
+
+  async addReference(dto: AddImageWorkflowReferenceDto) {
+    const { workflow, nodes, edges } = await this.requireControl(dto.workspaceId, dto.nodeId, dto.actorNodeId);
+    const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
+    if (payload.status === 'running') throw new ImageWorkflowError('image_workflow_already_running', 409);
+    const currentReferences = connectedNodes(workflow, nodes, edges).map(({ node }) => node).filter((node) => (
+      node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id
+    ));
+    const [file, inspection, workspace] = await Promise.all([
+      filesystemService.readBinary(dto.workspaceId, dto.input.path).catch(() => null),
+      filesystemService.inspect(dto.workspaceId, dto.input.path).catch(() => null),
+      workspaceRepository.getWorkspace(dto.workspaceId),
+    ]);
+    if (!file || !inspection || !workspace) throw new ImageWorkflowError('image_workflow_reference_unavailable');
+    if (file.data.length > MAX_REFERENCE_BYTES) throw new ImageWorkflowError('image_workflow_reference_too_large');
+    if (!imageMime(file.data)) throw new ImageWorkflowError('image_workflow_reference_format_invalid');
+    const path = relativeWorkspacePath(workspace, inspection.path);
+    const existing = nodes.find((node) => node.type === 'image' && (node.payload as ImageNodePayload).path === path);
+    const alreadyConnected = existing && currentReferences.some((node) => node.id === existing.id);
+    if (!alreadyConnected && currentReferences.length >= MAX_REFERENCES) throw new ImageWorkflowError('image_workflow_too_many_references');
+    const reference = existing ?? await workspaceRepository.createNode({
+      workspaceId: dto.workspaceId,
+      type: 'image',
+      title: dto.input.title ?? basename(path),
+      x: workflow.x - 352,
+      y: workflow.y + currentReferences.length * 272,
+      width: 280,
+      height: 240,
+      zIndex: workflow.zIndex,
+      floorId: workflow.floorId,
+      payload: { path } satisfies ImageNodePayload,
+    });
+    const result = await this.connect(new ConnectImageWorkflowNodeDto(
+      dto.workspaceId,
+      dto.nodeId,
+      { targetNodeId: reference.id, order: dto.input.order, from: dto.input.from },
+      dto.actorNodeId,
+    ));
+    return { reference: { nodeId: reference.id, title: reference.title, path }, ...result };
+  }
+
+  async remove(workspaceId: string, nodeId: string, actorNodeId: string) {
+    const { workflow } = await this.requireControl(workspaceId, nodeId, actorNodeId);
+    const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
+    if (payload.activeRun && payload.status === 'running') await this.finishFailure(workspaceId, nodeId, payload.activeRun.id, 'image_gen_cancelled');
+    await workspaceRepository.deleteNode(nodeId);
+    broadcast(workspaceId, nodeId);
+    return { deleted: true, nodeId };
+  }
+
   async runSaved(workspaceId: string, nodeId: string, input: BridgeRunImageWorkflowInput, actorNodeId: string | null) {
     if (!actorNodeId) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
     const node = await workspaceRepository.getNode(nodeId);
@@ -187,7 +377,10 @@ export class ImageWorkflowService {
     }
 
     const connected = connectedNodes(workflow, nodes, edges);
-    const contexts = connected.map(({ node }) => node).filter((node) => node.type === 'note').slice(0, 12);
+    const contexts = orderedNodes(
+      connected.map(({ node }) => node).filter((node) => node.type === 'note'),
+      existingPayload.contextOrder,
+    ).slice(0, 12);
     const connectedExecutors = connected.map(({ node }) => node).filter((node) => (
       node.type === 'terminal' && (node.payload as TerminalNodePayload).provider === 'codex'
     ));
@@ -198,9 +391,12 @@ export class ImageWorkflowService {
     const executor = agents.find((agent) => agent.nodeId === executorNode.id);
     if (!executor?.sessionAlive) throw new ImageWorkflowError('image_workflow_executor_offline', 409);
 
-    const imageNodes = connected.map(({ node }) => node).filter((node) => (
-      node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id
-    ));
+    const imageNodes = orderedNodes(
+      connected.map(({ node }) => node).filter((node) => (
+        node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id
+      )),
+      existingPayload.referenceOrder,
+    );
     if (imageNodes.length > MAX_REFERENCES) throw new ImageWorkflowError('image_workflow_too_many_references');
 
     const references: Array<{ node: CanvasNode; data: Uint8Array; path: string }> = [];
@@ -344,7 +540,8 @@ export class ImageWorkflowService {
     };
   }
 
-  async cancel(workspaceId: string, nodeId: string) {
+  async cancel(workspaceId: string, nodeId: string, actorNodeId?: string | null) {
+    if (actorNodeId) await this.requireControl(workspaceId, nodeId, actorNodeId);
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId || node.type !== 'imageWorkflow') throw new ImageWorkflowError('image_workflow_not_found', 404);
     const payload = (node.payload ?? {}) as ImageWorkflowNodePayload;
@@ -401,9 +598,12 @@ export class ImageWorkflowService {
       nodeId: node.id, title: node.title ?? type,
       ...(type === 'terminal' ? { provider: (node.payload as TerminalNodePayload).provider ?? null } : {}),
     }));
-    const references = connected.map(({ node }) => node).filter((node) => (
-      node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id
-    )).map((node) => ({ nodeId: node.id, title: node.title ?? 'Image', path: (node.payload as ImageNodePayload).path ?? null }));
+    const references = orderedNodes(
+      connected.map(({ node }) => node).filter((node) => (
+        node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId !== workflow.id
+      )),
+      payload.referenceOrder,
+    ).map((node) => ({ nodeId: node.id, title: node.title ?? 'Image', path: (node.payload as ImageNodePayload).path ?? null }));
     const outputs = connected.map(({ node }) => node).filter((node) => (
       node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId === workflow.id
     )).map((node) => ({ nodeId: node.id, title: node.title ?? 'Image', path: (node.payload as ImageNodePayload).path ?? null }));
@@ -416,10 +616,39 @@ export class ImageWorkflowService {
         outputDirectory: payload.outputDirectory ?? 'generated/images', filePrefix: payload.filePrefix ?? 'orkestrai-image',
       },
       status: payload.status ?? 'idle',
-      contexts: summarize('note'), references, executors: summarize('terminal'), outputs,
+      contexts: orderedNodes(
+        connected.map(({ node }) => node).filter((node) => node.type === 'note'),
+        payload.contextOrder,
+      ).map((node) => ({ nodeId: node.id, title: node.title ?? 'Note' })),
+      references, executors: summarize('terminal'), outputs,
       history: (payload.history ?? []).slice(-HISTORY_LIMIT),
       activeExecution: workspace && payload.activeRun ? this.executionSpec(workspace, workflow, payload.activeRun, agents) : null,
     };
+  }
+
+  private async requireCodexActor(workspaceId: string, actorNodeId: string) {
+    const [node, agents] = await Promise.all([workspaceRepository.getNode(actorNodeId), bridgeService.listAgents(workspaceId)]);
+    const actor = agents.find((agent) => agent.nodeId === actorNodeId);
+    if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal' || actor?.provider !== 'codex') {
+      throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    }
+    return node;
+  }
+
+  private async requireControl(workspaceId: string, nodeId: string, actorNodeId: string) {
+    const [workflow, actor, nodes, edges] = await Promise.all([
+      workspaceRepository.getNode(nodeId),
+      this.requireCodexActor(workspaceId, actorNodeId),
+      workspaceRepository.listNodes(workspaceId),
+      workspaceRepository.listEdges(workspaceId),
+    ]);
+    if (!workflow || workflow.workspaceId !== workspaceId || workflow.type !== 'imageWorkflow') throw new ImageWorkflowError('image_workflow_not_found', 404);
+    const connected = edges.some((edge) => (
+      (edge.sourceNodeId === workflow.id && edge.targetNodeId === actor.id)
+      || (edge.targetNodeId === workflow.id && edge.sourceNodeId === actor.id)
+    ));
+    if (!connected) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    return { workflow, actor, nodes, edges };
   }
 }
 

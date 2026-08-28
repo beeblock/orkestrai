@@ -710,6 +710,9 @@ export type ImageWorkflowNodePayload = {
   transparentBackground?: boolean;
   outputDirectory?: string;
   filePrefix?: string;
+  /** Ordem explicita dos contextos e referencias conectados. */
+  contextOrder?: string[];
+  referenceOrder?: string[];
   status?: 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   activeRunId?: string | null;
   activeRun?: ImageWorkflowActiveRun | null;
