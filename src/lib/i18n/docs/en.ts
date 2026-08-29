@@ -731,7 +731,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Aug 27, 2026 · 0.22.0',
+      date: 'Aug 28, 2026 · 0.22.0',
       title: 'Orkestrai 0.22.0: native image workflows for people and agents',
       summary: 'Build reusable image-generation graphs from briefs, references, and agents without leaving the workspace.',
       items: [
