@@ -1713,6 +1713,11 @@ export const TOURS_ES: Tour[] = [
         body: 'Abre Contratos para conectar endpoints del backend, llamadas del frontend, clientes generados, schemas OpenAPI, prefijos de gateway y requests vivos del Cliente de API. Resuelve llamadas sin correspondencia y conflictos de ruta entre proyectos antes de cambiar cualquiera de los lados. Los agentes usan code_graph_contracts para el mismo mapa limitado.',
       },
       {
+        id: 'inspect-quality-architecture',
+        title: 'Revisa evidencia de calidad y arquitectura',
+        body: 'Abre Calidad para inspeccionar duplicados, ciclos de imports, acoplamiento, límites inferidos entre capas, código excesivo, ejecución sensible para la seguridad y posible código muerto con confianza explícita. Los recursos de flujo de datos estático exponen solo identificadores seguros de entorno, archivos, rutas de red, tablas de base de datos y canales IPC. Trata los hallazgos como evidencia para revisión, no como veredictos automáticos. Los agentes usan code_graph_quality para el mismo análisis limitado.',
+      },
+      {
         id: 'inspect-change-impact',
         title: 'Inspecciona cambios activos',
         body: 'Abre Cambios para proyectar el workspace y los Pisos activos en el mismo grafo. Los símbolos rojos cambiaron directamente, las rutas ámbar indican pruebas probables y el panel lateral muestra archivos o símbolos dependientes compartidos entre Pisos. Los agentes reciben la misma evidencia limitada con code_graph_changes.',

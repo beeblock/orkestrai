@@ -763,6 +763,43 @@ export class CodeGraphRepository implements CodeGraphStore {
     };
   }
 
+  async analysisGraph(workspaceId: string, requestedNodeLimit = 30_000, requestedEdgeLimit = 150_000): Promise<CodeGraphSubgraph> {
+    const nodeLimit = Math.min(Math.max(requestedNodeLimit, 1_000), 40_000);
+    const edgeLimit = Math.min(Math.max(requestedEdgeLimit, 5_000), 180_000);
+    const nodeRows = await Connection.raw(`
+      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+      FROM agent_code_graph_symbols s
+      JOIN agent_code_graph_projects p ON p.id = s.project_id
+      LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
+      WHERE s.workspace_id = ?
+        AND s.revision_id = p.current_revision_id
+      ORDER BY p.name, f.path, s.start_line, s.kind
+      LIMIT ?
+    `, [workspaceId, nodeLimit + 1]) as RawRow[];
+    const nodes = nodeRows.slice(0, nodeLimit).map(mapSymbol);
+    const visible = new Set(nodes.map((node) => node.id));
+    const edgeRows = await Connection.raw(`
+      SELECT e.*, f.path AS site_path
+      FROM agent_code_graph_edges e
+      JOIN agent_code_graph_projects p ON p.id = e.project_id
+      LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
+      WHERE e.workspace_id = ?
+        AND e.revision_id = p.current_revision_id
+      ORDER BY e.project_id, e.kind, e.source_symbol_id
+      LIMIT ?
+    `, [workspaceId, edgeLimit + 1]) as RawRow[];
+    const edges = edgeRows.slice(0, edgeLimit)
+      .map(mapEdge)
+      .filter((edge) => visible.has(edge.sourceSymbolId) && visible.has(edge.targetSymbolId));
+    return {
+      nodes,
+      edges,
+      truncated: nodeRows.length > nodeLimit || edgeRows.length > edgeLimit,
+      depth: 0,
+      centerSymbolId: null,
+    };
+  }
+
   async overview(workspaceId: string, projectId?: string, requestedLimit = 220): Promise<CodeGraphSubgraph> {
     const limit = Math.min(Math.max(requestedLimit, 20), 400);
     const bindings: unknown[] = [workspaceId];

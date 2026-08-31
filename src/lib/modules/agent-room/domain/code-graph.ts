@@ -3,14 +3,15 @@ export type CodeGraphLanguage = (typeof CODE_GRAPH_LANGUAGES)[number];
 
 export const CODE_GRAPH_SYMBOL_KINDS = [
   'module', 'namespace', 'class', 'interface', 'type', 'enum', 'function',
-  'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'external',
+  'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'resource', 'external',
 ] as const;
 export type CodeGraphSymbolKind = (typeof CODE_GRAPH_SYMBOL_KINDS)[number];
 
 export const CODE_GRAPH_EDGE_KINDS = [
   'contains', 'defines', 'imports', 'exports', 'calls', 'references',
   'instantiates', 'inherits', 'implements', 'handles', 'requests', 'matches',
-  'validates', 'generatedFrom', 'routesTo',
+  'validates', 'generatedFrom', 'routesTo', 'reads', 'writes', 'queries',
+  'usesEnv', 'sends', 'receives',
 ] as const;
 export type CodeGraphEdgeKind = (typeof CODE_GRAPH_EDGE_KINDS)[number];
 
@@ -227,6 +228,54 @@ export type CodeGraphContractSnapshot = {
   conflicts: CodeGraphContractConflict[];
   unmatchedRequestIds: string[];
   unmatchedEndpointIds: string[];
+  graph: CodeGraphSubgraph;
+  truncated: boolean;
+};
+
+export const CODE_GRAPH_FINDING_KINDS = [
+  'duplicate', 'cycle', 'coupling', 'boundary', 'smell', 'security', 'dead-code',
+] as const;
+export type CodeGraphFindingKind = (typeof CODE_GRAPH_FINDING_KINDS)[number];
+
+export const CODE_GRAPH_FINDING_RULES = [
+  'duplicate-structure', 'import-cycle', 'high-coupling', 'layer-boundary',
+  'long-symbol', 'oversized-module', 'security-sensitive-execution', 'unreferenced-symbol',
+] as const;
+export type CodeGraphFindingRule = (typeof CODE_GRAPH_FINDING_RULES)[number];
+
+export type CodeGraphFinding = {
+  id: string;
+  kind: CodeGraphFindingKind;
+  rule: CodeGraphFindingRule;
+  severity: 'info' | 'warning' | 'error';
+  confidence: number;
+  symbolIds: string[];
+  projectNames: string[];
+  paths: string[];
+  metrics: Record<string, string | number | string[]>;
+};
+
+export type CodeGraphQualityOptions = {
+  limit?: number;
+  includeGraph?: boolean;
+};
+
+export type CodeGraphQualitySnapshot = {
+  generatedAt: string;
+  findings: CodeGraphFinding[];
+  counts: {
+    findings: number;
+    errors: number;
+    warnings: number;
+    duplicates: number;
+    cycles: number;
+    deadCode: number;
+  };
+  dataFlow: {
+    resources: CodeGraphSymbol[];
+    edges: CodeGraphEdge[];
+    byType: Record<string, number>;
+  };
   graph: CodeGraphSubgraph;
   truncated: boolean;
 };

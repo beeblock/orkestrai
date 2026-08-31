@@ -6,8 +6,9 @@ import type {
   CodeGraphChangeInput,
   CodeGraphHandoffInput,
   CodeGraphContractInput,
+  CodeGraphQualityInput,
 } from '../../contracts/schemas/codeGraphSchemas.js';
-import type { CodeGraphChangeOptions, CodeGraphContractOptions, CodeGraphHandoffOptions, CodeGraphIndexOptions, CodeGraphSearchOptions, CodeGraphTraversalOptions } from '../../domain/code-graph.js';
+import type { CodeGraphChangeOptions, CodeGraphContractOptions, CodeGraphHandoffOptions, CodeGraphIndexOptions, CodeGraphQualityOptions, CodeGraphSearchOptions, CodeGraphTraversalOptions } from '../../domain/code-graph.js';
 
 export class IndexCodeGraphDto {
   constructor(
@@ -95,5 +96,16 @@ export class CodeGraphContractDto {
 
   static from(workspaceId: string, input: CodeGraphContractInput): CodeGraphContractDto {
     return new CodeGraphContractDto(workspaceId, input);
+  }
+}
+
+export class CodeGraphQualityDto {
+  constructor(
+    public readonly workspaceId: string,
+    public readonly options: CodeGraphQualityOptions,
+  ) {}
+
+  static from(workspaceId: string, input: CodeGraphQualityInput): CodeGraphQualityDto {
+    return new CodeGraphQualityDto(workspaceId, input);
   }
 }

@@ -18,6 +18,11 @@ export function normalizeCodeGraphContractPath(value: unknown): string | null {
     .replace(/\[\[?[^\]]+\]?\]/g, '{param}')
     .replace(/\{\{[^{}]+\}\}|\$\{[^{}]+\}|:[A-Za-z_$][\w$-]*|\{[^{}]+\}/g, '{param}')
     .replace(/\/{2,}/g, '/');
+  path = path.split('/').map((segment) => {
+    if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(segment)) return '{param}';
+    if (segment.length >= 24 && /[A-Za-z]/.test(segment) && /\d/.test(segment) && /^[A-Za-z0-9_%+=.-]+$/.test(segment)) return '{opaque}';
+    return segment;
+  }).join('/');
   if (!path.startsWith('/')) path = `/${path}`;
   if (path.length > 1) path = path.replace(/\/+$/, '');
   return path.slice(0, 500) || '/';

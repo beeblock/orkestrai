@@ -1,11 +1,12 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { ChangeCodeGraphDto, CodeGraphContractDto, CodeGraphHandoffDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
+import { ChangeCodeGraphDto, CodeGraphContractDto, CodeGraphHandoffDto, CodeGraphQualityDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
 import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '../../../application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '../../../application/services/CodeGraphContractService.js';
-import { ChangeCodeGraphRequest, CodeGraphContractRequest, CodeGraphHandoffRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
+import { codeGraphQualityService } from '../../../application/services/CodeGraphQualityService.js';
+import { ChangeCodeGraphRequest, CodeGraphContractRequest, CodeGraphHandoffRequest, CodeGraphQualityRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
   async status(event: RequestEvent) {
@@ -92,6 +93,16 @@ export class CodeGraphController extends Controller {
       return this.json({ data: await codeGraphContractService.analyze(dto.workspaceId, dto.options) });
     } catch (error) {
       return this.failure(error, 'Could not analyze API contracts.');
+    }
+  }
+
+  async quality(event: RequestEvent) {
+    try {
+      const input = await CodeGraphQualityRequest.validate(event);
+      const dto = CodeGraphQualityDto.from(event.params.id, input);
+      return this.json({ data: await codeGraphQualityService.analyze(dto.workspaceId, dto.options) });
+    } catch (error) {
+      return this.failure(error, 'Could not analyze code quality.');
     }
   }
 

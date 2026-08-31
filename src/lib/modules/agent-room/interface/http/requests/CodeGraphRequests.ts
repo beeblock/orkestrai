@@ -7,6 +7,7 @@ import {
   codeGraphChangeSchema,
   codeGraphHandoffSchema,
   codeGraphContractSchema,
+  codeGraphQualitySchema,
   type CodeGraphIndexInput,
   type CodeGraphSearchInput,
   type CodeGraphTraversalInput,
@@ -14,6 +15,7 @@ import {
   type CodeGraphChangeInput,
   type CodeGraphHandoffInput,
   type CodeGraphContractInput,
+  type CodeGraphQualityInput,
 } from '../../../contracts/schemas/codeGraphSchemas.js';
 
 abstract class AuthorizedRequest extends FormRequest {
@@ -55,4 +57,9 @@ export class CodeGraphHandoffRequest extends AuthorizedRequest {
 export class CodeGraphContractRequest extends AuthorizedRequest {
   rules() { return codeGraphContractSchema; }
   passedValidation(data: unknown): CodeGraphContractInput { return codeGraphContractSchema.parse(data); }
+}
+
+export class CodeGraphQualityRequest extends AuthorizedRequest {
+  rules() { return codeGraphQualitySchema; }
+  passedValidation(data: unknown): CodeGraphQualityInput { return codeGraphQualitySchema.parse(data); }
 }

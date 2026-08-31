@@ -25,7 +25,7 @@ import { codeGraphRepository } from '../../infrastructure/repositories/CodeGraph
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 
 const execFileAsync = promisify(execFile);
-const INDEXER_VERSION = 2;
+const INDEXER_VERSION = 3;
 const PARSE_CONCURRENCY = 4;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
 
@@ -277,7 +277,7 @@ export class CodeGraphIndexService {
         awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 100 },
       });
       const changed = (path: string) => {
-        if (!/\.(?:[cm]?[jt]sx?|svelte|php)$/i.test(path)) return;
+        if (!/\.(?:[cm]?[jt]sx?|svelte|php|json|ya?ml)$/i.test(path)) return;
         const prior = this.state.staleTimers.get(project.id);
         if (prior) clearTimeout(prior);
         this.state.staleTimers.set(project.id, setTimeout(() => {

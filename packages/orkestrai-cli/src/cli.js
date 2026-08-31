@@ -41,7 +41,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
-  orkestrai graph status | graph index [--project <uuid>] | graph changes [--depth <1-3>] [--limit <n>] | graph contracts [--limit <n>] [--graph] | graph handoff <review|task> <scopeId> <titulo> [--locale en|pt-BR|es] | graph search <consulta> [--project <uuid>] [--kinds <csv>] [--limit <n>] | graph symbol <symbolId> | graph neighbors <symbolId> [--direction incoming|outgoing|both] [--depth <1-4>] [--kinds <csv>] [--limit <n>] [--json]
+  orkestrai graph status | graph index [--project <uuid>] | graph changes [--depth <1-3>] [--limit <n>] | graph contracts [--limit <n>] [--graph] | graph quality [--limit <n>] [--graph] | graph handoff <review|task> <scopeId> <titulo> [--locale en|pt-BR|es] | graph search <consulta> [--project <uuid>] [--kinds <csv>] [--limit <n>] | graph symbol <symbolId> | graph neighbors <symbolId> [--direction incoming|outgoing|both] [--depth <1-4>] [--kinds <csv>] [--limit <n>] [--json]
   orkestrai memory list [consulta] [--history] [--json]
   orkestrai memory add <titulo> --content <texto> --source-label <fonte> [--kind fact|decision|preference|constraint|reference|lesson] [--source-type user|note|task|message|file|url|git|review|council|agent] [--source-id <id>] [--source-uri <path-ou-url>] [--source-excerpt <trecho>] [--tags <csv>] [--confidence <0-100>] [--pin]
   orkestrai memory revise <id> --title <titulo> --content <texto> --kind <tipo> --sources <json> --base-revision <n> --base-updated-at <iso>
@@ -405,6 +405,18 @@ export async function run(argv, options = {}) {
         }
         return 0;
       }
+      if (action === 'quality') {
+        const params = new URLSearchParams();
+        if (flags.limit) params.set('limit', String(flags.limit));
+        params.set('includeGraph', flags.graph ? 'true' : 'false');
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/quality?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          out(`Quality: ${data.counts.findings} findings · ${data.counts.errors} errors · ${data.counts.warnings} warnings · ${data.dataFlow.resources.length} resources${data.truncated ? ' · truncated' : ''}`);
+          for (const item of data.findings.slice(0, 20)) out(`  ${item.severity} ${item.rule}: ${item.paths.join(', ') || item.projectNames.join(', ')} (${item.confidence}%)`);
+        }
+        return 0;
+      }
       if (action === 'search') {
         const query = [value, ...queryParts].filter(Boolean).join(' ').trim();
         if (!query) throw new Error('Usage: orkestrai graph search <query> [--kinds <csv>]');
@@ -437,7 +449,7 @@ export async function run(argv, options = {}) {
         }
         return 0;
       }
-      throw new Error('Usage: orkestrai graph <status|index|changes|contracts|handoff|search|symbol|neighbors> ...');
+      throw new Error('Usage: orkestrai graph <status|index|changes|contracts|quality|handoff|search|symbol|neighbors> ...');
     }
     case 'memory': {
       const [action, idOrTitle, ...values] = rest;

@@ -53,12 +53,13 @@ import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectIm
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
-import { codeGraphChangeSchema, codeGraphContractSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { codeGraphChangeSchema, codeGraphContractSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema, codeGraphSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
 import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '$lib/modules/agent-room/application/services/CodeGraphContractService.js';
+import { codeGraphQualityService } from '$lib/modules/agent-room/application/services/CodeGraphQualityService.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -181,6 +182,16 @@ export class BridgeController extends Controller {
       return this.json({ data: await codeGraphContractService.analyze(workspace.id, input) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to analyze API contracts.');
+    }
+  }
+
+  async codeGraphQuality(event: any) {
+    try {
+      const input = codeGraphQualitySchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphQualityService.analyze(workspace.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to analyze code quality.');
     }
   }
 

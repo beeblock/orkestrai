@@ -68,6 +68,28 @@ function externalSymbol(identity: string, name: string): ParsedCodeSymbol {
   };
 }
 
+function resourceSymbol(identity: string, name: string): ParsedCodeSymbol {
+  const fingerprint = hash(identity);
+  const [, resourceType = 'unknown', ...parts] = identity.split(':');
+  return {
+    key: `resource:${fingerprint}`,
+    parentKey: null,
+    kind: 'resource',
+    name: name.slice(0, 300),
+    qualifiedName: identity.slice(0, 1_000),
+    signature: null,
+    documentation: null,
+    modifiers: [],
+    metadata: { resourceType, identity: parts.join(':').slice(0, 500) },
+    exported: false,
+    startLine: null,
+    startColumn: null,
+    endLine: null,
+    endColumn: null,
+    fingerprint,
+  };
+}
+
 export class CodeGraphResolver {
   resolve(files: ParsedCodeFile[]): ResolvedCodeGraph {
     const symbols = files.flatMap((file) => file.symbols);
@@ -213,14 +235,18 @@ export class CodeGraphResolver {
   }
 
   private getExternal(reference: ParsedCodeReference, cache: Map<string, ParsedCodeSymbol>): ParsedCodeSymbol {
-    const identity = reference.targetModule
+    const identity = reference.targetQualifiedName?.startsWith('resource:')
+      ? reference.targetQualifiedName
+      : reference.targetModule
       ? `module:${reference.targetModule}`
       : reference.targetQualifiedName
         ? `symbol:${reference.targetQualifiedName}`
         : `symbol:${reference.targetName}`;
     let symbol = cache.get(identity);
     if (!symbol) {
-      symbol = externalSymbol(identity, reference.targetName);
+      symbol = identity.startsWith('resource:')
+        ? resourceSymbol(identity, reference.targetName)
+        : externalSymbol(identity, reference.targetName);
       cache.set(identity, symbol);
     }
     return symbol;

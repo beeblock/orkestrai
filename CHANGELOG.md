@@ -37,6 +37,13 @@ pt-BR, English, and Spanish translations.
   persisting credentials or exposing request hosts and query values. Agents use
   the same bounded map through `code_graph_contracts` or
   `orkestrai graph contracts`.
+- The Quality view surfaces bounded, confidence-scored evidence for structural
+  duplication, import cycles, high coupling, inferred layer violations,
+  oversized code, security-sensitive execution, and possible dead code. It
+  also maps static environment, file, network-path, database-table, and IPC
+  flows without persisting secret values, payloads, hosts, query strings, or
+  source bodies. Agents use the same analysis through `code_graph_quality` or
+  `orkestrai graph quality`.
 
 ### Fixed
 

@@ -11,6 +11,7 @@ import type {
 } from '../../domain/code-graph.js';
 import type { ParsedCodeFile, ParsedCodeReference, ParsedCodeSymbol, ScannedCodeFile } from './types.js';
 import { codeGraphContractExtractor } from './CodeGraphContractExtractor.js';
+import { codeGraphDataFlowExtractor } from './CodeGraphDataFlowExtractor.js';
 
 const require = createRequire(import.meta.url);
 const MAX_AST_NODES = 250_000;
@@ -112,6 +113,22 @@ function declarationDocumentation(node: SyntaxNode, source: string): string | nu
   return documentation || null;
 }
 
+function structuralProfile(node: SyntaxNode): { fingerprint: string; nodeCount: number } | null {
+  const ignored = new Set(['comment', 'identifier', 'property_identifier', 'type_identifier', 'name']);
+  const tokens: string[] = [];
+  let nodeCount = 0;
+  const visitNode = (current: SyntaxNode, depth: number) => {
+    if (depth > 64 || nodeCount >= 4_000 || ignored.has(current.type) || current.type.includes('comment')) return;
+    nodeCount += 1;
+    const type = /(?:string|number|integer|float|boolean|null|literal)/.test(current.type) ? 'literal' : current.type;
+    tokens.push(`+${type}`);
+    for (const child of current.namedChildren) visitNode(child, depth + 1);
+    tokens.push(`-${type}`);
+  };
+  visitNode(node.childForFieldName('body') ?? node, 0);
+  return nodeCount >= 12 ? { fingerprint: hash(tokens.join('|')), nodeCount } : null;
+}
+
 function targetFromCall(node: SyntaxNode): { name: string; qualified: string; receiver: string | null } | null {
   const callable = node.childForFieldName('function')
     ?? node.childForFieldName('name')
@@ -168,6 +185,7 @@ function addSymbol(
   const start = point(node, context.offset);
   const end = point(node, context.offset, true);
   const fingerprint = hash(`${context.path}:${countKey}:${occurrence}`);
+  const profile = ['function', 'method', 'class'].includes(kind) ? structuralProfile(signatureNode) : null;
   const symbol: ParsedCodeSymbol = {
     key: `symbol:${fingerprint}`,
     parentKey,
@@ -177,7 +195,10 @@ function addSymbol(
     signature: declarationSignature(signatureNode, context.source),
     documentation: declarationDocumentation(node, context.source),
     modifiers: declarationModifiers(node),
-    metadata: {},
+    metadata: {
+      lineSpan: Math.max(1, end.line - start.line + 1),
+      ...(profile ? { structureFingerprint: profile.fingerprint, structureNodeCount: profile.nodeCount } : {}),
+    },
     exported,
     startLine: start.line,
     startColumn: start.column,
@@ -436,6 +457,7 @@ export class CodeGraphParser {
     const contracts = codeGraphContractExtractor.extract(file, symbols);
     symbols.push(...contracts.symbols);
     references.push(...contracts.references);
+    references.push(...codeGraphDataFlowExtractor.extract(file, symbols));
     diagnostics.push(...contracts.diagnostics);
 
     return {

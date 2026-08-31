@@ -96,6 +96,7 @@ export interface CodeGraphStore {
   symbol(workspaceId: string, symbolId: string): Promise<CodeGraphSymbol | null>;
   symbolsForPaths(workspaceId: string, projectId: string, paths: string[], limit?: number): Promise<CodeGraphSymbol[]>;
   contractGraph(workspaceId: string, limit?: number): Promise<CodeGraphSubgraph>;
+  analysisGraph(workspaceId: string, nodeLimit?: number, edgeLimit?: number): Promise<CodeGraphSubgraph>;
   overview(workspaceId: string, projectId?: string, limit?: number): Promise<CodeGraphSubgraph>;
   subgraph(workspaceId: string, options: CodeGraphTraversalOptions): Promise<CodeGraphSubgraph>;
   impact(workspaceId: string, symbolIds: string[], depth?: number, limit?: number): Promise<CodeGraphSubgraph>;

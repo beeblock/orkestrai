@@ -66,7 +66,12 @@ common credentials redacted; normal agent output is not persisted.
   backend routes, frontend calls, generated clients, OpenAPI/Swagger schemas,
   gateway prefixes, and live API Client requests across approved repositories,
   while flagging unmatched calls and cross-project conflicts without retaining
-  request hosts, query values, or credentials.
+  request hosts, query values, or credentials. Its Quality view adds bounded,
+  confidence-scored evidence for structural duplication, import cycles,
+  coupling, layered-boundary violations, oversized code, security-sensitive
+  execution, and possible dead code. Static environment, file, network-path,
+  database-table, and IPC flows appear as resource nodes without retaining
+  secret values, payloads, hosts, query strings, or source bodies.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,

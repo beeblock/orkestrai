@@ -8,6 +8,7 @@ import { codeGraphIndexService } from '$lib/modules/agent-room/application/servi
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '$lib/modules/agent-room/application/services/CodeGraphContractService.js';
+import { codeGraphQualityService } from '$lib/modules/agent-room/application/services/CodeGraphQualityService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
 import { codeGraphParser } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphParser.js';
@@ -263,6 +264,80 @@ describe('CodeGraphIndexService', () => {
         sourceSymbolId: gatewayMatch?.gatewaySymbolId,
         targetSymbolId: gatewayMatch?.endpointSymbolId,
       }),
+    ]));
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('reports bounded quality evidence and safe data-flow resources', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-quality-'));
+    directories.push(directory);
+    await mkdir(join(directory, 'src', 'domain'), { recursive: true });
+    await mkdir(join(directory, 'src', 'infrastructure'), { recursive: true });
+    await writeFile(join(directory, 'package.json'), '{"name":"quality-test"}\n');
+    await writeFile(join(directory, 'src', 'a.ts'), `
+      import { beta } from './b';
+      export function alpha(value: number) {
+        const doubled = value * 2;
+        const adjusted = doubled + 1;
+        if (adjusted > 10) return adjusted;
+        return adjusted * 3;
+      }
+      export const callBeta = () => beta(1);
+    `);
+    await writeFile(join(directory, 'src', 'b.ts'), `
+      import { alpha } from './a';
+      export function beta(input: number) {
+        const scaled = input * 7;
+        const shifted = scaled + 9;
+        if (shifted > 40) return shifted;
+        return shifted * 5;
+      }
+      export const callAlpha = () => alpha(1);
+    `);
+    await writeFile(join(directory, 'src', 'infrastructure', 'db.ts'), 'export const storage = { ready: true };\n');
+    await writeFile(join(directory, 'src', 'domain', 'use-case.ts'), `
+      import { storage } from '../infrastructure/db';
+      export function domainUseCase() { return storage.ready; }
+    `);
+    await writeFile(join(directory, 'src', 'flows.ts'), `
+      export async function synchronize() {
+        const key = process.env.API_TOKEN;
+        const config = readFileSync('config/app.json');
+        const response = await fetch('https://private.example/api/users/supersecrettoken1234567890?token=must-not-leak');
+        const users = db.table('users');
+        await ipcRenderer.invoke('users:sync');
+        return { key, config, response, users };
+      }
+      function abandonedFeature() {
+        const first = 1;
+        const second = first + 2;
+        return second;
+      }
+      export function riskyExpression(source: string) { return eval(source); }
+    `);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Quality map', workingDir: directory });
+
+    await codeGraphIndexService.index(workspace.id);
+    const quality = await codeGraphQualityService.analyze(workspace.id, { includeGraph: true, limit: 500 });
+    const rules = new Set(quality.findings.map((item) => item.rule));
+
+    expect(rules).toContain('duplicate-structure');
+    expect(rules).toContain('import-cycle');
+    expect(rules).toContain('layer-boundary');
+    expect(rules).toContain('security-sensitive-execution');
+    expect(rules).toContain('unreferenced-symbol');
+    expect(quality.dataFlow.byType).toMatchObject({ environment: 1, file: 1, network: 1, database: 1, ipc: 1 });
+    expect(quality.graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'usesEnv' }),
+      expect.objectContaining({ kind: 'reads' }),
+      expect.objectContaining({ kind: 'queries' }),
+      expect.objectContaining({ kind: 'sends' }),
+    ]));
+    expect(JSON.stringify(quality)).not.toContain('private.example');
+    expect(JSON.stringify(quality)).not.toContain('must-not-leak');
+    expect(JSON.stringify(quality)).not.toContain('supersecrettoken1234567890');
+    expect(quality.dataFlow.resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ qualifiedName: 'resource:network:/api/users/{opaque}' }),
     ]));
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });

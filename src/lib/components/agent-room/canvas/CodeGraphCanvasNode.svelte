@@ -17,6 +17,7 @@
     Network,
     RefreshCw,
     Search,
+    ShieldCheck,
     Waypoints,
     X,
   } from '@lucide/svelte';
@@ -31,6 +32,8 @@
     CodeGraphChangeScope,
     CodeGraphChangedFile,
     CodeGraphHandoffResult,
+    CodeGraphFinding,
+    CodeGraphQualitySnapshot,
     CodeGraphSnapshot,
     CodeGraphSubgraph,
     CodeGraphSymbol,
@@ -54,6 +57,7 @@
   let graph = $state<CodeGraphSubgraph | null>(null);
   let changes = $state<CodeGraphChangeIntelligence | null>(null);
   let contracts = $state<CodeGraphContractSnapshot | null>(null);
+  let quality = $state<CodeGraphQualitySnapshot | null>(null);
   let selectedSymbol = $state<CodeGraphSymbol | null>(null);
   let results = $state<CodeGraphSymbol[]>([]);
   let query = $state('');
@@ -64,8 +68,9 @@
   let indexing = $state(false);
   let changeLoading = $state(false);
   let contractLoading = $state(false);
+  let qualityLoading = $state(false);
   let handoffBusy = $state<string | null>(null);
-  let viewMode = $state<'overview' | 'changes' | 'contracts'>('overview');
+  let viewMode = $state<'overview' | 'changes' | 'contracts' | 'quality'>('overview');
   let error = $state('');
   let graphHost: HTMLDivElement;
   let renderer: { kill: () => void; on: (event: string, handler: (payload: { node: string }) => void) => void } | null = null;
@@ -107,6 +112,7 @@
     if (kind === 'apiRequest') return '#06b6d4';
     if (kind === 'schema') return '#a855f7';
     if (kind === 'gateway') return '#f97316';
+    if (kind === 'resource') return '#ec4899';
     if (kind === 'function' || kind === 'method') return '#10b981';
     if (kind === 'external') return '#94a3b8';
     return '#f59e0b';
@@ -127,6 +133,7 @@
       case 'apiRequest': return m['code_graph.kind_api_request']();
       case 'schema': return m['code_graph.kind_schema']();
       case 'gateway': return m['code_graph.kind_gateway']();
+      case 'resource': return m['code_graph.kind_resource']();
       case 'external': return m['code_graph.kind_external']();
     }
   }
@@ -169,6 +176,10 @@
             : edge.kind === 'matches' || edge.kind === 'generatedFrom' || edge.kind === 'requests' ? '#06b6d4'
               : edge.kind === 'validates' ? '#a855f7'
                 : edge.kind === 'routesTo' ? '#f97316'
+                  : edge.kind === 'reads' || edge.kind === 'writes' ? '#f59e0b'
+                    : edge.kind === 'queries' ? '#e879f9'
+                      : edge.kind === 'usesEnv' ? '#f43f5e'
+                        : edge.kind === 'sends' || edge.kind === 'receives' ? '#14b8a6'
                   : '#64748b',
       });
     }
@@ -234,6 +245,67 @@
     } finally {
       contractLoading = false;
     }
+  }
+
+  async function loadQuality(): Promise<void> {
+    if (!hasIndexedGraph) return;
+    qualityLoading = true;
+    error = '';
+    try {
+      quality = await api<CodeGraphQualitySnapshot>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/quality?limit=500&includeGraph=true`);
+      viewMode = 'quality';
+      selectedSymbol = null;
+      results = [];
+      graph = quality.graph;
+      await renderGraph(graph);
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.quality_error']();
+    } finally {
+      qualityLoading = false;
+    }
+  }
+
+  function findingTitle(finding: CodeGraphFinding): string {
+    switch (finding.rule) {
+      case 'duplicate-structure': return m['code_graph.finding_duplicate_structure']();
+      case 'import-cycle': return m['code_graph.finding_import_cycle']();
+      case 'high-coupling': return m['code_graph.finding_high_coupling']();
+      case 'layer-boundary': return m['code_graph.finding_layer_boundary']();
+      case 'long-symbol': return m['code_graph.finding_long_symbol']();
+      case 'oversized-module': return m['code_graph.finding_oversized_module']();
+      case 'security-sensitive-execution': return m['code_graph.finding_security_sensitive_execution']();
+      case 'unreferenced-symbol': return m['code_graph.finding_unreferenced_symbol']();
+    }
+  }
+
+  function findingMetrics(finding: CodeGraphFinding): string {
+    const metric = (key: string): string | number => {
+      const value = finding.metrics[key];
+      return Array.isArray(value) ? value.join(', ') : value ?? 0;
+    };
+    switch (finding.rule) {
+      case 'duplicate-structure': return m['code_graph.metric_duplicate']({ candidates: metric('candidates'), nodes: metric('structureNodes') });
+      case 'import-cycle': return m['code_graph.metric_cycle']({ modules: metric('modules') });
+      case 'high-coupling': return m['code_graph.metric_coupling']({ incoming: metric('fanIn'), outgoing: metric('fanOut') });
+      case 'layer-boundary': return m['code_graph.metric_boundary']({ source: metric('sourceLayer'), target: metric('targetLayer') });
+      case 'long-symbol': return m['code_graph.metric_lines']({ lines: metric('lines'), threshold: metric('threshold') });
+      case 'oversized-module': return m['code_graph.metric_symbols']({ symbols: metric('symbols'), threshold: metric('threshold') });
+      case 'security-sensitive-execution': return m['code_graph.metric_operation']({ operation: metric('operation') });
+      case 'unreferenced-symbol': return m['code_graph.metric_reference']({
+        state: metric('rule') === 'no-indexed-consumer'
+          ? m['code_graph.metric_reference_public']()
+          : m['code_graph.metric_reference_private'](),
+      });
+    }
+  }
+
+  function resourceTypeLabel(type: string): string {
+    if (type === 'environment') return m['code_graph.resource_environment']();
+    if (type === 'file') return m['code_graph.resource_file']();
+    if (type === 'network') return m['code_graph.resource_network']();
+    if (type === 'database') return m['code_graph.resource_database']();
+    if (type === 'ipc') return m['code_graph.resource_ipc']();
+    return m['code_graph.resource_unknown']();
   }
 
   async function createHandoff(kind: 'review' | 'task', scope: CodeGraphChangeScope): Promise<void> {
@@ -486,6 +558,16 @@
         <Network size={12} class={contractLoading ? 'animate-pulse' : undefined} />
         {m['code_graph.contracts']()}{contracts ? ` (${contracts.matches.length})` : ''}
       </Button>
+      <Button
+        size="sm"
+        variant={viewMode === 'quality' ? 'default' : 'outline'}
+        class="h-8 text-[11px]"
+        disabled={!hasIndexedGraph || qualityLoading}
+        onclick={() => void loadQuality()}
+      >
+        <ShieldCheck size={12} class={qualityLoading ? 'animate-pulse' : undefined} />
+        {m['code_graph.quality']()}{quality ? ` (${quality.counts.findings})` : ''}
+      </Button>
     </div>
 
     {#if snapshot}
@@ -642,6 +724,55 @@
               </div>
             </section>
           {/if}
+        {:else if viewMode === 'quality' && quality}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.quality_title']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          <div class="mb-3 grid grid-cols-2 gap-1">
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-text)]">{quality.counts.findings}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_findings']()}</span></div>
+            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{quality.counts.errors}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_errors']()}</span></div>
+            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{quality.counts.warnings}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_warnings']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{quality.counts.duplicates}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_duplicates']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{quality.counts.cycles}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_cycles']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{quality.counts.deadCode}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_dead_code']()}</span></div>
+          </div>
+          <section class="mb-3">
+            <strong class="mb-1 block text-[10px]">{m['code_graph.data_flow']()}</strong>
+            <div class="flex flex-wrap gap-1">
+              {#each Object.entries(quality.dataFlow.byType) as [type, count] (type)}
+                <span class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-1.5 py-1 text-[8px] text-[var(--app-text-muted)]"><strong class="text-[var(--app-text)]">{count}</strong> {resourceTypeLabel(type)}</span>
+              {/each}
+              {#if Object.keys(quality.dataFlow.byType).length === 0}
+                <span class="text-[9px] text-[var(--app-text-muted)]">{m['code_graph.quality_resources_empty']()}</span>
+              {/if}
+            </div>
+          </section>
+          <section>
+            <strong class="mb-1 block text-[10px]">{m['code_graph.quality_findings']()}</strong>
+            {#if quality.findings.length === 0}
+              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.quality_empty']()}</div>
+            {:else}
+              <div class="space-y-1">
+                {#each quality.findings as finding (finding.id)}
+                  <button
+                    class="w-full rounded border p-2 text-left hover:bg-[var(--app-hover)] {finding.severity === 'error' ? 'border-[var(--app-danger)]/30' : finding.severity === 'warning' ? 'border-[var(--app-warning)]/30' : 'border-[var(--app-border)]'}"
+                    onclick={() => finding.symbolIds[0] && void openSymbol(finding.symbolIds[0])}
+                  >
+                    <span class="flex items-start gap-2">
+                      <span class="mt-0.5 size-1.5 shrink-0 rounded-full {finding.severity === 'error' ? 'bg-[var(--app-danger)]' : finding.severity === 'warning' ? 'bg-[var(--app-warning)]' : 'bg-[var(--app-secondary)]'}"></span>
+                      <span class="min-w-0 flex-1">
+                        <strong class="block text-[9px] leading-3">{findingTitle(finding)}</strong>
+                        <span class="mt-0.5 block break-words text-[8px] leading-3 text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
+                        <span class="mt-0.5 block break-words font-mono text-[8px] leading-3 text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
+                        <span class="mt-1 block text-[8px] font-semibold text-[var(--app-secondary)]">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
+                      </span>
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </section>
         {:else if results.length}
           <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
           <div class="space-y-1">

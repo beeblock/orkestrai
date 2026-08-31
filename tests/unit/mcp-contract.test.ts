@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
 import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
-import { codeGraphContractSchema, codeGraphHandoffSchema, codeGraphIndexSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { codeGraphContractSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 
 /**
  * Contrato MCP x ponte: TODA tool e dirigida contra a rota e o schema REAIS
@@ -63,6 +63,7 @@ const EXPECTED: Record<string, Expectation> = {
   code_graph_neighbors: { method: 'GET', path: /\/bridge\/code-graph\/symbols\/00000000-0000-7000-8000-000000000010\/graph\?/ },
   code_graph_changes: { method: 'GET', path: /\/bridge\/code-graph\/changes\?/ },
   code_graph_contracts: { method: 'GET', path: /\/bridge\/code-graph\/contracts\?/ },
+  code_graph_quality: { method: 'GET', path: /\/bridge\/code-graph\/quality\?/ },
   code_graph_handoff: { method: 'POST', path: /\/bridge\/code-graph\/handoffs$/, schema: codeGraphHandoffSchema },
   huddle_list: { method: 'GET', path: /\/bridge\/huddles\?selected=/ },
   huddle_say: { method: 'POST', path: /\/bridge\/huddles\/00000000-0000-7000-8000-000000000001\/turns$/, schema: bridgeHuddleContributeSchema },
@@ -141,6 +142,7 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   code_graph_neighbors: { symbolId: '00000000-0000-7000-8000-000000000010', direction: 'incoming', depth: 3, limit: 100 },
   code_graph_changes: { depth: 2, limit: 500 },
   code_graph_contracts: codeGraphContractSchema.parse({ limit: 300, includeGraph: true }),
+  code_graph_quality: codeGraphQualitySchema.parse({ limit: 300, includeGraph: true }),
   code_graph_handoff: { kind: 'task', scopeId: 'workspace', title: 'Investigate order impact', locale: 'en' },
   huddle_list: { huddleId: '00000000-0000-7000-8000-000000000001' },
   huddle_say: { huddleId: '00000000-0000-7000-8000-000000000001', text: 'The release gate is clear.' },

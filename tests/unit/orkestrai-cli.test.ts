@@ -80,6 +80,8 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { scopes: [{ files: [{ path: 'src/order.ts' }] }], impact: { nodes: [{ id: 's1' }], edges: [], truncated: false }, likelyTests: ['tests/order.test.ts'], conflicts: [], truncated: false } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/contracts?')) {
           res.end(JSON.stringify({ data: { endpoints: [{ id: 'e1' }], requests: [{ id: 'r1' }], matches: [{ id: 'm1' }], conflicts: [], schemas: [], gateways: [], unmatchedRequestIds: [], unmatchedEndpointIds: [], graph: { nodes: [], edges: [], truncated: false }, truncated: false } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/quality?')) {
+          res.end(JSON.stringify({ data: { generatedAt: '2026-08-31T12:00:00.000Z', findings: [], counts: { findings: 3, errors: 1, warnings: 2, duplicates: 0, cycles: 0, deadCode: 1 }, dataFlow: { resources: [], edges: [], byType: { environment: 0, file: 1, network: 1, database: 0, ipc: 0 } }, graph: { nodes: [], edges: [], centerSymbolId: null, truncated: false }, truncated: false } }));
         } else if (req.url === '/api/agent-room/bridge/code-graph/handoffs' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { kind: 'task', scopeId: 'workspace', artifact: { id: 'task-1', title: 'Investigate impact', status: 'todo' } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/search?')) {
@@ -249,6 +251,9 @@ describe('orkestrai CLI', () => {
     expect(await run(['graph', 'contracts', '--limit', '300', '--graph'], { cwd, out, env: {} })).toBe(0);
     expect(requests.at(-1).url).toContain('/code-graph/contracts?limit=300&includeGraph=true');
     expect(lines.join('\n')).toContain('Contracts: 1 endpoints');
+    expect(await run(['graph', 'quality', '--limit', '300', '--graph'], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1).url).toContain('/code-graph/quality?limit=300&includeGraph=true');
+    expect(lines.join('\n')).toContain('Quality: 3 findings');
     expect(await run(['graph', 'handoff', 'task', 'workspace', 'Investigate', 'impact'], { cwd, out, env: {} })).toBe(0);
     expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/code-graph/handoffs' });
   });
