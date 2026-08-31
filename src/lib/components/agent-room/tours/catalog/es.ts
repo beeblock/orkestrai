@@ -1683,6 +1683,33 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'code-intelligence-graph',
+    icon: 'Waypoints',
+    title: 'Entiende el código antes de cambiarlo',
+    tagline: 'Indexa repositorios aprobados y sigue relaciones reales desde un único grafo visual limitado.',
+    steps: [
+      {
+        id: 'create-code-graph',
+        title: 'Agrega el grafo compartido',
+        body: 'Agrego un nodo Grafo de Código al Canvas. Workbench y todos los agentes conectados usarán este mismo índice persistido.',
+        action: { kind: 'createCodeGraph', title: 'Inteligencia de Código' },
+        check: { kind: 'nodeExists', nodeType: 'codeGraph', titleIncludes: 'Inteligencia de Código' },
+      },
+      {
+        id: 'index-approved-repositories',
+        title: 'Indexa los repositorios aprobados',
+        body: 'Analizo fuentes TypeScript, JavaScript, Svelte y PHP del workspace y de los repositorios autorizados explícitamente. Nunca se ejecuta código ni configuración del proyecto.',
+        action: { kind: 'indexCodeGraph' },
+        check: { kind: 'codeGraphReady' },
+      },
+      {
+        id: 'explore-symbol-impact',
+        title: 'Busca y sigue el impacto',
+        body: 'Busca un servicio, componente, ruta o método en el nodo. Selecciona el resultado, alterna Entrante, Ambas o Saliente y ajusta la profundidad para inspeccionar su vecindad limitada. Los agentes hacen la misma búsqueda con code_graph_search y code_graph_neighbors.',
+      },
+    ],
+  },
+  {
     id: 'desktop-diagnostics',
     icon: 'Activity',
     title: 'Diagnosticar la aplicación de escritorio',

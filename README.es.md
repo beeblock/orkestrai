@@ -45,6 +45,13 @@ normal de los agentes no se guarda.
   pestañas locales, y la esfera de voz sigue el workspace activo.
   El pie mantiene visibles todas las ventanas de cuota informadas por Claude,
   Codex y Kimi sin abrir otro panel.
+- **Grafo nativo de inteligencia de código:** indexa de forma segura repositorios
+  TypeScript, JavaScript, Svelte y PHP aprobados sin ejecutar código del proyecto.
+  Busca símbolos, rutas, firmas y docblocks y explora imports, llamadas,
+  instancias, herencia e implementaciones entrantes y salientes en el mismo nodo
+  de Canvas y Workbench. Los agentes consultan ese grafo persistido mediante MCP
+  tipado o `orkestrai graph`; los repositorios hermanos autorizados siguen como
+  proyectos separados y nunca se exponen SQL ni Cypher arbitrarios.
 - **Cliente de API nativo:** crea y ejecuta solicitudes HTTP/REST, GraphQL,
   WebSocket y gRPC junto al equipo, con autenticación Bearer/Basic/clave API u
   OAuth 2.0, cookies, proxy, CA y certificados. Los scripts importados de Postman

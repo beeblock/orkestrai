@@ -1,0 +1,126 @@
+export const CODE_GRAPH_LANGUAGES = ['typescript', 'javascript', 'svelte', 'php'] as const;
+export type CodeGraphLanguage = (typeof CODE_GRAPH_LANGUAGES)[number];
+
+export const CODE_GRAPH_SYMBOL_KINDS = [
+  'module', 'namespace', 'class', 'interface', 'type', 'enum', 'function',
+  'method', 'variable', 'external',
+] as const;
+export type CodeGraphSymbolKind = (typeof CODE_GRAPH_SYMBOL_KINDS)[number];
+
+export const CODE_GRAPH_EDGE_KINDS = [
+  'contains', 'defines', 'imports', 'exports', 'calls', 'references',
+  'instantiates', 'inherits', 'implements',
+] as const;
+export type CodeGraphEdgeKind = (typeof CODE_GRAPH_EDGE_KINDS)[number];
+
+export type CodeGraphProjectStatus = 'idle' | 'indexing' | 'ready' | 'stale' | 'error';
+
+export type CodeGraphDiagnostic = {
+  path: string | null;
+  severity: 'info' | 'warning' | 'error';
+  code: string;
+  message: string;
+};
+
+export type CodeGraphStats = {
+  files: number;
+  symbols: number;
+  edges: number;
+  skipped: number;
+  durationMs: number;
+  languages: Partial<Record<CodeGraphLanguage, number>>;
+};
+
+export type CodeGraphProject = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  rootPath: string;
+  relativePath: string | null;
+  status: CodeGraphProjectStatus;
+  currentRevisionId: string | null;
+  gitHead: string | null;
+  stats: CodeGraphStats;
+  diagnostics: CodeGraphDiagnostic[];
+  lastIndexedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CodeGraphSymbol = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  projectName: string | null;
+  projectRelativePath: string | null;
+  revisionId: string;
+  fileId: string | null;
+  path: string | null;
+  language: CodeGraphLanguage | null;
+  parentSymbolId: string | null;
+  kind: CodeGraphSymbolKind;
+  name: string;
+  qualifiedName: string;
+  signature: string | null;
+  documentation: string | null;
+  modifiers: string[];
+  exported: boolean;
+  startLine: number | null;
+  startColumn: number | null;
+  endLine: number | null;
+  endColumn: number | null;
+};
+
+export type CodeGraphEdge = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  revisionId: string;
+  sourceSymbolId: string;
+  targetSymbolId: string;
+  kind: CodeGraphEdgeKind;
+  confidence: number;
+  sitePath: string | null;
+  siteLine: number | null;
+  siteColumn: number | null;
+  metadata: Record<string, unknown>;
+};
+
+export type CodeGraphSnapshot = {
+  projects: CodeGraphProject[];
+  totals: CodeGraphStats;
+  indexing: boolean;
+};
+
+export type CodeGraphSubgraph = {
+  nodes: CodeGraphSymbol[];
+  edges: CodeGraphEdge[];
+  truncated: boolean;
+  depth: number;
+  centerSymbolId: string | null;
+};
+
+export type CodeGraphIndexResult = {
+  projects: CodeGraphProject[];
+  stats: CodeGraphStats;
+};
+
+export type CodeGraphIndexOptions = {
+  projectIds?: string[];
+  force?: boolean;
+};
+
+export type CodeGraphSearchOptions = {
+  query: string;
+  projectId?: string;
+  kinds?: CodeGraphSymbolKind[];
+  limit?: number;
+};
+
+export type CodeGraphTraversalOptions = {
+  symbolId: string;
+  direction?: 'incoming' | 'outgoing' | 'both';
+  kinds?: CodeGraphEdgeKind[];
+  depth?: number;
+  limit?: number;
+};

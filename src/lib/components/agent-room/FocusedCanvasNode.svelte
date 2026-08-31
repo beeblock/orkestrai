@@ -16,6 +16,7 @@
   import ImageCanvasNode from './canvas/ImageCanvasNode.svelte';
   import ImageWorkflowCanvasNode from './canvas/ImageWorkflowCanvasNode.svelte';
   import UsageCanvasNode from './canvas/UsageCanvasNode.svelte';
+  import CodeGraphCanvasNode from './canvas/CodeGraphCanvasNode.svelte';
   import DesignCanvasNode from './canvas/DesignCanvasNode.svelte';
   import WorkbenchFileView from './WorkbenchFileView.svelte';
   import type { TerminalThemeName } from './terminal-themes.js';
@@ -70,6 +71,7 @@
     image: ImageCanvasNode,
     imageWorkflow: ImageWorkflowCanvasNode,
     usage: UsageCanvasNode,
+    codeGraph: CodeGraphCanvasNode,
     design: DesignCanvasNode,
   };
 

@@ -7,6 +7,20 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Added
+
+- Native Code Intelligence Graph nodes index approved TypeScript, JavaScript,
+  Svelte, and PHP repositories without executing project code. Atomic SQLite
+  revisions power symbol and documentation search plus bounded incoming,
+  outgoing, import, call, instantiation, inheritance, and implementation views
+  in the same Canvas and Workbench artifact.
+- Agents use that exact persisted graph through typed `code_graph_*` MCP tools
+  or `orkestrai graph` commands. Multi-repository workspaces remain confined to
+  explicitly approved roots, no arbitrary SQL or Cypher is exposed, and the
+  storage contract can adopt a benchmark-qualified Memgraph adapter later.
+- A guided Code Intelligence use case adds the node, indexes approved
+  repositories, and teaches people and agents to search and traverse impact.
+
 ### Fixed
 
 - After macOS sleep, hibernation, renderer reloads, or a brief power loss, a

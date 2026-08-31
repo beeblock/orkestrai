@@ -44,6 +44,11 @@ const DESIGN_BATCH_BASE = {
 const TOOLS = [
   { name: 'list', description: 'Lista agentes e todos os portais do workspace. Cada portal informa explicitamente se esta conectado a este agente.', inputSchema: { type: 'object', properties: {} } },
   { name: 'usage', description: 'Consulta cotas dos providers e a recomendacao de roteamento configurada no no Usage do canvas.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'code_graph_status', description: 'Retorna os repositorios registrados, estado da indexacao, diagnosticos e contagens do grafo de codigo do workspace.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'code_graph_index', description: 'Indexa sob demanda o codigo dos repositorios aprovados do workspace. Omita projectIds para indexar todos.', inputSchema: { type: 'object', properties: { projectIds: { type: 'array', maxItems: 16, items: { type: 'string', format: 'uuid' } }, force: { type: 'boolean', default: false } } } },
+  { name: 'code_graph_search', description: 'Busca simbolos por nome, caminho, assinatura e documentacao. Use antes de ler vizinhanca e impacto.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 120 }, projectId: { type: 'string', format: 'uuid' }, kinds: { type: 'array', items: { type: 'string', enum: ['module', 'namespace', 'class', 'interface', 'type', 'enum', 'function', 'method', 'variable', 'external'] } }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 } }, required: ['query'] } },
+  { name: 'code_graph_symbol', description: 'Le um simbolo indexado com localizacao, assinatura e metadados sem ler o arquivo inteiro.', inputSchema: { type: 'object', properties: { symbolId: { type: 'string', format: 'uuid' } }, required: ['symbolId'] } },
+  { name: 'code_graph_neighbors', description: 'Percorre uma vizinhanca limitada do grafo para entender dependencias, chamadas e impacto. Nunca executa consultas arbitrarias.', inputSchema: { type: 'object', properties: { symbolId: { type: 'string', format: 'uuid' }, direction: { type: 'string', enum: ['incoming', 'outgoing', 'both'], default: 'both' }, kinds: { type: 'array', items: { type: 'string', enum: ['contains', 'defines', 'imports', 'exports', 'calls', 'references', 'instantiates', 'inherits', 'implements'] } }, depth: { type: 'integer', minimum: 1, maximum: 4, default: 2 }, limit: { type: 'integer', minimum: 10, maximum: 750, default: 250 } }, required: ['symbolId'] } },
   { name: 'huddle_list', description: 'Lista huddles e retorna a sessao selecionada com participantes e transcricao.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' } } } },
   { name: 'huddle_say', description: 'Registra uma fala deste agente em um huddle ativo, sem disparar respostas recursivas.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 10000 } }, required: ['huddleId', 'text'] } },
   { name: 'ask', description: 'Envia mensagem a outro agente e aguarda resposta confirmada. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' } }, required: ['agent', 'message'] } },
@@ -177,6 +182,27 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     }
     case 'usage':
       return bridge('GET', '/api/agent-room/bridge/usage');
+    case 'code_graph_status':
+      return bridge('GET', '/api/agent-room/bridge/code-graph');
+    case 'code_graph_index':
+      return bridge('POST', '/api/agent-room/bridge/code-graph', { projectIds: args.projectIds, force: args.force ?? false });
+    case 'code_graph_search': {
+      const params = new URLSearchParams({ q: args.query });
+      if (args.projectId) params.set('projectId', args.projectId);
+      if (args.kinds?.length) params.set('kinds', args.kinds.join(','));
+      if (args.limit) params.set('limit', String(args.limit));
+      return bridge('GET', `/api/agent-room/bridge/code-graph/search?${params}`);
+    }
+    case 'code_graph_symbol':
+      return bridge('GET', `/api/agent-room/bridge/code-graph/symbols/${encodeURIComponent(args.symbolId)}`);
+    case 'code_graph_neighbors': {
+      const params = new URLSearchParams();
+      if (args.direction) params.set('direction', args.direction);
+      if (args.kinds?.length) params.set('kinds', args.kinds.join(','));
+      if (args.depth) params.set('depth', String(args.depth));
+      if (args.limit) params.set('limit', String(args.limit));
+      return bridge('GET', `/api/agent-room/bridge/code-graph/symbols/${encodeURIComponent(args.symbolId)}/graph?${params}`);
+    }
     case 'huddle_list': {
       const huddleId = /** @type {{ huddleId?: string }} */ (args).huddleId;
       return bridge('GET', `/api/agent-room/bridge/huddles${huddleId ? `?selected=${encodeURIComponent(huddleId)}` : ''}`);

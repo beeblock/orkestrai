@@ -26,6 +26,7 @@ import { AgentHuddleTurn } from '../../domain/models/AgentHuddleTurn.js';
 import { controlCenterRepository } from './ControlCenterRepository.js';
 import { reviewCenterRepository } from './ReviewCenterRepository.js';
 import { councilRepository } from './CouncilRepository.js';
+import { codeGraphRepository } from './CodeGraphRepository.js';
 
 function toIso(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
@@ -244,6 +245,7 @@ export class WorkspaceRepository {
     await controlCenterRepository.deleteWorkspaceHistory(id);
     await reviewCenterRepository.deleteWorkspaceHistory(id);
     await councilRepository.deleteWorkspaceHistory(id);
+    await codeGraphRepository.deleteWorkspace(id);
     await AgentMemorySource.query().where('workspace_id', id).delete();
     await AgentMemoryEntry.query().where('workspace_id', id).delete();
     await AgentHuddleTurn.query().where('workspace_id', id).delete();

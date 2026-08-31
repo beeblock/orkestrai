@@ -52,6 +52,14 @@ common credentials redacted; normal agent output is not persisted.
   label. The global
   voice orb follows its active workspace and leader. Its footer keeps every
   reported Claude, Codex, and Kimi quota window visible without opening a panel.
+- **Native code intelligence graph:** safely index approved TypeScript,
+  JavaScript, Svelte, and PHP repositories without running project code. Search
+  symbols, paths, signatures, and docblocks, then explore bounded incoming and
+  outgoing imports, calls, instantiation, inheritance, and implementation links
+  in the same Canvas and Workbench node. Agents query that exact persisted graph
+  through typed MCP or `orkestrai graph`; explicitly approved sibling
+  repositories remain separate projects, and arbitrary SQL/Cypher is never
+  exposed.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,

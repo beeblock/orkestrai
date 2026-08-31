@@ -41,6 +41,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
+  orkestrai graph status | graph index [--project <uuid>] | graph search <consulta> [--project <uuid>] [--kinds <csv>] [--limit <n>] | graph symbol <symbolId> | graph neighbors <symbolId> [--direction incoming|outgoing|both] [--depth <1-4>] [--kinds <csv>] [--limit <n>] [--json]
   orkestrai memory list [consulta] [--history] [--json]
   orkestrai memory add <titulo> --content <texto> --source-label <fonte> [--kind fact|decision|preference|constraint|reference|lesson] [--source-type user|note|task|message|file|url|git|review|council|agent] [--source-id <id>] [--source-uri <path-ou-url>] [--source-excerpt <trecho>] [--tags <csv>] [--confidence <0-100>] [--pin]
   orkestrai memory revise <id> --title <titulo> --content <texto> --kind <tipo> --sources <json> --base-revision <n> --base-updated-at <iso>
@@ -342,6 +343,60 @@ export async function run(argv, options = {}) {
         }
       }
       return 0;
+    }
+    case 'graph': {
+      const [action, value, ...queryParts] = rest;
+      if (action === 'status') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/code-graph');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else if (!data.projects?.length) out('(no code repositories registered)');
+        else for (const project of data.projects) {
+          out(`- ${project.name}: ${project.status} · ${project.stats.files} files · ${project.stats.symbols} symbols · ${project.stats.edges} relationships`);
+        }
+        return 0;
+      }
+      if (action === 'index') {
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/code-graph', {
+          projectIds: flags.project ? [String(flags.project)] : undefined,
+          force: Boolean(flags.force),
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Code graph indexed: ${data.stats.files} files · ${data.stats.symbols} symbols · ${data.stats.edges} relationships.`);
+        return 0;
+      }
+      if (action === 'search') {
+        const query = [value, ...queryParts].filter(Boolean).join(' ').trim();
+        if (!query) throw new Error('Usage: orkestrai graph search <query> [--kinds <csv>]');
+        const params = new URLSearchParams({ q: query });
+        if (flags.project) params.set('projectId', String(flags.project));
+        if (flags.kinds) params.set('kinds', String(flags.kinds));
+        if (flags.limit) params.set('limit', String(flags.limit));
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/search?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else if (!data.length) out('(no matching symbols)');
+        else for (const symbol of data) out(`- ${symbol.kind} ${symbol.qualifiedName} · ${symbol.projectName ?? ''}/${symbol.path ?? ''}:${symbol.startLine ?? 1} (${symbol.id})`);
+        return 0;
+      }
+      if (action === 'symbol' && value) {
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/symbols/${encodeURIComponent(value)}`);
+        out(JSON.stringify(data, null, 2));
+        return 0;
+      }
+      if (action === 'neighbors' && value) {
+        const params = new URLSearchParams();
+        if (flags.direction) params.set('direction', String(flags.direction));
+        if (flags.depth) params.set('depth', String(flags.depth));
+        if (flags.kinds) params.set('kinds', String(flags.kinds));
+        if (flags.limit) params.set('limit', String(flags.limit));
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/symbols/${encodeURIComponent(value)}/graph?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          out(`${data.nodes.length} symbols · ${data.edges.length} relationships${data.truncated ? ' · truncated' : ''}`);
+          for (const symbol of data.nodes) out(`- ${symbol.kind} ${symbol.qualifiedName} (${symbol.id})`);
+        }
+        return 0;
+      }
+      throw new Error('Usage: orkestrai graph <status|index|search|symbol|neighbors> ...');
     }
     case 'memory': {
       const [action, idOrTitle, ...values] = rest;

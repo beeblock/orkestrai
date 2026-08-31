@@ -164,6 +164,7 @@
     'flow',
     'loop',
     'usage',
+    'codeGraph',
     'controlCenter',
     'reviewCenter',
     'device',
@@ -205,7 +206,7 @@
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
     { id: 'content', types: ['note', 'image', 'imageWorkflow', 'design'] },
-    { id: 'tools', types: ['portal', 'apiClient', 'device', 'diff', 'usage'] },
+    { id: 'tools', types: ['portal', 'apiClient', 'device', 'diff', 'usage', 'codeGraph'] },
   ];
 
   const selectedWorkspace = $derived(workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null);

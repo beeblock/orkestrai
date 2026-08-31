@@ -14,7 +14,7 @@ function createdTitles(tour: Tour): Set<string> {
   for (const step of tour.steps) {
     const actions = step.action ? (Array.isArray(step.action) ? step.action : [step.action]) : [];
     for (const action of actions) {
-      if (action.kind === 'createAgent' || action.kind === 'createNote' || action.kind === 'createUsage' || action.kind === 'createApiClient' || action.kind === 'createImageWorkflow' || action.kind === 'createSampleImage' || action.kind === 'createShape' || action.kind === 'createDesign') titles.add(action.title);
+      if (action.kind === 'createAgent' || action.kind === 'createNote' || action.kind === 'createUsage' || action.kind === 'createApiClient' || action.kind === 'createCodeGraph' || action.kind === 'createImageWorkflow' || action.kind === 'createSampleImage' || action.kind === 'createShape' || action.kind === 'createDesign') titles.add(action.title);
       if (action.kind === 'createFlow') titles.add(action.title);
       if (action.kind === 'createPortal') titles.add(action.title ?? 'Portal');
     }
@@ -139,6 +139,7 @@ describe('checkPasses', () => {
     mcps: [{ name: 'deepwiki' }],
     floors: [{ name: 'feature-nova' }],
     routines: [{ id: 'r1' }],
+    codeGraph: { projects: [{ status: 'ready' }] },
   };
 
   it('nodeExists por tipo e titulo', () => {
@@ -160,6 +161,7 @@ describe('checkPasses', () => {
     expect(checkPasses({ kind: 'floorExists', nameIncludes: 'feature' }, snap)).toBe(true);
     expect(checkPasses({ kind: 'routineExists' }, snap)).toBe(true);
     expect(checkPasses({ kind: 'flowRunFinished' }, snap)).toBe(true);
+    expect(checkPasses({ kind: 'codeGraphReady' }, snap)).toBe(true);
   });
 
   it('aguarda o workflow concluir e materializar a quantidade minima de outputs', () => {

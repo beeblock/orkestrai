@@ -1687,6 +1687,33 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'code-intelligence-graph',
+    icon: 'Waypoints',
+    title: 'Entenda o código antes de alterá-lo',
+    tagline: 'Indexe repositórios aprovados e siga relações reais em um único grafo visual limitado.',
+    steps: [
+      {
+        id: 'create-code-graph',
+        title: 'Adicione o grafo compartilhado',
+        body: 'Eu adiciono um nó Grafo de Código ao Canvas. O Workbench e todos os agentes conectados usarão este mesmo índice persistido.',
+        action: { kind: 'createCodeGraph', title: 'Inteligência de Código' },
+        check: { kind: 'nodeExists', nodeType: 'codeGraph', titleIncludes: 'Inteligência de Código' },
+      },
+      {
+        id: 'index-approved-repositories',
+        title: 'Indexe os repositórios aprovados',
+        body: 'Eu analiso fontes TypeScript, JavaScript, Svelte e PHP do workspace e dos repositórios autorizados explicitamente. Código e configurações do projeto nunca são executados.',
+        action: { kind: 'indexCodeGraph' },
+        check: { kind: 'codeGraphReady' },
+      },
+      {
+        id: 'explore-symbol-impact',
+        title: 'Pesquise e acompanhe o impacto',
+        body: 'Pesquise um serviço, componente, rota ou método no nó. Selecione o resultado, alterne Entrada, Ambas ou Saída e ajuste a profundidade para inspecionar sua vizinhança limitada. Agentes fazem a mesma busca com code_graph_search e code_graph_neighbors.',
+      },
+    ],
+  },
+  {
     id: 'desktop-diagnostics',
     icon: 'Activity',
     title: 'Diagnosticar o app desktop',

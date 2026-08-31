@@ -57,6 +57,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'custom-app-theme': 'custom-app-theme',
   'windows-wsl-agents': 'windows-wsl-agents',
   'saved-terminal-commands': 'saved-terminal-commands',
+  'code-intelligence-graph': 'code-intelligence-graph',
   'desktop-diagnostics': 'desktop-diagnostics',
 };
 

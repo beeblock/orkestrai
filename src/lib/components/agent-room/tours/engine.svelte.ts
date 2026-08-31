@@ -60,13 +60,14 @@ async function api<T>(path: string, init?: RequestInit): Promise<T | null> {
 }
 
 async function snapshot(): Promise<WorkspaceSnapshot> {
-  const [nodes, edges, tasks, mcps, floors, routines] = await Promise.all([
+  const [nodes, edges, tasks, mcps, floors, routines, codeGraph] = await Promise.all([
     api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
     api<WorkspaceSnapshot['edges']>(`/api/agent-room/workspaces/${workspaceId}/edges`),
     api<WorkspaceSnapshot['tasks']>(`/api/agent-room/workspaces/${workspaceId}/tasks`),
     api<WorkspaceSnapshot['mcps']>(`/api/agent-room/workspaces/${workspaceId}/mcps`),
     api<WorkspaceSnapshot['floors']>(`/api/agent-room/workspaces/${workspaceId}/floors`),
     api<WorkspaceSnapshot['routines']>(`/api/agent-room/workspaces/${workspaceId}/routines`),
+    api<WorkspaceSnapshot['codeGraph']>(`/api/agent-room/workspaces/${workspaceId}/code-graph`),
   ]);
   return {
     nodes: nodes ?? [],
@@ -75,6 +76,7 @@ async function snapshot(): Promise<WorkspaceSnapshot> {
     mcps: mcps ?? [],
     floors: floors ?? [],
     routines: routines ?? [],
+    codeGraph,
   };
 }
 
@@ -283,6 +285,24 @@ async function runAction(action: TourAction): Promise<void> {
             payload: { requests: [], selectedRequestId: null, variables: {} },
           }),
         });
+        break;
+      }
+      case 'createCodeGraph': {
+        const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
+        if (!nodes?.some((node) => node.type === 'codeGraph')) {
+          await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+            method: 'POST',
+            body: JSON.stringify({ type: 'codeGraph', title: action.title, ...nextPosition(), width: 760, height: 560, payload: {} }),
+          });
+        }
+        break;
+      }
+      case 'indexCodeGraph': {
+        const indexed = await api(`/api/agent-room/workspaces/${workspaceId}/code-graph`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+        if (!indexed) throw new Error(m['code_graph.index_error']());
         break;
       }
       case 'createImageWorkflow': {

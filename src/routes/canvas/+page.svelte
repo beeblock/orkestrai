@@ -77,6 +77,7 @@
   import RolesPanel from '$lib/components/agent-room/canvas/RolesPanel.svelte';
   import UsagePanel from '$lib/components/agent-room/canvas/UsagePanel.svelte';
   import UsageCanvasNode from '$lib/components/agent-room/canvas/UsageCanvasNode.svelte';
+  import CodeGraphCanvasNode from '$lib/components/agent-room/canvas/CodeGraphCanvasNode.svelte';
   import DeviceCanvasNode from '$lib/components/agent-room/canvas/DeviceCanvasNode.svelte';
   import DesignCanvasNode from '$lib/components/agent-room/canvas/DesignCanvasNode.svelte';
   import DesignEditor from '$lib/components/agent-room/design/DesignEditor.svelte';
@@ -103,7 +104,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Workflow, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -134,6 +135,7 @@
     image: ImageCanvasNode,
     imageWorkflow: ImageWorkflowCanvasNode,
     usage: UsageCanvasNode,
+    codeGraph: CodeGraphCanvasNode,
     device: DeviceCanvasNode,
     design: DesignCanvasNode,
   };
@@ -524,7 +526,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -559,6 +561,7 @@
     image: async (rect) => { await addImageNode(rect); },
     imageWorkflow: async (rect) => { await addImageWorkflowNode(rect); },
     usage: async (rect) => { await addUsageNode(rect); },
+    codeGraph: async (rect) => { await addCodeGraphNode(rect); },
     design: async (rect) => { await addDesignNode(rect); },
   };
 
@@ -1701,6 +1704,30 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  async function addCodeGraphNode(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const existing = nodes.find((node) => node.type === 'codeGraph');
+    if (existing) {
+      jumpToNode(existing.id);
+      toast.info(m['code_graph.already_on_canvas']());
+      return;
+    }
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(760, 560);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'codeGraph',
+        title: m['code_graph.title'](),
+        ...position,
+        ...nodeSize(rect, 480, 420, 760, 560),
+        payload: {},
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    toast.success(m['code_graph.added']());
+  }
+
   async function addFlowNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(480, 420);
@@ -2048,6 +2075,7 @@
     { id: 'api-client', label: m['api_client.title'](), hint: m['canvas.hint_action'](), run: () => void addApiClient() },
     { id: 'design-exploration', label: m['design.exploration_menu_item'](), hint: m['canvas.hint_action'](), run: () => (designExplorationOpen = true) },
     { id: 'usage-node', label: m['usage.add_canvas'](), hint: m['canvas.hint_action'](), run: () => void addUsageNode() },
+    { id: 'code-graph', label: m['code_graph.title'](), hint: m['canvas.hint_action'](), run: () => void addCodeGraphNode() },
     { id: 'share-workspace', label: m['collaboration.share_workspace'](), hint: m['canvas.hint_action'](), run: () => (sharingOpen = true) },
     { id: 'device', label: m['canvas.palette_new_device'](), hint: m['canvas.hint_action'](), run: () => void addDevice() },
     { id: 'council', label: m['council.open'](), hint: m['canvas.hint_action'](), run: () => (councilOpen = true) },
@@ -2662,6 +2690,9 @@
             />
             <ToolbarButton label={m['tool.files']()} active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
               <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
+            </ToolbarButton>
+            <ToolbarButton label={m['code_graph.title']()} active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
+              <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}
             </ToolbarButton>
             <ToolbarButton label={m['tool.diff']()} active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
               <FileDiff size={15} class="tool-icon-svg" /> {m['canvas.default_diff']()}

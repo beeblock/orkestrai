@@ -72,6 +72,16 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { cancelled: true, runId: 'run1' } }));
         } else if (req.url === '/api/agent-room/bridge/image-workflows/img1/remove' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { deleted: true, nodeId: 'img1' } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph' && req.method === 'GET') {
+          res.end(JSON.stringify({ data: { projects: [{ id: '00000000-0000-7000-8000-000000000020', name: 'Web', status: 'ready', stats: { files: 12, symbols: 80, edges: 140 } }], totals: { files: 12, symbols: 80, edges: 140 }, indexing: false } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { projects: [], stats: { files: 12, symbols: 80, edges: 140 } } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/search?')) {
+          res.end(JSON.stringify({ data: [{ id: '00000000-0000-7000-8000-000000000010', kind: 'class', qualifiedName: 'src/order::OrderService', projectName: 'Web', path: 'src/order.ts', startLine: 4 }] }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/symbols/00000000-0000-7000-8000-000000000010') {
+          res.end(JSON.stringify({ data: { id: '00000000-0000-7000-8000-000000000010', kind: 'class', qualifiedName: 'src/order::OrderService' } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/symbols/00000000-0000-7000-8000-000000000010/graph?')) {
+          res.end(JSON.stringify({ data: { nodes: [{ id: '00000000-0000-7000-8000-000000000010', kind: 'class', qualifiedName: 'src/order::OrderService' }], edges: [], truncated: false } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/agents')) {
           const identified = req.url.includes('agentNodeId=n1');
           res.end(JSON.stringify({ data: {
@@ -212,6 +222,22 @@ describe('orkestrai CLI', () => {
     expect(lines.join('\n')).toContain('codex');
     expect(lines.join('\n')).toContain('codex');
     expect(requests.at(-1).url).toBe('/api/agent-room/bridge/usage');
+  });
+
+  it('consulta e percorre o mesmo grafo de codigo exposto no canvas', async () => {
+    const { lines, out } = capture();
+    const symbolId = '00000000-0000-7000-8000-000000000010';
+    const projectId = '00000000-0000-7000-8000-000000000020';
+
+    expect(await run(['graph', 'status'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('Web: ready');
+    expect(await run(['graph', 'index', '--project', projectId, '--force'], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/code-graph', body: { projectIds: [projectId], force: true } });
+    expect(await run(['graph', 'search', 'OrderService', '--kinds', 'class'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('src/order::OrderService');
+    expect(await run(['graph', 'symbol', symbolId], { cwd, out, env: {} })).toBe(0);
+    expect(await run(['graph', 'neighbors', symbolId, '--direction', 'incoming', '--depth', '3'], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1).url).toContain('/graph?direction=incoming&depth=3');
   });
 
   it('huddle lista sessoes e registra a fala do agente identificado', async () => {

@@ -47,5 +47,8 @@ export function checkPasses(check: TourCheck, snap: WorkspaceSnapshot): boolean 
       )).length;
       return outputCount >= (check.minOutputs ?? 1);
     }
+    case 'codeGraphReady':
+      return Boolean(snap.codeGraph?.projects.length)
+        && snap.codeGraph!.projects.every((project) => project.status === 'ready');
   }
 }

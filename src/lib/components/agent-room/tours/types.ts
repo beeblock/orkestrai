@@ -8,6 +8,8 @@ export type TourAction =
   | { kind: 'createTasksBoard' }
   | { kind: 'createUsage'; title: string }
   | { kind: 'createApiClient'; title: string }
+  | { kind: 'createCodeGraph'; title: string }
+  | { kind: 'indexCodeGraph' }
   | {
       kind: 'createImageWorkflow';
       title: string;
@@ -53,7 +55,8 @@ export type TourCheck =
   | { kind: 'floorExists'; nameIncludes: string }
   | { kind: 'routineExists' }
   | { kind: 'flowRunFinished' }
-  | { kind: 'imageWorkflowSucceeded'; title: string; minOutputs?: number };
+  | { kind: 'imageWorkflowSucceeded'; title: string; minOutputs?: number }
+  | { kind: 'codeGraphReady' };
 
 export type TourStep = {
   id: string;
@@ -82,4 +85,5 @@ export type WorkspaceSnapshot = {
   mcps: Array<{ name: string }>;
   floors: Array<{ name: string }>;
   routines: Array<{ id: string }>;
+  codeGraph: { projects: Array<{ status: string }> } | null;
 };

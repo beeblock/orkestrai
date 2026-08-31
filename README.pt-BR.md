@@ -45,6 +45,13 @@ agentes não é persistida.
   acompanha o workspace ativo e seu líder.
   O rodapé mantém visíveis todas as janelas de cota reportadas por Claude, Codex
   e Kimi sem exigir a abertura de outro painel.
+- **Grafo nativo de inteligência de código:** indexe com segurança repositórios
+  TypeScript, JavaScript, Svelte e PHP aprovados sem executar código do projeto.
+  Pesquise símbolos, caminhos, assinaturas e docblocks e explore imports,
+  chamadas, instanciações, herança e implementações de entrada e saída no mesmo
+  nó do Canvas e Workbench. Agentes consultam esse grafo persistido por MCP
+  tipado ou `orkestrai graph`; repositórios irmãos autorizados continuam projetos
+  separados, e SQL/Cypher arbitrários nunca são expostos.
 - **Cliente de API nativo:** crie e execute requests HTTP/REST, GraphQL, WebSocket
   e gRPC ao lado do time, com autenticação Bearer/Basic/chave de API ou OAuth 2.0,
   cookies, proxy, CA e certificados. Scripts importados do Postman rodam no

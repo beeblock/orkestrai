@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
 import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
+import { codeGraphIndexSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 
 /**
  * Contrato MCP x ponte: TODA tool e dirigida contra a rota e o schema REAIS
@@ -55,6 +56,11 @@ type Expectation = { method: string; path: RegExp; schema?: z.ZodTypeAny };
 const EXPECTED: Record<string, Expectation> = {
   list: { method: 'GET', path: /\/bridge\/agents\?/ },
   usage: { method: 'GET', path: /\/bridge\/usage$/ },
+  code_graph_status: { method: 'GET', path: /\/bridge\/code-graph$/ },
+  code_graph_index: { method: 'POST', path: /\/bridge\/code-graph$/, schema: codeGraphIndexSchema },
+  code_graph_search: { method: 'GET', path: /\/bridge\/code-graph\/search\?/ },
+  code_graph_symbol: { method: 'GET', path: /\/bridge\/code-graph\/symbols\/00000000-0000-7000-8000-000000000010$/ },
+  code_graph_neighbors: { method: 'GET', path: /\/bridge\/code-graph\/symbols\/00000000-0000-7000-8000-000000000010\/graph\?/ },
   huddle_list: { method: 'GET', path: /\/bridge\/huddles\?selected=/ },
   huddle_say: { method: 'POST', path: /\/bridge\/huddles\/00000000-0000-7000-8000-000000000001\/turns$/, schema: bridgeHuddleContributeSchema },
   ask: { method: 'POST', path: /\/bridge\/ask$/, schema: bridgeAskSchema },
@@ -126,6 +132,10 @@ const EXPECTED: Record<string, Expectation> = {
 };
 
 const TOOL_ARGS: Record<string, Record<string, unknown>> = {
+  code_graph_index: { projectIds: ['00000000-0000-7000-8000-000000000020'], force: true },
+  code_graph_search: { query: 'OrderService', kinds: ['class'], limit: 20 },
+  code_graph_symbol: { symbolId: '00000000-0000-7000-8000-000000000010' },
+  code_graph_neighbors: { symbolId: '00000000-0000-7000-8000-000000000010', direction: 'incoming', depth: 3, limit: 100 },
   huddle_list: { huddleId: '00000000-0000-7000-8000-000000000001' },
   huddle_say: { huddleId: '00000000-0000-7000-8000-000000000001', text: 'The release gate is clear.' },
   ask: { agent: 'Codex', message: 'oi' },

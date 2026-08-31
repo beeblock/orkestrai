@@ -21,6 +21,7 @@
     Route,
     BookMarked,
     MessageSquareText,
+    Waypoints,
   } from '@lucide/svelte';
   import type { CanvasNodeType } from '$lib/modules/agent-room/domain/types.js';
 
@@ -40,6 +41,7 @@
 {:else if type === 'flow'}<Workflow {size} aria-hidden="true" />
 {:else if type === 'loop'}<Repeat2 {size} aria-hidden="true" />
 {:else if type === 'usage'}<Gauge {size} aria-hidden="true" />
+{:else if type === 'codeGraph'}<Waypoints {size} aria-hidden="true" />
 {:else if type === 'controlCenter'}<Activity {size} aria-hidden="true" />
 {:else if type === 'reviewCenter'}<GitPullRequestArrow {size} aria-hidden="true" />
 {:else if type === 'workstreams'}<Route {size} aria-hidden="true" />

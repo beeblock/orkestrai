@@ -52,6 +52,10 @@ import { ImageWorkflowError, imageWorkflowService } from '$lib/modules/agent-roo
 import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction, ValidateImageWorkflowOutputAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
+import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
+import { codeGraphIndexSchema, codeGraphSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
+import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -84,6 +88,66 @@ export class BridgeController extends Controller {
       return this.json({ data: buildUsageRoutingReport(await usageService.getAll(false), policy) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao consultar uso dos providers.', 401);
+    }
+  }
+
+  async codeGraphStatus(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphIndexService.status(workspace.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load the code graph.', 401);
+    }
+  }
+
+  async codeGraphIndex(event: any) {
+    try {
+      const input = codeGraphIndexSchema.parse(await event.request.json().catch(() => ({})));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await indexCodeGraphAction.execute(IndexCodeGraphDto.from(workspace.id, input)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to index the workspace code.');
+    }
+  }
+
+  async codeGraphSearch(event: any) {
+    try {
+      const input = codeGraphSearchSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphIndexService.search(workspace.id, {
+        query: input.q,
+        projectId: input.projectId,
+        kinds: input.kinds,
+        limit: input.limit,
+      }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to search the code graph.');
+    }
+  }
+
+  async codeGraphSymbol(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const data = await codeGraphIndexService.symbol(workspace.id, event.params.symbolId);
+      return data ? this.json({ data }) : this.json({ error: 'Code graph symbol not found.' }, 404);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load the code graph symbol.');
+    }
+  }
+
+  async codeGraphGraph(event: any) {
+    try {
+      const input = codeGraphTraversalSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphIndexService.subgraph(workspace.id, {
+        symbolId: event.params.symbolId,
+        direction: input.direction,
+        kinds: input.kinds,
+        depth: input.depth,
+        limit: input.limit,
+      }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to traverse the code graph.');
     }
   }
 

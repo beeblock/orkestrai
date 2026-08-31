@@ -1683,6 +1683,33 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'code-intelligence-graph',
+    icon: 'Waypoints',
+    title: 'Understand the code before changing it',
+    tagline: 'Index approved repositories and follow real relationships from one bounded visual graph.',
+    steps: [
+      {
+        id: 'create-code-graph',
+        title: 'Add the shared graph',
+        body: 'I add one Code Graph node to the Canvas. Workbench and every connected agent will use this same persisted index.',
+        action: { kind: 'createCodeGraph', title: 'Code Intelligence' },
+        check: { kind: 'nodeExists', nodeType: 'codeGraph', titleIncludes: 'Code Intelligence' },
+      },
+      {
+        id: 'index-approved-repositories',
+        title: 'Index approved repositories',
+        body: 'I scan TypeScript, JavaScript, Svelte, and PHP source from the workspace and any explicitly authorized repository roots. Project code and configuration are never executed.',
+        action: { kind: 'indexCodeGraph' },
+        check: { kind: 'codeGraphReady' },
+      },
+      {
+        id: 'explore-symbol-impact',
+        title: 'Search and follow impact',
+        body: 'Search for a service, component, route, or method in the node. Select a result, then switch Incoming, Both, or Outgoing and adjust depth to inspect its bounded neighborhood. Agents can perform the same search with code_graph_search and code_graph_neighbors.',
+      },
+    ],
+  },
+  {
     id: 'desktop-diagnostics',
     icon: 'Activity',
     title: 'Diagnose the desktop app',
