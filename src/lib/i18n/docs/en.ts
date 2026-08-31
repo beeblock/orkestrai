@@ -736,7 +736,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       summary: 'Sleep recovery keeps one agent session, microphones retain the same take, and growing workflows stop moving or stacking nodes.',
       items: [
         'After sleep, hibernation, or a renderer reload, each agent reattaches to the one live PTY for its workspace node instead of opening a second writer for the same provider conversation.',
-        'Reload, provider/runtime changes, dismissal, deletion, and workspace unload remove duplicate node PTYs while preserving the exact conversation id used for recovery.',
+        'Reload, provider/runtime changes, dismissal, deletion, workspace unload, parent disconnect, and desktop shutdown terminate the complete provider process group; a lost node binding is recovered from the exact conversation id.',
         'Dictation captures at the microphone native 44.1/48 kHz rate, chooses the active channel, resamples only afterward, and can recover the same take from a browser fallback when Electron Web Audio emits no samples.',
         'Payload updates are truly partial and live refresh protects a current drag, so image progress or session state can no longer restore stale node coordinates or dimensions.',
         'Image workflows and agent-created nodes use collision-aware placement against real node rectangles, including every generated output and reference.',

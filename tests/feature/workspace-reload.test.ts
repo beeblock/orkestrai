@@ -92,6 +92,27 @@ describe('WorkspaceService.reloadNode', () => {
     ptySessionManager.kill(original.id);
   });
 
+  it('encerra pelo id da conversa quando o PTY perdeu o vinculo do no', async () => {
+    const conversationId = '01a04ef1-a6ca-72b1-bc4d-a80a00f5f897';
+    const workspace = await workspaceRepository.createWorkspace({ name: 'lost binding', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Codex',
+      payload: { command: '/bin/sh', provider: 'codex', agentSessionId: conversationId },
+    });
+    const unbound = ptySessionManager.create({
+      command: '/bin/sh',
+      args: ['-c', 'cat', 'resume', conversationId],
+      cwd: '/tmp',
+      provider: 'codex',
+    });
+
+    await workspaceService.reloadNode(workspace.id, node.id);
+
+    expect(ptySessionManager.get(unbound.id)).toBeNull();
+  });
+
   it('falha com no inexistente ou de outro workspace', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'reload2', workingDir: '/tmp' });
     await expect(workspaceService.reloadNode(workspace.id, 'inexistente')).rejects.toThrow('nao encontrado');

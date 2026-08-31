@@ -253,17 +253,30 @@ export class WorkspaceService {
       let changed = false;
       const storedSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
       let storedPty = storedSessionId ? ptySessionManager.get(storedSessionId) : null;
+      const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
+      const provider = typeof payload.provider === 'string' ? payload.provider : null;
       const liveNodeSessions = ptySessionManager.listLiveForNode(workspace.id, node.id);
-      const compatibleNodeSessions = liveNodeSessions.filter((session) => (
+      let compatibleNodeSessions = liveNodeSessions.filter((session) => (
         session.command === payload.command
-        && (session.provider ?? null) === (typeof payload.provider === 'string' ? payload.provider : null)
+        && (session.provider ?? null) === provider
         && session.runtimeKey === executionRuntimeKey(executionRuntime)
       ));
+      if (!compatibleNodeSessions.length && provider && agentSessionId) {
+        const conversationSession = ptySessionManager.listLiveForAgentSession(provider, agentSessionId).find(
+          (session) => session.command === payload.command
+            && session.runtimeKey === executionRuntimeKey(executionRuntime),
+        );
+        if (conversationSession) {
+          ptySessionManager.claimNode(conversationSession.id, workspace.id, node.id);
+          compatibleNodeSessions = [conversationSession];
+        }
+      }
       if (compatibleNodeSessions.length) {
         // Hibernacao/reload pode deixar o processo vivo depois que o renderer
         // perdeu o sessionId. Reassocie o PTY original e elimine duplicatas.
         const canonical = compatibleNodeSessions[0];
         ptySessionManager.killNode(workspace.id, node.id, canonical.id);
+        if (provider && agentSessionId) ptySessionManager.killAgentSession(provider, agentSessionId, canonical.id);
         storedPty = canonical;
         if (storedSessionId !== canonical.id) {
           payload.sessionId = canonical.id;
@@ -284,8 +297,6 @@ export class WorkspaceService {
           changed = true;
         }
       }
-      const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
-      const provider = typeof payload.provider === 'string' ? payload.provider : null;
       const currentWorkingDir = typeof payload.currentWorkingDir === 'string' ? payload.currentWorkingDir : null;
       if (currentWorkingDir && !provider && executionRuntime.kind === 'native') {
         try {
@@ -412,6 +423,19 @@ export class WorkspaceService {
     return node;
   }
 
+  private killTerminalSessions(workspaceId: string, nodeId: string, payload: Record<string, unknown>): number {
+    let killed = ptySessionManager.killNode(workspaceId, nodeId);
+    const provider = typeof payload.provider === 'string' ? payload.provider : null;
+    const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
+    if (provider && agentSessionId) killed += ptySessionManager.killAgentSession(provider, agentSessionId);
+    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
+    if (sessionId && ptySessionManager.get(sessionId)) {
+      ptySessionManager.kill(sessionId);
+      killed += 1;
+    }
+    return killed;
+  }
+
   /** Recarrega UM terminal: mata a sessao PTY e limpa o sessionId — o no
       recria a sessao com resume (o contexto volta, util apos suspensao ou
       atualizacao da CLI do provider). */
@@ -419,9 +443,7 @@ export class WorkspaceService {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId) throw new Error('No nao encontrado.');
     const payload = { ...((node.payload ?? {}) as Record<string, unknown>) };
-    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
-    ptySessionManager.killNode(workspaceId, nodeId);
-    if (sessionId && ptySessionManager.get(sessionId)) ptySessionManager.kill(sessionId);
+    this.killTerminalSessions(workspaceId, nodeId, payload);
     delete payload.sessionId;
     await workspaceRepository.updateNode(nodeId, { payload: payload as never });
     return { reloaded: true };
@@ -445,9 +467,7 @@ export class WorkspaceService {
     if (dto.profileId) await providerProfileService.resolveEnv(dto.profileId, adapter.id);
 
     const current = { ...((node.payload ?? {}) as Record<string, unknown>) };
-    const sessionId = typeof current.sessionId === 'string' ? current.sessionId : null;
-    ptySessionManager.killNode(dto.workspaceId, node.id);
-    if (sessionId && ptySessionManager.get(sessionId)) ptySessionManager.kill(sessionId);
+    this.killTerminalSessions(dto.workspaceId, node.id, current);
     const command = adapter.interactiveCommand();
     const env = { ...command.env };
     let payload: Record<string, unknown> = {
@@ -497,9 +517,7 @@ export class WorkspaceService {
       }
     }
     if (executionRuntimeKey(currentRuntime) !== executionRuntimeKey(nextRuntime)) {
-      const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
-      ptySessionManager.killNode(dto.workspaceId, node.id);
-      if (sessionId && ptySessionManager.get(sessionId)) ptySessionManager.kill(sessionId);
+      this.killTerminalSessions(dto.workspaceId, node.id, payload);
       delete payload.sessionId;
       delete payload.agentSessionId;
       payload.resumeRecovery = false;
@@ -532,11 +550,7 @@ export class WorkspaceService {
       }).__orkestraiStopWorkspaceDevice?.(workspaceId).catch(() => undefined);
     }
     if (node.type === 'terminal') {
-      const sessionId = typeof (node.payload as { sessionId?: unknown } | null)?.sessionId === 'string'
-        ? (node.payload as { sessionId: string }).sessionId
-        : null;
-      ptySessionManager.killNode(workspaceId, nodeId);
-      if (sessionId && ptySessionManager.get(sessionId)) ptySessionManager.kill(sessionId);
+      this.killTerminalSessions(workspaceId, nodeId, { ...((node.payload ?? {}) as Record<string, unknown>) });
     }
     if (node.type === 'design') await designDocumentService.remove(workspaceId, nodeId);
     await workspaceRepository.deleteNode(nodeId);
@@ -712,15 +726,12 @@ export class WorkspaceService {
     const nodes = await workspaceRepository.listNodes(id);
     let killed = ptySessionManager.killWorkspace(id);
     for (const node of nodes) {
-      const payload = node.payload as { sessionId?: string };
-      if (!payload.sessionId) continue;
-      if (ptySessionManager.get(payload.sessionId)) {
-        ptySessionManager.kill(payload.sessionId);
-        killed += 1;
-      }
+      if (node.type !== 'terminal') continue;
+      const payload = { ...((node.payload ?? {}) as Record<string, unknown>) };
+      killed += this.killTerminalSessions(id, node.id, payload);
       const next = { ...payload };
       delete next.sessionId;
-      await workspaceRepository.updateNode(node.id, { payload: next });
+      await workspaceRepository.updateNode(node.id, { payload: next as never });
     }
     return { unloaded: true, killedSessions: killed };
   }

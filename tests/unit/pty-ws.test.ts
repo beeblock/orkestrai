@@ -93,6 +93,44 @@ describe('PTY WebSocket protocol', () => {
     }
   });
 
+  it('reassocia pela conversa confirmada quando o vinculo do no foi perdido', async () => {
+    const conversationId = '01a04ef1-a6ca-72b1-bc4d-a80a00f5f897';
+    const original = ptySessionManager.create({
+      command: '/bin/sh',
+      args: ['-c', 'cat', 'resume', conversationId],
+      cwd: '/tmp',
+      provider: 'codex',
+    });
+    const create = vi.spyOn(ptySessionManager, 'create');
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'create',
+        command: '/bin/sh',
+        args: ['-c', 'cat'],
+        cwd: '/tmp',
+        provider: 'codex',
+        workspaceId: 'workspace-recovered',
+        nodeId: 'node-recovered',
+        conversationArgs: ['resume', conversationId],
+      }));
+
+      await vi.waitFor(() => expect(socket.frames.some((frame) => frame.type === 'created')).toBe(true));
+      expect(create).not.toHaveBeenCalled();
+      expect(socket.frames.find((frame) => frame.type === 'created')).toMatchObject({
+        reused: true,
+        session: { id: original.id },
+      });
+      expect(ptySessionManager.listLiveForNode('workspace-recovered', 'node-recovered'))
+        .toHaveLength(1);
+    } finally {
+      socket.emit('close');
+      ptySessionManager.kill(original.id);
+    }
+  });
+
   it('resolve o perfil no servidor somente ao criar a PTY', async () => {
     const create = vi.spyOn(ptySessionManager, 'create');
     (globalThis as {

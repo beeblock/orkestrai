@@ -126,6 +126,9 @@ if (existsSync(dbFile)) {
 const { handlePtyConnection, isAllowedPtyWsOrigin, isPtyWsPath } = await import(
   '../src/lib/modules/agent-room/infrastructure/pty/pty-ws.ts'
 );
+const { ptySessionManager } = await import(
+  '../src/lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts'
+);
 
 const host = process.env.HOST ?? '127.0.0.1';
 const port = Number(process.env.PORT ?? 4173);
@@ -206,11 +209,25 @@ server.listen(port, host, () => {
   writeOrkestraiRuntimeFile(`http://${host}:${port}`);
 });
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, async () => {
-    await globalThis.__orkestraiShutdownCollaboration?.().catch(() => undefined);
-    await globalThis.__orkestraiShutdownDevices?.().catch(() => undefined);
-    server.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 15_000).unref();
-  });
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  // Do this synchronously before awaiting anything: Electron may exit as soon
+  // as it sends SIGTERM, and provider descendants must not survive the app.
+  ptySessionManager.killAll();
+  await globalThis.__orkestraiShutdownCollaboration?.().catch(() => undefined);
+  await globalThis.__orkestraiShutdownDevices?.().catch(() => undefined);
+  wss.close();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 15_000).unref();
 }
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => void shutdown());
+}
+
+// IPC disconnect covers an Electron crash/forced close where no app-level
+// before-quit hook runs. `exit` is the final synchronous safety net.
+process.on('disconnect', () => void shutdown());
+process.on('exit', () => ptySessionManager.killAll());

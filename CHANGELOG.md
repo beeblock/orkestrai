@@ -13,8 +13,10 @@ pt-BR, English, and Spanish translations.
   canvas agent now reattaches to the one live PTY identified by workspace and
   node instead of launching a second writer for the same provider conversation.
   Stale duplicate PTYs are removed during reload, runtime/provider changes,
-  dismissal, deletion, and workspace unload while the exact conversation id is
-  preserved for recovery.
+  dismissal, deletion, workspace unload, parent-process disconnect, and desktop
+  shutdown. Orkestrai now terminates the complete provider process group instead
+  of leaving a forked CLI holding the conversation lock, and can recover a lost
+  node binding from the exact provider conversation id.
 - Dictation captures at the microphone's native hardware rate before resampling
   to 16 kHz for local STT, selects the active channel on multichannel devices,
   and keeps a same-take MediaRecorder fallback. Electron/macOS can no longer

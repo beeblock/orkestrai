@@ -7,6 +7,35 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it('encerra a arvore do processo gerenciado e localiza uma conversa mesmo sem vinculo do no', () => {
+    const treeKill = vi.fn();
+    const directKill = vi.fn();
+    const fakePty = {
+      write: () => {},
+      resize: () => {},
+      kill: directKill,
+      onData: () => ({ dispose: () => {} }),
+      onExit: () => ({ dispose: () => {} }),
+      pid: 42,
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn, treeKill);
+    const conversationId = '01a04ef1-a6ca-72b1-bc4d-a80a00f5f897';
+    const session = manager.create({
+      command: 'codex',
+      args: ['resume', conversationId],
+      cwd: process.cwd(),
+      workspaceId: 'workspace-1',
+      nodeId: 'node-1',
+      provider: 'codex',
+    });
+
+    manager.claimNode(session.id, 'workspace-2', 'node-2');
+    expect(manager.listLiveForAgentSession('codex', conversationId)).toHaveLength(1);
+    expect(manager.killAgentSession('codex', conversationId)).toBe(1);
+    expect(treeKill).toHaveBeenCalledWith(fakePty, true);
+    expect(directKill).not.toHaveBeenCalled();
+  });
+
   it('localiza o PTY original de um no e encerra somente as duplicatas', () => {
     const manager = new PtySessionManager(spawn);
     const first = manager.create({

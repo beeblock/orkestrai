@@ -915,6 +915,11 @@ export class BridgeService {
       const role = input.role ? await roleService.launchContext(workspaceId, input.role).catch(() => null) : null;
       payload = materializeInteractiveAgentCommand(payload, role).payload;
       ptySessionManager.killNode(workspaceId, node.id);
+      const previousProvider = typeof previousPayload.provider === 'string' ? previousPayload.provider : null;
+      const previousAgentSessionId = typeof previousPayload.agentSessionId === 'string' ? previousPayload.agentSessionId : null;
+      if (previousProvider && previousAgentSessionId) {
+        ptySessionManager.killAgentSession(previousProvider, previousAgentSessionId);
+      }
       const previousSessionId = typeof previousPayload.sessionId === 'string' ? previousPayload.sessionId : null;
       if (previousSessionId && ptySessionManager.get(previousSessionId)) ptySessionManager.kill(previousSessionId);
       const updated = await workspaceRepository.updateNode(node.id, { payload, title: input.title || node.title });
@@ -1135,6 +1140,11 @@ export class BridgeService {
     const target = this.findAgent(agents, input.target);
     if (target.nodeId === origin.nodeId) throw new Error('O maestro não pode dispensar a si mesmo.');
     ptySessionManager.killNode(workspaceId, target.nodeId);
+    const targetNode = await workspaceRepository.getNode(target.nodeId);
+    const targetPayload = (targetNode?.payload ?? {}) as { provider?: string; agentSessionId?: string };
+    if (targetPayload.provider && targetPayload.agentSessionId) {
+      ptySessionManager.killAgentSession(targetPayload.provider, targetPayload.agentSessionId);
+    }
     if (target.sessionId && ptySessionManager.get(target.sessionId)) ptySessionManager.kill(target.sessionId);
     await workspaceRepository.deleteNode(target.nodeId);
     this.notifyWorkspaceChanged(workspaceId);

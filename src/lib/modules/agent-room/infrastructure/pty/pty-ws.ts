@@ -152,11 +152,20 @@ export function handlePtyConnection(socket: WebSocket): void {
             const expectedProvider = typeof message.provider === 'string' ? message.provider : null;
             const expectedRuntime = executionRuntimeKey(message.runtime ?? { kind: 'native' });
             const live = ptySessionManager.listLiveForNode(message.workspaceId, message.nodeId);
-            const existing = live.find(
+            let existing = live.find(
               (session) => session.command === expectedCommand
                 && (session.provider ?? null) === expectedProvider
                 && session.runtimeKey === expectedRuntime,
             );
+            const expectedAgentSessionId = Array.isArray(message.conversationArgs)
+              ? message.conversationArgs.map(String).find((arg) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(arg)) ?? null
+              : null;
+            if (!existing && expectedProvider && expectedAgentSessionId) {
+              existing = ptySessionManager.listLiveForAgentSession(expectedProvider, expectedAgentSessionId).find(
+                (session) => session.command === expectedCommand && session.runtimeKey === expectedRuntime,
+              );
+              if (existing) ptySessionManager.claimNode(existing.id, message.workspaceId, message.nodeId);
+            }
             if (!existing) {
               // A provider/runtime change should have retired the old PTY. If
               // it did not, do it here before starting the replacement.
@@ -164,6 +173,9 @@ export function handlePtyConnection(socket: WebSocket): void {
               return false;
             }
             ptySessionManager.killNode(message.workspaceId, message.nodeId, existing.id);
+            if (expectedProvider && expectedAgentSessionId) {
+              ptySessionManager.killAgentSession(expectedProvider, expectedAgentSessionId, existing.id);
+            }
             const scrollback = attachSession(existing.id);
             send({ type: 'created', session: existing, scrollback, reused: true });
             return true;

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { readlink } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { promisify } from 'node:util';
@@ -68,8 +68,52 @@ async function processWorkingDirectory(pid: number): Promise<string | null> {
   return null;
 }
 
+/**
+ * node-pty kills only its direct child. Agent launchers commonly fork a native
+ * TUI, so stopping only the wrapper can leave the real provider holding a
+ * conversation lock. Canvas PTYs own a dedicated process group/session and
+ * can therefore terminate the complete tree without touching external CLIs.
+ */
+export function killPtyProcessTree(pty: IPty, owned: boolean): void {
+  const pid = Number(pty.pid);
+  if (!owned || !Number.isSafeInteger(pid) || pid <= 1) {
+    pty.kill();
+    return;
+  }
+
+  if (platform() === 'win32') {
+    try {
+      execFileSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        timeout: 5_000,
+        windowsHide: true,
+      });
+      return;
+    } catch {
+      pty.kill();
+      return;
+    }
+  }
+
+  try {
+    const processGroup = Number(execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2_000,
+    }).trim());
+    if (processGroup === pid) {
+      process.kill(-processGroup, 'SIGHUP');
+      return;
+    }
+  } catch {
+    // Fall back to node-pty when the process already exited or has no group.
+  }
+  pty.kill();
+}
+
 type PtySession = PtySessionInfo & {
   pty: IPty;
+  ownsProcessTree: boolean;
   scrollback: string;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
@@ -153,9 +197,14 @@ export function sanitizeComposerText(text: string): string {
 export class PtySessionManager {
   private sessions = new Map<string, PtySession>();
   private spawnPty: typeof import('node-pty').spawn;
+  private killProcessTree: (pty: IPty, owned: boolean) => void;
 
-  constructor(spawnPty: typeof import('node-pty').spawn) {
+  constructor(
+    spawnPty: typeof import('node-pty').spawn,
+    killProcessTree: (pty: IPty, owned: boolean) => void = killPtyProcessTree,
+  ) {
     this.spawnPty = spawnPty;
+    this.killProcessTree = killProcessTree;
   }
 
   create(input: CreatePtySessionInput): PtySessionInfo {
@@ -202,6 +251,7 @@ export class PtySessionManager {
       provider: input.provider ?? null,
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
+      ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       scrollback: '',
       listeners: new Set(),
       exitListeners: new Set(),
@@ -266,6 +316,21 @@ export class PtySessionManager {
       .filter((session) => session.workspaceId === workspaceId && session.nodeId === nodeId && !session.exited)
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .map((session) => this.toInfo(session));
+  }
+
+  listLiveForAgentSession(provider: string, agentSessionId: string): PtySessionInfo[] {
+    return [...this.sessions.values()]
+      .filter((session) => !session.exited && session.provider === provider && session.args.includes(agentSessionId))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .map((session) => this.toInfo(session));
+  }
+
+  claimNode(id: string, workspaceId: string, nodeId: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session || session.exited) return false;
+    session.workspaceId = workspaceId;
+    session.nodeId = nodeId;
+    return true;
   }
 
   get(id: string): PtySessionInfo | null {
@@ -365,7 +430,7 @@ export class PtySessionManager {
     this.rejectDeliveries(session, new Error(`Sessão PTY ${id} encerrada.`));
     if (!session.exited) {
       try {
-        session.pty.kill();
+        this.killProcessTree(session.pty, session.ownsProcessTree);
       } catch {
         // processo já morreu
       }
@@ -392,6 +457,22 @@ export class PtySessionManager {
     const sessions = [...this.sessions.values()].filter(
       (session) => session.workspaceId === workspaceId
         && session.nodeId === nodeId
+        && session.id !== keepSessionId,
+    );
+    for (const session of sessions) {
+      session.workspaceId = null;
+      session.nodeId = null;
+    }
+    for (const session of sessions) this.kill(session.id);
+    return sessions.length;
+  }
+
+  /** Ends a provider conversation even if a stale node lost its PTY id. */
+  killAgentSession(provider: string, agentSessionId: string, keepSessionId?: string): number {
+    const sessions = [...this.sessions.values()].filter(
+      (session) => !session.exited
+        && session.provider === provider
+        && session.args.includes(agentSessionId)
         && session.id !== keepSessionId,
     );
     for (const session of sessions) {

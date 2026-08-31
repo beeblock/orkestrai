@@ -70,6 +70,24 @@ export class AgentSessionService {
       }
       return { nodeId: target.id, sessionId: compatibleLiveSession.id, state: 'existing' };
     }
+    const confirmedAgentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
+    const conversationSession = payload.provider && confirmedAgentSessionId
+      ? ptySessionManager.listLiveForAgentSession(payload.provider, confirmedAgentSessionId).find(
+          (session) => session.command === payload.command && session.runtimeKey === executionRuntimeKey(runtime),
+        ) ?? null
+      : null;
+    if (conversationSession) {
+      ptySessionManager.claimNode(conversationSession.id, workspaceId, target.id);
+      ptySessionManager.killNode(workspaceId, target.id, conversationSession.id);
+      ptySessionManager.killAgentSession(payload.provider!, confirmedAgentSessionId!, conversationSession.id);
+      if (payload.sessionId !== conversationSession.id) {
+        await workspaceRepository.updateNode(target.id, {
+          payload: { ...payload, sessionId: conversationSession.id } as never,
+        });
+        notifyWorkspaceChanged(workspaceId);
+      }
+      return { nodeId: target.id, sessionId: conversationSession.id, state: 'existing' };
+    }
     if (liveNodeSessions.length) ptySessionManager.killNode(workspaceId, target.id);
 
     const existing = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;

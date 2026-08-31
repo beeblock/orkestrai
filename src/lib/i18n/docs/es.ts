@@ -736,7 +736,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       summary: 'La recuperación conserva una sesión por agente, el micrófono retiene la misma toma y los flujos dejan de mover o apilar nodos.',
       items: [
         'Después de suspender, hibernar o recargar el renderer, cada agente vuelve a la única PTY viva de su nodo en vez de abrir un segundo escritor para la misma conversación.',
-        'Recarga, cambios de provider o runtime, expulsión, eliminación y descarga del workspace quitan PTY duplicadas y conservan el id exacto de conversación para recuperarlo.',
+        'Recarga, cambios de provider o runtime, expulsión, eliminación, descarga del workspace, desconexión del proceso padre y cierre del app terminan todo el grupo de procesos; un vínculo perdido se recupera con el id exacto de conversación.',
         'El dictado captura a la frecuencia nativa de 44,1/48 kHz, elige el canal activo, remuestrea después y recupera la misma toma con un fallback del navegador si Web Audio no entrega muestras.',
         'Las actualizaciones de payload son realmente parciales y el refresco protege el arrastre actual, por lo que el progreso de imagen o el estado de sesión no restaura coordenadas antiguas.',
         'Los flujos de imagen y nodos creados por agentes usan posiciones libres según los rectángulos reales, incluidos resultados y referencias.',
