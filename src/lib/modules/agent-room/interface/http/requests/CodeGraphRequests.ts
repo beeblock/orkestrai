@@ -5,11 +5,13 @@ import {
   codeGraphTraversalSchema,
   codeGraphOverviewSchema,
   codeGraphChangeSchema,
+  codeGraphHandoffSchema,
   type CodeGraphIndexInput,
   type CodeGraphSearchInput,
   type CodeGraphTraversalInput,
   type CodeGraphOverviewInput,
   type CodeGraphChangeInput,
+  type CodeGraphHandoffInput,
 } from '../../../contracts/schemas/codeGraphSchemas.js';
 
 abstract class AuthorizedRequest extends FormRequest {
@@ -41,4 +43,9 @@ export class OverviewCodeGraphRequest extends AuthorizedRequest {
 export class ChangeCodeGraphRequest extends AuthorizedRequest {
   rules() { return codeGraphChangeSchema; }
   passedValidation(data: unknown): CodeGraphChangeInput { return codeGraphChangeSchema.parse(data); }
+}
+
+export class CodeGraphHandoffRequest extends AuthorizedRequest {
+  rules() { return codeGraphHandoffSchema; }
+  passedValidation(data: unknown): CodeGraphHandoffInput { return codeGraphHandoffSchema.parse(data); }
 }

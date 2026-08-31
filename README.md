@@ -61,7 +61,8 @@ common credentials redacted; normal agent output is not persisted.
   repositories remain separate projects, and arbitrary SQL/Cypher is never
   exposed. Its Changes view combines the current Git working tree and active
   Floor worktrees to surface affected symbols, likely tests, and shared-impact
-  conflicts before review or landing.
+  conflicts before review or landing, then creates a traceable Review Center
+  review or Kanban task from that bounded evidence.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,

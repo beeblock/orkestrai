@@ -36,8 +36,16 @@ export const codeGraphChangeSchema = z.object({
   limit: z.coerce.number().int().min(50).max(750).default(500),
 });
 
+export const codeGraphHandoffSchema = z.object({
+  kind: z.enum(['review', 'task']),
+  scopeId: z.string().trim().regex(/^(?:workspace|floor:[0-9a-f-]{36})$/i),
+  title: z.string().trim().min(1).max(160),
+  locale: z.enum(['pt-BR', 'en', 'es']).default('en'),
+});
+
 export type CodeGraphIndexInput = z.infer<typeof codeGraphIndexSchema>;
 export type CodeGraphSearchInput = z.infer<typeof codeGraphSearchSchema>;
 export type CodeGraphTraversalInput = z.infer<typeof codeGraphTraversalSchema>;
 export type CodeGraphOverviewInput = z.infer<typeof codeGraphOverviewSchema>;
 export type CodeGraphChangeInput = z.infer<typeof codeGraphChangeSchema>;
+export type CodeGraphHandoffInput = z.infer<typeof codeGraphHandoffSchema>;

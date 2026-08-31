@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
+import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
+import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
 import { codeGraphParser } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphParser.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -147,6 +149,37 @@ describe('CodeGraphIndexService', () => {
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });
 
+  it('does not misrepresent a multi-repository change set as a primary Git review', async () => {
+    const primary = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-primary-'));
+    const sibling = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-sibling-'));
+    directories.push(primary, sibling);
+    await writeFile(join(primary, 'package.json'), '{"name":"primary"}\n');
+    await writeFile(join(primary, 'app.ts'), 'export function primaryApp() { return 1; }\n');
+    await writeFile(join(sibling, 'package.json'), '{"name":"sibling"}\n');
+    await writeFile(join(sibling, 'api.ts'), 'export function siblingApi() { return 1; }\n');
+    initializeGit(primary);
+    initializeGit(sibling);
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'Mixed changes',
+      workingDir: primary,
+      repositoryRoots: [{ alias: 'sibling', path: sibling }],
+    });
+    await codeGraphIndexService.index(workspace.id);
+    await writeFile(join(primary, 'app.ts'), 'export function primaryApp() { return 2; }\n');
+    await writeFile(join(sibling, 'api.ts'), 'export function siblingApi() { return 2; }\n');
+
+    const intelligence = await codeGraphChangeIntelligenceService.analyze(workspace.id);
+    expect(new Set(intelligence.scopes[0].files.map((file) => file.projectName))).toEqual(new Set(['Mixed changes', 'sibling']));
+    const task = await codeGraphHandoffService.create(workspace.id, {
+      kind: 'task', scopeId: 'workspace', title: 'Review all repository changes', locale: 'en',
+    });
+    expect(task.kind).toBe('task');
+    await expect(codeGraphHandoffService.create(workspace.id, {
+      kind: 'review', scopeId: 'workspace', title: 'Unsafe partial review', locale: 'en',
+    })).rejects.toThrow('more than one repository');
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
   it('maps working tree changes to affected symbols and likely tests', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-impact-'));
     directories.push(directory);
@@ -172,6 +205,15 @@ describe('CodeGraphIndexService', () => {
     ]));
     expect(intelligence.impact.nodes.some((symbol) => symbol.name === 'total')).toBe(true);
     expect(intelligence.likelyTests).toContain('tests/orders.test.ts');
+    const task = await codeGraphHandoffService.create(workspace.id, {
+      kind: 'task', scopeId: 'workspace', title: 'Investigate order impact', locale: 'en',
+    });
+    expect(task).toMatchObject({ kind: 'task', artifact: { title: 'Investigate order impact', status: 'todo' } });
+    expect((await taskBoardService.list(workspace.id))[0].description).toContain('## Likely tests');
+    const review = await codeGraphHandoffService.create(workspace.id, {
+      kind: 'review', scopeId: 'workspace', title: 'Review order impact', locale: 'en',
+    });
+    expect(review).toMatchObject({ kind: 'review', artifact: { title: 'Review order impact', status: 'pending' } });
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });
 
@@ -202,6 +244,13 @@ describe('CodeGraphIndexService', () => {
         sharedPaths: ['Floor impact/src/orders.ts'],
       }),
     ]));
+    const floorTask = await codeGraphHandoffService.create(workspace.id, {
+      kind: 'task', scopeId: `floor:${left.id}`, title: 'Resolve pricing overlap', locale: 'en',
+    });
+    expect(floorTask.artifact.title).toBe('Resolve pricing overlap');
+    await expect(codeGraphHandoffService.create(workspace.id, {
+      kind: 'review', scopeId: `floor:${left.id}`, title: 'Review pricing Floor', locale: 'en',
+    })).rejects.toThrow('primary Git working tree');
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });
 });

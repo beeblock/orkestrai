@@ -174,3 +174,20 @@ export type CodeGraphChangeOptions = {
   depth?: number;
   limit?: number;
 };
+
+export type CodeGraphHandoffOptions = {
+  kind: 'review' | 'task';
+  scopeId: string;
+  title: string;
+  locale: 'pt-BR' | 'en' | 'es';
+};
+
+export type CodeGraphHandoffResult = {
+  kind: CodeGraphHandoffOptions['kind'];
+  scopeId: string;
+  artifact: {
+    id: string;
+    title: string;
+    status: string;
+  };
+};

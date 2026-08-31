@@ -11,6 +11,8 @@
     Braces,
     FileCode2,
     GitCompareArrows,
+    GitPullRequestArrow,
+    ListTodo,
     ExternalLink,
     Network,
     RefreshCw,
@@ -25,12 +27,15 @@
   import type {
     CodeGraphProject,
     CodeGraphChangeIntelligence,
+    CodeGraphChangeScope,
     CodeGraphChangedFile,
+    CodeGraphHandoffResult,
     CodeGraphSnapshot,
     CodeGraphSubgraph,
     CodeGraphSymbol,
   } from '$lib/modules/agent-room/domain/code-graph.js';
   import * as m from '$lib/paraglide/messages.js';
+  import { localeState } from '$lib/i18n/locale.svelte.js';
 
   export type CodeGraphNodeData = {
     title: string;
@@ -56,6 +61,7 @@
   let loading = $state(true);
   let indexing = $state(false);
   let changeLoading = $state(false);
+  let handoffBusy = $state<string | null>(null);
   let viewMode = $state<'overview' | 'changes'>('overview');
   let error = $state('');
   let graphHost: HTMLDivElement;
@@ -151,9 +157,11 @@
       });
     }
     if (model.order > 1 && model.size > 0) forceAtlas2.assign(model, { iterations: Math.min(120, 30 + model.order) });
+    const labelColor = getComputedStyle(graphHost).getPropertyValue('--app-text').trim() || '#e5e7eb';
     const sigma = new Sigma(model, graphHost, {
       allowInvalidContainer: true,
       renderEdgeLabels: false,
+      labelColor: { color: labelColor },
       labelDensity: 0.08,
       labelRenderedSizeThreshold: 8,
       minCameraRatio: 0.08,
@@ -191,6 +199,31 @@
       error = reason instanceof Error ? reason.message : m['code_graph.changes_error']();
     } finally {
       changeLoading = false;
+    }
+  }
+
+  async function createHandoff(kind: 'review' | 'task', scope: CodeGraphChangeScope): Promise<void> {
+    const operation = `${kind}:${scope.id}`;
+    handoffBusy = operation;
+    try {
+      const result = await api<CodeGraphHandoffResult>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/handoffs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          kind,
+          scopeId: scope.id,
+          title: kind === 'review'
+            ? m['code_graph.review_title']({ name: scope.name })
+            : m['code_graph.task_title']({ name: scope.name }),
+          locale: localeState.current,
+        }),
+      });
+      toast.success(kind === 'review'
+        ? m['code_graph.review_created']({ title: result.artifact.title })
+        : m['code_graph.task_created']({ title: result.artifact.title }));
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : m['code_graph.handoff_error']());
+    } finally {
+      handoffBusy = null;
     }
   }
 
@@ -437,9 +470,25 @@
             <div class="space-y-3">
               {#each changes.scopes as scope (scope.id)}
                 <section>
-                  <div class="mb-1 flex items-center justify-between gap-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">
+                  <div class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">
                     <span class="truncate">{scope.kind === 'floor' ? m['code_graph.floor_scope']({ name: scope.name }) : m['code_graph.workspace_scope']()}</span>
-                    <span class="tabular-nums">{scope.files.length}</span>
+                    <span class="ml-auto tabular-nums">{scope.files.length}</span>
+                    {#if scope.kind === 'workspace'}
+                      <HeaderIconButton
+                        label={m['code_graph.create_review']()}
+                        class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
+                        side="top"
+                        disabled={handoffBusy !== null}
+                        onclick={() => void createHandoff('review', scope)}
+                      ><GitPullRequestArrow size={12} class={handoffBusy === `review:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
+                    {/if}
+                    <HeaderIconButton
+                      label={m['code_graph.create_task']()}
+                      class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
+                      side="top"
+                      disabled={handoffBusy !== null}
+                      onclick={() => void createHandoff('task', scope)}
+                    ><ListTodo size={12} class={handoffBusy === `task:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
                   </div>
                   <div class="space-y-1">
                     {#each scope.files.slice(0, 20) as file (`${scope.id}:${file.projectId}:${file.path}`)}

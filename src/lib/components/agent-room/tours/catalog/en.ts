@@ -1712,6 +1712,11 @@ export const TOURS_EN: Tour[] = [
         title: 'Inspect active changes',
         body: 'Open Changes to map the workspace and active Floors onto the same graph. Red symbols changed directly, amber paths identify likely tests, and the side panel exposes overlapping Floor files or downstream symbols. Agents receive the same bounded evidence with code_graph_changes.',
       },
+      {
+        id: 'handoff-change-impact',
+        title: 'Make the evidence actionable',
+        body: 'Use the review icon on the workspace scope to create a Review Center item tied to the current Git revision, or the task icon on any workspace or Floor scope to create a Kanban task for the leader. Agents use code_graph_handoff for the same guarded action.',
+      },
     ],
   },
   {

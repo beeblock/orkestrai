@@ -1716,6 +1716,11 @@ export const TOURS_PT: Tour[] = [
         title: 'Inspecione mudanças ativas',
         body: 'Abra Mudanças para projetar o workspace e os Andares ativos no mesmo grafo. Símbolos vermelhos mudaram diretamente, caminhos âmbar indicam testes prováveis, e o painel lateral mostra arquivos ou símbolos dependentes compartilhados entre Andares. Agentes recebem a mesma evidência limitada com code_graph_changes.',
       },
+      {
+        id: 'handoff-change-impact',
+        title: 'Transforme a evidência em ação',
+        body: 'Use o ícone de revisão no escopo do workspace para criar um item no Review Center ligado à revisão Git atual, ou o ícone de tarefa em qualquer escopo de workspace ou Andar para criar uma tarefa Kanban para o líder. Agentes usam code_graph_handoff para a mesma ação protegida.',
+      },
     ],
   },
   {

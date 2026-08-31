@@ -3390,5 +3390,12 @@
   "code_graph.shared_files": "shared files",
   "code_graph.shared_symbols": "shared symbols",
   "code_graph.likely_tests": "Likely tests",
-  "code_graph.changes_error": "Could not analyze Git and Floor changes."
+  "code_graph.changes_error": "Could not analyze Git and Floor changes.",
+  "code_graph.create_review": "Create Review Center handoff",
+  "code_graph.create_task": "Create Kanban task",
+  "code_graph.review_title": "Review {name} change impact",
+  "code_graph.task_title": "Investigate {name} change impact",
+  "code_graph.review_created": "Review created: {title}",
+  "code_graph.task_created": "Task created: {title}",
+  "code_graph.handoff_error": "Could not create the handoff."
 }

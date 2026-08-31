@@ -78,6 +78,8 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { projects: [], stats: { files: 12, symbols: 80, edges: 140 } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/changes?')) {
           res.end(JSON.stringify({ data: { scopes: [{ files: [{ path: 'src/order.ts' }] }], impact: { nodes: [{ id: 's1' }], edges: [], truncated: false }, likelyTests: ['tests/order.test.ts'], conflicts: [], truncated: false } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/handoffs' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { kind: 'task', scopeId: 'workspace', artifact: { id: 'task-1', title: 'Investigate impact', status: 'todo' } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/search?')) {
           res.end(JSON.stringify({ data: [{ id: '00000000-0000-7000-8000-000000000010', kind: 'class', qualifiedName: 'src/order::OrderService', projectName: 'Web', path: 'src/order.ts', startLine: 4 }] }));
         } else if (req.url === '/api/agent-room/bridge/code-graph/symbols/00000000-0000-7000-8000-000000000010') {
@@ -242,6 +244,8 @@ describe('orkestrai CLI', () => {
     expect(requests.at(-1).url).toContain('/graph?direction=incoming&depth=3');
     expect(await run(['graph', 'changes', '--depth', '2'], { cwd, out, env: {} })).toBe(0);
     expect(requests.at(-1).url).toContain('/code-graph/changes?depth=2');
+    expect(await run(['graph', 'handoff', 'task', 'workspace', 'Investigate', 'impact'], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/code-graph/handoffs' });
   });
 
   it('huddle lista sessoes e registra a fala do agente identificado', async () => {

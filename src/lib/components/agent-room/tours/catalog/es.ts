@@ -1712,6 +1712,11 @@ export const TOURS_ES: Tour[] = [
         title: 'Inspecciona cambios activos',
         body: 'Abre Cambios para proyectar el workspace y los Pisos activos en el mismo grafo. Los símbolos rojos cambiaron directamente, las rutas ámbar indican pruebas probables y el panel lateral muestra archivos o símbolos dependientes compartidos entre Pisos. Los agentes reciben la misma evidencia limitada con code_graph_changes.',
       },
+      {
+        id: 'handoff-change-impact',
+        title: 'Convierte la evidencia en acción',
+        body: 'Usa el icono de revisión en el alcance del workspace para crear un elemento en Review Center ligado a la revisión Git actual, o el icono de tarea en cualquier alcance de workspace o Piso para crear una tarea Kanban para el líder. Los agentes usan code_graph_handoff para la misma acción protegida.',
+      },
     ],
   },
   {

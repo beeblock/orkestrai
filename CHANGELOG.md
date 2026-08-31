@@ -25,6 +25,11 @@ pt-BR, English, and Spanish translations.
   symbols, recommends likely tests, and highlights cross-Floor conflicts before
   work is reviewed or landed. The same evidence is available through
   `code_graph_changes` and `orkestrai graph changes`.
+- Each change scope can create a traceable Kanban task with bounded file,
+  symbol, test, and conflict evidence. Primary working-tree changes can also
+  create a Review Center review tied to the current Git revision; typed
+  `code_graph_handoff` and CLI commands expose the same guarded action. Graph
+  labels now follow the active theme so they remain legible in dark and light modes.
 
 ### Fixed
 

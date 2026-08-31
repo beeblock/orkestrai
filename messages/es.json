@@ -3390,5 +3390,12 @@
   "code_graph.shared_files": "archivos compartidos",
   "code_graph.shared_symbols": "símbolos compartidos",
   "code_graph.likely_tests": "Pruebas probables",
-  "code_graph.changes_error": "No se pudieron analizar los cambios de Git y de los Pisos."
+  "code_graph.changes_error": "No se pudieron analizar los cambios de Git y de los Pisos.",
+  "code_graph.create_review": "Crear handoff en Review Center",
+  "code_graph.create_task": "Crear tarea en Kanban",
+  "code_graph.review_title": "Revisar impacto de cambios en {name}",
+  "code_graph.task_title": "Investigar impacto de cambios en {name}",
+  "code_graph.review_created": "Revisión creada: {title}",
+  "code_graph.task_created": "Tarea creada: {title}",
+  "code_graph.handoff_error": "No se pudo crear el handoff."
 }

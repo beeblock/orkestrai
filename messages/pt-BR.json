@@ -3390,5 +3390,12 @@
   "code_graph.shared_files": "arquivos compartilhados",
   "code_graph.shared_symbols": "símbolos compartilhados",
   "code_graph.likely_tests": "Testes prováveis",
-  "code_graph.changes_error": "Não foi possível analisar as mudanças Git e dos Andares."
+  "code_graph.changes_error": "Não foi possível analisar as mudanças Git e dos Andares.",
+  "code_graph.create_review": "Criar handoff no Review Center",
+  "code_graph.create_task": "Criar tarefa no Kanban",
+  "code_graph.review_title": "Revisar impacto das mudanças em {name}",
+  "code_graph.task_title": "Investigar impacto das mudanças em {name}",
+  "code_graph.review_created": "Revisão criada: {title}",
+  "code_graph.task_created": "Tarefa criada: {title}",
+  "code_graph.handoff_error": "Não foi possível criar o handoff."
 }

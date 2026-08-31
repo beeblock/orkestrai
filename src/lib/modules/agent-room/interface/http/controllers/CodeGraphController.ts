@@ -1,9 +1,10 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { ChangeCodeGraphDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
+import { ChangeCodeGraphDto, CodeGraphHandoffDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
 import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
-import { ChangeCodeGraphRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
+import { codeGraphHandoffService } from '../../../application/services/CodeGraphHandoffService.js';
+import { ChangeCodeGraphRequest, CodeGraphHandoffRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
   async status(event: RequestEvent) {
@@ -70,6 +71,16 @@ export class CodeGraphController extends Controller {
       return this.json({ data: await codeGraphChangeIntelligenceService.analyze(dto.workspaceId, dto.options) });
     } catch (error) {
       return this.failure(error, 'Could not analyze code changes.');
+    }
+  }
+
+  async handoff(event: RequestEvent) {
+    try {
+      const input = await CodeGraphHandoffRequest.validate(event);
+      const dto = CodeGraphHandoffDto.from(event.params.id, input);
+      return this.json({ data: await codeGraphHandoffService.create(dto.workspaceId, dto.options, 'user') }, 201);
+    } catch (error) {
+      return this.failure(error, 'Could not create the code intelligence handoff.');
     }
   }
 
