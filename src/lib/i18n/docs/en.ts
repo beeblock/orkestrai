@@ -376,7 +376,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'atalhos',
       title: 'Shortcuts',
-      body: `⌘P palette · ⌘K (or Ctrl+K) search documentation from any screen · ⌘2 Provider Center · ⌘⇧A next attention · ⌘⇧T organize selected nodes, or the whole canvas when none are selected · Cmd/Ctrl+D duplicate selected shapes · Cmd/Ctrl+C and Cmd/Ctrl+V copy and paste selected shapes · ⌘G group · ⌘⇧G ungroup · N new note · L connect selected · Alt+1…9 focus terminal · Alt+Space voice dictation · ⌘F search terminal · ⌘Z undo · Backspace delete. In Windows terminals, Ctrl+V pastes native clipboard text; when the clipboard has no text, the original CLI shortcut remains available for image paste. On Windows, the styled title bar provides File, Edit, View, Workspace, Window, and Help while preserving window controls; macOS and Linux keep their platform menus.`,
+      body: `⌘P palette · ⌘K (or Ctrl+K) search documentation from any screen · ⌘2 Provider Center · ⌘⇧A next attention · ⌘⇧T organize the whole visible canvas · Cmd/Ctrl+D duplicate selected shapes · Cmd/Ctrl+C and Cmd/Ctrl+V copy and paste selected shapes · ⌘G group · ⌘⇧G ungroup · N new note · L connect selected · Alt+1…9 focus terminal · Alt+Space voice dictation · ⌘F search terminal · ⌘Z undo · Backspace delete. In Windows terminals, Ctrl+V pastes native clipboard text; when the clipboard has no text, the original CLI shortcut remains available for image paste. On Windows, the styled title bar provides File, Edit, View, Workspace, Window, and Help while preserving window controls; macOS and Linux keep their platform menus.`,
     },
   ],
   useCases: [
@@ -575,7 +575,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'audio-devices',
       title: 'Choose the microphone and speaker',
-      body: 'Open Settings → Voice to choose and test the microphone used by every local dictation surface and the speaker used by previews and spoken replies. Grant microphone access to reveal device names, watch the live input meter, and play a short output tone before saving. Dictation records direct PCM through the same Web Audio route as that meter and normalizes quiet speech before local STT. If a selected device disappears, Orkestrai returns to the system default. Permission denial, a missing device, interrupted capture, likely contention, and a device that opens but produces no signal receive distinct guidance; platforms that cannot route app audio to a specific output explain that limitation instead of silently ignoring the choice.',
+      body: 'Open Settings → Voice to choose and test the microphone used by every local dictation surface and the speaker used by previews and spoken replies. Grant microphone access to reveal device names, watch the live input meter, and play a short output tone before saving. Dictation captures direct PCM at the microphone native hardware rate, selects the active input channel, then resamples and normalizes it for local STT. A same-take browser capture recovers the speech if Electron Web Audio opens but emits empty blocks, so you do not have to dictate it again. If a selected device disappears, Orkestrai returns to the system default. Permission denial, a missing device, interrupted capture, likely contention, and a device that opens but produces no signal receive distinct guidance; platforms that cannot route app audio to a specific output explain that limitation instead of silently ignoring the choice.',
       tags: ['Audio devices', 'microphone test', 'speaker test'],
     },
     {
@@ -605,8 +605,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'organize-canvas',
       title: 'Reorganize a growing workspace',
-      body: 'Select the nodes you want to realign and choose Organize canvas from the toolbar or command palette. Orkestrai lays out only that selection; with nothing selected, it organizes the whole canvas into deterministic rows without moving nodes into each other. Connections stay behind every node.',
-      tags: ['Canvas layout', 'selection', 'connections'],
+      body: 'Choose Organize canvas from the toolbar or command palette. Orkestrai lays out the complete visible canvas into deterministic rows without moving nodes into each other, even when one item was still selected before the command; groups move as intact units and keep their internal arrangement. New agent, note, Portal, board, image workflow, reference, and generated Image nodes also search the real occupied rectangles and keep a stable margin instead of landing on existing work. Connections stay behind every node.',
+      tags: ['Canvas layout', 'collision-free nodes', 'connections'],
     },
     {
       id: 'focused-workspace-view',
@@ -730,6 +730,19 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Upcoming patch',
+      title: 'Reliable resume, dictation, and canvas placement',
+      summary: 'Sleep recovery keeps one agent session, microphones retain the same take, and growing workflows stop moving or stacking nodes.',
+      items: [
+        'After sleep, hibernation, or a renderer reload, each agent reattaches to the one live PTY for its workspace node instead of opening a second writer for the same provider conversation.',
+        'Reload, provider/runtime changes, dismissal, deletion, and workspace unload remove duplicate node PTYs while preserving the exact conversation id used for recovery.',
+        'Dictation captures at the microphone native 44.1/48 kHz rate, chooses the active channel, resamples only afterward, and can recover the same take from a browser fallback when Electron Web Audio emits no samples.',
+        'Payload updates are truly partial and live refresh protects a current drag, so image progress or session state can no longer restore stale node coordinates or dimensions.',
+        'Image workflows and agent-created nodes use collision-aware placement against real node rectangles, including every generated output and reference.',
+        'Organize canvas always arranges the complete visible graph into deterministic non-overlapping rows, keeps groups intact, and works even when one node remains selected.',
+      ],
+    },
     {
       date: 'Aug 28, 2026 · 0.22.0',
       title: 'Orkestrai 0.22.0: native image workflows for people and agents',

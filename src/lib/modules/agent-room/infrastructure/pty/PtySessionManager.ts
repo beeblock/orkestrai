@@ -5,6 +5,7 @@ import { platform } from 'node:os';
 import { promisify } from 'node:util';
 import type { IPty } from 'node-pty';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
+import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch } from '../WslRuntime.ts';
 
@@ -33,6 +34,8 @@ export type PtySessionInfo = {
   nodeId?: string | null;
   /** Provider registrado; ausente em shells puros. */
   provider?: string | null;
+  /** Stable native/WSL identity used to avoid cross-runtime reattachment. */
+  runtimeKey: string;
 };
 
 export type PtySessionListener = (data: string) => void;
@@ -197,6 +200,7 @@ export class PtySessionManager {
       workspaceId: input.workspaceId ?? null,
       nodeId: input.nodeId ?? null,
       provider: input.provider ?? null,
+      runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
       scrollback: '',
       listeners: new Set(),
@@ -250,6 +254,18 @@ export class PtySessionManager {
 
   list(): PtySessionInfo[] {
     return [...this.sessions.values()].map((session) => this.toInfo(session));
+  }
+
+  /**
+   * A node owns at most one live PTY. Returning the oldest session makes the
+   * original process canonical when a renderer reconnect race created a
+   * second terminal for the same node.
+   */
+  listLiveForNode(workspaceId: string, nodeId: string): PtySessionInfo[] {
+    return [...this.sessions.values()]
+      .filter((session) => session.workspaceId === workspaceId && session.nodeId === nodeId && !session.exited)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .map((session) => this.toInfo(session));
   }
 
   get(id: string): PtySessionInfo | null {
@@ -369,6 +385,21 @@ export class PtySessionManager {
     }
     for (const id of ids) this.kill(id);
     return ids.length;
+  }
+
+  /** Ends every PTY owned by one canvas node, optionally preserving one. */
+  killNode(workspaceId: string, nodeId: string, keepSessionId?: string): number {
+    const sessions = [...this.sessions.values()].filter(
+      (session) => session.workspaceId === workspaceId
+        && session.nodeId === nodeId
+        && session.id !== keepSessionId,
+    );
+    for (const session of sessions) {
+      session.workspaceId = null;
+      session.nodeId = null;
+    }
+    for (const session of sessions) this.kill(session.id);
+    return sessions.length;
   }
 
   /**
@@ -658,6 +689,7 @@ export class PtySessionManager {
       workspaceId: session.workspaceId,
       nodeId: session.nodeId,
       provider: session.provider,
+      runtimeKey: session.runtimeKey,
       /** Já produziu algum output (boot comecou/terminou) — usado na prontidao do ask. */
       hasOutput: session.scrollback.length > 0,
     };

@@ -5,6 +5,7 @@ import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import type { AgentActivityState, CanvasNode, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
+import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/canvas-placement.js';
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager, sanitizeComposerText } from '../../infrastructure/pty/PtySessionManager.ts';
@@ -77,6 +78,12 @@ type BridgeAskResult = {
   messageId: string;
   deliveryState: 'replied' | 'failed';
 };
+
+function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPlacementRect[] {
+  return nodes
+    .filter((node) => (node.floorId ?? null) === floorId)
+    .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
+}
 
 // Remove sequencias ANSI (cores, cursor, etc.) do output de TUIs.
 const ANSI_PATTERN = /[[][0-9;?]*[a-zA-Z]|\][^]*|[()][0-9A-B]/g;
@@ -650,12 +657,18 @@ export class BridgeService {
     input: { title: string; content?: string; connect?: string | null }
   ): Promise<{ nodeId: string; title: string; connectedTo: string | null }> {
     const siblings = await workspaceRepository.listNodes(workspaceId);
+    const position = findFreeCanvasPosition(occupiedOnFloor(siblings, null), {
+      x: 120,
+      y: 120,
+      width: 320,
+      height: 220,
+    });
     const note = await workspaceRepository.createNode({
       workspaceId,
       type: 'note',
       title: input.title.trim(),
-      x: 120 + (siblings.length % 4) * 620,
-      y: 120 + (Math.floor(siblings.length / 4) % 4) * 460,
+      x: position.x,
+      y: position.y,
       width: 320,
       height: 220,
       payload: { content: input.content ?? '' },
@@ -885,7 +898,6 @@ export class BridgeService {
       const node = (await workspaceRepository.getNode(existing.nodeId))!;
       const previousPayload = { ...(node.payload as Record<string, unknown>) };
       const previousTitle = node.title;
-      const previousSessionId = typeof previousPayload.sessionId === 'string' ? previousPayload.sessionId : null;
       let payload: Record<string, unknown> = {
         ...(node.payload as Record<string, unknown>),
         ...command,
@@ -902,10 +914,12 @@ export class BridgeService {
       delete payload.agentSessionId;
       const role = input.role ? await roleService.launchContext(workspaceId, input.role).catch(() => null) : null;
       payload = materializeInteractiveAgentCommand(payload, role).payload;
+      ptySessionManager.killNode(workspaceId, node.id);
+      const previousSessionId = typeof previousPayload.sessionId === 'string' ? previousPayload.sessionId : null;
+      if (previousSessionId && ptySessionManager.get(previousSessionId)) ptySessionManager.kill(previousSessionId);
       const updated = await workspaceRepository.updateNode(node.id, { payload, title: input.title || node.title });
       try {
         const active = await agentSessionService.ensure(workspaceId, node.id);
-        if (previousSessionId && previousSessionId !== active.sessionId) ptySessionManager.kill(previousSessionId);
         this.notifyWorkspaceChanged(workspaceId);
         return { nodeId: updated!.id, title: updated!.title, replaced: true, sessionId: active.sessionId, sessionState: active.state };
       } catch (error) {
@@ -1002,10 +1016,13 @@ export class BridgeService {
     const col = index % perRow;
     const leaderCenterX = (maestro?.x ?? 0) + (maestro?.width ?? 640) / 2;
     const leaderBottomY = (maestro?.y ?? 0) + (maestro?.height ?? 400);
-    return {
+    const preferred = {
       x: Math.round(leaderCenterX + (col - 1) * 700 - 320),
       y: Math.round(leaderBottomY + 80 + row * 480),
+      width: 640,
+      height: 400,
     };
+    return findFreeCanvasPosition(occupiedOnFloor(nodes, targetFloor), preferred, { rowsPerColumn: 3 });
   }
 
   /** Cria um portal (browser embutido) no canvas e conecta a um agente (default: o maestro). */
@@ -1039,12 +1056,18 @@ export class BridgeService {
         'Crie outro apenas quando o usuário pedir explicitamente, usando forceNew/--force-new.'
       );
     }
+    const portalPosition = findFreeCanvasPosition(occupiedOnFloor(await workspaceRepository.listNodes(workspaceId), null), {
+      x: (maestroNode?.x ?? 0) + (maestroNode?.width ?? 640) + 80,
+      y: maestroNode?.y ?? 120,
+      width: 560,
+      height: 400,
+    });
     const node = await workspaceRepository.createNode({
       workspaceId,
       type: 'portal',
       title: shortTitle(input.title?.trim() || new URL(url).hostname),
-      x: (maestroNode?.x ?? 0) + (maestroNode?.width ?? 640) + 80,
-      y: maestroNode?.y ?? 120,
+      x: portalPosition.x,
+      y: portalPosition.y,
       width: 560,
       height: 400,
       payload: { url },
@@ -1085,12 +1108,18 @@ export class BridgeService {
     if (nodes.some((node) => node.type === 'tasks')) return;
     const anchor = nodes.find((node) => node.type === 'terminal' && Boolean((node.payload as { maestro?: boolean }).maestro))
       ?? nodes.find((node) => node.type === 'terminal');
+    const boardPosition = findFreeCanvasPosition(occupiedOnFloor(nodes, null), {
+      x: (anchor?.x ?? 0) + (anchor?.width ?? 640) + 80,
+      y: (anchor?.y ?? 120) + 80,
+      width: 480,
+      height: 360,
+    });
     const board = await workspaceRepository.createNode({
       workspaceId,
       type: 'tasks',
       title: 'Tarefas',
-      x: (anchor?.x ?? 0) + (anchor?.width ?? 640) + 80,
-      y: (anchor?.y ?? 120) + 80,
+      x: boardPosition.x,
+      y: boardPosition.y,
       width: 480,
       height: 360,
       payload: {},
@@ -1105,7 +1134,8 @@ export class BridgeService {
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.target);
     if (target.nodeId === origin.nodeId) throw new Error('O maestro não pode dispensar a si mesmo.');
-    if (target.sessionId) ptySessionManager.kill(target.sessionId);
+    ptySessionManager.killNode(workspaceId, target.nodeId);
+    if (target.sessionId && ptySessionManager.get(target.sessionId)) ptySessionManager.kill(target.sessionId);
     await workspaceRepository.deleteNode(target.nodeId);
     this.notifyWorkspaceChanged(workspaceId);
     return { dismissed: target.title };

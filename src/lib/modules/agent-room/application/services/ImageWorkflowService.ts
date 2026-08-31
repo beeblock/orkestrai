@@ -12,6 +12,7 @@ import type {
   TerminalNodePayload,
   Workspace,
 } from '../../domain/types.js';
+import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/canvas-placement.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from './FilesystemService.js';
 import { bridgeService } from './BridgeService.js';
@@ -107,6 +108,12 @@ export class ImageWorkflowError extends Error {
 function broadcast(workspaceId: string, nodeId: string): void {
   const send = (globalThis as { __orkestraiBroadcast?: (payload: Record<string, unknown>) => void }).__orkestraiBroadcast;
   send?.({ type: 'workspaceChanged', workspaceId, nodeId });
+}
+
+function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPlacementRect[] {
+  return nodes
+    .filter((node) => (node.floorId ?? null) === floorId)
+    .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
 }
 
 function imageMime(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/webp' | null {
@@ -265,12 +272,19 @@ export class ImageWorkflowService {
   async create(dto: CreateImageWorkflowDto) {
     const actor = await this.requireCodexActor(dto.workspaceId, dto.actorNodeId);
     const { from: _from, title, ...config } = dto.input;
+    const nodes = await workspaceRepository.listNodes(dto.workspaceId);
+    const position = findFreeCanvasPosition(occupiedOnFloor(nodes, actor.floorId ?? null), {
+      x: actor.x + actor.width + 72,
+      y: actor.y,
+      width: 440,
+      height: 560,
+    });
     const workflow = await workspaceRepository.createNode({
       workspaceId: dto.workspaceId,
       type: 'imageWorkflow',
       title,
-      x: actor.x + actor.width + 72,
-      y: actor.y,
+      x: position.x,
+      y: position.y,
       width: 440,
       height: 560,
       zIndex: actor.zIndex,
@@ -394,12 +408,18 @@ export class ImageWorkflowService {
     const existing = nodes.find((node) => node.type === 'image' && (node.payload as ImageNodePayload).path === path);
     const alreadyConnected = existing && currentReferences.some((node) => node.id === existing.id);
     if (!alreadyConnected && currentReferences.length >= MAX_REFERENCES) throw new ImageWorkflowError('image_workflow_too_many_references');
+    const referencePosition = findFreeCanvasPosition(occupiedOnFloor(nodes, workflow.floorId ?? null), {
+      x: workflow.x - 352,
+      y: workflow.y,
+      width: 280,
+      height: 240,
+    }, { columnDirection: -1 });
     const reference = existing ?? await workspaceRepository.createNode({
       workspaceId: dto.workspaceId,
       type: 'image',
       title: dto.input.title ?? basename(path),
-      x: workflow.x - 352,
-      y: workflow.y + currentReferences.length * 272,
+      x: referencePosition.x,
+      y: referencePosition.y,
       width: 280,
       height: 240,
       zIndex: workflow.zIndex,
@@ -567,21 +587,30 @@ export class ImageWorkflowService {
       node.type === 'image' && (node.payload as ImageNodePayload).generatedBy?.workflowNodeId === workflow.id
     )).length;
     const outputNodeIds: string[] = [];
+    const occupied = occupiedOnFloor(nodes, workflow.floorId ?? null);
     try {
       for (const [index, path] of dto.outputPaths.entries()) {
         const outputIndex = existingOutputCount + index;
+        const preferred = {
+          x: workflow.x + workflow.width + 72 + Math.floor(outputIndex / 4) * 312,
+          y: workflow.y + (outputIndex % 4) * 272,
+          width: 280,
+          height: 240,
+        };
+        const position = findFreeCanvasPosition(occupied, preferred);
         const outputNode = await workspaceRepository.createNode({
           workspaceId: dto.workspaceId,
           type: 'image',
           title: `${workflow.title ?? 'Generated image'} ${outputIndex + 1}`,
-          x: workflow.x + workflow.width + 72 + Math.floor(outputIndex / 4) * 312,
-          y: workflow.y + (outputIndex % 4) * 272,
+          x: position.x,
+          y: position.y,
           width: 280,
           height: 240,
           zIndex: workflow.zIndex,
           floorId: workflow.floorId,
           payload: { path, generatedBy: { workflowNodeId: workflow.id, runId: active.id, outputIndex: index, inputHash: active.inputHash } } satisfies ImageNodePayload,
         });
+        occupied.push({ ...position, width: outputNode.width, height: outputNode.height });
         outputNodeIds.push(outputNode.id);
         await workspaceRepository.createEdge({ workspaceId: dto.workspaceId, sourceNodeId: workflow.id, targetNodeId: outputNode.id, style: 'cord' });
       }

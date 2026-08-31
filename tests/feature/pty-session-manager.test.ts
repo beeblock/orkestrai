@@ -7,6 +7,32 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it('localiza o PTY original de um no e encerra somente as duplicatas', () => {
+    const manager = new PtySessionManager(spawn);
+    const first = manager.create({
+      command: '/bin/cat',
+      cwd: process.cwd(),
+      workspaceId: 'workspace-1',
+      nodeId: 'node-1',
+      provider: 'codex',
+    });
+    const duplicate = manager.create({
+      command: '/bin/cat',
+      cwd: process.cwd(),
+      workspaceId: 'workspace-1',
+      nodeId: 'node-1',
+      provider: 'codex',
+    });
+
+    expect(manager.listLiveForNode('workspace-1', 'node-1').map((session) => session.id))
+      .toEqual([first.id, duplicate.id]);
+    expect(manager.killNode('workspace-1', 'node-1', first.id)).toBe(1);
+    expect(manager.get(first.id)?.exited).toBe(false);
+    expect(manager.get(duplicate.id)).toBeNull();
+
+    manager.kill(first.id);
+  });
+
   it('cria sessao, faz roundtrip de escrita/leitura e replay de scrollback', async () => {
     const manager = new PtySessionManager(spawn);
     const session = manager.create({ command: '/bin/cat', cwd: process.cwd(), cols: 80, rows: 24 });

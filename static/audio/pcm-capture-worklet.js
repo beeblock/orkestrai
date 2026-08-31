@@ -20,7 +20,17 @@ class OrkestraiPcmCaptureProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
-    const input = inputs[0]?.[0];
+    const channels = inputs[0] ?? [];
+    let input = channels[0];
+    let strongestEnergy = -1;
+    for (const channel of channels) {
+      let energy = 0;
+      for (let index = 0; index < channel.length; index += 1) energy += channel[index] * channel[index];
+      if (energy > strongestEnergy) {
+        strongestEnergy = energy;
+        input = channel;
+      }
+    }
     if (input?.length) {
       let inputOffset = 0;
       while (inputOffset < input.length) {

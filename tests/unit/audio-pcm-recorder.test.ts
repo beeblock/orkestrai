@@ -28,13 +28,18 @@ const gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() };
 const close = vi.fn(async () => undefined);
 
 class FakeAudioContext {
-  sampleRate = 16_000;
+  static latestOptions: AudioContextOptions | undefined;
+  sampleRate = 44_100;
   state: AudioContextState = 'running';
   destination = {} as AudioDestinationNode;
   audioWorklet = { addModule };
   createMediaStreamSource = vi.fn(() => source);
   createGain = vi.fn(() => gain);
   close = close;
+
+  constructor(options?: AudioContextOptions) {
+    FakeAudioContext.latestOptions = options;
+  }
 }
 
 describe('PcmAudioRecorder', () => {
@@ -42,6 +47,7 @@ describe('PcmAudioRecorder', () => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     FakeAudioWorkletNode.latest = null;
+    FakeAudioContext.latestOptions = undefined;
   });
 
   it('captures and flushes PCM through AudioWorklet without ScriptProcessorNode', async () => {
@@ -53,6 +59,7 @@ describe('PcmAudioRecorder', () => {
     const recording = await recorder.stop();
 
     expect(addModule).toHaveBeenCalledWith('/audio/pcm-capture-worklet.js');
+    expect(FakeAudioContext.latestOptions).toBeUndefined();
     expect(FakeAudioWorkletNode.latest).not.toBeNull();
     expect(recording.wav.type).toBe('audio/wav');
     expect(recording.wav.size).toBeGreaterThan(44);

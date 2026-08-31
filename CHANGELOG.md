@@ -5,6 +5,33 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- After macOS sleep, hibernation, renderer reloads, or a brief power loss, a
+  canvas agent now reattaches to the one live PTY identified by workspace and
+  node instead of launching a second writer for the same provider conversation.
+  Stale duplicate PTYs are removed during reload, runtime/provider changes,
+  dismissal, deletion, and workspace unload while the exact conversation id is
+  preserved for recovery.
+- Dictation captures at the microphone's native hardware rate before resampling
+  to 16 kHz for local STT, selects the active channel on multichannel devices,
+  and keeps a same-take MediaRecorder fallback. Electron/macOS can no longer
+  report an empty recording merely because a 44.1/48 kHz input opened against a
+  forced 16 kHz Web Audio graph.
+- Canvas node updates are now truly partial: image progress, terminal sessions,
+  and other payload writes never replay stale position or size values over a
+  recent human drag. Live graph refreshes also preserve an in-progress or
+  not-yet-confirmed local position.
+- Image workflows place workflow, reference, and generated Image nodes in free
+  rectangles with a stable margin. Agent-created notes, recruits, Portals,
+  boards, and generic canvas nodes use the same collision-aware placement
+  instead of cycling through occupied coordinates.
+- Organize canvas always lays out the complete visible canvas into deterministic,
+  non-overlapping rows while moving groups as intact units; a single node left
+  selected no longer turns the action into a fit-to-view-only result.
+
 ## 0.22.0 - 2026-08-28
 
 ### Added

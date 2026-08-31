@@ -26,6 +26,7 @@ import type { WebSocket } from 'ws';
 import { ptySessionManager } from './PtySessionManager.ts';
 import { agentSessionTracker, agentSessionTrackerForRuntime, type AgentSessionTracker } from './AgentSessionTracker.ts';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
+import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { preflightWslLaunch, WslLaunchError, type WslTrackingContext } from '../WslRuntime.ts';
 import { codexMcpLaunchForRuntime, codexMcpOverrideArgs } from '../codex-mcp-config.ts';
 
@@ -144,6 +145,34 @@ export function handlePtyConnection(socket: WebSocket): void {
               break;
             }
           }
+
+          const reuseLiveNodeSession = () => {
+            if (typeof message.workspaceId !== 'string' || typeof message.nodeId !== 'string') return false;
+            const expectedCommand = message.command.trim();
+            const expectedProvider = typeof message.provider === 'string' ? message.provider : null;
+            const expectedRuntime = executionRuntimeKey(message.runtime ?? { kind: 'native' });
+            const live = ptySessionManager.listLiveForNode(message.workspaceId, message.nodeId);
+            const existing = live.find(
+              (session) => session.command === expectedCommand
+                && (session.provider ?? null) === expectedProvider
+                && session.runtimeKey === expectedRuntime,
+            );
+            if (!existing) {
+              // A provider/runtime change should have retired the old PTY. If
+              // it did not, do it here before starting the replacement.
+              if (live.length) ptySessionManager.killNode(message.workspaceId, message.nodeId);
+              return false;
+            }
+            ptySessionManager.killNode(message.workspaceId, message.nodeId, existing.id);
+            const scrollback = attachSession(existing.id);
+            send({ type: 'created', session: existing, scrollback, reused: true });
+            return true;
+          };
+
+          // Page remounts and reconnects must reattach to the PTY already
+          // owned by this node instead of starting the same conversation twice.
+          if (reuseLiveNodeSession()) break;
+
           const trackingStartedAt = Date.now();
           const resolvedCwd = resolveCwd(message.cwd);
           const wslContext: WslTrackingContext | null = message.runtime?.kind === 'wsl'
@@ -161,13 +190,6 @@ export function handlePtyConnection(socket: WebSocket): void {
                 (cwd) => posix.normalize(cwd),
               )
             : agentSessionTracker;
-          const freshSessionId = Array.isArray(message.freshSessionArgs) && message.freshSessionArgs.length
-            ? randomUUID()
-            : null;
-          const freshSessionArgs = freshSessionId
-            ? message.freshSessionArgs!.map((arg) => String(arg).replace('__ORKESTRAI_SESSION_ID__', freshSessionId))
-            : [];
-          if (freshSessionId) tracker.claim(freshSessionId);
           const runtime = message.runtime ?? { kind: 'native' as const };
           const providerArgs = message.provider === 'codex'
             ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
@@ -181,6 +203,18 @@ export function handlePtyConnection(socket: WebSocket): void {
               runtimeHome: wslContext?.linuxHomePath,
             });
           }
+
+          // A concurrent renderer may have created the PTY while preflight or
+          // secure profile resolution was awaiting I/O.
+          if (reuseLiveNodeSession()) break;
+
+          const freshSessionId = Array.isArray(message.freshSessionArgs) && message.freshSessionArgs.length
+            ? randomUUID()
+            : null;
+          const freshSessionArgs = freshSessionId
+            ? message.freshSessionArgs!.map((arg) => String(arg).replace('__ORKESTRAI_SESSION_ID__', freshSessionId))
+            : [];
+          if (freshSessionId) tracker.claim(freshSessionId);
           const session = ptySessionManager.create({
             command: message.command.trim(),
             args: [

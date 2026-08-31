@@ -7,6 +7,7 @@ import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 import { floorService } from './FloorService.js';
 import { preflightWslLaunch, terminalExecutionRuntime } from '../../infrastructure/WslRuntime.js';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.js';
+import { executionRuntimeKey } from '../../domain/runtime.js';
 import { providerProfileService } from './ProviderProfileService.js';
 import { codexMcpLaunchForRuntime, codexMcpOverrideArgs } from '../../infrastructure/codex-mcp-config.js';
 
@@ -52,6 +53,25 @@ export class AgentSessionService {
     }
     const title = target.title ?? 'Terminal';
     const payload = (target.payload ?? {}) as AgentNodePayload;
+    const runtime = terminalExecutionRuntime(workspace, payload);
+    const liveNodeSessions = ptySessionManager.listLiveForNode(workspaceId, target.id);
+    const compatibleLiveSession = liveNodeSessions.find(
+      (session) => session.command === payload.command
+        && (session.provider ?? null) === (payload.provider ?? null)
+        && session.runtimeKey === executionRuntimeKey(runtime),
+    );
+    if (compatibleLiveSession) {
+      ptySessionManager.killNode(workspaceId, target.id, compatibleLiveSession.id);
+      if (payload.sessionId !== compatibleLiveSession.id) {
+        await workspaceRepository.updateNode(target.id, {
+          payload: { ...payload, sessionId: compatibleLiveSession.id } as never,
+        });
+        notifyWorkspaceChanged(workspaceId);
+      }
+      return { nodeId: target.id, sessionId: compatibleLiveSession.id, state: 'existing' };
+    }
+    if (liveNodeSessions.length) ptySessionManager.killNode(workspaceId, target.id);
+
     const existing = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
     if (existing && !existing.exited) {
       return { nodeId: target.id, sessionId: existing.id, state: 'existing' };
@@ -65,7 +85,6 @@ export class AgentSessionService {
     }
 
     const adapter = payload.provider && hasAgentAdapter(payload.provider) ? getAgentAdapter(payload.provider) : null;
-    const runtime = terminalExecutionRuntime(workspace, payload);
     const trackingStartedAt = Date.now();
     const wslContext = runtime.kind === 'wsl'
       ? await preflightWslLaunch({ runtime, command: payload.command, hostCwd: cwd, workspaceRoot: workspace.workingDir })

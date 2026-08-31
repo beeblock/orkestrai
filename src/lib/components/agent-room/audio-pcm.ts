@@ -3,6 +3,7 @@
 import {
   DICTATION_SAMPLE_RATE,
   analyzeAudioSignal,
+  audioSignalIsEmpty,
   normalizeSpeechAudio,
   resampleAudio,
   type AudioSignalStats,
@@ -15,22 +16,39 @@ export type PcmRecording = {
 
 const TARGET_RATE = DICTATION_SAMPLE_RATE;
 
-export async function blobToWav16k(blob: Blob): Promise<Blob> {
+async function blobToRecording16k(blob: Blob): Promise<PcmRecording> {
   if (blob.size === 0) throw new Error('Nenhum audio foi gravado.');
-  const audioContext = new AudioContext({ sampleRate: TARGET_RATE });
+  const audioContext = new AudioContext();
   try {
     const decoded = await audioContext.decodeAudioData(await blob.arrayBuffer());
-    const frameCount = Math.max(1, Math.ceil(decoded.duration * TARGET_RATE));
-    const offline = new OfflineAudioContext(1, frameCount, TARGET_RATE);
-    const source = offline.createBufferSource();
-    source.buffer = decoded;
-    source.connect(offline.destination);
-    source.start(0);
-    const rendered = await offline.startRendering();
-    return pcmToWavBlob(rendered.getChannelData(0), TARGET_RATE);
+    const source = strongestAudioChannel(decoded);
+    const samples = resampleAudio(source, decoded.sampleRate, TARGET_RATE);
+    return {
+      wav: pcmToWavBlob(normalizeSpeechAudio(samples), TARGET_RATE),
+      stats: analyzeAudioSignal(samples, TARGET_RATE),
+    };
   } finally {
     await audioContext.close().catch(() => undefined);
   }
+}
+
+export async function blobToWav16k(blob: Blob): Promise<Blob> {
+  return (await blobToRecording16k(blob)).wav;
+}
+
+function strongestAudioChannel(buffer: AudioBuffer): Float32Array {
+  let strongest = buffer.getChannelData(0);
+  let strongestEnergy = -1;
+  for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
+    const channel = buffer.getChannelData(channelIndex);
+    let energy = 0;
+    for (let index = 0; index < channel.length; index += 1) energy += channel[index] * channel[index];
+    if (energy > strongestEnergy) {
+      strongest = channel;
+      strongestEnergy = energy;
+    }
+  }
+  return strongest;
 }
 
 export function pcmToWavBlob(samples: Float32Array, sampleRate: number): Blob {
@@ -72,11 +90,15 @@ export class PcmAudioRecorder {
   private sampleRate = TARGET_RATE;
   private stopped = false;
   private flushResolver: (() => void) | null = null;
+  private backupRecorder: MediaRecorder | null = null;
+  private backupChunks: Blob[] = [];
 
   constructor(private readonly stream: MediaStream) {}
 
   async start(): Promise<void> {
-    const context = new AudioContext({ sampleRate: TARGET_RATE });
+    // Use the hardware rate while capturing. Requesting 16 kHz here can leave
+    // Chromium/Electron with an open 44.1/48 kHz track that emits empty blocks.
+    const context = new AudioContext();
     this.context = context;
     this.sampleRate = context.sampleRate;
     try {
@@ -86,8 +108,7 @@ export class PcmAudioRecorder {
         numberOfInputs: 1,
         numberOfOutputs: 1,
         outputChannelCount: [1],
-        channelCount: 1,
-        channelCountMode: 'explicit',
+        channelCountMode: 'max',
       });
       this.processor.port.onmessage = (event: MessageEvent<{ type?: string; samples?: Float32Array }>) => {
         if (event.data?.type === 'samples' && event.data.samples instanceof Float32Array) {
@@ -102,6 +123,7 @@ export class PcmAudioRecorder {
       this.processor.connect(this.mutedOutput);
       this.mutedOutput.connect(context.destination);
       if (context.state === 'suspended') await context.resume();
+      this.startBackupCapture();
     } catch (error) {
       await this.disposeGraph();
       throw error;
@@ -111,6 +133,7 @@ export class PcmAudioRecorder {
   async stop(): Promise<PcmRecording> {
     if (this.stopped) return { wav: pcmToWavBlob(new Float32Array(), TARGET_RATE), stats: analyzeAudioSignal(new Float32Array()) };
     this.stopped = true;
+    const backup = this.stopBackupCapture().catch(() => null);
     await this.flushProcessor();
     const totalLength = this.chunks.reduce((total, chunk) => total + chunk.length, 0);
     const captured = new Float32Array(totalLength);
@@ -123,13 +146,68 @@ export class PcmAudioRecorder {
     const stats = analyzeAudioSignal(samples, TARGET_RATE);
     const wav = pcmToWavBlob(normalizeSpeechAudio(samples), TARGET_RATE);
     await this.disposeGraph();
+    if (!audioSignalIsEmpty(stats)) {
+      void backup;
+      return { wav, stats };
+    }
+
+    const backupBlob = await backup;
+    if (backupBlob?.size) {
+      try {
+        const recovered = await blobToRecording16k(backupBlob);
+        if (!audioSignalIsEmpty(recovered.stats)) return recovered;
+      } catch {
+        // Preserve the primary empty result so callers show the usual guidance.
+      }
+    }
     return { wav, stats };
   }
 
   cancel(): void {
     if (this.stopped) return;
     this.stopped = true;
+    void this.stopBackupCapture().catch(() => null);
     void this.disposeGraph();
+  }
+
+  private startBackupCapture(): void {
+    if (typeof MediaRecorder === 'undefined') return;
+    try {
+      const recorder = new MediaRecorder(this.stream);
+      this.backupRecorder = recorder;
+      this.backupChunks = [];
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size) this.backupChunks.push(event.data);
+      });
+      recorder.start(250);
+    } catch {
+      this.backupRecorder = null;
+      this.backupChunks = [];
+    }
+  }
+
+  private async stopBackupCapture(): Promise<Blob | null> {
+    const recorder = this.backupRecorder;
+    this.backupRecorder = null;
+    if (!recorder) return null;
+    if (recorder.state !== 'inactive') {
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(finish, 1_000);
+        recorder.addEventListener('stop', finish, { once: true });
+        recorder.addEventListener('error', finish, { once: true });
+        recorder.stop();
+      });
+    }
+    const chunks = this.backupChunks;
+    this.backupChunks = [];
+    return chunks.length ? new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }) : null;
   }
 
   private async disposeGraph(): Promise<void> {

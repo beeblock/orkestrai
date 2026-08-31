@@ -87,6 +87,7 @@
   import AgentToolbarMenu from '$lib/components/agent-room/canvas/AgentToolbarMenu.svelte';
   import CommandPalette, { type PaletteAction } from '$lib/components/agent-room/canvas/CommandPalette.svelte';
   import { alignRects, boundingBox, distributeRects, tidyRects, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
+  import { findFreeCanvasPosition } from '$lib/modules/agent-room/domain/canvas-placement.js';
   import type { TerminalThemeName } from '$lib/components/agent-room/terminal-themes.js';
   import {
     LEADER_DICTATION_COMMAND,
@@ -881,9 +882,13 @@
   // ativo — sem precisar trocar de andar ou recarregar a pagina.
   let refreshDebounce: ReturnType<typeof setTimeout> | null = null;
   let graphRefreshRequestId = 0;
+  const draggingNodeIds = new Set<string>();
+  const localPositionOverrides = new Map<string, { x: number; y: number; confirmedAt: number | null }>();
 
   async function refreshCanvasGraph(workspaceId: string): Promise<boolean> {
     const requestId = ++graphRefreshRequestId;
+    const refreshStartedAt = performance.now();
+    const previousById = new Map(nodes.map((node) => [node.id, node]));
     const [canvasNodes, canvasEdges, floorList] = await Promise.all([
       api<CanvasNode[]>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
       api<CanvasEdge[]>(`/api/agent-room/workspaces/${workspaceId}/edges`),
@@ -893,7 +898,23 @@
     floors = floorList;
     nodes = canvasNodes
       .filter((node) => (node.floorId ?? null) === visibleFloorId)
-      .map(toFlowNode);
+      .map((node) => {
+        const refreshed = toFlowNode(node);
+        const previous = previousById.get(node.id);
+        const override = localPositionOverrides.get(node.id);
+        if (override) {
+          const serverMatches = node.x === override.x && node.y === override.y;
+          if (serverMatches || (override.confirmedAt !== null && override.confirmedAt <= refreshStartedAt)) {
+            localPositionOverrides.delete(node.id);
+          } else {
+            refreshed.position = { x: override.x, y: override.y };
+          }
+        } else if (draggingNodeIds.has(node.id) && previous) {
+          refreshed.position = { ...previous.position };
+        }
+        if (previous?.selected) refreshed.selected = true;
+        return refreshed;
+      });
     const visibleIds = new Set(nodes.map((node) => node.id));
     edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
     writeWorkspaceViewCache({ workspace: activeWorkspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
@@ -1480,9 +1501,13 @@
     }
   }
 
-  function nextFreePosition() {
-    const index = nodes.length;
-    return { x: 80 + (index % 4) * 620, y: 80 + (Math.floor(index / 4) % 4) * 460 };
+  function nextFreePosition(width = 560, height = 360) {
+    return findFreeCanvasPosition(nodes.map((node) => ({
+      x: node.position.x,
+      y: node.position.y,
+      width: Number(node.width ?? node.measured?.width ?? 560),
+      height: Number(node.height ?? node.measured?.height ?? 360),
+    })), { x: 80, y: 80, width, height });
   }
 
   /** Titulo unico no canvas: "Claude" ocupado vira "Claude 2"... (ask ambiguo quebra o roteamento). */
@@ -1501,7 +1526,7 @@
     creation?: { title: string; model: string | null; effort: string | null; leader: boolean; executionRuntime: import('$lib/modules/agent-room/domain/types.js').WorkspaceExecutionRuntime | null; profileId?: string | null }
   ) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(Number(appSettings.newTerminalWidth ?? 560), Number(appSettings.newTerminalHeight ?? 340));
     let payload: TerminalNodePayload;
     if (provider) {
       // Monta o comando com model/effort escolhidos no dialogo (server-side,
@@ -1540,7 +1565,7 @@
 
   async function addFileTree(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(300, 380);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'fileTree', title: m['canvas.default_files'](), ...position, ...nodeSize(rect, 260, 200, 300, 380), payload: {}, floorId: visibleFloorId }),
@@ -1561,7 +1586,7 @@
     if (!activeWorkspace) return;
     const kind = SHAPES[shapeIndex % SHAPES.length];
     shapeIndex += 1;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(kind === 'arrow' ? 220 : 160, kind === 'arrow' ? 80 : 160);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1579,7 +1604,7 @@
 
   async function addPortal(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(720, 520);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'portal', title: m['canvas.default_portal'](), ...position, ...nodeSize(rect, 360, 260, 720, 520), payload: {}, floorId: visibleFloorId }),
@@ -1589,7 +1614,7 @@
 
   async function addApiClient(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(820, 560);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1612,7 +1637,7 @@
       toast.info(m['device.already_on_canvas']());
       return;
     }
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(560, 720);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1635,7 +1660,7 @@
 
   async function addLoop(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(560, 460);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'loop', title: m['canvas.default_loop'](), ...position, ...nodeSize(rect, 380, 280, 560, 460), payload: {}, floorId: visibleFloorId }),
@@ -1645,7 +1670,7 @@
 
   async function addTasksNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(560, 360);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'tasks', title: m['canvas.default_tasks'](), ...position, ...nodeSize(rect, 400, 260, 560, 360), payload: {}, floorId: visibleFloorId }),
@@ -1661,7 +1686,7 @@
       toast.info(m['usage.already_on_canvas']());
       return;
     }
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(600, 600);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1678,7 +1703,7 @@
 
   async function addFlowNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(480, 420);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'flow', title: m['canvas.default_flow'](), ...position, ...nodeSize(rect, 420, 300, 480, 420), payload: { steps: [], iterations: 1 }, floorId: visibleFloorId }),
@@ -1688,7 +1713,7 @@
 
   async function addImageNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(320, 240);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'image', title: m['node.image'](), ...position, ...nodeSize(rect, 220, 160, 320, 240), payload: {}, floorId: visibleFloorId }),
@@ -1698,7 +1723,7 @@
 
   async function addImageWorkflowNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(440, 560);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1724,7 +1749,7 @@
 
   async function addDesignNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(520, 380);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1750,7 +1775,7 @@
 
   async function addDiff(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(720, 440);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'diff', title: m['canvas.default_diff'](), ...position, ...nodeSize(rect, 380, 240, 720, 440), payload: {}, floorId: visibleFloorId }),
@@ -1760,7 +1785,7 @@
 
   async function addNote(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition();
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(Number(appSettings.newNoteWidth ?? 320), Number(appSettings.newNoteHeight ?? 220));
     const payload: NoteNodePayload = { content: '' };
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
@@ -1784,10 +1809,26 @@
 
   async function resizeNode(id: string, params: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
-    await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(params),
-    });
+    await persistNodePosition(id, params, { width: params.width, height: params.height });
+  }
+
+  async function persistNodePosition(
+    id: string,
+    position: { x: number; y: number },
+    extra: Record<string, unknown> = {},
+  ): Promise<void> {
+    if (!activeWorkspace) return;
+    const override = { x: position.x, y: position.y, confirmedAt: null };
+    localPositionOverrides.set(id, override);
+    try {
+      await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ x: position.x, y: position.y, ...extra }),
+      });
+      if (localPositionOverrides.get(id) === override) override.confirmedAt = performance.now();
+    } catch {
+      if (localPositionOverrides.get(id) === override) localPositionOverrides.delete(id);
+    }
   }
 
   async function updateNodePayload(id: string, partial: Record<string, unknown>) {
@@ -1921,10 +1962,7 @@
     for (const memberId of members) {
       const member = nodes.find((node) => node.id === memberId);
       if (member) {
-        api(`/api/agent-room/workspaces/${activeWorkspace?.id}/nodes/${memberId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ x: member.position.x, y: member.position.y }),
-        }).catch(() => {});
+        void persistNodePosition(memberId, member.position);
       }
     }
   }
@@ -1942,10 +1980,13 @@
   }
 
   function organizationRects() {
-    const selected = selectedRects().filter((rect) => nodes.find((node) => node.id === rect.id)?.type !== 'group');
-    if (selected.length) return selected;
+    const groupedNodeIds = new Set(
+      nodes
+        .filter((node) => node.type === 'group')
+        .flatMap((node) => ((node.data?.payload as { members?: string[] } | undefined)?.members ?? [])),
+    );
     return nodes
-      .filter((node) => node.type !== 'group')
+      .filter((node) => node.type === 'group' || !groupedNodeIds.has(node.id))
       .map((node) => ({
         id: node.id,
         x: node.position.x,
@@ -1959,7 +2000,19 @@
     const rects = organizationRects();
     if (!rects.length) return;
     snapshot();
-    await applyPositions(tidyRects(rects));
+    const positions = tidyRects(rects);
+    for (const group of nodes.filter((node) => node.type === 'group')) {
+      const next = positions.get(group.id);
+      if (!next) continue;
+      const dx = next.x - group.position.x;
+      const dy = next.y - group.position.y;
+      const members = ((group.data?.payload as { members?: string[] } | undefined)?.members ?? []);
+      for (const memberId of members) {
+        const member = nodes.find((node) => node.id === memberId);
+        if (member) positions.set(memberId, { x: member.position.x + dx, y: member.position.y + dy });
+      }
+    }
+    await applyPositions(positions);
     requestAnimationFrame(() => zoomApi?.fitView({ duration: 300 }));
   }
 
@@ -1970,10 +2023,7 @@
       return next ? { ...node, position: { x: next.x, y: next.y } } : node;
     });
     for (const [id, position] of positions) {
-      await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(position),
-      }).catch(() => {});
+      await persistNodePosition(id, position);
     }
   }
 
@@ -2039,7 +2089,7 @@
     { id: 'align-centerV', label: m['canvas.palette_center_v'](), hint: m['canvas.hint_selection'](), run: () => applyPositions(alignRects(selectedRects(), 'centerV')) },
     { id: 'dist-h', label: m['canvas.palette_dist_h'](), hint: m['canvas.hint_selection'](), run: () => applyPositions(distributeRects(selectedRects(), 'horizontal')) },
     { id: 'dist-v', label: m['canvas.palette_dist_v'](), hint: m['canvas.hint_selection'](), run: () => applyPositions(distributeRects(selectedRects(), 'vertical')) },
-    { id: 'tidy', label: m['canvas.palette_tidy'](), hint: m['canvas.hint_selection'](), run: () => void organizeCanvas() },
+    { id: 'tidy', label: m['canvas.palette_tidy'](), hint: m['canvas.hint_action'](), run: () => void organizeCanvas() },
     { id: 'group', label: m['canvas.palette_group'](), hint: m['canvas.hint_selection'](), run: () => groupSelection() },
     { id: 'zoom-sel', label: m['canvas.palette_zoom_sel'](), hint: m['canvas.hint_view'](), run: zoomToSelection },
   ]);
@@ -2234,14 +2284,13 @@
     if (targetNode.type === 'group' && previous) {
       moveGroupWithMembers(targetNode, previous);
     }
-    await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${targetNode.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ x: targetNode.position.x, y: targetNode.position.y }),
-    }).catch(() => {});
+    draggingNodeIds.delete(targetNode.id);
+    await persistNodePosition(targetNode.id, targetNode.position);
   }
 
   function handleDragStart({ targetNode }: { targetNode: Node | null }) {
     if (targetNode) {
+      draggingNodeIds.add(targetNode.id);
       preDragPositions.set(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y });
     }
   }

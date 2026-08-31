@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { AgentCanvasNode } from '$lib/modules/agent-room/domain/models/AgentCanvasNode.js';
 
 describe('WorkspaceRepository', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -65,6 +66,25 @@ describe('WorkspaceRepository', () => {
 
     expect(await workspaceRepository.deleteNode(a.id)).toBe(true);
     expect(await workspaceRepository.listEdges(workspace.id)).toHaveLength(0);
+  });
+
+  it('updates only requested node columns so payload writes cannot reset a concurrent drag', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'partial', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'imageWorkflow',
+      x: 120,
+      y: 240,
+      width: 440,
+      height: 560,
+      payload: { status: 'idle' },
+    });
+    const update = vi.spyOn(AgentCanvasNode.prototype, 'update');
+
+    await workspaceRepository.updateNode(node.id, { payload: { status: 'running' } });
+
+    expect(update).toHaveBeenLastCalledWith({ payload_json: JSON.stringify({ status: 'running' }) });
+    update.mockRestore();
   });
 
   it('alterna estilo da aresta (cord/circuit)', async () => {

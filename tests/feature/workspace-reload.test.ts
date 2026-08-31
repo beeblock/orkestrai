@@ -34,6 +34,64 @@ describe('WorkspaceService.reloadNode', () => {
     expect(ptySessionManager.get(session.id)?.exited).not.toBe(false);
   });
 
+  it('mata todos os PTYs do no ao recarregar mesmo quando o payload aponta para uma duplicata', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'reload duplicado', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Codex',
+      payload: { command: 'codex', provider: 'codex', agentSessionId: 'conversation-1' },
+    });
+    const original = ptySessionManager.create({
+      command: '/bin/cat',
+      cwd: '/tmp',
+      workspaceId: workspace.id,
+      nodeId: node.id,
+      provider: 'codex',
+    });
+    const duplicate = ptySessionManager.create({
+      command: '/bin/cat',
+      cwd: '/tmp',
+      workspaceId: workspace.id,
+      nodeId: node.id,
+      provider: 'codex',
+    });
+    await workspaceRepository.updateNode(node.id, {
+      payload: { command: 'codex', provider: 'codex', sessionId: duplicate.id, agentSessionId: 'conversation-1' },
+    });
+
+    await workspaceService.reloadNode(workspace.id, node.id);
+
+    expect(ptySessionManager.get(original.id)).toBeNull();
+    expect(ptySessionManager.get(duplicate.id)).toBeNull();
+    expect(((await workspaceRepository.getNode(node.id))!.payload as Record<string, unknown>).sessionId).toBeUndefined();
+  });
+
+  it('reassocia o PTY original quando o sessionId persistido ficou obsoleto apos hibernacao', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'wake resume', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Codex',
+      payload: { command: '/bin/cat', provider: 'codex', sessionId: 'pty-obsoleto' },
+    });
+    const original = ptySessionManager.create({
+      command: '/bin/cat',
+      cwd: '/tmp',
+      workspaceId: workspace.id,
+      nodeId: node.id,
+      provider: 'codex',
+    });
+
+    const listed = await workspaceService.listNodes(workspace.id);
+
+    expect((listed.find((candidate) => candidate.id === node.id)!.payload as Record<string, unknown>).sessionId)
+      .toBe(original.id);
+    expect(((await workspaceRepository.getNode(node.id))!.payload as Record<string, unknown>).sessionId)
+      .toBe(original.id);
+    ptySessionManager.kill(original.id);
+  });
+
   it('falha com no inexistente ou de outro workspace', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'reload2', workingDir: '/tmp' });
     await expect(workspaceService.reloadNode(workspace.id, 'inexistente')).rejects.toThrow('nao encontrado');

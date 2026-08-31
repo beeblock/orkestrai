@@ -347,21 +347,18 @@ export class WorkspaceRepository {
     id: string,
     input: Partial<Pick<CanvasNode, 'title' | 'x' | 'y' | 'width' | 'height' | 'zIndex' | 'type'>> & { payload?: CanvasNodePayload }
   ): Promise<CanvasNode | null> {
-    const existing = await this.getNode(id);
-    if (!existing) return null;
-
     const model = await AgentCanvasNode.find(id);
     if (!model) return null;
-    await model.update({
-      title: input.title === undefined ? existing.title : input.title,
-      type: input.type ?? existing.type,
-      x: input.x ?? existing.x,
-      y: input.y ?? existing.y,
-      width: input.width ?? existing.width,
-      height: input.height ?? existing.height,
-      z_index: input.zIndex ?? existing.zIndex,
-      payload_json: input.payload === undefined ? JSON.stringify(existing.payload) : JSON.stringify(input.payload),
-    });
+    const changes: Record<string, unknown> = {};
+    if (input.title !== undefined) changes.title = input.title;
+    if (input.type !== undefined) changes.type = input.type;
+    if (input.x !== undefined) changes.x = input.x;
+    if (input.y !== undefined) changes.y = input.y;
+    if (input.width !== undefined) changes.width = input.width;
+    if (input.height !== undefined) changes.height = input.height;
+    if (input.zIndex !== undefined) changes.z_index = input.zIndex;
+    if (input.payload !== undefined) changes.payload_json = JSON.stringify(input.payload);
+    if (Object.keys(changes).length) await model.update(changes);
     return this.getNode(id);
   }
 

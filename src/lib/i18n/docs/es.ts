@@ -376,7 +376,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'atalhos',
       title: 'Atajos',
-      body: `⌘P paleta · ⌘K (o Ctrl+K) buscar en la documentación desde cualquier pantalla · ⌘2 Central de Providers · ⌘⇧A próxima atención · ⌘⇧T organizar los nodos seleccionados o todo el canvas cuando no hay selección · Cmd/Ctrl+D duplicar formas seleccionadas · Cmd/Ctrl+C y Cmd/Ctrl+V copiar y pegar formas seleccionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nueva nota · L conectar seleccionados · Alt+1…9 enfocar terminal · Alt+Espacio dictado por voz · ⌘F buscar en la terminal · ⌘Z deshacer · Backspace eliminar. En las terminales de Windows, Ctrl+V pega el texto del portapapeles nativo; cuando no hay texto, el atajo original de la CLI sigue disponible para pegar imágenes. En Windows, la barra de título estilizada ofrece Archivo, Editar, Ver, Workspace, Ventana y Ayuda sin perder los controles de la ventana; macOS y Linux conservan sus menús de plataforma.`,
+      body: `⌘P paleta · ⌘K (o Ctrl+K) buscar en la documentación desde cualquier pantalla · ⌘2 Central de Providers · ⌘⇧A próxima atención · ⌘⇧T organizar todo el canvas visible · Cmd/Ctrl+D duplicar formas seleccionadas · Cmd/Ctrl+C y Cmd/Ctrl+V copiar y pegar formas seleccionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nueva nota · L conectar seleccionados · Alt+1…9 enfocar terminal · Alt+Espacio dictado por voz · ⌘F buscar en la terminal · ⌘Z deshacer · Backspace eliminar. En las terminales de Windows, Ctrl+V pega el texto del portapapeles nativo; cuando no hay texto, el atajo original de la CLI sigue disponible para pegar imágenes. En Windows, la barra de título estilizada ofrece Archivo, Editar, Ver, Workspace, Ventana y Ayuda sin perder los controles de la ventana; macOS y Linux conservan sus menús de plataforma.`,
     },
   ],
   useCases: [
@@ -575,7 +575,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'audio-devices',
       title: 'Elegir micrófono y altavoz',
-      body: 'Abre Configuración → Voz para elegir y probar el micrófono usado por todo dictado local y el altavoz usado en vistas previas y respuestas habladas. Autoriza el micrófono para revelar los nombres, observa el medidor de entrada en vivo y reproduce un tono corto en la salida antes de guardar. El dictado graba PCM directo por la misma ruta Web Audio del medidor y normaliza la voz baja antes del STT local. Si desaparece el dispositivo elegido, Orkestrai vuelve al predeterminado del sistema. Permiso denegado, dispositivo ausente, captura interrumpida, probable contención y un dispositivo que abre sin producir señal reciben indicaciones distintas; las plataformas que no pueden dirigir el audio de la app a una salida específica explican la limitación en lugar de ignorar la selección.',
+      body: 'Abre Configuración → Voz para elegir y probar el micrófono usado por todo dictado local y el altavoz usado en vistas previas y respuestas habladas. Autoriza el micrófono para revelar los nombres, observa el medidor de entrada en vivo y reproduce un tono corto en la salida antes de guardar. El dictado captura PCM directo con la frecuencia nativa del micrófono, elige el canal activo y solo después remuestrea y normaliza para el STT local. Una captura alternativa de la misma toma recupera la voz si Web Audio de Electron abre pero entrega bloques vacíos, sin obligarte a dictar de nuevo. Si desaparece el dispositivo elegido, Orkestrai vuelve al predeterminado del sistema. Permiso denegado, dispositivo ausente, captura interrumpida, probable contención y un dispositivo que abre sin producir señal reciben indicaciones distintas; las plataformas que no pueden dirigir el audio de la app a una salida específica explican la limitación en lugar de ignorar la selección.',
       tags: ['Dispositivos de audio', 'prueba de micrófono', 'prueba de altavoz'],
     },
     {
@@ -605,8 +605,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'organize-canvas',
       title: 'Reorganizar un workspace que creció',
-      body: 'Selecciona los nodos que deseas realinear y elige Organizar canvas en la barra o la paleta de comandos. Orkestrai organiza solo la selección; sin nada seleccionado, organiza todo el canvas en filas deterministas sin superponer nodos. Las conexiones permanecen detrás de todos los nodos.',
-      tags: ['Layout del canvas', 'selección', 'conexiones'],
+      body: 'Elige Organizar canvas en la barra o la paleta de comandos. Orkestrai dispone todo el canvas visible en filas deterministas sin superponer nodos, incluso si un elemento seguía seleccionado antes del comando; los grupos se mueven como unidades intactas y conservan su distribución interna. Los nuevos agentes, notas, Portales, tableros, flujos de imagen, referencias e Imágenes generadas también buscan los rectángulos realmente ocupados y conservan un margen estable. Las conexiones permanecen detrás de todos los nodos.',
+      tags: ['Layout del canvas', 'nodos sin colisiones', 'conexiones'],
     },
     {
       id: 'focused-workspace-view',
@@ -730,6 +730,19 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Próximo parche',
+      title: 'Reanudación, dictado y organización del canvas confiables',
+      summary: 'La recuperación conserva una sesión por agente, el micrófono retiene la misma toma y los flujos dejan de mover o apilar nodos.',
+      items: [
+        'Después de suspender, hibernar o recargar el renderer, cada agente vuelve a la única PTY viva de su nodo en vez de abrir un segundo escritor para la misma conversación.',
+        'Recarga, cambios de provider o runtime, expulsión, eliminación y descarga del workspace quitan PTY duplicadas y conservan el id exacto de conversación para recuperarlo.',
+        'El dictado captura a la frecuencia nativa de 44,1/48 kHz, elige el canal activo, remuestrea después y recupera la misma toma con un fallback del navegador si Web Audio no entrega muestras.',
+        'Las actualizaciones de payload son realmente parciales y el refresco protege el arrastre actual, por lo que el progreso de imagen o el estado de sesión no restaura coordenadas antiguas.',
+        'Los flujos de imagen y nodos creados por agentes usan posiciones libres según los rectángulos reales, incluidos resultados y referencias.',
+        'Organizar canvas siempre dispone todo el gráfico visible en filas deterministas sin superposición, mantiene los grupos intactos y funciona aunque un nodo quede seleccionado.',
+      ],
+    },
     {
       date: '28 ago 2026 · 0.22.0',
       title: 'Orkestrai 0.22.0: flujos nativos de imagen para personas y agentes',

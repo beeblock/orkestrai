@@ -57,6 +57,42 @@ describe('PTY WebSocket protocol', () => {
     }
   });
 
+  it('reutiliza o PTY vivo do mesmo workspace e no em vez de duplicar a conversa', async () => {
+    const original = ptySessionManager.create({
+      command: '/bin/cat',
+      cwd: '/tmp',
+      workspaceId: 'workspace-resume',
+      nodeId: 'node-resume',
+      provider: 'codex',
+    });
+    const create = vi.spyOn(ptySessionManager, 'create');
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'create',
+        command: '/bin/cat',
+        cwd: '/tmp',
+        provider: 'codex',
+        workspaceId: 'workspace-resume',
+        nodeId: 'node-resume',
+        conversationArgs: ['resume', 'conversation-resume'],
+      }));
+
+      await vi.waitFor(() => expect(socket.frames.some((frame) => frame.type === 'created')).toBe(true));
+      expect(create).not.toHaveBeenCalled();
+      expect(socket.frames.find((frame) => frame.type === 'created')).toMatchObject({
+        reused: true,
+        session: { id: original.id },
+      });
+      expect(ptySessionManager.listLiveForNode('workspace-resume', 'node-resume')).toHaveLength(1);
+    } finally {
+      socket.emit('close');
+      ptySessionManager.kill(original.id);
+    }
+  });
+
   it('resolve o perfil no servidor somente ao criar a PTY', async () => {
     const create = vi.spyOn(ptySessionManager, 'create');
     (globalThis as {

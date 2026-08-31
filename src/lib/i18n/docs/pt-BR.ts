@@ -380,7 +380,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'atalhos',
       title: 'Atalhos',
-      body: `⌘P paleta · ⌘K (ou Ctrl+K) buscar na documentação de qualquer tela · ⌘2 Central de Providers · ⌘⇧A próxima atenção · ⌘⇧T organizar os nós selecionados ou todo o canvas quando nada está selecionado · Cmd/Ctrl+D duplicar formas selecionadas · Cmd/Ctrl+C e Cmd/Ctrl+V copiar e colar formas selecionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nova nota · L conectar selecionados · Alt+1…9 focar terminal · Alt+Espaço ditado por voz · ⌘F buscar no terminal · ⌘Z desfazer · Backspace excluir. Nos terminais do Windows, Ctrl+V cola o texto do clipboard nativo; quando não há texto, o atalho original da CLI continua disponível para colar imagem. No Windows, a barra de título estilizada oferece Arquivo, Editar, Visualizar, Workspace, Janela e Ajuda sem perder os controles da janela; macOS e Linux mantêm seus menus de plataforma.`,
+      body: `⌘P paleta · ⌘K (ou Ctrl+K) buscar na documentação de qualquer tela · ⌘2 Central de Providers · ⌘⇧A próxima atenção · ⌘⇧T organizar todo o canvas visível · Cmd/Ctrl+D duplicar formas selecionadas · Cmd/Ctrl+C e Cmd/Ctrl+V copiar e colar formas selecionadas · ⌘G agrupar · ⌘⇧G desagrupar · N nova nota · L conectar selecionados · Alt+1…9 focar terminal · Alt+Espaço ditado por voz · ⌘F buscar no terminal · ⌘Z desfazer · Backspace excluir. Nos terminais do Windows, Ctrl+V cola o texto do clipboard nativo; quando não há texto, o atalho original da CLI continua disponível para colar imagem. No Windows, a barra de título estilizada oferece Arquivo, Editar, Visualizar, Workspace, Janela e Ajuda sem perder os controles da janela; macOS e Linux mantêm seus menus de plataforma.`,
     },
   ],
   useCases: [
@@ -579,7 +579,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'audio-devices',
       title: 'Escolher microfone e saída de áudio',
-      body: 'Abra Configurações → Voz para escolher e testar o microfone usado em todo ditado local e a saída usada nas prévias e respostas faladas. Autorize o microfone para revelar os nomes dos dispositivos, observe o medidor de entrada ao vivo e reproduza um tom curto na saída antes de salvar. O ditado grava PCM direto pela mesma rota Web Audio do medidor e normaliza fala baixa antes do STT local. Se o dispositivo escolhido desaparecer, o Orkestrai volta ao padrão do sistema. Permissão negada, dispositivo ausente, captura interrompida, provável disputa e um dispositivo que abre sem produzir sinal recebem orientações diferentes; plataformas que não permitem direcionar o áudio do app explicam a limitação em vez de ignorar a escolha silenciosamente.',
+      body: 'Abra Configurações → Voz para escolher e testar o microfone usado em todo ditado local e a saída usada nas prévias e respostas faladas. Autorize o microfone para revelar os nomes dos dispositivos, observe o medidor de entrada ao vivo e reproduza um tom curto na saída antes de salvar. O ditado captura PCM direto na frequência nativa do microfone, escolhe o canal ativo e só depois reamostra e normaliza para o STT local. Uma captura alternativa da mesma fala recupera o áudio se o Web Audio do Electron abrir mas entregar blocos vazios, sem obrigar você a ditar novamente. Se o dispositivo escolhido desaparecer, o Orkestrai volta ao padrão do sistema. Permissão negada, dispositivo ausente, captura interrompida, provável disputa e um dispositivo que abre sem produzir sinal recebem orientações diferentes; plataformas que não permitem direcionar o áudio do app explicam a limitação em vez de ignorar a escolha silenciosamente.',
       tags: ['Dispositivos de áudio', 'teste de microfone', 'teste de saída'],
     },
     {
@@ -609,8 +609,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'organize-canvas',
       title: 'Reorganizar um workspace que cresceu',
-      body: 'Selecione os nós que deseja realinhar e escolha Organizar canvas na barra ou na paleta de comandos. O Orkestrai organiza somente a seleção; sem nada selecionado, organiza todo o canvas em linhas determinísticas sem sobrepor nós. As conexões permanecem atrás de todos os nós.',
-      tags: ['Layout do canvas', 'seleção', 'conexões'],
+      body: 'Escolha Organizar canvas na barra ou na paleta de comandos. O Orkestrai distribui todo o canvas visível em linhas determinísticas sem sobrepor nós, mesmo que um item ainda estivesse selecionado antes do comando; grupos se movem como unidades intactas e preservam sua organização interna. Novos agentes, notas, Portais, quadros, fluxos de imagem, referências e Imagens geradas também procuram os retângulos realmente ocupados e mantêm uma margem estável. As conexões permanecem atrás de todos os nós.',
+      tags: ['Layout do canvas', 'nós sem colisão', 'conexões'],
     },
     {
       id: 'focused-workspace-view',
@@ -734,6 +734,19 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Próximo patch',
+      title: 'Retomada, ditado e organização do canvas confiáveis',
+      summary: 'A recuperação mantém uma sessão por agente, o microfone preserva a mesma fala e fluxos crescentes param de mover ou empilhar nós.',
+      items: [
+        'Depois de suspensão, hibernação ou recarga do renderer, cada agente se reconecta à única PTY viva do seu nó em vez de abrir um segundo writer para a mesma conversa.',
+        'Recarregar, trocar provider/runtime, dispensar, excluir ou descarregar o workspace remove PTYs duplicadas e preserva o id exato da conversa para recuperação.',
+        'O ditado captura na frequência nativa de 44,1/48 kHz, escolhe o canal ativo, reamostra depois e recupera a mesma fala por um fallback do navegador se o Web Audio não entregar amostras.',
+        'Updates de payload são realmente parciais e a atualização ao vivo protege o arraste atual; progresso de imagem ou estado de sessão não restaura coordenadas antigas.',
+        'Fluxos de imagem e nós criados por agentes usam posições livres calculadas pelos retângulos reais, incluindo cada resultado e referência.',
+        'Organizar canvas sempre distribui todo o grafo visível em linhas determinísticas sem sobreposição, mantém grupos intactos e funciona mesmo com um nó selecionado.',
+      ],
+    },
     {
       date: '28 ago 2026 · 0.22.0',
       title: 'Orkestrai 0.22.0: fluxos nativos de imagem para pessoas e agentes',
