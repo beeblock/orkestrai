@@ -47,6 +47,10 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Code Intelligence now treats an approved repository with no supported source
+  files as a valid empty graph instead of surfacing ripgrep's no-match exit code
+  as an indexing failure. Its primary Index code action also uses the theme's
+  guaranteed accent-contrast token, keeping the label readable in every theme.
 - After macOS sleep, hibernation, renderer reloads, or a brief power loss, a
   canvas agent now reattaches to the one live PTY identified by workspace and
   node instead of launching a second writer for the same provider conversation.

@@ -531,7 +531,7 @@
       </form>
       <Button
         size="sm"
-        class="h-8 bg-[var(--app-accent)] text-[11px] text-[var(--app-accent-foreground)] hover:brightness-105"
+        class="h-8 bg-[var(--app-accent)] text-[11px] text-[var(--app-accent-contrast)] hover:brightness-105"
         disabled={indexing}
         onclick={() => void indexWorkspace()}
       >

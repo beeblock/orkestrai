@@ -62,8 +62,10 @@ export class CodeGraphFileScanner {
       }));
     } catch (error) {
       const candidate = error as { code?: number; stdout?: string };
-      if (candidate.code !== 1 || !candidate.stdout) throw error;
-      stdout = candidate.stdout;
+      // ripgrep exits with 1 when a valid directory has no matching files.
+      // That is an empty graph, not an indexing failure.
+      if (candidate.code !== 1) throw error;
+      stdout = candidate.stdout ?? '';
     }
 
     const paths = stdout.split(/\r?\n/).filter(Boolean).slice(0, MAX_FILES + 1);

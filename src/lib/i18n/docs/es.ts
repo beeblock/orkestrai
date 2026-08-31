@@ -755,6 +755,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'El Grafo de Inteligencia de Código nativo indexa de forma segura repositorios TypeScript, JavaScript, Svelte y PHP aprobados, ofrece revisiones atómicas con búsqueda y recorridos limitados, superpone cambios Git y de Floors activos con símbolos afectados, tests probables y conflictos, crea handoffs trazables en Review Center o Kanban, renderiza etiquetas adaptadas al tema en Canvas y Workbench y expone el mismo grafo a los agentes por CLI y MCP tipados.',
         'La vista Contratos cruza endpoints del backend, llamadas del frontend, clientes generados, schemas OpenAPI o Swagger, prefijos de gateway y requests vivos del Cliente de API entre repositorios aprobados, destacando llamadas sin correspondencia y conflictos sin retener hosts, valores de query, headers ni credenciales.',
         'La vista Calidad agrega evidencia con confianza explícita para duplicados, ciclos de imports, acoplamiento, violaciones inferidas entre capas, código excesivo, ejecución sensible, posible código muerto y flujos estáticos de entorno/archivo/red/base de datos/IPC sin retener valores, payloads, hosts, query strings ni cuerpos de código.',
+        'Inteligencia de Código acepta repositorios aprobados sin archivos fuente compatibles como un grafo vacío válido, y la acción Indexar código conserva un contraste legible en todos los temas.',
       ],
     },
     {

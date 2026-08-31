@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { CodeGraphFileScanner } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphFileScanner.js';
 import { CodeGraphParser } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphParser.js';
 import { CodeGraphResolver } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphResolver.js';
 import type { ScannedCodeFile } from '$lib/modules/agent-room/infrastructure/code-graph/types.js';
@@ -16,6 +20,23 @@ function source(path: string, content: string): ScannedCodeFile {
     generated: false,
   };
 }
+
+describe('CodeGraphFileScanner', () => {
+  it('treats a repository without supported source files as an empty graph', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-empty-'));
+    try {
+      await writeFile(join(root, 'README.md'), '# Empty project\n', 'utf8');
+      await expect(new CodeGraphFileScanner().scan(root)).resolves.toMatchObject({
+        rootPath: await realpath(root),
+        files: [],
+        diagnostics: [],
+        skipped: 0,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('CodeGraphParser', () => {
   it('extracts TypeScript declarations and typed relationships', async () => {

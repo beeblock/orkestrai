@@ -755,6 +755,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'The native Code Intelligence Graph safely indexes approved TypeScript, JavaScript, Svelte, and PHP repositories, provides atomic searchable revisions and bounded relationship traversal, overlays Git and active Floor changes with affected symbols, likely tests, and conflicts, creates traceable Review Center or Kanban handoffs, renders theme-aware labels in Canvas and Workbench, and exposes the same graph to agents through typed CLI and MCP tools.',
         'Its Contracts view joins backend endpoints, frontend calls, generated clients, OpenAPI or Swagger schemas, gateway prefixes, and live API Client requests across approved repositories, highlighting unmatched calls and route conflicts without retaining hosts, query values, headers, or credentials.',
         'Its Quality view adds confidence-scored evidence for duplication, import cycles, coupling, inferred layer violations, oversized code, security-sensitive execution, possible dead code, and static environment/file/network/database/IPC flows without retaining values, payloads, hosts, query strings, or source bodies.',
+        'Code Intelligence accepts approved repositories with no supported source files as a valid empty graph, and the Index code action keeps readable contrast across every theme.',
       ],
     },
     {
