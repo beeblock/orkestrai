@@ -76,6 +76,8 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { projects: [{ id: '00000000-0000-7000-8000-000000000020', name: 'Web', status: 'ready', stats: { files: 12, symbols: 80, edges: 140 } }], totals: { files: 12, symbols: 80, edges: 140 }, indexing: false } }));
         } else if (req.url === '/api/agent-room/bridge/code-graph' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { projects: [], stats: { files: 12, symbols: 80, edges: 140 } } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/changes?')) {
+          res.end(JSON.stringify({ data: { scopes: [{ files: [{ path: 'src/order.ts' }] }], impact: { nodes: [{ id: 's1' }], edges: [], truncated: false }, likelyTests: ['tests/order.test.ts'], conflicts: [], truncated: false } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/search?')) {
           res.end(JSON.stringify({ data: [{ id: '00000000-0000-7000-8000-000000000010', kind: 'class', qualifiedName: 'src/order::OrderService', projectName: 'Web', path: 'src/order.ts', startLine: 4 }] }));
         } else if (req.url === '/api/agent-room/bridge/code-graph/symbols/00000000-0000-7000-8000-000000000010') {
@@ -238,6 +240,8 @@ describe('orkestrai CLI', () => {
     expect(await run(['graph', 'symbol', symbolId], { cwd, out, env: {} })).toBe(0);
     expect(await run(['graph', 'neighbors', symbolId, '--direction', 'incoming', '--depth', '3'], { cwd, out, env: {} })).toBe(0);
     expect(requests.at(-1).url).toContain('/graph?direction=incoming&depth=3');
+    expect(await run(['graph', 'changes', '--depth', '2'], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1).url).toContain('/code-graph/changes?depth=2');
   });
 
   it('huddle lista sessoes e registra a fala do agente identificado', async () => {

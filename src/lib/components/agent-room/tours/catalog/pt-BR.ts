@@ -1711,6 +1711,11 @@ export const TOURS_PT: Tour[] = [
         title: 'Pesquise e acompanhe o impacto',
         body: 'Pesquise um serviço, componente, rota ou método no nó. Selecione o resultado, alterne Entrada, Ambas ou Saída e ajuste a profundidade para inspecionar sua vizinhança limitada. Agentes fazem a mesma busca com code_graph_search e code_graph_neighbors.',
       },
+      {
+        id: 'inspect-change-impact',
+        title: 'Inspecione mudanças ativas',
+        body: 'Abra Mudanças para projetar o workspace e os Andares ativos no mesmo grafo. Símbolos vermelhos mudaram diretamente, caminhos âmbar indicam testes prováveis, e o painel lateral mostra arquivos ou símbolos dependentes compartilhados entre Andares. Agentes recebem a mesma evidência limitada com code_graph_changes.',
+      },
     ],
   },
   {

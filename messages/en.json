@@ -3380,5 +3380,15 @@
   "code_graph.index_error": "Could not index the workspace code.",
   "code_graph.load_error": "Could not load the code graph.",
   "code_graph.added": "Code graph added to the canvas.",
-  "code_graph.already_on_canvas": "The code graph is already on this canvas."
+  "code_graph.already_on_canvas": "The code graph is already on this canvas.",
+  "code_graph.changes": "Changes",
+  "code_graph.change_impact": "Change impact",
+  "code_graph.no_changes": "No Git or active Floor changes affect the indexed graph.",
+  "code_graph.workspace_scope": "Workspace changes",
+  "code_graph.floor_scope": "Floor: {name}",
+  "code_graph.floor_conflicts": "Potential Floor conflicts",
+  "code_graph.shared_files": "shared files",
+  "code_graph.shared_symbols": "shared symbols",
+  "code_graph.likely_tests": "Likely tests",
+  "code_graph.changes_error": "Could not analyze Git and Floor changes."
 }

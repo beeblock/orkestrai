@@ -49,6 +49,7 @@ const TOOLS = [
   { name: 'code_graph_search', description: 'Busca simbolos por nome, caminho, assinatura e documentacao. Use antes de ler vizinhanca e impacto.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 120 }, projectId: { type: 'string', format: 'uuid' }, kinds: { type: 'array', items: { type: 'string', enum: ['module', 'namespace', 'class', 'interface', 'type', 'enum', 'function', 'method', 'variable', 'external'] } }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 } }, required: ['query'] } },
   { name: 'code_graph_symbol', description: 'Le um simbolo indexado com localizacao, assinatura e metadados sem ler o arquivo inteiro.', inputSchema: { type: 'object', properties: { symbolId: { type: 'string', format: 'uuid' } }, required: ['symbolId'] } },
   { name: 'code_graph_neighbors', description: 'Percorre uma vizinhanca limitada do grafo para entender dependencias, chamadas e impacto. Nunca executa consultas arbitrarias.', inputSchema: { type: 'object', properties: { symbolId: { type: 'string', format: 'uuid' }, direction: { type: 'string', enum: ['incoming', 'outgoing', 'both'], default: 'both' }, kinds: { type: 'array', items: { type: 'string', enum: ['contains', 'defines', 'imports', 'exports', 'calls', 'references', 'instantiates', 'inherits', 'implements'] } }, depth: { type: 'integer', minimum: 1, maximum: 4, default: 2 }, limit: { type: 'integer', minimum: 10, maximum: 750, default: 250 } }, required: ['symbolId'] } },
+  { name: 'code_graph_changes', description: 'Cruza mudancas Git e Floors com o grafo persistido para retornar simbolos afetados, testes provaveis e conflitos logicos limitados.', inputSchema: { type: 'object', properties: { depth: { type: 'integer', minimum: 1, maximum: 3, default: 2 }, limit: { type: 'integer', minimum: 50, maximum: 750, default: 500 } } } },
   { name: 'huddle_list', description: 'Lista huddles e retorna a sessao selecionada com participantes e transcricao.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' } } } },
   { name: 'huddle_say', description: 'Registra uma fala deste agente em um huddle ativo, sem disparar respostas recursivas.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 10000 } }, required: ['huddleId', 'text'] } },
   { name: 'ask', description: 'Envia mensagem a outro agente e aguarda resposta confirmada. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' } }, required: ['agent', 'message'] } },
@@ -202,6 +203,12 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       if (args.depth) params.set('depth', String(args.depth));
       if (args.limit) params.set('limit', String(args.limit));
       return bridge('GET', `/api/agent-room/bridge/code-graph/symbols/${encodeURIComponent(args.symbolId)}/graph?${params}`);
+    }
+    case 'code_graph_changes': {
+      const params = new URLSearchParams();
+      if (args.depth) params.set('depth', String(args.depth));
+      if (args.limit) params.set('limit', String(args.limit));
+      return bridge('GET', `/api/agent-room/bridge/code-graph/changes?${params}`);
     }
     case 'huddle_list': {
       const huddleId = /** @type {{ huddleId?: string }} */ (args).huddleId;

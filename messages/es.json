@@ -3380,5 +3380,15 @@
   "code_graph.index_error": "No se pudo indexar el código del workspace.",
   "code_graph.load_error": "No se pudo cargar el grafo de código.",
   "code_graph.added": "Grafo de código agregado al canvas.",
-  "code_graph.already_on_canvas": "El grafo de código ya está en este canvas."
+  "code_graph.already_on_canvas": "El grafo de código ya está en este canvas.",
+  "code_graph.changes": "Cambios",
+  "code_graph.change_impact": "Impacto de cambios",
+  "code_graph.no_changes": "Ningún cambio de Git o Piso activo afecta al grafo indexado.",
+  "code_graph.workspace_scope": "Cambios del workspace",
+  "code_graph.floor_scope": "Piso: {name}",
+  "code_graph.floor_conflicts": "Posibles conflictos entre Pisos",
+  "code_graph.shared_files": "archivos compartidos",
+  "code_graph.shared_symbols": "símbolos compartidos",
+  "code_graph.likely_tests": "Pruebas probables",
+  "code_graph.changes_error": "No se pudieron analizar los cambios de Git y de los Pisos."
 }

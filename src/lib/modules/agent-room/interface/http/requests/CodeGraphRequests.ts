@@ -4,10 +4,12 @@ import {
   codeGraphSearchSchema,
   codeGraphTraversalSchema,
   codeGraphOverviewSchema,
+  codeGraphChangeSchema,
   type CodeGraphIndexInput,
   type CodeGraphSearchInput,
   type CodeGraphTraversalInput,
   type CodeGraphOverviewInput,
+  type CodeGraphChangeInput,
 } from '../../../contracts/schemas/codeGraphSchemas.js';
 
 abstract class AuthorizedRequest extends FormRequest {
@@ -34,4 +36,9 @@ export class TraverseCodeGraphRequest extends AuthorizedRequest {
 export class OverviewCodeGraphRequest extends AuthorizedRequest {
   rules() { return codeGraphOverviewSchema; }
   passedValidation(data: unknown): CodeGraphOverviewInput { return codeGraphOverviewSchema.parse(data); }
+}
+
+export class ChangeCodeGraphRequest extends AuthorizedRequest {
+  rules() { return codeGraphChangeSchema; }
+  passedValidation(data: unknown): CodeGraphChangeInput { return codeGraphChangeSchema.parse(data); }
 }

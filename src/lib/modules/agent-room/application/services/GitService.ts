@@ -77,6 +77,32 @@ function parsePorcelain(porcelain: string): GitChange[] {
   return changes;
 }
 
+function parseNameStatus(output: string, source: string): GitChange[] {
+  const records = output.split('\0');
+  const changes: GitChange[] = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) continue;
+    const separator = record.indexOf('\t');
+    const status = separator > 0 ? record.slice(0, separator) : record;
+    let path = separator > 0 ? record.slice(separator + 1) : records[++index] || '';
+    if (!status || !path) continue;
+    let previousPath: string | null = null;
+    if (status.startsWith('R') || status.startsWith('C')) {
+      previousPath = path;
+      path = records[++index] || path;
+    }
+    changes.push({
+      id: `${source}:${path}`,
+      path,
+      previousPath,
+      status: status[0],
+      staged: false,
+    });
+  }
+  return changes;
+}
+
 /** Git operations scoped to the workspace root and executed without a shell. */
 export class GitService {
   private async root(workspaceId: string): Promise<string> {
@@ -153,7 +179,11 @@ export class GitService {
   }
 
   async status(workspaceId: string): Promise<GitStatusResult> {
-    const cwd = await this.root(workspaceId);
+    return this.statusDirectory(await this.root(workspaceId));
+  }
+
+  /** Internal read-only status for an already authorized repository or Floor. */
+  async statusDirectory(cwd: string): Promise<GitStatusResult> {
     try {
       await this.git(cwd, ['rev-parse', '--is-inside-work-tree']);
     } catch {
@@ -186,6 +216,24 @@ export class GitService {
       .update(`${head ?? ''}\0${porcelain}\0${contentHashes.join('\0')}`)
       .digest('hex');
     return { isRepo: true, branch, upstream, ahead, behind, head, revision, changes };
+  }
+
+  /**
+   * Returns committed file changes since the common ancestor of two refs.
+   * Refs are resolved to commit hashes before diffing, preventing option
+   * injection while keeping every subprocess shell-free.
+   */
+  async changesSinceMergeBase(cwd: string, baseRef: string, headRef = 'HEAD'): Promise<GitChange[]> {
+    const [base, head] = await Promise.all([
+      this.resolveCommit(cwd, baseRef),
+      this.resolveCommit(cwd, headRef),
+    ]);
+    const mergeBase = (await this.git(cwd, ['merge-base', base, head])).trim();
+    if (!mergeBase) return [];
+    const output = await this.git(cwd, [
+      'diff', '--name-status', '-z', '--find-renames', mergeBase, head, '--',
+    ]);
+    return parseNameStatus(output, `range:${head.slice(0, 12)}`);
   }
 
   async fileDiff(workspaceId: string, path: string, staged = false): Promise<GitFileDiff> {
@@ -307,6 +355,14 @@ export class GitService {
     if (change?.status === '?') throw new Error('Arquivos novos devem ser removidos manualmente para evitar perda irreversivel.');
     await this.git(cwd, ['restore', '--', path]);
     return { discarded: path };
+  }
+
+  private async resolveCommit(cwd: string, ref: string): Promise<string> {
+    const value = ref.trim();
+    if (!value || value.length > 300 || value.includes('\0')) throw new Error('Referência Git inválida.');
+    const resolved = (await this.git(cwd, ['rev-parse', '--verify', '--end-of-options', `${value}^{commit}`])).trim();
+    if (!/^[0-9a-f]{40,64}$/i.test(resolved)) throw new Error('Referência Git inválida.');
+    return resolved;
   }
 }
 

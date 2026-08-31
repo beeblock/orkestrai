@@ -20,6 +20,11 @@ pt-BR, English, and Spanish translations.
   storage contract can adopt a benchmark-qualified Memgraph adapter later.
 - A guided Code Intelligence use case adds the node, indexes approved
   repositories, and teaches people and agents to search and traverse impact.
+- The graph's Changes view overlays the current Git working tree and every
+  active Floor, maps changed files to directly and transitively affected
+  symbols, recommends likely tests, and highlights cross-Floor conflicts before
+  work is reviewed or landed. The same evidence is available through
+  `code_graph_changes` and `orkestrai graph changes`.
 
 ### Fixed
 

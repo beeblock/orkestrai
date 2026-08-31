@@ -3380,5 +3380,15 @@
   "code_graph.index_error": "Não foi possível indexar o código do workspace.",
   "code_graph.load_error": "Não foi possível carregar o grafo de código.",
   "code_graph.added": "Grafo de código adicionado ao canvas.",
-  "code_graph.already_on_canvas": "O grafo de código já está neste canvas."
+  "code_graph.already_on_canvas": "O grafo de código já está neste canvas.",
+  "code_graph.changes": "Mudanças",
+  "code_graph.change_impact": "Impacto das mudanças",
+  "code_graph.no_changes": "Nenhuma mudança Git ou de Andar ativo afeta o grafo indexado.",
+  "code_graph.workspace_scope": "Mudanças do workspace",
+  "code_graph.floor_scope": "Andar: {name}",
+  "code_graph.floor_conflicts": "Possíveis conflitos entre Andares",
+  "code_graph.shared_files": "arquivos compartilhados",
+  "code_graph.shared_symbols": "símbolos compartilhados",
+  "code_graph.likely_tests": "Testes prováveis",
+  "code_graph.changes_error": "Não foi possível analisar as mudanças Git e dos Andares."
 }

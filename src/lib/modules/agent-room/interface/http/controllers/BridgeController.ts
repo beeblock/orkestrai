@@ -53,9 +53,10 @@ import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectIm
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
-import { codeGraphIndexSchema, codeGraphSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { codeGraphChangeSchema, codeGraphIndexSchema, codeGraphSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
 import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
+import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -148,6 +149,16 @@ export class BridgeController extends Controller {
       }) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to traverse the code graph.');
+    }
+  }
+
+  async codeGraphChanges(event: any) {
+    try {
+      const input = codeGraphChangeSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphChangeIntelligenceService.analyze(workspace.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to analyze code changes.');
     }
   }
 

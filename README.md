@@ -59,7 +59,9 @@ common credentials redacted; normal agent output is not persisted.
   in the same Canvas and Workbench node. Agents query that exact persisted graph
   through typed MCP or `orkestrai graph`; explicitly approved sibling
   repositories remain separate projects, and arbitrary SQL/Cypher is never
-  exposed.
+  exposed. Its Changes view combines the current Git working tree and active
+  Floor worktrees to surface affected symbols, likely tests, and shared-impact
+  conflicts before review or landing.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,

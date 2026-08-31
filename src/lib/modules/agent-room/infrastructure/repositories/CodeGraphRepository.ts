@@ -682,6 +682,35 @@ export class CodeGraphRepository implements CodeGraphStore {
     return rows[0] ?? null;
   }
 
+  async symbolsForPaths(
+    workspaceId: string,
+    projectId: string,
+    paths: string[],
+    requestedLimit = 2_000,
+  ): Promise<CodeGraphSymbol[]> {
+    const uniquePaths = [...new Set(paths)].slice(0, 500);
+    const limit = Math.min(Math.max(requestedLimit, 1), 2_000);
+    if (!uniquePaths.length) return [];
+    const output: CodeGraphSymbol[] = [];
+    for (let offset = 0; offset < uniquePaths.length && output.length < limit; offset += 150) {
+      const batch = uniquePaths.slice(offset, offset + 150);
+      const rows = await Connection.raw(`
+        SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+        FROM agent_code_graph_symbols s
+        JOIN agent_code_graph_projects p ON p.id = s.project_id
+        JOIN agent_code_graph_files f ON f.id = s.file_id
+        WHERE s.workspace_id = ?
+          AND s.project_id = ?
+          AND s.revision_id = p.current_revision_id
+          AND f.path IN (${placeholders(batch.length)})
+        ORDER BY f.path, s.start_line, s.kind
+        LIMIT ?
+      `, [workspaceId, projectId, ...batch, limit - output.length]) as RawRow[];
+      output.push(...rows.map(mapSymbol));
+    }
+    return output;
+  }
+
   async overview(workspaceId: string, projectId?: string, requestedLimit = 220): Promise<CodeGraphSubgraph> {
     const limit = Math.min(Math.max(requestedLimit, 20), 400);
     const bindings: unknown[] = [workspaceId];
@@ -791,6 +820,60 @@ export class CodeGraphRepository implements CodeGraphStore {
       truncated,
       depth,
       centerSymbolId: center.id,
+    };
+  }
+
+  async impact(
+    workspaceId: string,
+    symbolIds: string[],
+    requestedDepth = 2,
+    requestedLimit = 500,
+  ): Promise<CodeGraphSubgraph> {
+    const depth = Math.min(Math.max(requestedDepth, 1), 3);
+    const limit = Math.min(Math.max(requestedLimit, 10), 750);
+    const seeds = await this.loadSymbols(workspaceId, [...new Set(symbolIds)].slice(0, limit));
+    const visited = new Set(seeds.map((symbol) => symbol.id));
+    const edges = new Map<string, CodeGraphEdge>();
+    let frontier = [...visited];
+    let truncated = symbolIds.length > seeds.length;
+
+    for (let level = 0; level < depth && frontier.length; level += 1) {
+      const rows = await Connection.raw(`
+        SELECT e.*, f.path AS site_path
+        FROM agent_code_graph_edges e
+        JOIN agent_code_graph_projects p ON p.id = e.project_id
+        LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
+        WHERE e.workspace_id = ?
+          AND e.revision_id = p.current_revision_id
+          AND e.target_symbol_id IN (${placeholders(frontier.length)})
+        ORDER BY e.confidence DESC, e.kind
+        LIMIT ?
+      `, [workspaceId, ...frontier, limit * 3]) as RawRow[];
+      if (rows.length >= limit * 3) truncated = true;
+      const next = new Set<string>();
+      for (const row of rows) {
+        const edge = mapEdge(row);
+        edges.set(edge.id, edge);
+        if (!visited.has(edge.sourceSymbolId)) {
+          if (visited.size >= limit) {
+            truncated = true;
+            continue;
+          }
+          visited.add(edge.sourceSymbolId);
+          next.add(edge.sourceSymbolId);
+        }
+      }
+      frontier = [...next];
+    }
+
+    const nodes = await this.loadSymbols(workspaceId, [...visited]);
+    const visible = new Set(nodes.map((node) => node.id));
+    return {
+      nodes,
+      edges: [...edges.values()].filter((edge) => visible.has(edge.sourceSymbolId) && visible.has(edge.targetSymbolId)),
+      truncated,
+      depth,
+      centerSymbolId: seeds.length === 1 ? seeds[0].id : null,
     };
   }
 

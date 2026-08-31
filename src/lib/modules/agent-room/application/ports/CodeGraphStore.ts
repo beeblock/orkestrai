@@ -93,8 +93,10 @@ export interface CodeGraphStore {
   failRevision(workspaceId: string, projectId: string, revisionId: string, diagnostics: CodeGraphDiagnostic[]): Promise<void>;
   search(workspaceId: string, options: CodeGraphSearchOptions): Promise<CodeGraphSymbol[]>;
   symbol(workspaceId: string, symbolId: string): Promise<CodeGraphSymbol | null>;
+  symbolsForPaths(workspaceId: string, projectId: string, paths: string[], limit?: number): Promise<CodeGraphSymbol[]>;
   overview(workspaceId: string, projectId?: string, limit?: number): Promise<CodeGraphSubgraph>;
   subgraph(workspaceId: string, options: CodeGraphTraversalOptions): Promise<CodeGraphSubgraph>;
+  impact(workspaceId: string, symbolIds: string[], depth?: number, limit?: number): Promise<CodeGraphSubgraph>;
   deleteWorkspace(workspaceId: string): Promise<void>;
 }
 

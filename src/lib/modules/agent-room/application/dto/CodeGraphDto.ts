@@ -3,8 +3,9 @@ import type {
   CodeGraphSearchInput,
   CodeGraphTraversalInput,
   CodeGraphOverviewInput,
+  CodeGraphChangeInput,
 } from '../../contracts/schemas/codeGraphSchemas.js';
-import type { CodeGraphIndexOptions, CodeGraphSearchOptions, CodeGraphTraversalOptions } from '../../domain/code-graph.js';
+import type { CodeGraphChangeOptions, CodeGraphIndexOptions, CodeGraphSearchOptions, CodeGraphTraversalOptions } from '../../domain/code-graph.js';
 
 export class IndexCodeGraphDto {
   constructor(
@@ -59,5 +60,16 @@ export class TraverseCodeGraphDto {
       depth: input.depth,
       limit: input.limit,
     });
+  }
+}
+
+export class ChangeCodeGraphDto {
+  constructor(
+    public readonly workspaceId: string,
+    public readonly options: CodeGraphChangeOptions,
+  ) {}
+
+  static from(workspaceId: string, input: CodeGraphChangeInput): ChangeCodeGraphDto {
+    return new ChangeCodeGraphDto(workspaceId, { depth: input.depth, limit: input.limit });
   }
 }

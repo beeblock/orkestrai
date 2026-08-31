@@ -10,6 +10,7 @@
     Box,
     Braces,
     FileCode2,
+    GitCompareArrows,
     ExternalLink,
     Network,
     RefreshCw,
@@ -23,6 +24,8 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
   import type {
     CodeGraphProject,
+    CodeGraphChangeIntelligence,
+    CodeGraphChangedFile,
     CodeGraphSnapshot,
     CodeGraphSubgraph,
     CodeGraphSymbol,
@@ -43,6 +46,7 @@
   let { id, data, selected } = $props<NodeProps & { data: CodeGraphNodeData }>();
   let snapshot = $state<CodeGraphSnapshot | null>(null);
   let graph = $state<CodeGraphSubgraph | null>(null);
+  let changes = $state<CodeGraphChangeIntelligence | null>(null);
   let selectedSymbol = $state<CodeGraphSymbol | null>(null);
   let results = $state<CodeGraphSymbol[]>([]);
   let query = $state('');
@@ -51,6 +55,8 @@
   let depth = $state(2);
   let loading = $state(true);
   let indexing = $state(false);
+  let changeLoading = $state(false);
+  let viewMode = $state<'overview' | 'changes'>('overview');
   let error = $state('');
   let graphHost: HTMLDivElement;
   let renderer: { kill: () => void; on: (event: string, handler: (payload: { node: string }) => void) => void } | null = null;
@@ -58,6 +64,7 @@
 
   const currentProject = $derived(snapshot?.projects.find((project) => project.id === projectId) ?? null);
   const hasIndexedGraph = $derived(Boolean(snapshot?.projects.some((project) => project.currentRevisionId)));
+  const changedFileCount = $derived(changes?.scopes.reduce((total, scope) => total + scope.files.length, 0) ?? 0);
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -125,13 +132,15 @@
     ]);
     if (sequence !== renderSequence || !graphHost) return;
     const model = new Graph({ multi: true, type: 'directed' });
+    const changed = new Set(viewMode === 'changes' ? changes?.scopes.flatMap((scope) => scope.changedSymbolIds) ?? [] : []);
+    const tests = new Set(viewMode === 'changes' ? changes?.likelyTests ?? [] : []);
     for (const node of next.nodes) {
       model.addNode(node.id, {
         label: node.name,
         x: stablePosition(node.id, 0),
         y: stablePosition(node.id, 1),
-        size: node.id === next.centerSymbolId ? 11 : node.kind === 'module' ? 7 : 5,
-        color: symbolColor(node.kind),
+        size: changed.has(node.id) || node.id === next.centerSymbolId ? 11 : node.kind === 'module' ? 7 : 5,
+        color: changed.has(node.id) ? '#ef4444' : node.path && tests.has(node.path) ? '#f59e0b' : symbolColor(node.kind),
       });
     }
     for (const edge of next.edges) {
@@ -159,11 +168,30 @@
   }
 
   async function loadOverview(): Promise<void> {
+    viewMode = 'overview';
     selectedSymbol = null;
     const params = new URLSearchParams();
     if (projectId !== 'all') params.set('projectId', projectId);
     graph = await api<CodeGraphSubgraph>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/graph?${params}`);
     await renderGraph(graph);
+  }
+
+  async function loadChanges(): Promise<void> {
+    if (!hasIndexedGraph) return;
+    changeLoading = true;
+    error = '';
+    try {
+      changes = await api<CodeGraphChangeIntelligence>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/changes?depth=2&limit=500`);
+      viewMode = 'changes';
+      selectedSymbol = null;
+      results = [];
+      graph = changes.impact;
+      await renderGraph(graph);
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.changes_error']();
+    } finally {
+      changeLoading = false;
+    }
   }
 
   async function load(): Promise<void> {
@@ -225,6 +253,7 @@
         api<CodeGraphSubgraph>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/symbols/${symbolId}/graph?${params}`),
       ]);
       selectedSymbol = symbol;
+      viewMode = 'overview';
       graph = nextGraph;
       results = [];
       await renderGraph(nextGraph);
@@ -242,6 +271,15 @@
     if (!selectedSymbol?.path) return;
     const root = selectedSymbol.projectRelativePath;
     const path = !root || root === '.' ? selectedSymbol.path : `${root}/${selectedSymbol.path}`;
+    window.dispatchEvent(new CustomEvent('orkestrai:open-file', {
+      detail: { workspaceId: data.workspaceId, path },
+    }));
+  }
+
+  function openChangedFile(file: CodeGraphChangedFile): void {
+    const project = snapshot?.projects.find((candidate) => candidate.id === file.projectId);
+    const root = project?.relativePath;
+    const path = !root || root === '.' ? file.path : `${root}/${file.path}`;
     window.dispatchEvent(new CustomEvent('orkestrai:open-file', {
       detail: { workspaceId: data.workspaceId, path },
     }));
@@ -341,6 +379,16 @@
         <RefreshCw size={12} class={indexing ? 'animate-spin' : undefined} />
         {indexing ? m['code_graph.indexing']() : m['code_graph.index']()}
       </Button>
+      <Button
+        size="sm"
+        variant={viewMode === 'changes' ? 'default' : 'outline'}
+        class="h-8 text-[11px]"
+        disabled={!hasIndexedGraph || changeLoading}
+        onclick={() => void loadChanges()}
+      >
+        <GitCompareArrows size={12} class={changeLoading ? 'animate-pulse' : undefined} />
+        {m['code_graph.changes']()}{changes ? ` (${changedFileCount})` : ''}
+      </Button>
     </div>
 
     {#if snapshot}
@@ -378,7 +426,55 @@
       </div>
 
       <aside class="min-h-0 overflow-y-auto overscroll-contain bg-[var(--app-surface)] p-2">
-        {#if results.length}
+        {#if viewMode === 'changes' && changes}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.change_impact']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          {#if changes.scopes.length === 0}
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.no_changes']()}</div>
+          {:else}
+            <div class="space-y-3">
+              {#each changes.scopes as scope (scope.id)}
+                <section>
+                  <div class="mb-1 flex items-center justify-between gap-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">
+                    <span class="truncate">{scope.kind === 'floor' ? m['code_graph.floor_scope']({ name: scope.name }) : m['code_graph.workspace_scope']()}</span>
+                    <span class="tabular-nums">{scope.files.length}</span>
+                  </div>
+                  <div class="space-y-1">
+                    {#each scope.files.slice(0, 20) as file (`${scope.id}:${file.projectId}:${file.path}`)}
+                      <button class="flex w-full min-w-0 items-center gap-2 rounded border border-transparent px-1.5 py-1 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-hover)]" onclick={() => openChangedFile(file)}>
+                        <span class="grid size-5 shrink-0 place-items-center rounded bg-[var(--app-canvas)] font-mono text-[9px] text-[var(--app-warning)]">{file.status}</span>
+                        <span class="min-w-0 flex-1"><span class="block truncate text-[10px]">{file.path}</span><span class="block truncate text-[8px] text-[var(--app-text-muted)]">{file.projectName} · {file.symbolIds.length} {m['code_graph.symbols']()}</span></span>
+                      </button>
+                    {/each}
+                  </div>
+                </section>
+              {/each}
+              {#if changes.conflicts.length}
+                <section class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 p-2">
+                  <strong class="mb-1 block text-[10px] text-[var(--app-danger)]">{m['code_graph.floor_conflicts']()}</strong>
+                  {#each changes.conflicts as conflict (conflict.id)}
+                    <div class="border-t border-[var(--app-danger)]/20 py-1.5 first:border-0">
+                      <span class="block text-[10px] font-semibold">{conflict.leftFloorName} ↔ {conflict.rightFloorName}</span>
+                      <span class="block text-[8px] leading-3 text-[var(--app-text-muted)]">{conflict.sharedPaths.length} {m['code_graph.shared_files']()} · {conflict.sharedImpactSymbolIds.length + conflict.sharedSymbolIds.length} {m['code_graph.shared_symbols']()}</span>
+                    </div>
+                  {/each}
+                </section>
+              {/if}
+              {#if changes.likelyTests.length}
+                <section>
+                  <strong class="mb-1 block text-[10px]">{m['code_graph.likely_tests']()}</strong>
+                  <div class="space-y-0.5">
+                    {#each changes.likelyTests.slice(0, 20) as path (path)}
+                      <div class="truncate rounded bg-[var(--app-canvas)] px-2 py-1 font-mono text-[8px] text-[var(--app-text-muted)]">{path}</div>
+                    {/each}
+                  </div>
+                </section>
+              {/if}
+            </div>
+          {/if}
+        {:else if results.length}
           <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
           <div class="space-y-1">
             {#each results as result (result.id)}

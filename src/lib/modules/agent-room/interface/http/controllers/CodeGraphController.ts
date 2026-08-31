@@ -1,8 +1,9 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
+import { ChangeCodeGraphDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
 import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
-import { IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
+import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
+import { ChangeCodeGraphRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
   async status(event: RequestEvent) {
@@ -59,6 +60,16 @@ export class CodeGraphController extends Controller {
       return this.json({ data: await codeGraphIndexService.subgraph(dto.workspaceId, dto.options) });
     } catch (error) {
       return this.failure(error, 'Could not traverse the code graph.');
+    }
+  }
+
+  async changes(event: RequestEvent) {
+    try {
+      const input = await ChangeCodeGraphRequest.validate(event);
+      const dto = ChangeCodeGraphDto.from(event.params.id, input);
+      return this.json({ data: await codeGraphChangeIntelligenceService.analyze(dto.workspaceId, dto.options) });
+    } catch (error) {
+      return this.failure(error, 'Could not analyze code changes.');
     }
   }
 
