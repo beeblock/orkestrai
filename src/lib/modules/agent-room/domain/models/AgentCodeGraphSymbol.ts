@@ -8,7 +8,7 @@ export class AgentCodeGraphSymbol extends Model {
   static fillable = [
     'id', 'workspace_id', 'project_id', 'revision_id', 'file_id',
     'parent_symbol_id', 'kind', 'name', 'qualified_name', 'signature',
-    'documentation', 'modifiers_json', 'exported', 'start_line',
+    'documentation', 'modifiers_json', 'metadata_json', 'exported', 'start_line',
     'start_column', 'end_line', 'end_column', 'fingerprint', 'created_at',
     'updated_at',
   ];
@@ -35,6 +35,7 @@ export class AgentCodeGraphSymbol extends Model {
   declare signature: string | null;
   declare documentation: string | null;
   declare modifiers_json: string | null;
+  declare metadata_json: string | null;
   declare exported: boolean;
   declare start_line: number | null;
   declare start_column: number | null;

@@ -14,6 +14,7 @@ export type ParsedCodeSymbol = {
   signature: string | null;
   documentation: string | null;
   modifiers: string[];
+  metadata: Record<string, unknown>;
   exported: boolean;
   startLine: number | null;
   startColumn: number | null;

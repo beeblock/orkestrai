@@ -1708,6 +1708,11 @@ export const TOURS_ES: Tour[] = [
         body: 'Busca un servicio, componente, ruta o método en el nodo. Selecciona el resultado, alterna Entrante, Ambas o Saliente y ajusta la profundidad para inspeccionar su vecindad limitada. Los agentes hacen la misma búsqueda con code_graph_search y code_graph_neighbors.',
       },
       {
+        id: 'inspect-api-contracts',
+        title: 'Rastrea contratos de API entre repositorios',
+        body: 'Abre Contratos para conectar endpoints del backend, llamadas del frontend, clientes generados, schemas OpenAPI, prefijos de gateway y requests vivos del Cliente de API. Resuelve llamadas sin correspondencia y conflictos de ruta entre proyectos antes de cambiar cualquiera de los lados. Los agentes usan code_graph_contracts para el mismo mapa limitado.',
+      },
+      {
         id: 'inspect-change-impact',
         title: 'Inspecciona cambios activos',
         body: 'Abre Cambios para proyectar el workspace y los Pisos activos en el mismo grafo. Los símbolos rojos cambiaron directamente, las rutas ámbar indican pruebas probables y el panel lateral muestra archivos o símbolos dependientes compartidos entre Pisos. Los agentes reciben la misma evidencia limitada con code_graph_changes.',

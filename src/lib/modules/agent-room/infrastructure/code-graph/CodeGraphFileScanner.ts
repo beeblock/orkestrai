@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { realpath, readFile, stat } from 'node:fs/promises';
-import { extname, relative, resolve, sep } from 'node:path';
+import { basename, extname, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { CodeGraphDiagnostic, CodeGraphLanguage } from '../../domain/code-graph.js';
 import type { ScannedCodeFile } from './types.js';
@@ -10,11 +10,13 @@ const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES = 20_000;
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
-const EXTENSIONS = new Map<string, CodeGraphLanguage>([
+const SOURCE_EXTENSIONS = new Map<string, CodeGraphLanguage>([
   ['.ts', 'typescript'], ['.tsx', 'typescript'], ['.mts', 'typescript'], ['.cts', 'typescript'],
   ['.js', 'javascript'], ['.jsx', 'javascript'], ['.mjs', 'javascript'], ['.cjs', 'javascript'],
   ['.svelte', 'svelte'], ['.php', 'php'],
 ]);
+const CONTRACT_FILE = /(?:^|[._-])(openapi|swagger)(?:[._-]|$)/i;
+const CONTRACT_GLOBS = ['*openapi*.json', '*openapi*.yaml', '*openapi*.yml', '*swagger*.json', '*swagger*.yaml', '*swagger*.yml'];
 const IGNORED_GLOBS = [
   '.git/**', 'node_modules/**', 'vendor/**', '.svelte-kit/**', '.next/**', '.nuxt/**',
   'build/**', 'dist/**', 'release/**', 'coverage/**', 'target/**', '.cache/**',
@@ -47,7 +49,8 @@ export class CodeGraphFileScanner {
     const args = [
       '--files', '--hidden', '--no-follow', '--max-filesize', String(MAX_FILE_BYTES),
       ...IGNORED_GLOBS.flatMap((glob) => ['--glob', `!${glob}`]),
-      ...[...EXTENSIONS.keys()].flatMap((extension) => ['--glob', `*${extension}`]),
+      ...[...SOURCE_EXTENSIONS.keys()].flatMap((extension) => ['--glob', `*${extension}`]),
+      ...CONTRACT_GLOBS.flatMap((glob) => ['--glob', glob]),
       '--', rootPath,
     ];
     let stdout = '';
@@ -84,7 +87,10 @@ export class CodeGraphFileScanner {
           continue;
         }
         const info = await stat(absolutePath);
-        const language = EXTENSIONS.get(extname(absolutePath).toLowerCase());
+        const extension = extname(absolutePath).toLowerCase();
+        const language = SOURCE_EXTENSIONS.get(extension)
+          ?? (CONTRACT_FILE.test(basename(absolutePath)) && extension === '.json' ? 'json' : null)
+          ?? (CONTRACT_FILE.test(basename(absolutePath)) && ['.yaml', '.yml'].includes(extension) ? 'yaml' : null);
         if (!language || !info.isFile() || info.size > MAX_FILE_BYTES) {
           skipped += 1;
           continue;

@@ -58,6 +58,7 @@ function externalSymbol(identity: string, name: string): ParsedCodeSymbol {
     signature: null,
     documentation: null,
     modifiers: [],
+    metadata: { identity },
     exported: true,
     startLine: null,
     startColumn: null,

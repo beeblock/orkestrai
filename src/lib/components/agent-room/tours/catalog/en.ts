@@ -1708,6 +1708,11 @@ export const TOURS_EN: Tour[] = [
         body: 'Search for a service, component, route, or method in the node. Select a result, then switch Incoming, Both, or Outgoing and adjust depth to inspect its bounded neighborhood. Agents can perform the same search with code_graph_search and code_graph_neighbors.',
       },
       {
+        id: 'inspect-api-contracts',
+        title: 'Trace API contracts across repositories',
+        body: 'Open Contracts to connect backend endpoints, frontend calls, generated clients, OpenAPI schemas, gateway prefixes, and live API Client requests. Resolve unmatched calls and cross-project route conflicts before changing either side. Agents use code_graph_contracts for the same bounded map.',
+      },
+      {
         id: 'inspect-change-impact',
         title: 'Inspect active changes',
         body: 'Open Changes to map the workspace and active Floors onto the same graph. Red symbols changed directly, amber paths identify likely tests, and the side panel exposes overlapping Floor files or downstream symbols. Agents receive the same bounded evidence with code_graph_changes.',

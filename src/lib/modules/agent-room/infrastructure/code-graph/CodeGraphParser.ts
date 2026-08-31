@@ -10,6 +10,7 @@ import type {
   CodeGraphSymbolKind,
 } from '../../domain/code-graph.js';
 import type { ParsedCodeFile, ParsedCodeReference, ParsedCodeSymbol, ScannedCodeFile } from './types.js';
+import { codeGraphContractExtractor } from './CodeGraphContractExtractor.js';
 
 const require = createRequire(import.meta.url);
 const MAX_AST_NODES = 250_000;
@@ -176,6 +177,7 @@ function addSymbol(
     signature: declarationSignature(signatureNode, context.source),
     documentation: declarationDocumentation(node, context.source),
     modifiers: declarationModifiers(node),
+    metadata: {},
     exported,
     startLine: start.line,
     startColumn: start.column,
@@ -336,6 +338,7 @@ function moduleSymbol(file: ScannedCodeFile): ParsedCodeSymbol {
     signature: null,
     documentation: null,
     modifiers: [],
+    metadata: {},
     exported: true,
     startLine: 1,
     startColumn: 0,
@@ -350,7 +353,8 @@ export class CodeGraphParser {
     const diagnostics: CodeGraphDiagnostic[] = [];
     const symbols = [moduleSymbol(file)];
     const references: ParsedCodeReference[] = [];
-    const scripts = file.language === 'svelte' ? this.svelteScripts(file, diagnostics) : [{
+    const scripts = file.language === 'json' || file.language === 'yaml' ? []
+      : file.language === 'svelte' ? this.svelteScripts(file, diagnostics) : [{
       content: file.content,
       kind: file.language === 'php' ? 'php' as const
         : ['.tsx', '.jsx'].includes(extname(file.relativePath).toLowerCase()) ? 'tsx' as const
@@ -380,6 +384,7 @@ export class CodeGraphParser {
             signature: `namespace ${namespace}`,
             documentation: null,
             modifiers: [],
+            metadata: {},
             exported: true,
             startLine: 1,
             startColumn: 0,
@@ -427,6 +432,11 @@ export class CodeGraphParser {
         parser?.delete();
       }
     }
+
+    const contracts = codeGraphContractExtractor.extract(file, symbols);
+    symbols.push(...contracts.symbols);
+    references.push(...contracts.references);
+    diagnostics.push(...contracts.diagnostics);
 
     return {
       absolutePath: file.absolutePath,

@@ -1,15 +1,16 @@
-export const CODE_GRAPH_LANGUAGES = ['typescript', 'javascript', 'svelte', 'php'] as const;
+export const CODE_GRAPH_LANGUAGES = ['typescript', 'javascript', 'svelte', 'php', 'json', 'yaml'] as const;
 export type CodeGraphLanguage = (typeof CODE_GRAPH_LANGUAGES)[number];
 
 export const CODE_GRAPH_SYMBOL_KINDS = [
   'module', 'namespace', 'class', 'interface', 'type', 'enum', 'function',
-  'method', 'variable', 'external',
+  'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'external',
 ] as const;
 export type CodeGraphSymbolKind = (typeof CODE_GRAPH_SYMBOL_KINDS)[number];
 
 export const CODE_GRAPH_EDGE_KINDS = [
   'contains', 'defines', 'imports', 'exports', 'calls', 'references',
-  'instantiates', 'inherits', 'implements',
+  'instantiates', 'inherits', 'implements', 'handles', 'requests', 'matches',
+  'validates', 'generatedFrom', 'routesTo',
 ] as const;
 export type CodeGraphEdgeKind = (typeof CODE_GRAPH_EDGE_KINDS)[number];
 
@@ -64,6 +65,7 @@ export type CodeGraphSymbol = {
   signature: string | null;
   documentation: string | null;
   modifiers: string[];
+  metadata: Record<string, unknown>;
   exported: boolean;
   startLine: number | null;
   startColumn: number | null;
@@ -190,4 +192,41 @@ export type CodeGraphHandoffResult = {
     title: string;
     status: string;
   };
+};
+
+export type CodeGraphContractOptions = {
+  limit?: number;
+  includeGraph?: boolean;
+};
+
+export type CodeGraphContractMatch = {
+  id: string;
+  requestSymbolId: string;
+  endpointSymbolId: string;
+  gatewaySymbolId: string | null;
+  confidence: number;
+  reason: 'exact' | 'gateway-prefix';
+  crossProject: boolean;
+};
+
+export type CodeGraphContractConflict = {
+  id: string;
+  method: string;
+  path: string;
+  endpointSymbolIds: string[];
+  projectNames: string[];
+};
+
+export type CodeGraphContractSnapshot = {
+  generatedAt: string;
+  endpoints: CodeGraphSymbol[];
+  requests: CodeGraphSymbol[];
+  schemas: CodeGraphSymbol[];
+  gateways: CodeGraphSymbol[];
+  matches: CodeGraphContractMatch[];
+  conflicts: CodeGraphContractConflict[];
+  unmatchedRequestIds: string[];
+  unmatchedEndpointIds: string[];
+  graph: CodeGraphSubgraph;
+  truncated: boolean;
 };

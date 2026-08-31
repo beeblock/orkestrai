@@ -1,10 +1,11 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { ChangeCodeGraphDto, CodeGraphHandoffDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
+import { ChangeCodeGraphDto, CodeGraphContractDto, CodeGraphHandoffDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
 import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '../../../application/services/CodeGraphHandoffService.js';
-import { ChangeCodeGraphRequest, CodeGraphHandoffRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
+import { codeGraphContractService } from '../../../application/services/CodeGraphContractService.js';
+import { ChangeCodeGraphRequest, CodeGraphContractRequest, CodeGraphHandoffRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
   async status(event: RequestEvent) {
@@ -81,6 +82,16 @@ export class CodeGraphController extends Controller {
       return this.json({ data: await codeGraphHandoffService.create(dto.workspaceId, dto.options, 'user') }, 201);
     } catch (error) {
       return this.failure(error, 'Could not create the code intelligence handoff.');
+    }
+  }
+
+  async contracts(event: RequestEvent) {
+    try {
+      const input = await CodeGraphContractRequest.validate(event);
+      const dto = CodeGraphContractDto.from(event.params.id, input);
+      return this.json({ data: await codeGraphContractService.analyze(dto.workspaceId, dto.options) });
+    } catch (error) {
+      return this.failure(error, 'Could not analyze API contracts.');
     }
   }
 

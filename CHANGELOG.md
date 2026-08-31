@@ -30,6 +30,13 @@ pt-BR, English, and Spanish translations.
   create a Review Center review tied to the current Git revision; typed
   `code_graph_handoff` and CLI commands expose the same guarded action. Graph
   labels now follow the active theme so they remain legible in dark and light modes.
+- The Contracts view connects backend endpoints, frontend HTTP calls, generated
+  clients, OpenAPI or Swagger schemas, gateway prefixes, and live API Client
+  requests across every approved repository. It highlights unmatched requests,
+  cross-project route conflicts, handlers, and validation schemas without
+  persisting credentials or exposing request hosts and query values. Agents use
+  the same bounded map through `code_graph_contracts` or
+  `orkestrai graph contracts`.
 
 ### Fixed
 

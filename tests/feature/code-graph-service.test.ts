@@ -7,10 +7,12 @@ import { join } from 'node:path';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
+import { codeGraphContractService } from '$lib/modules/agent-room/application/services/CodeGraphContractService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
 import { codeGraphParser } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphParser.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { apiClientNativePayloadSchema, apiClientRequestSchema } from '$lib/modules/agent-room/contracts/schemas/apiClient.schema.js';
 
 const directories: string[] = [];
 
@@ -146,6 +148,122 @@ describe('CodeGraphIndexService', () => {
     expect(result.stats.files).toBe(2);
     const symbol = (await codeGraphIndexService.search(workspace.id, { query: 'User' }))[0];
     expect(symbol).toMatchObject({ name: 'User', projectRelativePath: 'api', path: 'User.php' });
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('maps API contracts across repositories, generated clients, OpenAPI, and live API Client requests', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'orkestrai-contract-parent-'));
+    directories.push(parent);
+    const api = join(parent, 'api');
+    const web = join(parent, 'web');
+    await mkdir(join(api, 'src', 'routes', 'api', 'users', '[id]'), { recursive: true });
+    await mkdir(join(web, 'src', 'generated'), { recursive: true });
+    await writeFile(join(api, 'package.json'), '{"name":"contracts-api"}\n');
+    await writeFile(join(api, 'src', 'routes', 'api', 'users', '[id]', '+server.ts'), `
+      import { userIdSchema } from '$lib/schemas/user';
+      export const GET = async ({ params }) => ({ id: userIdSchema.parse(params.id) });
+    `);
+    await writeFile(join(api, 'openapi.json'), JSON.stringify({
+      openapi: '3.1.0',
+      info: { title: 'Users', version: '1.0.0' },
+      paths: {
+        '/api/users/{id}': {
+          get: {
+            operationId: 'getUser',
+            responses: { 200: { content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } },
+          },
+        },
+      },
+      components: { schemas: { User: { type: 'object' } } },
+    }));
+    await writeFile(join(web, 'package.json'), '{"name":"contracts-web"}\n');
+    await writeFile(join(web, 'src', 'generated', 'users.generated.ts'), `
+      export async function getUser(id: string) {
+        return fetch(\`/api/users/\${id}\`);
+      }
+    `);
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'Contract map',
+      workingDir: parent,
+      repositoryRoots: [{ alias: 'api', path: api }, { alias: 'web', path: web }],
+    });
+    const liveRequest = apiClientRequestSchema.parse({
+      id: 'live-user',
+      name: 'Get live user',
+      method: 'GET',
+      protocol: 'http',
+      url: 'https://private.example/api/users/42?token=must-not-leak',
+      assertions: [],
+    });
+    await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'apiClient',
+      title: 'User API',
+      payload: apiClientNativePayloadSchema.parse({ requests: [liveRequest] }),
+    });
+
+    await codeGraphIndexService.index(workspace.id);
+    const contracts = await codeGraphContractService.analyze(workspace.id, { includeGraph: true });
+
+    expect(contracts.endpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ method: 'GET', path: '/api/users/{param}' }) }),
+    ]));
+    expect(contracts.schemas).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'User', metadata: expect.objectContaining({ framework: 'openapi' }) }),
+    ]));
+    expect(contracts.requests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ projectName: 'web', modifiers: expect.arrayContaining(['generated']) }),
+      expect.objectContaining({ projectName: 'User API', metadata: expect.objectContaining({ path: '/api/users/42' }) }),
+    ]));
+    expect(contracts.matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'exact', crossProject: true }),
+    ]));
+    expect(contracts.graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'generatedFrom' }),
+    ]));
+    expect(JSON.stringify(contracts)).not.toContain('private.example');
+    expect(JSON.stringify(contracts)).not.toContain('must-not-leak');
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('matches frontend requests through an indexed gateway prefix', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'orkestrai-gateway-parent-'));
+    directories.push(parent);
+    const api = join(parent, 'api');
+    const web = join(parent, 'web');
+    await mkdir(api);
+    await mkdir(web);
+    await writeFile(join(api, 'package.json'), '{"name":"gateway-api"}\n');
+    await writeFile(join(api, 'routes.ts'), `
+      app.use('/api', router);
+      router.get('/users/:id', getUser);
+    `);
+    await writeFile(join(web, 'package.json'), '{"name":"gateway-web"}\n');
+    await writeFile(join(web, 'client.ts'), 'export const loadUser = (id: string) => api.get(`/api/users/${id}`);\n');
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'Gateway map',
+      workingDir: parent,
+      repositoryRoots: [{ alias: 'api', path: api }, { alias: 'web', path: web }],
+    });
+
+    await codeGraphIndexService.index(workspace.id);
+    const contracts = await codeGraphContractService.analyze(workspace.id);
+
+    expect(contracts.gateways).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metadata: expect.objectContaining({ pathPrefix: '/api' }) }),
+    ]));
+    expect(contracts.matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'gateway-prefix', crossProject: true, gatewaySymbolId: expect.any(String) }),
+    ]));
+    const gatewayMatch = contracts.matches.find((match) => match.reason === 'gateway-prefix');
+    const graph = await codeGraphContractService.analyze(workspace.id, { includeGraph: true });
+    expect(graph.graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'routesTo',
+        sourceSymbolId: gatewayMatch?.gatewaySymbolId,
+        targetSymbolId: gatewayMatch?.endpointSymbolId,
+      }),
+    ]));
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });
 

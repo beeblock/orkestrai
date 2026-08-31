@@ -25,7 +25,7 @@ import { codeGraphRepository } from '../../infrastructure/repositories/CodeGraph
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 
 const execFileAsync = promisify(execFile);
-const INDEXER_VERSION = 1;
+const INDEXER_VERSION = 2;
 const PARSE_CONCURRENCY = 4;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
 
@@ -197,6 +197,7 @@ export class CodeGraphIndexService {
         signature: symbol.signature,
         documentation: symbol.documentation,
         modifiers: symbol.modifiers,
+        metadata: symbol.metadata,
         exported: symbol.exported,
         startLine: symbol.startLine,
         startColumn: symbol.startColumn,

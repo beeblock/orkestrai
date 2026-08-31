@@ -101,6 +101,7 @@ function mapSymbol(row: RawRow): CodeGraphSymbol {
     signature: row.signature ? String(row.signature) : null,
     documentation: row.documentation ? String(row.documentation) : null,
     modifiers: parseJson(row.modifiers_json, []),
+    metadata: parseJson(row.metadata_json, {}),
     exported: Boolean(row.exported),
     startLine: row.start_line == null ? null : Number(row.start_line),
     startColumn: row.start_column == null ? null : Number(row.start_column),
@@ -318,14 +319,14 @@ export class CodeGraphRepository implements CodeGraphStore {
       await insertRows('agent_code_graph_symbols', [
         'id', 'workspace_id', 'project_id', 'revision_id', 'file_id',
         'parent_symbol_id', 'kind', 'name', 'qualified_name', 'signature',
-        'documentation', 'modifiers_json', 'exported', 'start_line',
+        'documentation', 'modifiers_json', 'metadata_json', 'exported', 'start_line',
         'start_column', 'end_line', 'end_column', 'fingerprint', 'created_at', 'updated_at',
       ], input.symbols.map((symbol) => [
         symbolIds.get(symbol.key), input.workspaceId, input.projectId, input.revisionId,
         symbol.fileKey ? fileIds.get(symbol.fileKey) ?? null : null,
         symbol.parentKey ? symbolIds.get(symbol.parentKey) ?? null : null,
         symbol.kind, symbol.name, symbol.qualifiedName, symbol.signature,
-        symbol.documentation, JSON.stringify(symbol.modifiers), symbol.exported,
+        symbol.documentation, JSON.stringify(symbol.modifiers), JSON.stringify(symbol.metadata), symbol.exported,
         symbol.startLine, symbol.startColumn, symbol.endLine, symbol.endColumn,
         symbol.fingerprint, now, now,
       ]));
@@ -506,27 +507,27 @@ export class CodeGraphRepository implements CodeGraphStore {
           UPDATE agent_code_graph_symbols
           SET revision_id = ?, file_id = ?, parent_symbol_id = ?, kind = ?, name = ?,
               qualified_name = ?, signature = ?, documentation = ?, modifiers_json = ?,
-              exported = ?, start_line = ?, start_column = ?, end_line = ?, end_column = ?, updated_at = ?
+              metadata_json = ?, exported = ?, start_line = ?, start_column = ?, end_line = ?, end_column = ?, updated_at = ?
           WHERE id = ?
         `, [
           input.revisionId, symbol.fileKey ? fileIds.get(symbol.fileKey) ?? null : null,
           symbol.parentKey ? symbolIds.get(symbol.parentKey) ?? null : null,
           symbol.kind, symbol.name, symbol.qualifiedName, symbol.signature, symbol.documentation,
-          JSON.stringify(symbol.modifiers), symbol.exported, symbol.startLine, symbol.startColumn,
+          JSON.stringify(symbol.modifiers), JSON.stringify(symbol.metadata), symbol.exported, symbol.startLine, symbol.startColumn,
           symbol.endLine, symbol.endColumn, now, symbolIds.get(symbol.key),
         ]);
       }
       await insertRows('agent_code_graph_symbols', [
         'id', 'workspace_id', 'project_id', 'revision_id', 'file_id',
         'parent_symbol_id', 'kind', 'name', 'qualified_name', 'signature',
-        'documentation', 'modifiers_json', 'exported', 'start_line',
+        'documentation', 'modifiers_json', 'metadata_json', 'exported', 'start_line',
         'start_column', 'end_line', 'end_column', 'fingerprint', 'created_at', 'updated_at',
       ], addedSymbols.map((symbol) => [
         symbolIds.get(symbol.key), input.workspaceId, input.projectId, input.revisionId,
         symbol.fileKey ? fileIds.get(symbol.fileKey) ?? null : null,
         symbol.parentKey ? symbolIds.get(symbol.parentKey) ?? null : null,
         symbol.kind, symbol.name, symbol.qualifiedName, symbol.signature,
-        symbol.documentation, JSON.stringify(symbol.modifiers), symbol.exported,
+        symbol.documentation, JSON.stringify(symbol.modifiers), JSON.stringify(symbol.metadata), symbol.exported,
         symbol.startLine, symbol.startColumn, symbol.endLine, symbol.endColumn,
         symbol.fingerprint, now, now,
       ]));
@@ -709,6 +710,57 @@ export class CodeGraphRepository implements CodeGraphStore {
       output.push(...rows.map(mapSymbol));
     }
     return output;
+  }
+
+  async contractGraph(workspaceId: string, requestedLimit = 500): Promise<CodeGraphSubgraph> {
+    const limit = Math.min(Math.max(requestedLimit, 50), 1_000);
+    const kinds = ['endpoint', 'apiRequest', 'schema', 'gateway'];
+    const rows = await Connection.raw(`
+      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+      FROM agent_code_graph_symbols s
+      JOIN agent_code_graph_projects p ON p.id = s.project_id
+      LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
+      WHERE s.workspace_id = ?
+        AND s.revision_id = p.current_revision_id
+        AND s.kind IN (${placeholders(kinds.length)})
+      ORDER BY p.name, f.path, s.start_line, s.kind
+      LIMIT ?
+    `, [workspaceId, ...kinds, limit + 1]) as RawRow[];
+    const truncated = rows.length > limit;
+    const contracts = rows.slice(0, limit).map(mapSymbol);
+    const contractIds = contracts.map((node) => node.id);
+    if (!contractIds.length) return { nodes: [], edges: [], truncated, depth: 1, centerSymbolId: null };
+    const edgeRows: RawRow[] = [];
+    for (let offset = 0; offset < contractIds.length && edgeRows.length < limit * 4; offset += 350) {
+      const batch = contractIds.slice(offset, offset + 350);
+      const rows = await Connection.raw(`
+        SELECT e.*, f.path AS site_path
+        FROM agent_code_graph_edges e
+        JOIN agent_code_graph_projects p ON p.id = e.project_id
+        LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
+        WHERE e.workspace_id = ?
+          AND e.revision_id = p.current_revision_id
+          AND (e.source_symbol_id IN (${placeholders(batch.length)})
+            OR e.target_symbol_id IN (${placeholders(batch.length)}))
+        ORDER BY e.confidence DESC, e.kind
+        LIMIT ?
+      `, [workspaceId, ...batch, ...batch, limit * 4 - edgeRows.length]) as RawRow[];
+      edgeRows.push(...rows);
+    }
+    const edges = [...new Map(edgeRows.map((row) => [String(row.id), mapEdge(row)])).values()];
+    const neighborIds = [...new Set(edges.flatMap((edge) => [edge.sourceSymbolId, edge.targetSymbolId]))]
+      .filter((id) => !contractIds.includes(id))
+      .slice(0, limit);
+    const neighbors = await this.loadSymbols(workspaceId, neighborIds);
+    const nodes = [...contracts, ...neighbors];
+    const visible = new Set(nodes.map((node) => node.id));
+    return {
+      nodes,
+      edges: edges.filter((edge) => visible.has(edge.sourceSymbolId) && visible.has(edge.targetSymbolId)),
+      truncated: truncated || edges.length >= limit * 4 || neighborIds.length >= limit,
+      depth: 1,
+      centerSymbolId: null,
+    };
   }
 
   async overview(workspaceId: string, projectId?: string, requestedLimit = 220): Promise<CodeGraphSubgraph> {

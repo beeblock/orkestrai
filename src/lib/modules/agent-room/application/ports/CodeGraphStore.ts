@@ -48,6 +48,7 @@ export type CodeGraphWriteSymbol = {
   signature: string | null;
   documentation: string | null;
   modifiers: string[];
+  metadata: Record<string, unknown>;
   exported: boolean;
   startLine: number | null;
   startColumn: number | null;
@@ -94,6 +95,7 @@ export interface CodeGraphStore {
   search(workspaceId: string, options: CodeGraphSearchOptions): Promise<CodeGraphSymbol[]>;
   symbol(workspaceId: string, symbolId: string): Promise<CodeGraphSymbol | null>;
   symbolsForPaths(workspaceId: string, projectId: string, paths: string[], limit?: number): Promise<CodeGraphSymbol[]>;
+  contractGraph(workspaceId: string, limit?: number): Promise<CodeGraphSubgraph>;
   overview(workspaceId: string, projectId?: string, limit?: number): Promise<CodeGraphSubgraph>;
   subgraph(workspaceId: string, options: CodeGraphTraversalOptions): Promise<CodeGraphSubgraph>;
   impact(workspaceId: string, symbolIds: string[], depth?: number, limit?: number): Promise<CodeGraphSubgraph>;

@@ -3397,5 +3397,22 @@
   "code_graph.task_title": "Investigar impacto de cambios en {name}",
   "code_graph.review_created": "Revisión creada: {title}",
   "code_graph.task_created": "Tarea creada: {title}",
-  "code_graph.handoff_error": "No se pudo crear el handoff."
+  "code_graph.handoff_error": "No se pudo crear el handoff.",
+  "code_graph.kind_endpoint": "Endpoint",
+  "code_graph.kind_api_request": "Solicitud de API",
+  "code_graph.kind_schema": "Esquema",
+  "code_graph.kind_gateway": "Gateway",
+  "code_graph.contracts": "Contratos",
+  "code_graph.contract_map": "Mapa de contratos de API",
+  "code_graph.endpoints": "Endpoints",
+  "code_graph.requests": "Solicitudes",
+  "code_graph.schemas": "Schemas",
+  "code_graph.gateways": "Gateways",
+  "code_graph.contract_matches": "Contratos coincidentes",
+  "code_graph.unmatched_requests": "Solicitudes sin coincidencia",
+  "code_graph.contract_conflicts": "Conflictos",
+  "code_graph.contracts_error": "No se pudieron analizar los contratos de API.",
+  "code_graph.open_api_client": "Abrir Cliente de API",
+  "code_graph.match_exact": "Ruta exacta",
+  "code_graph.match_gateway": "Prefijo de gateway"
 }

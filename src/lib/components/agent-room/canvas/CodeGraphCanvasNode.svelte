@@ -26,6 +26,7 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
   import type {
     CodeGraphProject,
+    CodeGraphContractSnapshot,
     CodeGraphChangeIntelligence,
     CodeGraphChangeScope,
     CodeGraphChangedFile,
@@ -52,6 +53,7 @@
   let snapshot = $state<CodeGraphSnapshot | null>(null);
   let graph = $state<CodeGraphSubgraph | null>(null);
   let changes = $state<CodeGraphChangeIntelligence | null>(null);
+  let contracts = $state<CodeGraphContractSnapshot | null>(null);
   let selectedSymbol = $state<CodeGraphSymbol | null>(null);
   let results = $state<CodeGraphSymbol[]>([]);
   let query = $state('');
@@ -61,8 +63,9 @@
   let loading = $state(true);
   let indexing = $state(false);
   let changeLoading = $state(false);
+  let contractLoading = $state(false);
   let handoffBusy = $state<string | null>(null);
-  let viewMode = $state<'overview' | 'changes'>('overview');
+  let viewMode = $state<'overview' | 'changes' | 'contracts'>('overview');
   let error = $state('');
   let graphHost: HTMLDivElement;
   let renderer: { kill: () => void; on: (event: string, handler: (payload: { node: string }) => void) => void } | null = null;
@@ -100,6 +103,10 @@
   function symbolColor(kind: CodeGraphSymbol['kind']): string {
     if (kind === 'module') return '#0ea5e9';
     if (kind === 'class' || kind === 'interface') return '#8b5cf6';
+    if (kind === 'endpoint') return '#22c55e';
+    if (kind === 'apiRequest') return '#06b6d4';
+    if (kind === 'schema') return '#a855f7';
+    if (kind === 'gateway') return '#f97316';
     if (kind === 'function' || kind === 'method') return '#10b981';
     if (kind === 'external') return '#94a3b8';
     return '#f59e0b';
@@ -116,6 +123,10 @@
       case 'function': return m['code_graph.kind_function']();
       case 'method': return m['code_graph.kind_method']();
       case 'variable': return m['code_graph.kind_variable']();
+      case 'endpoint': return m['code_graph.kind_endpoint']();
+      case 'apiRequest': return m['code_graph.kind_api_request']();
+      case 'schema': return m['code_graph.kind_schema']();
+      case 'gateway': return m['code_graph.kind_gateway']();
       case 'external': return m['code_graph.kind_external']();
     }
   }
@@ -153,7 +164,12 @@
       if (!model.hasNode(edge.sourceSymbolId) || !model.hasNode(edge.targetSymbolId)) continue;
       model.addEdgeWithKey(edge.id, edge.sourceSymbolId, edge.targetSymbolId, {
         size: Math.max(0.7, edge.confidence / 80),
-        color: edge.kind === 'calls' ? '#10b981' : edge.kind === 'imports' ? '#0ea5e9' : '#64748b',
+        color: edge.kind === 'calls' || edge.kind === 'handles' ? '#10b981'
+          : edge.kind === 'imports' ? '#0ea5e9'
+            : edge.kind === 'matches' || edge.kind === 'generatedFrom' || edge.kind === 'requests' ? '#06b6d4'
+              : edge.kind === 'validates' ? '#a855f7'
+                : edge.kind === 'routesTo' ? '#f97316'
+                  : '#64748b',
       });
     }
     if (model.order > 1 && model.size > 0) forceAtlas2.assign(model, { iterations: Math.min(120, 30 + model.order) });
@@ -167,7 +183,7 @@
       minCameraRatio: 0.08,
       maxCameraRatio: 8,
     });
-    sigma.on('clickNode', ({ node }: { node: string }) => void openSymbol(node));
+    sigma.on('clickNode', ({ node }: { node: string }) => void openGraphSymbol(node));
     renderer = sigma;
   }
 
@@ -199,6 +215,24 @@
       error = reason instanceof Error ? reason.message : m['code_graph.changes_error']();
     } finally {
       changeLoading = false;
+    }
+  }
+
+  async function loadContracts(): Promise<void> {
+    if (!hasIndexedGraph) return;
+    contractLoading = true;
+    error = '';
+    try {
+      contracts = await api<CodeGraphContractSnapshot>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/contracts?limit=500&includeGraph=true`);
+      viewMode = 'contracts';
+      selectedSymbol = null;
+      results = [];
+      graph = contracts.graph;
+      await renderGraph(graph);
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.contracts_error']();
+    } finally {
+      contractLoading = false;
     }
   }
 
@@ -293,6 +327,26 @@
     } catch (reason) {
       error = reason instanceof Error ? reason.message : m['code_graph.load_error']();
     }
+  }
+
+  async function openGraphSymbol(symbolId: string): Promise<void> {
+    const artifact = contracts?.graph.nodes.find((node) => node.id === symbolId && node.revisionId === 'live');
+    if (artifact) {
+      selectedSymbol = artifact;
+      viewMode = 'overview';
+      results = [];
+      return;
+    }
+    await openSymbol(symbolId);
+  }
+
+  function contractSymbol(symbolId: string): CodeGraphSymbol | null {
+    return contracts?.graph.nodes.find((node) => node.id === symbolId) ?? null;
+  }
+
+  function openApiClient(symbol: CodeGraphSymbol): void {
+    const nodeId = typeof symbol.metadata.nodeId === 'string' ? symbol.metadata.nodeId : null;
+    if (nodeId) data.onJumpToNode?.(nodeId);
   }
 
   async function changeProject(value: string): Promise<void> {
@@ -422,6 +476,16 @@
         <GitCompareArrows size={12} class={changeLoading ? 'animate-pulse' : undefined} />
         {m['code_graph.changes']()}{changes ? ` (${changedFileCount})` : ''}
       </Button>
+      <Button
+        size="sm"
+        variant={viewMode === 'contracts' ? 'default' : 'outline'}
+        class="h-8 text-[11px]"
+        disabled={!hasIndexedGraph || contractLoading}
+        onclick={() => void loadContracts()}
+      >
+        <Network size={12} class={contractLoading ? 'animate-pulse' : undefined} />
+        {m['code_graph.contracts']()}{contracts ? ` (${contracts.matches.length})` : ''}
+      </Button>
     </div>
 
     {#if snapshot}
@@ -523,6 +587,61 @@
               {/if}
             </div>
           {/if}
+        {:else if viewMode === 'contracts' && contracts}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.contract_map']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          <div class="mb-3 grid grid-cols-2 gap-1">
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-emerald-500">{contracts.endpoints.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.endpoints']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{contracts.requests.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.requests']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{contracts.schemas.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.schemas']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{contracts.gateways.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.gateways']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-success)]">{contracts.matches.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.contract_matches']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-warning)]">{contracts.unmatchedRequestIds.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.unmatched_requests']()}</span></div>
+          </div>
+          {#if contracts.conflicts.length}
+            <section class="mb-3 rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 p-2">
+              <strong class="mb-1 block text-[10px] text-[var(--app-danger)]">{m['code_graph.contract_conflicts']()}</strong>
+              {#each contracts.conflicts.slice(0, 20) as conflict (conflict.id)}
+                <div class="border-t border-[var(--app-danger)]/20 py-1.5 first:border-0">
+                  <span class="block truncate font-mono text-[9px]">{conflict.method} {conflict.path}</span>
+                  <span class="block truncate text-[8px] text-[var(--app-text-muted)]">{conflict.projectNames.join(' · ')}</span>
+                </div>
+              {/each}
+            </section>
+          {/if}
+          <section>
+            <strong class="mb-1 block text-[10px]">{m['code_graph.contract_matches']()}</strong>
+            <div class="space-y-1">
+              {#each contracts.matches.slice(0, 30) as match (match.id)}
+                {@const request = contractSymbol(match.requestSymbolId)}
+                {@const endpoint = contractSymbol(match.endpointSymbolId)}
+                {#if request && endpoint}
+                  <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => void openGraphSymbol(request.id)}>
+                    <span class="block truncate font-mono text-[9px]">{request.name}</span>
+                    <span class="mt-0.5 block truncate text-[8px] text-[var(--app-text-muted)]">{request.projectName} → {endpoint.projectName} · {match.reason === 'exact' ? m['code_graph.match_exact']() : m['code_graph.match_gateway']()} · {match.confidence}%</span>
+                  </button>
+                {/if}
+              {/each}
+            </div>
+          </section>
+          {#if contracts.unmatchedRequestIds.length}
+            <section class="mt-3 border-t border-[var(--app-border)] pt-3">
+              <strong class="mb-1 block text-[10px] text-[var(--app-warning)]">{m['code_graph.unmatched_requests']()}</strong>
+              <div class="space-y-1">
+                {#each contracts.unmatchedRequestIds.slice(0, 30) as symbolId (symbolId)}
+                  {@const request = contractSymbol(symbolId)}
+                  {#if request}
+                    <button class="w-full rounded border border-[var(--app-warning)]/25 bg-[var(--app-warning)]/5 p-2 text-left hover:bg-[var(--app-warning)]/10" onclick={() => void openGraphSymbol(request.id)}>
+                      <span class="block truncate font-mono text-[9px]">{request.name}</span>
+                      <span class="mt-0.5 block truncate text-[8px] text-[var(--app-text-muted)]">{request.projectName ?? request.projectId}</span>
+                    </button>
+                  {/if}
+                {/each}
+              </div>
+            </section>
+          {/if}
         {:else if results.length}
           <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
           <div class="space-y-1">
@@ -552,6 +671,12 @@
               <ExternalLink size={11} /> {m['code_graph.open_source']()}
             </Button>
           {/if}
+          {#if selectedSymbol.revisionId === 'live' && typeof selectedSymbol.metadata.nodeId === 'string'}
+            <Button size="xs" variant="outline" class="mt-3 w-full" onclick={() => openApiClient(selectedSymbol!)}>
+              <ExternalLink size={11} /> {m['code_graph.open_api_client']()}
+            </Button>
+          {/if}
+          {#if selectedSymbol.revisionId !== 'live'}
           <div class="mt-3 border-t border-[var(--app-border)] pt-2">
             <span class="mb-1 block text-[9px] font-semibold text-[var(--app-text-muted)]">{m['code_graph.direction']()}</span>
             <div class="grid grid-cols-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-0.5">
@@ -564,6 +689,7 @@
               <input class="mt-1 w-full accent-[var(--app-accent)]" type="range" min="1" max="4" bind:value={depth} onchange={() => void openSymbol(selectedSymbol!.id)} />
             </label>
           </div>
+          {/if}
         {:else}
           <div class="space-y-2">
             <strong class="text-xs">{m['code_graph.repositories']()}</strong>

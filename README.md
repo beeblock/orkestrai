@@ -62,7 +62,11 @@ common credentials redacted; normal agent output is not persisted.
   exposed. Its Changes view combines the current Git working tree and active
   Floor worktrees to surface affected symbols, likely tests, and shared-impact
   conflicts before review or landing, then creates a traceable Review Center
-  review or Kanban task from that bounded evidence.
+  review or Kanban task from that bounded evidence. Its Contracts view joins
+  backend routes, frontend calls, generated clients, OpenAPI/Swagger schemas,
+  gateway prefixes, and live API Client requests across approved repositories,
+  while flagging unmatched calls and cross-project conflicts without retaining
+  request hosts, query values, or credentials.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,
