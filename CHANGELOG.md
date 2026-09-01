@@ -71,6 +71,15 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Bounded context previews, leader/agent/Council/task handoffs, and named
+  investigation create/update requests now validate their strict payloads
+  without mistaking Svelar workspace route parameters for unexpected user
+  input.
+- Switching between Canvas and Workbench now restores the Code Intelligence
+  project, view, query mode, selected symbol, traversal direction, depth, and
+  graph camera for the same node instead of returning to an unrelated overview.
+- Live work keeps disconnected agents with in-progress tasks visible, including
+  their task, files, and symbols, while excluding them from new handoff targets.
 - Workspace and preset instructions now live in a bounded managed block inside
   `AGENTS.md` and, when enabled, `CLAUDE.md`. Existing user-authored content is
   preserved, legacy Orkestrai-owned whole-file instructions migrate safely, and

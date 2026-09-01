@@ -128,6 +128,9 @@
   let handoffBusy = $state<string | null>(null);
   let viewMode = $state<CodeGraphInvestigationState['viewMode']>('overview');
   let error = $state('');
+  let sessionStateReady = $state(false);
+  let restoredSymbolId: string | null = null;
+  let restoredViewMode: CodeGraphInvestigationState['viewMode'] = 'overview';
   let graphHost: HTMLDivElement;
   type CameraState = { x: number; y: number; ratio: number; angle: number };
   type GraphRenderer = {
@@ -138,6 +141,15 @@
       on: (event: 'updated', callback: (state: CameraState) => void) => void;
     };
   };
+  type CodeGraphSessionState = {
+    projectId: string;
+    viewMode: CodeGraphInvestigationState['viewMode'];
+    query: string;
+    searchMode: 'lexical' | 'semantic';
+    selectedSymbolId: string | null;
+    direction: 'incoming' | 'outgoing' | 'both';
+    depth: number;
+  };
   let renderer: GraphRenderer | null = null;
   let cameraState = $state<CameraState | null>(null);
   let renderSequence = 0;
@@ -147,6 +159,23 @@
   const hasIndexedGraph = $derived(Boolean(snapshot?.projects.some((project) => project.currentRevisionId)));
   const changedFileCount = $derived(changes?.scopes.reduce((total, scope) => total + scope.files.length, 0) ?? 0);
   const activeAgents = $derived(operations?.agents.filter((agent) => agent.state !== 'disconnected') ?? []);
+  const trackedAgents = $derived(
+    operations?.agents.filter((agent) => agent.state !== 'disconnected' || Boolean(agent.task)) ?? [],
+  );
+
+  $effect(() => {
+    if (!sessionStateReady || typeof sessionStorage === 'undefined') return;
+    const state: CodeGraphSessionState = {
+      projectId,
+      viewMode,
+      query,
+      searchMode,
+      selectedSymbolId: selectedSymbol?.id ?? null,
+      direction,
+      depth,
+    };
+    sessionStorage.setItem(`orkestrai:code-graph-state:${data.workspaceId}:${id}`, JSON.stringify(state));
+  });
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -772,7 +801,22 @@
     error = '';
     try {
       await loadStatus();
-      if (hasIndexedGraph) await loadOverview();
+      if (hasIndexedGraph) {
+        if (restoredSymbolId) {
+          const symbolId = restoredSymbolId;
+          restoredSymbolId = null;
+          await openSymbol(symbolId);
+        } else if (restoredViewMode === 'changes') await loadChanges();
+        else if (restoredViewMode === 'contracts') await loadContracts();
+        else if (restoredViewMode === 'quality') await loadQuality();
+        else if (restoredViewMode === 'semantic') await loadSemantic();
+        else if (restoredViewMode === 'runtime') await loadRuntime();
+        else if (restoredViewMode === 'operations') await loadOperations();
+        else if (restoredViewMode === 'compare') await loadComparison();
+        else if (query.trim()) await searchSymbols();
+        else await loadOverview();
+        restoredViewMode = 'overview';
+      }
       else {
         graph = null;
         await renderGraph(null);
@@ -920,6 +964,24 @@
     if (storedCamera) {
       try { cameraState = JSON.parse(storedCamera) as CameraState; } catch { /* ignore invalid session state */ }
     }
+    const storedState = sessionStorage.getItem(`orkestrai:code-graph-state:${data.workspaceId}:${id}`);
+    if (storedState) {
+      try {
+        const state = JSON.parse(storedState) as Partial<CodeGraphSessionState>;
+        if (typeof state.projectId === 'string') projectId = state.projectId;
+        if (typeof state.query === 'string') query = state.query.slice(0, 120);
+        if (state.searchMode === 'lexical' || state.searchMode === 'semantic') searchMode = state.searchMode;
+        if (typeof state.selectedSymbolId === 'string') restoredSymbolId = state.selectedSymbolId;
+        if (state.direction === 'incoming' || state.direction === 'outgoing' || state.direction === 'both') direction = state.direction;
+        if (typeof state.depth === 'number' && Number.isInteger(state.depth) && state.depth >= 1 && state.depth <= 4) depth = state.depth;
+        if (['overview', 'changes', 'contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(state.viewMode ?? '')) {
+          restoredViewMode = state.viewMode!;
+        }
+      } catch {
+        sessionStorage.removeItem(`orkestrai:code-graph-state:${data.workspaceId}:${id}`);
+      }
+    }
+    sessionStateReady = true;
     let editorLocateTimer: ReturnType<typeof setTimeout> | null = null;
     const handleEditorLocation = (event: Event) => {
       const detail = (event as CustomEvent<{ workspaceId?: string; path?: string; line?: number }>).detail;
@@ -1081,7 +1143,7 @@
           <DropdownMenu.Separator />
           <DropdownMenu.Item onclick={() => void loadOperations()}>
             <Bot size={13} class={operationsLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.operations']()}{operations ? ` (${activeAgents.length})` : ''}
+            {m['code_graph.operations']()}{operations ? ` (${trackedAgents.length})` : ''}
           </DropdownMenu.Item>
           <DropdownMenu.Item onclick={() => void loadComparison()}>
             <GitCompareArrows size={13} class={comparisonLoading ? 'animate-pulse' : undefined} />
@@ -1418,7 +1480,7 @@
             </section>
           {/if}
           <section class="space-y-1">
-            {#each activeAgents as agent (agent.nodeId)}
+            {#each trackedAgents as agent (agent.nodeId)}
               {@const agentIndex = operations.agents.findIndex((candidate) => candidate.nodeId === agent.nodeId)}
               <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => data.onJumpToNode?.(agent.nodeId)}>
                 <span class="flex items-center gap-1.5"><span class="size-2 rounded-full ring-1 ring-black/10" style={`background:${AGENT_COLORS[Math.max(0, agentIndex) % AGENT_COLORS.length]}`}></span><strong class="min-w-0 flex-1 truncate text-[9px]">{agent.title}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{agentStateLabel(agent.state)}</span></span>

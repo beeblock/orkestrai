@@ -1,4 +1,5 @@
 import { FormRequest } from '@beeblock/svelar/forms';
+import { z } from 'zod';
 import {
   codeGraphIndexSchema,
   codeGraphSearchSchema,
@@ -44,6 +45,15 @@ abstract class AuthorizedRequest extends FormRequest {
   }
 }
 
+function withoutRouteParams<T extends z.ZodType>(schema: T, routeParams: string[] = ['id']) {
+  return z.preprocess((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const input = { ...(value as Record<string, unknown>) };
+    for (const routeParam of routeParams) delete input[routeParam];
+    return input;
+  }, schema);
+}
+
 export class IndexCodeGraphRequest extends AuthorizedRequest {
   rules() { return codeGraphIndexSchema; }
   passedValidation(data: unknown): CodeGraphIndexInput { return codeGraphIndexSchema.parse(data); }
@@ -70,7 +80,7 @@ export class ChangeCodeGraphRequest extends AuthorizedRequest {
 }
 
 export class CodeGraphHandoffRequest extends AuthorizedRequest {
-  rules() { return codeGraphHandoffSchema; }
+  rules() { return withoutRouteParams(codeGraphHandoffSchema); }
   passedValidation(data: unknown): CodeGraphHandoffInput { return codeGraphHandoffSchema.parse(data); }
 }
 
@@ -105,7 +115,7 @@ export class CodeGraphEvidenceSnapshotRequest extends AuthorizedRequest {
 }
 
 export class CodeGraphContextRequest extends AuthorizedRequest {
-  rules() { return codeGraphContextSchema; }
+  rules() { return withoutRouteParams(codeGraphContextSchema); }
   passedValidation(data: unknown): CodeGraphContextInput { return codeGraphContextSchema.parse(data); }
 }
 
@@ -125,11 +135,11 @@ export class CodeGraphCompareRequest extends AuthorizedRequest {
 }
 
 export class CodeGraphInvestigationCreateRequest extends AuthorizedRequest {
-  rules() { return codeGraphInvestigationCreateSchema; }
+  rules() { return withoutRouteParams(codeGraphInvestigationCreateSchema); }
   passedValidation(data: unknown): CodeGraphInvestigationCreateInput { return codeGraphInvestigationCreateSchema.parse(data); }
 }
 
 export class CodeGraphInvestigationUpdateRequest extends AuthorizedRequest {
-  rules() { return codeGraphInvestigationUpdateSchema; }
+  rules() { return withoutRouteParams(codeGraphInvestigationUpdateSchema, ['id', 'investigationId']); }
   passedValidation(data: unknown): CodeGraphInvestigationUpdateInput { return codeGraphInvestigationUpdateSchema.parse(data); }
 }

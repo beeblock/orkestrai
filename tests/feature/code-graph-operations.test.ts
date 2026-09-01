@@ -11,6 +11,12 @@ import { councilService } from '$lib/modules/agent-room/application/services/Cou
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { codeGraphInvestigationRepository } from '$lib/modules/agent-room/infrastructure/repositories/CodeGraphInvestigationRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import {
+  CodeGraphContextRequest,
+  CodeGraphHandoffRequest,
+  CodeGraphInvestigationCreateRequest,
+  CodeGraphInvestigationUpdateRequest,
+} from '$lib/modules/agent-room/interface/http/requests/CodeGraphRequests.js';
 
 const directories: string[] = [];
 
@@ -43,6 +49,42 @@ afterEach(async () => {
 
 describe('Code graph operational intelligence', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('validates strict operation bodies without treating Svelar route params as user input', async () => {
+    const workspaceId = '00000000-0000-7000-8000-000000000001';
+    const symbolId = '00000000-0000-7000-8000-000000000002';
+    const investigationId = '00000000-0000-7000-8000-000000000003';
+    const state = {
+      projectId: null,
+      viewMode: 'overview',
+      query: 'TodoService',
+      searchMode: 'lexical',
+      selectedSymbolIds: [symbolId],
+      direction: 'both',
+      depth: 2,
+      camera: null,
+      openPath: 'src/service/todo-service.js',
+    };
+    const event = (body: unknown, params: Record<string, string>) => ({
+      params,
+      url: new URL(`http://localhost/api/agent-room/workspaces/${workspaceId}/code-graph`),
+      request: new Request('http://localhost/code-graph', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    }) as never;
+
+    const context = { selection: { symbolIds: [symbolId] }, purpose: 'review', maxTokens: 900, depth: 2, includeSource: true };
+    await expect(CodeGraphContextRequest.validate(event(context, { id: workspaceId }))).resolves.toEqual(context);
+    await expect(CodeGraphHandoffRequest.validate(event({ kind: 'task', title: 'Review TodoService', locale: 'en', context }, { id: workspaceId })))
+      .resolves.toMatchObject({ kind: 'task', title: 'Review TodoService' });
+    await expect(CodeGraphInvestigationCreateRequest.validate(event({ name: 'Todo trace', state }, { id: workspaceId })))
+      .resolves.toMatchObject({ name: 'Todo trace', state });
+    await expect(CodeGraphInvestigationUpdateRequest.validate(event({ name: 'Todo trace updated' }, { id: workspaceId, investigationId })))
+      .resolves.toEqual({ name: 'Todo trace updated' });
+    await expect(CodeGraphContextRequest.validate(event({ ...context, unexpected: true }, { id: workspaceId }))).rejects.toThrow('invalid');
+  });
 
   it('builds redacted bounded context and explains editor and relationship provenance', async () => {
     const { workspace, symbol } = await fixture();
