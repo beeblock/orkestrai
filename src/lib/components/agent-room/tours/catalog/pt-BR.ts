@@ -1737,6 +1737,26 @@ export const TOURS_PT: Tour[] = [
         body: 'Abra Mudanças para projetar o workspace e os Andares ativos no mesmo grafo. Símbolos vermelhos mudaram diretamente, caminhos âmbar indicam testes prováveis, e o painel lateral mostra arquivos ou símbolos dependentes compartilhados entre Andares. Agentes recebem a mesma evidência limitada com code_graph_changes.',
       },
       {
+        id: 'explain-and-sync-source',
+        title: 'Explique a evidência e abra o código',
+        body: 'Selecione uma relação para inspecionar tipo, confiança, origem e procedência estática ou de execução. Abra qualquer ponta no Monaco; selecionar um símbolo pelo editor atualiza o grafo preservando a câmera.',
+      },
+      {
+        id: 'inspect-live-ownership',
+        title: 'Veja quem está alterando o quê',
+        body: 'Abra Análises → Trabalho ativo para sobrepor agentes, tarefas Kanban e Andares nos arquivos e símbolos alterados. Conflitos identificam propriedade simultânea para você abrir o agente ou a tarefa responsável antes de coordenar.',
+      },
+      {
+        id: 'build-bounded-context',
+        title: 'Envie contexto revisado e limitado',
+        body: 'A partir de um símbolo, escopo de mudança ou achado de qualidade, escolha um orçamento de 500 a 16.000 tokens e revise o pacote exato. Envie ao líder, a um agente, ao Council ou a uma tarefa rastreável; revisão e ids de origem do grafo acompanham o handoff.',
+      },
+      {
+        id: 'compare-and-resume-investigation',
+        title: 'Compare e retome investigações',
+        body: 'Compare revisões retidas para inspecionar símbolos ou relações adicionados, removidos e alterados. Salve uma investigação nomeada com projeto, visão, filtros, seleção, câmera e código aberto e restaure tudo depois pelo mesmo nó.',
+      },
+      {
         id: 'handoff-change-impact',
         title: 'Transforme a evidência em ação',
         body: 'Use o ícone de revisão no escopo do workspace para criar um item no Review Center ligado à revisão Git atual, ou o ícone de tarefa em qualquer escopo de workspace ou Andar para criar uma tarefa Kanban para o líder. Agentes usam code_graph_handoff para a mesma ação protegida.',

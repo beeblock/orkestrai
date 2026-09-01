@@ -11,6 +11,9 @@ import type {
   CodeGraphSymbolKind,
   CodeGraphTraversalOptions,
   CodeGraphLanguage,
+  CodeGraphEdge,
+  CodeGraphRevisionManifestData,
+  CodeGraphRevisionSummary,
 } from '../../domain/code-graph.js';
 
 export type CodeGraphProjectRoot = {
@@ -94,6 +97,8 @@ export interface CodeGraphStore {
   failRevision(workspaceId: string, projectId: string, revisionId: string, diagnostics: CodeGraphDiagnostic[]): Promise<void>;
   search(workspaceId: string, options: CodeGraphSearchOptions): Promise<CodeGraphSymbol[]>;
   symbol(workspaceId: string, symbolId: string): Promise<CodeGraphSymbol | null>;
+  edge(workspaceId: string, edgeId: string): Promise<CodeGraphEdge | null>;
+  symbolAt(workspaceId: string, projectId: string, path: string, line: number): Promise<CodeGraphSymbol | null>;
   symbols(workspaceId: string, symbolIds: string[]): Promise<CodeGraphSymbol[]>;
   symbolsForPaths(workspaceId: string, projectId: string, paths: string[], limit?: number): Promise<CodeGraphSymbol[]>;
   contractGraph(workspaceId: string, limit?: number): Promise<CodeGraphSubgraph>;
@@ -101,6 +106,8 @@ export interface CodeGraphStore {
   overview(workspaceId: string, projectId?: string, limit?: number): Promise<CodeGraphSubgraph>;
   subgraph(workspaceId: string, options: CodeGraphTraversalOptions): Promise<CodeGraphSubgraph>;
   impact(workspaceId: string, symbolIds: string[], depth?: number, limit?: number): Promise<CodeGraphSubgraph>;
+  revisionSummaries(workspaceId: string, projectId?: string, limit?: number): Promise<CodeGraphRevisionSummary[]>;
+  revisionManifest(workspaceId: string, revisionId: string): Promise<CodeGraphRevisionManifestData | null>;
   deleteWorkspace(workspaceId: string): Promise<void>;
 }
 

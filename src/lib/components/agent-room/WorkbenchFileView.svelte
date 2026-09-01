@@ -84,6 +84,7 @@
   let sourceMode = $state(true);
   let previewContent = $state('');
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let graphSyncTimer: ReturnType<typeof setTimeout> | null = null;
   let themeObserver: MutationObserver | null = null;
   let pdfDocument: any = null;
   let pdfRenderTask: any = null;
@@ -237,13 +238,34 @@
     codeEditor.onDidChangeCursorPosition((event) => {
       cursorLine = event.position.lineNumber;
       cursorColumn = event.position.column;
+      if (graphSyncTimer) clearTimeout(graphSyncTimer);
+      graphSyncTimer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('orkestrai:editor-location', {
+          detail: { workspaceId, path: relativePath, line: cursorLine, column: cursorColumn },
+        }));
+      }, 180);
     });
+    const revealKey = `orkestrai:file-reveal:${workspaceId}:${relativePath}`;
+    const reveal = sessionStorage.getItem(revealKey);
+    if (reveal) {
+      sessionStorage.removeItem(revealKey);
+      try {
+        const location = JSON.parse(reveal) as { line?: number; column?: number };
+        const lineNumber = Math.max(1, Number(location.line) || 1);
+        const column = Math.max(1, Number(location.column) || 1);
+        codeEditor.setPosition({ lineNumber, column });
+        codeEditor.revealLineInCenter(lineNumber);
+      } catch {
+        // Ignore invalid transient navigation state.
+      }
+    }
     codeEditor.onDidChangeModelContent(() => {
       modelRevision = activeBuffer.model.getAlternativeVersionId();
       previewContent = activeBuffer.model.getValue();
       notifyWorkbenchEditorState(activeBuffer.key);
       if (!autoSave || activeBuffer.truncated) return;
       if (autoSaveTimer) clearTimeout(autoSaveTimer);
+      if (graphSyncTimer) clearTimeout(graphSyncTimer);
       autoSaveTimer = setTimeout(() => void save(), 900);
     });
   }

@@ -75,7 +75,13 @@ common credentials redacted; normal agent output is not persisted.
   offline semantic index adds intent search with compact vectors and no model
   download or API key. Runtime evidence imports confined LCOV, JUnit, traceback,
   or structured JSON files and overlays coverage, failures, observed calls, and
-  runtime-only relationships without persisting raw test output. Revision stats
+  runtime-only relationships without persisting raw test output. Operational
+  intelligence explains relationship provenance, synchronizes graph selections
+  with Monaco, overlays active agents, tasks, and Floors with ownership conflict
+  warnings, and builds reviewed context packages within an explicit token budget
+  for a leader, agent, Council, or traceable task. Retained revision manifests
+  support structural comparison, while named investigations restore the exact
+  project, view, filters, selection, camera, and open source location. Revision stats
   include bounded scan, parse, resolution, persistence, and cache telemetry; a
   reproducible benchmark keeps SQLite behind explicit latency gates instead of
   replacing the local-first adapter on assumption.

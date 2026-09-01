@@ -53,7 +53,7 @@ import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectIm
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
-import { codeGraphChangeSchema, codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphEvidenceSnapshotSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema, codeGraphSearchSchema, codeGraphSemanticActionSchema, codeGraphSemanticSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { codeGraphChangeSchema, codeGraphCompareSchema, codeGraphContextSchema, codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphEvidenceSnapshotSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphInvestigationCreateSchema, codeGraphInvestigationUpdateSchema, codeGraphLocateSchema, codeGraphQualitySchema, codeGraphRevisionsSchema, codeGraphSearchSchema, codeGraphSemanticActionSchema, codeGraphSemanticSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
 import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
@@ -62,6 +62,8 @@ import { codeGraphContractService } from '$lib/modules/agent-room/application/se
 import { codeGraphQualityService } from '$lib/modules/agent-room/application/services/CodeGraphQualityService.js';
 import { codeGraphSemanticService } from '$lib/modules/agent-room/application/services/CodeGraphSemanticService.js';
 import { codeGraphRuntimeEvidenceService } from '$lib/modules/agent-room/application/services/CodeGraphRuntimeEvidenceService.js';
+import { codeGraphOperationsService } from '$lib/modules/agent-room/application/services/CodeGraphOperationsService.js';
+import { codeGraphInvestigationRepository } from '$lib/modules/agent-room/infrastructure/repositories/CodeGraphInvestigationRepository.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -243,6 +245,115 @@ export class BridgeController extends Controller {
       return this.json({ data: await codeGraphRuntimeEvidenceService.import(workspace.id, input) }, 201);
     } catch (error) {
       return this.errorResponse(error, 'Failed to import runtime evidence.');
+    }
+  }
+
+  async codeGraphContext(event: any) {
+    try {
+      const input = codeGraphContextSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphOperationsService.context(workspace.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to build the bounded code context.');
+    }
+  }
+
+  async codeGraphOperations(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphOperationsService.operations(workspace.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load the operational code graph.');
+    }
+  }
+
+  async codeGraphExplain(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const data = await codeGraphOperationsService.explain(workspace.id, event.params.edgeId);
+      return data ? this.json({ data }) : this.json({ error: 'Code graph relationship not found.' }, 404);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to explain the code relationship.');
+    }
+  }
+
+  async codeGraphLocate(event: any) {
+    try {
+      const input = codeGraphLocateSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphOperationsService.locate(workspace.id, input.path, input.line) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to locate the editor symbol.');
+    }
+  }
+
+  async codeGraphRevisions(event: any) {
+    try {
+      const input = codeGraphRevisionsSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphIndexService.revisions(workspace.id, input.projectId, input.limit) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load code graph revisions.');
+    }
+  }
+
+  async codeGraphCompare(event: any) {
+    try {
+      const input = codeGraphCompareSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphOperationsService.compare(workspace.id, input.projectId, input.from, input.to) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to compare code graph revisions.');
+    }
+  }
+
+  async codeGraphInvestigations(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphInvestigationRepository.list(workspace.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load saved code investigations.');
+    }
+  }
+
+  async codeGraphInvestigation(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const data = await codeGraphInvestigationRepository.get(workspace.id, event.params.investigationId);
+      return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load the saved code investigation.');
+    }
+  }
+
+  async codeGraphInvestigationCreate(event: any) {
+    try {
+      const input = codeGraphInvestigationCreateSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphInvestigationRepository.create(workspace.id, { ...input, createdBy: 'agent' }) }, 201);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to save the code investigation.');
+    }
+  }
+
+  async codeGraphInvestigationUpdate(event: any) {
+    try {
+      const input = codeGraphInvestigationUpdateSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const data = await codeGraphInvestigationRepository.update(workspace.id, event.params.investigationId, input);
+      return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to update the saved code investigation.');
+    }
+  }
+
+  async codeGraphInvestigationDelete(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const deleted = await codeGraphInvestigationRepository.delete(workspace.id, event.params.investigationId);
+      return deleted ? this.json({ data: { deleted: true } }) : this.json({ error: 'Saved investigation not found.' }, 404);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to delete the saved code investigation.');
     }
   }
 

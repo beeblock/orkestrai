@@ -92,6 +92,24 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { id: 'run1', label: 'lcov.info', stats: { coveredSymbols: 4, failures: 0, observedCalls: 0, runtimeOnlyCalls: 0 } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/evidence?')) {
           res.end(JSON.stringify({ data: { counts: { runs: 1, coveredSymbols: 4, failures: 0, observedCalls: 0, runtimeOnlyCalls: 0 }, runs: [], graph: { nodes: [], edges: [] } } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/context' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { markdown: '# Orkestrai code context\n\ncheckoutTotal', estimatedTokens: 120, symbols: [{ id: 's1' }], relationships: [] } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/operations') {
+          res.end(JSON.stringify({ data: { agents: [{ nodeId: 'n1' }], graph: { nodes: [{ id: 's1' }], edges: [] }, conflicts: [] } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/relationships/00000000-0000-7000-8000-000000000030') {
+          res.end(JSON.stringify({ data: { summary: 'checkoutTotal calls add', classification: 'static', provenance: { confidence: 100, runtimeOnly: false } } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/locate?')) {
+          res.end(JSON.stringify({ data: { id: 's1', name: 'checkoutTotal', path: 'src/order.ts', startLine: 12 } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/revisions?')) {
+          res.end(JSON.stringify({ data: [{ id: 'rev2', projectName: 'Web', sequence: 2, current: true, gitHead: null, sourceHash: 'abcdef123456' }] }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/compare?')) {
+          res.end(JSON.stringify({ data: { added: [{ name: 'checkoutCurrency' }], removed: [], modified: [{ after: { name: 'checkoutTotal' } }], unchanged: 10, relationships: { added: [{}], removed: [], modified: [], unchanged: 20 }, truncated: false } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/investigations' && req.method === 'GET') {
+          res.end(JSON.stringify({ data: [{ id: '00000000-0000-7000-8000-000000000050', name: 'Checkout trace', state: { viewMode: 'overview' } }] }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/investigations' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { id: '00000000-0000-7000-8000-000000000050', name: 'Checkout trace', state: JSON.parse(body).state } }));
+        } else if (req.url === '/api/agent-room/bridge/code-graph/investigations/00000000-0000-7000-8000-000000000050' && req.method === 'DELETE') {
+          res.end(JSON.stringify({ data: { deleted: true } }));
         } else if (req.url === '/api/agent-room/bridge/code-graph/handoffs' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { kind: 'task', scopeId: 'workspace', artifact: { id: 'task-1', title: 'Investigate impact', status: 'todo' } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/code-graph/search?')) {
@@ -270,6 +288,25 @@ describe('orkestrai CLI', () => {
     expect(lines.join('\n')).toContain('calculateTotal');
     expect(await run(['graph', 'evidence', 'import', projectId, 'coverage/lcov.info', '--kind', 'coverage'], { cwd, out, env: {} })).toBe(0);
     expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/code-graph/evidence', body: { projectId, path: 'coverage/lcov.info', kind: 'coverage' } });
+    expect(await run(['graph', 'context', symbolId, '--purpose', 'review', '--tokens', '2000'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('Orkestrai code context');
+    expect(requests.at(-1).body).toMatchObject({ selection: { symbolIds: [symbolId] }, purpose: 'review', maxTokens: 2000 });
+    expect(await run(['graph', 'operations'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('Operations: 1 agents');
+    expect(await run(['graph', 'explain', '00000000-0000-7000-8000-000000000030'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('checkoutTotal calls add');
+    expect(await run(['graph', 'locate', 'src/order.ts', '12'], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1).url).toContain('path=src%2Forder.ts&line=12');
+    expect(await run(['graph', 'revisions', projectId, '--limit', '10'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('Web #2 [current]');
+    expect(await run(['graph', 'compare', projectId, '00000000-0000-7000-8000-000000000040', '00000000-0000-7000-8000-000000000041'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('Revision comparison: symbols +1 · -0 · ~1; relationships +1 · -0 · ~0');
+    const state = JSON.stringify({ projectId: null, viewMode: 'overview', query: '', searchMode: 'lexical', selectedSymbolIds: [symbolId], direction: 'both', depth: 2, camera: null, openPath: 'src/order.ts' });
+    expect(await run(['graph', 'investigation', 'save', 'Checkout trace', '--state', state], { cwd, out, env: {} })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/code-graph/investigations' });
+    expect(await run(['graph', 'investigation', 'list'], { cwd, out, env: {} })).toBe(0);
+    expect(lines.join('\n')).toContain('Checkout trace');
+    expect(await run(['graph', 'investigation', 'delete', '00000000-0000-7000-8000-000000000050'], { cwd, out, env: {} })).toBe(0);
     expect(await run(['graph', 'handoff', 'task', 'workspace', 'Investigate', 'impact'], { cwd, out, env: {} })).toBe(0);
     expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/code-graph/handoffs' });
   });

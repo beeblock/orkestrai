@@ -20,7 +20,16 @@ import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
 import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
-import { codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema, codeGraphSemanticActionSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import {
+  codeGraphContextSchema,
+  codeGraphContractSchema,
+  codeGraphEvidenceImportSchema,
+  codeGraphHandoffSchema,
+  codeGraphIndexSchema,
+  codeGraphInvestigationCreateSchema,
+  codeGraphQualitySchema,
+  codeGraphSemanticActionSchema,
+} from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 
 /**
  * Contrato MCP x ponte: TODA tool e dirigida contra a rota e o schema REAIS
@@ -69,6 +78,16 @@ const EXPECTED: Record<string, Expectation> = {
   code_graph_semantic_search: { method: 'GET', path: /\/bridge\/code-graph\/semantic\?/ },
   code_graph_evidence: { method: 'GET', path: /\/bridge\/code-graph\/evidence\?/ },
   code_graph_evidence_import: { method: 'POST', path: /\/bridge\/code-graph\/evidence$/, schema: codeGraphEvidenceImportSchema },
+  code_graph_context: { method: 'POST', path: /\/bridge\/code-graph\/context$/, schema: codeGraphContextSchema },
+  code_graph_operations: { method: 'GET', path: /\/bridge\/code-graph\/operations$/ },
+  code_graph_explain: { method: 'GET', path: /\/bridge\/code-graph\/relationships\/00000000-0000-7000-8000-000000000030$/ },
+  code_graph_locate: { method: 'GET', path: /\/bridge\/code-graph\/locate\?path=src%2Forder\.ts&line=12$/ },
+  code_graph_revisions: { method: 'GET', path: /\/bridge\/code-graph\/revisions\?projectId=00000000-0000-7000-8000-000000000020&limit=10$/ },
+  code_graph_compare: { method: 'GET', path: /\/bridge\/code-graph\/compare\?projectId=00000000-0000-7000-8000-000000000020&from=00000000-0000-7000-8000-000000000040&to=00000000-0000-7000-8000-000000000041$/ },
+  code_graph_investigation_list: { method: 'GET', path: /\/bridge\/code-graph\/investigations$/ },
+  code_graph_investigation_read: { method: 'GET', path: /\/bridge\/code-graph\/investigations\/00000000-0000-7000-8000-000000000050$/ },
+  code_graph_investigation_save: { method: 'POST', path: /\/bridge\/code-graph\/investigations$/, schema: codeGraphInvestigationCreateSchema },
+  code_graph_investigation_delete: { method: 'DELETE', path: /\/bridge\/code-graph\/investigations\/00000000-0000-7000-8000-000000000050$/ },
   code_graph_handoff: { method: 'POST', path: /\/bridge\/code-graph\/handoffs$/, schema: codeGraphHandoffSchema },
   huddle_list: { method: 'GET', path: /\/bridge\/huddles\?selected=/ },
   huddle_say: { method: 'POST', path: /\/bridge\/huddles\/00000000-0000-7000-8000-000000000001\/turns$/, schema: bridgeHuddleContributeSchema },
@@ -151,6 +170,17 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   code_graph_semantic_search: { query: 'compute checkout total', kinds: ['function'], limit: 20 },
   code_graph_evidence: { limit: 300 },
   code_graph_evidence_import: { projectId: '00000000-0000-7000-8000-000000000020', path: 'coverage/lcov.info', kind: 'coverage' },
+  code_graph_context: { symbolIds: ['00000000-0000-7000-8000-000000000010'], purpose: 'review', maxTokens: 2_000, depth: 2, includeSource: true },
+  code_graph_explain: { edgeId: '00000000-0000-7000-8000-000000000030' },
+  code_graph_locate: { path: 'src/order.ts', line: 12 },
+  code_graph_revisions: { projectId: '00000000-0000-7000-8000-000000000020', limit: 10 },
+  code_graph_compare: { projectId: '00000000-0000-7000-8000-000000000020', from: '00000000-0000-7000-8000-000000000040', to: '00000000-0000-7000-8000-000000000041' },
+  code_graph_investigation_read: { investigationId: '00000000-0000-7000-8000-000000000050' },
+  code_graph_investigation_save: {
+    name: 'Checkout trace',
+    state: { projectId: null, viewMode: 'overview', query: 'checkout', searchMode: 'lexical', selectedSymbolIds: ['00000000-0000-7000-8000-000000000010'], direction: 'both', depth: 2, camera: null, openPath: 'src/order.ts' },
+  },
+  code_graph_investigation_delete: { investigationId: '00000000-0000-7000-8000-000000000050' },
   code_graph_handoff: { kind: 'task', scopeId: 'workspace', title: 'Investigate order impact', locale: 'en' },
   huddle_list: { huddleId: '00000000-0000-7000-8000-000000000001' },
   huddle_say: { huddleId: '00000000-0000-7000-8000-000000000001', text: 'The release gate is clear.' },

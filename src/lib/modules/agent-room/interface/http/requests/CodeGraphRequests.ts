@@ -12,6 +12,12 @@ import {
   codeGraphSemanticActionSchema,
   codeGraphEvidenceImportSchema,
   codeGraphEvidenceSnapshotSchema,
+  codeGraphContextSchema,
+  codeGraphLocateSchema,
+  codeGraphRevisionsSchema,
+  codeGraphCompareSchema,
+  codeGraphInvestigationCreateSchema,
+  codeGraphInvestigationUpdateSchema,
   type CodeGraphIndexInput,
   type CodeGraphSearchInput,
   type CodeGraphTraversalInput,
@@ -24,6 +30,12 @@ import {
   type CodeGraphSemanticActionInput,
   type CodeGraphEvidenceImportInput,
   type CodeGraphEvidenceSnapshotInput,
+  type CodeGraphContextInput,
+  type CodeGraphLocateInput,
+  type CodeGraphRevisionsInput,
+  type CodeGraphCompareInput,
+  type CodeGraphInvestigationCreateInput,
+  type CodeGraphInvestigationUpdateInput,
 } from '../../../contracts/schemas/codeGraphSchemas.js';
 
 abstract class AuthorizedRequest extends FormRequest {
@@ -90,4 +102,34 @@ export class CodeGraphEvidenceImportRequest extends AuthorizedRequest {
 export class CodeGraphEvidenceSnapshotRequest extends AuthorizedRequest {
   rules() { return codeGraphEvidenceSnapshotSchema; }
   passedValidation(data: unknown): CodeGraphEvidenceSnapshotInput { return codeGraphEvidenceSnapshotSchema.parse(data); }
+}
+
+export class CodeGraphContextRequest extends AuthorizedRequest {
+  rules() { return codeGraphContextSchema; }
+  passedValidation(data: unknown): CodeGraphContextInput { return codeGraphContextSchema.parse(data); }
+}
+
+export class CodeGraphLocateRequest extends AuthorizedRequest {
+  rules() { return codeGraphLocateSchema; }
+  passedValidation(data: unknown): CodeGraphLocateInput { return codeGraphLocateSchema.parse(data); }
+}
+
+export class CodeGraphRevisionsRequest extends AuthorizedRequest {
+  rules() { return codeGraphRevisionsSchema; }
+  passedValidation(data: unknown): CodeGraphRevisionsInput { return codeGraphRevisionsSchema.parse(data); }
+}
+
+export class CodeGraphCompareRequest extends AuthorizedRequest {
+  rules() { return codeGraphCompareSchema; }
+  passedValidation(data: unknown): CodeGraphCompareInput { return codeGraphCompareSchema.parse(data); }
+}
+
+export class CodeGraphInvestigationCreateRequest extends AuthorizedRequest {
+  rules() { return codeGraphInvestigationCreateSchema; }
+  passedValidation(data: unknown): CodeGraphInvestigationCreateInput { return codeGraphInvestigationCreateSchema.parse(data); }
+}
+
+export class CodeGraphInvestigationUpdateRequest extends AuthorizedRequest {
+  rules() { return codeGraphInvestigationUpdateSchema; }
+  passedValidation(data: unknown): CodeGraphInvestigationUpdateInput { return codeGraphInvestigationUpdateSchema.parse(data); }
 }

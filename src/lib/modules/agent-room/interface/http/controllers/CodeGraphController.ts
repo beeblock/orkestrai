@@ -1,5 +1,5 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { ChangeCodeGraphDto, CodeGraphContractDto, CodeGraphEvidenceImportDto, CodeGraphHandoffDto, CodeGraphQualityDto, CodeGraphSemanticSearchDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
+import { ChangeCodeGraphDto, CodeGraphCompareDto, CodeGraphContextDto, CodeGraphContractDto, CodeGraphEvidenceImportDto, CodeGraphHandoffDto, CodeGraphInvestigationCreateDto, CodeGraphInvestigationUpdateDto, CodeGraphLocateDto, CodeGraphQualityDto, CodeGraphRevisionsDto, CodeGraphSemanticSearchDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
 import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
@@ -8,7 +8,9 @@ import { codeGraphContractService } from '../../../application/services/CodeGrap
 import { codeGraphQualityService } from '../../../application/services/CodeGraphQualityService.js';
 import { codeGraphSemanticService } from '../../../application/services/CodeGraphSemanticService.js';
 import { codeGraphRuntimeEvidenceService } from '../../../application/services/CodeGraphRuntimeEvidenceService.js';
-import { ChangeCodeGraphRequest, CodeGraphContractRequest, CodeGraphEvidenceImportRequest, CodeGraphEvidenceSnapshotRequest, CodeGraphHandoffRequest, CodeGraphQualityRequest, CodeGraphSemanticActionRequest, CodeGraphSemanticSearchRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
+import { codeGraphOperationsService } from '../../../application/services/CodeGraphOperationsService.js';
+import { codeGraphInvestigationRepository } from '../../../infrastructure/repositories/CodeGraphInvestigationRepository.js';
+import { ChangeCodeGraphRequest, CodeGraphCompareRequest, CodeGraphContextRequest, CodeGraphContractRequest, CodeGraphEvidenceImportRequest, CodeGraphEvidenceSnapshotRequest, CodeGraphHandoffRequest, CodeGraphInvestigationCreateRequest, CodeGraphInvestigationUpdateRequest, CodeGraphLocateRequest, CodeGraphQualityRequest, CodeGraphRevisionsRequest, CodeGraphSemanticActionRequest, CodeGraphSemanticSearchRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
   async status(event: RequestEvent) {
@@ -147,6 +149,108 @@ export class CodeGraphController extends Controller {
       return this.json({ data: await codeGraphRuntimeEvidenceService.import(dto.workspaceId, dto.options) }, 201);
     } catch (error) {
       return this.failure(error, 'Could not import runtime evidence.');
+    }
+  }
+
+  async context(event: RequestEvent) {
+    try {
+      const dto = CodeGraphContextDto.from(event.params.id, await CodeGraphContextRequest.validate(event));
+      return this.json({ data: await codeGraphOperationsService.context(dto.workspaceId, dto.options) });
+    } catch (error) {
+      return this.failure(error, 'Could not build the bounded code context.');
+    }
+  }
+
+  async operations(event: RequestEvent) {
+    try {
+      return this.json({ data: await codeGraphOperationsService.operations(event.params.id) });
+    } catch (error) {
+      return this.failure(error, 'Could not load the operational code graph.');
+    }
+  }
+
+  async explain(event: RequestEvent) {
+    try {
+      const data = await codeGraphOperationsService.explain(event.params.id, event.params.edgeId);
+      return data ? this.json({ data }) : this.json({ error: 'Code graph relationship not found.' }, 404);
+    } catch (error) {
+      return this.failure(error, 'Could not explain the code relationship.');
+    }
+  }
+
+  async locate(event: RequestEvent) {
+    try {
+      const dto = CodeGraphLocateDto.from(event.params.id, await CodeGraphLocateRequest.validate(event));
+      return this.json({ data: await codeGraphOperationsService.locate(dto.workspaceId, dto.path, dto.line) });
+    } catch (error) {
+      return this.failure(error, 'Could not locate the editor symbol in the code graph.');
+    }
+  }
+
+  async revisions(event: RequestEvent) {
+    try {
+      const dto = CodeGraphRevisionsDto.from(event.params.id, await CodeGraphRevisionsRequest.validate(event));
+      return this.json({ data: await codeGraphIndexService.revisions(dto.workspaceId, dto.projectId, dto.limit) });
+    } catch (error) {
+      return this.failure(error, 'Could not load code graph revisions.');
+    }
+  }
+
+  async compare(event: RequestEvent) {
+    try {
+      const dto = CodeGraphCompareDto.from(event.params.id, await CodeGraphCompareRequest.validate(event));
+      return this.json({ data: await codeGraphOperationsService.compare(dto.workspaceId, dto.projectId, dto.from, dto.to) });
+    } catch (error) {
+      return this.failure(error, 'Could not compare code graph revisions.');
+    }
+  }
+
+  async investigations(event: RequestEvent) {
+    try {
+      return this.json({ data: await codeGraphInvestigationRepository.list(event.params.id) });
+    } catch (error) {
+      return this.failure(error, 'Could not load saved investigations.');
+    }
+  }
+
+  async investigation(event: RequestEvent) {
+    try {
+      const data = await codeGraphInvestigationRepository.get(event.params.id, event.params.investigationId);
+      return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
+    } catch (error) {
+      return this.failure(error, 'Could not load the saved investigation.');
+    }
+  }
+
+  async createInvestigation(event: RequestEvent) {
+    try {
+      const dto = CodeGraphInvestigationCreateDto.from(event.params.id, await CodeGraphInvestigationCreateRequest.validate(event));
+      return this.json({ data: await codeGraphInvestigationRepository.create(dto.workspaceId, {
+        name: dto.name,
+        state: dto.state,
+        createdBy: 'user',
+      }) }, 201);
+    } catch (error) {
+      return this.failure(error, 'Could not save the investigation.');
+    }
+  }
+
+  async updateInvestigation(event: RequestEvent) {
+    try {
+      const dto = CodeGraphInvestigationUpdateDto.from(event.params.id, event.params.investigationId, await CodeGraphInvestigationUpdateRequest.validate(event));
+      const data = await codeGraphInvestigationRepository.update(dto.workspaceId, dto.investigationId, { name: dto.name, state: dto.state });
+      return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
+    } catch (error) {
+      return this.failure(error, 'Could not update the saved investigation.');
+    }
+  }
+
+  async deleteInvestigation(event: RequestEvent) {
+    try {
+      const deleted = await codeGraphInvestigationRepository.delete(event.params.id, event.params.investigationId);
+      return deleted ? this.json({ data: { deleted: true } }) : this.json({ error: 'Saved investigation not found.' }, 404);
+    } catch (error) {
+      return this.failure(error, 'Could not delete the saved investigation.');
     }
   }
 

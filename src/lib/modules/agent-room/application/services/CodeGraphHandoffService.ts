@@ -1,4 +1,5 @@
 import { CreateAgentReviewDto } from '../dto/AgentReviewDto.js';
+import { CreateCouncilDto } from '../dto/CouncilDto.js';
 import type {
   CodeGraphChangeIntelligence,
   CodeGraphChangeScope,
@@ -11,6 +12,9 @@ import { taskBoardService } from './TaskBoardService.js';
 import { codeGraphChangeIntelligenceService } from './CodeGraphChangeIntelligenceService.js';
 import { codeGraphIndexService } from './CodeGraphIndexService.js';
 import { gitService } from './GitService.js';
+import { codeGraphOperationsService } from './CodeGraphOperationsService.js';
+import { councilService } from './CouncilService.js';
+import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 
 type Locale = CodeGraphHandoffOptions['locale'];
 
@@ -29,6 +33,9 @@ const COPY = {
     none: 'None',
     conflictEvidence: (files: number, symbols: number, tests: number) => `${files} files, ${symbols} symbols, ${tests} tests`,
     truncated: 'The evidence is bounded; open Changes for the complete visible result.',
+    leaderMissing: 'This workspace does not have a leader.',
+    agentMissing: 'The selected agent is not available in this workspace.',
+    councilMissing: 'Select at least two available workspace agents for the Council.',
   },
   'pt-BR': {
     scopeMissing: 'O escopo de mudanças selecionado não existe mais. Atualize Mudanças e tente novamente.',
@@ -44,6 +51,9 @@ const COPY = {
     none: 'Nenhum',
     conflictEvidence: (files: number, symbols: number, tests: number) => `${files} arquivos, ${symbols} símbolos, ${tests} testes`,
     truncated: 'A evidência é limitada; abra Mudanças para ver o resultado visível completo.',
+    leaderMissing: 'Este workspace não possui um líder.',
+    agentMissing: 'O agente selecionado não está disponível neste workspace.',
+    councilMissing: 'Selecione pelo menos dois agentes disponíveis do workspace para o Conselho.',
   },
   es: {
     scopeMissing: 'El alcance de cambios seleccionado ya no existe. Actualiza Cambios e inténtalo de nuevo.',
@@ -59,6 +69,9 @@ const COPY = {
     none: 'Ninguno',
     conflictEvidence: (files: number, symbols: number, tests: number) => `${files} archivos, ${symbols} símbolos, ${tests} tests`,
     truncated: 'La evidencia está limitada; abre Cambios para ver el resultado visible completo.',
+    leaderMissing: 'Este workspace no tiene líder.',
+    agentMissing: 'El agente seleccionado no está disponible en este workspace.',
+    councilMissing: 'Selecciona al menos dos agentes disponibles del workspace para el Consejo.',
   },
 } satisfies Record<Locale, Record<string, unknown>>;
 
@@ -91,19 +104,74 @@ export class CodeGraphHandoffService {
     actor: 'user' | 'agent' = 'user',
   ): Promise<CodeGraphHandoffResult> {
     const copy = COPY[options.locale];
-    const analysis = await codeGraphChangeIntelligenceService.analyze(workspaceId);
-    const scope = analysis.scopes.find((candidate) => candidate.id === options.scopeId);
-    if (!scope) throw new Error(copy.scopeMissing as string);
+    const needsScope = options.kind === 'review' || Boolean(options.scopeId);
+    const analysis = needsScope ? await codeGraphChangeIntelligenceService.analyze(workspaceId) : null;
+    const scope = options.scopeId ? analysis?.scopes.find((candidate) => candidate.id === options.scopeId) ?? null : null;
+    if (options.scopeId && !scope) throw new Error(copy.scopeMissing as string);
 
-    if (options.kind === 'review') return this.createReview(workspaceId, scope, analysis, options, copy);
+    if (options.kind === 'review') {
+      if (!scope || !analysis) throw new Error(copy.scopeMissing as string);
+      return this.createReview(workspaceId, scope, analysis, options, copy);
+    }
+    const context = options.context ? await codeGraphOperationsService.context(workspaceId, options.context) : null;
+    const description = context?.markdown ?? (scope && analysis ? this.taskDescription(scope, analysis, copy) : '');
+    const marker = context?.selectedSymbolIds.length
+      ? `\n\n<!-- orkestrai:code-graph-symbols=${context.selectedSymbolIds.join(',')} -->`
+      : '';
+    const taskDescription = `${description.slice(0, Math.max(0, 24_000 - marker.length))}${marker}`;
+    if (options.kind === 'leader' || options.kind === 'agent') {
+      const nodes = await workspaceRepository.listNodes(workspaceId);
+      const target = options.kind === 'leader'
+        ? nodes.find((node) => node.type === 'terminal' && Boolean((node.payload as { maestro?: boolean }).maestro))
+        : nodes.find((node) => node.id === options.targetNodeId && node.type === 'terminal');
+      if (!target) throw new Error(options.kind === 'leader' ? copy.leaderMissing as string : copy.agentMissing as string);
+      const task = await taskBoardService.create(workspaceId, {
+        title: options.title,
+        description: taskDescription,
+        assigneeNodeId: target.id,
+        createdBy: actor,
+        status: 'doing',
+        dispatch: true,
+      });
+      return { kind: options.kind, scopeId: scope?.id ?? null, artifact: { id: task.id, title: task.title, status: task.status, type: 'task' } };
+    }
+    if (options.kind === 'council') {
+      const nodes = await workspaceRepository.listNodes(workspaceId);
+      const terminals = new Map(nodes.filter((node) => node.type === 'terminal').map((node) => [node.id, node]));
+      const targetIds = [...new Set(options.targetNodeIds ?? [])];
+      if (targetIds.length < 2 || targetIds.some((id) => !terminals.has(id))) {
+        throw new Error(copy.councilMissing as string);
+      }
+      const leader = nodes.find((node) => node.type === 'terminal' && Boolean((node.payload as { maestro?: boolean }).maestro)) ?? null;
+      const task = await taskBoardService.create(workspaceId, {
+        title: options.title,
+        description: taskDescription,
+        createdBy: actor,
+        status: 'todo',
+        dispatch: false,
+      });
+      const council = await councilService.start(workspaceId, CreateCouncilDto.from({
+        title: options.title,
+        objective: taskDescription.slice(0, 12_000),
+        taskId: task.id,
+        leaderNodeId: leader?.id ?? null,
+        mode: 'advisory',
+        criterion: 'balanced',
+        customCriterion: null,
+        requestLeaderRecommendation: Boolean(leader),
+        maxExecutions: targetIds.length + (leader ? 1 : 0),
+        perspectives: targetIds.map((agentNodeId) => ({ agentNodeId, approach: '' })),
+      }));
+      return { kind: 'council', scopeId: scope?.id ?? null, artifact: { id: council.id, title: council.title, status: council.status, type: 'council' } };
+    }
     const task = await taskBoardService.create(workspaceId, {
       title: options.title,
-      description: this.taskDescription(scope, analysis, copy),
+      description: taskDescription,
       createdBy: actor,
       status: 'todo',
       dispatch: false,
     });
-    return { kind: 'task', scopeId: scope.id, artifact: { id: task.id, title: task.title, status: task.status } };
+    return { kind: 'task', scopeId: scope?.id ?? null, artifact: { id: task.id, title: task.title, status: task.status, type: 'task' } };
   }
 
   private async createReview(
@@ -141,7 +209,7 @@ export class CodeGraphHandoffService {
       likelyTests,
       conflicts,
     ));
-    return { kind: 'review', scopeId: scope.id, artifact: { id: review.id, title: review.title, status: review.status } };
+    return { kind: 'review', scopeId: scope.id, artifact: { id: review.id, title: review.title, status: review.status, type: 'review' } };
   }
 
   private taskDescription(

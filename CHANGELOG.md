@@ -61,6 +61,13 @@ pt-BR, English, and Spanish translations.
   repository, a full temporary mirror for real incremental updates, and a
   synthetic repository against the documented SQLite latency gates; additional
   Laravel or monorepo roots can be supplied without changing the benchmark.
+- Operational Code Intelligence explains relationship provenance, keeps graph
+  and Monaco selections synchronized, overlays live agents, tasks, and Floors
+  with concurrent-ownership warnings, and assembles reviewable 500–16,000-token
+  context packages for a leader, agent, Council, or traceable task. Compact
+  retained revision manifests support structural comparison, while named
+  investigations restore project, view, filters, selection, camera, and open
+  source. Canvas, Workbench, HTTP, CLI, and MCP use the same bounded contracts.
 
 ### Fixed
 

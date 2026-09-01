@@ -1733,6 +1733,26 @@ export const TOURS_EN: Tour[] = [
         body: 'Open Changes to map the workspace and active Floors onto the same graph. Red symbols changed directly, amber paths identify likely tests, and the side panel exposes overlapping Floor files or downstream symbols. Agents receive the same bounded evidence with code_graph_changes.',
       },
       {
+        id: 'explain-and-sync-source',
+        title: 'Explain evidence and open the source',
+        body: 'Select a relationship to inspect its type, confidence, source, and static or runtime provenance. Open either endpoint in Monaco; selecting a symbol from the editor updates this graph while preserving the camera.',
+      },
+      {
+        id: 'inspect-live-ownership',
+        title: 'See who is changing what',
+        body: 'Open Insights → Live work to overlay active agents, Kanban tasks, and Floors on the files and symbols they touch. Conflicts identify concurrent ownership so you can open the responsible agent or task before coordinating.',
+      },
+      {
+        id: 'build-bounded-context',
+        title: 'Send reviewed, bounded context',
+        body: 'From a selected symbol, change scope, or quality finding, choose a 500–16,000 token budget and review the exact package. Send it to the leader, one agent, Council, or a traceable task; graph revision and source ids travel with the handoff.',
+      },
+      {
+        id: 'compare-and-resume-investigation',
+        title: 'Compare and resume investigations',
+        body: 'Compare retained revisions to inspect added, removed, and changed symbols or relationships. Save a named investigation to preserve project, view, filters, selection, camera, and open source, then restore it later from the same node.',
+      },
+      {
         id: 'handoff-change-impact',
         title: 'Make the evidence actionable',
         body: 'Use the review icon on the workspace scope to create a Review Center item tied to the current Git revision, or the task icon on any workspace or Floor scope to create a Kanban task for the leader. Agents use code_graph_handoff for the same guarded action.',

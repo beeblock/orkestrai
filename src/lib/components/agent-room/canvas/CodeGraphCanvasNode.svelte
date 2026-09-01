@@ -13,6 +13,9 @@
     FileCode2,
     GitCompareArrows,
     GitPullRequestArrow,
+    Bookmark,
+    Bot,
+    Send,
     ListTodo,
     ExternalLink,
     Network,
@@ -27,6 +30,10 @@
   } from '@lucide/svelte';
   import * as Select from '$lib/components/ui/select';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import * as Dialog from '$lib/components/ui/dialog';
+  import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import { Input } from '$lib/components/ui/input';
+  import { Checkbox } from '$lib/components/ui/checkbox';
   import { Button } from '$lib/components/ui/button';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
@@ -40,6 +47,15 @@
     CodeGraphFinding,
     CodeGraphQualitySnapshot,
     CodeGraphRuntimeEvidenceSnapshot,
+    CodeGraphContextPackage,
+    CodeGraphContextPurpose,
+    CodeGraphContextSelection,
+    CodeGraphInvestigation,
+    CodeGraphInvestigationState,
+    CodeGraphOperationsSnapshot,
+    CodeGraphRelationshipExplanation,
+    CodeGraphRevisionComparison,
+    CodeGraphRevisionSummary,
     CodeGraphSemanticMatch,
     CodeGraphSemanticStatus,
     CodeGraphSnapshot,
@@ -69,6 +85,12 @@
   let semanticStatus = $state<CodeGraphSemanticStatus | null>(null);
   let semanticMatches = $state<CodeGraphSemanticMatch[]>([]);
   let runtime = $state<CodeGraphRuntimeEvidenceSnapshot | null>(null);
+  let operations = $state<CodeGraphOperationsSnapshot | null>(null);
+  let revisions = $state<CodeGraphRevisionSummary[]>([]);
+  let comparison = $state<CodeGraphRevisionComparison | null>(null);
+  let investigations = $state<CodeGraphInvestigation[]>([]);
+  let pendingInvestigationDelete = $state<CodeGraphInvestigation | null>(null);
+  let selectedRelationship = $state<CodeGraphRelationshipExplanation | null>(null);
   let selectedSymbol = $state<CodeGraphSymbol | null>(null);
   let results = $state<CodeGraphSymbol[]>([]);
   let query = $state('');
@@ -82,20 +104,49 @@
   let qualityLoading = $state(false);
   let semanticLoading = $state(false);
   let runtimeLoading = $state(false);
+  let operationsLoading = $state(false);
+  let comparisonLoading = $state(false);
+  let investigationsOpen = $state(false);
+  let investigationBusy = $state(false);
+  let investigationName = $state('');
+  let currentInvestigationId = $state<string | null>(null);
+  let compareFrom = $state('');
+  let compareTo = $state('');
+  let contextOpen = $state(false);
+  let contextBusy = $state(false);
+  let contextPackage = $state<CodeGraphContextPackage | null>(null);
+  let contextSelection = $state<CodeGraphContextSelection | null>(null);
+  let contextPurpose = $state<CodeGraphContextPurpose>('investigate');
+  let contextTokens = $state('4000');
+  let contextHandoff = $state<'task' | 'leader' | 'agent' | 'council'>('leader');
+  let contextTarget = $state('');
+  let councilTargets = $state<string[]>([]);
   let evidenceImporting = $state(false);
   let evidencePath = $state('');
   let evidenceKind = $state<'auto' | 'coverage' | 'test' | 'trace'>('auto');
   let searchMode = $state<'lexical' | 'semantic'>('lexical');
   let handoffBusy = $state<string | null>(null);
-  let viewMode = $state<'overview' | 'changes' | 'contracts' | 'quality' | 'semantic' | 'runtime'>('overview');
+  let viewMode = $state<CodeGraphInvestigationState['viewMode']>('overview');
   let error = $state('');
   let graphHost: HTMLDivElement;
-  let renderer: { kill: () => void } | null = null;
+  type CameraState = { x: number; y: number; ratio: number; angle: number };
+  type GraphRenderer = {
+    kill: () => void;
+    getCamera: () => {
+      getState: () => CameraState;
+      setState: (state: CameraState) => void;
+      on: (event: 'updated', callback: (state: CameraState) => void) => void;
+    };
+  };
+  let renderer: GraphRenderer | null = null;
+  let cameraState = $state<CameraState | null>(null);
   let renderSequence = 0;
+  const AGENT_COLORS = ['#22c55e', '#0ea5e9', '#f97316', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#ef4444'];
 
   const currentProject = $derived(snapshot?.projects.find((project) => project.id === projectId) ?? null);
   const hasIndexedGraph = $derived(Boolean(snapshot?.projects.some((project) => project.currentRevisionId)));
   const changedFileCount = $derived(changes?.scopes.reduce((total, scope) => total + scope.files.length, 0) ?? 0);
+  const activeAgents = $derived(operations?.agents.filter((agent) => agent.state !== 'disconnected') ?? []);
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -120,6 +171,39 @@
     if (project.status === 'stale') return m['code_graph.status_stale']();
     if (project.status === 'error') return m['code_graph.status_error']();
     return m['code_graph.status_idle']();
+  }
+
+  function agentStateLabel(state: CodeGraphOperationsSnapshot['agents'][number]['state']): string {
+    switch (state) {
+      case 'starting': return m['control_center.state_starting']();
+      case 'working': return m['control_center.state_working']();
+      case 'waiting_input': return m['control_center.state_waiting_input']();
+      case 'waiting_permission': return m['control_center.state_waiting_permission']();
+      case 'blocked': return m['control_center.state_blocked']();
+      case 'idle': return m['control_center.state_idle']();
+      case 'done': return m['control_center.state_done']();
+      case 'error': return m['control_center.state_error']();
+      case 'disconnected': return m['control_center.state_disconnected']();
+    }
+  }
+
+  function viewModeLabel(mode: CodeGraphInvestigationState['viewMode']): string {
+    switch (mode) {
+      case 'overview': return m['code_graph.overview']();
+      case 'changes': return m['code_graph.changes']();
+      case 'contracts': return m['code_graph.contracts']();
+      case 'quality': return m['code_graph.quality']();
+      case 'semantic': return m['code_graph.semantic']();
+      case 'runtime': return m['code_graph.runtime']();
+      case 'operations': return m['code_graph.operations']();
+      case 'compare': return m['code_graph.compare']();
+    }
+  }
+
+  function comparisonStateLabel(state: 'added' | 'modified' | 'removed'): string {
+    if (state === 'added') return m['code_graph.comparison_added']();
+    if (state === 'modified') return m['code_graph.comparison_modified']();
+    return m['code_graph.comparison_removed']();
   }
 
   function symbolColor(kind: CodeGraphSymbol['kind']): string {
@@ -165,6 +249,7 @@
 
   async function renderGraph(next: CodeGraphSubgraph | null): Promise<void> {
     const sequence = ++renderSequence;
+    cameraState = renderer?.getCamera().getState() ?? cameraState;
     renderer?.kill();
     renderer = null;
     if (!next?.nodes.length || !graphHost) return;
@@ -177,13 +262,22 @@
     const model = new Graph({ multi: true, type: 'directed' });
     const changed = new Set(viewMode === 'changes' ? changes?.scopes.flatMap((scope) => scope.changedSymbolIds) ?? [] : []);
     const tests = new Set(viewMode === 'changes' ? changes?.likelyTests ?? [] : []);
+    const ownerColors = new Map<string, string>();
+    if (viewMode === 'operations') {
+      operations?.agents.forEach((agent, index) => agent.symbolIds.forEach((symbolId) => ownerColors.set(symbolId, AGENT_COLORS[index % AGENT_COLORS.length])));
+    }
+    const comparisonKey = (value: { projectName?: string | null; path: string | null; kind: string; qualifiedName: string; startLine: number | null }) =>
+      `${value.projectName ?? currentProject?.name ?? ''}\0${value.path ?? ''}\0${value.kind}\0${value.qualifiedName}\0${value.startLine ?? ''}`;
+    const added = new Set(viewMode === 'compare' ? comparison?.added.map((item) => comparisonKey({ ...item, projectName: comparison.projectName })) ?? [] : []);
+    const modified = new Set(viewMode === 'compare' ? comparison?.modified.map((item) => comparisonKey({ ...item.after, projectName: comparison.projectName })) ?? [] : []);
     for (const node of next.nodes) {
+      const key = comparisonKey(node);
       model.addNode(node.id, {
         label: node.name,
         x: stablePosition(node.id, 0),
         y: stablePosition(node.id, 1),
         size: changed.has(node.id) || node.id === next.centerSymbolId ? 11 : node.kind === 'module' ? 7 : 5,
-        color: changed.has(node.id) ? '#ef4444' : node.path && tests.has(node.path) ? '#f59e0b' : symbolColor(node.kind),
+        color: ownerColors.get(node.id) ?? (added.has(key) ? '#22c55e' : modified.has(key) ? '#f59e0b' : changed.has(node.id) ? '#ef4444' : node.path && tests.has(node.path) ? '#f59e0b' : symbolColor(node.kind)),
       });
     }
     for (const edge of next.edges) {
@@ -217,7 +311,13 @@
       maxCameraRatio: 8,
     });
     sigma.on('clickNode', ({ node }: { node: string }) => void openGraphSymbol(node));
-    renderer = sigma;
+    sigma.on('clickEdge', ({ edge }: { edge: string }) => void openRelationship(edge));
+    if (cameraState) sigma.getCamera().setState(cameraState);
+    sigma.getCamera().on('updated', (state: CameraState) => {
+      cameraState = state;
+      sessionStorage.setItem(`orkestrai:code-graph-camera:${data.workspaceId}:${id}`, JSON.stringify(state));
+    });
+    renderer = sigma as GraphRenderer;
   }
 
   async function loadStatus(): Promise<void> {
@@ -227,6 +327,7 @@
   async function loadOverview(): Promise<void> {
     viewMode = 'overview';
     selectedSymbol = null;
+    selectedRelationship = null;
     results = [];
     semanticMatches = [];
     const params = new URLSearchParams();
@@ -341,6 +442,211 @@
     }
   }
 
+  async function loadOperations(): Promise<void> {
+    if (!hasIndexedGraph) return;
+    operationsLoading = true;
+    error = '';
+    try {
+      operations = await api<CodeGraphOperationsSnapshot>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/operations`);
+      viewMode = 'operations';
+      selectedSymbol = null;
+      selectedRelationship = null;
+      results = [];
+      graph = operations.graph;
+      await renderGraph(graph);
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.operations_error']();
+    } finally {
+      operationsLoading = false;
+    }
+  }
+
+  async function loadComparison(): Promise<void> {
+    const targetProjectId = projectId !== 'all' ? projectId : snapshot?.projects[0]?.id;
+    if (!targetProjectId) return;
+    comparisonLoading = true;
+    error = '';
+    try {
+      projectId = targetProjectId;
+      revisions = await api<CodeGraphRevisionSummary[]>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/revisions?projectId=${encodeURIComponent(targetProjectId)}&limit=30`);
+      compareTo = compareTo && revisions.some((item) => item.id === compareTo) ? compareTo : revisions[0]?.id ?? '';
+      compareFrom = compareFrom && revisions.some((item) => item.id === compareFrom) ? compareFrom : revisions.find((item) => item.id !== compareTo)?.id ?? '';
+      viewMode = 'compare';
+      selectedSymbol = null;
+      selectedRelationship = null;
+      if (compareFrom && compareTo) await compareRevisions(targetProjectId);
+      else {
+        comparison = null;
+        graph = await api<CodeGraphSubgraph>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/graph?projectId=${encodeURIComponent(targetProjectId)}`);
+        await renderGraph(graph);
+      }
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.compare_error']();
+    } finally {
+      comparisonLoading = false;
+    }
+  }
+
+  async function compareRevisions(targetProjectId = projectId): Promise<void> {
+    if (!compareFrom || !compareTo || targetProjectId === 'all') return;
+    const params = new URLSearchParams({ projectId: targetProjectId, from: compareFrom, to: compareTo });
+    comparison = await api<CodeGraphRevisionComparison>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/compare?${params}`);
+    graph = await api<CodeGraphSubgraph>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/graph?projectId=${encodeURIComponent(targetProjectId)}`);
+    await renderGraph(graph);
+  }
+
+  async function openRelationship(edgeId: string): Promise<void> {
+    try {
+      selectedRelationship = await api<CodeGraphRelationshipExplanation>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/relationships/${edgeId}`);
+      selectedSymbol = null;
+      results = [];
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : m['code_graph.relationship_error']());
+    }
+  }
+
+  async function openContext(selection: CodeGraphContextSelection): Promise<void> {
+    contextSelection = selection;
+    contextPackage = null;
+    contextHandoff = 'leader';
+    contextTarget = '';
+    councilTargets = [];
+    contextOpen = true;
+    if (!operations) operations = await api<CodeGraphOperationsSnapshot>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/operations`).catch(() => null);
+    await buildContext();
+  }
+
+  async function buildContext(): Promise<void> {
+    if (!contextSelection) return;
+    contextBusy = true;
+    try {
+      contextPackage = await api<CodeGraphContextPackage>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/context`, {
+        method: 'POST',
+        body: JSON.stringify({
+          selection: contextSelection,
+          purpose: contextPurpose,
+          maxTokens: Number(contextTokens),
+          depth: Math.min(depth, 3),
+          includeSource: true,
+        }),
+      });
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : m['code_graph.context_error']());
+    } finally {
+      contextBusy = false;
+    }
+  }
+
+  async function handoffContext(): Promise<void> {
+    if (!contextSelection || !contextPackage) return;
+    if (contextHandoff === 'agent' && !contextTarget) return;
+    if (contextHandoff === 'council' && councilTargets.length < 2) return;
+    contextBusy = true;
+    try {
+      const result = await api<CodeGraphHandoffResult>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/handoffs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          kind: contextHandoff,
+          title: m['code_graph.context_task_title']({ symbol: contextPackage.symbols[0]?.name ?? m['code_graph.context']() }),
+          locale: localeState.current,
+          context: {
+            selection: contextSelection,
+            purpose: contextPurpose,
+            maxTokens: Number(contextTokens),
+            depth: Math.min(depth, 3),
+            includeSource: true,
+          },
+          targetNodeId: contextHandoff === 'agent' ? contextTarget : undefined,
+          targetNodeIds: contextHandoff === 'council' ? councilTargets : undefined,
+        }),
+      });
+      toast.success(m['code_graph.context_sent']({ title: result.artifact.title }));
+      contextOpen = false;
+      if (result.artifact.type === 'council') {
+        window.dispatchEvent(new CustomEvent('orkestrai:open-council', {
+          detail: { workspaceId: data.workspaceId, councilId: result.artifact.id },
+        }));
+      }
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : m['code_graph.handoff_error']());
+    } finally {
+      contextBusy = false;
+    }
+  }
+
+  function investigationState(): CodeGraphInvestigationState {
+    return {
+      projectId: projectId === 'all' ? null : projectId,
+      viewMode,
+      query,
+      searchMode,
+      selectedSymbolIds: selectedSymbol ? [selectedSymbol.id] : [],
+      direction,
+      depth,
+      camera: cameraState,
+      openPath: selectedSymbol?.path ?? null,
+    };
+  }
+
+  async function loadInvestigations(): Promise<void> {
+    investigations = await api<CodeGraphInvestigation[]>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/investigations`);
+    investigationsOpen = true;
+  }
+
+  async function saveInvestigation(): Promise<void> {
+    if (!investigationName.trim()) return;
+    investigationBusy = true;
+    try {
+      const path = currentInvestigationId
+        ? `/api/agent-room/workspaces/${data.workspaceId}/code-graph/investigations/${currentInvestigationId}`
+        : `/api/agent-room/workspaces/${data.workspaceId}/code-graph/investigations`;
+      const saved = await api<CodeGraphInvestigation>(path, {
+        method: currentInvestigationId ? 'PATCH' : 'POST',
+        body: JSON.stringify({ name: investigationName.trim(), state: investigationState() }),
+      });
+      currentInvestigationId = saved.id;
+      investigations = await api<CodeGraphInvestigation[]>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/investigations`);
+      toast.success(m['code_graph.investigation_saved']());
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : m['code_graph.investigation_error']());
+    } finally {
+      investigationBusy = false;
+    }
+  }
+
+  async function restoreInvestigation(item: CodeGraphInvestigation): Promise<void> {
+    currentInvestigationId = item.id;
+    investigationName = item.name;
+    projectId = item.state.projectId ?? 'all';
+    query = item.state.query;
+    searchMode = item.state.searchMode;
+    direction = item.state.direction;
+    depth = item.state.depth;
+    cameraState = item.state.camera;
+    investigationsOpen = false;
+    if (item.state.viewMode === 'changes') await loadChanges();
+    else if (item.state.viewMode === 'contracts') await loadContracts();
+    else if (item.state.viewMode === 'quality') await loadQuality();
+    else if (item.state.viewMode === 'semantic') await loadSemantic();
+    else if (item.state.viewMode === 'runtime') await loadRuntime();
+    else if (item.state.viewMode === 'operations') await loadOperations();
+    else if (item.state.viewMode === 'compare') await loadComparison();
+    else if (item.state.selectedSymbolIds[0]) {
+      await openSymbol(item.state.selectedSymbolIds[0]);
+      if (item.state.openPath) openSource();
+    }
+    else await loadOverview();
+  }
+
+  async function deleteInvestigation(item: CodeGraphInvestigation): Promise<void> {
+    await api(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/investigations/${item.id}`, { method: 'DELETE' });
+    if (currentInvestigationId === item.id) {
+      currentInvestigationId = null;
+      investigationName = '';
+    }
+    investigations = investigations.filter((candidate) => candidate.id !== item.id);
+  }
+
   async function importEvidence(): Promise<void> {
     const targetProjectId = projectId !== 'all'
       ? projectId
@@ -424,6 +730,18 @@
     return m['code_graph.evidence_auto']();
   }
 
+  function purposeLabel(purpose: CodeGraphContextPurpose): string {
+    if (purpose === 'implement') return m['code_graph.purpose_implement']();
+    if (purpose === 'review') return m['code_graph.purpose_review']();
+    if (purpose === 'test') return m['code_graph.purpose_test']();
+    return m['code_graph.purpose_investigate']();
+  }
+
+  function revisionLabel(revisionId: string, fallback: string): string {
+    const revision = revisions.find((item) => item.id === revisionId);
+    return revision ? `#${revision.sequence} · ${revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}` : fallback;
+  }
+
   async function createHandoff(kind: 'review' | 'task', scope: CodeGraphChangeScope): Promise<void> {
     const operation = `${kind}:${scope.id}`;
     handoffBusy = operation;
@@ -464,6 +782,25 @@
     } finally {
       loading = false;
     }
+  }
+
+  async function refreshCurrentView(): Promise<void> {
+    await loadStatus();
+    if (!hasIndexedGraph) {
+      graph = null;
+      await renderGraph(null);
+      return;
+    }
+    if (viewMode === 'changes') await loadChanges();
+    else if (viewMode === 'contracts') await loadContracts();
+    else if (viewMode === 'quality') await loadQuality();
+    else if (viewMode === 'semantic') await loadSemantic();
+    else if (viewMode === 'runtime') await loadRuntime();
+    else if (viewMode === 'operations') await loadOperations();
+    else if (viewMode === 'compare') await loadComparison();
+    else if (selectedSymbol) await openSymbol(selectedSymbol.id);
+    else if (query.trim()) await searchSymbols();
+    else await loadOverview();
   }
 
   async function indexWorkspace(): Promise<void> {
@@ -516,6 +853,7 @@
         api<CodeGraphSubgraph>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/symbols/${symbolId}/graph?${params}`),
       ]);
       selectedSymbol = symbol;
+      selectedRelationship = null;
       viewMode = 'overview';
       graph = nextGraph;
       results = [];
@@ -555,8 +893,12 @@
     if (!selectedSymbol?.path) return;
     const root = selectedSymbol.projectRelativePath;
     const path = !root || root === '.' ? selectedSymbol.path : `${root}/${selectedSymbol.path}`;
+    sessionStorage.setItem(`orkestrai:file-reveal:${data.workspaceId}:${path}`, JSON.stringify({
+      line: selectedSymbol.startLine ?? 1,
+      column: Math.max(1, (selectedSymbol.startColumn ?? 0) + 1),
+    }));
     window.dispatchEvent(new CustomEvent('orkestrai:open-file', {
-      detail: { workspaceId: data.workspaceId, path },
+      detail: { workspaceId: data.workspaceId, path, direction: 'horizontal' },
     }));
   }
 
@@ -572,7 +914,24 @@
   onMount(() => {
     let destroyed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let liveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     let socket: WebSocket | null = null;
+    const storedCamera = sessionStorage.getItem(`orkestrai:code-graph-camera:${data.workspaceId}:${id}`);
+    if (storedCamera) {
+      try { cameraState = JSON.parse(storedCamera) as CameraState; } catch { /* ignore invalid session state */ }
+    }
+    let editorLocateTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleEditorLocation = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string; path?: string; line?: number }>).detail;
+      if (detail?.workspaceId !== data.workspaceId || !detail.path || !detail.line) return;
+      if (editorLocateTimer) clearTimeout(editorLocateTimer);
+      editorLocateTimer = setTimeout(async () => {
+        const params = new URLSearchParams({ path: detail.path!, line: String(detail.line) });
+        const symbol = await api<CodeGraphSymbol | null>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/locate?${params}`).catch(() => null);
+        if (symbol && selectedSymbol?.id !== symbol.id) await openSymbol(symbol.id);
+      }, 180);
+    };
+    window.addEventListener('orkestrai:editor-location', handleEditorLocation);
     const connect = () => {
       if (destroyed) return;
       const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -580,7 +939,12 @@
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(String(event.data));
-          if (message.type === 'codeGraphChanged' && message.workspaceId === data.workspaceId) void load();
+          if (message.workspaceId !== data.workspaceId) return;
+          if (message.type === 'codeGraphChanged') void refreshCurrentView();
+          else if (viewMode === 'operations' && ['controlCenterChanged', 'workspaceChanged'].includes(message.type)) {
+            if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
+            liveRefreshTimer = setTimeout(() => void loadOperations(), 250);
+          }
         } catch {
           // PTY binary and non-JSON frames are unrelated to this node.
         }
@@ -594,6 +958,9 @@
     return () => {
       destroyed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
+      if (editorLocateTimer) clearTimeout(editorLocateTimer);
+      window.removeEventListener('orkestrai:editor-location', handleEditorLocation);
       socket?.close();
       renderSequence += 1;
       renderer?.kill();
@@ -686,7 +1053,7 @@
       </Button>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-[11px] text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${viewMode === 'contracts' || viewMode === 'quality' || viewMode === 'semantic' || viewMode === 'runtime' ? 'bg-[var(--app-accent-soft)]' : ''}`}
+          class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-[11px] text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${['contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(viewMode) ? 'bg-[var(--app-accent-soft)]' : ''}`}
           disabled={!hasIndexedGraph}
           aria-label={m['code_graph.intelligence_views']()}
         >
@@ -710,6 +1077,19 @@
           <DropdownMenu.Item onclick={() => void loadRuntime()}>
             <Activity size={13} class={runtimeLoading ? 'animate-pulse' : undefined} />
             {m['code_graph.runtime']()}{runtime ? ` (${runtime.counts.runs})` : ''}
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item onclick={() => void loadOperations()}>
+            <Bot size={13} class={operationsLoading ? 'animate-pulse' : undefined} />
+            {m['code_graph.operations']()}{operations ? ` (${activeAgents.length})` : ''}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => void loadComparison()}>
+            <GitCompareArrows size={13} class={comparisonLoading ? 'animate-pulse' : undefined} />
+            {m['code_graph.compare']()}
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item onclick={() => void loadInvestigations()}>
+            <Bookmark size={13} /> {m['code_graph.investigations']()}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -750,7 +1130,23 @@
       </div>
 
       <aside class="min-h-0 overflow-y-auto overscroll-contain bg-[var(--app-surface)] p-2">
-        {#if viewMode === 'changes' && changes}
+        {#if selectedRelationship}
+          <button class="mb-2 inline-flex items-center gap-1 text-[10px] text-[var(--app-secondary)] hover:underline" onclick={() => { selectedRelationship = null; }}>
+            <ArrowUpFromLine size={11} /> {m['code_graph.back_to_graph']()}
+          </button>
+          <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2.5">
+            <span class="mb-2 inline-flex rounded bg-[var(--app-accent-soft)] px-1.5 py-0.5 text-[8px] font-semibold text-[var(--app-accent)]">{selectedRelationship.classification === 'runtime' ? m['code_graph.runtime_relationship']() : selectedRelationship.classification === 'inferred' ? m['code_graph.inferred_relationship']() : m['code_graph.static_relationship']()}</span>
+            <strong class="block break-words text-[10px] leading-4">{selectedRelationship.summary}</strong>
+            <dl class="mt-2 space-y-1 text-[8px] text-[var(--app-text-muted)]">
+              <div><dt>{m['code_graph.provenance']()}</dt><dd class="break-all font-mono text-[var(--app-text)]">{selectedRelationship.provenance.path ?? m['code_graph.index_inference']()}:{selectedRelationship.provenance.line ?? 1}</dd></div>
+              <div><dt>{m['code_graph.confidence']()}</dt><dd class="text-[var(--app-text)]">{Math.round(selectedRelationship.provenance.confidence)}%</dd></div>
+            </dl>
+          </div>
+          <div class="grid grid-cols-2 gap-1">
+            <Button size="xs" variant="outline" onclick={() => void openSymbol(selectedRelationship!.source.id)}>{m['code_graph.source_symbol']()}</Button>
+            <Button size="xs" variant="outline" onclick={() => void openSymbol(selectedRelationship!.target.id)}>{m['code_graph.target_symbol']()}</Button>
+          </div>
+        {:else if viewMode === 'changes' && changes}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.change_impact']()}</strong>
             <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
@@ -773,6 +1169,12 @@
                         onclick={() => void createHandoff('review', scope)}
                       ><GitPullRequestArrow size={12} class={handoffBusy === `review:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
                     {/if}
+                    <HeaderIconButton
+                      label={m['code_graph.context']()}
+                      class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
+                      side="top"
+                      onclick={() => void openContext({ scopeId: scope.id })}
+                    ><Send size={12} /></HeaderIconButton>
                     <HeaderIconButton
                       label={m['code_graph.create_task']()}
                       class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
@@ -900,20 +1302,20 @@
             {:else}
               <div class="space-y-1">
                 {#each quality.findings as finding (finding.id)}
-                  <button
-                    class="w-full rounded border p-2 text-left hover:bg-[var(--app-hover)] {finding.severity === 'error' ? 'border-[var(--app-danger)]/30' : finding.severity === 'warning' ? 'border-[var(--app-warning)]/30' : 'border-[var(--app-border)]'}"
-                    onclick={() => finding.symbolIds[0] && void openSymbol(finding.symbolIds[0])}
-                  >
-                    <span class="flex items-start gap-2">
-                      <span class="mt-0.5 size-1.5 shrink-0 rounded-full {finding.severity === 'error' ? 'bg-[var(--app-danger)]' : finding.severity === 'warning' ? 'bg-[var(--app-warning)]' : 'bg-[var(--app-secondary)]'}"></span>
-                      <span class="min-w-0 flex-1">
-                        <strong class="block text-[9px] leading-3">{findingTitle(finding)}</strong>
-                        <span class="mt-0.5 block break-words text-[8px] leading-3 text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
-                        <span class="mt-0.5 block break-words font-mono text-[8px] leading-3 text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
-                        <span class="mt-1 block text-[8px] font-semibold text-[var(--app-secondary)]">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
+                  <div class="flex items-start gap-1 rounded border p-1 {finding.severity === 'error' ? 'border-[var(--app-danger)]/30' : finding.severity === 'warning' ? 'border-[var(--app-warning)]/30' : 'border-[var(--app-border)]'}">
+                    <button class="min-w-0 flex-1 rounded p-1 text-left hover:bg-[var(--app-hover)]" onclick={() => finding.symbolIds[0] && void openSymbol(finding.symbolIds[0])}>
+                      <span class="flex items-start gap-2">
+                        <span class="mt-0.5 size-1.5 shrink-0 rounded-full {finding.severity === 'error' ? 'bg-[var(--app-danger)]' : finding.severity === 'warning' ? 'bg-[var(--app-warning)]' : 'bg-[var(--app-secondary)]'}"></span>
+                        <span class="min-w-0 flex-1">
+                          <strong class="block text-[9px] leading-3">{findingTitle(finding)}</strong>
+                          <span class="mt-0.5 block break-words text-[8px] leading-3 text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
+                          <span class="mt-0.5 block break-words font-mono text-[8px] leading-3 text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
+                          <span class="mt-1 block text-[8px] font-semibold text-[var(--app-secondary)]">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                    <HeaderIconButton label={m['code_graph.context']()} class="grid size-6 shrink-0 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" side="left" onclick={() => void openContext({ findingId: finding.id })}><Send size={11} /></HeaderIconButton>
+                  </div>
                 {/each}
               </div>
             {/if}
@@ -993,6 +1395,75 @@
               </div>
             {/if}
           </section>
+        {:else if viewMode === 'operations' && operations}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.operations_title']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          <div class="mb-3 grid grid-cols-2 gap-1">
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{activeAgents.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.active_agents']()}</span></div>
+            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{operations.conflicts.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.edit_conflicts']()}</span></div>
+          </div>
+          {#if operations.conflicts.length}
+            <section class="mb-3 space-y-1 rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2">
+              <strong class="block text-[10px] text-[var(--app-danger)]">{m['code_graph.conflict_warning']()}</strong>
+              {#each operations.conflicts as conflict (conflict.id)}
+                {@const left = operations.agents.find((agent) => agent.nodeId === conflict.leftNodeId)}
+                {@const right = operations.agents.find((agent) => agent.nodeId === conflict.rightNodeId)}
+                <div class="border-t border-[var(--app-danger)]/20 pt-1.5 text-[8px] first:border-0 first:pt-0">
+                  <strong class="block text-[var(--app-text)]">{left?.title} ↔ {right?.title}</strong>
+                  <span class="block break-words text-[var(--app-text-muted)]">{conflict.sharedPaths.slice(0, 3).join(' · ') || m['code_graph.shared_symbols_count']({ count: conflict.sharedSymbolIds.length })}</span>
+                </div>
+              {/each}
+            </section>
+          {/if}
+          <section class="space-y-1">
+            {#each activeAgents as agent (agent.nodeId)}
+              {@const agentIndex = operations.agents.findIndex((candidate) => candidate.nodeId === agent.nodeId)}
+              <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => data.onJumpToNode?.(agent.nodeId)}>
+                <span class="flex items-center gap-1.5"><span class="size-2 rounded-full ring-1 ring-black/10" style={`background:${AGENT_COLORS[Math.max(0, agentIndex) % AGENT_COLORS.length]}`}></span><strong class="min-w-0 flex-1 truncate text-[9px]">{agent.title}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{agentStateLabel(agent.state)}</span></span>
+                <span class="mt-1 block truncate text-[8px] text-[var(--app-text-muted)]">{agent.task?.title ?? m['code_graph.no_active_task']()} · {agent.floorName ?? m['code_graph.main_workspace']()}</span>
+                <span class="mt-1 block text-[8px] text-[var(--app-secondary)]">{m['code_graph.active_symbols_count']({ count: agent.symbolIds.length })}</span>
+              </button>
+            {/each}
+          </section>
+        {:else if viewMode === 'compare'}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.compare_title']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          {#if revisions.length < 2}
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.compare_empty']()}</div>
+          {:else}
+            <div class="mb-3 space-y-1.5">
+              <Select.Root type="single" value={compareFrom} onValueChange={(value: string) => { compareFrom = value; void compareRevisions(projectId); }}>
+                <Select.Trigger size="sm" class="w-full">{revisionLabel(compareFrom, m['code_graph.compare_from']())}</Select.Trigger>
+                <Select.Content>{#each revisions as revision (revision.id)}<Select.Item value={revision.id} disabled={revision.id === compareTo}>#{revision.sequence} · {revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}</Select.Item>{/each}</Select.Content>
+              </Select.Root>
+              <Select.Root type="single" value={compareTo} onValueChange={(value: string) => { compareTo = value; void compareRevisions(projectId); }}>
+                <Select.Trigger size="sm" class="w-full">{revisionLabel(compareTo, m['code_graph.compare_to']())}</Select.Trigger>
+                <Select.Content>{#each revisions as revision (revision.id)}<Select.Item value={revision.id} disabled={revision.id === compareFrom}>#{revision.sequence} · {revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}</Select.Item>{/each}</Select.Content>
+              </Select.Root>
+            </div>
+            {#if comparison}
+              <div class="mb-3 grid grid-cols-3 gap-1">
+                <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">+{comparison.added.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.comparison_added']()}</span></div>
+                <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">~{comparison.modified.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.comparison_modified']()}</span></div>
+                <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">-{comparison.removed.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.comparison_removed']()}</span></div>
+              </div>
+              <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 py-1.5 text-[8px] text-[var(--app-text-muted)]">
+                {m['code_graph.relationship_changes']({ added: comparison.relationships.added.length, modified: comparison.relationships.modified.length, removed: comparison.relationships.removed.length })}
+              </div>
+              <div class="space-y-1">
+                {#each [...comparison.added.map((symbol) => ({ symbol, state: 'added' })), ...comparison.modified.map((item) => ({ symbol: item.after, state: 'modified' })), ...comparison.removed.map((symbol) => ({ symbol, state: 'removed' }))].slice(0, 80) as item (`${item.state}:${item.symbol.fingerprint}`)}
+                  <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
+                    <span class="block truncate text-[9px] font-semibold">{item.symbol.name}</span>
+                    <span class="block truncate font-mono text-[8px] text-[var(--app-text-muted)]">{comparisonStateLabel(item.state)} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {/if}
         {:else if results.length}
           <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
           <div class="space-y-1">
@@ -1022,9 +1493,14 @@
             {#if selectedSymbol.documentation}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.documentation']()}</dt><dd class="mt-0.5 break-words leading-4">{selectedSymbol.documentation}</dd></div>{/if}
           </dl>
           {#if selectedSymbol.path}
-            <Button size="xs" variant="outline" class="mt-3 w-full" onclick={openSource}>
-              <ExternalLink size={11} /> {m['code_graph.open_source']()}
-            </Button>
+            <div class="mt-3 grid grid-cols-2 gap-1">
+              <Button size="xs" variant="outline" class="w-full" onclick={openSource}>
+                <ExternalLink size={11} /> {m['code_graph.open_source']()}
+              </Button>
+              <Button size="xs" variant="outline" class="w-full" onclick={() => void openContext({ symbolIds: [selectedSymbol!.id] })}>
+                <Send size={11} /> {m['code_graph.context']()}
+              </Button>
+            </div>
           {/if}
           {#if selectedSymbol.revisionId === 'live' && typeof selectedSymbol.metadata.nodeId === 'string'}
             <Button size="xs" variant="outline" class="mt-3 w-full" onclick={() => openApiClient(selectedSymbol!)}>
@@ -1060,3 +1536,116 @@
     </div>
   </div>
 </NodeShell>
+
+<Dialog.Root bind:open={investigationsOpen}>
+  <Dialog.Content class="flex max-h-[min(760px,88vh)] flex-col gap-0 overflow-hidden overscroll-contain p-0 sm:max-w-[min(720px,92vw)]">
+    <Dialog.Header class="border-b border-[var(--app-border)] px-5 py-4 pr-12">
+      <Dialog.Title>{m['code_graph.investigations_title']()}</Dialog.Title>
+      <Dialog.Description>{m['code_graph.investigations_description']()}</Dialog.Description>
+    </Dialog.Header>
+    <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_220px] max-[620px]:grid-cols-1">
+      <div class="min-h-0 overflow-y-auto p-4">
+        <div class="mb-2 flex gap-2">
+          <Input bind:value={investigationName} maxlength={120} placeholder={m['code_graph.investigation_name']()} />
+          <Button disabled={investigationBusy || !investigationName.trim()} onclick={() => void saveInvestigation()}><Bookmark size={14} /> {m['code_graph.save']()}</Button>
+        </div>
+        <p class="text-[10px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.investigation_current_state']()}</p>
+      </div>
+      <aside class="min-h-0 overflow-y-auto border-l border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3 max-[620px]:max-h-64 max-[620px]:border-t max-[620px]:border-l-0">
+        <strong class="mb-2 block text-[10px] uppercase text-[var(--app-text-muted)]">{m['code_graph.saved_investigations']()}</strong>
+        <div class="space-y-1">
+          {#each investigations as item (item.id)}
+            <div class="flex items-center gap-1 rounded border border-[var(--app-border)] bg-[var(--app-surface)] p-1">
+              <button class="min-w-0 flex-1 rounded px-1.5 py-1 text-left hover:bg-[var(--app-hover)]" onclick={() => void restoreInvestigation(item)}>
+                <strong class="block truncate text-[10px]">{item.name}</strong>
+                <span class="block truncate text-[8px] text-[var(--app-text-muted)]">{viewModeLabel(item.state.viewMode)} · {new Date(item.updatedAt).toLocaleString(localeState.current)}</span>
+              </button>
+              <HeaderIconButton label={m['settings.delete']()} class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger)]/10 hover:text-[var(--app-danger)]" side="left" onclick={() => { pendingInvestigationDelete = item; }}><Trash2 size={12} /></HeaderIconButton>
+            </div>
+          {:else}
+            <p class="py-4 text-center text-[9px] text-[var(--app-text-muted)]">{m['code_graph.investigations_empty']()}</p>
+          {/each}
+        </div>
+      </aside>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={contextOpen}>
+  <Dialog.Content class="flex max-h-[min(820px,92vh)] min-h-[min(620px,86vh)] flex-col gap-0 overflow-hidden overscroll-contain p-0 sm:max-w-[min(1040px,94vw)]">
+    <Dialog.Header class="border-b border-[var(--app-border)] px-5 py-4 pr-12">
+      <Dialog.Title>{m['code_graph.context_title']()}</Dialog.Title>
+      <Dialog.Description>{m['code_graph.context_description']()}</Dialog.Description>
+    </Dialog.Header>
+    <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] max-[760px]:grid-cols-1">
+      <div class="min-h-0 overflow-auto bg-[var(--app-canvas)] p-4">
+        {#if contextBusy && !contextPackage}
+          <div class="grid h-full place-items-center"><RefreshCw size={20} class="animate-spin text-[var(--app-accent)]" /></div>
+        {:else if contextPackage}
+          <div class="mb-3 flex flex-wrap gap-1.5 text-[9px] text-[var(--app-text-muted)]">
+            <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_tokens']({ used: contextPackage.estimatedTokens, max: contextPackage.maxTokens })}</span>
+            <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_symbols']({ count: contextPackage.symbols.length })}</span>
+            <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_relationships']({ count: contextPackage.relationships.length })}</span>
+            {#if contextPackage.truncated}<span class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 px-2 py-1 text-[var(--app-warning)]">{m['code_graph.truncated']()}</span>{/if}
+          </div>
+          <pre class="whitespace-pre-wrap break-words font-mono text-[10px] leading-5 text-[var(--app-text)]">{contextPackage.markdown}</pre>
+        {/if}
+      </div>
+      <aside class="min-h-0 overflow-y-auto border-l border-[var(--app-border)] bg-[var(--app-surface)] p-4 max-[760px]:border-t max-[760px]:border-l-0">
+        <div class="space-y-4">
+          <label class="block"><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.context_purpose']()}</span>
+            <Select.Root type="single" value={contextPurpose} onValueChange={(value: string) => { contextPurpose = value as CodeGraphContextPurpose; void buildContext(); }}>
+              <Select.Trigger class="w-full">{purposeLabel(contextPurpose)}</Select.Trigger>
+              <Select.Content>
+                <Select.Item value="investigate">{m['code_graph.purpose_investigate']()}</Select.Item>
+                <Select.Item value="implement">{m['code_graph.purpose_implement']()}</Select.Item>
+                <Select.Item value="review">{m['code_graph.purpose_review']()}</Select.Item>
+                <Select.Item value="test">{m['code_graph.purpose_test']()}</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </label>
+          <label class="block"><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.token_budget']()}</span><Input type="number" min="500" max="16000" step="500" bind:value={contextTokens} onblur={() => void buildContext()} /></label>
+          <div>
+            <span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.send_to']()}</span>
+            <div class="grid grid-cols-2 gap-1">
+              {#each ['leader', 'agent', 'council', 'task'] as target (target)}
+                <Button size="xs" variant={contextHandoff === target ? 'secondary' : 'outline'} onclick={() => { contextHandoff = target as typeof contextHandoff; }}>{target === 'leader' ? m['code_graph.leader']() : target === 'agent' ? m['code_graph.agent']() : target === 'council' ? m['code_graph.council']() : m['code_graph.task']()}</Button>
+              {/each}
+            </div>
+          </div>
+          {#if contextHandoff === 'agent'}
+            <label class="block"><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.target_agent']()}</span>
+              <Select.Root type="single" value={contextTarget} onValueChange={(value: string) => { contextTarget = value; }}>
+                <Select.Trigger class="w-full">{activeAgents.find((agent) => agent.nodeId === contextTarget)?.title ?? m['code_graph.select_agent']()}</Select.Trigger>
+                <Select.Content>{#each activeAgents as agent (agent.nodeId)}<Select.Item value={agent.nodeId}>{agent.title}</Select.Item>{/each}</Select.Content>
+              </Select.Root>
+            </label>
+          {:else if contextHandoff === 'council'}
+            <div><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.council_agents']()}</span>
+              <div class="space-y-1">
+                {#each activeAgents as agent (agent.nodeId)}
+                  <label class="flex min-h-8 items-center gap-2 rounded border border-[var(--app-border)] px-2 text-[10px] hover:bg-[var(--app-hover)]"><Checkbox checked={councilTargets.includes(agent.nodeId)} disabled={!councilTargets.includes(agent.nodeId) && councilTargets.length >= 5} onCheckedChange={(checked: boolean | 'indeterminate') => { councilTargets = checked === true ? [...councilTargets, agent.nodeId] : councilTargets.filter((id) => id !== agent.nodeId); }} /><span class="truncate">{agent.title}</span></label>
+                {/each}
+              </div>
+            </div>
+          {/if}
+          <Button variant="outline" class="w-full" disabled={contextBusy} onclick={() => void buildContext()}><RefreshCw size={14} class={contextBusy ? 'animate-spin' : undefined} /> {m['code_graph.rebuild_context']()}</Button>
+          <Button class="w-full" disabled={contextBusy || !contextPackage || (contextHandoff === 'agent' && !contextTarget) || (contextHandoff === 'council' && councilTargets.length < 2)} onclick={() => void handoffContext()}><Send size={14} /> {m['code_graph.send_context']()}</Button>
+        </div>
+      </aside>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
+
+<AlertDialog.Root open={Boolean(pendingInvestigationDelete)} onOpenChange={(open) => !open && (pendingInvestigationDelete = null)}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{m['code_graph.delete_investigation_title']()}</AlertDialog.Title>
+      <AlertDialog.Description>{m['code_graph.delete_investigation_description']({ name: pendingInvestigationDelete?.name ?? '' })}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>{m['automation.cancel']()}</AlertDialog.Cancel>
+      <AlertDialog.Action class="bg-[var(--app-danger)] text-white hover:opacity-90" onclick={() => { if (pendingInvestigationDelete) void deleteInvestigation(pendingInvestigationDelete); pendingInvestigationDelete = null; }}>{m['settings.delete']()}</AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

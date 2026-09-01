@@ -129,6 +129,11 @@ export class CodeGraphIndexService {
     return codeGraphRepository.symbol(workspaceId, symbolId);
   }
 
+  async revisions(workspaceId: string, projectId?: string, limit = 30) {
+    await this.assertWorkspace(workspaceId);
+    return codeGraphRepository.revisionSummaries(workspaceId, projectId, limit);
+  }
+
   async overview(workspaceId: string, projectId?: string, limit?: number): Promise<CodeGraphSubgraph> {
     await this.assertWorkspace(workspaceId);
     return codeGraphRepository.overview(workspaceId, projectId, limit);

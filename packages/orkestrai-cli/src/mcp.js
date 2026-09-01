@@ -57,7 +57,17 @@ const TOOLS = [
   { name: 'code_graph_semantic_search', description: 'Busca simbolos por intencao no indice semantico local e retorna pontuacao e motivos explicaveis.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 120 }, projectId: { type: 'string', format: 'uuid' }, kinds: { type: 'array', items: { type: 'string', enum: ['module', 'namespace', 'class', 'interface', 'type', 'enum', 'function', 'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'resource', 'external'] } }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 } }, required: ['query'] } },
   { name: 'code_graph_evidence', description: 'Lista cobertura, falhas e chamadas observadas importadas para o grafo, incluindo relacoes vistas apenas em runtime.', inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 50, maximum: 5000, default: 2000 } } } },
   { name: 'code_graph_evidence_import', description: 'Importa LCOV, JUnit, traceback ou JSON estruturado de um caminho relativo a um repositorio aprovado. Persiste apenas evidencias derivadas e limitadas.', inputSchema: { type: 'object', properties: { projectId: { type: 'string', format: 'uuid' }, path: { type: 'string', minLength: 1, maxLength: 1024 }, kind: { type: 'string', enum: ['auto', 'coverage', 'test', 'trace'], default: 'auto' }, label: { type: 'string', minLength: 1, maxLength: 120 } }, required: ['projectId', 'path'] } },
-  { name: 'code_graph_handoff', description: 'Transforma um escopo retornado por code_graph_changes em uma review rastreavel do working tree principal ou em uma tarefa Kanban para o lider.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['review', 'task'] }, scopeId: { type: 'string', pattern: '^(workspace|floor:[0-9a-f-]{36})$' }, title: { type: 'string', minLength: 1, maxLength: 160 }, locale: { type: 'string', enum: ['en', 'pt-BR', 'es'], default: 'en' } }, required: ['kind', 'scopeId', 'title'] } },
+  { name: 'code_graph_context', description: 'Monta um pacote de contexto limitado por tokens, com simbolos, relacoes explicaveis, testes, achados e trechos redigidos. Nao persiste codigo-fonte.', inputSchema: { type: 'object', properties: { symbolIds: { type: 'array', maxItems: 24, items: { type: 'string', format: 'uuid' } }, scopeId: { type: 'string', pattern: '^(workspace|floor:[0-9a-f-]{36})$' }, findingId: { type: 'string' }, purpose: { type: 'string', enum: ['investigate', 'implement', 'review', 'test'], default: 'investigate' }, maxTokens: { type: 'integer', minimum: 500, maximum: 16000, default: 4000 }, depth: { type: 'integer', minimum: 1, maximum: 3, default: 2 }, includeSource: { type: 'boolean', default: true } }, anyOf: [{ required: ['symbolIds'] }, { required: ['scopeId'] }, { required: ['findingId'] }] } },
+  { name: 'code_graph_operations', description: 'Projeta agentes, tarefas e Floors ativos sobre o grafo e sinaliza edicoes concorrentes no mesmo arquivo ou simbolo.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'code_graph_explain', description: 'Explica uma relacao com origem, destino, local, confianca e classificacao estatica, inferida ou runtime.', inputSchema: { type: 'object', properties: { edgeId: { type: 'string', minLength: 1, maxLength: 160, pattern: '^[A-Za-z0-9:_-]+$' } }, required: ['edgeId'] } },
+  { name: 'code_graph_locate', description: 'Localiza no grafo o simbolo que contem uma linha de um arquivo aprovado.', inputSchema: { type: 'object', properties: { path: { type: 'string', minLength: 1, maxLength: 1024 }, line: { type: 'integer', minimum: 1 } }, required: ['path', 'line'] } },
+  { name: 'code_graph_revisions', description: 'Lista ate 30 revisoes indexadas que ainda podem ser comparadas.', inputSchema: { type: 'object', properties: { projectId: { type: 'string', format: 'uuid' }, limit: { type: 'integer', minimum: 1, maximum: 30, default: 30 } } } },
+  { name: 'code_graph_compare', description: 'Compara dois manifestos indexados e retorna simbolos e relacoes adicionados, removidos e modificados.', inputSchema: { type: 'object', properties: { projectId: { type: 'string', format: 'uuid' }, from: { type: 'string', format: 'uuid' }, to: { type: 'string', format: 'uuid' } }, required: ['projectId'] } },
+  { name: 'code_graph_investigation_list', description: 'Lista investigacoes nomeadas salvas para retomar a mesma consulta e viewport.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'code_graph_investigation_read', description: 'Le uma investigacao nomeada salva.', inputSchema: { type: 'object', properties: { investigationId: { type: 'string', format: 'uuid' } }, required: ['investigationId'] } },
+  { name: 'code_graph_investigation_save', description: 'Salva ou atualiza uma investigacao nomeada com filtros, selecao e camera.', inputSchema: { type: 'object', properties: { investigationId: { type: 'string', format: 'uuid' }, name: { type: 'string', minLength: 1, maxLength: 120 }, state: { type: 'object', properties: { projectId: { type: ['string', 'null'] }, viewMode: { type: 'string', enum: ['overview', 'changes', 'contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'] }, query: { type: 'string', maxLength: 120 }, searchMode: { type: 'string', enum: ['lexical', 'semantic'] }, selectedSymbolIds: { type: 'array', maxItems: 24, items: { type: 'string', minLength: 1, maxLength: 160, pattern: '^[A-Za-z0-9:_-]+$' } }, direction: { type: 'string', enum: ['incoming', 'outgoing', 'both'] }, depth: { type: 'integer', minimum: 1, maximum: 4 }, camera: { type: ['object', 'null'] }, openPath: { type: ['string', 'null'] } }, required: ['projectId', 'viewMode', 'query', 'searchMode', 'selectedSymbolIds', 'direction', 'depth', 'camera', 'openPath'] } }, required: ['name', 'state'] } },
+  { name: 'code_graph_investigation_delete', description: 'Remove uma investigacao nomeada sem alterar o grafo.', inputSchema: { type: 'object', properties: { investigationId: { type: 'string', format: 'uuid' } }, required: ['investigationId'] } },
+  { name: 'code_graph_handoff', description: 'Cria um artefato rastreavel a partir de mudancas ou contexto: review, tarefa, envio ao lider/agente ou Council.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['review', 'task', 'leader', 'agent', 'council'] }, scopeId: { type: 'string', pattern: '^(workspace|floor:[0-9a-f-]{36})$' }, title: { type: 'string', minLength: 1, maxLength: 160 }, locale: { type: 'string', enum: ['en', 'pt-BR', 'es'], default: 'en' }, context: { type: 'object', properties: { selection: { type: 'object', properties: { symbolIds: { type: 'array', maxItems: 24, items: { type: 'string', format: 'uuid' } }, scopeId: { type: 'string' }, findingId: { type: 'string' } } }, purpose: { type: 'string', enum: ['investigate', 'implement', 'review', 'test'] }, maxTokens: { type: 'integer', minimum: 500, maximum: 16000 }, depth: { type: 'integer', minimum: 1, maximum: 3 }, includeSource: { type: 'boolean' } }, required: ['selection', 'purpose'] }, targetNodeId: { type: 'string', format: 'uuid' }, targetNodeIds: { type: 'array', minItems: 2, maxItems: 5, items: { type: 'string', format: 'uuid' } } }, required: ['kind', 'title'] } },
   { name: 'huddle_list', description: 'Lista huddles e retorna a sessao selecionada com participantes e transcricao.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' } } } },
   { name: 'huddle_say', description: 'Registra uma fala deste agente em um huddle ativo, sem disparar respostas recursivas.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 10000 } }, required: ['huddleId', 'text'] } },
   { name: 'ask', description: 'Envia mensagem a outro agente e aguarda resposta confirmada. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' } }, required: ['agent', 'message'] } },
@@ -248,6 +258,44 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     }
     case 'code_graph_evidence_import':
       return bridge('POST', '/api/agent-room/bridge/code-graph/evidence', args);
+    case 'code_graph_context':
+      return bridge('POST', '/api/agent-room/bridge/code-graph/context', {
+        selection: { symbolIds: args.symbolIds, scopeId: args.scopeId, findingId: args.findingId },
+        purpose: args.purpose ?? 'investigate',
+        maxTokens: args.maxTokens ?? 4000,
+        depth: args.depth ?? 2,
+        includeSource: args.includeSource ?? true,
+      });
+    case 'code_graph_operations':
+      return bridge('GET', '/api/agent-room/bridge/code-graph/operations');
+    case 'code_graph_explain':
+      return bridge('GET', `/api/agent-room/bridge/code-graph/relationships/${encodeURIComponent(args.edgeId)}`);
+    case 'code_graph_locate': {
+      const params = new URLSearchParams({ path: args.path, line: String(args.line) });
+      return bridge('GET', `/api/agent-room/bridge/code-graph/locate?${params}`);
+    }
+    case 'code_graph_revisions': {
+      const params = new URLSearchParams();
+      if (args.projectId) params.set('projectId', args.projectId);
+      if (args.limit) params.set('limit', String(args.limit));
+      return bridge('GET', `/api/agent-room/bridge/code-graph/revisions?${params}`);
+    }
+    case 'code_graph_compare': {
+      const params = new URLSearchParams({ projectId: args.projectId });
+      if (args.from) params.set('from', args.from);
+      if (args.to) params.set('to', args.to);
+      return bridge('GET', `/api/agent-room/bridge/code-graph/compare?${params}`);
+    }
+    case 'code_graph_investigation_list':
+      return bridge('GET', '/api/agent-room/bridge/code-graph/investigations');
+    case 'code_graph_investigation_read':
+      return bridge('GET', `/api/agent-room/bridge/code-graph/investigations/${encodeURIComponent(args.investigationId)}`);
+    case 'code_graph_investigation_save':
+      return args.investigationId
+        ? bridge('PATCH', `/api/agent-room/bridge/code-graph/investigations/${encodeURIComponent(args.investigationId)}`, { name: args.name, state: args.state })
+        : bridge('POST', '/api/agent-room/bridge/code-graph/investigations', { name: args.name, state: args.state });
+    case 'code_graph_investigation_delete':
+      return bridge('DELETE', `/api/agent-room/bridge/code-graph/investigations/${encodeURIComponent(args.investigationId)}`);
     case 'code_graph_handoff':
       return bridge('POST', '/api/agent-room/bridge/code-graph/handoffs', args);
     case 'huddle_list': {

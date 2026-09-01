@@ -1733,6 +1733,26 @@ export const TOURS_ES: Tour[] = [
         body: 'Abre Cambios para proyectar el workspace y los Pisos activos en el mismo grafo. Los símbolos rojos cambiaron directamente, las rutas ámbar indican pruebas probables y el panel lateral muestra archivos o símbolos dependientes compartidos entre Pisos. Los agentes reciben la misma evidencia limitada con code_graph_changes.',
       },
       {
+        id: 'explain-and-sync-source',
+        title: 'Explica la evidencia y abre el código',
+        body: 'Selecciona una relación para inspeccionar tipo, confianza, origen y procedencia estática o de ejecución. Abre cualquiera de sus extremos en Monaco; seleccionar un símbolo desde el editor actualiza el grafo conservando la cámara.',
+      },
+      {
+        id: 'inspect-live-ownership',
+        title: 'Mira quién está cambiando qué',
+        body: 'Abre Análisis → Trabajo activo para superponer agentes, tareas Kanban y Pisos sobre los archivos y símbolos modificados. Los conflictos identifican propiedad simultánea para que abras al agente o la tarea responsable antes de coordinar.',
+      },
+      {
+        id: 'build-bounded-context',
+        title: 'Envía contexto revisado y limitado',
+        body: 'Desde un símbolo, alcance de cambios o hallazgo de calidad, elige un presupuesto de 500 a 16.000 tokens y revisa el paquete exacto. Envíalo al líder, a un agente, al Council o a una tarea trazable; la revisión y los ids de origen del grafo acompañan el handoff.',
+      },
+      {
+        id: 'compare-and-resume-investigation',
+        title: 'Compara y retoma investigaciones',
+        body: 'Compara revisiones retenidas para inspeccionar símbolos o relaciones agregados, eliminados y modificados. Guarda una investigación con nombre que conserve proyecto, vista, filtros, selección, cámara y código abierto, y restáurala después desde el mismo nodo.',
+      },
+      {
         id: 'handoff-change-impact',
         title: 'Convierte la evidencia en acción',
         body: 'Usa el icono de revisión en el alcance del workspace para crear un elemento en Review Center ligado a la revisión Git actual, o el icono de tarea en cualquier alcance de workspace o Piso para crear una tarea Kanban para el líder. Los agentes usan code_graph_handoff para la misma acción protegida.',

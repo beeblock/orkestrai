@@ -191,19 +191,23 @@ export type CodeGraphChangeOptions = {
 };
 
 export type CodeGraphHandoffOptions = {
-  kind: 'review' | 'task';
-  scopeId: string;
+  kind: 'review' | 'task' | 'leader' | 'agent' | 'council';
+  scopeId?: string;
   title: string;
   locale: 'pt-BR' | 'en' | 'es';
+  context?: CodeGraphContextOptions;
+  targetNodeId?: string;
+  targetNodeIds?: string[];
 };
 
 export type CodeGraphHandoffResult = {
   kind: CodeGraphHandoffOptions['kind'];
-  scopeId: string;
+  scopeId: string | null;
   artifact: {
     id: string;
     title: string;
     status: string;
+    type?: 'review' | 'task' | 'council';
   };
 };
 
@@ -378,4 +382,177 @@ export type CodeGraphEvidenceImportOptions = {
   path: string;
   kind?: 'auto' | CodeGraphEvidenceKind;
   label?: string;
+};
+
+export const CODE_GRAPH_CONTEXT_PURPOSES = ['investigate', 'implement', 'review', 'test'] as const;
+export type CodeGraphContextPurpose = (typeof CODE_GRAPH_CONTEXT_PURPOSES)[number];
+
+export type CodeGraphContextSelection = {
+  symbolIds?: string[];
+  scopeId?: string;
+  findingId?: string;
+};
+
+export type CodeGraphSourceExcerpt = {
+  symbolId: string;
+  projectId: string;
+  path: string;
+  startLine: number;
+  endLine: number;
+  language: CodeGraphLanguage | null;
+  content: string;
+  redacted: boolean;
+};
+
+export type CodeGraphRelationshipExplanation = {
+  edge: CodeGraphEdge;
+  source: CodeGraphSymbol;
+  target: CodeGraphSymbol;
+  classification: 'static' | 'inferred' | 'runtime';
+  provenance: {
+    path: string | null;
+    line: number | null;
+    column: number | null;
+    confidence: number;
+    runtimeOnly: boolean;
+  };
+  summary: string;
+};
+
+export type CodeGraphContextPackage = {
+  id: string;
+  workspaceId: string;
+  purpose: CodeGraphContextPurpose;
+  generatedAt: string;
+  revisionIds: string[];
+  selectedSymbolIds: string[];
+  symbols: CodeGraphSymbol[];
+  relationships: CodeGraphRelationshipExplanation[];
+  excerpts: CodeGraphSourceExcerpt[];
+  likelyTests: string[];
+  findings: CodeGraphFinding[];
+  estimatedTokens: number;
+  maxTokens: number;
+  truncated: boolean;
+  omitted: { symbols: number; relationships: number; excerpts: number };
+  markdown: string;
+};
+
+export type CodeGraphContextOptions = {
+  selection: CodeGraphContextSelection;
+  purpose: CodeGraphContextPurpose;
+  maxTokens?: number;
+  depth?: number;
+  includeSource?: boolean;
+};
+
+export type CodeGraphInvestigationState = {
+  projectId: string | null;
+  viewMode: 'overview' | 'changes' | 'contracts' | 'quality' | 'semantic' | 'runtime' | 'operations' | 'compare';
+  query: string;
+  searchMode: 'lexical' | 'semantic';
+  selectedSymbolIds: string[];
+  direction: 'incoming' | 'outgoing' | 'both';
+  depth: number;
+  camera: { x: number; y: number; ratio: number; angle: number } | null;
+  openPath: string | null;
+};
+
+export type CodeGraphInvestigation = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  state: CodeGraphInvestigationState;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CodeGraphRevisionSummary = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  projectName: string;
+  sequence: number;
+  sourceHash: string;
+  gitHead: string | null;
+  stats: CodeGraphStats;
+  completedAt: string;
+  current: boolean;
+};
+
+export type CodeGraphRevisionSymbol = {
+  fingerprint: string;
+  name: string;
+  qualifiedName: string;
+  kind: CodeGraphSymbolKind;
+  path: string | null;
+  startLine: number | null;
+  endLine: number | null;
+  contentHash: string;
+};
+
+export type CodeGraphRevisionManifestData = {
+  version: 1;
+  files: Array<{ path: string; contentHash: string }>;
+  symbols: CodeGraphRevisionSymbol[];
+  relationships: CodeGraphRevisionRelationship[];
+};
+
+export type CodeGraphRevisionRelationship = {
+  fingerprint: string;
+  sourceFingerprint: string;
+  targetFingerprint: string;
+  kind: CodeGraphEdgeKind;
+  sitePath: string | null;
+  siteLine: number | null;
+  siteColumn: number | null;
+  confidence: number;
+  contentHash: string;
+};
+
+export type CodeGraphRevisionComparison = {
+  projectId: string;
+  projectName: string;
+  from: CodeGraphRevisionSummary;
+  to: CodeGraphRevisionSummary;
+  added: CodeGraphRevisionSymbol[];
+  removed: CodeGraphRevisionSymbol[];
+  modified: Array<{ before: CodeGraphRevisionSymbol; after: CodeGraphRevisionSymbol }>;
+  unchanged: number;
+  relationships: {
+    added: CodeGraphRevisionRelationship[];
+    removed: CodeGraphRevisionRelationship[];
+    modified: Array<{ before: CodeGraphRevisionRelationship; after: CodeGraphRevisionRelationship }>;
+    unchanged: number;
+  };
+  truncated: boolean;
+};
+
+export type CodeGraphAgentOverlay = {
+  nodeId: string;
+  title: string;
+  provider: string | null;
+  state: string;
+  floorId: string | null;
+  floorName: string | null;
+  task: { id: string; title: string; status: string } | null;
+  symbolIds: string[];
+  paths: string[];
+};
+
+export type CodeGraphAgentConflict = {
+  id: string;
+  severity: 'warning' | 'error';
+  leftNodeId: string;
+  rightNodeId: string;
+  sharedSymbolIds: string[];
+  sharedPaths: string[];
+};
+
+export type CodeGraphOperationsSnapshot = {
+  generatedAt: string;
+  agents: CodeGraphAgentOverlay[];
+  conflicts: CodeGraphAgentConflict[];
+  graph: CodeGraphSubgraph;
 };

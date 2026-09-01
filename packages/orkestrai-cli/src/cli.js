@@ -41,7 +41,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
-  orkestrai graph status | graph index [--project <uuid>] | graph changes [--depth <1-3>] [--limit <n>] | graph contracts [--limit <n>] [--graph] | graph quality [--limit <n>] [--graph] | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph handoff <review|task> <scopeId> <titulo> [--locale en|pt-BR|es] | graph search <consulta> [--project <uuid>] [--kinds <csv>] [--limit <n>] | graph symbol <symbolId> | graph neighbors <symbolId> [--direction incoming|outgoing|both] [--depth <1-4>] [--kinds <csv>] [--limit <n>] [--json]
+  orkestrai graph status | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
   orkestrai memory list [consulta] [--history] [--json]
   orkestrai memory add <titulo> --content <texto> --source-label <fonte> [--kind fact|decision|preference|constraint|reference|lesson] [--source-type user|note|task|message|file|url|git|review|council|agent] [--source-id <id>] [--source-uri <path-ou-url>] [--source-excerpt <trecho>] [--tags <csv>] [--confidence <0-100>] [--pin]
   orkestrai memory revise <id> --title <titulo> --content <texto> --kind <tipo> --sources <json> --base-revision <n> --base-updated-at <iso>
@@ -377,20 +377,126 @@ export async function run(argv, options = {}) {
         }
         return 0;
       }
-      if (action === 'handoff') {
-        const [scopeId, ...titleParts] = queryParts;
-        const title = titleParts.join(' ').trim();
-        if (!['review', 'task'].includes(value) || !scopeId || !title) {
-          throw new Error('Usage: orkestrai graph handoff <review|task> <scopeId> <title> [--locale en|pt-BR|es]');
+      if (action === 'context') {
+        const symbolIds = String(flags.symbols ?? value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+        const selection = {
+          symbolIds: symbolIds.length ? symbolIds : undefined,
+          scopeId: flags.scope ? String(flags.scope) : undefined,
+          findingId: flags.finding ? String(flags.finding) : undefined,
+        };
+        if (!selection.symbolIds && !selection.scopeId && !selection.findingId) {
+          throw new Error('Usage: orkestrai graph context <symbolIds-csv> [--scope <scopeId>] [--finding <findingId>] [--purpose <purpose>] [--tokens <n>]');
         }
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/code-graph/context', {
+          selection,
+          purpose: flags.purpose ?? 'investigate',
+          maxTokens: flags.tokens ? Number(flags.tokens) : 4000,
+          depth: flags.depth ? Number(flags.depth) : 2,
+          includeSource: !flags['no-source'],
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(data.markdown);
+        return 0;
+      }
+      if (action === 'operations') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/code-graph/operations');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          out(`Operations: ${data.agents.length} agents · ${data.graph.nodes.length} active symbols · ${data.conflicts.length} conflicts.`);
+          for (const conflict of data.conflicts) out(`- ${conflict.severity}: ${conflict.sharedSymbolIds.length} symbols · ${conflict.sharedPaths.join(', ')}`);
+        }
+        return 0;
+      }
+      if (action === 'explain') {
+        if (!value) throw new Error('Usage: orkestrai graph explain <edgeId>');
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/relationships/${encodeURIComponent(value)}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`${data.summary}\n${data.classification} · confidence ${data.provenance.confidence}${data.provenance.runtimeOnly ? ' · runtime-only' : ''}`);
+        return 0;
+      }
+      if (action === 'locate') {
+        const line = Number(queryParts[0]);
+        if (!value || !Number.isInteger(line) || line < 1) throw new Error('Usage: orkestrai graph locate <path> <line>');
+        const params = new URLSearchParams({ path: value, line: String(line) });
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/locate?${params}`);
+        out(JSON.stringify(data, null, 2));
+        return 0;
+      }
+      if (action === 'revisions') {
+        const params = new URLSearchParams();
+        if (value) params.set('projectId', value);
+        if (flags.limit) params.set('limit', String(flags.limit));
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/revisions?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else for (const revision of data) out(`- ${revision.projectName} #${revision.sequence}${revision.current ? ' [current]' : ''} ${revision.gitHead ?? revision.sourceHash.slice(0, 10)} (${revision.id})`);
+        return 0;
+      }
+      if (action === 'compare') {
+        if (!value) throw new Error('Usage: orkestrai graph compare <projectId> [fromRevision] [toRevision]');
+        const params = new URLSearchParams({ projectId: value });
+        if (queryParts[0]) params.set('from', queryParts[0]);
+        if (queryParts[1]) params.set('to', queryParts[1]);
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/compare?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Revision comparison: symbols +${data.added.length} · -${data.removed.length} · ~${data.modified.length}; relationships +${data.relationships.added.length} · -${data.relationships.removed.length} · ~${data.relationships.modified.length}${data.truncated ? ' · truncated' : ''}.`);
+        return 0;
+      }
+      if (action === 'investigation') {
+        if (!value || value === 'list') {
+          const data = await bridge(config, 'GET', '/api/agent-room/bridge/code-graph/investigations');
+          if (flags.json) out(JSON.stringify(data, null, 2));
+          else if (!data.length) out('(no saved investigations)');
+          else for (const item of data) out(`- ${item.name} (${item.id}) · ${item.state.viewMode}`);
+          return 0;
+        }
+        if (value === 'read') {
+          if (!queryParts[0]) throw new Error('Usage: orkestrai graph investigation read <id>');
+          out(JSON.stringify(await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/investigations/${encodeURIComponent(queryParts[0])}`), null, 2));
+          return 0;
+        }
+        if (value === 'save') {
+          const name = String(flags.name ?? queryParts[0] ?? '').trim();
+          if (!name || !flags.state) throw new Error('Usage: orkestrai graph investigation save <name> --state <json> [--id <uuid>]');
+          const body = { name, state: JSON.parse(String(flags.state)) };
+          const data = flags.id
+            ? await bridge(config, 'PATCH', `/api/agent-room/bridge/code-graph/investigations/${encodeURIComponent(String(flags.id))}`, body)
+            : await bridge(config, 'POST', '/api/agent-room/bridge/code-graph/investigations', body);
+          out(flags.json ? JSON.stringify(data, null, 2) : `Investigation saved: ${data.name} (${data.id})`);
+          return 0;
+        }
+        if (value === 'delete') {
+          if (!queryParts[0]) throw new Error('Usage: orkestrai graph investigation delete <id>');
+          await bridge(config, 'DELETE', `/api/agent-room/bridge/code-graph/investigations/${encodeURIComponent(queryParts[0])}`);
+          out('Investigation deleted.');
+          return 0;
+        }
+      }
+      if (action === 'handoff') {
+        const kind = value;
+        if (!['review', 'task', 'leader', 'agent', 'council'].includes(kind)) throw new Error('Usage: orkestrai graph handoff <review|task|leader|agent|council> ...');
+        const legacyScope = /^(?:workspace|floor:[0-9a-f-]{36})$/i.test(queryParts[0] ?? '') ? queryParts.shift() : undefined;
+        const title = String(flags.title ?? queryParts.join(' ')).trim();
+        const scopeId = flags.scope ? String(flags.scope) : legacyScope;
+        const symbolIds = String(flags.symbols ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+        const context = symbolIds.length || scopeId || flags.finding ? {
+          selection: { symbolIds: symbolIds.length ? symbolIds : undefined, scopeId, findingId: flags.finding ? String(flags.finding) : undefined },
+          purpose: flags.purpose ?? 'implement',
+          maxTokens: flags.tokens ? Number(flags.tokens) : 4000,
+          depth: flags.depth ? Number(flags.depth) : 2,
+          includeSource: !flags['no-source'],
+        } : undefined;
+        if (!title) throw new Error('Provide a handoff title with positional text or --title.');
         const data = await bridge(config, 'POST', '/api/agent-room/bridge/code-graph/handoffs', {
-          kind: value,
+          kind,
           scopeId,
           title,
           locale: flags.locale ?? 'en',
+          context,
+          targetNodeId: flags.target,
+          targetNodeIds: flags.targets ? String(flags.targets).split(',').map((item) => item.trim()).filter(Boolean) : undefined,
         });
         if (flags.json) out(JSON.stringify(data, null, 2));
-        else out(`${data.kind === 'review' ? 'Review' : 'Task'} created: ${data.artifact.title} (${data.artifact.id})`);
+        else out(`${data.artifact.type ?? data.kind} created: ${data.artifact.title} (${data.artifact.id})`);
         return 0;
       }
       if (action === 'contracts') {
