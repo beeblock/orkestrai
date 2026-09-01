@@ -788,6 +788,8 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Its Runtime view imports confined LCOV, JUnit, traceback, or structured JSON evidence and overlays coverage, failures, observed calls, and runtime-only relationships without persisting raw output.',
         'Code Intelligence accepts approved repositories with no supported source files as a valid empty graph, and the Index code action keeps readable contrast across every theme.',
         'Code graph watchers observe only supported source and contract files, ignore sockets and other special entries, and contain filesystem errors without terminating the app.',
+        'Code graph scans read supported files with bounded concurrency and revision stats separate scan, parse, resolution, persistence, cache hits, cache misses, changed files, and indexing strategy. Empty roots keep no recursive watcher; resource-limit failures mark the graph stale and retry after a bounded backoff instead of showing healthy data.',
+        'The reproducible code-graph benchmark validates the Orkestrai repository, a temporary full mirror, and a synthetic repository against the documented SQLite search, traversal, and single-file incremental gates; the real 1,672-file mirror stays below the two-second incremental target, so no alternate graph database is justified.',
       ],
     },
     {

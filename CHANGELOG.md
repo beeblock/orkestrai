@@ -55,6 +55,12 @@ pt-BR, English, and Spanish translations.
   same graph while raw logs, test output, source bodies, and credentials are
   never persisted. The compact toolbar now groups Contracts, Quality, Semantic,
   and Runtime under Insights.
+- Code graph indexing now records bounded scan, parse, resolve, persistence,
+  cache-hit, cache-miss, changed-file, and strategy telemetry in its existing
+  revision stats. `npm run benchmark:code-graph` exercises the Orkestrai
+  repository, a full temporary mirror for real incremental updates, and a
+  synthetic repository against the documented SQLite latency gates; additional
+  Laravel or monorepo roots can be supplied without changing the benchmark.
 
 ### Fixed
 
@@ -65,6 +71,11 @@ pt-BR, English, and Spanish translations.
 - Code graph watchers now observe only supported source and contract files,
   ignore sockets and other special filesystem entries, and contain watcher
   errors instead of allowing an unusual workspace entry to terminate the app.
+- Code graph scans validate and read supported files with bounded concurrency,
+  while an empty indexed root no longer keeps a recursive watcher alive. A
+  watcher that reaches an operating-system resource limit marks the graph stale,
+  closes cleanly, and retries after a bounded backoff instead of silently showing
+  healthy data or flooding logs.
 - After macOS sleep, hibernation, renderer reloads, or a brief power loss, a
   canvas agent now reattaches to the one live PTY identified by workspace and
   node instead of launching a second writer for the same provider conversation.

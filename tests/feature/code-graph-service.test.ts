@@ -50,6 +50,20 @@ describe('CodeGraphIndexService', () => {
     expect(indexed.stats).toMatchObject({ files: 2 });
     expect(indexed.stats.symbols).toBeGreaterThanOrEqual(6);
     expect(indexed.stats.edges).toBeGreaterThanOrEqual(5);
+    expect(indexed.projects[0].stats).toMatchObject({
+      timings: {
+        scanMs: expect.any(Number),
+        parseMs: expect.any(Number),
+        resolveMs: expect.any(Number),
+        persistMs: expect.any(Number),
+      },
+      indexing: {
+        strategy: 'cold',
+        cacheHits: 0,
+        cacheMisses: 2,
+        changedFiles: 2,
+      },
+    });
     const repeated = await codeGraphIndexService.index(workspace.id);
     expect(repeated.projects[0].currentRevisionId).toBe(indexed.projects[0].currentRevisionId);
 
@@ -112,6 +126,12 @@ describe('CodeGraphIndexService', () => {
       const updated = await codeGraphIndexService.index(workspace.id);
       expect(parse).toHaveBeenCalledTimes(1);
       expect(parse.mock.calls[0][0].relativePath).toBe('first.ts');
+      expect(updated.projects[0].stats.indexing).toMatchObject({
+        strategy: 'incremental',
+        cacheHits: 1,
+        cacheMisses: 1,
+        changedFiles: 1,
+      });
       expect(updated.projects[0].currentRevisionId).not.toBe(initial.projects[0].currentRevisionId);
       const unchangedAfter = (await codeGraphIndexService.search(workspace.id, { query: 'second' }))[0];
       expect(unchangedAfter.id).toBe(unchangedBefore.id);

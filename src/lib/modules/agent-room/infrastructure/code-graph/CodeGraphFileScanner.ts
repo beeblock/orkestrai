@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 1_500_000;
 const MAX_FILES = 20_000;
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
+const FILE_READ_CONCURRENCY = 16;
 const SOURCE_EXTENSIONS = new Map<string, CodeGraphLanguage>([
   ['.ts', 'typescript'], ['.tsx', 'typescript'], ['.mts', 'typescript'], ['.cts', 'typescript'],
   ['.js', 'javascript'], ['.jsx', 'javascript'], ['.mjs', 'javascript'], ['.cjs', 'javascript'],
@@ -36,6 +37,20 @@ function isInside(root: string, candidate: string): boolean {
 
 function isGenerated(path: string): boolean {
   return /(^|\/)(generated|__generated__|gen)(\/|$)|\.generated\.|\.g\.(ts|js|php)$|\.d\.ts$/i.test(path);
+}
+
+async function mapConcurrent<T, R>(items: T[], concurrency: number, work: (item: T) => Promise<R>): Promise<R[]> {
+  const output = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      output[index] = await work(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return output;
 }
 
 export class CodeGraphFileScanner {
@@ -78,15 +93,14 @@ export class CodeGraphFileScanner {
       });
     }
 
-    let skipped = Math.max(0, paths.length - MAX_FILES);
-    const files: ScannedCodeFile[] = [];
-    for (const candidate of paths.slice(0, MAX_FILES)) {
+    const results = await mapConcurrent(paths.slice(0, MAX_FILES), FILE_READ_CONCURRENCY, async (candidate) => {
       try {
         const absolutePath = await realpath(resolve(candidate));
         if (!isInside(rootPath, absolutePath)) {
-          skipped += 1;
-          diagnostics.push({ path: candidate, severity: 'warning', code: 'outside_root', message: 'Symlink target is outside the repository root.' });
-          continue;
+          return {
+            file: null,
+            diagnostic: { path: candidate, severity: 'warning', code: 'outside_root', message: 'Symlink target is outside the repository root.' } satisfies CodeGraphDiagnostic,
+          };
         }
         const info = await stat(absolutePath);
         const extension = extname(absolutePath).toLowerCase();
@@ -94,16 +108,14 @@ export class CodeGraphFileScanner {
           ?? (CONTRACT_FILE.test(basename(absolutePath)) && extension === '.json' ? 'json' : null)
           ?? (CONTRACT_FILE.test(basename(absolutePath)) && ['.yaml', '.yml'].includes(extension) ? 'yaml' : null);
         if (!language || !info.isFile() || info.size > MAX_FILE_BYTES) {
-          skipped += 1;
-          continue;
+          return { file: null, diagnostic: null };
         }
         const content = await readFile(absolutePath, 'utf8');
         if (content.includes('\0')) {
-          skipped += 1;
-          continue;
+          return { file: null, diagnostic: null };
         }
         const relativePath = relative(rootPath, absolutePath).split(sep).join('/');
-        files.push({
+        return { file: {
           absolutePath,
           relativePath,
           language,
@@ -112,16 +124,23 @@ export class CodeGraphFileScanner {
           byteSize: Buffer.byteLength(content),
           modifiedAt: info.mtime.toISOString(),
           generated: isGenerated(relativePath),
-        });
+        } satisfies ScannedCodeFile, diagnostic: null };
       } catch (error) {
-        skipped += 1;
-        diagnostics.push({
+        return { file: null, diagnostic: {
           path: relative(rootPath, candidate).split(sep).join('/'),
           severity: 'warning',
           code: 'file_read_failed',
           message: error instanceof Error ? error.message.slice(0, 300) : 'Source file could not be read.',
-        });
+        } satisfies CodeGraphDiagnostic };
       }
+    });
+
+    let skipped = Math.max(0, paths.length - MAX_FILES);
+    const files: ScannedCodeFile[] = [];
+    for (const result of results) {
+      if (result.file) files.push(result.file);
+      else skipped += 1;
+      if (result.diagnostic) diagnostics.push(result.diagnostic);
     }
 
     files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));

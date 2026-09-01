@@ -788,6 +788,8 @@ Header: Authorization = Bearer {{accessToken}}`,
         'La vista Ejecución importa evidencia confinada de LCOV, JUnit, traceback o JSON estructurado y superpone cobertura, fallos, llamadas observadas y relaciones solo de ejecución sin persistir salida cruda.',
         'Inteligencia de Código acepta repositorios aprobados sin archivos fuente compatibles como un grafo vacío válido, y la acción Indexar código conserva un contraste legible en todos los temas.',
         'Los watchers del grafo observan solo archivos fuente y contratos compatibles, ignoran sockets y otras entradas especiales y contienen errores del filesystem sin cerrar la app.',
+        'El escaneo del grafo lee archivos compatibles con concurrencia limitada y las estadísticas de revisión separan escaneo, parseo, resolución, persistencia, aciertos y fallos de caché, archivos cambiados y estrategia de indexación. Las raíces vacías no mantienen un watcher recursivo; los límites de recursos marcan el grafo como desactualizado y reintentan tras un backoff limitado en vez de mostrar datos saludables.',
+        'El benchmark reproducible del grafo valida el repositorio Orkestrai, un espejo completo temporal y un repositorio sintético frente a las metas documentadas de búsqueda, recorrido y actualización incremental de SQLite; el espejo real de 1.672 archivos queda por debajo de dos segundos, por lo que no se justifica otra base de grafos.',
       ],
     },
     {

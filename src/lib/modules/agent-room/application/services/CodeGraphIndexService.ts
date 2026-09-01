@@ -36,6 +36,7 @@ const IGNORED_WATCH_SEGMENT = /(^|[\\/])(\.git|node_modules|vendor|\.svelte-kit|
 type IndexState = {
   inFlight: Map<string, Promise<CodeGraphProject>>;
   watchers: Map<string, { workspaceId: string; rootPath: string; watcher: FSWatcher }>;
+  watcherRetryAt: Map<string, number>;
   staleTimers: Map<string, ReturnType<typeof setTimeout>>;
   parseCache: Map<string, Map<string, { contentHash: string; file: ParsedCodeFile }>>;
 };
@@ -45,11 +46,13 @@ function indexState(): IndexState {
   global.__orkestraiCodeGraphIndexState ??= {
     inFlight: new Map(),
     watchers: new Map(),
+    watcherRetryAt: new Map(),
     staleTimers: new Map(),
     parseCache: new Map(),
   };
   // Preserve development HMR state created by an older module shape.
   global.__orkestraiCodeGraphIndexState.parseCache ??= new Map();
+  global.__orkestraiCodeGraphIndexState.watcherRetryAt ??= new Map();
   return global.__orkestraiCodeGraphIndexState;
 }
 
@@ -157,7 +160,9 @@ export class CodeGraphIndexService {
   private async buildRevision(project: CodeGraphProject, force: boolean): Promise<CodeGraphProject> {
     const startedAt = Date.now();
     const gitHead = await this.gitHead(project.rootPath);
+    const scanStartedAt = Date.now();
     const scan = await codeGraphFileScanner.scan(project.rootPath);
+    const scanMs = Date.now() - scanStartedAt;
     const sourceHash = hash(JSON.stringify(scan.files.map((file) => [file.relativePath, file.contentHash])));
     const currentSourceHash = await codeGraphRepository.currentSourceHash(project.id);
     if (!force && project.status === 'ready' && sourceHash === currentSourceHash) {
@@ -167,14 +172,21 @@ export class CodeGraphIndexService {
     try {
       const previousCache = this.state.parseCache.get(project.id);
       const nextCache = new Map<string, { contentHash: string; file: ParsedCodeFile }>();
+      let cacheHits = 0;
+      let cacheMisses = 0;
+      const parseStartedAt = Date.now();
       const parsed = await mapConcurrent(scan.files, PARSE_CONCURRENCY, async (file) => {
         const cached = previousCache?.get(file.relativePath);
+        if (cached?.contentHash === file.contentHash) cacheHits += 1;
+        else cacheMisses += 1;
         const parsedFile = cached?.contentHash === file.contentHash
           ? cached.file
           : await codeGraphParser.parse(file);
         nextCache.set(file.relativePath, { contentHash: file.contentHash, file: parsedFile });
         return parsedFile;
       });
+      const parseMs = Date.now() - parseStartedAt;
+      const resolveStartedAt = Date.now();
       const graph = codeGraphResolver.resolve(parsed);
       const fileKeyByPath = new Map(graph.files.map((file) => [file.relativePath, `file:${file.contentHash}:${file.relativePath}`]));
       const fileKeyBySymbol = new Map<string, string>();
@@ -228,6 +240,10 @@ export class CodeGraphIndexService {
         fingerprint: edge.fingerprint,
       }));
       const diagnostics = [...scan.diagnostics, ...graph.diagnostics].slice(0, 500);
+      const resolveMs = Date.now() - resolveStartedAt;
+      const removedFiles = previousCache
+        ? [...previousCache.keys()].filter((path) => !nextCache.has(path)).length
+        : 0;
       const languages = graph.files.reduce<Record<string, number>>((counts, file) => {
         counts[file.language] = (counts[file.language] ?? 0) + 1;
         return counts;
@@ -246,6 +262,13 @@ export class CodeGraphIndexService {
           skipped: scan.skipped,
           durationMs: Date.now() - startedAt,
           languages,
+          timings: { scanMs, parseMs, resolveMs, persistMs: 0 },
+          indexing: {
+            strategy: previousCache ? (force ? 'full' : 'incremental') : 'cold',
+            cacheHits,
+            cacheMisses,
+            changedFiles: cacheMisses + removedFiles,
+          },
         },
         diagnostics,
         files,
@@ -279,6 +302,13 @@ export class CodeGraphIndexService {
     }
     for (const project of projects) {
       const current = this.state.watchers.get(project.id);
+      if (project.stats.files === 0) {
+        if (current) await this.closeWatcher(project.id);
+        continue;
+      }
+      const retryAt = this.state.watcherRetryAt.get(project.id) ?? 0;
+      if (!current && retryAt > Date.now()) continue;
+      if (retryAt) this.state.watcherRetryAt.delete(project.id);
       if (current?.rootPath === project.rootPath) continue;
       if (current) await this.closeWatcher(project.id);
       const watcher = watch(project.rootPath, {
@@ -298,15 +328,21 @@ export class CodeGraphIndexService {
           });
         }, 350));
       };
+      this.state.watchers.set(project.id, { workspaceId, rootPath: project.rootPath, watcher });
       watcher
         .on('add', changed)
         .on('change', changed)
         .on('unlink', changed)
         .on('error', (error) => {
           const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'unknown';
-          console.warn(`[orkestrai] Code graph watcher ignored a filesystem error (${code}) for project ${project.id}.`);
+          console.warn(`[orkestrai] Code graph watcher entered a 30-second backoff after filesystem error (${code}) for project ${project.id}.`);
+          this.state.watcherRetryAt.set(project.id, Date.now() + 30_000);
+          if (this.state.watchers.get(project.id)?.watcher === watcher) this.state.watchers.delete(project.id);
+          void watcher.close().catch(() => undefined);
+          void codeGraphRepository.markStale(workspaceId, project.id).then((didChange) => {
+            if (didChange) this.broadcast(workspaceId);
+          });
         });
-      this.state.watchers.set(project.id, { workspaceId, rootPath: project.rootPath, watcher });
     }
   }
 
@@ -314,6 +350,7 @@ export class CodeGraphIndexService {
     const timer = this.state.staleTimers.get(projectId);
     if (timer) clearTimeout(timer);
     this.state.staleTimers.delete(projectId);
+    this.state.watcherRetryAt.delete(projectId);
     const entry = this.state.watchers.get(projectId);
     this.state.watchers.delete(projectId);
     this.state.parseCache.delete(projectId);

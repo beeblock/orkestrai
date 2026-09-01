@@ -75,7 +75,10 @@ common credentials redacted; normal agent output is not persisted.
   offline semantic index adds intent search with compact vectors and no model
   download or API key. Runtime evidence imports confined LCOV, JUnit, traceback,
   or structured JSON files and overlays coverage, failures, observed calls, and
-  runtime-only relationships without persisting raw test output.
+  runtime-only relationships without persisting raw test output. Revision stats
+  include bounded scan, parse, resolution, persistence, and cache telemetry; a
+  reproducible benchmark keeps SQLite behind explicit latency gates instead of
+  replacing the local-first adapter on assumption.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,
@@ -481,7 +484,15 @@ required Svelar flow, i18n rules, release discipline, and platform constraints.
 npm test
 npm run build
 npm run test:e2e
+npm run benchmark:code-graph
 ```
+
+The code-graph benchmark is read-only against the current repository and makes
+temporary mirrors for incremental writes. To include up to four approved local
+Laravel or monorepo fixtures, set `ORKESTRAI_CODE_GRAPH_BENCH_ROOTS` to a JSON
+array such as `[{"name":"Laravel","path":"/absolute/path"}]`. It enforces p95
+targets for search and bounded traversal plus a two-second single-file
+incremental target, and removes its temporary workspaces afterward.
 
 End-to-end tests run serially against the production build. Follow the cleanup
 rules in [AGENTS.md](AGENTS.md) after packaging or E2E runs.

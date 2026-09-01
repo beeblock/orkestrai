@@ -46,6 +46,8 @@ const EMPTY_STATS: CodeGraphStats = {
   skipped: 0,
   durationMs: 0,
   languages: {},
+  timings: { scanMs: 0, parseMs: 0, resolveMs: 0, persistMs: 0 },
+  indexing: { strategy: 'cold', cacheHits: 0, cacheMisses: 0, changedFiles: 0 },
 };
 
 function iso(value: unknown): string {
@@ -214,11 +216,23 @@ export class CodeGraphRepository implements CodeGraphStore {
       edges: total.edges + project.stats.edges,
       skipped: total.skipped + project.stats.skipped,
       durationMs: total.durationMs + project.stats.durationMs,
+      timings: {
+        scanMs: (total.timings?.scanMs ?? 0) + (project.stats.timings?.scanMs ?? 0),
+        parseMs: (total.timings?.parseMs ?? 0) + (project.stats.timings?.parseMs ?? 0),
+        resolveMs: (total.timings?.resolveMs ?? 0) + (project.stats.timings?.resolveMs ?? 0),
+        persistMs: (total.timings?.persistMs ?? 0) + (project.stats.timings?.persistMs ?? 0),
+      },
+      indexing: {
+        strategy: projects.length === 1 ? project.stats.indexing?.strategy ?? 'cold' : 'mixed',
+        cacheHits: (total.indexing?.cacheHits ?? 0) + (project.stats.indexing?.cacheHits ?? 0),
+        cacheMisses: (total.indexing?.cacheMisses ?? 0) + (project.stats.indexing?.cacheMisses ?? 0),
+        changedFiles: (total.indexing?.changedFiles ?? 0) + (project.stats.indexing?.changedFiles ?? 0),
+      },
       languages: Object.entries(project.stats.languages).reduce((languages, [language, count]) => ({
         ...languages,
         [language]: (languages[language as keyof typeof languages] ?? 0) + Number(count ?? 0),
       }), total.languages),
-    }), { ...EMPTY_STATS, languages: {} });
+    }), { ...EMPTY_STATS, languages: {}, timings: { ...EMPTY_STATS.timings! }, indexing: { ...EMPTY_STATS.indexing! } });
     return { projects, totals, indexing: projects.some((project) => project.status === 'indexing') };
   }
 
@@ -356,7 +370,12 @@ export class CodeGraphRepository implements CodeGraphStore {
         symbol.documentation ?? '', symbol.signature ?? '',
       ]));
 
-      committedStats.durationMs += Date.now() - commitStartedAt;
+      const persistMs = Date.now() - commitStartedAt;
+      committedStats.durationMs += persistMs;
+      if (committedStats.timings) committedStats.timings.persistMs = persistMs;
+      if (committedStats.indexing) {
+        committedStats.indexing.strategy = previousRevisionId ? 'full' : 'cold';
+      }
       await revision.update({
         state: 'ready',
         source_hash: input.sourceHash,
@@ -571,7 +590,10 @@ export class CodeGraphRepository implements CodeGraphStore {
         symbol.documentation ?? '', symbol.signature ?? '',
       ]));
 
-      committedStats.durationMs += Date.now() - commitStartedAt;
+      const persistMs = Date.now() - commitStartedAt;
+      committedStats.durationMs += persistMs;
+      if (committedStats.timings) committedStats.timings.persistMs = persistMs;
+      if (committedStats.indexing) committedStats.indexing.strategy = 'incremental';
       await revision.update({
         state: 'ready',
         source_hash: input.sourceHash,

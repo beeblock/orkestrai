@@ -31,6 +31,18 @@ export type CodeGraphStats = {
   skipped: number;
   durationMs: number;
   languages: Partial<Record<CodeGraphLanguage, number>>;
+  timings?: {
+    scanMs: number;
+    parseMs: number;
+    resolveMs: number;
+    persistMs: number;
+  };
+  indexing?: {
+    strategy: 'cold' | 'incremental' | 'full' | 'mixed';
+    cacheHits: number;
+    cacheMisses: number;
+    changedFiles: number;
+  };
 };
 
 export type CodeGraphProject = {
