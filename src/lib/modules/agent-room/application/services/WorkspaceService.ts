@@ -1,4 +1,4 @@
-import { constants as fsConstants, existsSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { constants as fsConstants, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { access, readFile } from 'node:fs/promises';
 import { posix, resolve } from 'node:path';
 import type { CanvasNodePayload, Workspace, WorkspaceRepositoryRoot } from '../../domain/types.js';
@@ -41,6 +41,32 @@ type WorkspaceProvisionState = {
 };
 
 const WORKSPACE_PROVISION_STATE = Symbol.for('orkestrai.workspaceProvisionState');
+const WORKSPACE_INSTRUCTIONS_BEGIN = '<!-- orkestrai:workspace-instructions:begin -->';
+const WORKSPACE_INSTRUCTIONS_END = '<!-- orkestrai:workspace-instructions:end -->';
+const WORKSPACE_INSTRUCTIONS_PATTERN = /<!-- orkestrai:workspace-instructions:begin -->[\s\S]*?<!-- orkestrai:workspace-instructions:end -->/;
+
+function managedInstructionBlock(instructions: string): string {
+  return `${WORKSPACE_INSTRUCTIONS_BEGIN}\n${instructions}\n${WORKSPACE_INSTRUCTIONS_END}`;
+}
+
+function mergeInstructionFile(current: string, instructions: string | null, legacyInstructions?: string | null): string {
+  const block = instructions ? managedInstructionBlock(instructions) : '';
+  if (WORKSPACE_INSTRUCTIONS_PATTERN.test(current)) {
+    const next = current.replace(WORKSPACE_INSTRUCTIONS_PATTERN, block);
+    return `${next.trimEnd()}${next.trim() ? '\n' : ''}`;
+  }
+
+  const trimmed = current.trim();
+  const knownLegacy = [instructions, legacyInstructions].filter((value): value is string => Boolean(value));
+  if (trimmed && knownLegacy.includes(trimmed)) return block ? `${block}\n` : '';
+  if (!block) return current;
+
+  const bridgeMarker = current.indexOf('<!-- orkestrai:begin -->');
+  if (bridgeMarker > 0 && knownLegacy.includes(current.slice(0, bridgeMarker).trim())) {
+    return `${block}\n\n${current.slice(bridgeMarker).trimStart()}`;
+  }
+  return `${current.trimEnd()}${current.trim() ? '\n\n' : ''}${block}\n`;
+}
 
 function workspaceProvisionState(): WorkspaceProvisionState {
   const globals = globalThis as typeof globalThis & {
@@ -227,7 +253,7 @@ export class WorkspaceService {
     });
     if (!workspace) throw new Error('Workspace nao encontrado.');
     if (runtimeChanged || repositoryRootsChanged) this.provisionChecked.delete(id);
-    this.writeInstructionFiles(workspace);
+    this.writeInstructionFiles(workspace, existing.instructions);
     if (runtimeChanged || repositoryRootsChanged) await this.reprovisionBridge(workspace);
     else await this.ensureProvisioned(workspace);
     return workspace;
@@ -812,19 +838,23 @@ export class WorkspaceService {
     });
   }
 
-  /**
-   * Escreve AGENTS.md com as instrucoes do workspace no working_dir.
-   * Com syncAgentInstructionFiles, espelha em CLAUDE.md (Claude Code so le
-   * CLAUDE.md; os demais agentes padronizaram AGENTS.md).
-   */
-  private writeInstructionFiles(workspace: Workspace) {
-    const instructions = workspace.instructions?.trim();
-    if (!instructions) return;
+  /** Keeps workspace instructions in a bounded block without replacing user files. */
+  private writeInstructionFiles(workspace: Workspace, legacyInstructions?: string | null) {
+    const instructions = workspace.instructions?.trim() || null;
     try {
-      writeFileSync(resolve(workspace.workingDir, 'AGENTS.md'), `${instructions}\n`);
-      if (workspace.syncAgentInstructionFiles) {
-        writeFileSync(resolve(workspace.workingDir, 'CLAUDE.md'), `${instructions}\n`);
-      }
+      const agentsPath = resolve(workspace.workingDir, 'AGENTS.md');
+      const currentAgents = existsSync(agentsPath) ? readFileSync(agentsPath, 'utf8') : '';
+      const nextAgents = mergeInstructionFile(currentAgents, instructions, legacyInstructions?.trim() || null);
+      if (nextAgents !== currentAgents) writeFileSync(agentsPath, nextAgents);
+
+      const claudePath = resolve(workspace.workingDir, 'CLAUDE.md');
+      const currentClaude = existsSync(claudePath) ? readFileSync(claudePath, 'utf8') : '';
+      const nextClaude = mergeInstructionFile(
+        currentClaude,
+        workspace.syncAgentInstructionFiles ? instructions : null,
+        legacyInstructions?.trim() || null,
+      );
+      if (nextClaude !== currentClaude) writeFileSync(claudePath, nextClaude);
     } catch {
       // Diretorio sem permissao de escrita nao bloqueia o workspace.
     }

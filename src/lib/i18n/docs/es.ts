@@ -790,6 +790,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Los watchers del grafo observan solo archivos fuente y contratos compatibles, ignoran sockets y otras entradas especiales y contienen errores del filesystem sin cerrar la app.',
         'El escaneo del grafo lee archivos compatibles con concurrencia limitada y las estadísticas de revisión separan escaneo, parseo, resolución, persistencia, aciertos y fallos de caché, archivos cambiados y estrategia de indexación. Las raíces vacías no mantienen un watcher recursivo; los límites de recursos marcan el grafo como desactualizado y reintentan tras un backoff limitado en vez de mostrar datos saludables.',
         'El benchmark reproducible del grafo valida el repositorio Orkestrai, un espejo completo temporal y un repositorio sintético frente a las metas documentadas de búsqueda, recorrido y actualización incremental de SQLite; el espejo real de 1.672 archivos queda por debajo de dos segundos, por lo que no se justifica otra base de grafos.',
+        'Las instrucciones del workspace y de los presets ahora usan un bloque gestionado y delimitado en AGENTS.md y, cuando está habilitado, en CLAUDE.md. El contenido existente del usuario se conserva, los archivos antiguos controlados por Orkestrai migran de forma segura y desactivar la sincronización elimina solo ese bloque.',
       ],
     },
     {

@@ -790,6 +790,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Code graph watchers observe only supported source and contract files, ignore sockets and other special entries, and contain filesystem errors without terminating the app.',
         'Code graph scans read supported files with bounded concurrency and revision stats separate scan, parse, resolution, persistence, cache hits, cache misses, changed files, and indexing strategy. Empty roots keep no recursive watcher; resource-limit failures mark the graph stale and retry after a bounded backoff instead of showing healthy data.',
         'The reproducible code-graph benchmark validates the Orkestrai repository, a temporary full mirror, and a synthetic repository against the documented SQLite search, traversal, and single-file incremental gates; the real 1,672-file mirror stays below the two-second incremental target, so no alternate graph database is justified.',
+        'Workspace and preset instructions now use a bounded managed block in AGENTS.md and, when enabled, CLAUDE.md. Existing user content is preserved, legacy Orkestrai-owned files migrate safely, and disabling synchronization removes only that block.',
       ],
     },
     {

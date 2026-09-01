@@ -64,6 +64,10 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Workspace and preset instructions now live in a bounded managed block inside
+  `AGENTS.md` and, when enabled, `CLAUDE.md`. Existing user-authored content is
+  preserved, legacy Orkestrai-owned whole-file instructions migrate safely, and
+  disabling synchronization removes only the managed block.
 - Code Intelligence now treats an approved repository with no supported source
   files as a valid empty graph instead of surfacing ripgrep's no-match exit code
   as an indexing failure. Its primary Index code action also uses the theme's

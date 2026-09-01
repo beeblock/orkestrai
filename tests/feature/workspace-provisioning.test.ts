@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { WorkspaceService, workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
+import { UpdateWorkspaceDto } from '$lib/modules/agent-room/application/dto/WorkspaceDtos.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 
 describe('WorkspaceService — provisionamento da ponte', () => {
@@ -102,6 +103,54 @@ describe('WorkspaceService — provisionamento da ponte', () => {
     expect(agentsMd).toContain('Regras minhas aqui.');
     expect(agentsMd).toContain('<!-- orkestrai:begin -->');
     expect(workspace.id).toBeTruthy();
+  });
+
+  it('preserva AGENTS.md e CLAUDE.md do usuario ao sincronizar instrucoes de preset', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-prov-instructions-'));
+    writeFileSync(join(dir, 'AGENTS.md'), '# Product rules\n\nNever rewrite this section.\n');
+    writeFileSync(join(dir, 'CLAUDE.md'), '# Claude rules\n\nKeep this too.\n');
+
+    const workspace = await workspaceService.create({
+      name: 'instructions',
+      workingDir: dir,
+      icon: null,
+      instructions: 'Team instructions.',
+      syncAgentInstructionFiles: true,
+    });
+    await workspaceService.update(workspace.id, new UpdateWorkspaceDto({
+      instructions: 'Updated team instructions.',
+      syncAgentInstructionFiles: true,
+    }));
+
+    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+    const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
+    expect(agents).toContain('# Product rules');
+    expect(agents).toContain('Never rewrite this section.');
+    expect(agents).toContain('Updated team instructions.');
+    expect(agents).not.toContain('\nTeam instructions.\n');
+    expect(agents).toContain('<!-- orkestrai:begin -->');
+    expect(claude).toContain('# Claude rules');
+    expect(claude).toContain('Keep this too.');
+    expect(claude).toContain('Updated team instructions.');
+  });
+
+  it('migrates legacy whole-file instructions into a managed block', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-prov-legacy-instructions-'));
+    writeFileSync(join(dir, 'AGENTS.md'), 'Old managed instructions.\n');
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'legacy instructions',
+      workingDir: dir,
+      instructions: 'Old managed instructions.',
+      syncAgentInstructionFiles: false,
+    });
+
+    await workspaceService.update(workspace.id, new UpdateWorkspaceDto({ instructions: 'New managed instructions.' }));
+
+    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+    expect(agents.match(/Old managed instructions\./g)).toBeNull();
+    expect(agents).toContain('<!-- orkestrai:workspace-instructions:begin -->');
+    expect(agents).toContain('New managed instructions.');
+    expect(agents).toContain('<!-- orkestrai:begin -->');
   });
 
   it('preserva servidores MCP configurados pelo usuario', async () => {
