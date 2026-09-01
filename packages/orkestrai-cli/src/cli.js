@@ -41,7 +41,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
-  orkestrai graph status | graph index [--project <uuid>] | graph changes [--depth <1-3>] [--limit <n>] | graph contracts [--limit <n>] [--graph] | graph quality [--limit <n>] [--graph] | graph handoff <review|task> <scopeId> <titulo> [--locale en|pt-BR|es] | graph search <consulta> [--project <uuid>] [--kinds <csv>] [--limit <n>] | graph symbol <symbolId> | graph neighbors <symbolId> [--direction incoming|outgoing|both] [--depth <1-4>] [--kinds <csv>] [--limit <n>] [--json]
+  orkestrai graph status | graph index [--project <uuid>] | graph changes [--depth <1-3>] [--limit <n>] | graph contracts [--limit <n>] [--graph] | graph quality [--limit <n>] [--graph] | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph handoff <review|task> <scopeId> <titulo> [--locale en|pt-BR|es] | graph search <consulta> [--project <uuid>] [--kinds <csv>] [--limit <n>] | graph symbol <symbolId> | graph neighbors <symbolId> [--direction incoming|outgoing|both] [--depth <1-4>] [--kinds <csv>] [--limit <n>] [--json]
   orkestrai memory list [consulta] [--history] [--json]
   orkestrai memory add <titulo> --content <texto> --source-label <fonte> [--kind fact|decision|preference|constraint|reference|lesson] [--source-type user|note|task|message|file|url|git|review|council|agent] [--source-id <id>] [--source-uri <path-ou-url>] [--source-excerpt <trecho>] [--tags <csv>] [--confidence <0-100>] [--pin]
   orkestrai memory revise <id> --title <titulo> --content <texto> --kind <tipo> --sources <json> --base-revision <n> --base-updated-at <iso>
@@ -417,6 +417,54 @@ export async function run(argv, options = {}) {
         }
         return 0;
       }
+      if (action === 'semantic') {
+        if (!value || value === 'status') {
+          const data = await bridge(config, 'GET', '/api/agent-room/bridge/code-graph/semantic');
+          if (flags.json) out(JSON.stringify(data, null, 2));
+          else out(`Semantic index: ${data.state} · ${data.indexedSymbols}/${data.totalSymbols} symbols · ${data.model}`);
+          return 0;
+        }
+        if (value === 'build' || value === 'clear') {
+          const data = await bridge(config, 'POST', '/api/agent-room/bridge/code-graph/semantic', { action: value });
+          if (flags.json) out(JSON.stringify(data, null, 2));
+          else out(`Semantic index: ${data.state} · ${data.indexedSymbols}/${data.totalSymbols} symbols.`);
+          return 0;
+        }
+        if (value === 'search') {
+          const query = queryParts.join(' ').trim();
+          if (!query) throw new Error('Usage: orkestrai graph semantic search <query> [--project <uuid>] [--kinds <csv>]');
+          const params = new URLSearchParams({ q: query });
+          if (flags.project) params.set('projectId', String(flags.project));
+          if (flags.kinds) params.set('kinds', String(flags.kinds));
+          if (flags.limit) params.set('limit', String(flags.limit));
+          const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/semantic?${params}`);
+          if (flags.json) out(JSON.stringify(data, null, 2));
+          else if (!data.length) out('(no semantic matches)');
+          else for (const match of data) out(`- ${match.score}% ${match.symbol.kind} ${match.symbol.qualifiedName} · ${match.symbol.path ?? ''} (${match.symbol.id})`);
+          return 0;
+        }
+      }
+      if (action === 'evidence') {
+        if (value === 'import') {
+          const [projectId, path] = queryParts;
+          if (!projectId || !path) throw new Error('Usage: orkestrai graph evidence import <projectId> <relative-path> [--kind auto|coverage|test|trace] [--label <label>]');
+          const data = await bridge(config, 'POST', '/api/agent-room/bridge/code-graph/evidence', {
+            projectId,
+            path,
+            kind: flags.kind ?? 'auto',
+            label: flags.label,
+          });
+          if (flags.json) out(JSON.stringify(data, null, 2));
+          else out(`Evidence imported: ${data.label} · ${data.stats.coveredSymbols} covered · ${data.stats.failures} failures · ${data.stats.observedCalls} observed calls.`);
+          return 0;
+        }
+        const params = new URLSearchParams();
+        if (flags.limit) params.set('limit', String(flags.limit));
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/code-graph/evidence?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Runtime evidence: ${data.counts.runs} runs · ${data.counts.coveredSymbols} covered · ${data.counts.failures} failures · ${data.counts.observedCalls} observed calls · ${data.counts.runtimeOnlyCalls} runtime-only.`);
+        return 0;
+      }
       if (action === 'search') {
         const query = [value, ...queryParts].filter(Boolean).join(' ').trim();
         if (!query) throw new Error('Usage: orkestrai graph search <query> [--kinds <csv>]');
@@ -449,7 +497,7 @@ export async function run(argv, options = {}) {
         }
         return 0;
       }
-      throw new Error('Usage: orkestrai graph <status|index|changes|contracts|quality|handoff|search|symbol|neighbors> ...');
+      throw new Error('Usage: orkestrai graph <status|index|changes|contracts|quality|semantic|evidence|handoff|search|symbol|neighbors> ...');
     }
     case 'memory': {
       const [action, idOrTitle, ...values] = rest;

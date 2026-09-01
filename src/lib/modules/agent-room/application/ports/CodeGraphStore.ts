@@ -94,6 +94,7 @@ export interface CodeGraphStore {
   failRevision(workspaceId: string, projectId: string, revisionId: string, diagnostics: CodeGraphDiagnostic[]): Promise<void>;
   search(workspaceId: string, options: CodeGraphSearchOptions): Promise<CodeGraphSymbol[]>;
   symbol(workspaceId: string, symbolId: string): Promise<CodeGraphSymbol | null>;
+  symbols(workspaceId: string, symbolIds: string[]): Promise<CodeGraphSymbol[]>;
   symbolsForPaths(workspaceId: string, projectId: string, paths: string[], limit?: number): Promise<CodeGraphSymbol[]>;
   contractGraph(workspaceId: string, limit?: number): Promise<CodeGraphSubgraph>;
   analysisGraph(workspaceId: string, nodeLimit?: number, edgeLimit?: number): Promise<CodeGraphSubgraph>;

@@ -5,6 +5,7 @@
   import { toast } from '@beeblock/svelar/ui';
   import {
     AlertTriangle,
+    Activity,
     ArrowDownToLine,
     ArrowUpFromLine,
     Box,
@@ -15,13 +16,17 @@
     ListTodo,
     ExternalLink,
     Network,
+    MoreHorizontal,
     RefreshCw,
     Search,
     ShieldCheck,
+    Sparkles,
+    Trash2,
     Waypoints,
     X,
   } from '@lucide/svelte';
   import * as Select from '$lib/components/ui/select';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import { Button } from '$lib/components/ui/button';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
@@ -34,6 +39,9 @@
     CodeGraphHandoffResult,
     CodeGraphFinding,
     CodeGraphQualitySnapshot,
+    CodeGraphRuntimeEvidenceSnapshot,
+    CodeGraphSemanticMatch,
+    CodeGraphSemanticStatus,
     CodeGraphSnapshot,
     CodeGraphSubgraph,
     CodeGraphSymbol,
@@ -58,6 +66,9 @@
   let changes = $state<CodeGraphChangeIntelligence | null>(null);
   let contracts = $state<CodeGraphContractSnapshot | null>(null);
   let quality = $state<CodeGraphQualitySnapshot | null>(null);
+  let semanticStatus = $state<CodeGraphSemanticStatus | null>(null);
+  let semanticMatches = $state<CodeGraphSemanticMatch[]>([]);
+  let runtime = $state<CodeGraphRuntimeEvidenceSnapshot | null>(null);
   let selectedSymbol = $state<CodeGraphSymbol | null>(null);
   let results = $state<CodeGraphSymbol[]>([]);
   let query = $state('');
@@ -69,11 +80,17 @@
   let changeLoading = $state(false);
   let contractLoading = $state(false);
   let qualityLoading = $state(false);
+  let semanticLoading = $state(false);
+  let runtimeLoading = $state(false);
+  let evidenceImporting = $state(false);
+  let evidencePath = $state('');
+  let evidenceKind = $state<'auto' | 'coverage' | 'test' | 'trace'>('auto');
+  let searchMode = $state<'lexical' | 'semantic'>('lexical');
   let handoffBusy = $state<string | null>(null);
-  let viewMode = $state<'overview' | 'changes' | 'contracts' | 'quality'>('overview');
+  let viewMode = $state<'overview' | 'changes' | 'contracts' | 'quality' | 'semantic' | 'runtime'>('overview');
   let error = $state('');
   let graphHost: HTMLDivElement;
-  let renderer: { kill: () => void; on: (event: string, handler: (payload: { node: string }) => void) => void } | null = null;
+  let renderer: { kill: () => void } | null = null;
   let renderSequence = 0;
 
   const currentProject = $derived(snapshot?.projects.find((project) => project.id === projectId) ?? null);
@@ -115,6 +132,7 @@
     if (kind === 'resource') return '#ec4899';
     if (kind === 'function' || kind === 'method') return '#10b981';
     if (kind === 'external') return '#94a3b8';
+    if (kind === 'evidence') return '#f59e0b';
     return '#f59e0b';
   }
 
@@ -135,6 +153,7 @@
       case 'gateway': return m['code_graph.kind_gateway']();
       case 'resource': return m['code_graph.kind_resource']();
       case 'external': return m['code_graph.kind_external']();
+      case 'evidence': return m['code_graph.kind_evidence']();
     }
   }
 
@@ -179,7 +198,10 @@
                   : edge.kind === 'reads' || edge.kind === 'writes' ? '#f59e0b'
                     : edge.kind === 'queries' ? '#e879f9'
                       : edge.kind === 'usesEnv' ? '#f43f5e'
-                        : edge.kind === 'sends' || edge.kind === 'receives' ? '#14b8a6'
+                    : edge.kind === 'sends' || edge.kind === 'receives' ? '#14b8a6'
+                      : edge.kind === 'coveredBy' ? '#22c55e'
+                        : edge.kind === 'failsAt' ? '#ef4444'
+                          : edge.kind === 'observedCalls' ? (edge.metadata.runtimeOnly ? '#f59e0b' : '#06b6d4')
                   : '#64748b',
       });
     }
@@ -205,6 +227,8 @@
   async function loadOverview(): Promise<void> {
     viewMode = 'overview';
     selectedSymbol = null;
+    results = [];
+    semanticMatches = [];
     const params = new URLSearchParams();
     if (projectId !== 'all') params.set('projectId', projectId);
     graph = await api<CodeGraphSubgraph>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/graph?${params}`);
@@ -265,6 +289,85 @@
     }
   }
 
+  async function loadSemantic(): Promise<void> {
+    if (!hasIndexedGraph) return;
+    semanticLoading = true;
+    error = '';
+    try {
+      semanticStatus = await api<CodeGraphSemanticStatus>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/semantic`);
+      viewMode = 'semantic';
+      selectedSymbol = null;
+      results = [];
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.semantic_error']();
+    } finally {
+      semanticLoading = false;
+    }
+  }
+
+  async function updateSemantic(action: 'build' | 'clear'): Promise<void> {
+    semanticLoading = true;
+    error = '';
+    try {
+      semanticStatus = await api<CodeGraphSemanticStatus>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/semantic`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+      semanticMatches = [];
+      toast.success(action === 'build' ? m['code_graph.semantic_built']() : m['code_graph.semantic_cleared']());
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.semantic_error']();
+      toast.error(error);
+    } finally {
+      semanticLoading = false;
+    }
+  }
+
+  async function loadRuntime(): Promise<void> {
+    if (!hasIndexedGraph) return;
+    runtimeLoading = true;
+    error = '';
+    try {
+      runtime = await api<CodeGraphRuntimeEvidenceSnapshot>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/evidence?limit=2000`);
+      viewMode = 'runtime';
+      selectedSymbol = null;
+      results = [];
+      graph = runtime.graph;
+      await renderGraph(graph);
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.runtime_error']();
+    } finally {
+      runtimeLoading = false;
+    }
+  }
+
+  async function importEvidence(): Promise<void> {
+    const targetProjectId = projectId !== 'all'
+      ? projectId
+      : snapshot?.projects.length === 1 ? snapshot.projects[0].id : null;
+    if (!targetProjectId) {
+      toast.error(m['code_graph.runtime_select_repository']());
+      return;
+    }
+    if (!evidencePath.trim()) return;
+    evidenceImporting = true;
+    error = '';
+    try {
+      await api(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/evidence`, {
+        method: 'POST',
+        body: JSON.stringify({ projectId: targetProjectId, path: evidencePath.trim(), kind: evidenceKind }),
+      });
+      evidencePath = '';
+      await loadRuntime();
+      toast.success(m['code_graph.runtime_imported']());
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.runtime_error']();
+      toast.error(error);
+    } finally {
+      evidenceImporting = false;
+    }
+  }
+
   function findingTitle(finding: CodeGraphFinding): string {
     switch (finding.rule) {
       case 'duplicate-structure': return m['code_graph.finding_duplicate_structure']();
@@ -306,6 +409,19 @@
     if (type === 'database') return m['code_graph.resource_database']();
     if (type === 'ipc') return m['code_graph.resource_ipc']();
     return m['code_graph.resource_unknown']();
+  }
+
+  function semanticStateLabel(state: CodeGraphSemanticStatus['state']): string {
+    if (state === 'ready') return m['code_graph.semantic_ready']();
+    if (state === 'stale') return m['code_graph.semantic_stale']();
+    return m['code_graph.semantic_empty']();
+  }
+
+  function evidenceKindLabel(kind: string): string {
+    if (kind === 'coverage') return m['code_graph.evidence_coverage']();
+    if (kind === 'test') return m['code_graph.evidence_test']();
+    if (kind === 'trace') return m['code_graph.evidence_trace']();
+    return m['code_graph.evidence_auto']();
   }
 
   async function createHandoff(kind: 'review' | 'task', scope: CodeGraphChangeScope): Promise<void> {
@@ -378,7 +494,15 @@
     const params = new URLSearchParams({ q: value, limit: '30' });
     if (projectId !== 'all') params.set('projectId', projectId);
     try {
-      results = await api<CodeGraphSymbol[]>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/search?${params}`);
+      viewMode = 'overview';
+      selectedSymbol = null;
+      if (searchMode === 'semantic') {
+        semanticMatches = await api<CodeGraphSemanticMatch[]>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/semantic?${params}`);
+        results = semanticMatches.map((match) => match.symbol);
+      } else {
+        semanticMatches = [];
+        results = await api<CodeGraphSymbol[]>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/search?${params}`);
+      }
     } catch (reason) {
       error = reason instanceof Error ? reason.message : m['code_graph.load_error']();
     }
@@ -402,7 +526,8 @@
   }
 
   async function openGraphSymbol(symbolId: string): Promise<void> {
-    const artifact = contracts?.graph.nodes.find((node) => node.id === symbolId && node.revisionId === 'live');
+    const artifact = contracts?.graph.nodes.find((node) => node.id === symbolId && node.revisionId === 'live')
+      ?? runtime?.graph.nodes.find((node) => node.id === symbolId && node.kind === 'evidence');
     if (artifact) {
       selectedSymbol = artifact;
       viewMode = 'overview';
@@ -520,11 +645,22 @@
       <form class="relative flex min-w-44 flex-1" onsubmit={(event) => { event.preventDefault(); void searchSymbols(); }}>
         <Search size={13} class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[var(--app-text-muted)]" />
         <input
-          class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] pr-8 pl-7 text-xs outline-none focus:border-[var(--app-accent)]"
+          class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] pr-14 pl-7 text-xs outline-none focus:border-[var(--app-accent)]"
           bind:value={query}
           placeholder={m['code_graph.search_placeholder']()}
           aria-label={m['code_graph.search_placeholder']()}
         />
+        <button
+          type="button"
+          class="absolute top-1/2 right-7 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+          class:bg-[var(--app-accent-soft)]={searchMode === 'semantic'}
+          class:text-[var(--app-accent)]={searchMode === 'semantic'}
+          aria-label={searchMode === 'semantic' ? m['code_graph.semantic_search_enabled']() : m['code_graph.semantic_search_disabled']()}
+          title={searchMode === 'semantic' ? m['code_graph.semantic_search_enabled']() : m['code_graph.semantic_search_disabled']()}
+          onclick={() => { searchMode = searchMode === 'semantic' ? 'lexical' : 'semantic'; }}
+        >
+          <Sparkles size={12} />
+        </button>
         <button type="submit" class="absolute top-1/2 right-1 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" aria-label={m['code_graph.search']()}>
           <ArrowDownToLine size={12} />
         </button>
@@ -548,26 +684,35 @@
         <GitCompareArrows size={12} class={changeLoading ? 'animate-pulse' : undefined} />
         {m['code_graph.changes']()}{changes ? ` (${changedFileCount})` : ''}
       </Button>
-      <Button
-        size="sm"
-        variant={viewMode === 'contracts' ? 'default' : 'outline'}
-        class="h-8 text-[11px]"
-        disabled={!hasIndexedGraph || contractLoading}
-        onclick={() => void loadContracts()}
-      >
-        <Network size={12} class={contractLoading ? 'animate-pulse' : undefined} />
-        {m['code_graph.contracts']()}{contracts ? ` (${contracts.matches.length})` : ''}
-      </Button>
-      <Button
-        size="sm"
-        variant={viewMode === 'quality' ? 'default' : 'outline'}
-        class="h-8 text-[11px]"
-        disabled={!hasIndexedGraph || qualityLoading}
-        onclick={() => void loadQuality()}
-      >
-        <ShieldCheck size={12} class={qualityLoading ? 'animate-pulse' : undefined} />
-        {m['code_graph.quality']()}{quality ? ` (${quality.counts.findings})` : ''}
-      </Button>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-[11px] text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${viewMode === 'contracts' || viewMode === 'quality' || viewMode === 'semantic' || viewMode === 'runtime' ? 'bg-[var(--app-accent-soft)]' : ''}`}
+          disabled={!hasIndexedGraph}
+          aria-label={m['code_graph.intelligence_views']()}
+        >
+          <MoreHorizontal size={13} />
+          {m['code_graph.intelligence']()}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="z-[140] min-w-52">
+          <DropdownMenu.Label>{m['code_graph.intelligence_views']()}</DropdownMenu.Label>
+          <DropdownMenu.Item onclick={() => void loadContracts()}>
+            <Network size={13} class={contractLoading ? 'animate-pulse' : undefined} />
+            {m['code_graph.contracts']()}{contracts ? ` (${contracts.matches.length})` : ''}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => void loadQuality()}>
+            <ShieldCheck size={13} class={qualityLoading ? 'animate-pulse' : undefined} />
+            {m['code_graph.quality']()}{quality ? ` (${quality.counts.findings})` : ''}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => void loadSemantic()}>
+            <Sparkles size={13} class={semanticLoading ? 'animate-pulse' : undefined} />
+            {m['code_graph.semantic']()}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => void loadRuntime()}>
+            <Activity size={13} class={runtimeLoading ? 'animate-pulse' : undefined} />
+            {m['code_graph.runtime']()}{runtime ? ` (${runtime.counts.runs})` : ''}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     </div>
 
     {#if snapshot}
@@ -773,6 +918,81 @@
               </div>
             {/if}
           </section>
+        {:else if viewMode === 'semantic' && semanticStatus}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.semantic_title']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          <section class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2.5">
+            <div class="flex items-center gap-2">
+              <span class="grid size-7 place-items-center rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Sparkles size={14} /></span>
+              <div class="min-w-0 flex-1">
+                <strong class="block text-[10px]">{semanticStateLabel(semanticStatus.state)}</strong>
+                <span class="block truncate text-[8px] text-[var(--app-text-muted)]">{semanticStatus.model}</span>
+              </div>
+            </div>
+            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--app-border)]">
+              <div class="h-full bg-[var(--app-accent)]" style={`width: ${semanticStatus.totalSymbols ? Math.round((semanticStatus.indexedSymbols / semanticStatus.totalSymbols) * 100) : 0}%`}></div>
+            </div>
+            <span class="mt-1 block text-[8px] text-[var(--app-text-muted)]">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
+            <div class="mt-3 grid grid-cols-2 gap-1">
+              <Button size="xs" class="w-full" disabled={semanticLoading || !hasIndexedGraph || semanticStatus.totalSymbols === 0} onclick={() => void updateSemantic('build')}>
+                <RefreshCw size={11} class={semanticLoading ? 'animate-spin' : undefined} />
+                {semanticStatus.state === 'empty' ? m['code_graph.semantic_build']() : m['code_graph.semantic_rebuild']()}
+              </Button>
+              <Button size="xs" variant="outline" class="w-full" disabled={semanticLoading || semanticStatus.state === 'empty'} onclick={() => void updateSemantic('clear')}>
+                <Trash2 size={11} /> {m['code_graph.semantic_clear']()}
+              </Button>
+            </div>
+          </section>
+          <p class="mt-2 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_privacy']()}</p>
+        {:else if viewMode === 'runtime' && runtime}
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <strong class="text-xs">{m['code_graph.runtime_title']()}</strong>
+            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          </div>
+          <div class="mb-3 grid grid-cols-2 gap-1">
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{runtime.counts.runs}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_runs']()}</span></div>
+            <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">{runtime.counts.coveredSymbols}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_covered']()}</span></div>
+            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{runtime.counts.failures}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_failures']()}</span></div>
+            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{runtime.counts.runtimeOnlyCalls}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_runtime_only']()}</span></div>
+          </div>
+          <form class="mb-3 space-y-1.5 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2" onsubmit={(event) => { event.preventDefault(); void importEvidence(); }}>
+            <strong class="block text-[10px]">{m['code_graph.evidence_import']()}</strong>
+            <Select.Root type="single" value={evidenceKind} onValueChange={(value: string) => { evidenceKind = value as typeof evidenceKind; }}>
+              <Select.Trigger size="sm" class="w-full">{evidenceKindLabel(evidenceKind)}</Select.Trigger>
+              <Select.Content>
+                {#each ['auto', 'coverage', 'test', 'trace'] as kind (kind)}
+                  <Select.Item value={kind}>{evidenceKindLabel(kind)}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+            <input
+              class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 font-mono text-[9px] outline-none focus:border-[var(--app-accent)]"
+              bind:value={evidencePath}
+              placeholder={m['code_graph.evidence_path_placeholder']()}
+              aria-label={m['code_graph.evidence_path']()}
+            />
+            <Button type="submit" size="xs" class="w-full" disabled={evidenceImporting || !evidencePath.trim()}>
+              <ArrowDownToLine size={11} class={evidenceImporting ? 'animate-pulse' : undefined} /> {m['code_graph.evidence_import_action']()}
+            </Button>
+          </form>
+          <section>
+            <strong class="mb-1 block text-[10px]">{m['code_graph.evidence_recent']()}</strong>
+            {#if runtime.runs.length === 0}
+              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.evidence_empty']()}</div>
+            {:else}
+              <div class="space-y-1">
+                {#each runtime.runs.slice(0, 50) as run (run.id)}
+                  <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
+                    <span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full {run.kind === 'coverage' ? 'bg-emerald-500' : run.kind === 'test' ? 'bg-[var(--app-danger)]' : 'bg-cyan-500'}"></span><strong class="min-w-0 flex-1 truncate text-[9px]">{run.label}</strong></span>
+                    <span class="mt-1 block truncate font-mono text-[8px] text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
+                    <span class="mt-1 block text-[8px] text-[var(--app-text-muted)]">{run.stats.coveredSymbols} {m['code_graph.evidence_covered']()} · {run.stats.failures} {m['code_graph.evidence_failures']()} · {run.stats.observedCalls} {m['code_graph.evidence_calls']()}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </section>
         {:else if results.length}
           <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
           <div class="space-y-1">
@@ -780,6 +1000,10 @@
               <button class="w-full rounded border border-transparent p-2 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-hover)]" onclick={() => void openSymbol(result.id)}>
                 <span class="block truncate text-[11px] font-semibold">{result.name}</span>
                 <span class="block truncate text-[9px] text-[var(--app-text-muted)]">{symbolKind(result.kind)} · {result.path ?? result.projectName}</span>
+                {#if searchMode === 'semantic'}
+                  {@const semantic = semanticMatches.find((match) => match.symbol.id === result.id)}
+                  {#if semantic}<span class="mt-1 block text-[8px] font-semibold text-[var(--app-accent)]">{m['code_graph.semantic_score']({ score: semantic.score })}</span>{/if}
+                {/if}
               </button>
             {/each}
           </div>

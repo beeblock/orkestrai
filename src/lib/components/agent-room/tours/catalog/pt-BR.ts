@@ -1722,6 +1722,16 @@ export const TOURS_PT: Tour[] = [
         body: 'Abra Qualidade para inspecionar duplicações, ciclos de import, acoplamento, limites inferidos entre camadas, código excessivo, execução sensível à segurança e possível código morto com confiança explícita. Recursos de fluxo de dados estático expõem somente identificadores seguros de ambiente, arquivos, caminhos de rede, tabelas de banco e canais IPC. Trate os achados como evidência para revisão, não como vereditos automáticos. Agentes usam code_graph_quality para a mesma análise limitada.',
       },
       {
+        id: 'build-semantic-index',
+        title: 'Pesquise por intenção, localmente',
+        body: 'Abra Análises → Busca semântica e construa o índice compacto local. Ative o brilho ao lado da busca e descreva o comportamento desejado em vez de adivinhar o nome do símbolo. O índice não exige chave nem download de modelo, nunca envia o código para fora do dispositivo e avisa quando uma nova revisão exige reconstrução. Agentes usam code_graph_semantic_status, code_graph_semantic_build e code_graph_semantic_search.',
+      },
+      {
+        id: 'overlay-runtime-evidence',
+        title: 'Sobreponha o que realmente executou',
+        body: 'Abra Análises → Execução, selecione um repositório e importe um caminho LCOV, JUnit XML, traceback ou JSON de execução do Orkestrai que esteja dentro dele. Arestas verdes mostram cobertura, vermelhas mostram falhas, ciano confirma chamadas observadas e âmbar marca chamadas vistas somente em execução. Logs e saída bruta dos testes não são armazenados. Agentes usam code_graph_evidence e code_graph_evidence_import.',
+      },
+      {
         id: 'inspect-change-impact',
         title: 'Inspecione mudanças ativas',
         body: 'Abra Mudanças para projetar o workspace e os Andares ativos no mesmo grafo. Símbolos vermelhos mudaram diretamente, caminhos âmbar indicam testes prováveis, e o painel lateral mostra arquivos ou símbolos dependentes compartilhados entre Andares. Agentes recebem a mesma evidência limitada com code_graph_changes.',

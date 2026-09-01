@@ -3,7 +3,7 @@ export type CodeGraphLanguage = (typeof CODE_GRAPH_LANGUAGES)[number];
 
 export const CODE_GRAPH_SYMBOL_KINDS = [
   'module', 'namespace', 'class', 'interface', 'type', 'enum', 'function',
-  'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'resource', 'external',
+  'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'resource', 'external', 'evidence',
 ] as const;
 export type CodeGraphSymbolKind = (typeof CODE_GRAPH_SYMBOL_KINDS)[number];
 
@@ -11,7 +11,7 @@ export const CODE_GRAPH_EDGE_KINDS = [
   'contains', 'defines', 'imports', 'exports', 'calls', 'references',
   'instantiates', 'inherits', 'implements', 'handles', 'requests', 'matches',
   'validates', 'generatedFrom', 'routesTo', 'reads', 'writes', 'queries',
-  'usesEnv', 'sends', 'receives',
+  'usesEnv', 'sends', 'receives', 'coveredBy', 'failsAt', 'observedCalls',
 ] as const;
 export type CodeGraphEdgeKind = (typeof CODE_GRAPH_EDGE_KINDS)[number];
 
@@ -278,4 +278,92 @@ export type CodeGraphQualitySnapshot = {
   };
   graph: CodeGraphSubgraph;
   truncated: boolean;
+};
+
+export const CODE_GRAPH_SEMANTIC_MODEL = 'orkestrai-code-subword-v1';
+export const CODE_GRAPH_SEMANTIC_DIMENSIONS = 384;
+
+export type CodeGraphSemanticState = 'empty' | 'ready' | 'stale';
+
+export type CodeGraphSemanticStatus = {
+  state: CodeGraphSemanticState;
+  model: string;
+  dimensions: number;
+  indexedSymbols: number;
+  totalSymbols: number;
+  builtAt: string | null;
+};
+
+export type CodeGraphSemanticMatch = {
+  symbol: CodeGraphSymbol;
+  score: number;
+  reasons: Array<'semantic' | 'name' | 'path' | 'documentation'>;
+};
+
+export type CodeGraphSemanticSearchOptions = {
+  query: string;
+  projectId?: string;
+  kinds?: CodeGraphSymbolKind[];
+  limit?: number;
+};
+
+export const CODE_GRAPH_EVIDENCE_KINDS = ['coverage', 'test', 'trace'] as const;
+export type CodeGraphEvidenceKind = (typeof CODE_GRAPH_EVIDENCE_KINDS)[number];
+
+export const CODE_GRAPH_EVIDENCE_EDGE_KINDS = ['coveredBy', 'failsAt', 'observedCalls'] as const;
+export type CodeGraphEvidenceEdgeKind = (typeof CODE_GRAPH_EVIDENCE_EDGE_KINDS)[number];
+
+export type CodeGraphEvidenceRun = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  projectName: string;
+  revisionId: string;
+  kind: CodeGraphEvidenceKind;
+  label: string;
+  sourcePath: string;
+  stats: {
+    coveredSymbols: number;
+    failures: number;
+    observedCalls: number;
+    runtimeOnlyCalls: number;
+    unmatchedLocations: number;
+  };
+  importedAt: string;
+};
+
+export type CodeGraphEvidenceEdge = {
+  id: string;
+  runId: string;
+  sourceSymbolId: string | null;
+  targetSymbolId: string;
+  kind: CodeGraphEvidenceEdgeKind;
+  count: number;
+  confidence: number;
+  metadata: {
+    runtimeOnly?: boolean;
+    path?: string;
+    line?: number;
+  };
+};
+
+export type CodeGraphRuntimeEvidenceSnapshot = {
+  generatedAt: string;
+  runs: CodeGraphEvidenceRun[];
+  counts: {
+    runs: number;
+    coveredSymbols: number;
+    failures: number;
+    observedCalls: number;
+    runtimeOnlyCalls: number;
+  };
+  graph: CodeGraphSubgraph;
+  truncated: boolean;
+};
+
+export type CodeGraphEvidenceImportOptions = {
+  projectId: string;
+  path: string;
+  kind?: 'auto' | CodeGraphEvidenceKind;
+  label?: string;
 };

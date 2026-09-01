@@ -361,7 +361,36 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'code-intelligence-graph',
       title: 'Code Intelligence Graph',
-      body: `Add Code Graph from the Canvas toolbar to index the approved repositories of the workspace without executing project code, build scripts, plugins, or configuration. The same persistent node opens in Workbench and visualizes modules, imports, classes, interfaces, functions, methods, calls, instantiation, inheritance, and implementations for TypeScript, JavaScript, Svelte, and PHP. Choose one repository or the whole workspace, search names, paths, signatures, and nearby documentation, then inspect incoming, outgoing, or bidirectional relationships up to a bounded depth. Open Changes to combine the current Git working tree with every active Floor: changed files are mapped to direct and transitively affected symbols, likely test files, and shared-impact conflicts before review or landing. Open Contracts to join backend endpoints, frontend HTTP calls, generated clients, OpenAPI or Swagger schemas, gateway prefixes, and live API Client requests across approved repositories. The view flags unmatched requests and cross-project route conflicts; request hosts, query values, headers, and credentials are never retained in the graph. Open Quality for confidence-scored evidence about structural duplication, import cycles, coupling, inferred layer violations, oversized code, security-sensitive execution, and possible dead code. Its static data-flow resource nodes expose environment names, relative files, network paths, database tables, and IPC channels without storing values, bodies, hosts, query strings, or source bodies. Treat every finding as review evidence, not an automatic defect verdict. The actions beside each change scope create a bounded Kanban handoff; the primary working tree can also create a Review Center review tied to its current Git revision. Source files remain authoritative: Orkestrai stores hashes, spans, bounded metadata, and relationships in its own versioned SQLite graph adapter, swaps revisions atomically, and marks the index stale when supported files change. Additional sibling repositories explicitly authorized in Edit workspace become separate graph projects. Agents query that exact visible graph through code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/handoff or the equivalent orkestrai graph commands; arbitrary SQL and Cypher are never exposed. SQLite is the local-first default behind CodeGraphStore, while benchmark gates keep a future Memgraph adapter possible without changing the UI or agent contract.`,
+      body: `Add Code Graph from the Canvas toolbar to index the approved repositories of the workspace without executing project code, build scripts, plugins, or configuration. The same persistent node opens in Workbench and visualizes modules, imports, classes, interfaces, functions, methods, calls, instantiation, inheritance, and implementations for TypeScript, JavaScript, Svelte, and PHP. Choose one repository or the whole workspace, search names, paths, signatures, and nearby documentation, then inspect incoming, outgoing, or bidirectional relationships up to a bounded depth. Open Changes to combine the current Git working tree with every active Floor: changed files are mapped to direct and transitively affected symbols, likely test files, and shared-impact conflicts before review or landing. Open Insights for Contracts, Quality, Semantic, and Runtime. Contracts joins backend endpoints, frontend HTTP calls, generated clients, OpenAPI or Swagger schemas, gateway prefixes, and live API Client requests across approved repositories while withholding request hosts, query values, headers, and credentials. Quality provides confidence-scored evidence about structural duplication, import cycles, coupling, inferred layer violations, oversized code, security-sensitive execution, possible dead code, and static environment/file/network/database/IPC flows without values or source bodies. Semantic builds an optional compact local index and turns the sparkle beside search on for intent queries; it requires no API key, external service, or model download and becomes stale when source revisions change. Runtime imports LCOV, JUnit XML, traceback, or structured Orkestrai JSON from a relative path inside the selected approved repository. It overlays covered symbols, failures, observed calls, and calls seen only at runtime while raw logs and test output are never persisted. Treat every finding as review evidence, not an automatic defect verdict. The actions beside each change scope create a bounded Kanban handoff; the primary working tree can also create a Review Center review tied to its current Git revision. Source files remain authoritative: Orkestrai stores hashes, spans, bounded metadata, compact vectors, derived evidence, and relationships in its own versioned SQLite graph adapter, swaps revisions atomically, and marks indexes stale when supported files change. Additional sibling repositories explicitly authorized in Edit workspace become separate graph projects. Agents query that exact visible graph through code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/handoff or the equivalent orkestrai graph commands; arbitrary SQL and Cypher are never exposed. SQLite is the local-first default behind CodeGraphStore, while benchmark gates keep future adapters possible without changing the UI or agent contract.`,
+    },
+    {
+      id: 'code-intelligence-runtime-format',
+      title: 'Runtime evidence format',
+      body: 'In Code Graph, open Insights, then Runtime. Select one indexed repository and provide a path relative to that repository. Auto-detection accepts LCOV .info, JUnit XML, common stack traces, or the bounded Orkestrai JSON v1 contract below. JSON paths are also repository-relative and line numbers are one-based. Files are limited to 5 MB; coverage is capped at 50,000 locations and failures or calls at 5,000 relationships. Orkestrai stores only content hashes, counters, mapped symbol ids, paths, line numbers, and derived relationships. It never persists the raw file, stack text, test output, environment values, or source bodies.',
+      bullets: [
+        'Build or refresh the structural graph before importing evidence so paths and lines can map to the current symbol revision.',
+        'Use orkestrai graph evidence import <projectId> <relativePath> --kind auto from an agent terminal, or the equivalent code_graph_evidence_import MCP tool.',
+        'A runtime-only call means the observed relationship was absent from the bounded static call graph. It is evidence to inspect, not proof of a defect.',
+      ],
+      examples: [{
+        id: 'runtime-evidence-json-v1',
+        title: 'Orkestrai JSON v1',
+        description: 'Coverage, failures, and observed calls can share one document.',
+        snippets: [{
+          id: 'runtime-evidence-json',
+          title: 'runtime-evidence.json',
+          code: `{
+  "version": 1,
+  "coverage": [{ "path": "src/auth.ts", "line": 42, "count": 8 }],
+  "failures": [{ "path": "src/auth.ts", "line": 67, "count": 1 }],
+  "calls": [{
+    "from": { "path": "src/routes/login.ts", "line": 18 },
+    "to": { "path": "src/auth.ts", "line": 42 },
+    "count": 8
+  }]
+}`,
+        }],
+      }],
     },
     {
       id: 'cli',
@@ -730,8 +759,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'code-intelligence-graph',
       title: 'Understand a codebase before changing it',
-      body: 'Start the guided use case to add one Code Graph node and index every repository explicitly approved for the workspace. Search for a service, component, route, or method, select the result, and switch between callers and dependencies before opening the relevant source. Open Contracts to connect backend endpoints, frontend calls, generated clients, OpenAPI schemas, gateway prefixes, and live API Client requests, then inspect unmatched calls or cross-project route conflicts without exposing secrets. Open Quality to review confidence-scored duplication, cycles, coupling, layer boundaries, smells, sensitive execution, possible dead code, and static data flow without stored secret values. Open Changes to inspect the current working tree and active Floors, including affected symbols, likely tests, and cross-Floor conflicts, then use the scope actions to create a Review Center review or Kanban task. A leader or specialist uses the same bounded graph, contracts, quality evidence, and handoff through MCP without loading whole repositories into the conversation.',
-      tags: ['Code intelligence', 'architecture and impact', 'multi-repository'],
+      body: 'Start the guided use case to add one Code Graph node and index every repository explicitly approved for the workspace. Search for a service, component, route, or method, then follow callers and dependencies before opening source. Under Insights, use Contracts for cross-repository APIs, Quality for confidence-scored findings, Semantic to build an offline intent index, and Runtime to import a confined LCOV, JUnit, traceback, or structured JSON file. Coverage, failures, observed calls, and runtime-only links appear in the same graph without storing raw logs or secrets. Open Changes for the working tree and active Floors, then create a Review Center or Kanban handoff. A leader or specialist uses the same bounded evidence through MCP without loading whole repositories into the conversation.',
+      tags: ['Code intelligence', 'semantic and runtime evidence', 'multi-repository'],
     },
     {
       id: 'desktop-diagnostics',
@@ -755,7 +784,10 @@ Header: Authorization = Bearer {{accessToken}}`,
         'The native Code Intelligence Graph safely indexes approved TypeScript, JavaScript, Svelte, and PHP repositories, provides atomic searchable revisions and bounded relationship traversal, overlays Git and active Floor changes with affected symbols, likely tests, and conflicts, creates traceable Review Center or Kanban handoffs, renders theme-aware labels in Canvas and Workbench, and exposes the same graph to agents through typed CLI and MCP tools.',
         'Its Contracts view joins backend endpoints, frontend calls, generated clients, OpenAPI or Swagger schemas, gateway prefixes, and live API Client requests across approved repositories, highlighting unmatched calls and route conflicts without retaining hosts, query values, headers, or credentials.',
         'Its Quality view adds confidence-scored evidence for duplication, import cycles, coupling, inferred layer violations, oversized code, security-sensitive execution, possible dead code, and static environment/file/network/database/IPC flows without retaining values, payloads, hosts, query strings, or source bodies.',
+        'Its optional offline Semantic index adds intent search without an API key, model download, or external code transfer; compact vectors stay scoped to the current graph revision.',
+        'Its Runtime view imports confined LCOV, JUnit, traceback, or structured JSON evidence and overlays coverage, failures, observed calls, and runtime-only relationships without persisting raw output.',
         'Code Intelligence accepts approved repositories with no supported source files as a valid empty graph, and the Index code action keeps readable contrast across every theme.',
+        'Code graph watchers observe only supported source and contract files, ignore sockets and other special entries, and contain filesystem errors without terminating the app.',
       ],
     },
     {

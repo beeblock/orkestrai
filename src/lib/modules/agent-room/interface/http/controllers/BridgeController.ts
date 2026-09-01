@@ -53,13 +53,15 @@ import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectIm
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
-import { codeGraphChangeSchema, codeGraphContractSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema, codeGraphSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { codeGraphChangeSchema, codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphEvidenceSnapshotSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema, codeGraphSearchSchema, codeGraphSemanticActionSchema, codeGraphSemanticSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
 import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '$lib/modules/agent-room/application/services/CodeGraphContractService.js';
 import { codeGraphQualityService } from '$lib/modules/agent-room/application/services/CodeGraphQualityService.js';
+import { codeGraphSemanticService } from '$lib/modules/agent-room/application/services/CodeGraphSemanticService.js';
+import { codeGraphRuntimeEvidenceService } from '$lib/modules/agent-room/application/services/CodeGraphRuntimeEvidenceService.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -192,6 +194,55 @@ export class BridgeController extends Controller {
       return this.json({ data: await codeGraphQualityService.analyze(workspace.id, input) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to analyze code quality.');
+    }
+  }
+
+  async codeGraphSemantic(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const query = event.url.searchParams.get('q');
+      if (!query) return this.json({ data: await codeGraphSemanticService.status(workspace.id) });
+      const input = codeGraphSemanticSearchSchema.parse(Object.fromEntries(event.url.searchParams));
+      return this.json({ data: await codeGraphSemanticService.search(workspace.id, {
+        query: input.q,
+        projectId: input.projectId,
+        kinds: input.kinds,
+        limit: input.limit,
+      }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to use the semantic code index.');
+    }
+  }
+
+  async codeGraphSemanticUpdate(event: any) {
+    try {
+      const input = codeGraphSemanticActionSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: input.action === 'build'
+        ? await codeGraphSemanticService.build(workspace.id)
+        : await codeGraphSemanticService.clear(workspace.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to update the semantic code index.');
+    }
+  }
+
+  async codeGraphEvidence(event: any) {
+    try {
+      const input = codeGraphEvidenceSnapshotSchema.parse(Object.fromEntries(event.url.searchParams));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphRuntimeEvidenceService.snapshot(workspace.id, input.limit) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load runtime evidence.');
+    }
+  }
+
+  async codeGraphEvidenceImport(event: any) {
+    try {
+      const input = codeGraphEvidenceImportSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await codeGraphRuntimeEvidenceService.import(workspace.id, input) }, 201);
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to import runtime evidence.');
     }
   }
 

@@ -8,6 +8,10 @@ import {
   codeGraphHandoffSchema,
   codeGraphContractSchema,
   codeGraphQualitySchema,
+  codeGraphSemanticSearchSchema,
+  codeGraphSemanticActionSchema,
+  codeGraphEvidenceImportSchema,
+  codeGraphEvidenceSnapshotSchema,
   type CodeGraphIndexInput,
   type CodeGraphSearchInput,
   type CodeGraphTraversalInput,
@@ -16,6 +20,10 @@ import {
   type CodeGraphHandoffInput,
   type CodeGraphContractInput,
   type CodeGraphQualityInput,
+  type CodeGraphSemanticSearchInput,
+  type CodeGraphSemanticActionInput,
+  type CodeGraphEvidenceImportInput,
+  type CodeGraphEvidenceSnapshotInput,
 } from '../../../contracts/schemas/codeGraphSchemas.js';
 
 abstract class AuthorizedRequest extends FormRequest {
@@ -62,4 +70,24 @@ export class CodeGraphContractRequest extends AuthorizedRequest {
 export class CodeGraphQualityRequest extends AuthorizedRequest {
   rules() { return codeGraphQualitySchema; }
   passedValidation(data: unknown): CodeGraphQualityInput { return codeGraphQualitySchema.parse(data); }
+}
+
+export class CodeGraphSemanticSearchRequest extends AuthorizedRequest {
+  rules() { return codeGraphSemanticSearchSchema; }
+  passedValidation(data: unknown): CodeGraphSemanticSearchInput { return codeGraphSemanticSearchSchema.parse(data); }
+}
+
+export class CodeGraphSemanticActionRequest extends AuthorizedRequest {
+  rules() { return codeGraphSemanticActionSchema; }
+  passedValidation(data: unknown): CodeGraphSemanticActionInput { return codeGraphSemanticActionSchema.parse(data); }
+}
+
+export class CodeGraphEvidenceImportRequest extends AuthorizedRequest {
+  rules() { return codeGraphEvidenceImportSchema; }
+  passedValidation(data: unknown): CodeGraphEvidenceImportInput { return codeGraphEvidenceImportSchema.parse(data); }
+}
+
+export class CodeGraphEvidenceSnapshotRequest extends AuthorizedRequest {
+  rules() { return codeGraphEvidenceSnapshotSchema; }
+  passedValidation(data: unknown): CodeGraphEvidenceSnapshotInput { return codeGraphEvidenceSnapshotSchema.parse(data); }
 }

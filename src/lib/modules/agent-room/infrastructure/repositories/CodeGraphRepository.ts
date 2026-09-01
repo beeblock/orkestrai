@@ -683,6 +683,10 @@ export class CodeGraphRepository implements CodeGraphStore {
     return rows[0] ?? null;
   }
 
+  async symbols(workspaceId: string, symbolIds: string[]): Promise<CodeGraphSymbol[]> {
+    return this.loadSymbols(workspaceId, [...new Set(symbolIds)].slice(0, 5_000));
+  }
+
   async symbolsForPaths(
     workspaceId: string,
     projectId: string,

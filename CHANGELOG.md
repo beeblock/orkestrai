@@ -44,6 +44,17 @@ pt-BR, English, and Spanish translations.
   flows without persisting secret values, payloads, hosts, query strings, or
   source bodies. Agents use the same analysis through `code_graph_quality` or
   `orkestrai graph quality`.
+- The optional local semantic index searches symbols by intent across names,
+  qualified names, paths, signatures, bounded documentation, and graph
+  neighbors. Its compact vectors stay on the device, require no API key or
+  model download, and are rebuilt explicitly when indexed revisions change.
+  Canvas, Workbench, CLI, and MCP expose the same scored, explainable matches.
+- Runtime evidence imports LCOV, JUnit XML, bounded tracebacks, or structured
+  Orkestrai JSON from a relative path inside an approved repository. Coverage,
+  failures, observed calls, and runtime-only relationships are overlaid on the
+  same graph while raw logs, test output, source bodies, and credentials are
+  never persisted. The compact toolbar now groups Contracts, Quality, Semantic,
+  and Runtime under Insights.
 
 ### Fixed
 
@@ -51,6 +62,9 @@ pt-BR, English, and Spanish translations.
   files as a valid empty graph instead of surfacing ripgrep's no-match exit code
   as an indexing failure. Its primary Index code action also uses the theme's
   guaranteed accent-contrast token, keeping the label readable in every theme.
+- Code graph watchers now observe only supported source and contract files,
+  ignore sockets and other special filesystem entries, and contain watcher
+  errors instead of allowing an unusual workspace entry to terminate the app.
 - After macOS sleep, hibernation, renderer reloads, or a brief power loss, a
   canvas agent now reattaches to the one live PTY identified by workspace and
   node instead of launching a second writer for the same provider conversation.

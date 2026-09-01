@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import type { Stats } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { basename, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
@@ -28,6 +29,9 @@ const execFileAsync = promisify(execFile);
 const INDEXER_VERSION = 3;
 const PARSE_CONCURRENCY = 4;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
+const WATCHED_SOURCE = /\.(?:[cm]?[jt]sx?|svelte|php)$/i;
+const WATCHED_CONTRACT = /(?:^|[._-])(openapi|swagger)(?:[._-]|$).*\.(?:json|ya?ml)$/i;
+const IGNORED_WATCH_SEGMENT = /(^|[\\/])(\.git|node_modules|vendor|\.svelte-kit|\.next|\.nuxt|build|dist|release|coverage|target|\.cache)([\\/]|$)/;
 
 type IndexState = {
   inFlight: Map<string, Promise<CodeGraphProject>>;
@@ -60,6 +64,13 @@ function portablePath(value: string): string {
 function isInside(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (!path.startsWith(`..${sep}`) && path !== '..');
+}
+
+function ignoreWatchPath(path: string, info?: Stats): boolean {
+  if (IGNORED_WATCH_SEGMENT.test(path)) return true;
+  if (!info || info.isDirectory()) return false;
+  if (!info.isFile()) return true;
+  return !WATCHED_SOURCE.test(path) && !WATCHED_CONTRACT.test(basename(path));
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -271,13 +282,13 @@ export class CodeGraphIndexService {
       if (current?.rootPath === project.rootPath) continue;
       if (current) await this.closeWatcher(project.id);
       const watcher = watch(project.rootPath, {
-        ignored: (path) => /(^|[\\/])(\.git|node_modules|vendor|\.svelte-kit|\.next|\.nuxt|build|dist|release|coverage|target|\.cache)([\\/]|$)/.test(path),
+        ignored: ignoreWatchPath,
         ignoreInitial: true,
         followSymlinks: false,
         awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 100 },
       });
       const changed = (path: string) => {
-        if (!/\.(?:[cm]?[jt]sx?|svelte|php|json|ya?ml)$/i.test(path)) return;
+        if (!WATCHED_SOURCE.test(path) && !WATCHED_CONTRACT.test(basename(path))) return;
         const prior = this.state.staleTimers.get(project.id);
         if (prior) clearTimeout(prior);
         this.state.staleTimers.set(project.id, setTimeout(() => {
@@ -287,7 +298,14 @@ export class CodeGraphIndexService {
           });
         }, 350));
       };
-      watcher.on('add', changed).on('change', changed).on('unlink', changed);
+      watcher
+        .on('add', changed)
+        .on('change', changed)
+        .on('unlink', changed)
+        .on('error', (error) => {
+          const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'unknown';
+          console.warn(`[orkestrai] Code graph watcher ignored a filesystem error (${code}) for project ${project.id}.`);
+        });
       this.state.watchers.set(project.id, { workspaceId, rootPath: project.rootPath, watcher });
     }
   }

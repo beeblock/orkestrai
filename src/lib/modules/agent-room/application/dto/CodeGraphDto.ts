@@ -7,8 +7,10 @@ import type {
   CodeGraphHandoffInput,
   CodeGraphContractInput,
   CodeGraphQualityInput,
+  CodeGraphSemanticSearchInput,
+  CodeGraphEvidenceImportInput,
 } from '../../contracts/schemas/codeGraphSchemas.js';
-import type { CodeGraphChangeOptions, CodeGraphContractOptions, CodeGraphHandoffOptions, CodeGraphIndexOptions, CodeGraphQualityOptions, CodeGraphSearchOptions, CodeGraphTraversalOptions } from '../../domain/code-graph.js';
+import type { CodeGraphChangeOptions, CodeGraphContractOptions, CodeGraphEvidenceImportOptions, CodeGraphHandoffOptions, CodeGraphIndexOptions, CodeGraphQualityOptions, CodeGraphSearchOptions, CodeGraphSemanticSearchOptions, CodeGraphTraversalOptions } from '../../domain/code-graph.js';
 
 export class IndexCodeGraphDto {
   constructor(
@@ -107,5 +109,32 @@ export class CodeGraphQualityDto {
 
   static from(workspaceId: string, input: CodeGraphQualityInput): CodeGraphQualityDto {
     return new CodeGraphQualityDto(workspaceId, input);
+  }
+}
+
+export class CodeGraphSemanticSearchDto {
+  constructor(
+    public readonly workspaceId: string,
+    public readonly options: CodeGraphSemanticSearchOptions,
+  ) {}
+
+  static from(workspaceId: string, input: CodeGraphSemanticSearchInput): CodeGraphSemanticSearchDto {
+    return new CodeGraphSemanticSearchDto(workspaceId, {
+      query: input.q,
+      projectId: input.projectId,
+      kinds: input.kinds,
+      limit: input.limit,
+    });
+  }
+}
+
+export class CodeGraphEvidenceImportDto {
+  constructor(
+    public readonly workspaceId: string,
+    public readonly options: CodeGraphEvidenceImportOptions,
+  ) {}
+
+  static from(workspaceId: string, input: CodeGraphEvidenceImportInput): CodeGraphEvidenceImportDto {
+    return new CodeGraphEvidenceImportDto(workspaceId, input);
   }
 }

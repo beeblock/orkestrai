@@ -71,7 +71,11 @@ common credentials redacted; normal agent output is not persisted.
   coupling, layered-boundary violations, oversized code, security-sensitive
   execution, and possible dead code. Static environment, file, network-path,
   database-table, and IPC flows appear as resource nodes without retaining
-  secret values, payloads, hosts, query strings, or source bodies.
+  secret values, payloads, hosts, query strings, or source bodies. An optional
+  offline semantic index adds intent search with compact vectors and no model
+  download or API key. Runtime evidence imports confined LCOV, JUnit, traceback,
+  or structured JSON files and overlays coverage, failures, observed calls, and
+  runtime-only relationships without persisting raw test output.
 - **Native API client:** organize HTTP/REST, GraphQL, WebSocket, and gRPC requests
   in nested folders with isolated drag-and-drop and context menus. Configure
   Bearer/Basic/API-key or assisted OAuth 2.0 authentication, cookies, proxy,

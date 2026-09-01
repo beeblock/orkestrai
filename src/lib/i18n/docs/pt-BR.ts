@@ -365,7 +365,36 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'code-intelligence-graph',
       title: 'Grafo de Inteligência de Código',
-      body: `Adicione Grafo de Código pela barra do Canvas para indexar os repositórios aprovados do workspace sem executar código do projeto, scripts de build, plugins ou configurações. O mesmo nó persistente abre no Workbench e visualiza módulos, imports, classes, interfaces, funções, métodos, chamadas, instanciações, herança e implementações em TypeScript, JavaScript, Svelte e PHP. Escolha um repositório ou o workspace inteiro, pesquise nomes, caminhos, assinaturas e documentação próxima e inspecione relações de entrada, saída ou ambas até uma profundidade limitada. Abra Mudanças para combinar o working tree Git atual com todos os Floors ativos: arquivos alterados são mapeados para símbolos direta e transitivamente afetados, testes prováveis e conflitos de impacto compartilhado antes da revisão ou integração. Abra Contratos para cruzar endpoints do backend, chamadas HTTP do frontend, clientes gerados, schemas OpenAPI ou Swagger, prefixos de gateway e requests vivos do Cliente de API entre repositórios aprovados. A visão destaca requests sem correspondência e conflitos de rota entre projetos; hosts, valores de query, headers e credenciais nunca ficam no grafo. Abra Qualidade para evidências com confiança explícita sobre duplicação estrutural, ciclos de import, acoplamento, violações inferidas entre camadas, código excessivo, execução sensível à segurança e possível código morto. Os nós de recurso do fluxo de dados estático mostram nomes de ambiente, arquivos relativos, caminhos de rede, tabelas de banco e canais IPC sem guardar valores, corpos, hosts, query strings ou corpos de código. Trate cada achado como evidência para revisão, não como veredito automático. As ações ao lado de cada escopo de mudança criam um handoff limitado no Kanban; o working tree principal também pode criar uma revisão no Review Center ligada à revisão Git atual. Os arquivos-fonte continuam sendo a verdade: o Orkestrai salva hashes, spans, metadados limitados e relações no próprio adapter de grafo versionado em SQLite, troca revisões de forma atômica e marca o índice como desatualizado quando arquivos suportados mudam. Repositórios irmãos autorizados em Editar workspace viram projetos separados no grafo. Agentes consultam exatamente o mesmo grafo visível por code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/handoff ou pelos comandos orkestrai graph equivalentes; SQL e Cypher arbitrários nunca são expostos. SQLite é o padrão local-first atrás de CodeGraphStore, e gates de benchmark mantêm possível um adapter Memgraph futuro sem mudar a UI ou o contrato dos agentes.`,
+      body: `Adicione Grafo de Código pela barra do Canvas para indexar os repositórios aprovados do workspace sem executar código do projeto, scripts de build, plugins ou configurações. O mesmo nó persistente abre no Workbench e visualiza módulos, imports, classes, interfaces, funções, métodos, chamadas, instanciações, herança e implementações em TypeScript, JavaScript, Svelte e PHP. Escolha um repositório ou o workspace inteiro, pesquise nomes, caminhos, assinaturas e documentação próxima e inspecione relações de entrada, saída ou ambas até uma profundidade limitada. Abra Mudanças para combinar o working tree Git atual com todos os Floors ativos: arquivos alterados são mapeados para símbolos direta e transitivamente afetados, testes prováveis e conflitos antes da revisão ou integração. Abra Análises para Contratos, Qualidade, Busca semântica e Execução. Contratos cruza endpoints, chamadas HTTP, clientes gerados, OpenAPI ou Swagger, gateways e requests do Cliente de API sem reter hosts, queries, headers ou credenciais. Qualidade mostra evidências com confiança explícita sobre duplicação, ciclos, acoplamento, camadas, código excessivo, execução sensível, possível código morto e fluxos estáticos de ambiente/arquivo/rede/banco/IPC sem valores ou corpos de código. Busca semântica constrói um índice compacto opcional no dispositivo e ativa o brilho ao lado da busca para consultas por intenção; não exige chave, serviço externo ou download de modelo e fica desatualizado quando a revisão muda. Execução importa LCOV, JUnit XML, traceback ou JSON estruturado do Orkestrai por um caminho relativo dentro do repositório aprovado selecionado. A visão sobrepõe símbolos cobertos, falhas, chamadas observadas e relações vistas somente em execução sem persistir logs ou saída bruta dos testes. Trate cada achado como evidência para revisão, não como veredito automático. As ações de mudança criam um handoff limitado no Kanban; o working tree principal também pode criar uma revisão no Review Center. Os arquivos-fonte continuam sendo a verdade: o Orkestrai salva hashes, spans, metadados limitados, vetores compactos, evidências derivadas e relações no adapter versionado em SQLite, troca revisões atomicamente e marca índices desatualizados quando arquivos suportados mudam. Repositórios irmãos autorizados viram projetos separados. Agentes consultam o mesmo grafo por code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/handoff ou comandos orkestrai graph equivalentes; SQL e Cypher arbitrários nunca são expostos. SQLite continua como padrão local-first atrás de CodeGraphStore, com espaço para adapters futuros sem mudar a UI ou o contrato dos agentes.`,
+    },
+    {
+      id: 'code-intelligence-runtime-format',
+      title: 'Formato de evidência de execução',
+      body: 'No Grafo de Código, abra Análises e depois Execução. Selecione um repositório indexado e informe um caminho relativo a ele. A detecção automática aceita LCOV .info, JUnit XML, stack traces comuns ou o contrato JSON v1 limitado do Orkestrai abaixo. Caminhos no JSON também são relativos ao repositório e as linhas começam em um. O arquivo é limitado a 5 MB; cobertura aceita até 50.000 locais e falhas ou chamadas até 5.000 relações. O Orkestrai guarda somente hash do conteúdo, contadores, ids dos símbolos mapeados, caminhos, linhas e relações derivadas. O arquivo bruto, texto da stack, saída de testes, valores de ambiente e corpos de código nunca são persistidos.',
+      bullets: [
+        'Construa ou atualize o grafo estrutural antes de importar evidências para mapear caminhos e linhas à revisão atual dos símbolos.',
+        'Use orkestrai graph evidence import <projectId> <caminhoRelativo> --kind auto no terminal do agente, ou a tool MCP code_graph_evidence_import equivalente.',
+        'Uma chamada somente em execução significa que a relação observada não estava no grafo estático limitado. É evidência para investigar, não prova de defeito.',
+      ],
+      examples: [{
+        id: 'runtime-evidence-json-v1',
+        title: 'JSON v1 do Orkestrai',
+        description: 'Cobertura, falhas e chamadas observadas podem compartilhar o mesmo documento.',
+        snippets: [{
+          id: 'runtime-evidence-json',
+          title: 'runtime-evidence.json',
+          code: `{
+  "version": 1,
+  "coverage": [{ "path": "src/auth.ts", "line": 42, "count": 8 }],
+  "failures": [{ "path": "src/auth.ts", "line": 67, "count": 1 }],
+  "calls": [{
+    "from": { "path": "src/routes/login.ts", "line": 18 },
+    "to": { "path": "src/auth.ts", "line": 42 },
+    "count": 8
+  }]
+}`,
+        }],
+      }],
     },
     {
       id: 'cli',
@@ -734,8 +763,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'code-intelligence-graph',
       title: 'Entender uma codebase antes de alterá-la',
-      body: 'Inicie o caso de uso guiado para adicionar um nó Grafo de Código e indexar todos os repositórios explicitamente aprovados para o workspace. Pesquise um serviço, componente, rota ou método, selecione o resultado e alterne entre quem chama e suas dependências antes de abrir o código relevante. Abra Contratos para ligar endpoints do backend, chamadas do frontend, clientes gerados, schemas OpenAPI, prefixos de gateway e requests vivos do Cliente de API, depois inspecione chamadas sem correspondência ou conflitos de rota entre projetos sem expor segredos. Abra Qualidade para revisar duplicações, ciclos, acoplamento, limites entre camadas, smells, execução sensível, possível código morto e fluxo de dados estático com confiança explícita e sem valores secretos armazenados. Abra Mudanças para inspecionar o working tree atual e os Floors ativos, incluindo símbolos afetados, testes prováveis e conflitos entre Floors, e use as ações do escopo para criar uma revisão no Review Center ou tarefa Kanban. Um líder ou especialista usa o mesmo grafo, contratos, evidências de qualidade e handoff limitados pelo MCP sem carregar repositórios inteiros na conversa.',
-      tags: ['Inteligência de código', 'arquitetura e impacto', 'múltiplos repositórios'],
+      body: 'Inicie o caso de uso guiado para adicionar um nó Grafo de Código e indexar os repositórios aprovados. Pesquise um serviço, componente, rota ou método e siga chamadas e dependências antes de abrir o código. Em Análises, use Contratos para APIs entre repositórios, Qualidade para achados com confiança explícita, Busca semântica para construir um índice offline por intenção e Execução para importar LCOV, JUnit, traceback ou JSON estruturado confinado. Cobertura, falhas, chamadas observadas e relações somente de execução aparecem no mesmo grafo sem guardar logs brutos ou segredos. Abra Mudanças para o working tree e Floors ativos e crie uma revisão no Review Center ou tarefa Kanban. Líderes e especialistas usam as mesmas evidências limitadas pelo MCP sem carregar repositórios inteiros na conversa.',
+      tags: ['Inteligência de código', 'semântica e execução', 'múltiplos repositórios'],
     },
     {
       id: 'desktop-diagnostics',
@@ -759,7 +788,10 @@ Header: Authorization = Bearer {{accessToken}}`,
         'O Grafo de Inteligência de Código nativo indexa com segurança repositórios TypeScript, JavaScript, Svelte e PHP aprovados, oferece revisões atômicas pesquisáveis e travessias limitadas, sobrepõe mudanças Git e de Floors ativos com símbolos afetados, testes prováveis e conflitos, cria handoffs rastreáveis no Review Center ou Kanban, renderiza rótulos adaptados ao tema no Canvas e Workbench e expõe o mesmo grafo aos agentes por CLI e MCP tipados.',
         'A visão Contratos cruza endpoints do backend, chamadas do frontend, clientes gerados, schemas OpenAPI ou Swagger, prefixos de gateway e requests vivos do Cliente de API entre repositórios aprovados, destacando chamadas sem correspondência e conflitos sem reter hosts, valores de query, headers ou credenciais.',
         'A visão Qualidade adiciona evidências com confiança explícita para duplicação, ciclos de import, acoplamento, violações inferidas entre camadas, código excessivo, execução sensível, possível código morto e fluxos estáticos de ambiente/arquivo/rede/banco/IPC sem reter valores, payloads, hosts, query strings ou corpos de código.',
+        'O índice Semântico offline opcional adiciona busca por intenção sem chave de API, download de modelo ou envio externo de código; vetores compactos permanecem limitados à revisão atual do grafo.',
+        'A visão Execução importa evidências confinadas de LCOV, JUnit, traceback ou JSON estruturado e sobrepõe cobertura, falhas, chamadas observadas e relações somente de execução sem persistir saída bruta.',
         'A Inteligência de Código aceita repositórios aprovados sem arquivos-fonte suportados como um grafo vazio válido, e a ação Indexar código mantém contraste legível em todos os temas.',
+        'Os watchers do grafo observam apenas arquivos-fonte e contratos suportados, ignoram sockets e outras entradas especiais e contêm erros do filesystem sem encerrar o app.',
       ],
     },
     {

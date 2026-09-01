@@ -1718,6 +1718,16 @@ export const TOURS_ES: Tour[] = [
         body: 'Abre Calidad para inspeccionar duplicados, ciclos de imports, acoplamiento, límites inferidos entre capas, código excesivo, ejecución sensible para la seguridad y posible código muerto con confianza explícita. Los recursos de flujo de datos estático exponen solo identificadores seguros de entorno, archivos, rutas de red, tablas de base de datos y canales IPC. Trata los hallazgos como evidencia para revisión, no como veredictos automáticos. Los agentes usan code_graph_quality para el mismo análisis limitado.',
       },
       {
+        id: 'build-semantic-index',
+        title: 'Busca por intención, localmente',
+        body: 'Abre Análisis → Búsqueda semántica y construye el índice compacto local. Activa el brillo junto a la búsqueda y describe el comportamiento que necesitas en vez de adivinar el nombre del símbolo. El índice no requiere clave ni descarga de modelo, nunca envía el código fuera del dispositivo y avisa cuando una nueva revisión exige reconstrucción. Los agentes usan code_graph_semantic_status, code_graph_semantic_build y code_graph_semantic_search.',
+      },
+      {
+        id: 'overlay-runtime-evidence',
+        title: 'Superpone lo que realmente se ejecutó',
+        body: 'Abre Análisis → Ejecución, selecciona un repositorio e importa una ruta LCOV, JUnit XML, traceback o JSON de ejecución de Orkestrai que esté dentro del repositorio. Las aristas verdes muestran cobertura, las rojas fallos, las cian llamadas observadas y las ámbar llamadas vistas solo en ejecución. No se almacenan logs ni salida cruda de tests. Los agentes usan code_graph_evidence y code_graph_evidence_import.',
+      },
+      {
         id: 'inspect-change-impact',
         title: 'Inspecciona cambios activos',
         body: 'Abre Cambios para proyectar el workspace y los Pisos activos en el mismo grafo. Los símbolos rojos cambiaron directamente, las rutas ámbar indican pruebas probables y el panel lateral muestra archivos o símbolos dependientes compartidos entre Pisos. Los agentes reciben la misma evidencia limitada con code_graph_changes.',

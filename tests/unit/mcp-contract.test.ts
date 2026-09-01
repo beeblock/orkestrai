@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
 import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
-import { codeGraphContractSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
+import { codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphQualitySchema, codeGraphSemanticActionSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 
 /**
  * Contrato MCP x ponte: TODA tool e dirigida contra a rota e o schema REAIS
@@ -64,6 +64,11 @@ const EXPECTED: Record<string, Expectation> = {
   code_graph_changes: { method: 'GET', path: /\/bridge\/code-graph\/changes\?/ },
   code_graph_contracts: { method: 'GET', path: /\/bridge\/code-graph\/contracts\?/ },
   code_graph_quality: { method: 'GET', path: /\/bridge\/code-graph\/quality\?/ },
+  code_graph_semantic_status: { method: 'GET', path: /\/bridge\/code-graph\/semantic$/ },
+  code_graph_semantic_build: { method: 'POST', path: /\/bridge\/code-graph\/semantic$/, schema: codeGraphSemanticActionSchema },
+  code_graph_semantic_search: { method: 'GET', path: /\/bridge\/code-graph\/semantic\?/ },
+  code_graph_evidence: { method: 'GET', path: /\/bridge\/code-graph\/evidence\?/ },
+  code_graph_evidence_import: { method: 'POST', path: /\/bridge\/code-graph\/evidence$/, schema: codeGraphEvidenceImportSchema },
   code_graph_handoff: { method: 'POST', path: /\/bridge\/code-graph\/handoffs$/, schema: codeGraphHandoffSchema },
   huddle_list: { method: 'GET', path: /\/bridge\/huddles\?selected=/ },
   huddle_say: { method: 'POST', path: /\/bridge\/huddles\/00000000-0000-7000-8000-000000000001\/turns$/, schema: bridgeHuddleContributeSchema },
@@ -143,6 +148,9 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   code_graph_changes: { depth: 2, limit: 500 },
   code_graph_contracts: codeGraphContractSchema.parse({ limit: 300, includeGraph: true }),
   code_graph_quality: codeGraphQualitySchema.parse({ limit: 300, includeGraph: true }),
+  code_graph_semantic_search: { query: 'compute checkout total', kinds: ['function'], limit: 20 },
+  code_graph_evidence: { limit: 300 },
+  code_graph_evidence_import: { projectId: '00000000-0000-7000-8000-000000000020', path: 'coverage/lcov.info', kind: 'coverage' },
   code_graph_handoff: { kind: 'task', scopeId: 'workspace', title: 'Investigate order impact', locale: 'en' },
   huddle_list: { huddleId: '00000000-0000-7000-8000-000000000001' },
   huddle_say: { huddleId: '00000000-0000-7000-8000-000000000001', text: 'The release gate is clear.' },

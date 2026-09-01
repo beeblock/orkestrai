@@ -1,12 +1,14 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { ChangeCodeGraphDto, CodeGraphContractDto, CodeGraphHandoffDto, CodeGraphQualityDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
+import { ChangeCodeGraphDto, CodeGraphContractDto, CodeGraphEvidenceImportDto, CodeGraphHandoffDto, CodeGraphQualityDto, CodeGraphSemanticSearchDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
 import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '../../../application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '../../../application/services/CodeGraphContractService.js';
 import { codeGraphQualityService } from '../../../application/services/CodeGraphQualityService.js';
-import { ChangeCodeGraphRequest, CodeGraphContractRequest, CodeGraphHandoffRequest, CodeGraphQualityRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
+import { codeGraphSemanticService } from '../../../application/services/CodeGraphSemanticService.js';
+import { codeGraphRuntimeEvidenceService } from '../../../application/services/CodeGraphRuntimeEvidenceService.js';
+import { ChangeCodeGraphRequest, CodeGraphContractRequest, CodeGraphEvidenceImportRequest, CodeGraphEvidenceSnapshotRequest, CodeGraphHandoffRequest, CodeGraphQualityRequest, CodeGraphSemanticActionRequest, CodeGraphSemanticSearchRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
   async status(event: RequestEvent) {
@@ -103,6 +105,48 @@ export class CodeGraphController extends Controller {
       return this.json({ data: await codeGraphQualityService.analyze(dto.workspaceId, dto.options) });
     } catch (error) {
       return this.failure(error, 'Could not analyze code quality.');
+    }
+  }
+
+  async semantic(event: RequestEvent) {
+    try {
+      const query = event.url.searchParams.get('q');
+      if (!query) return this.json({ data: await codeGraphSemanticService.status(event.params.id) });
+      const input = await CodeGraphSemanticSearchRequest.validate(event);
+      const dto = CodeGraphSemanticSearchDto.from(event.params.id, input);
+      return this.json({ data: await codeGraphSemanticService.search(dto.workspaceId, dto.options) });
+    } catch (error) {
+      return this.failure(error, 'Could not use the semantic code index.');
+    }
+  }
+
+  async updateSemantic(event: RequestEvent) {
+    try {
+      const input = await CodeGraphSemanticActionRequest.validate(event);
+      return this.json({ data: input.action === 'build'
+        ? await codeGraphSemanticService.build(event.params.id)
+        : await codeGraphSemanticService.clear(event.params.id) });
+    } catch (error) {
+      return this.failure(error, 'Could not update the semantic code index.');
+    }
+  }
+
+  async evidence(event: RequestEvent) {
+    try {
+      const input = await CodeGraphEvidenceSnapshotRequest.validate(event);
+      return this.json({ data: await codeGraphRuntimeEvidenceService.snapshot(event.params.id, input.limit) });
+    } catch (error) {
+      return this.failure(error, 'Could not load runtime evidence.');
+    }
+  }
+
+  async importEvidence(event: RequestEvent) {
+    try {
+      const input = await CodeGraphEvidenceImportRequest.validate(event);
+      const dto = CodeGraphEvidenceImportDto.from(event.params.id, input);
+      return this.json({ data: await codeGraphRuntimeEvidenceService.import(dto.workspaceId, dto.options) }, 201);
+    } catch (error) {
+      return this.failure(error, 'Could not import runtime evidence.');
     }
   }
 

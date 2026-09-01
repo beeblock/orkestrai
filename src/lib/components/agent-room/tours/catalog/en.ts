@@ -1718,6 +1718,16 @@ export const TOURS_EN: Tour[] = [
         body: 'Open Quality to inspect confidence-scored duplication, import cycles, coupling, inferred layer boundaries, oversized code, security-sensitive execution, and possible dead code. Static data-flow resources expose only safe identifiers for environment, files, network paths, database tables, and IPC channels. Treat findings as review evidence, not automatic defect verdicts. Agents use code_graph_quality for the same bounded analysis.',
       },
       {
+        id: 'build-semantic-index',
+        title: 'Search by intent, locally',
+        body: 'Open Insights → Semantic and build the compact local index. Turn on the sparkle beside search, then describe the behavior you need instead of guessing a symbol name. The index requires no API key or model download, never sends repository code outside the device, and reports when a changed graph revision needs a rebuild. Agents use code_graph_semantic_status, code_graph_semantic_build, and code_graph_semantic_search.',
+      },
+      {
+        id: 'overlay-runtime-evidence',
+        title: 'Overlay what really ran',
+        body: 'Open Insights → Runtime, select a repository, and import an LCOV, JUnit XML, traceback, or Orkestrai runtime JSON path from inside that repository. Green edges show coverage, red edges show failures, cyan edges confirm observed calls, and amber edges mark calls seen only at runtime. Raw logs and test output are not stored. Agents use code_graph_evidence and code_graph_evidence_import.',
+      },
+      {
         id: 'inspect-change-impact',
         title: 'Inspect active changes',
         body: 'Open Changes to map the workspace and active Floors onto the same graph. Red symbols changed directly, amber paths identify likely tests, and the side panel exposes overlapping Floor files or downstream symbols. Agents receive the same bounded evidence with code_graph_changes.',
