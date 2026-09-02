@@ -21,6 +21,13 @@ export type CodeGraphEmbeddingEntry = {
   vector: Int8Array;
 };
 
+export type CodeGraphEmbeddingState = {
+  symbolId: string;
+  model: string;
+  dimensions: number;
+  contentHash: string;
+};
+
 export type CodeGraphSemanticStoreStatus = {
   state: CodeGraphSemanticState;
   indexedSymbols: number;
@@ -34,7 +41,8 @@ export type CodeGraphEvidenceRunWrite = Omit<CodeGraphEvidenceRun, 'projectName'
 
 export interface CodeGraphIntelligenceStore {
   semanticStatus(workspaceId: string, model: string): Promise<CodeGraphSemanticStoreStatus>;
-  replaceEmbeddings(workspaceId: string, model: string, rows: CodeGraphEmbeddingWrite[]): Promise<void>;
+  embeddingStates(workspaceId: string, model: string): Promise<CodeGraphEmbeddingState[]>;
+  syncEmbeddings(workspaceId: string, model: string, changedRows: CodeGraphEmbeddingWrite[]): Promise<void>;
   clearEmbeddings(workspaceId: string, model: string): Promise<void>;
   embeddingEntries(workspaceId: string, model: string, projectId?: string): Promise<CodeGraphEmbeddingEntry[]>;
   replaceEvidenceRun(run: CodeGraphEvidenceRunWrite, edges: CodeGraphEvidenceEdge[]): Promise<CodeGraphEvidenceRun>;

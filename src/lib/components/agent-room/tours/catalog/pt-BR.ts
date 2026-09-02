@@ -132,7 +132,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'portal',
         title: 'O portal (navegador dos agentes)',
-        body: 'O portal é um navegador embutido que os agentes controlam. O nome persistente aparece no cabeçalho e pode ser alterado pelo lápis; a URL fica na barra de navegação separada, então você e os agentes escolhem o Portal certo pelo nome. Crio um apontado para o seu dev server — ajuste a URL depois se não for localhost:5173. Pop-ups de login ficam numa janela sandboxed do Orkestrai com a mesma sessão persistente, e o nó restaura a última página navegada após reiniciar.',
+        body: 'O portal é um navegador embutido que os agentes controlam. O nome persistente aparece no cabeçalho e pode ser alterado pelo lápis; a URL fica na barra de navegação separada, então você e os agentes escolhem o Portal certo pelo nome. Crio um apontado para o seu dev server — ajuste a URL depois se não for localhost:5173. Links que pedem nova aba viram um segundo Portal no mesmo Canvas; pop-ups reais de login continuam numa janela isolada do Orkestrai para preservar window.opener e o fluxo de autenticação. Ambos restauram a sessão persistente após reiniciar.',
         action: { kind: 'createPortal', url: 'http://localhost:5173', title: 'Portal App' },
         check: { kind: 'nodeExists', nodeType: 'portal' },
       },
@@ -978,6 +978,12 @@ export const TOURS_PT: Tour[] = [
         title: 'Mantenha o workspace legível',
         body: 'As conexões ficam atrás de todos os nós, inclusive em telas Windows com escalas diferentes. Depois, você ainda pode fazer ajustes manuais.',
       },
+      {
+        id: 'tune-connection-performance',
+        title: 'Escolha o custo das conexões',
+        body: 'Abra Configurações → Aparência → Conexões do canvas. Adaptativo escala a física conforme a densidade, Elástico preserva o efeito com limite de quadros e Estático desativa física e animação para usar menos CPU e GPU.',
+        action: { kind: 'openPage', path: '/settings#appearance' },
+      },
     ],
   },
   {
@@ -1707,6 +1713,11 @@ export const TOURS_PT: Tour[] = [
         check: { kind: 'codeGraphReady' },
       },
       {
+        id: 'choose-code-intelligence-mode',
+        title: 'Escolha atualização e acesso',
+        body: 'Edite o workspace para escolher Assistido, Manual ou Desativado. Assistido observa mudanças estabilizadas, atualiza incrementalmente e faz as consultas dos agentes aguardarem a revisão mais recente. Manual deixa a indexação com você e bloqueia agentes. Desativado para os watchers e bloqueia o grafo sem apagar o histórico local.',
+      },
+      {
         id: 'explore-symbol-impact',
         title: 'Pesquise e acompanhe o impacto',
         body: 'Pesquise um serviço, componente, rota ou método no nó. Selecione o resultado, alterne Entrada, Ambas ou Saída e ajuste a profundidade para inspecionar sua vizinhança limitada. Agentes fazem a mesma busca com code_graph_search e code_graph_neighbors.',
@@ -1724,7 +1735,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'build-semantic-index',
         title: 'Pesquise por intenção, localmente',
-        body: 'Abra Análises → Busca semântica e construa o índice compacto local. Ative o brilho ao lado da busca e descreva o comportamento desejado em vez de adivinhar o nome do símbolo. O índice não exige chave nem download de modelo, nunca envia o código para fora do dispositivo e avisa quando uma nova revisão exige reconstrução. Agentes usam code_graph_semantic_status, code_graph_semantic_build e code_graph_semantic_search.',
+        body: 'Abra Análises → Busca semântica. O modo Assistido prepara automaticamente o índice compacto local, reaproveita vetores inalterados após edições e oferece Atualizar agora para forçar uma passagem imediata. Ative o brilho ao lado da busca e descreva o comportamento desejado em vez de adivinhar o nome do símbolo. O índice não exige chave nem download de modelo, nunca envia código para fora do dispositivo e as buscas dos agentes aguardam a revisão mais recente. O modo Manual mantém os controles explícitos Construir e Reconstruir.',
       },
       {
         id: 'overlay-runtime-evidence',

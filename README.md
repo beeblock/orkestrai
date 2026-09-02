@@ -30,6 +30,8 @@ common credentials redacted; normal agent output is not persisted.
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or
   offscreen graphs while active conversations retain their visual signal.
+  Settings can force elastic rendering or fully static connections with no
+  physics or animation on lower-power hardware.
   Duplicate styled shapes with Cmd/Ctrl+D or copy and paste complete visual
   arrangements while preserving their relative layout.
 - **Organized workspace creation:** create a regular or preset-based workspace
@@ -37,7 +39,9 @@ common credentials redacted; normal agent output is not persisted.
   header or the New workspace dialog, without an intermediate root-level item.
 - **Persistent Portal sessions:** authentication cookies, web storage, and the
   last navigated URL survive app restarts. Login flows opened with `window.open`
-  stay in a sandboxed Orkestrai Portal window that shares the same session.
+  stay in a sandboxed Orkestrai Portal window that shares the same session,
+  while normal foreground or background tab links become a second Portal node
+  in the same Canvas instead of escaping to the system browser.
   Every Portal has a persistent, editable name separate from its address, so
   people and agents can target the correct browser by name or node id. The
   bridge inventories all workspace Portals with explicit connection state,
@@ -49,14 +53,18 @@ common credentials redacted; normal agent output is not persisted.
   references canvas artifacts without duplicating sessions, while workspace
   files remain local editor tabs. Finished Floors retire their nodes instead of
   inflating the explorer, while active floor agents retain an explicit floor
-  label. The global
-  voice orb follows its active workspace and leader. Its footer keeps every
-  reported Claude, Codex, and Kimi quota window visible without opening a panel.
+  label. The global voice orb follows its active workspace and leader. Its
+  footer keeps every reported Claude, Codex, and Kimi quota window visible
+  without opening a panel.
 - **Native code intelligence graph:** safely index approved TypeScript,
   JavaScript, Svelte, and PHP repositories without running project code. Search
   symbols, paths, signatures, and docblocks, then explore bounded incoming and
   outgoing imports, calls, instantiation, inheritance, and implementation links
-  in the same Canvas and Workbench node. Agents query that exact persisted graph
+  in the same Canvas and Workbench node. Assisted mode watches settled edits,
+  refreshes atomic revisions incrementally, and makes agent reads wait for the
+  freshest known data; Manual keeps indexing explicit and user-only, while
+  Disabled stops watchers and access without deleting local history. Agents
+  query that exact persisted graph
   through typed MCP or `orkestrai graph`; explicitly approved sibling
   repositories remain separate projects, and arbitrary SQL/Cypher is never
   exposed. Its Changes view combines the current Git working tree and active
@@ -71,9 +79,11 @@ common credentials redacted; normal agent output is not persisted.
   coupling, layered-boundary violations, oversized code, security-sensitive
   execution, and possible dead code. Static environment, file, network-path,
   database-table, and IPC flows appear as resource nodes without retaining
-  secret values, payloads, hosts, query strings, or source bodies. An optional
+  secret values, payloads, hosts, query strings, or source bodies. A local
   offline semantic index adds intent search with compact vectors and no model
-  download or API key. Runtime evidence imports confined LCOV, JUnit, traceback,
+  download or API key; Assisted mode keeps it synchronized incrementally and
+  agent searches wait for the latest graph revision. Runtime evidence imports
+  confined LCOV, JUnit, traceback,
   or structured JSON files and overlays coverage, failures, observed calls, and
   runtime-only relationships without persisting raw test output. Operational
   intelligence explains relationship provenance, synchronizes graph selections

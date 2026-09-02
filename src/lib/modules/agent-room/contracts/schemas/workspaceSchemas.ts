@@ -15,6 +15,8 @@ export const workspaceRepositoryRootsSchema = z.array(workspaceRepositoryRootSch
   }
 });
 
+export const codeIntelligenceModeSchema = z.enum(['assisted', 'manual', 'disabled']);
+
 export const createWorkspaceSchema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do workspace.'),
   workingDir: z.string().trim().min(1, 'Informe o diretorio de trabalho.'),
@@ -24,6 +26,7 @@ export const createWorkspaceSchema = z.object({
   wslDistribution: z.string().trim().nullish(),
   wslWorkingDir: z.string().trim().nullish(),
   repositoryRoots: workspaceRepositoryRootsSchema.default([]),
+  codeIntelligenceMode: codeIntelligenceModeSchema.default('assisted'),
   groupId: z.string().trim().uuid().nullish(),
 });
 
@@ -37,6 +40,7 @@ export const updateWorkspaceSchema = z.object({
   wslDistribution: z.string().trim().nullish(),
   wslWorkingDir: z.string().trim().nullish(),
   repositoryRoots: workspaceRepositoryRootsSchema.optional(),
+  codeIntelligenceMode: codeIntelligenceModeSchema.optional(),
 });
 
 export const canvasNodeTypeSchema = z.enum(['terminal', 'note', 'fileTree', 'editor', 'diff', 'portal', 'apiClient', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'imageWorkflow', 'usage', 'codeGraph', 'device', 'design']);

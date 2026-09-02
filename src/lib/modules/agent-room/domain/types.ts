@@ -596,6 +596,8 @@ export type WorkspaceRepositoryRoot = {
   path: string;
 };
 
+export type CodeIntelligenceMode = 'assisted' | 'manual' | 'disabled';
+
 export type Workspace = {
   id: string;
   name: string;
@@ -609,6 +611,8 @@ export type Workspace = {
   syncAgentInstructionFiles: boolean;
   /** Repositorios adicionais aprovados para fluxos multi-repo. */
   repositoryRoots: WorkspaceRepositoryRoot[];
+  /** Controls indexing automation and whether agents can query the code graph. */
+  codeIntelligenceMode: CodeIntelligenceMode;
   /** Hooks de ciclo de vida de andares (setup/run/teardown). */
   hooks: WorkspaceHooks;
   /** Non-null while terminal activity is explicitly suspended by the user. */

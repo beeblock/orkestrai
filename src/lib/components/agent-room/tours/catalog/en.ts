@@ -128,7 +128,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'portal',
         title: 'The portal (the agents\' browser)',
-        body: 'The portal is an embedded browser the agents control. Its persistent name appears in the header and can be edited with the pencil; the URL stays in the separate navigation bar, so both you and agents can target the right Portal by name. I\'ll create one pointing at your dev server — adjust the URL later if it isn\'t localhost:5173. Login pop-ups stay in a sandboxed Orkestrai window with the same persistent session, and the node restores its last navigated page after restart.',
+        body: 'The portal is an embedded browser the agents control. Its persistent name appears in the header and can be edited with the pencil; the URL stays in the separate navigation bar, so both you and agents can target the right Portal by name. I\'ll create one pointing at your dev server — adjust the URL later if it isn\'t localhost:5173. Links requesting a new tab become a second Portal node in the same Canvas, while true login pop-ups stay in a sandboxed Orkestrai window so window.opener and authentication flows keep working. Both restore their persistent session after restart.',
         action: { kind: 'createPortal', url: 'http://localhost:5173', title: 'Portal App' },
         check: { kind: 'nodeExists', nodeType: 'portal' },
       },
@@ -974,6 +974,12 @@ export const TOURS_EN: Tour[] = [
         title: 'Keep the workspace readable',
         body: 'Connections remain behind every node, including on Windows displays with different scale factors. You can still fine-tune positions manually afterward.',
       },
+      {
+        id: 'tune-connection-performance',
+        title: 'Choose the connection workload',
+        body: 'Open Settings → Appearance → Canvas connections. Adaptive scales rope physics with workspace density, Elastic keeps the effect within a frame budget, and Static disables physics and animation for the lowest CPU and GPU use.',
+        action: { kind: 'openPage', path: '/settings#appearance' },
+      },
     ],
   },
   {
@@ -1703,6 +1709,11 @@ export const TOURS_EN: Tour[] = [
         check: { kind: 'codeGraphReady' },
       },
       {
+        id: 'choose-code-intelligence-mode',
+        title: 'Choose freshness and access',
+        body: 'Edit the workspace to choose Assisted, Manual, or Disabled. Assisted watches settled file changes, refreshes incrementally, and makes agent reads wait for the newest revision. Manual leaves indexing to you and blocks agents. Disabled stops watchers and blocks the graph while preserving its local history.',
+      },
+      {
         id: 'explore-symbol-impact',
         title: 'Search and follow impact',
         body: 'Search for a service, component, route, or method in the node. Select a result, then switch Incoming, Both, or Outgoing and adjust depth to inspect its bounded neighborhood. Agents can perform the same search with code_graph_search and code_graph_neighbors.',
@@ -1720,7 +1731,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'build-semantic-index',
         title: 'Search by intent, locally',
-        body: 'Open Insights → Semantic and build the compact local index. Turn on the sparkle beside search, then describe the behavior you need instead of guessing a symbol name. The index requires no API key or model download, never sends repository code outside the device, and reports when a changed graph revision needs a rebuild. Agents use code_graph_semantic_status, code_graph_semantic_build, and code_graph_semantic_search.',
+        body: 'Open Insights → Semantic. Assisted mode prepares the compact local index automatically, reuses unchanged vectors after code edits, and lets Refresh now force an immediate pass. Turn on the sparkle beside search, then describe the behavior you need instead of guessing a symbol name. The index requires no API key or model download, never sends repository code outside the device, and agent searches wait for the latest revision. Manual mode retains explicit Build and Rebuild controls.',
       },
       {
         id: 'overlay-runtime-evidence',

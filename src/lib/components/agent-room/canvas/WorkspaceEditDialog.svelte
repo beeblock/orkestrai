@@ -12,11 +12,11 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Button } from '$lib/components/ui/button';
   import * as Select from '$lib/components/ui/select';
-  import { FolderGit2, FolderOpen, Plus, Trash2 } from '@lucide/svelte';
+  import { FolderGit2, FolderOpen, Plus, Trash2, Waypoints } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import McpIcon from '../McpIcon.svelte';
   import { isLegacyEmojiIcon, WORKSPACE_ICONS } from '../workspace-icons.js';
-  import type { Workspace, WorkspaceRepositoryRoot } from '$lib/modules/agent-room/domain/types.js';
+  import type { CodeIntelligenceMode, Workspace, WorkspaceRepositoryRoot } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
 
   type Props = {
@@ -31,6 +31,7 @@
       wslDistribution: string | null;
       wslWorkingDir: string | null;
       repositoryRoots: WorkspaceRepositoryRoot[];
+      codeIntelligenceMode: CodeIntelligenceMode;
     }) => Promise<void>;
     onClose: () => void;
   };
@@ -54,6 +55,7 @@
   let repositoryRoots = $state<WorkspaceRepositoryRoot[]>(
     (workspace.repositoryRoots ?? []).map((repository) => ({ ...repository })),
   );
+  let codeIntelligenceMode = $state<CodeIntelligenceMode>(workspace.codeIntelligenceMode);
   let wsl = $state<{ supported: boolean; distributions: Array<{ name: string }>; inferred: { distribution: string; linuxWorkingDir: string } | null; error: string | null }>({
     supported: false,
     distributions: [],
@@ -190,6 +192,7 @@
             wslDistribution: wslDistribution.trim() || null,
             wslWorkingDir: wslWorkingDir.trim() || null,
             repositoryRoots: normalizedRepositories,
+            codeIntelligenceMode,
           });
           onClose();
         } catch (error) {
@@ -439,6 +442,37 @@
               {/each}
             </div>
           {/if}
+        </section>
+
+        <section class="space-y-3 border-t border-border/60 pt-4" data-testid="workspace-code-intelligence-mode">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <Waypoints size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />
+              <h3 class="text-sm font-medium">{m['dlg.code_intelligence_title']()}</h3>
+            </div>
+            <p class="max-w-xl text-pretty text-xs text-muted-foreground">{m['dlg.code_intelligence_description']()}</p>
+          </div>
+          <Select.Root type="single" value={codeIntelligenceMode} onValueChange={(value: string) => (codeIntelligenceMode = value as CodeIntelligenceMode)}>
+            <Select.Trigger class="w-full" aria-label={m['dlg.code_intelligence_title']()}>
+              {codeIntelligenceMode === 'assisted'
+                ? m['dlg.code_intelligence_assisted']()
+                : codeIntelligenceMode === 'manual'
+                  ? m['dlg.code_intelligence_manual']()
+                  : m['dlg.code_intelligence_disabled']()}
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="assisted">{m['dlg.code_intelligence_assisted']()}</Select.Item>
+              <Select.Item value="manual">{m['dlg.code_intelligence_manual']()}</Select.Item>
+              <Select.Item value="disabled">{m['dlg.code_intelligence_disabled']()}</Select.Item>
+            </Select.Content>
+          </Select.Root>
+          <p class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-pretty text-xs leading-5 text-muted-foreground">
+            {codeIntelligenceMode === 'assisted'
+              ? m['dlg.code_intelligence_assisted_description']()
+              : codeIntelligenceMode === 'manual'
+                ? m['dlg.code_intelligence_manual_description']()
+                : m['dlg.code_intelligence_disabled_description']()}
+          </p>
         </section>
 
         <div class="space-y-2">

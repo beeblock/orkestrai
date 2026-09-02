@@ -124,6 +124,12 @@
     return m['language.name_en']();
   }
 
+  function edgeRenderingLabel(value: string): string {
+    if (value === 'elastic') return m['settings.canvas_edges_elastic']();
+    if (value === 'static') return m['settings.canvas_edges_static']();
+    return m['settings.canvas_edges_auto']();
+  }
+
   function setTtsSpeed(value: number) {
     settings = { ...settings, voiceTtsSpeed: normalizeEmbeddedTtsSpeed(value).toFixed(2) };
   }
@@ -483,6 +489,24 @@
         <p>{m['settings.section_appearance_desc']()}</p>
       </div>
     </header>
+    <div class="mb-5 grid gap-2 border-b border-[var(--app-border)] pb-5">
+      <span class="field-label">{m['settings.canvas_edges']()}</span>
+      <p class="field-hint">{m['settings.canvas_edges_desc']()}</p>
+      <Select.Root
+        type="single"
+        value={settings.canvasEdgeRendering ?? 'auto'}
+        onValueChange={(value: string) => (settings = { ...settings, canvasEdgeRendering: value })}
+      >
+        <Select.Trigger class="w-full sm:w-72" aria-label={m['settings.canvas_edges']()}>
+          {edgeRenderingLabel(settings.canvasEdgeRendering ?? 'auto')}
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Item value="auto">{m['settings.canvas_edges_auto']()}</Select.Item>
+          <Select.Item value="elastic">{m['settings.canvas_edges_elastic']()}</Select.Item>
+          <Select.Item value="static">{m['settings.canvas_edges_static']()}</Select.Item>
+        </Select.Content>
+      </Select.Root>
+    </div>
     <div class="mb-5 grid gap-2 border-b border-[var(--app-border)] pb-5">
       <span class="field-label">{m['settings.workbench_tabs']()}</span>
       <p class="field-hint">{m['settings.workbench_tabs_desc']()}</p>

@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream';
 import { runMcpServer, MCP_TOOLS } from '../../packages/orkestrai-cli/src/mcp.js';
 
 /** Roda o servidor MCP com streams em memoria + bridge fake (captura o body). */
-function startMcp(bridgeResult = { ok: true }) {
+function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
   const input = new PassThrough();
   const chunks = [];
   const done = runMcpServer({
@@ -11,7 +11,7 @@ function startMcp(bridgeResult = { ok: true }) {
     write: (chunk) => chunks.push(chunk),
     bridge: async (method, path, body) => ({ ...bridgeResult, method, path, body }),
     findFreePort: async () => 45678,
-    selfAgent: 'n1',
+    selfAgent,
   });
   /** NDJSON (spec stdio do MCP): 1 JSON por linha. */
   const send = (message) => {
@@ -74,6 +74,36 @@ describe('servidor MCP (orkestrai mcp)', () => {
     send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'port', arguments: {} } });
     const response = await waitFor(1);
     expect(JSON.parse(response.result.content[0].text).port).toBe(45678);
+    input.end();
+  });
+
+  it('reports status through an assigned task when a restored session has no agent environment', async () => {
+    const { send, waitFor, input } = startMcp({ ok: true }, null);
+    const taskId = '00000000-0000-7000-8000-000000000001';
+    send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+      name: 'status',
+      arguments: { state: 'working', action: 'Reviewing architecture', taskId },
+    } });
+    const response = await waitFor(1);
+    const result = JSON.parse(response.result.content[0].text);
+    expect(result).toMatchObject({
+      method: 'POST',
+      path: '/api/agent-room/bridge/activity',
+      body: { state: 'working', action: 'Reviewing architecture', taskId },
+    });
+    expect(result.body).not.toHaveProperty('from');
+    input.end();
+  });
+
+  it('rejects status without an environment identity or assigned task', async () => {
+    const { send, waitFor, input } = startMcp({ ok: true }, null);
+    send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+      name: 'status',
+      arguments: { state: 'working' },
+    } });
+    const response = await waitFor(1);
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0].text).toMatch(/ORKESTRAI_NODE_ID.*tarefa/i);
     input.end();
   });
 
@@ -159,6 +189,8 @@ describe('servidor MCP (orkestrai mcp)', () => {
     const create = JSON.parse((await waitFor(4)).result.content[0].text);
     expect(create.method).toBe('POST');
     expect(create.path).toBe('/api/agent-room/bridge/notes');
+    expect(create.body).toMatchObject({ title: 'T', content: 'c', from: 'n1' });
+    expect(create.body.connect).toBeUndefined();
 
     // dismiss: o schema espera "target" (nao "agent")
     send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'dismiss', arguments: { agent: 'Kimi' } } });

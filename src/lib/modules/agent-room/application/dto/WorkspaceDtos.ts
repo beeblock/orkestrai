@@ -2,6 +2,7 @@ import type {
   CanvasEdgeStyle,
   CanvasNodePayload,
   CanvasNodeType,
+  CodeIntelligenceMode,
   Workspace,
   WorkspaceHooks,
   WorkspaceRepositoryRoot,
@@ -63,6 +64,7 @@ export class CreateWorkspaceDto {
     public readonly hooks: WorkspaceHooks = {},
     public readonly repositoryRoots: WorkspaceRepositoryRoot[] = [],
     public readonly groupId: string | null = null,
+    public readonly codeIntelligenceMode: CodeIntelligenceMode = 'assisted',
   ) {}
 
   static from(input: CreateWorkspaceInput): CreateWorkspaceDto {
@@ -78,12 +80,13 @@ export class CreateWorkspaceDto {
       {},
       input.repositoryRoots,
       input.groupId ?? null,
+      input.codeIntelligenceMode,
     );
   }
 }
 
 export class UpdateWorkspaceDto {
-  constructor(public readonly changes: Partial<Pick<Workspace, 'name' | 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir' | 'icon' | 'instructions' | 'syncAgentInstructionFiles' | 'repositoryRoots'>>) {}
+  constructor(public readonly changes: Partial<Pick<Workspace, 'name' | 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir' | 'icon' | 'instructions' | 'syncAgentInstructionFiles' | 'repositoryRoots' | 'codeIntelligenceMode'>>) {}
 
   static from(input: UpdateWorkspaceInput): UpdateWorkspaceDto {
     return new UpdateWorkspaceDto({
@@ -96,6 +99,7 @@ export class UpdateWorkspaceDto {
       instructions: input.instructions,
       syncAgentInstructionFiles: input.syncAgentInstructionFiles,
       repositoryRoots: input.repositoryRoots,
+      codeIntelligenceMode: input.codeIntelligenceMode,
     });
   }
 }

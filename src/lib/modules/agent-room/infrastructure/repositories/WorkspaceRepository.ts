@@ -1,6 +1,7 @@
 import { uuidv7 } from '@beeblock/svelar/support';
 import type {
   CanvasEdge,
+  CodeIntelligenceMode,
   WorkspaceHooks,
   CanvasEdgeStyle,
   CanvasNode,
@@ -60,6 +61,10 @@ function parseRepositoryRoots(value: string | null): WorkspaceRepositoryRoot[] {
 }
 
 function mapWorkspace(model: AgentWorkspace): Workspace {
+  const persistedCodeIntelligenceMode = model.getAttribute('code_intelligence_mode');
+  const codeIntelligenceMode: CodeIntelligenceMode = persistedCodeIntelligenceMode === 'manual' || persistedCodeIntelligenceMode === 'disabled'
+    ? persistedCodeIntelligenceMode
+    : 'assisted';
   return {
     id: model.getAttribute('id'),
     name: model.getAttribute('name'),
@@ -71,6 +76,7 @@ function mapWorkspace(model: AgentWorkspace): Workspace {
     instructions: model.getAttribute('instructions'),
     syncAgentInstructionFiles: Boolean(model.getAttribute('sync_agent_instruction_files')),
     repositoryRoots: parseRepositoryRoots(model.getAttribute('repository_roots_json') as string | null),
+    codeIntelligenceMode,
     hooks: parseJsonObject(model.getAttribute('hooks_json') as string | null),
     suspendedAt: model.getAttribute('suspended_at')
       ? toIso(model.getAttribute('suspended_at'))
@@ -156,6 +162,7 @@ export class WorkspaceRepository {
     instructions?: string | null;
     syncAgentInstructionFiles?: boolean;
     repositoryRoots?: WorkspaceRepositoryRoot[];
+    codeIntelligenceMode?: CodeIntelligenceMode;
     hooks?: WorkspaceHooks;
     groupId?: string | null;
   }): Promise<Workspace> {
@@ -175,6 +182,7 @@ export class WorkspaceRepository {
       instructions: input.instructions ?? null,
       sync_agent_instruction_files: input.syncAgentInstructionFiles ?? false,
       repository_roots_json: JSON.stringify(input.repositoryRoots ?? []),
+      code_intelligence_mode: input.codeIntelligenceMode ?? 'assisted',
       hooks_json: JSON.stringify(input.hooks ?? {}),
       group_id: input.groupId ?? null,
       position: await this.nextWorkspacePosition(input.groupId ?? null),
@@ -211,7 +219,7 @@ export class WorkspaceRepository {
 
   async updateWorkspace(
     id: string,
-    input: Partial<Pick<Workspace, 'name' | 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir' | 'icon' | 'instructions' | 'syncAgentInstructionFiles' | 'repositoryRoots' | 'hooks'>>
+    input: Partial<Pick<Workspace, 'name' | 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir' | 'icon' | 'instructions' | 'syncAgentInstructionFiles' | 'repositoryRoots' | 'codeIntelligenceMode' | 'hooks'>>
   ): Promise<Workspace | null> {
     const existing = await this.getWorkspace(id);
     if (!existing) return null;
@@ -230,6 +238,7 @@ export class WorkspaceRepository {
       repository_roots_json: input.repositoryRoots === undefined
         ? JSON.stringify(existing.repositoryRoots)
         : JSON.stringify(input.repositoryRoots),
+      code_intelligence_mode: input.codeIntelligenceMode ?? existing.codeIntelligenceMode,
       hooks_json: input.hooks === undefined ? JSON.stringify(existing.hooks) : JSON.stringify(input.hooks),
     });
     return this.getWorkspace(id);

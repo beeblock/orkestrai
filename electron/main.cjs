@@ -17,7 +17,7 @@ const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-pol
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
-const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse } = require('./portal-policy.cjs');
+const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas } = require('./portal-policy.cjs');
 
 const isDev = !app.isPackaged;
 const appRoot = path.resolve(__dirname, '..');
@@ -86,7 +86,16 @@ function configurePortalSession() {
 function configurePortalContents(contents) {
   if (configuredPortalContents.has(contents)) return;
   configuredPortalContents.add(contents);
-  contents.setWindowOpenHandler(({ url }) => portalWindowOpenResponse(url, MENU_COPY[menuLocale].portalWindow));
+  contents.setWindowOpenHandler(({ url, disposition }) => {
+    if (shouldOpenPortalInCanvas(url, disposition)) {
+      mainWindow?.webContents.send('orkestrai:portal-open-request', {
+        sourceWebContentsId: contents.id,
+        url,
+      });
+      return { action: 'deny' };
+    }
+    return portalWindowOpenResponse(url, MENU_COPY[menuLocale].portalWindow);
+  });
   contents.on('will-navigate', (event, url) => {
     if (!isAllowedPortalUrl(url)) event.preventDefault();
   });

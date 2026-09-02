@@ -47,6 +47,8 @@ export const bridgeNoteCreateSchema = z.object({
   token: z.string().trim().min(1).nullish(),
   title: z.string().trim().min(1, 'Informe o titulo da nota.'),
   content: z.string().optional(),
+  /** Identidade do agente autor; usada como conexão padrão quando presente. */
+  from: z.string().trim().max(120).nullish(),
   /** Agente (titulo ou id) para conectar a nota criada. */
   connect: z.string().trim().nullish(),
 });
@@ -63,10 +65,18 @@ export const bridgeNotifySchema = z.object({
 
 export const bridgeActivitySchema = z.object({
   token: z.string().trim().min(1).nullish(),
-  from: z.string().trim().min(1, 'Informe o agente que está reportando o estado.'),
+  from: z.string().trim().min(1, 'Informe o agente que está reportando o estado.').max(120).nullish(),
   state: z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'blocked', 'idle', 'done', 'error', 'disconnected']),
   action: z.string().trim().max(240).nullish(),
-  taskId: z.string().trim().nullish(),
+  taskId: z.string().uuid().nullish(),
+}).superRefine((input, context) => {
+  if (!input.from && !input.taskId) {
+    context.addIssue({
+      code: 'custom',
+      path: ['from'],
+      message: 'Informe o agente ou uma tarefa atribuída para identificar quem reporta o estado.',
+    });
+  }
 });
 
 export type BridgeAskInput = z.infer<typeof bridgeAskSchema>;

@@ -1,7 +1,7 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
 import { ChangeCodeGraphDto, CodeGraphCompareDto, CodeGraphContextDto, CodeGraphContractDto, CodeGraphEvidenceImportDto, CodeGraphHandoffDto, CodeGraphInvestigationCreateDto, CodeGraphInvestigationUpdateDto, CodeGraphLocateDto, CodeGraphQualityDto, CodeGraphRevisionsDto, CodeGraphSemanticSearchDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
-import { codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
+import { CodeGraphAccessError, codeGraphIndexService } from '../../../application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '../../../application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '../../../application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '../../../application/services/CodeGraphContractService.js';
@@ -72,6 +72,7 @@ export class CodeGraphController extends Controller {
 
   async changes(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await ChangeCodeGraphRequest.validate(event);
       const dto = ChangeCodeGraphDto.from(event.params.id, input);
       return this.json({ data: await codeGraphChangeIntelligenceService.analyze(dto.workspaceId, dto.options) });
@@ -82,6 +83,7 @@ export class CodeGraphController extends Controller {
 
   async handoff(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await CodeGraphHandoffRequest.validate(event);
       const dto = CodeGraphHandoffDto.from(event.params.id, input);
       return this.json({ data: await codeGraphHandoffService.create(dto.workspaceId, dto.options, 'user') }, 201);
@@ -92,6 +94,7 @@ export class CodeGraphController extends Controller {
 
   async contracts(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await CodeGraphContractRequest.validate(event);
       const dto = CodeGraphContractDto.from(event.params.id, input);
       return this.json({ data: await codeGraphContractService.analyze(dto.workspaceId, dto.options) });
@@ -102,6 +105,7 @@ export class CodeGraphController extends Controller {
 
   async quality(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await CodeGraphQualityRequest.validate(event);
       const dto = CodeGraphQualityDto.from(event.params.id, input);
       return this.json({ data: await codeGraphQualityService.analyze(dto.workspaceId, dto.options) });
@@ -112,8 +116,9 @@ export class CodeGraphController extends Controller {
 
   async semantic(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const query = event.url.searchParams.get('q');
-      if (!query) return this.json({ data: await codeGraphSemanticService.status(event.params.id) });
+      if (!query) return this.json({ data: await codeGraphSemanticService.ensureFresh(event.params.id) });
       const input = await CodeGraphSemanticSearchRequest.validate(event);
       const dto = CodeGraphSemanticSearchDto.from(event.params.id, input);
       return this.json({ data: await codeGraphSemanticService.search(dto.workspaceId, dto.options) });
@@ -124,6 +129,7 @@ export class CodeGraphController extends Controller {
 
   async updateSemantic(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await CodeGraphSemanticActionRequest.validate(event);
       return this.json({ data: input.action === 'build'
         ? await codeGraphSemanticService.build(event.params.id)
@@ -135,6 +141,7 @@ export class CodeGraphController extends Controller {
 
   async evidence(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await CodeGraphEvidenceSnapshotRequest.validate(event);
       return this.json({ data: await codeGraphRuntimeEvidenceService.snapshot(event.params.id, input.limit) });
     } catch (error) {
@@ -144,6 +151,7 @@ export class CodeGraphController extends Controller {
 
   async importEvidence(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const input = await CodeGraphEvidenceImportRequest.validate(event);
       const dto = CodeGraphEvidenceImportDto.from(event.params.id, input);
       return this.json({ data: await codeGraphRuntimeEvidenceService.import(dto.workspaceId, dto.options) }, 201);
@@ -154,6 +162,7 @@ export class CodeGraphController extends Controller {
 
   async context(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const dto = CodeGraphContextDto.from(event.params.id, await CodeGraphContextRequest.validate(event));
       return this.json({ data: await codeGraphOperationsService.context(dto.workspaceId, dto.options) });
     } catch (error) {
@@ -163,6 +172,7 @@ export class CodeGraphController extends Controller {
 
   async operations(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       return this.json({ data: await codeGraphOperationsService.operations(event.params.id) });
     } catch (error) {
       return this.failure(error, 'Could not load the operational code graph.');
@@ -171,6 +181,7 @@ export class CodeGraphController extends Controller {
 
   async explain(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const data = await codeGraphOperationsService.explain(event.params.id, event.params.edgeId);
       return data ? this.json({ data }) : this.json({ error: 'Code graph relationship not found.' }, 404);
     } catch (error) {
@@ -180,6 +191,7 @@ export class CodeGraphController extends Controller {
 
   async locate(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const dto = CodeGraphLocateDto.from(event.params.id, await CodeGraphLocateRequest.validate(event));
       return this.json({ data: await codeGraphOperationsService.locate(dto.workspaceId, dto.path, dto.line) });
     } catch (error) {
@@ -198,6 +210,7 @@ export class CodeGraphController extends Controller {
 
   async compare(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const dto = CodeGraphCompareDto.from(event.params.id, await CodeGraphCompareRequest.validate(event));
       return this.json({ data: await codeGraphOperationsService.compare(dto.workspaceId, dto.projectId, dto.from, dto.to) });
     } catch (error) {
@@ -207,6 +220,7 @@ export class CodeGraphController extends Controller {
 
   async investigations(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       return this.json({ data: await codeGraphInvestigationRepository.list(event.params.id) });
     } catch (error) {
       return this.failure(error, 'Could not load saved investigations.');
@@ -215,6 +229,7 @@ export class CodeGraphController extends Controller {
 
   async investigation(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const data = await codeGraphInvestigationRepository.get(event.params.id, event.params.investigationId);
       return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
     } catch (error) {
@@ -224,6 +239,7 @@ export class CodeGraphController extends Controller {
 
   async createInvestigation(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const dto = CodeGraphInvestigationCreateDto.from(event.params.id, await CodeGraphInvestigationCreateRequest.validate(event));
       return this.json({ data: await codeGraphInvestigationRepository.create(dto.workspaceId, {
         name: dto.name,
@@ -237,6 +253,7 @@ export class CodeGraphController extends Controller {
 
   async updateInvestigation(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const dto = CodeGraphInvestigationUpdateDto.from(event.params.id, event.params.investigationId, await CodeGraphInvestigationUpdateRequest.validate(event));
       const data = await codeGraphInvestigationRepository.update(dto.workspaceId, dto.investigationId, { name: dto.name, state: dto.state });
       return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
@@ -247,6 +264,7 @@ export class CodeGraphController extends Controller {
 
   async deleteInvestigation(event: RequestEvent) {
     try {
+      await codeGraphIndexService.assertAvailable(event.params.id);
       const deleted = await codeGraphInvestigationRepository.delete(event.params.id, event.params.investigationId);
       return deleted ? this.json({ data: { deleted: true } }) : this.json({ error: 'Saved investigation not found.' }, 404);
     } catch (error) {
@@ -255,6 +273,9 @@ export class CodeGraphController extends Controller {
   }
 
   private failure(error: unknown, fallback: string) {
-    return this.json({ error: error instanceof Error ? error.message : fallback }, 400);
+    return this.json(
+      { error: error instanceof Error ? error.message : fallback },
+      error instanceof CodeGraphAccessError ? error.status : 400,
+    );
   }
 }

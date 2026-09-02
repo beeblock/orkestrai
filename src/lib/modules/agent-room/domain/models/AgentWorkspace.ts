@@ -16,6 +16,7 @@ export class AgentWorkspace extends Model {
     'instructions',
     'sync_agent_instruction_files',
     'repository_roots_json',
+    'code_intelligence_mode',
     'bridge_token',
     'hooks_json',
     'suspended_at',
@@ -41,6 +42,7 @@ export class AgentWorkspace extends Model {
   declare instructions: string | null;
   declare sync_agent_instruction_files: boolean;
   declare repository_roots_json: string | null;
+  declare code_intelligence_mode: string;
   declare hooks_json: string | null;
   declare suspended_at: Date | null;
   declare group_id: string | null;

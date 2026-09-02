@@ -5,12 +5,14 @@ import { bridgeService } from '$lib/modules/agent-room/application/services/Brid
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
+import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { agentSessionService } from '$lib/modules/agent-room/application/services/AgentSessionService.js';
+import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 
 beforeEach(() => {
   vi.spyOn(agentSessionService, 'ensure').mockImplementation(async (_workspaceId, nodeId) => ({
@@ -94,6 +96,42 @@ describe('BridgeService', () => {
     expect(agents[0].sessionAlive).toBe(true);
     ptySessionManager.kill(session.id);
     terminal.id && (await workspaceRepository.deleteNode(terminal.id));
+  });
+
+  it('infers a restored agent identity only from its assigned workspace task', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'activity', workingDir: '/tmp' });
+    const terminal = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Acceptance Lead',
+      payload: { command: 'codex', provider: 'codex' },
+    });
+    const assigned = await taskBoardService.create(workspace.id, {
+      title: 'Review architecture',
+      assigneeNodeId: terminal.id,
+      createdBy: 'test',
+      dispatch: false,
+    });
+    const unassigned = await taskBoardService.create(workspace.id, {
+      title: 'Unassigned review',
+      createdBy: 'test',
+      dispatch: false,
+    });
+
+    const result = await bridgeService.reportActivity(workspace.id, {
+      state: 'working',
+      action: 'Reviewing architecture and test coverage',
+      taskId: assigned.id,
+    });
+    expect(result).toMatchObject({ recorded: true, nodeId: terminal.id, state: 'working' });
+    expect(await controlCenterRepository.listActivity(workspace.id)).toContainEqual(
+      expect.objectContaining({ nodeId: terminal.id, state: 'working', taskId: assigned.id }),
+    );
+
+    await expect(bridgeService.reportActivity(workspace.id, {
+      state: 'working',
+      taskId: unassigned.id,
+    })).rejects.toThrow('não tem responsável');
   });
 
   it('ask envia mensagem ao PTY e retorna a resposta apos silencio', async () => {
@@ -374,6 +412,62 @@ describe('Modo Maestro', () => {
     expect(note.connectedTo).toBe('todos os agentes');
     // 2 edges do recruit + 3 da nota (lider + 2 recrutas)
     expect(await workspaceRepository.listEdges(workspace.id)).toHaveLength(2 + 3);
+  });
+
+  it('nota sem destino conecta somente ao autor mesmo com roles repetidas', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'creative-flows', workingDir: '/tmp' });
+    const author = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Diretor Criativo',
+      payload: { command: 'codex', provider: 'codex' },
+    });
+    const other = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Diretor Criativo',
+      payload: { command: 'codex', provider: 'codex' },
+    });
+
+    const note = await bridgeService.createNote(workspace.id, {
+      title: 'Direção visual',
+      content: 'Paleta e referências deste fluxo.',
+      from: author.id,
+    });
+
+    expect(note.connectedTo).toBe('Diretor Criativo');
+    const noteEdges = (await workspaceRepository.listEdges(workspace.id)).filter(
+      (edge) => edge.sourceNodeId === note.nodeId || edge.targetNodeId === note.nodeId,
+    );
+    expect(noteEdges).toHaveLength(1);
+    expect([noteEdges[0].sourceNodeId, noteEdges[0].targetNodeId]).toContain(author.id);
+    expect([noteEdges[0].sourceNodeId, noteEdges[0].targetNodeId]).not.toContain(other.id);
+  });
+
+  it('nota sem identidade nem destino permanece sem conexoes', async () => {
+    const { workspace } = await setupMaestro(true);
+    await bridgeService.recruit(workspace.id, { from: 'Lider', title: 'Outro Diretor', provider: 'codex' });
+
+    const note = await bridgeService.createNote(workspace.id, { title: 'Nota manual' });
+
+    expect(note.connectedTo).toBeNull();
+    const noteEdges = (await workspaceRepository.listEdges(workspace.id)).filter(
+      (edge) => edge.sourceNodeId === note.nodeId || edge.targetNodeId === note.nodeId,
+    );
+    expect(noteEdges).toHaveLength(0);
+  });
+
+  it('valida o autor antes de persistir uma nota', async () => {
+    const { workspace } = await setupMaestro(true);
+    const before = (await workspaceRepository.listNodes(workspace.id)).filter((node) => node.type === 'note');
+
+    await expect(bridgeService.createNote(workspace.id, {
+      title: 'Nota que não deve existir',
+      from: 'agente-inexistente',
+    })).rejects.toThrow();
+
+    const after = (await workspaceRepository.listNodes(workspace.id)).filter((node) => node.type === 'note');
+    expect(after).toHaveLength(before.length);
   });
 
   it('quadro de tarefas aparece sozinho na primeira tarefa (idempotente)', async () => {

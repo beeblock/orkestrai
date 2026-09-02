@@ -27,6 +27,16 @@ const SEMANTIC_GROUPS = [
 ] as const;
 const SEMANTIC_CANONICAL = new Map<string, string>(SEMANTIC_GROUPS.flatMap((group) => group.map((token) => [token, group[0]])));
 
+type SemanticSyncState = {
+  inFlight: Map<string, Promise<CodeGraphSemanticStatus>>;
+};
+
+function semanticSyncState(): SemanticSyncState {
+  const global = globalThis as typeof globalThis & { __orkestraiCodeGraphSemanticSyncState?: SemanticSyncState };
+  global.__orkestraiCodeGraphSemanticSyncState ??= { inFlight: new Map() };
+  return global.__orkestraiCodeGraphSemanticSyncState;
+}
+
 function normalized(value: string): string {
   return value
     .normalize('NFKD')
@@ -108,17 +118,54 @@ function contentHash(symbol: CodeGraphSymbol, neighbors: string): string {
 }
 
 export class CodeGraphSemanticService implements SemanticIndex {
+  private syncState = semanticSyncState();
+
   async status(workspaceId: string): Promise<CodeGraphSemanticStatus> {
     await this.assertWorkspace(workspaceId);
     const status = await codeGraphIntelligenceRepository.semanticStatus(workspaceId, CODE_GRAPH_SEMANTIC_MODEL);
     return { ...status, model: CODE_GRAPH_SEMANTIC_MODEL, dimensions: CODE_GRAPH_SEMANTIC_DIMENSIONS };
   }
 
+  async ensureFresh(workspaceId: string): Promise<CodeGraphSemanticStatus> {
+    const workspace = await this.assertWorkspace(workspaceId);
+    let latest = await this.status(workspaceId);
+    if (workspace.codeIntelligenceMode !== 'assisted' || latest.state === 'ready' || latest.totalSymbols === 0) {
+      return latest;
+    }
+    for (let attempt = 0; attempt < 3 && latest.state !== 'ready'; attempt += 1) {
+      const active = this.syncState.inFlight.get(workspaceId);
+      latest = active ? await active : await this.synchronize(workspaceId, false);
+      latest = await this.status(workspaceId);
+    }
+    return latest;
+  }
+
   async build(workspaceId: string): Promise<CodeGraphSemanticStatus> {
     await this.assertWorkspace(workspaceId);
+    const active = this.syncState.inFlight.get(workspaceId);
+    if (active) await active;
+    return this.synchronize(workspaceId, true);
+  }
+
+  private async synchronize(workspaceId: string, force: boolean): Promise<CodeGraphSemanticStatus> {
+    const active = this.syncState.inFlight.get(workspaceId);
+    if (active) return active;
+    const pending = this.performSync(workspaceId, force);
+    this.syncState.inFlight.set(workspaceId, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.syncState.inFlight.get(workspaceId) === pending) this.syncState.inFlight.delete(workspaceId);
+    }
+  }
+
+  private async performSync(workspaceId: string, force: boolean): Promise<CodeGraphSemanticStatus> {
     const graph = await codeGraphRepository.analysisGraph(workspaceId, 40_000, 180_000);
     if (graph.truncated) throw new Error('The semantic index exceeds the safe 40,000-symbol graph limit. Narrow the registered repositories first.');
-    if (!graph.nodes.length) return this.status(workspaceId);
+    if (!graph.nodes.length) {
+      await codeGraphIntelligenceRepository.clearEmbeddings(workspaceId, CODE_GRAPH_SEMANTIC_MODEL);
+      return this.status(workspaceId);
+    }
     const names = new Map(graph.nodes.map((symbol) => [symbol.id, symbol.name]));
     const neighborNames = new Map<string, string[]>();
     for (const edge of graph.edges) {
@@ -131,35 +178,45 @@ export class CodeGraphSemanticService implements SemanticIndex {
       if (sourceName && incoming.length < 8) incoming.push(`${edge.kind} ${sourceName}`);
       neighborNames.set(edge.targetSymbolId, incoming);
     }
-    await codeGraphIntelligenceRepository.replaceEmbeddings(
-      workspaceId,
-      CODE_GRAPH_SEMANTIC_MODEL,
-      graph.nodes.map((symbol) => {
-        const neighbors = (neighborNames.get(symbol.id) ?? []).join(' ');
-        return {
-          workspaceId,
-          projectId: symbol.projectId,
-          revisionId: symbol.revisionId,
-          symbolId: symbol.id,
-          model: CODE_GRAPH_SEMANTIC_MODEL,
-          dimensions: CODE_GRAPH_SEMANTIC_DIMENSIONS,
-          vector: embed(symbolParts(symbol, neighbors)),
-          contentHash: contentHash(symbol, neighbors),
-        };
-      }),
+    const existing = new Map(
+      (await codeGraphIntelligenceRepository.embeddingStates(workspaceId, CODE_GRAPH_SEMANTIC_MODEL))
+        .map((entry) => [entry.symbolId, entry]),
     );
+    const changedRows = graph.nodes.flatMap((symbol) => {
+      const neighbors = (neighborNames.get(symbol.id) ?? []).join(' ');
+      const nextContentHash = contentHash(symbol, neighbors);
+      const current = existing.get(symbol.id);
+      if (!force && current?.contentHash === nextContentHash && current.dimensions === CODE_GRAPH_SEMANTIC_DIMENSIONS) {
+        return [];
+      }
+      return [{
+        workspaceId,
+        projectId: symbol.projectId,
+        revisionId: symbol.revisionId,
+        symbolId: symbol.id,
+        model: CODE_GRAPH_SEMANTIC_MODEL,
+        dimensions: CODE_GRAPH_SEMANTIC_DIMENSIONS,
+        vector: embed(symbolParts(symbol, neighbors)),
+        contentHash: nextContentHash,
+      }];
+    });
+    await codeGraphIntelligenceRepository.syncEmbeddings(workspaceId, CODE_GRAPH_SEMANTIC_MODEL, changedRows);
     return this.status(workspaceId);
   }
 
   async clear(workspaceId: string): Promise<CodeGraphSemanticStatus> {
     await this.assertWorkspace(workspaceId);
+    const active = this.syncState.inFlight.get(workspaceId);
+    if (active) await active;
     await codeGraphIntelligenceRepository.clearEmbeddings(workspaceId, CODE_GRAPH_SEMANTIC_MODEL);
     return this.status(workspaceId);
   }
 
   async search(workspaceId: string, options: CodeGraphSemanticSearchOptions): Promise<CodeGraphSemanticMatch[]> {
-    await this.assertWorkspace(workspaceId);
-    const status = await this.status(workspaceId);
+    const workspace = await this.assertWorkspace(workspaceId);
+    const status = workspace.codeIntelligenceMode === 'assisted'
+      ? await this.ensureFresh(workspaceId)
+      : await this.status(workspaceId);
     if (status.state !== 'ready') throw new Error('Build the semantic index before using intent search.');
     const requestedKinds = options.kinds ? new Set(options.kinds) : null;
     const entries = await codeGraphIntelligenceRepository.embeddingEntries(workspaceId, CODE_GRAPH_SEMANTIC_MODEL, options.projectId);
@@ -186,8 +243,10 @@ export class CodeGraphSemanticService implements SemanticIndex {
       .slice(0, limit);
   }
 
-  private async assertWorkspace(workspaceId: string): Promise<void> {
-    if (!await workspaceRepository.getWorkspace(workspaceId)) throw new Error('Workspace not found.');
+  private async assertWorkspace(workspaceId: string) {
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace) throw new Error('Workspace not found.');
+    return workspace;
   }
 }
 

@@ -2,6 +2,7 @@ import { Connection } from '@beeblock/svelar/database';
 import { uuidv7 } from '@beeblock/svelar/support';
 import type {
   CodeGraphEmbeddingEntry,
+  CodeGraphEmbeddingState,
   CodeGraphEmbeddingWrite,
   CodeGraphEvidenceRunWrite,
   CodeGraphIntelligenceStore,
@@ -125,17 +126,66 @@ export class CodeGraphIntelligenceRepository implements CodeGraphIntelligenceSto
     };
   }
 
-  async replaceEmbeddings(workspaceId: string, model: string, rows: CodeGraphEmbeddingWrite[]): Promise<void> {
+  async embeddingStates(workspaceId: string, model: string): Promise<CodeGraphEmbeddingState[]> {
+    const rows = await Connection.raw(`
+      SELECT symbol_id, model, dimensions, content_hash
+      FROM agent_code_graph_embeddings
+      WHERE workspace_id = ? AND model = ?
+    `, [workspaceId, model]) as RawRow[];
+    return rows.map((row) => ({
+      symbolId: String(row.symbol_id),
+      model: String(row.model),
+      dimensions: Number(row.dimensions),
+      contentHash: String(row.content_hash),
+    }));
+  }
+
+  async syncEmbeddings(workspaceId: string, model: string, changedRows: CodeGraphEmbeddingWrite[]): Promise<void> {
     const now = new Date().toISOString();
     await Connection.transaction(async () => {
-      await Connection.raw('DELETE FROM agent_code_graph_embeddings WHERE workspace_id = ? AND model = ?', [workspaceId, model]);
-      for (let offset = 0; offset < rows.length; offset += 400) {
-        const batch = rows.slice(offset, offset + 400);
+      // Stable symbols keep their ids across incremental graph revisions. Move
+      // their existing vectors to the current revision without rewriting blobs.
+      await Connection.raw(`
+        UPDATE agent_code_graph_embeddings
+        SET revision_id = (
+              SELECT s.revision_id FROM agent_code_graph_symbols s
+              JOIN agent_code_graph_projects p ON p.id = s.project_id
+              WHERE s.id = agent_code_graph_embeddings.symbol_id
+                AND s.revision_id = p.current_revision_id
+              LIMIT 1
+            ),
+            project_id = (
+              SELECT s.project_id FROM agent_code_graph_symbols s
+              JOIN agent_code_graph_projects p ON p.id = s.project_id
+              WHERE s.id = agent_code_graph_embeddings.symbol_id
+                AND s.revision_id = p.current_revision_id
+              LIMIT 1
+            ),
+            updated_at = ?
+        WHERE workspace_id = ? AND model = ?
+          AND EXISTS (
+            SELECT 1 FROM agent_code_graph_symbols s
+            JOIN agent_code_graph_projects p ON p.id = s.project_id
+            WHERE s.id = agent_code_graph_embeddings.symbol_id
+              AND s.revision_id = p.current_revision_id
+          )
+      `, [now, workspaceId, model]);
+
+      for (let offset = 0; offset < changedRows.length; offset += 400) {
+        const batch = changedRows.slice(offset, offset + 400);
         const values = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         await Connection.raw(`
           INSERT INTO agent_code_graph_embeddings
             (id, workspace_id, project_id, revision_id, symbol_id, model, dimensions, vector, content_hash, created_at, updated_at)
           VALUES ${values}
+          ON CONFLICT(symbol_id, model) DO UPDATE SET
+            workspace_id = excluded.workspace_id,
+            project_id = excluded.project_id,
+            revision_id = excluded.revision_id,
+            dimensions = excluded.dimensions,
+            vector = excluded.vector,
+            content_hash = excluded.content_hash,
+            updated_at = excluded.updated_at
         `, batch.flatMap((row) => [
           uuidv7(), row.workspaceId, row.projectId, row.revisionId, row.symbolId,
           row.model, row.dimensions,
@@ -143,6 +193,17 @@ export class CodeGraphIntelligenceRepository implements CodeGraphIntelligenceSto
           row.contentHash, now, now,
         ]));
       }
+
+      await Connection.raw(`
+        DELETE FROM agent_code_graph_embeddings
+        WHERE workspace_id = ? AND model = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM agent_code_graph_symbols s
+            JOIN agent_code_graph_projects p ON p.id = s.project_id
+            WHERE s.id = agent_code_graph_embeddings.symbol_id
+              AND s.revision_id = p.current_revision_id
+          )
+      `, [workspaceId, model]);
       await Connection.raw(`
         INSERT INTO agent_code_graph_semantic_indexes (id, workspace_id, model, built_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)

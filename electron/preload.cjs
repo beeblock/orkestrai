@@ -51,6 +51,12 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
     ipcRenderer.on('orkestrai:menu-action', listener);
     return () => ipcRenderer.removeListener('orkestrai:menu-action', listener);
   },
+  /** Converte links de nova aba de um webview em outro Portal no mesmo canvas. */
+  onPortalOpenRequest: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('orkestrai:portal-open-request', listener);
+    return () => ipcRenderer.removeListener('orkestrai:portal-open-request', listener);
+  },
   /** Eventos do updater: available/manual/downloading/downloaded/none/error. Retorna unsubscribe. */
   onUpdate: (callback) => {
     const listener = (_event, payload) => callback(payload);

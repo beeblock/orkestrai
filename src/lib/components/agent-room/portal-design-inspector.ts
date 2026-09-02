@@ -5,6 +5,7 @@ import {
 } from '$lib/modules/agent-room/contracts/schemas/portal-design-feedback.schema.js';
 
 export type PortalWebviewElement = HTMLElement & {
+  getWebContentsId: () => number;
   src: string;
   loadURL: (url: string) => Promise<void>;
   executeJavaScript: (code: string) => Promise<unknown>;

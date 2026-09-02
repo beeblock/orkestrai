@@ -128,7 +128,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'portal',
         title: 'El portal (navegador de los agentes)',
-        body: 'El portal es un navegador integrado que los agentes controlan. El nombre persistente aparece en el encabezado y puede cambiarse con el lápiz; la URL queda en la barra de navegación separada, así tú y los agentes eligen el Portal correcto por nombre. Creo uno apuntando a tu dev server — ajusta la URL después si no es localhost:5173. Los pop-ups de login permanecen en una ventana aislada de Orkestrai con la misma sesión persistente, y el nodo restaura la última página navegada después de reiniciar.',
+        body: 'El portal es un navegador integrado que los agentes controlan. El nombre persistente aparece en el encabezado y puede cambiarse con el lápiz; la URL queda en la barra de navegación separada, así tú y los agentes eligen el Portal correcto por nombre. Creo uno apuntando a tu dev server — ajusta la URL después si no es localhost:5173. Los enlaces que solicitan una pestaña nueva se convierten en un segundo Portal dentro del mismo Canvas; los pop-ups reales de inicio de sesión permanecen en una ventana aislada de Orkestrai para conservar window.opener y el flujo de autenticación. Ambos restauran la sesión persistente después de reiniciar.',
         action: { kind: 'createPortal', url: 'http://localhost:5173', title: 'Portal App' },
         check: { kind: 'nodeExists', nodeType: 'portal' },
       },
@@ -974,6 +974,12 @@ export const TOURS_ES: Tour[] = [
         title: 'Mantén el workspace legible',
         body: 'Las conexiones permanecen detrás de todos los nodos, incluso en pantallas Windows con escalas diferentes. Luego puedes ajustar posiciones manualmente.',
       },
+      {
+        id: 'tune-connection-performance',
+        title: 'Elige el costo de las conexiones',
+        body: 'Abre Configuración → Apariencia → Conexiones del canvas. Adaptativo escala la física con la densidad, Elástico conserva el efecto con un límite de cuadros y Estático desactiva física y animación para usar menos CPU y GPU.',
+        action: { kind: 'openPage', path: '/settings#appearance' },
+      },
     ],
   },
   {
@@ -1703,6 +1709,11 @@ export const TOURS_ES: Tour[] = [
         check: { kind: 'codeGraphReady' },
       },
       {
+        id: 'choose-code-intelligence-mode',
+        title: 'Elige actualización y acceso',
+        body: 'Edita el workspace para elegir Asistido, Manual o Desactivado. Asistido observa cambios estabilizados, actualiza de forma incremental y hace que las consultas de agentes esperen la revisión más reciente. Manual deja la indexación en tus manos y bloquea a los agentes. Desactivado detiene los watchers y bloquea el grafo sin borrar el historial local.',
+      },
+      {
         id: 'explore-symbol-impact',
         title: 'Busca y sigue el impacto',
         body: 'Busca un servicio, componente, ruta o método en el nodo. Selecciona el resultado, alterna Entrante, Ambas o Saliente y ajusta la profundidad para inspeccionar su vecindad limitada. Los agentes hacen la misma búsqueda con code_graph_search y code_graph_neighbors.',
@@ -1720,7 +1731,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'build-semantic-index',
         title: 'Busca por intención, localmente',
-        body: 'Abre Análisis → Búsqueda semántica y construye el índice compacto local. Activa el brillo junto a la búsqueda y describe el comportamiento que necesitas en vez de adivinar el nombre del símbolo. El índice no requiere clave ni descarga de modelo, nunca envía el código fuera del dispositivo y avisa cuando una nueva revisión exige reconstrucción. Los agentes usan code_graph_semantic_status, code_graph_semantic_build y code_graph_semantic_search.',
+        body: 'Abre Análisis → Búsqueda semántica. El modo Asistido prepara automáticamente el índice compacto local, reutiliza vectores sin cambios después de editar y ofrece Actualizar ahora para forzar una pasada inmediata. Activa el brillo junto a la búsqueda y describe el comportamiento que necesitas en vez de adivinar el nombre del símbolo. El índice no requiere clave ni descarga de modelo, nunca envía código fuera del dispositivo y las búsquedas de agentes esperan la revisión más reciente. El modo Manual conserva los controles explícitos Construir y Reconstruir.',
       },
       {
         id: 'overlay-runtime-evidence',

@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import type { AgentActivityState, CanvasNode, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/canvas-placement.js';
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
+import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager, sanitizeComposerText } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracker.js';
@@ -651,12 +652,18 @@ export class BridgeService {
     return { nodeId: node.id, title: node.title ?? 'nota', content };
   }
 
-  /** Cria uma nota no canvas (e opcionalmente já conecta a um agente ou a todos). */
+  /** Cria uma nota no canvas e, por padrão, a conecta somente ao agente autor. */
   async createNote(
     workspaceId: string,
-    input: { title: string; content?: string; connect?: string | null }
+    input: { title: string; content?: string; from?: string | null; connect?: string | null }
   ): Promise<{ nodeId: string; title: string; connectedTo: string | null }> {
     const siblings = await workspaceRepository.listNodes(workspaceId);
+    const agents = input.connect === 'all' || input.connect || input.from
+      ? await this.listAgents(workspaceId)
+      : [];
+    const targetAgent = input.connect !== 'all' && (input.connect || input.from)
+      ? this.findAgent(agents, input.connect ?? input.from!)
+      : null;
     const position = findFreeCanvasPosition(occupiedOnFloor(siblings, null), {
       x: 120,
       y: 120,
@@ -676,16 +683,15 @@ export class BridgeService {
     let connectedTo: string | null = null;
     if (input.connect === 'all') {
       // Specs/briefs do líder: visiveis para o time inteiro.
-      const agents = await this.listAgents(workspaceId);
       for (const agent of agents) {
         await this.ensureEdge(workspaceId, note.id, agent.nodeId);
       }
       connectedTo = 'todos os agentes';
-    } else if (input.connect) {
-      const agents = await this.listAgents(workspaceId);
-      const agent = this.findAgent(agents, input.connect);
-      await this.ensureEdge(workspaceId, note.id, agent.nodeId);
-      connectedTo = agent.title;
+    } else if (targetAgent) {
+      // Uma conexão explícita prevalece; sem ela, o id do nó autor mantém
+      // fluxos paralelos isolados mesmo quando vários agentes têm o mesmo papel.
+      await this.ensureEdge(workspaceId, note.id, targetAgent.nodeId);
+      connectedTo = targetAgent.title;
     }
     this.notifyWorkspaceChanged(workspaceId);
     return { nodeId: note.id, title: note.title ?? input.title, connectedTo };
@@ -835,9 +841,21 @@ export class BridgeService {
 
   async reportActivity(
     workspaceId: string,
-    input: { from: string; state: AgentActivityState; action?: string | null; taskId?: string | null },
+    input: { from?: string | null; state: AgentActivityState; action?: string | null; taskId?: string | null },
   ): Promise<{ recorded: boolean; nodeId: string; state: AgentActivityState }> {
-    const agent = this.findAgent(await this.listAgents(workspaceId), input.from);
+    const agents = await this.listAgents(workspaceId);
+    let agent: BridgeAgent | null = input.from ? this.findAgent(agents, input.from) : null;
+    if (!agent && input.taskId) {
+      const task = await AgentBoardTask.find(input.taskId);
+      const assigneeNodeId = task?.getAttribute('assignee_node_id') as string | null | undefined;
+      if (!task || task.getAttribute('workspace_id') !== workspaceId || !assigneeNodeId) {
+        throw new Error('Não foi possível identificar o agente: a tarefa não existe neste workspace ou não tem responsável.');
+      }
+      agent = agents.find((candidate) => candidate.nodeId === assigneeNodeId) ?? null;
+    }
+    if (!agent) {
+      throw new Error('Não foi possível identificar o agente que está reportando o estado.');
+    }
     const event = await controlCenterService.recordActivity({
       workspaceId,
       nodeId: agent.nodeId,
@@ -1203,12 +1221,12 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/note_*/
 - \`orkestrai usage\` — consulta as cotas reais e a política do nó Usage; perfis de multi-conta aparecem como linhas próprias (\`profileId\`/\`profileName\`). Quando \`shouldFallback\` for verdadeiro, direcione NOVAS tarefas e tarefas ainda pendentes ao \`recommendedProvider\` (se ele tiver \`:profile:\`, use \`--provider\` + \`--profile\` juntos no recruit). Não troque silenciosamente o provider ou perfil de um terminal que já executa trabalho.
 - \`orkestrai ask "<TituloDoAgente>" "<mensagem>"\` — envia uma mensagem a outro agente e aguarda uma resposta confirmada. Só diga que falou/consultou o agente quando o comando terminar com sucesso e imprimir \`Resposta confirmada de ...\`. Timeout, erro ou \`Resposta nao confirmada\` significam que a conversa NÃO foi concluída — informe isso sem inventar resposta.
 - Tools MCP \`huddle_list\` e \`huddle_say\` (ou \`orkestrai huddle list/say\`) — acompanhe a transcrição de um huddle e registre sua contribuição quando você for participante. \`huddle_say\` apenas registra sua fala; não use para simular outra pessoa nem para disparar fan-out recursivo.
-- Tools MCP \`code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff\` (ou \`orkestrai graph ...\`) — consulte o grafo compartilhado antes de explicar arquitetura, dependências ou impacto. Use \`explain\` para procedência, \`locate\` para sincronizar código e grafo, \`operations\` para agentes/tarefas/Floors e conflitos, \`context\` para pacotes revisáveis com orçamento explícito, \`compare\` para revisões e \`investigation\` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte \`changes\` antes de integrar, \`contracts\` para APIs, \`quality\` como evidência e \`semantic\` somente após construir o índice local. Importe \`evidence\` apenas de caminho relativo confinado. Use \`handoff\` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.
+- Tools MCP \`code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff\` (ou \`orkestrai graph ...\`) — consulte o grafo compartilhado antes de explicar arquitetura, dependências ou impacto. Use \`explain\` para procedência, \`locate\` para sincronizar código e grafo, \`operations\` para agentes/tarefas/Floors e conflitos, \`context\` para pacotes revisáveis com orçamento explícito, \`compare\` para revisões e \`investigation\` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte \`changes\` antes de integrar, \`contracts\` para APIs e \`quality\` como evidência. Em modo Assistido, \`semantic\` aguarda o índice local atualizado automaticamente; em modo Manual, construa ou reconstrua esse índice explicitamente. Importe \`evidence\` apenas de caminho relativo confinado. Use \`handoff\` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.
 - \`orkestrai status working "<ação atual>" --task <taskId>\` — registra o trabalho atual no Control Center. Use \`waiting_input\`, \`waiting_permission\`, \`blocked\`, \`idle\`, \`done\` ou \`error\` sempre que houver uma transição real; não use como heartbeat.
 - Tools MCP \`memory_search/add/revise/archive\` — consulte memória sob demanda antes de decisões relevantes. Registre somente conhecimento reutilizável (decisão, fato, preferência, restrição, referência ou aprendizado) com uma fonte explícita. Nunca injete toda a memória no prompt nem salve conversa solta automaticamente. Para corrigir algo, use \`memory_revise\` com a revisão retornada pela busca; não duplique nem sobrescreva concorrência.
 - \`orkestrai memory list [consulta] --json\` / \`memory add ... --source-label ...\` / \`memory revise ...\` / \`memory archive <id>\` — fallbacks CLI para a mesma memória durável e versionada.
 - \`orkestrai note read <nodeId>\` — lê uma nota conectada a você.
-- \`orkestrai note create "<título>" [--content "<texto>"] [--connect "<Agente>"|all]\` — cria uma nota no canvas (default: conecta ao time inteiro).
+- \`orkestrai note create "<título>" [--content "<texto>"] [--connect "<Agente>"|all]\` — cria uma nota no canvas (default: conecta somente ao agente autor; use \`--connect all\` apenas para compartilhar com o time inteiro).
 - \`orkestrai note write <nodeId> "<conteúdo>"\` — substitui o conteúdo da nota.
 - \`orkestrai note edit <nodeId> "<trecho antigo>" "<trecho novo>"\` — edição pontual.
 - \`orkestrai notes\` — lista \`nodeId\`, título e prévia das notas acessíveis. Rode antes de criar; se a nota já existe, use \`note read\` e \`note write/edit\` em vez de duplicar.
@@ -1274,7 +1292,7 @@ Antes de propor o time e antes de cada nova rodada de delegação, consulte \`or
 
 1. PRIMEIRO proponha o time: liste os agentes sugeridos (título, provider, role de cada um) e pergunte quais ele quer criar — não crie nada sem aprovação. VARIE os providers instalados: times com 3+ agentes devem combinar perspectivas diferentes — NUNCA crie o time inteiro com um provider só.
 2. Aprovado, crie com \`orkestrai recruit "<Título>" [--provider ${providerIds}] [--profile <nome-do-perfil>] [--model <id>] [--effort medium|high|xhigh] [--role <papel>]\`. \`--profile\` usa uma conta alternativa já cadastrada na Central de Providers para esse provider (multi-conta); sem isso, usa a conta padrão. Recrutas nascem CONECTADOS a você no organograma (não precisa de \`connect\`). Para composição visual estruturada, use \`medium\` ou \`high\`: \`xhigh\` aumenta muito a latência de payloads sem melhorar o gate visual. Use títulos CURTOS (2-3 palavras, ex.: "Dev API", "Designer UI") e roles de UMA palavra ("frontend", "qa", "design") — descrições longas vão para a nota de briefing.
-3. Escreva o spec/briefing do projeto numa nota: \`orkestrai note create "Spec — <projeto>" --content "..." --connect all\` (sem --connect, a nota já conecta ao time inteiro por padrão).
+3. Escreva o spec/briefing do projeto numa nota: \`orkestrai note create "Spec — <projeto>" --content "..." --connect all\`. Sem \`--connect\`, a nota fica restrita ao agente que a criou.
 4. Trabalho em código? Cada agente trabalha no PRÓPRIO ANDAR (worktree isolada): \`orkestrai floor create "<frente>"\` antes do agente começar — NUNCA deixe vários agentes codando na mesma branch. Integre depois com \`orkestrai floor preview\` (vê conflitos) e \`orkestrai floor land\`.
 5. Distribua TODO trabalho com \`orkestrai task add --assign\` ANTES de usar \`orkestrai ask\` para o handoff (o quadro kanban aparece no canvas sozinho na primeira tarefa). É PROIBIDO delegar trabalho apenas por mensagem direta. Use notas com \`orkestrai note create\`; cada task tem que ser AUTOSSUFICIENTE (a descrição diz o que fazer e onde está o spec) OU citar o id de uma nota que JÁ EXISTE e já está conectada ao agente — NUNCA atribua uma task que depende de uma nota/artefato que você ainda não criou. E cada agente PRODUZ os próprios artefatos: o designer CRIA a nota de design com \`orkestrai note create\`; não fica esperando o líder mandar uma — deixe isso explícito na descrição da task.
 6. Projeto web? Rode \`orkestrai list\` e REUTILIZE um Portal existente pelo nome/id, navegando-o para \`http://localhost:<porta-do-dev-server>\`. Só crie um se a listagem confirmar que não existe nenhum; nunca deduza ausência a partir do estado de conexão. Use \`orkestrai portal <nome-ou-nodeId> dom|screenshot|eval\` para testar o que o time está construindo. A porta do dev server vem de \`orkestrai port\` (NUNCA a padrão 5173/3000 — outro workspace pode estar usando).
@@ -1374,7 +1392,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `orkestrai usage` — cotas reais e recomendação do nó Usage; líderes consultam antes de delegar e roteiam novas tarefas ao recommendedProvider quando shouldFallback=true.',
       '- `orkestrai ask "<Agente>" "<mensagem>"` — fala com outro agente e aguarda a resposta.',
       '- `huddle_list` / `huddle_say` — acompanha huddles ativos e registra somente a contribuição deste agente no transcript.',
-      '- `code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff` / `orkestrai graph ...` — consulta o mesmo grafo nativo visível no Canvas e Workbench. Use `explain` para procedência, `locate` para sincronizar código e grafo, `operations` para agentes/tarefas/Floors e conflitos, `context` para pacotes revisáveis com orçamento explícito, `compare` para revisões e `investigation` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte `changes` antes de integrar, `contracts` para APIs, `quality` como evidência e `semantic` somente após construir o índice local. Importe `evidence` apenas de caminho relativo confinado. Use `handoff` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.',
+      '- `code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff` / `orkestrai graph ...` — consulta o mesmo grafo nativo visível no Canvas e Workbench. Use `explain` para procedência, `locate` para sincronizar código e grafo, `operations` para agentes/tarefas/Floors e conflitos, `context` para pacotes revisáveis com orçamento explícito, `compare` para revisões e `investigation` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte `changes` antes de integrar, `contracts` para APIs e `quality` como evidência. Em modo Assistido, `semantic` aguarda o índice local atualizado automaticamente; em modo Manual, construa ou reconstrua esse índice explicitamente. Importe `evidence` apenas de caminho relativo confinado. Use `handoff` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.',
       '- `orkestrai note read/write/edit/create` — notas compartilhadas no canvas.',
       '- `image_workflow_*` — controle completo dos fluxos nativos de imagem executados por Codex: crie/configure sem rodar, conecte ou reordene Notas e Imagens, adicione referencias do workspace, gere de 1 a 10 outputs, valide, conclua, cancele ou remova. Leia o contrato, use somente `image_gen.imagegen` com `referenced_image_paths`, copie cada output para o destino do workspace e chame `image_workflow_validate`. Se alpha real for exigido e falhar, chame `image_gen.imagegen` novamente usando apenas a saida invalida como referencia e o prompt corretivo retornado, depois valide o resultado, no maximo tres tentativas. Toda mudanca visual, inclusive remover fundo, deve vir da tool nativa: nunca use Python, Pillow, ImageMagick, ffmpeg, remove-bg, mascaras geradas ou processamento local de pixels. Chame `image_workflow_complete` apenas quando todos validarem. Nunca peça chave de API nem use API/script paralelo.',
       '- `orkestrai design list/read/reference/apply` — documentos visuais nativos. Em exploração, produza primeiro 1 desktop + 1 mobile com design_import_code ou lote pequeno, entregue a primeira revisão em até 5 minutos e espere o gate visual humano. Só expanda a direção aprovada com blueprint completo. design list sinaliza stalled e o reviewStatus da revisão atual.',

@@ -14,6 +14,7 @@ import { floorService } from '$lib/modules/agent-room/application/services/Floor
 import { codeGraphParser } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphParser.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { apiClientNativePayloadSchema, apiClientRequestSchema } from '$lib/modules/agent-room/contracts/schemas/apiClient.schema.js';
+import { CodeGraphController } from '$lib/modules/agent-room/interface/http/controllers/CodeGraphController.js';
 
 const directories: string[] = [];
 
@@ -91,7 +92,11 @@ describe('CodeGraphIndexService', () => {
     await writeFile(join(directory, 'package.json'), '{"name":"watch-test"}\n');
     const sourcePath = join(directory, 'service.ts');
     await writeFile(sourcePath, 'export function firstVersion() {}\n');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Watch test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'Watch test',
+      workingDir: directory,
+      codeIntelligenceMode: 'manual',
+    });
 
     await codeGraphIndexService.index(workspace.id);
     await codeGraphIndexService.status(workspace.id);
@@ -103,6 +108,49 @@ describe('CodeGraphIndexService', () => {
       status = await codeGraphIndexService.status(workspace.id);
     }
     expect(status.projects[0].status).toBe('stale');
+    await expect(codeGraphIndexService.ensureFresh(workspace.id)).rejects.toThrow(/manual mode/i);
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('incrementally refreshes assisted workspaces and makes freshness reads wait for the newest source', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-assisted-'));
+    directories.push(directory);
+    await writeFile(join(directory, 'package.json'), '{"name":"assisted-watch-test"}\n');
+    const sourcePath = join(directory, 'service.ts');
+    await writeFile(sourcePath, 'export function firstVersion() {}\n');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Assisted watch test', workingDir: directory });
+
+    await codeGraphIndexService.index(workspace.id);
+    await writeFile(sourcePath, 'export function newestVersion() {}\n');
+    await codeGraphIndexService.ensureFresh(workspace.id);
+
+    expect(await codeGraphIndexService.search(workspace.id, { query: 'newestVersion' }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ name: 'newestVersion' })]));
+    expect(await codeGraphIndexService.search(workspace.id, { query: 'firstVersion' })).toEqual([]);
+    expect((await codeGraphIndexService.status(workspace.id)).projects[0].status).toBe('ready');
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('blocks indexing and reads when Code Intelligence is disabled', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-disabled-'));
+    directories.push(directory);
+    await writeFile(join(directory, 'package.json'), '{"name":"disabled-test"}\n');
+    await writeFile(join(directory, 'service.ts'), 'export function hidden() {}\n');
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'Disabled graph test',
+      workingDir: directory,
+      codeIntelligenceMode: 'disabled',
+    });
+
+    await expect(codeGraphIndexService.status(workspace.id)).rejects.toThrow(/disabled/i);
+    await expect(codeGraphIndexService.index(workspace.id)).rejects.toThrow(/disabled/i);
+    await expect(codeGraphIndexService.search(workspace.id, { query: 'hidden' })).rejects.toThrow(/disabled/i);
+    const semanticResponse = await new CodeGraphController().semantic({
+      params: { id: workspace.id },
+      url: new URL(`http://localhost/api/agent-room/workspaces/${workspace.id}/code-graph/semantic`),
+    } as never) as Response;
+    expect(semanticResponse.status).toBe(403);
+    expect(await semanticResponse.json()).toEqual(expect.objectContaining({ error: expect.stringMatching(/disabled/i) }));
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });
 

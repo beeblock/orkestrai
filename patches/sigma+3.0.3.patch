@@ -1,0 +1,51 @@
+diff --git a/node_modules/sigma/dist/sigma.cjs.dev.js b/node_modules/sigma/dist/sigma.cjs.dev.js
+index 07042d5..d9211f0 100644
+--- a/node_modules/sigma/dist/sigma.cjs.dev.js
++++ b/node_modules/sigma/dist/sigma.cjs.dev.js
+@@ -313,8 +313,10 @@ var Camera = /*#__PURE__*/function (_TypedEventEmitter) {
+  */
+ function getPosition(e, dom) {
+   var bbox = dom.getBoundingClientRect();
++  var scaleX = bbox.width ? dom.offsetWidth / bbox.width : 1;
++  var scaleY = bbox.height ? dom.offsetHeight / bbox.height : 1;
+   return {
+-    x: e.clientX - bbox.left,
+-    y: e.clientY - bbox.top
++    x: (e.clientX - bbox.left) * scaleX,
++    y: (e.clientY - bbox.top) * scaleY
+   };
+ }
+diff --git a/node_modules/sigma/dist/sigma.cjs.prod.js b/node_modules/sigma/dist/sigma.cjs.prod.js
+index 3bd5bbd..9f6e3c0 100644
+--- a/node_modules/sigma/dist/sigma.cjs.prod.js
++++ b/node_modules/sigma/dist/sigma.cjs.prod.js
+@@ -313,8 +313,10 @@ var Camera = /*#__PURE__*/function (_TypedEventEmitter) {
+  */
+ function getPosition(e, dom) {
+   var bbox = dom.getBoundingClientRect();
++  var scaleX = bbox.width ? dom.offsetWidth / bbox.width : 1;
++  var scaleY = bbox.height ? dom.offsetHeight / bbox.height : 1;
+   return {
+-    x: e.clientX - bbox.left,
+-    y: e.clientY - bbox.top
++    x: (e.clientX - bbox.left) * scaleX,
++    y: (e.clientY - bbox.top) * scaleY
+   };
+ }
+diff --git a/node_modules/sigma/dist/sigma.esm.js b/node_modules/sigma/dist/sigma.esm.js
+index 6cca733..580ce68 100644
+--- a/node_modules/sigma/dist/sigma.esm.js
++++ b/node_modules/sigma/dist/sigma.esm.js
+@@ -309,8 +309,10 @@ var Camera = /*#__PURE__*/function (_TypedEventEmitter) {
+  */
+ function getPosition(e, dom) {
+   var bbox = dom.getBoundingClientRect();
++  var scaleX = bbox.width ? dom.offsetWidth / bbox.width : 1;
++  var scaleY = bbox.height ? dom.offsetHeight / bbox.height : 1;
+   return {
+-    x: e.clientX - bbox.left,
+-    y: e.clientY - bbox.top
++    x: (e.clientX - bbox.left) * scaleX,
++    y: (e.clientY - bbox.top) * scaleY
+   };
+ }

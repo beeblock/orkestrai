@@ -697,8 +697,8 @@ export async function run(argv, options = {}) {
         const data = await bridge(config, 'POST', '/api/agent-room/bridge/notes', {
           title,
           content: flags.content,
-          // Default: nota visivel para o time inteiro (specs/briefs).
-          connect: flags.connect ?? 'all',
+          from: selfAgent,
+          connect: flags.connect,
         });
         out(`Nota criada: "${data.title}" (${data.nodeId})${data.connectedTo ? ` — conectada a ${data.connectedTo}` : ''}`);
         return 0;
@@ -1138,9 +1138,9 @@ export async function run(argv, options = {}) {
     }
     case 'status': {
       const [state, ...actionParts] = rest;
-      if (!state || !flags.from) throw new Error('Uso: orkestrai status <estado> [acao] [--task <id>]');
+      if (!state || (!flags.from && !flags.task)) throw new Error('Uso: orkestrai status <estado> [acao] [--task <id>]');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/activity', {
-        from: flags.from,
+        ...(flags.from ? { from: flags.from } : {}),
         state,
         action: actionParts.join(' ') || undefined,
         taskId: flags.task,

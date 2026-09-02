@@ -24,6 +24,7 @@ import { codeGraphResolver } from '../../infrastructure/code-graph/CodeGraphReso
 import type { ParsedCodeFile } from '../../infrastructure/code-graph/types.js';
 import { codeGraphRepository } from '../../infrastructure/repositories/CodeGraphRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { codeGraphSemanticService } from './CodeGraphSemanticService.js';
 
 const execFileAsync = promisify(execFile);
 const INDEXER_VERSION = 3;
@@ -33,12 +34,28 @@ const WATCHED_SOURCE = /\.(?:[cm]?[jt]sx?|svelte|php)$/i;
 const WATCHED_CONTRACT = /(?:^|[._-])(openapi|swagger)(?:[._-]|$).*\.(?:json|ya?ml)$/i;
 const IGNORED_WATCH_SEGMENT = /(^|[\\/])(\.git|node_modules|vendor|\.svelte-kit|\.next|\.nuxt|build|dist|release|coverage|target|\.cache)([\\/]|$)/;
 
+export class CodeGraphAccessError extends Error {
+  readonly status = 403;
+
+  constructor(readonly mode: Workspace['codeIntelligenceMode']) {
+    super(mode === 'manual'
+      ? 'Code Intelligence is in manual mode. Agent access is disabled for this workspace.'
+      : 'Code Intelligence is disabled for this workspace.');
+    this.name = 'CodeGraphAccessError';
+  }
+}
+
 type IndexState = {
   inFlight: Map<string, Promise<CodeGraphProject>>;
-  watchers: Map<string, { workspaceId: string; rootPath: string; watcher: FSWatcher }>;
+  watchers: Map<string, { workspaceId: string; rootPath: string; watcher: FSWatcher; ready: Promise<void> }>;
   watcherRetryAt: Map<string, number>;
   staleTimers: Map<string, ReturnType<typeof setTimeout>>;
+  semanticTimers: Map<string, ReturnType<typeof setTimeout>>;
   parseCache: Map<string, Map<string, { contentHash: string; file: ParsedCodeFile }>>;
+  changeVersions: Map<string, number>;
+  indexedChangeVersions: Map<string, number>;
+  autoReindexing: Map<string, Promise<void>>;
+  freshnessCheckedProjects: Set<string>;
 };
 
 function indexState(): IndexState {
@@ -48,11 +65,21 @@ function indexState(): IndexState {
     watchers: new Map(),
     watcherRetryAt: new Map(),
     staleTimers: new Map(),
+    semanticTimers: new Map(),
     parseCache: new Map(),
+    changeVersions: new Map(),
+    indexedChangeVersions: new Map(),
+    autoReindexing: new Map(),
+    freshnessCheckedProjects: new Set(),
   };
   // Preserve development HMR state created by an older module shape.
   global.__orkestraiCodeGraphIndexState.parseCache ??= new Map();
   global.__orkestraiCodeGraphIndexState.watcherRetryAt ??= new Map();
+  global.__orkestraiCodeGraphIndexState.semanticTimers ??= new Map();
+  global.__orkestraiCodeGraphIndexState.changeVersions ??= new Map();
+  global.__orkestraiCodeGraphIndexState.indexedChangeVersions ??= new Map();
+  global.__orkestraiCodeGraphIndexState.autoReindexing ??= new Map();
+  global.__orkestraiCodeGraphIndexState.freshnessCheckedProjects ??= new Set();
   return global.__orkestraiCodeGraphIndexState;
 }
 
@@ -100,11 +127,62 @@ export class CodeGraphIndexService {
   async status(workspaceId: string): Promise<CodeGraphSnapshot> {
     const projects = await this.syncWorkspaceProjects(workspaceId);
     await this.ensureWatchers(workspaceId, projects);
+    this.scheduleSemanticRefresh(workspaceId, false);
     return codeGraphRepository.snapshot(workspaceId);
+  }
+
+  /** Agent reads use this gate so a known-stale graph is never returned. */
+  async ensureFresh(workspaceId: string): Promise<CodeGraphSnapshot> {
+    const workspace = await this.assertWorkspace(workspaceId, true);
+    const projects = await this.syncWorkspaceProjects(workspace.id);
+    await this.ensureWatchers(workspace.id, projects);
+    for (const project of projects) {
+      const version = this.state.changeVersions.get(project.id) ?? 0;
+      const indexedVersion = this.state.indexedChangeVersions.get(project.id) ?? 0;
+      const firstCheckThisProcess = !this.state.freshnessCheckedProjects.has(project.id);
+      if (firstCheckThisProcess || project.status !== 'ready' || version > indexedVersion) {
+        const timer = this.state.staleTimers.get(project.id);
+        if (timer) clearTimeout(timer);
+        this.state.staleTimers.delete(project.id);
+        await this.runAutoReindex(workspace.id, project.id);
+      }
+      this.state.freshnessCheckedProjects.add(project.id);
+    }
+    this.scheduleSemanticRefresh(workspace.id, true);
+    return codeGraphRepository.snapshot(workspace.id);
+  }
+
+  async applyWorkspaceMode(workspace: Workspace): Promise<void> {
+    if (workspace.codeIntelligenceMode === 'disabled') {
+      await this.pauseWorkspace(workspace.id);
+      this.broadcast(workspace.id);
+      return;
+    }
+    if (workspace.codeIntelligenceMode === 'assisted') {
+      await this.ensureFresh(workspace.id);
+      return;
+    }
+    const projects = await this.syncWorkspaceProjects(workspace.id);
+    await this.ensureWatchers(workspace.id, projects);
+    this.broadcast(workspace.id);
+  }
+
+  async pauseWorkspace(workspaceId: string): Promise<void> {
+    const semanticTimer = this.state.semanticTimers.get(workspaceId);
+    if (semanticTimer) clearTimeout(semanticTimer);
+    this.state.semanticTimers.delete(workspaceId);
+    for (const [projectId, entry] of this.state.watchers) {
+      if (entry.workspaceId === workspaceId) await this.closeWatcher(projectId);
+    }
+  }
+
+  async assertAvailable(workspaceId: string): Promise<void> {
+    await this.assertWorkspace(workspaceId);
   }
 
   async index(workspaceId: string, options: CodeGraphIndexOptions = {}): Promise<CodeGraphIndexResult> {
     const projects = await this.syncWorkspaceProjects(workspaceId);
+    await this.ensureWatchers(workspaceId, projects);
     const selected = options.projectIds?.length
       ? projects.filter((project) => options.projectIds!.includes(project.id))
       : projects;
@@ -113,8 +191,12 @@ export class CodeGraphIndexService {
     }
 
     const indexed: CodeGraphProject[] = [];
-    for (const project of selected) indexed.push(await this.indexProject(project, options.force ?? false));
+    for (const project of selected) {
+      indexed.push(await this.indexProject(project, options.force ?? false));
+      this.state.indexedChangeVersions.set(project.id, this.state.changeVersions.get(project.id) ?? 0);
+    }
     const snapshot = await codeGraphRepository.snapshot(workspaceId);
+    this.scheduleSemanticRefresh(workspaceId, true);
     this.broadcast(workspaceId);
     return { projects: indexed, stats: snapshot.totals };
   }
@@ -145,6 +227,9 @@ export class CodeGraphIndexService {
   }
 
   async removeWorkspace(workspaceId: string): Promise<void> {
+    const semanticTimer = this.state.semanticTimers.get(workspaceId);
+    if (semanticTimer) clearTimeout(semanticTimer);
+    this.state.semanticTimers.delete(workspaceId);
     const projects = await codeGraphRepository.listProjects(workspaceId);
     for (const project of projects) await this.closeWatcher(project.id);
     await codeGraphRepository.deleteWorkspace(workspaceId);
@@ -307,14 +392,13 @@ export class CodeGraphIndexService {
     }
     for (const project of projects) {
       const current = this.state.watchers.get(project.id);
-      if (project.stats.files === 0) {
-        if (current) await this.closeWatcher(project.id);
-        continue;
-      }
       const retryAt = this.state.watcherRetryAt.get(project.id) ?? 0;
       if (!current && retryAt > Date.now()) continue;
       if (retryAt) this.state.watcherRetryAt.delete(project.id);
-      if (current?.rootPath === project.rootPath) continue;
+      if (current?.rootPath === project.rootPath) {
+        await current.ready;
+        continue;
+      }
       if (current) await this.closeWatcher(project.id);
       const watcher = watch(project.rootPath, {
         ignored: ignoreWatchPath,
@@ -322,18 +406,28 @@ export class CodeGraphIndexService {
         followSymlinks: false,
         awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 100 },
       });
+      const ready = new Promise<void>((resolveReady) => {
+        let settled = false;
+        const settle = () => {
+          if (settled) return;
+          settled = true;
+          resolveReady();
+        };
+        watcher.once('ready', settle);
+        watcher.once('error', settle);
+      });
       const changed = (path: string) => {
         if (!WATCHED_SOURCE.test(path) && !WATCHED_CONTRACT.test(basename(path))) return;
+        const version = (this.state.changeVersions.get(project.id) ?? 0) + 1;
+        this.state.changeVersions.set(project.id, version);
         const prior = this.state.staleTimers.get(project.id);
         if (prior) clearTimeout(prior);
         this.state.staleTimers.set(project.id, setTimeout(() => {
           this.state.staleTimers.delete(project.id);
-          void codeGraphRepository.markStale(workspaceId, project.id).then((didChange) => {
-            if (didChange) this.broadcast(workspaceId);
-          });
+          void this.handleProjectChange(workspaceId, project.id, version);
         }, 350));
       };
-      this.state.watchers.set(project.id, { workspaceId, rootPath: project.rootPath, watcher });
+      this.state.watchers.set(project.id, { workspaceId, rootPath: project.rootPath, watcher, ready });
       watcher
         .on('add', changed)
         .on('change', changed)
@@ -348,6 +442,64 @@ export class CodeGraphIndexService {
             if (didChange) this.broadcast(workspaceId);
           });
         });
+      await ready;
+    }
+  }
+
+  private async handleProjectChange(workspaceId: string, projectId: string, version: number): Promise<void> {
+    if ((this.state.indexedChangeVersions.get(projectId) ?? 0) >= version) return;
+    const didChange = await codeGraphRepository.markStale(workspaceId, projectId);
+    if (didChange) this.broadcast(workspaceId);
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (workspace?.codeIntelligenceMode === 'assisted') {
+      await this.runAutoReindex(workspaceId, projectId).catch(() => undefined);
+      this.scheduleSemanticRefresh(workspaceId, true);
+    }
+  }
+
+  private scheduleSemanticRefresh(workspaceId: string, reset: boolean): void {
+    const existing = this.state.semanticTimers.get(workspaceId);
+    if (existing && !reset) return;
+    if (existing) clearTimeout(existing);
+    this.state.semanticTimers.set(workspaceId, setTimeout(() => {
+      this.state.semanticTimers.delete(workspaceId);
+      void (async () => {
+        const workspace = await workspaceRepository.getWorkspace(workspaceId);
+        if (!workspace || workspace.codeIntelligenceMode !== 'assisted') return;
+        const before = await codeGraphSemanticService.status(workspaceId);
+        if (before.state === 'ready' || before.totalSymbols === 0) return;
+        const after = await codeGraphSemanticService.ensureFresh(workspaceId);
+        if (after.builtAt !== before.builtAt || after.state !== before.state) this.broadcast(workspaceId);
+      })().catch((error) => {
+        const message = error instanceof Error ? error.message.slice(0, 240) : 'Unknown semantic indexing error.';
+        console.warn(`[orkestrai] Automatic semantic code index refresh failed for workspace ${workspaceId}: ${message}`);
+      });
+    }, 750));
+  }
+
+  private async runAutoReindex(workspaceId: string, projectId: string): Promise<void> {
+    const existing = this.state.autoReindexing.get(projectId);
+    if (existing) return existing;
+    const pending = (async () => {
+      while (true) {
+        const workspace = await workspaceRepository.getWorkspace(workspaceId);
+        if (!workspace || workspace.codeIntelligenceMode !== 'assisted') return;
+        const projects = await this.syncWorkspaceProjects(workspaceId);
+        const project = projects.find((candidate) => candidate.id === projectId);
+        if (!project) return;
+        const version = this.state.changeVersions.get(projectId) ?? 0;
+        await this.indexProject(project, false);
+        this.state.indexedChangeVersions.set(projectId, version);
+        this.state.freshnessCheckedProjects.add(projectId);
+        this.broadcast(workspaceId);
+        if ((this.state.changeVersions.get(projectId) ?? 0) <= version) return;
+      }
+    })();
+    this.state.autoReindexing.set(projectId, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.state.autoReindexing.get(projectId) === pending) this.state.autoReindexing.delete(projectId);
     }
   }
 
@@ -356,15 +508,21 @@ export class CodeGraphIndexService {
     if (timer) clearTimeout(timer);
     this.state.staleTimers.delete(projectId);
     this.state.watcherRetryAt.delete(projectId);
+    this.state.changeVersions.delete(projectId);
+    this.state.indexedChangeVersions.delete(projectId);
+    this.state.freshnessCheckedProjects.delete(projectId);
     const entry = this.state.watchers.get(projectId);
     this.state.watchers.delete(projectId);
     this.state.parseCache.delete(projectId);
     await entry?.watcher.close();
   }
 
-  private async assertWorkspace(workspaceId: string): Promise<Workspace> {
+  private async assertWorkspace(workspaceId: string, requireAgentAccess = false): Promise<Workspace> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('Workspace not found.');
+    if (workspace.codeIntelligenceMode === 'disabled' || (requireAgentAccess && workspace.codeIntelligenceMode !== 'assisted')) {
+      throw new CodeGraphAccessError(workspace.codeIntelligenceMode);
+    }
     return workspace;
   }
 

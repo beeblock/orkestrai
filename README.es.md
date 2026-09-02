@@ -29,7 +29,10 @@ normal de los agentes no se guarda.
 
 - **Lienzo de agentes en vivo:** organiza terminales PTY reales, notas, tableros
   de tareas, portales de navegador, árboles de archivos, loops y formas. Las
-  conexiones muestran la colaboración entre agentes mientras ocurre. Duplica
+  conexiones muestran la colaboración entre agentes mientras ocurre. La física
+  se adapta a la densidad, y Configuración permite forzar líneas elásticas o
+  conexiones totalmente estáticas, sin física ni animación, en equipos menos
+  potentes. Duplica
   formas estilizadas con Cmd/Ctrl+D o copia y pega arreglos visuales completos
   conservando su distribución relativa.
 - **Creación organizada de workspaces:** crea un workspace normal o basado en

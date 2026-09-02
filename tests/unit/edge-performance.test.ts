@@ -1,22 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { edgeIntersectsViewport, edgePerformanceProfile, staticEdgePath } from '$lib/components/agent-room/canvas/edge-performance.js';
+import { edgeIntersectsViewport, edgePerformanceProfile, normalizeEdgeRenderingPreference, staticEdgePath } from '$lib/components/agent-room/canvas/edge-performance.js';
 import { connectedEdgesFor, nodeIndexFor } from '$lib/components/agent-room/canvas/floating-anchor.js';
 
 describe('adaptive canvas edge performance', () => {
   it('keeps full rope physics for ordinary workspaces', () => {
     expect(edgePerformanceProfile({ edgeCount: 40, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: false })).toMatchObject({
-      mode: 'physics', segments: 14, iterations: 5, fps: 60,
+      mode: 'physics', segments: 12, iterations: 4, fps: 60,
     });
   });
 
   it('uses static geometry for dense idle edges but preserves active feedback', () => {
     expect(edgePerformanceProfile({ edgeCount: 250, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: false }).mode).toBe('curve');
     expect(edgePerformanceProfile({ edgeCount: 250, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: true })).toMatchObject({
-      mode: 'physics', animateActivity: true,
+      mode: 'curve', animateActivity: true,
     });
     expect(edgePerformanceProfile({ edgeCount: 500, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: true })).toMatchObject({
       mode: 'curve', animateActivity: true,
     });
+  });
+
+  it('lets the user force static or elastic rendering', () => {
+    expect(edgePerformanceProfile({ edgeCount: 20, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: true, preference: 'static' })).toEqual({
+      mode: 'curve', segments: 0, iterations: 0, fps: 0, animateActivity: false,
+    });
+    expect(edgePerformanceProfile({ edgeCount: 600, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: false, preference: 'elastic' })).toMatchObject({
+      mode: 'physics', segments: 5, iterations: 1, fps: 24,
+    });
+    expect(normalizeEdgeRenderingPreference('invalid')).toBe('auto');
   });
 
   it('pauses work outside the viewport and respects reduced motion', () => {

@@ -4,7 +4,7 @@
   import { X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { floatingAnchorFor, nodeIndexFor } from './floating-anchor.js';
-  import { edgeIntersectsViewport, edgePerformanceProfile, staticEdgePath } from './edge-performance.js';
+  import { edgeIntersectsViewport, edgePerformanceProfile, normalizeEdgeRenderingPreference, staticEdgePath } from './edge-performance.js';
   import { canvasEdgeRuntime, retainCanvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
 
   /**
@@ -28,6 +28,7 @@
   let lastAnchorSig = '';
   let lastFrameAt = 0;
   let hovered = $state(false);
+  let hideControlsTimer: ReturnType<typeof setTimeout> | null = null;
 
   function centerOf(nodeId: string): { x: number; y: number } | null {
     const node = nodeIndexFor(nodesStore.current).get(nodeId);
@@ -89,11 +90,11 @@
   }
 
   function simulate(): boolean {
-    const current = anchors();
+    const current = currentAnchors;
     if (!current || rope.length === 0) return false;
     const segments = rope.length - 1;
-    const sourceBox = boxOf(source);
-    const targetBox = boxOf(target);
+    const sourceBox = currentSourceBox;
+    const targetBox = currentTargetBox;
 
     // Verlet: gravidade + inercia
     let movement = 0;
@@ -163,7 +164,7 @@
     // Para a simulacao quando a corda estabiliza — o $effect religa o rAF
     // assim que uma ancora se move (no arrastado, redimensionado etc).
     settleFrames = active ? 0 : settleFrames + 1;
-    if (settleFrames > 45) {
+    if (settleFrames > 12) {
       rafId = null;
       return;
     }
@@ -172,7 +173,12 @@
 
   const talking = $derived(Boolean((data as { talking?: boolean } | undefined)?.talking));
   const pinned = $derived(Boolean((data as { pinned?: boolean } | undefined)?.pinned));
+  const renderingPreference = $derived(normalizeEdgeRenderingPreference(
+    (data as { renderingPreference?: unknown } | undefined)?.renderingPreference,
+  ));
   const currentAnchors = $derived(anchors());
+  const currentSourceBox = $derived(boxOf(source));
+  const currentTargetBox = $derived(boxOf(target));
   const inViewport = $derived(currentAnchors
     ? edgeIntersectsViewport(currentAnchors, viewportStore.current, canvasEdgeRuntime.current.width, canvasEdgeRuntime.current.height)
     : false);
@@ -181,7 +187,8 @@
     documentVisible: canvasEdgeRuntime.current.documentVisible,
     inViewport,
     reducedMotion: canvasEdgeRuntime.current.reducedMotion,
-    emphasized: talking || pinned || selected || hovered,
+    emphasized: talking || pinned || selected,
+    preference: renderingPreference,
   }));
 
   $effect(() => {
@@ -226,7 +233,27 @@
     (data as { onRemove?: (edgeId: string) => void } | undefined)?.onRemove?.(id);
   }
 
-  onMount(retainCanvasEdgeRuntime);
+  function showControls() {
+    if (hideControlsTimer !== null) clearTimeout(hideControlsTimer);
+    hideControlsTimer = null;
+    hovered = true;
+  }
+
+  function scheduleHideControls() {
+    if (hideControlsTimer !== null) clearTimeout(hideControlsTimer);
+    hideControlsTimer = setTimeout(() => {
+      hovered = false;
+      hideControlsTimer = null;
+    }, 120);
+  }
+
+  onMount(() => {
+    const releaseRuntime = retainCanvasEdgeRuntime();
+    return () => {
+      if (hideControlsTimer !== null) clearTimeout(hideControlsTimer);
+      releaseRuntime();
+    };
+  });
 </script>
 
 {#if path.path}
@@ -240,8 +267,8 @@
       role="button"
       aria-label={m['shell.connection']()}
       tabindex="-1"
-      onpointerenter={() => (hovered = true)}
-      onpointerleave={() => (hovered = false)}
+      onpointerenter={showControls}
+      onpointerleave={scheduleHideControls}
     />
     <path
       {id}
@@ -255,22 +282,23 @@
       class:animated={talking && profile.animateActivity}
       style="pointer-events: none"
     />
-    <EdgeLabel x={Math.round(path.midX)} y={Math.round(path.midY)} selectEdgeOnClick>
-      <button
-        class="edge-delete"
-        class:pinned
-        class:visible={hovered || pinned || selected}
-        aria-label={m['shell.remove_connection']()}
-        onpointerenter={() => (hovered = true)}
-        onpointerleave={() => (hovered = false)}
-        onclick={(event) => {
-          event.stopPropagation();
-          remove();
-        }}
-      >
-        <X size={11} strokeWidth={2.5} />
-      </button>
-    </EdgeLabel>
+    {#if hovered || pinned || selected}
+      <EdgeLabel x={Math.round(path.midX)} y={Math.round(path.midY)} selectEdgeOnClick>
+        <button
+          class="edge-delete visible"
+          class:pinned
+          aria-label={m['shell.remove_connection']()}
+          onpointerenter={showControls}
+          onpointerleave={scheduleHideControls}
+          onclick={(event) => {
+            event.stopPropagation();
+            remove();
+          }}
+        >
+          <X size={11} strokeWidth={2.5} />
+        </button>
+      </EdgeLabel>
+    {/if}
   </g>
 {/if}
 

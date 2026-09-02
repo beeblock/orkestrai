@@ -40,6 +40,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'multilingual-spoken-replies': 'multilingual-spoken-replies',
   'quota-aware-delegation': 'quota-aware-delegation',
   'organize-canvas': 'organize-canvas',
+  'canvas-edge-performance': 'organize-canvas',
   'focused-workspace-view': 'focused-workspace-view',
   'monitor-team-control-center': 'monitor-team-control-center',
   'triage-attention-across-workspaces': 'triage-attention-center',

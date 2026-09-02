@@ -14,6 +14,7 @@ import { roleService } from './RoleService.js';
 import { providerProfileService } from './ProviderProfileService.js';
 import { floorService } from './FloorService.js';
 import { controlCenterService } from './ControlCenterService.js';
+import { codeGraphIndexService } from './CodeGraphIndexService.js';
 import { workspaceGroupService } from './WorkspaceGroupService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
@@ -208,6 +209,7 @@ export class WorkspaceService {
       syncAgentInstructionFiles: dto.syncAgentInstructionFiles,
       hooks: dto.hooks,
       repositoryRoots: this.assertRepositoryRoots(dto.repositoryRoots),
+      codeIntelligenceMode: dto.codeIntelligenceMode,
       groupId: dto.groupId,
     });
     this.writeInstructionFiles(workspace);
@@ -242,6 +244,8 @@ export class WorkspaceService {
         existing.wslWorkingDir !== resolvedRuntime.runtime.linuxWorkingDir
       ));
     const repositoryRootsChanged = JSON.stringify(existing.repositoryRoots) !== JSON.stringify(repositoryRoots);
+    const codeIntelligenceModeChanged = dto.changes.codeIntelligenceMode !== undefined
+      && dto.changes.codeIntelligenceMode !== existing.codeIntelligenceMode;
     if (runtimeChanged) await this.unloadWorkspaceSessions(id);
     const workspace = await workspaceRepository.updateWorkspace(id, {
       ...dto.changes,
@@ -252,6 +256,7 @@ export class WorkspaceService {
       repositoryRoots,
     });
     if (!workspace) throw new Error('Workspace nao encontrado.');
+    if (codeIntelligenceModeChanged) await codeGraphIndexService.applyWorkspaceMode(workspace);
     if (runtimeChanged || repositoryRootsChanged) this.provisionChecked.delete(id);
     this.writeInstructionFiles(workspace, existing.instructions);
     if (runtimeChanged || repositoryRootsChanged) await this.reprovisionBridge(workspace);
@@ -654,6 +659,7 @@ export class WorkspaceService {
         icon: workspace.icon,
         instructions: workspace.instructions,
         syncAgentInstructionFiles: workspace.syncAgentInstructionFiles,
+        codeIntelligenceMode: workspace.codeIntelligenceMode,
         hooks: workspace.hooks,
       },
       nodes: nodes.map((node) => ({
@@ -678,7 +684,7 @@ export class WorkspaceService {
   async importWorkspace(data: unknown, workingDirOverride?: string) {
     const parsed = data as {
       format?: string;
-      workspace?: { name: string; workingDir: string; runtimeKind?: 'native' | 'wsl'; wslDistribution?: string | null; wslWorkingDir?: string | null; icon?: string | null; instructions?: string | null; syncAgentInstructionFiles?: boolean; hooks?: object };
+      workspace?: { name: string; workingDir: string; runtimeKind?: 'native' | 'wsl'; wslDistribution?: string | null; wslWorkingDir?: string | null; icon?: string | null; instructions?: string | null; syncAgentInstructionFiles?: boolean; codeIntelligenceMode?: 'assisted' | 'manual' | 'disabled'; hooks?: object };
       nodes?: Array<{ type: string; title?: string | null; x?: number; y?: number; width?: number; height?: number; zIndex?: number; payload?: object }>;
       edges?: Array<{ sourceIndex: number; targetIndex: number; style?: 'cord' | 'circuit' }>;
     };
@@ -695,6 +701,11 @@ export class WorkspaceService {
       info.runtimeKind ?? 'native',
       info.wslDistribution ?? null,
       info.wslWorkingDir ?? null,
+      false,
+      {},
+      [],
+      null,
+      info.codeIntelligenceMode ?? 'assisted',
     ));
     if (info.syncAgentInstructionFiles || info.hooks) {
       await workspaceRepository.updateWorkspace(workspace.id, {

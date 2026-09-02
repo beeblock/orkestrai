@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
+import { Connection } from '@beeblock/svelar/database';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +28,11 @@ describe('Code graph semantic and runtime intelligence', () => {
       export function calculateCheckoutTotal() { return 42; }
       export function authenticateSession() { return true; }
     `);
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Semantic test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({
+      name: 'Semantic test',
+      workingDir: directory,
+      codeIntelligenceMode: 'manual',
+    });
     await codeGraphIndexService.index(workspace.id);
 
     expect(await codeGraphSemanticService.status(workspace.id)).toMatchObject({ state: 'empty' });
@@ -46,6 +51,78 @@ describe('Code graph semantic and runtime intelligence', () => {
     await codeGraphIndexService.index(workspace.id, { force: true });
     expect(await codeGraphSemanticService.status(workspace.id)).toMatchObject({ state: 'stale', indexedSymbols: 0 });
     await expect(codeGraphSemanticService.search(workspace.id, { query: 'shopping cart total' })).rejects.toThrow(/build/i);
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('automatically refreshes assisted semantic indexes and reuses unchanged vectors', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-semantic-assisted-'));
+    directories.push(directory);
+    await writeFile(join(directory, 'package.json'), '{"name":"semantic-assisted-test"}\n');
+    const sourcePath = join(directory, 'service.ts');
+    await writeFile(sourcePath, [
+      '/** Calculates the original cart total. */',
+      'export function calculateCheckoutTotal() { return 42; }',
+      'export function authenticateSession() { return true; }',
+      '',
+    ].join('\n'));
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Assisted semantic test', workingDir: directory });
+
+    await codeGraphIndexService.index(workspace.id);
+    await vi.waitFor(async () => {
+      expect(await codeGraphSemanticService.status(workspace.id)).toMatchObject({ state: 'ready' });
+    }, { timeout: 4_000, interval: 100 });
+    const initialRevision = (await codeGraphIndexService.status(workspace.id)).projects[0].currentRevisionId;
+    const before = await Connection.raw(`
+      SELECT e.id, e.symbol_id, e.revision_id, s.fingerprint
+      FROM agent_code_graph_embeddings e
+      JOIN agent_code_graph_symbols s ON s.id = e.symbol_id
+      WHERE e.workspace_id = ? AND s.name = ?
+      LIMIT 1
+    `, [workspace.id, 'authenticateSession']) as Array<Record<string, unknown>>;
+    expect(before).toHaveLength(1);
+
+    await writeFile(sourcePath, [
+      '/** Computes the promotional shopping basket amount. */',
+      'export function calculateCheckoutTotal() { return 84; }',
+      'export function authenticateSession() { return true; }',
+      '',
+    ].join('\n'));
+    await vi.waitFor(async () => {
+      const snapshot = await codeGraphIndexService.status(workspace.id);
+      expect(snapshot.projects[0].currentRevisionId).not.toBe(initialRevision);
+      expect(snapshot.projects[0].stats?.indexing?.strategy).toBe('incremental');
+      expect(await codeGraphSemanticService.status(workspace.id)).toMatchObject({ state: 'ready' });
+    }, { timeout: 4_000, interval: 100 });
+
+    const after = await Connection.raw(`
+      SELECT e.id, e.symbol_id, e.revision_id, s.fingerprint
+      FROM agent_code_graph_embeddings e
+      JOIN agent_code_graph_symbols s ON s.id = e.symbol_id
+      WHERE e.workspace_id = ? AND s.name = ?
+      LIMIT 1
+    `, [workspace.id, 'authenticateSession']) as Array<Record<string, unknown>>;
+    expect(after).toHaveLength(1);
+    expect(after[0].fingerprint).toBe(before[0].fingerprint);
+    expect(after[0].symbol_id).toBe(before[0].symbol_id);
+    expect(after[0].id).toBe(before[0].id);
+    expect(after[0].revision_id).not.toBe(before[0].revision_id);
+    expect(await codeGraphSemanticService.search(workspace.id, { query: 'promotional shopping basket amount' }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({
+        symbol: expect.objectContaining({ name: 'calculateCheckoutTotal' }),
+      })]));
+
+    await writeFile(sourcePath, [
+      '/** Computes the fraud-aware checkout amount. */',
+      'export function calculateCheckoutTotal() { return 126; }',
+      'export function authenticateSession() { return true; }',
+      '',
+    ].join('\n'));
+    await codeGraphIndexService.ensureFresh(workspace.id);
+    expect(await codeGraphSemanticService.search(workspace.id, { query: 'fraud aware checkout amount' }))
+      .toEqual(expect.arrayContaining([expect.objectContaining({
+        symbol: expect.objectContaining({ name: 'calculateCheckoutTotal' }),
+      })]));
+    expect(await codeGraphSemanticService.status(workspace.id)).toMatchObject({ state: 'ready' });
     await codeGraphIndexService.removeWorkspace(workspace.id);
   });
 

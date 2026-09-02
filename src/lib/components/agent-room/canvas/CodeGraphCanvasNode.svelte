@@ -30,6 +30,7 @@
   } from '@lucide/svelte';
   import * as Select from '$lib/components/ui/select';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Input } from '$lib/components/ui/input';
@@ -68,6 +69,7 @@
   export type CodeGraphNodeData = {
     title: string;
     workspaceId: string;
+    codeIntelligenceMode: 'assisted' | 'manual' | 'disabled';
     onDelete: (id: string) => void;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
     connections?: NodeConnection[];
@@ -135,12 +137,23 @@
   type CameraState = { x: number; y: number; ratio: number; angle: number };
   type GraphRenderer = {
     kill: () => void;
+    resize: (force?: boolean) => GraphRenderer;
+    refresh: (options?: { schedule?: boolean; skipIndexation?: boolean }) => GraphRenderer;
+    scheduleRender: () => GraphRenderer;
+    getNodeDisplayData: (nodeId: string) => { x: number; y: number; size: number } | undefined;
     getCamera: () => {
       getState: () => CameraState;
       setState: (state: CameraState) => void;
+      animate: (state: Partial<CameraState>, options?: { duration?: number; easing?: string }) => Promise<void>;
       on: (event: 'updated', callback: (state: CameraState) => void) => void;
     };
   };
+  type GraphPointerEvent = {
+    node?: string;
+    edge?: string;
+    preventSigmaDefault: () => void;
+  };
+  type GraphFocusStrength = 'soft' | 'strong';
   type CodeGraphSessionState = {
     projectId: string;
     viewMode: CodeGraphInvestigationState['viewMode'];
@@ -153,6 +166,10 @@
   let renderer: GraphRenderer | null = null;
   let cameraState = $state<CameraState | null>(null);
   let renderSequence = 0;
+  let graphViewportMetrics = { width: 1, height: 1, outerScale: 1 };
+  let requestedGraphFocus: { symbolId: string; strength: GraphFocusStrength } | null = null;
+  let openSymbolTimer: ReturnType<typeof setTimeout> | null = null;
+  let previousIntelligenceMode: CodeGraphNodeData['codeIntelligenceMode'] | null = null;
   const AGENT_COLORS = ['#22c55e', '#0ea5e9', '#f97316', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#ef4444'];
 
   const currentProject = $derived(snapshot?.projects.find((project) => project.id === projectId) ?? null);
@@ -162,6 +179,26 @@
   const trackedAgents = $derived(
     operations?.agents.filter((agent) => agent.state !== 'disconnected' || Boolean(agent.task)) ?? [],
   );
+  const intelligenceDisabled = $derived(data.codeIntelligenceMode === 'disabled');
+
+  $effect(() => {
+    const nextMode = data.codeIntelligenceMode;
+    if (previousIntelligenceMode === null) {
+      previousIntelligenceMode = nextMode;
+      return;
+    }
+    if (nextMode === previousIntelligenceMode) return;
+    const wasDisabled = previousIntelligenceMode === 'disabled';
+    previousIntelligenceMode = nextMode;
+    if (nextMode === 'disabled') {
+      snapshot = null;
+      graph = null;
+      error = '';
+      void renderGraph(null);
+    } else if (wasDisabled) {
+      void load();
+    }
+  });
 
   $effect(() => {
     if (!sessionStateReady || typeof sessionStorage === 'undefined') return;
@@ -200,6 +237,12 @@
     if (project.status === 'stale') return m['code_graph.status_stale']();
     if (project.status === 'error') return m['code_graph.status_error']();
     return m['code_graph.status_idle']();
+  }
+
+  function projectScopeLabel(project: CodeGraphProject | null): string {
+    if (!project) return m['code_graph.all_repositories']();
+    if (project.relativePath === '.') return m['code_graph.main_repository']({ name: project.name });
+    return project.relativePath?.startsWith('@') ? project.relativePath : project.name;
   }
 
   function agentStateLabel(state: CodeGraphOperationsSnapshot['agents'][number]['state']): string {
@@ -276,7 +319,43 @@
     return ((code >>> 0) % 10_000) / 1_000 - 5;
   }
 
-  async function renderGraph(next: CodeGraphSubgraph | null): Promise<void> {
+  function prefersReducedMotion(): boolean {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  }
+
+  function measureGraphViewport(): void {
+    const bounds = graphHost.getBoundingClientRect();
+    const width = Math.max(1, graphHost.offsetWidth);
+    const height = Math.max(1, graphHost.offsetHeight);
+    graphViewportMetrics = {
+      width,
+      height,
+      outerScale: bounds.width ? Math.max(0.35, Math.min(4, bounds.width / width)) : 1,
+    };
+  }
+
+  function focusGraphSymbol(
+    targetRenderer: GraphRenderer,
+    symbolId: string,
+    strength: GraphFocusStrength = 'soft',
+  ): void {
+    const displayData = targetRenderer.getNodeDisplayData(symbolId);
+    if (!displayData) return;
+    const camera = targetRenderer.getCamera();
+    const current = camera.getState();
+    const targetRatio = Math.min(current.ratio, strength === 'strong' ? 0.32 : 0.64);
+    graphHost.dataset.focusedSymbol = symbolId;
+    void camera.animate(
+      { x: displayData.x, y: displayData.y, ratio: targetRatio },
+      { duration: prefersReducedMotion() ? 0 : strength === 'strong' ? 320 : 220, easing: 'quadraticInOut' },
+    );
+  }
+
+  async function renderGraph(
+    next: CodeGraphSubgraph | null,
+    focusSymbolId?: string,
+    focusStrength: GraphFocusStrength = 'soft',
+  ): Promise<void> {
     const sequence = ++renderSequence;
     cameraState = renderer?.getCamera().getState() ?? cameraState;
     renderer?.kill();
@@ -299,13 +378,14 @@
       `${value.projectName ?? currentProject?.name ?? ''}\0${value.path ?? ''}\0${value.kind}\0${value.qualifiedName}\0${value.startLine ?? ''}`;
     const added = new Set(viewMode === 'compare' ? comparison?.added.map((item) => comparisonKey({ ...item, projectName: comparison.projectName })) ?? [] : []);
     const modified = new Set(viewMode === 'compare' ? comparison?.modified.map((item) => comparisonKey({ ...item.after, projectName: comparison.projectName })) ?? [] : []);
+    let focusedSymbolId = focusSymbolId ?? next.centerSymbolId ?? null;
     for (const node of next.nodes) {
       const key = comparisonKey(node);
       model.addNode(node.id, {
         label: node.name,
         x: stablePosition(node.id, 0),
         y: stablePosition(node.id, 1),
-        size: changed.has(node.id) || node.id === next.centerSymbolId ? 11 : node.kind === 'module' ? 7 : 5,
+        size: changed.has(node.id) || node.id === next.centerSymbolId ? 14 : node.kind === 'module' ? 11 : 9,
         color: ownerColors.get(node.id) ?? (added.has(key) ? '#22c55e' : modified.has(key) ? '#f59e0b' : changed.has(node.id) ? '#ef4444' : node.path && tests.has(node.path) ? '#f59e0b' : symbolColor(node.kind)),
       });
     }
@@ -330,23 +410,129 @@
     }
     if (model.order > 1 && model.size > 0) forceAtlas2.assign(model, { iterations: Math.min(120, 30 + model.order) });
     const labelColor = getComputedStyle(graphHost).getPropertyValue('--app-text').trim() || '#e5e7eb';
+    const hoverBackground = getComputedStyle(graphHost).getPropertyValue('--app-surface-raised').trim() || '#18181b';
+    const hoverBorder = getComputedStyle(graphHost).getPropertyValue('--app-border').trim() || '#3f3f46';
+    const accentColor = getComputedStyle(graphHost).getPropertyValue('--app-secondary').trim() || '#0ea5e9';
+    measureGraphViewport();
     const sigma = new Sigma(model, graphHost, {
       allowInvalidContainer: true,
       renderEdgeLabels: false,
       labelColor: { color: labelColor },
-      labelDensity: 0.08,
-      labelRenderedSizeThreshold: 8,
+      labelSize: 12,
+      labelWeight: '600',
+      labelDensity: 0.16,
+      labelGridCellSize: 110,
+      labelRenderedSizeThreshold: 6,
+      enableEdgeEvents: true,
+      nodeReducer: (node, attributes) => node === focusedSymbolId
+        ? { ...attributes, highlighted: true, forceLabel: true, size: Math.max(Number(attributes.size ?? 0), 14) }
+        : attributes,
+      defaultDrawNodeLabel: (context, displayData, settings) => {
+        const label = String(displayData.label ?? '');
+        if (!label) return;
+        const scale = graphViewportMetrics.outerScale;
+        const fontSize = Math.min(30, Math.max(settings.labelSize, 12 / scale));
+        const offset = Math.max(5, 6 / scale);
+        context.save();
+        context.font = `${settings.labelWeight} ${fontSize}px ${settings.labelFont}`;
+        context.textBaseline = 'middle';
+        context.lineJoin = 'round';
+        context.strokeStyle = hoverBackground;
+        context.lineWidth = Math.max(2.5, 3 / scale);
+        context.strokeText(label, displayData.x + displayData.size + offset, displayData.y);
+        context.fillStyle = labelColor;
+        context.fillText(label, displayData.x + displayData.size + offset, displayData.y);
+        context.restore();
+      },
+      defaultDrawNodeHover: (context, displayData, settings) => {
+        const fullLabel = String(displayData.label ?? '');
+        const scale = graphViewportMetrics.outerScale;
+        const fontSize = Math.min(32, Math.max(14, 14 / scale));
+        const paddingX = Math.max(8, 8 / scale);
+        const paddingY = Math.max(6, 6 / scale);
+        const gap = Math.max(8, 8 / scale);
+        context.save();
+        context.font = `${settings.labelWeight} ${fontSize}px ${settings.labelFont}`;
+        const maxTextWidth = Math.max(120, graphViewportMetrics.width * 0.72 - paddingX * 2);
+        let label = fullLabel;
+        if (context.measureText(label).width > maxTextWidth) {
+          let lower = 0;
+          let upper = fullLabel.length;
+          while (lower < upper) {
+            const middle = Math.ceil((lower + upper) / 2);
+            if (context.measureText(`${fullLabel.slice(0, middle)}...`).width <= maxTextWidth) lower = middle;
+            else upper = middle - 1;
+          }
+          label = `${fullLabel.slice(0, lower)}...`;
+        }
+        const textWidth = Math.ceil(context.measureText(label).width);
+        const boxWidth = textWidth + paddingX * 2;
+        const boxHeight = fontSize + paddingY * 2;
+        const preferredX = displayData.x + displayData.size + gap;
+        const x = preferredX + boxWidth <= graphViewportMetrics.width - paddingX
+          ? preferredX
+          : displayData.x - displayData.size - gap - boxWidth;
+        const y = Math.max(paddingY, Math.min(graphViewportMetrics.height - boxHeight - paddingY, displayData.y - boxHeight / 2));
+        context.beginPath();
+        context.arc(displayData.x, displayData.y, displayData.size + Math.max(3, 3 / scale), 0, Math.PI * 2);
+        context.strokeStyle = accentColor;
+        context.lineWidth = Math.max(2, 2 / scale);
+        context.stroke();
+        context.fillStyle = hoverBackground;
+        context.strokeStyle = hoverBorder;
+        context.lineWidth = Math.max(1, 1 / scale);
+        context.fillRect(x, y, boxWidth, boxHeight);
+        context.strokeRect(x + 0.5, y + 0.5, boxWidth - 1, boxHeight - 1);
+        context.fillStyle = labelColor;
+        context.textBaseline = 'middle';
+        context.fillText(label, x + paddingX, y + boxHeight / 2);
+        context.restore();
+      },
       minCameraRatio: 0.08,
       maxCameraRatio: 8,
     });
-    sigma.on('clickNode', ({ node }: { node: string }) => void openGraphSymbol(node));
+    sigma.on('clickNode', ({ node, preventSigmaDefault }: GraphPointerEvent & { node: string }) => {
+      preventSigmaDefault();
+      focusedSymbolId = node;
+      requestedGraphFocus = { symbolId: node, strength: 'soft' };
+      sigma.refresh({ schedule: true });
+      focusGraphSymbol(sigma as GraphRenderer, node);
+      if (openSymbolTimer) clearTimeout(openSymbolTimer);
+      openSymbolTimer = setTimeout(() => {
+        openSymbolTimer = null;
+        void openGraphSymbol(node);
+      }, 180);
+    });
+    sigma.on('doubleClickNode', ({ node, preventSigmaDefault }: GraphPointerEvent & { node: string }) => {
+      preventSigmaDefault();
+      focusedSymbolId = node;
+      requestedGraphFocus = { symbolId: node, strength: 'strong' };
+      if (openSymbolTimer) clearTimeout(openSymbolTimer);
+      openSymbolTimer = null;
+      sigma.refresh({ schedule: true });
+      focusGraphSymbol(sigma as GraphRenderer, node, 'strong');
+      void openGraphSymbol(node);
+    });
+    sigma.on('doubleClickEdge', ({ preventSigmaDefault }: GraphPointerEvent) => preventSigmaDefault());
+    sigma.on('doubleClickStage', ({ preventSigmaDefault }: GraphPointerEvent) => preventSigmaDefault());
     sigma.on('clickEdge', ({ edge }: { edge: string }) => void openRelationship(edge));
+    sigma.on('enterNode', ({ node }: { node: string }) => {
+      graphHost.dataset.hoveredSymbol = node;
+      graphHost.style.cursor = 'pointer';
+    });
+    sigma.on('leaveNode', () => {
+      delete graphHost.dataset.hoveredSymbol;
+      graphHost.style.cursor = '';
+    });
+    sigma.on('enterEdge', () => { graphHost.style.cursor = 'pointer'; });
+    sigma.on('leaveEdge', () => { graphHost.style.cursor = ''; });
     if (cameraState) sigma.getCamera().setState(cameraState);
     sigma.getCamera().on('updated', (state: CameraState) => {
       cameraState = state;
       sessionStorage.setItem(`orkestrai:code-graph-camera:${data.workspaceId}:${id}`, JSON.stringify(state));
     });
     renderer = sigma as GraphRenderer;
+    if (focusedSymbolId) focusGraphSymbol(renderer, focusedSymbolId, focusStrength);
   }
 
   async function loadStatus(): Promise<void> {
@@ -748,8 +934,12 @@
 
   function semanticStateLabel(state: CodeGraphSemanticStatus['state']): string {
     if (state === 'ready') return m['code_graph.semantic_ready']();
-    if (state === 'stale') return m['code_graph.semantic_stale']();
-    return m['code_graph.semantic_empty']();
+    if (state === 'stale') return data.codeIntelligenceMode === 'assisted'
+      ? m['code_graph.semantic_updating']()
+      : m['code_graph.semantic_stale']();
+    return data.codeIntelligenceMode === 'assisted'
+      ? m['code_graph.semantic_preparing']()
+      : m['code_graph.semantic_empty']();
   }
 
   function evidenceKindLabel(kind: string): string {
@@ -799,6 +989,13 @@
   async function load(): Promise<void> {
     loading = true;
     error = '';
+    if (intelligenceDisabled) {
+      snapshot = null;
+      graph = null;
+      await renderGraph(null);
+      loading = false;
+      return;
+    }
     try {
       await loadStatus();
       if (hasIndexedGraph) {
@@ -889,6 +1086,35 @@
     }
   }
 
+  async function toggleSearchMode(): Promise<void> {
+    if (searchMode === 'semantic') {
+      searchMode = 'lexical';
+      if (query.trim()) await searchSymbols();
+      return;
+    }
+    semanticLoading = true;
+    error = '';
+    try {
+      const status = await api<CodeGraphSemanticStatus>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/semantic`);
+      semanticStatus = status;
+      if (status.state !== 'ready') {
+        viewMode = 'semantic';
+        selectedSymbol = null;
+        results = [];
+        semanticMatches = [];
+        toast.info(m['code_graph.semantic_build_required']());
+        return;
+      }
+      searchMode = 'semantic';
+      if (query.trim()) await searchSymbols();
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : m['code_graph.semantic_error']();
+      toast.error(error);
+    } finally {
+      semanticLoading = false;
+    }
+  }
+
   async function openSymbol(symbolId: string): Promise<void> {
     const params = new URLSearchParams({ direction, depth: String(depth), limit: '350' });
     try {
@@ -901,7 +1127,10 @@
       viewMode = 'overview';
       graph = nextGraph;
       results = [];
-      await renderGraph(nextGraph);
+      const focusStrength = requestedGraphFocus?.symbolId === symbolId
+        ? requestedGraphFocus.strength
+        : 'soft';
+      await renderGraph(nextGraph, symbolId, focusStrength);
     } catch (reason) {
       error = reason instanceof Error ? reason.message : m['code_graph.load_error']();
     }
@@ -959,7 +1188,24 @@
     let destroyed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let liveRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let graphResizeFrame: number | null = null;
     let socket: WebSocket | null = null;
+    const synchronizeGraphViewport = () => {
+      if (graphResizeFrame !== null) return;
+      graphResizeFrame = requestAnimationFrame(() => {
+        graphResizeFrame = null;
+        if (destroyed || !renderer) return;
+        measureGraphViewport();
+        // Sigma owns separate visible and picking buffers. Keep both aligned
+        // with the resizable and CSS-scaled node before the next interaction.
+        renderer.resize(true).scheduleRender();
+      });
+    };
+    const graphResizeObserver = new ResizeObserver(synchronizeGraphViewport);
+    graphResizeObserver.observe(graphHost);
+    const flowViewport = graphHost.closest('.svelte-flow__viewport');
+    const graphScaleObserver = new MutationObserver(synchronizeGraphViewport);
+    if (flowViewport) graphScaleObserver.observe(flowViewport, { attributes: true, attributeFilter: ['style'] });
     const storedCamera = sessionStorage.getItem(`orkestrai:code-graph-camera:${data.workspaceId}:${id}`);
     if (storedCamera) {
       try { cameraState = JSON.parse(storedCamera) as CameraState; } catch { /* ignore invalid session state */ }
@@ -987,6 +1233,7 @@
       const detail = (event as CustomEvent<{ workspaceId?: string; path?: string; line?: number }>).detail;
       if (detail?.workspaceId !== data.workspaceId || !detail.path || !detail.line) return;
       if (editorLocateTimer) clearTimeout(editorLocateTimer);
+      if (openSymbolTimer) clearTimeout(openSymbolTimer);
       editorLocateTimer = setTimeout(async () => {
         const params = new URLSearchParams({ path: detail.path!, line: String(detail.line) });
         const symbol = await api<CodeGraphSymbol | null>(`/api/agent-room/workspaces/${data.workspaceId}/code-graph/locate?${params}`).catch(() => null);
@@ -1016,12 +1263,15 @@
       };
     };
     connect();
-    void load();
+    if (!intelligenceDisabled) void load();
     return () => {
       destroyed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
       if (editorLocateTimer) clearTimeout(editorLocateTimer);
+      if (graphResizeFrame !== null) cancelAnimationFrame(graphResizeFrame);
+      graphResizeObserver.disconnect();
+      graphScaleObserver.disconnect();
       window.removeEventListener('orkestrai:editor-location', handleEditorLocation);
       socket?.close();
       renderSequence += 1;
@@ -1062,61 +1312,67 @@
     onwheel={(event) => event.stopPropagation()}
   >
     <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] p-2">
-      <Select.Root type="single" value={projectId} onValueChange={(value: string) => void changeProject(value)}>
-        <Select.Trigger size="sm" class="min-w-36 max-w-52">{currentProject?.name ?? m['code_graph.all_repositories']()}</Select.Trigger>
+      <Select.Root type="single" value={projectId} disabled={intelligenceDisabled} onValueChange={(value: string) => void changeProject(value)}>
+        <Select.Trigger size="sm" class="min-w-36 max-w-52">{projectScopeLabel(currentProject)}</Select.Trigger>
         <Select.Content>
           <Select.Item value="all">{m['code_graph.all_repositories']()}</Select.Item>
           {#each snapshot?.projects ?? [] as project (project.id)}
-            <Select.Item value={project.id}>{project.name}</Select.Item>
+            <Select.Item value={project.id}>{projectScopeLabel(project)}</Select.Item>
           {/each}
         </Select.Content>
       </Select.Root>
       <form class="relative flex min-w-44 flex-1" onsubmit={(event) => { event.preventDefault(); void searchSymbols(); }}>
-        <Search size={13} class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[var(--app-text-muted)]" />
         <input
-          class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] pr-14 pl-7 text-xs outline-none focus:border-[var(--app-accent)]"
+          class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] pr-14 pl-2 text-xs outline-none focus:border-[var(--app-accent)] disabled:cursor-not-allowed disabled:opacity-60"
           bind:value={query}
+          disabled={intelligenceDisabled}
           placeholder={m['code_graph.search_placeholder']()}
           aria-label={m['code_graph.search_placeholder']()}
         />
-        <button
-          type="button"
-          class="absolute top-1/2 right-7 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
-          class:bg-[var(--app-accent-soft)]={searchMode === 'semantic'}
-          class:text-[var(--app-accent)]={searchMode === 'semantic'}
-          aria-label={searchMode === 'semantic' ? m['code_graph.semantic_search_enabled']() : m['code_graph.semantic_search_disabled']()}
-          title={searchMode === 'semantic' ? m['code_graph.semantic_search_enabled']() : m['code_graph.semantic_search_disabled']()}
-          onclick={() => { searchMode = searchMode === 'semantic' ? 'lexical' : 'semantic'; }}
+        <HeaderIconButton
+          label={searchMode === 'semantic' ? m['code_graph.semantic_search_enabled']() : m['code_graph.semantic_search_disabled']()}
+          class={`absolute top-1/2 right-7 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${searchMode === 'semantic' ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]' : ''}`}
+          active={searchMode === 'semantic'}
+          disabled={intelligenceDisabled}
+          onclick={() => void toggleSearchMode()}
         >
           <Sparkles size={12} />
-        </button>
-        <button type="submit" class="absolute top-1/2 right-1 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" aria-label={m['code_graph.search']()}>
-          <ArrowDownToLine size={12} />
-        </button>
+        </HeaderIconButton>
+        <HeaderIconButton label={m['code_graph.search']()} class="absolute top-1/2 right-1 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" type="submit" disabled={intelligenceDisabled}>
+          <Search size={12} />
+        </HeaderIconButton>
       </form>
       <Button
         size="sm"
         class="h-8 bg-[var(--app-accent)] text-[11px] text-[var(--app-accent-contrast)] hover:brightness-105"
-        disabled={indexing}
+        disabled={indexing || intelligenceDisabled}
         onclick={() => void indexWorkspace()}
       >
         <RefreshCw size={12} class={indexing ? 'animate-spin' : undefined} />
         {indexing ? m['code_graph.indexing']() : m['code_graph.index']()}
       </Button>
-      <Button
-        size="sm"
-        variant={viewMode === 'changes' ? 'default' : 'outline'}
-        class="h-8 text-[11px]"
-        disabled={!hasIndexedGraph || changeLoading}
-        onclick={() => void loadChanges()}
-      >
-        <GitCompareArrows size={12} class={changeLoading ? 'animate-pulse' : undefined} />
-        {m['code_graph.changes']()}{changes ? ` (${changedFileCount})` : ''}
-      </Button>
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              size="sm"
+              variant={viewMode === 'changes' ? 'default' : 'outline'}
+              class="h-8 text-[11px]"
+              disabled={!hasIndexedGraph || changeLoading || intelligenceDisabled}
+              onclick={() => void loadChanges()}
+            >
+              <GitCompareArrows size={12} class={changeLoading ? 'animate-pulse' : undefined} />
+              {m['code_graph.changes']()}{changes ? ` (${changedFileCount})` : ''}
+            </Button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content side="bottom" class="max-w-64 text-pretty">{m['code_graph.changes_description']()}</Tooltip.Content>
+      </Tooltip.Root>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-[11px] text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${['contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(viewMode) ? 'bg-[var(--app-accent-soft)]' : ''}`}
-          disabled={!hasIndexedGraph}
+          disabled={!hasIndexedGraph || intelligenceDisabled}
           aria-label={m['code_graph.intelligence_views']()}
         >
           <MoreHorizontal size={13} />
@@ -1179,13 +1435,18 @@
         {:else if !hasIndexedGraph}
           <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
             <Network size={28} class="text-[var(--app-secondary)]" />
-            <strong class="text-sm">{m['code_graph.empty_title']()}</strong>
-            <p class="max-w-80 text-[11px] leading-5 text-[var(--app-text-muted)]">{m['code_graph.empty_description']()}</p>
+            <strong class="text-sm">{intelligenceDisabled ? m['code_graph.disabled_title']() : m['code_graph.empty_title']()}</strong>
+            <p class="max-w-80 text-[11px] leading-5 text-[var(--app-text-muted)]">{intelligenceDisabled ? m['code_graph.disabled_description']() : m['code_graph.empty_description']()}</p>
           </div>
         {:else if graph && graph.nodes.length === 0}
           <div class="absolute inset-0 grid place-items-center text-xs text-[var(--app-text-muted)]">{m['code_graph.no_results']()}</div>
         {/if}
-        <div bind:this={graphHost} class="absolute inset-0" aria-label={m['code_graph.visualization']()}></div>
+        <div
+          bind:this={graphHost}
+          class="absolute inset-0"
+          data-testid="code-graph-visualization"
+          aria-label={m['code_graph.visualization']()}
+        ></div>
         {#if graph?.truncated}
           <span class="absolute bottom-2 left-2 rounded bg-[var(--app-surface)]/90 px-2 py-1 text-[9px] text-[var(--app-warning)] shadow">{m['code_graph.truncated']()}</span>
         {/if}
@@ -1399,16 +1660,25 @@
               <div class="h-full bg-[var(--app-accent)]" style={`width: ${semanticStatus.totalSymbols ? Math.round((semanticStatus.indexedSymbols / semanticStatus.totalSymbols) * 100) : 0}%`}></div>
             </div>
             <span class="mt-1 block text-[8px] text-[var(--app-text-muted)]">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
-            <div class="mt-3 grid grid-cols-2 gap-1">
+            <div class={`mt-3 grid gap-1 ${data.codeIntelligenceMode === 'assisted' ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <Button size="xs" class="w-full" disabled={semanticLoading || !hasIndexedGraph || semanticStatus.totalSymbols === 0} onclick={() => void updateSemantic('build')}>
                 <RefreshCw size={11} class={semanticLoading ? 'animate-spin' : undefined} />
-                {semanticStatus.state === 'empty' ? m['code_graph.semantic_build']() : m['code_graph.semantic_rebuild']()}
+                {data.codeIntelligenceMode === 'assisted'
+                  ? m['code_graph.semantic_refresh']()
+                  : semanticStatus.state === 'empty'
+                    ? m['code_graph.semantic_build']()
+                    : m['code_graph.semantic_rebuild']()}
               </Button>
-              <Button size="xs" variant="outline" class="w-full" disabled={semanticLoading || semanticStatus.state === 'empty'} onclick={() => void updateSemantic('clear')}>
-                <Trash2 size={11} /> {m['code_graph.semantic_clear']()}
-              </Button>
+              {#if data.codeIntelligenceMode !== 'assisted'}
+                <Button size="xs" variant="outline" class="w-full" disabled={semanticLoading || semanticStatus.state === 'empty'} onclick={() => void updateSemantic('clear')}>
+                  <Trash2 size={11} /> {m['code_graph.semantic_clear']()}
+                </Button>
+              {/if}
             </div>
           </section>
+          {#if data.codeIntelligenceMode === 'assisted'}
+            <p class="mt-2 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_auto']()}</p>
+          {/if}
           <p class="mt-2 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_privacy']()}</p>
         {:else if viewMode === 'runtime' && runtime}
           <div class="mb-2 flex items-center justify-between gap-2">

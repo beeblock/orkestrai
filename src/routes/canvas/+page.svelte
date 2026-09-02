@@ -1100,6 +1100,7 @@
         title: node.title ?? '',
         workspaceId: activeWorkspace?.id ?? '',
         workspaceName: activeWorkspace?.name ?? '',
+        codeIntelligenceMode: activeWorkspace?.codeIntelligenceMode ?? 'assisted',
         providersReady,
         providers,
         workingDir: floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.',
@@ -1139,6 +1140,7 @@
         onOpenFile: (path: string) => openEditor(path),
         onOpenWorkbench: (id: string) => (designModeNodeId = id),
         onUrlChange: (id: string, url: string) => updateNodePayload(id, { url }),
+        onOpenNewPortal: (sourceNodeId: string, url: string) => void openPortalTab(sourceNodeId, url),
         onRename: (id: string, title: string) => {
           nodes = nodes.map((node) => (node.id === id ? { ...node, data: { ...node.data, title } } : node));
           api(`/api/agent-room/workspaces/${activeWorkspace?.id}/nodes/${id}`, {
@@ -1254,7 +1256,10 @@
       // Sempre a corda verlet — o estilo "circuit" (linhas retas) foi removido.
       type: 'orkestrai',
       zIndex: 10,
-      data: { onRemove: removeConnection },
+      data: {
+        onRemove: removeConnection,
+        renderingPreference: appSettings.canvasEdgeRendering ?? 'auto',
+      },
     };
   }
 
@@ -1470,6 +1475,7 @@
     wslDistribution: string | null;
     wslWorkingDir: string | null;
     repositoryRoots: Array<{ alias: string; path: string }>;
+    codeIntelligenceMode: Workspace['codeIntelligenceMode'];
   }) {
     if (!editingWorkspace) return;
     const updated = await api<Workspace>(`/api/agent-room/workspaces/${editingWorkspace.id}`, {
@@ -1478,7 +1484,13 @@
     });
     workspaces = workspaces.map((item) => (item.id === updated.id ? updated : item));
     writeWorkspaceListCache(workspaces);
-    if (activeWorkspace?.id === updated.id) activeWorkspace = updated;
+    if (activeWorkspace?.id === updated.id) {
+      activeWorkspace = updated;
+      nodes = nodes.map((node) => ({
+        ...node,
+        data: { ...node.data, codeIntelligenceMode: updated.codeIntelligenceMode },
+      }));
+    }
   }
 
   async function confirmDeleteWorkspace() {
@@ -1615,6 +1627,47 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  async function openPortalTab(sourceNodeId: string, url: string) {
+    if (!activeWorkspace || url.length > 4_096) return;
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    const width = 720;
+    const height = 520;
+    const source = nodes.find((node) => node.id === sourceNodeId);
+    const position = findFreeCanvasPosition(nodes.map((node) => ({
+      x: node.position.x,
+      y: node.position.y,
+      width: Number(node.width ?? node.measured?.width ?? 560),
+      height: Number(node.height ?? node.measured?.height ?? 360),
+    })), {
+      x: source ? source.position.x + Number(source.width ?? source.measured?.width ?? width) + 48 : 80,
+      y: source?.position.y ?? 80,
+      width,
+      height,
+    });
+    const title = parsed.hostname.replace(/^www\./i, '') || m['canvas.default_portal']();
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'portal',
+        title,
+        ...position,
+        width,
+        height,
+        payload: { url: parsed.href },
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    requestAnimationFrame(() => jumpToNode(node.id, 0.72, 28));
+    toast.success(m['portal.new_tab_added']({ title }));
+  }
+
   async function addApiClient(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(820, 560);
@@ -1706,6 +1759,10 @@
 
   async function addCodeGraphNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
+    if (activeWorkspace.codeIntelligenceMode === 'disabled') {
+      toast.error(m['code_graph.disabled_toast']());
+      return;
+    }
     const existing = nodes.find((node) => node.type === 'codeGraph');
     if (existing) {
       jumpToNode(existing.id);

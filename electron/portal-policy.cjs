@@ -1,6 +1,7 @@
 const PORTAL_PARTITION = 'persist:orkestrai-portals';
 
 function isAllowedPortalUrl(candidate) {
+  if (typeof candidate !== 'string' || candidate.length > 4096) return false;
   if (candidate === 'about:blank') return true;
   try {
     const protocol = new URL(candidate).protocol;
@@ -8,6 +9,12 @@ function isAllowedPortalUrl(candidate) {
   } catch {
     return false;
   }
+}
+
+function shouldOpenPortalInCanvas(url, disposition) {
+  return (disposition === 'foreground-tab' || disposition === 'background-tab')
+    && url !== 'about:blank'
+    && isAllowedPortalUrl(url);
 }
 
 function portalWindowOpenResponse(url, title = 'Orkestrai Portal') {
@@ -35,4 +42,4 @@ function portalWindowOpenResponse(url, title = 'Orkestrai Portal') {
   };
 }
 
-module.exports = { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse };
+module.exports = { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas };

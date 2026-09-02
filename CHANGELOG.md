@@ -5,7 +5,7 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.23.0 - 2026-09-02
 
 ### Added
 
@@ -44,11 +44,14 @@ pt-BR, English, and Spanish translations.
   flows without persisting secret values, payloads, hosts, query strings, or
   source bodies. Agents use the same analysis through `code_graph_quality` or
   `orkestrai graph quality`.
-- The optional local semantic index searches symbols by intent across names,
-  qualified names, paths, signatures, bounded documentation, and graph
-  neighbors. Its compact vectors stay on the device, require no API key or
-  model download, and are rebuilt explicitly when indexed revisions change.
-  Canvas, Workbench, CLI, and MCP expose the same scored, explainable matches.
+- The local semantic index searches symbols by intent across names, qualified
+  names, paths, signatures, bounded documentation, and graph neighbors. In
+  Assisted mode it follows settled structural revisions automatically, reuses
+  vectors with unchanged content hashes, recalculates only changed symbols and
+  affected neighbors, removes obsolete entries, and makes agent searches wait
+  for the latest revision. Manual mode retains explicit Build and Rebuild
+  controls. Compact vectors stay on-device with no API key or model download;
+  Canvas, Workbench, CLI, and MCP expose the same explainable matches.
 - Runtime evidence imports LCOV, JUnit XML, bounded tracebacks, or structured
   Orkestrai JSON from a relative path inside an approved repository. Coverage,
   failures, observed calls, and runtime-only relationships are overlaid on the
@@ -68,9 +71,34 @@ pt-BR, English, and Spanish translations.
   retained revision manifests support structural comparison, while named
   investigations restore project, view, filters, selection, camera, and open
   source. Canvas, Workbench, HTTP, CLI, and MCP use the same bounded contracts.
+- Workspaces now expose Assisted, Manual, and Disabled Code Intelligence modes.
+  Assisted mode watches settled source changes, incrementally refreshes atomic
+  revisions, and makes every agent graph read wait for the freshest known
+  revision. Manual mode retains explicit user indexing while denying agent
+  reads; Disabled stops watchers and blocks UI and agent access without deleting
+  existing local history.
+- Foreground and background tab requests from a Portal now create a second,
+  collision-aware Portal node inside the same Canvas. Real authentication and
+  payment pop-ups remain sandboxed Orkestrai child windows so `window.opener`
+  and the shared persistent session continue to work.
+- Canvas connection rendering is now configurable as Adaptive, Elastic, or
+  Static. Adaptive mode removes idle rope simulations much earlier as graph
+  density grows, Elastic keeps the physical effect within progressively lower
+  segment and frame budgets, and Static disables physics and activity
+  animation completely. Offscreen and hidden-window work remains paused, rope
+  simulation settles sooner, and edge controls mount only while they are used.
 
 ### Fixed
 
+- Notes created through the CLI or MCP bridge now connect only to their exact
+  author node by default. Parallel agents with the same role no longer receive
+  one another's notes; sharing with a specific agent or the complete team
+  remains an explicit `--connect <agent>` or `--connect all` action.
+- Code Intelligence graph coordinates now account for the outer Canvas zoom as
+  well as node resizing, keeping mouse, touch, wheel, visible canvases, and
+  WebGL picking buffers aligned. Symbols expose larger, scale-aware labels;
+  clicking selects, centers, and opens a symbol, double-clicking it focuses
+  closer, and double-clicking empty graph space no longer performs a blind zoom.
 - Bounded context previews, leader/agent/Council/task handoffs, and named
   investigation create/update requests now validate their strict payloads
   without mistaking Svelar workspace route parameters for unexpected user
@@ -120,6 +148,14 @@ pt-BR, English, and Spanish translations.
 - Organize canvas always lays out the complete visible canvas into deterministic,
   non-overlapping rows while moving groups as intact units; a single node left
   selected no longer turns the action into a fit-to-view-only result.
+- Code Intelligence hover labels now use theme surface, border, and text tokens;
+  graph nodes have larger interaction targets, the repository selector names the
+  main repository and approved aliases explicitly, Change impact explains its
+  Git and Floor scope, and the semantic-search control guides users to build its
+  index instead of appearing inert.
+- A restored MCP or CLI session that lacks `ORKESTRAI_NODE_ID` can report its
+  Control Center state when it supplies a task assigned to a real agent in the
+  same workspace. Calls without either verified identity source remain denied.
 
 ## 0.22.0 - 2026-08-28
 

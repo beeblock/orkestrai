@@ -8,6 +8,7 @@ const DEFAULTS: Record<string, string> = {
   terminalTheme: 'dark',
   showMinimap: 'true',
   showControls: 'true',
+  canvasEdgeRendering: 'auto',
   terminalFontSize: '13',
   terminalFontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   terminalPadding: '6',

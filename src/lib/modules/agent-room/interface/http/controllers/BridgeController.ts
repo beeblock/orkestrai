@@ -52,7 +52,7 @@ import { ImageWorkflowError, imageWorkflowService } from '$lib/modules/agent-roo
 import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction, ValidateImageWorkflowOutputAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
-import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
+import { CodeGraphAccessError, codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
 import { codeGraphChangeSchema, codeGraphCompareSchema, codeGraphContextSchema, codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphEvidenceSnapshotSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphInvestigationCreateSchema, codeGraphInvestigationUpdateSchema, codeGraphLocateSchema, codeGraphQualitySchema, codeGraphRevisionsSchema, codeGraphSearchSchema, codeGraphSemanticActionSchema, codeGraphSemanticSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
 import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
@@ -82,7 +82,7 @@ export class BridgeController extends Controller {
         ? await bridgeService.designsForAgent(workspace.id, agentNodeId).catch(() => [] as Array<{ id: string; title: string }>)
         : [];
       const repositories = workspace.repositoryRoots.map(({ alias }) => ({ alias, reference: `@${alias}` }));
-      return this.json({ data: { workspace: { id: workspace.id, name: workspace.name }, repositories, agents, notes, portals, designs } });
+      return this.json({ data: { workspace: { id: workspace.id, name: workspace.name, codeIntelligenceMode: workspace.codeIntelligenceMode }, repositories, agents, notes, portals, designs } });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao listar agentes.', 401);
     }
@@ -101,7 +101,7 @@ export class BridgeController extends Controller {
 
   async codeGraphStatus(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphIndexService.status(workspace.id) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to load the code graph.', 401);
@@ -111,7 +111,7 @@ export class BridgeController extends Controller {
   async codeGraphIndex(event: any) {
     try {
       const input = codeGraphIndexSchema.parse(await event.request.json().catch(() => ({})));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event, false);
       return this.json({ data: await indexCodeGraphAction.execute(IndexCodeGraphDto.from(workspace.id, input)) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to index the workspace code.');
@@ -121,7 +121,7 @@ export class BridgeController extends Controller {
   async codeGraphSearch(event: any) {
     try {
       const input = codeGraphSearchSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphIndexService.search(workspace.id, {
         query: input.q,
         projectId: input.projectId,
@@ -135,7 +135,7 @@ export class BridgeController extends Controller {
 
   async codeGraphSymbol(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       const data = await codeGraphIndexService.symbol(workspace.id, event.params.symbolId);
       return data ? this.json({ data }) : this.json({ error: 'Code graph symbol not found.' }, 404);
     } catch (error) {
@@ -146,7 +146,7 @@ export class BridgeController extends Controller {
   async codeGraphGraph(event: any) {
     try {
       const input = codeGraphTraversalSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphIndexService.subgraph(workspace.id, {
         symbolId: event.params.symbolId,
         direction: input.direction,
@@ -162,7 +162,7 @@ export class BridgeController extends Controller {
   async codeGraphChanges(event: any) {
     try {
       const input = codeGraphChangeSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphChangeIntelligenceService.analyze(workspace.id, input) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to analyze code changes.');
@@ -172,7 +172,7 @@ export class BridgeController extends Controller {
   async codeGraphHandoff(event: any) {
     try {
       const input = codeGraphHandoffSchema.parse(await event.request.json());
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphHandoffService.create(workspace.id, input, 'agent') }, 201);
     } catch (error) {
       return this.errorResponse(error, 'Failed to create the code intelligence handoff.');
@@ -182,7 +182,7 @@ export class BridgeController extends Controller {
   async codeGraphContracts(event: any) {
     try {
       const input = codeGraphContractSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphContractService.analyze(workspace.id, input) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to analyze API contracts.');
@@ -192,7 +192,7 @@ export class BridgeController extends Controller {
   async codeGraphQuality(event: any) {
     try {
       const input = codeGraphQualitySchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphQualityService.analyze(workspace.id, input) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to analyze code quality.');
@@ -201,9 +201,9 @@ export class BridgeController extends Controller {
 
   async codeGraphSemantic(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       const query = event.url.searchParams.get('q');
-      if (!query) return this.json({ data: await codeGraphSemanticService.status(workspace.id) });
+      if (!query) return this.json({ data: await codeGraphSemanticService.ensureFresh(workspace.id) });
       const input = codeGraphSemanticSearchSchema.parse(Object.fromEntries(event.url.searchParams));
       return this.json({ data: await codeGraphSemanticService.search(workspace.id, {
         query: input.q,
@@ -219,7 +219,7 @@ export class BridgeController extends Controller {
   async codeGraphSemanticUpdate(event: any) {
     try {
       const input = codeGraphSemanticActionSchema.parse(await event.request.json());
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: input.action === 'build'
         ? await codeGraphSemanticService.build(workspace.id)
         : await codeGraphSemanticService.clear(workspace.id) });
@@ -231,7 +231,7 @@ export class BridgeController extends Controller {
   async codeGraphEvidence(event: any) {
     try {
       const input = codeGraphEvidenceSnapshotSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphRuntimeEvidenceService.snapshot(workspace.id, input.limit) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to load runtime evidence.');
@@ -241,7 +241,7 @@ export class BridgeController extends Controller {
   async codeGraphEvidenceImport(event: any) {
     try {
       const input = codeGraphEvidenceImportSchema.parse(await event.request.json());
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphRuntimeEvidenceService.import(workspace.id, input) }, 201);
     } catch (error) {
       return this.errorResponse(error, 'Failed to import runtime evidence.');
@@ -251,7 +251,7 @@ export class BridgeController extends Controller {
   async codeGraphContext(event: any) {
     try {
       const input = codeGraphContextSchema.parse(await event.request.json());
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphOperationsService.context(workspace.id, input) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to build the bounded code context.');
@@ -260,7 +260,7 @@ export class BridgeController extends Controller {
 
   async codeGraphOperations(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphOperationsService.operations(workspace.id) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to load the operational code graph.');
@@ -269,7 +269,7 @@ export class BridgeController extends Controller {
 
   async codeGraphExplain(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       const data = await codeGraphOperationsService.explain(workspace.id, event.params.edgeId);
       return data ? this.json({ data }) : this.json({ error: 'Code graph relationship not found.' }, 404);
     } catch (error) {
@@ -280,7 +280,7 @@ export class BridgeController extends Controller {
   async codeGraphLocate(event: any) {
     try {
       const input = codeGraphLocateSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphOperationsService.locate(workspace.id, input.path, input.line) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to locate the editor symbol.');
@@ -290,7 +290,7 @@ export class BridgeController extends Controller {
   async codeGraphRevisions(event: any) {
     try {
       const input = codeGraphRevisionsSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphIndexService.revisions(workspace.id, input.projectId, input.limit) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to load code graph revisions.');
@@ -300,7 +300,7 @@ export class BridgeController extends Controller {
   async codeGraphCompare(event: any) {
     try {
       const input = codeGraphCompareSchema.parse(Object.fromEntries(event.url.searchParams));
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphOperationsService.compare(workspace.id, input.projectId, input.from, input.to) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to compare code graph revisions.');
@@ -309,7 +309,7 @@ export class BridgeController extends Controller {
 
   async codeGraphInvestigations(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphInvestigationRepository.list(workspace.id) });
     } catch (error) {
       return this.errorResponse(error, 'Failed to load saved code investigations.');
@@ -318,7 +318,7 @@ export class BridgeController extends Controller {
 
   async codeGraphInvestigation(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       const data = await codeGraphInvestigationRepository.get(workspace.id, event.params.investigationId);
       return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
     } catch (error) {
@@ -329,7 +329,7 @@ export class BridgeController extends Controller {
   async codeGraphInvestigationCreate(event: any) {
     try {
       const input = codeGraphInvestigationCreateSchema.parse(await event.request.json());
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       return this.json({ data: await codeGraphInvestigationRepository.create(workspace.id, { ...input, createdBy: 'agent' }) }, 201);
     } catch (error) {
       return this.errorResponse(error, 'Failed to save the code investigation.');
@@ -339,7 +339,7 @@ export class BridgeController extends Controller {
   async codeGraphInvestigationUpdate(event: any) {
     try {
       const input = codeGraphInvestigationUpdateSchema.parse(await event.request.json());
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       const data = await codeGraphInvestigationRepository.update(workspace.id, event.params.investigationId, input);
       return data ? this.json({ data }) : this.json({ error: 'Saved investigation not found.' }, 404);
     } catch (error) {
@@ -349,7 +349,7 @@ export class BridgeController extends Controller {
 
   async codeGraphInvestigationDelete(event: any) {
     try {
-      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const workspace = await this.resolveCodeGraphWorkspace(event);
       const deleted = await codeGraphInvestigationRepository.delete(workspace.id, event.params.investigationId);
       return deleted ? this.json({ data: { deleted: true } }) : this.json({ error: 'Saved investigation not found.' }, 404);
     } catch (error) {
@@ -1484,6 +1484,15 @@ export class BridgeController extends Controller {
     return bodyToken ?? this.requireToken(event);
   }
 
+  private async resolveCodeGraphWorkspace(event: any, requireFresh = true) {
+    const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+    if (workspace.codeIntelligenceMode !== 'assisted') {
+      throw new CodeGraphAccessError(workspace.codeIntelligenceMode);
+    }
+    if (requireFresh) await codeGraphIndexService.ensureFresh(workspace.id);
+    return workspace;
+  }
+
   private async resolveImageWorkflowActor(workspaceId: string, from: string): Promise<string> {
     const actor = (await bridgeService.listAgents(workspaceId)).find((agent) => (
       agent.nodeId === from || agent.title.toLowerCase() === from.toLowerCase()
@@ -1493,7 +1502,8 @@ export class BridgeController extends Controller {
   }
 
   private errorResponse(error: unknown, fallback: string, status = 400) {
-    return this.json({ error: error instanceof Error ? error.message : fallback }, status);
+    const responseStatus = error instanceof CodeGraphAccessError ? error.status : status;
+    return this.json({ error: error instanceof Error ? error.message : fallback }, responseStatus);
   }
 
   private imageWorkflowError(error: unknown, fallback: string, status = 400) {

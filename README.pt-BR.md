@@ -29,7 +29,10 @@ agentes não é persistida.
 
 - **Canvas de agentes ao vivo:** organize terminais PTY reais, notas, quadros de
   tarefas, portais de browser, árvores de arquivos, loops e formas. As conexões
-  mostram a colaboração entre os agentes enquanto ela acontece. Duplique formas
+  mostram a colaboração entre os agentes enquanto ela acontece. A física se
+  adapta à densidade, e as Configurações permitem forçar linhas elásticas ou
+  conexões totalmente estáticas, sem física nem animação, em computadores menos
+  potentes. Duplique formas
   estilizadas com Cmd/Ctrl+D ou copie e cole arranjos visuais completos mantendo
   seu layout relativo.
 - **Criação organizada de workspaces:** crie um workspace comum ou baseado em

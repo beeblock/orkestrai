@@ -393,11 +393,12 @@ describe('orkestrai CLI', () => {
     expect(request.body.connect).toBe('Claude');
   });
 
-  it('note create conecta por padrao ao time inteiro', async () => {
+  it('note create identifica o autor e nao compartilha com o time por padrao', async () => {
     const { out } = capture();
     await run(['note', 'create', 'Spec X'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out });
     const request = requests.filter((entry) => entry.url === '/api/agent-room/bridge/notes' && entry.method === 'POST').at(-1);
-    expect(request.body.connect).toBe('all');
+    expect(request.body.from).toBe('n1');
+    expect(request.body.connect).toBeUndefined();
   });
 
   it('design apply envia operacoes e revisao sem editar o arquivo diretamente', async () => {

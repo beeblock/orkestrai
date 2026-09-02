@@ -48,6 +48,7 @@
     onJumpToNode?: (nodeId: string) => void;
     onRemoveConnection?: (edgeId: string) => void;
     onPayloadChange?: (id: string, partial: Record<string, unknown>) => void;
+    onOpenNewPortal?: (sourceNodeId: string, url: string) => void;
   };
 
   type WebviewLoadFailure = Event & {
@@ -95,6 +96,11 @@
   const readyWaiters = new Set<{ resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 
   const isDesktop = typeof window !== 'undefined' && 'orkestraiDesktop' in window;
+  const desktop = typeof window === 'undefined' ? undefined : (window as unknown as {
+    orkestraiDesktop?: {
+      onPortalOpenRequest: (callback: (payload: { sourceWebContentsId: number; url: string }) => void) => () => void;
+    };
+  }).orkestraiDesktop;
   const sanitizedElementHtml = $derived(DOMPurify.sanitize(capture?.html ?? '', {
     ALLOWED_TAGS: ['a', 'button', 'div', 'span', 'p', 'label', 'input', 'select', 'option', 'img', 'svg', 'path', 'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'strong', 'em', 'small'],
     ALLOWED_ATTR: ['role', 'aria-label', 'title', 'alt', 'href', 'src', 'type', 'placeholder', 'viewBox', 'd'],
@@ -513,7 +519,15 @@
 
   onMount(() => {
     startPolling();
+    const unsubscribePortalOpen = desktop?.onPortalOpenRequest((payload) => {
+      const webview = desktopFrame();
+      if (!webview || !Number.isInteger(payload.sourceWebContentsId)) return;
+      if (webview.getWebContentsId() !== payload.sourceWebContentsId) return;
+      if (typeof payload.url !== 'string' || payload.url.length > 4_096 || !/^https?:\/\//i.test(payload.url)) return;
+      data.onOpenNewPortal?.(id, payload.url);
+    });
     return () => {
+      unsubscribePortalOpen?.();
       stopPolling();
       clearRetry();
       if (urlPersistTimer) clearTimeout(urlPersistTimer);
