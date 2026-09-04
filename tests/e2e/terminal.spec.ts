@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { rmSync } from 'node:fs';
-import { selectAgentTool } from './helpers.js';
+import { mockInstalledProvider, selectAgentTool } from './helpers.js';
 
 test.describe('terminais PTY', () => {
   test('salva comandos locais e globais e autoexecuta apenas uma vez ao retomar o shell', async ({ page, request }) => {
@@ -378,6 +378,7 @@ test.describe('terminais PTY', () => {
   test('botao de agente no canvas cria terminal com o comando do agente (nao shell puro)', async ({ page, request }) => {
     const workspaceName = `E2E agente ${Date.now()}`;
 
+    await mockInstalledProvider(page, 'claude');
     await page.goto('/canvas');
     await page.getByRole('button', { name: 'Novo workspace' }).click();
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);

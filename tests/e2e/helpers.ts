@@ -1,5 +1,25 @@
 import { expect, type Page } from '@playwright/test';
 
+/**
+ * Makes provider-dependent canvas scenarios deterministic on clean CI hosts.
+ * Provider detection itself is covered separately; these tests exercise the
+ * creation flow and must not depend on a developer CLI being installed.
+ */
+export async function mockInstalledProvider(page: Page, providerId: string) {
+  await page.route('**/api/agent-room/status**', async (route) => {
+    const response = await route.fetch();
+    const payload = await response.json() as {
+      data?: { providers?: Array<{ id: string; installed: boolean; detail?: string }> };
+    };
+    if (payload.data?.providers) {
+      payload.data.providers = payload.data.providers.map((provider) => provider.id === providerId
+        ? { ...provider, installed: true, detail: 'E2E provider fixture' }
+        : provider);
+    }
+    await route.fulfill({ response, json: payload });
+  });
+}
+
 /** Seleciona um provider no menu compacto de agentes da toolbar. */
 export async function selectAgentTool(page: Page, providerName: string) {
   await expect(page.locator('.svelte-flow__pane')).toBeVisible();

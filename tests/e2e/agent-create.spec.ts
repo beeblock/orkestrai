@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { selectAgentTool, selectCanvasTool } from './helpers.js';
+import { mockInstalledProvider, selectAgentTool, selectCanvasTool } from './helpers.js';
 
 test.describe('dialogo de criacao de agente', () => {
   test('desenhar terminal abre dialogo com nome/modelo/esforco/lider', async ({ page, request }) => {
     const workspaceName = `E2E dialog ${Date.now()}`;
 
+    await mockInstalledProvider(page, 'claude');
     await page.goto('/canvas');
     await page.getByRole('button', { name: 'Novo workspace' }).click();
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
