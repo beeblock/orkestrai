@@ -40,7 +40,11 @@ instalação antiga pode permanecer offline por meses antes de fazer a migraçã
 2. Atualize no mesmo commit o `CHANGELOG.md` em inglês e os três catálogos
    traduzidos em `src/lib/i18n/docs/`. O workflow usa o `CHANGELOG.md` como
    fonte exclusiva das notas públicas da release.
-3. Rode os testes e faça o commit.
+3. Rode os testes e faça o commit. A CI executa auditoria de dependências,
+   testes unitários, build de produção e toda a suíte E2E do Playwright. Aguarde
+   a CI de `main` terminar com sucesso nesse mesmo SHA; tanto o preflight local
+   quanto o workflow de release bloqueiam a tag/publicação se a CI estiver
+   ausente, pendente, cancelada ou falhar.
 4. Crie uma tag anotada ou leve exatamente igual à versão:
 
    ```bash

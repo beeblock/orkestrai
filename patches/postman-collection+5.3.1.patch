@@ -1,0 +1,126 @@
+diff --git a/node_modules/postman-collection/lib/superstring/dynamic-variables.js b/node_modules/postman-collection/lib/superstring/dynamic-variables.js
+index 83424a3..30f91d7 100644
+--- a/node_modules/postman-collection/lib/superstring/dynamic-variables.js
++++ b/node_modules/postman-collection/lib/superstring/dynamic-variables.js
+@@ -1,2 +1,120 @@
+-var faker = require('@faker-js/faker/locale/en'),
++var fakerModule = require('@faker-js/faker/locale/en'),
++    modernFaker = fakerModule.faker || fakerModule,
++    imageFor = function (category) {
++        return function () {
++            return modernFaker.image.url({ width: 640, height: 480, category: category });
++        };
++    },
++    faker = {
++        address: {
++            city: modernFaker.location.city,
++            country: modernFaker.location.country,
++            countryCode: modernFaker.location.countryCode,
++            latitude: modernFaker.location.latitude,
++            longitude: modernFaker.location.longitude,
++            streetAddress: modernFaker.location.streetAddress,
++            streetName: modernFaker.location.street
++        },
++        commerce: {
++            color: modernFaker.color.human,
++            department: modernFaker.commerce.department,
++            product: modernFaker.commerce.product,
++            productAdjective: modernFaker.commerce.productAdjective,
++            productMaterial: modernFaker.commerce.productMaterial,
++            productName: modernFaker.commerce.productName
++        },
++        company: {
++            bs: modernFaker.company.buzzPhrase,
++            bsAdjective: modernFaker.company.buzzAdjective,
++            bsBuzz: modernFaker.company.buzzVerb,
++            bsNoun: modernFaker.company.buzzNoun,
++            catchPhrase: modernFaker.company.catchPhrase,
++            catchPhraseAdjective: modernFaker.company.catchPhraseAdjective,
++            catchPhraseDescriptor: modernFaker.company.catchPhraseDescriptor,
++            catchPhraseNoun: modernFaker.company.catchPhraseNoun,
++            companyName: modernFaker.company.name,
++            companySuffix: function () {
++                return modernFaker.helpers.arrayElement(['Inc', 'LLC', 'Ltd', 'Group', 'PLC']);
++            }
++        },
++        database: modernFaker.database,
++        date: modernFaker.date,
++        datatype: {
++            boolean: modernFaker.datatype.boolean,
++            number: modernFaker.number.int,
++            uuid: modernFaker.string.uuid
++        },
++        finance: {
++            account: modernFaker.finance.accountNumber,
++            accountName: modernFaker.finance.accountName,
++            amount: modernFaker.finance.amount,
++            bic: modernFaker.finance.bic,
++            bitcoinAddress: modernFaker.finance.bitcoinAddress,
++            currencyCode: modernFaker.finance.currencyCode,
++            currencyName: modernFaker.finance.currencyName,
++            currencySymbol: modernFaker.finance.currencySymbol,
++            iban: modernFaker.finance.iban,
++            mask: function () {
++                return modernFaker.helpers.replaceCreditCardSymbols('####-##XX-XXXX-####');
++            },
++            transactionType: modernFaker.finance.transactionType
++        },
++        hacker: modernFaker.hacker,
++        image: {
++            abstract: imageFor('abstract'),
++            animals: imageFor('animals'),
++            business: imageFor('business'),
++            cats: imageFor('cats'),
++            city: imageFor('city'),
++            dataUri: modernFaker.image.dataUri,
++            fashion: imageFor('fashion'),
++            food: imageFor('food'),
++            imageUrl: modernFaker.image.url,
++            nature: imageFor('nature'),
++            nightlife: imageFor('nightlife'),
++            people: imageFor('people'),
++            sports: imageFor('sports'),
++            transport: imageFor('transport')
++        },
++        internet: {
++            color: function () {
++                return modernFaker.color.rgb({ format: 'hex' });
++            },
++            domainName: modernFaker.internet.domainName,
++            domainSuffix: modernFaker.internet.domainSuffix,
++            domainWord: modernFaker.internet.domainWord,
++            email: modernFaker.internet.email,
++            exampleEmail: modernFaker.internet.exampleEmail,
++            ip: modernFaker.internet.ipv4,
++            ipv6: modernFaker.internet.ipv6,
++            mac: modernFaker.internet.mac,
++            password: modernFaker.internet.password,
++            protocol: modernFaker.internet.protocol,
++            url: modernFaker.internet.url,
++            userAgent: modernFaker.internet.userAgent,
++            userName: modernFaker.internet.username
++        },
++        lorem: modernFaker.lorem,
++        name: {
++            findName: modernFaker.person.fullName,
++            firstName: modernFaker.person.firstName,
++            jobArea: modernFaker.person.jobArea,
++            jobDescriptor: modernFaker.person.jobDescriptor,
++            jobTitle: modernFaker.person.jobTitle,
++            jobType: modernFaker.person.jobType,
++            lastName: modernFaker.person.lastName,
++            prefix: modernFaker.person.prefix,
++            suffix: modernFaker.person.suffix
++        },
++        phone: {
++            phoneNumber: modernFaker.phone.number,
++            phoneNumberFormat: modernFaker.phone.number
++        },
++        random: {
++            alphaNumeric: modernFaker.string.alphanumeric,
++            arrayElement: modernFaker.helpers.arrayElement,
++            word: modernFaker.word.sample
++        },
++        system: modernFaker.system
++    },
+     uuid = require('uuid'),

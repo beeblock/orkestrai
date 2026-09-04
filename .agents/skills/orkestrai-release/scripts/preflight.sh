@@ -79,6 +79,24 @@ if [[ "$SOURCE_IS_PRIVATE" == "true" && "$VERSION" != "$LEGACY_TRANSITION_VERSIO
   fail 'source repository must be public before creating a release'
 fi
 
+SOURCE_SHA="$(git rev-parse HEAD)"
+CI_RUN="$(gh run list \
+  --repo "$SOURCE_REPO" \
+  --workflow CI \
+  --branch main \
+  --event push \
+  --commit "$SOURCE_SHA" \
+  --limit 1 \
+  --json status,conclusion,url,headSha \
+  --jq '.[0] // {}')"
+CI_SHA="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.headSha || "")' "$CI_RUN")"
+CI_STATUS="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.status || "missing")' "$CI_RUN")"
+CI_CONCLUSION="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.conclusion || "")' "$CI_RUN")"
+CI_URL="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.url || "")' "$CI_RUN")"
+[[ "$CI_SHA" == "$SOURCE_SHA" ]] || fail "no main push CI run found for $SOURCE_SHA"
+[[ "$CI_STATUS" == "completed" ]] || fail "CI for $SOURCE_SHA is not complete: $CI_URL"
+[[ "$CI_CONCLUSION" == "success" ]] || fail "CI for $SOURCE_SHA did not pass ($CI_CONCLUSION): $CI_URL"
+
 CONFIGURED_SECRETS="$(gh secret list --repo "$SOURCE_REPO" --json name --jq '.[].name')"
 for secret in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
   printf '%s\n' "$CONFIGURED_SECRETS" | grep -qx "$secret" || fail "$secret is not configured for signed macOS releases"

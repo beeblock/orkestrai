@@ -146,6 +146,7 @@ describe('packaged updater', () => {
     const signerPatch = readFileSync(path.resolve('patches/@electron+osx-sign+1.3.3.patch'), 'utf8');
     const nodePtyPatch = readFileSync(path.resolve('patches/node-pty+1.1.0.patch'), 'utf8');
     const workflow = readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8');
+    const ciWorkflow = readFileSync(path.resolve('.github/workflows/ci.yml'), 'utf8');
     const preflight = readFileSync(path.resolve('.agents/skills/orkestrai-release/scripts/preflight.sh'), 'utf8');
     expect(packageJson.build?.mac?.notarize).toBe(true);
     expect(packageScript).toContain('-c.mac.identity=-');
@@ -159,7 +160,7 @@ describe('packaged updater', () => {
     expect(packageScript).toContain('ORKESTRAI_MAC_OPEN_FILE_LIMIT:-unlimited');
     expect(packageScript).toContain('ulimit -n "$requested_open_file_limit"');
     expect(packageScript).toContain('macOS open-file limit: %s');
-    expect(packageJson.scripts?.postinstall).toBe('patch-package');
+    expect(packageJson.scripts?.postinstall).toBe('patch-package && node scripts/ensure-node-pty-helper.mjs');
     expect(packageJson.devDependencies?.['patch-package']).toBeTruthy();
     expect(signerPatch).toContain('const binaryFileCheckLimit = 64;');
     expect(signerPatch).toContain('await acquireBinaryFileCheck();');
@@ -176,6 +177,14 @@ describe('packaged updater', () => {
     expect(workflow).toContain('xcrun stapler validate');
     expect(workflow).toContain('hdiutil verify');
     expect(workflow).toContain('unzip -tq');
+    expect(workflow).toContain('Require successful CI for tagged commit');
+    expect(workflow).toContain('actions/workflows/ci.yml/runs');
+    expect(workflow).toContain('-f head_sha="$SHA"');
+    expect(workflow).toContain('if [[ "$CONCLUSION" == "success" ]]');
+    expect(ciWorkflow).toContain('npx playwright install --with-deps chromium');
+    expect(ciWorkflow).toContain('npm run test:e2e');
+    expect(preflight).toContain('--commit "$SOURCE_SHA"');
+    expect(preflight).toContain('[[ "$CI_CONCLUSION" == "success" ]]');
     for (const secret of [
       'MAC_CSC_LINK',
       'MAC_CSC_KEY_PASSWORD',

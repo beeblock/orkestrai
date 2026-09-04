@@ -71,23 +71,29 @@ test.describe('arquivos e editor do workspace', () => {
     writeFileSync(join(dir, 'README.md'), '# x mudou\n');
 
     const workspaceName = `E2E git ${Date.now()}`;
-    await page.goto('/canvas');
-    await page.getByRole('button', { name: 'Novo workspace' }).click();
-    await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
-    await page.getByPlaceholder('Diretório de trabalho').fill(dir);
-    await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
-    await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
+    let workspaceId: string | undefined;
+    try {
+      await page.goto('/canvas');
+      await page.getByRole('button', { name: 'Novo workspace' }).click();
+      await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
+      await page.getByPlaceholder('Diretório de trabalho').fill(dir);
+      await page.getByRole('button', { name: 'Criar' }).click();
+      await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+      await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
-    await createNodeOnCanvas(page, 'Arquivos');
-    const tree = page.locator('.canvas-filetree');
-    await expect(tree.locator('.branch-badge')).toContainText('main');
-    await expect(tree.locator('.entry-status')).toHaveCount(1);
+      await createNodeOnCanvas(page, 'Arquivos');
+      const tree = page.locator('.canvas-filetree');
+      await expect(tree.locator('.branch-badge')).toContainText('main');
+      const readme = tree.locator('.tree-entry', { hasText: 'README.md' });
+      await expect(readme.locator('.entry-status')).toHaveText('M');
 
-    const list = await request.get('/api/agent-room/workspaces');
-    const workspaces = (await list.json()).data as Array<{ id: string; name: string }>;
-    const created = workspaces.find((workspace) => workspace.name === workspaceName);
-    if (created) await request.delete(`/api/agent-room/workspaces/${created.id}`);
+      const list = await request.get('/api/agent-room/workspaces');
+      const workspaces = (await list.json()).data as Array<{ id: string; name: string }>;
+      workspaceId = workspaces.find((workspace) => workspace.name === workspaceName)?.id;
+    } finally {
+      if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`).catch(() => {});
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('diff viewer mostra alteracoes e faz stage', async ({ page, request }) => {
@@ -102,30 +108,36 @@ test.describe('arquivos e editor do workspace', () => {
     writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
 
     const workspaceName = `E2E diff ${Date.now()}`;
-    await page.goto('/canvas');
-    await page.getByRole('button', { name: 'Novo workspace' }).click();
-    await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
-    await page.getByPlaceholder('Diretório de trabalho').fill(dir);
-    await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    let workspaceId: string | undefined;
+    try {
+      await page.goto('/canvas');
+      await page.getByRole('button', { name: 'Novo workspace' }).click();
+      await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
+      await page.getByPlaceholder('Diretório de trabalho').fill(dir);
+      await page.getByRole('button', { name: 'Criar' }).click();
+      await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
 
-    await createNodeOnCanvas(page, 'Diff');
-    const diff = page.locator('.canvas-diff');
-    await expect(diff).toBeVisible();
-    await expect(diff.locator('.branch-badge')).toContainText('main');
+      await createNodeOnCanvas(page, 'Diff');
+      const diff = page.locator('.canvas-diff');
+      await expect(diff).toBeVisible();
+      await expect(diff.locator('.branch-badge')).toContainText('main');
 
-    // Seleciona o arquivo alterado e ve o diff
-    await diff.locator('.change-open', { hasText: 'app.ts' }).click();
-    await expect(diff.locator('.diff-text')).toContainText('const v = 2');
-    await expect(diff.locator('.diff-text')).toContainText('const v = 1');
+      // Seleciona o arquivo alterado e ve o diff
+      const appChange = diff.locator('.change-row', { hasText: 'app.ts' });
+      await appChange.locator('.change-open').click();
+      await expect(diff.locator('.diff-text')).toContainText('const v = 2');
+      await expect(diff.locator('.diff-text')).toContainText('const v = 1');
 
-    // Stage pelo botao
-    await diff.getByRole('button', { name: 'stage' }).first().click();
-    await expect(diff.locator('.change-status')).toContainText('M*', { timeout: 10_000 });
+      // Stage pelo botao e confira somente a alteracao sob teste.
+      await appChange.getByRole('button', { name: 'stage' }).click();
+      await expect(diff.locator('.change-row', { hasText: 'app.ts' }).locator('.change-status')).toHaveText('M*', { timeout: 10_000 });
 
-    const list = await request.get('/api/agent-room/workspaces');
-    const workspaces = (await list.json()).data as Array<{ id: string; name: string }>;
-    const created = workspaces.find((workspace) => workspace.name === workspaceName);
-    if (created) await request.delete(`/api/agent-room/workspaces/${created.id}`);
+      const list = await request.get('/api/agent-room/workspaces');
+      const workspaces = (await list.json()).data as Array<{ id: string; name: string }>;
+      workspaceId = workspaces.find((workspace) => workspace.name === workspaceName)?.id;
+    } finally {
+      if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`).catch(() => {});
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

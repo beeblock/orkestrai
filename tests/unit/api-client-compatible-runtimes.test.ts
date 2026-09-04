@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it } from 'vitest';
 import { apiClientRequestSchema } from '$lib/modules/agent-room/contracts/schemas/apiClient.schema.js';
 import { runBrunoScript } from '$lib/modules/agent-room/infrastructure/api-client/BrunoScriptRuntime.js';
@@ -6,6 +7,7 @@ import { runPostmanRequest } from '$lib/modules/agent-room/infrastructure/api-cl
 import { mergeScriptScopes } from '$lib/modules/agent-room/infrastructure/api-client/ApiClientScriptRuntimeTypes.js';
 
 const servers: Array<ReturnType<typeof createServer>> = [];
+const require = createRequire(import.meta.url);
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
@@ -43,6 +45,16 @@ function request(url: string, overrides: Record<string, unknown> = {}) {
 }
 
 describe('compatible API Client script runtimes', () => {
+  it('keeps every Postman dynamic variable available on the patched Faker runtime', () => {
+    const dynamicVariables = require('postman-collection/lib/superstring/dynamic-variables') as Record<string, { generator: () => unknown }>;
+
+    expect(Object.keys(dynamicVariables)).toHaveLength(118);
+    for (const [name, entry] of Object.entries(dynamicVariables)) {
+      expect(() => entry.generator(), name).not.toThrow();
+      expect(entry.generator(), name).not.toBeNull();
+    }
+  });
+
   it('runs Postman scopes, sendRequest, tests, legacy globals, and collection flow in the official runtime', async () => {
     const baseUrl = await endpoint();
     const primary = request(`${baseUrl}/primary`, {

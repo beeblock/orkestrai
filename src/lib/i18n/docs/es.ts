@@ -813,6 +813,16 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: '4 de septiembre de 2026 · 0.24.1',
+      title: 'Orkestrai 0.24.1: dependencias seguras y releases bloqueadas por CI',
+      summary: 'La base de dependencias vuelve a ser segura, el empaquetado de terminales es determinista y una CI fallida ya no puede publicar una release de escritorio.',
+      items: [
+        'Las dependencias corregidas resuelven los avisos de Faker, fast-uri, qs y xmldom, conservando todas las variables dinámicas compatibles de Postman y los runtimes de scripts de Bruno y Postman.',
+        'Las instalaciones limpias en macOS y Linux restauran el permiso de ejecución requerido por el helper de node-pty, evitando fallos al iniciar terminales causados por los modos de extracción de paquetes.',
+        'La CI ahora ejecuta toda la suite E2E de Playwright junto con la auditoría de dependencias, las pruebas unitarias y el build de producción. El preflight local y Release Desktop exigen que el commit exacto pase antes de que una etiqueta publique artefactos de plataforma.',
+      ],
+    },
+    {
       date: '4 de septiembre de 2026 · 0.24.0',
       title: 'Orkestrai 0.24.0: mueve selecciones completas del Canvas entre workspaces',
       summary: 'Reutiliza una estructura de trabajo conectada sin reconstruir nodos ni transportar estado inseguro de ejecución.',

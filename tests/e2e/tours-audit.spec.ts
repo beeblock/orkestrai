@@ -1,9 +1,58 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TOURS_PT } from '../../src/lib/components/agent-room/tours/catalog/pt-BR';
+
+async function completeImageWorkflowFixture(
+  request: APIRequestContext,
+  workspaceId: string,
+  title: string,
+): Promise<void> {
+  const list = await request.get(`/api/agent-room/workspaces/${workspaceId}/nodes`);
+  expect(list.ok(), await list.text()).toBe(true);
+  const nodes = (await list.json()).data as Array<{
+    id: string;
+    type: string;
+    title: string | null;
+    payload: Record<string, unknown>;
+  }>;
+  const workflow = nodes.find((node) => node.type === 'imageWorkflow' && node.title === title);
+  expect(workflow, `image workflow ${title} not found`).toBeTruthy();
+  const count = Math.max(1, Number(workflow!.payload.count ?? 1));
+
+  for (let index = 0; index < count; index += 1) {
+    const output = await request.post(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+      data: {
+        type: 'image',
+        title: `${title} ${index + 1}`,
+        x: 80 + index * 300,
+        y: 1_400,
+        width: 280,
+        height: 240,
+        payload: {
+          path: `.orkestrai/e2e/${workflow!.id}-${index}.png`,
+          generatedBy: { workflowNodeId: workflow!.id, runId: 'e2e-image-run', outputIndex: index },
+        },
+      },
+    });
+    expect(output.status(), await output.text()).toBe(201);
+  }
+
+  const updated = await request.patch(`/api/agent-room/workspaces/${workspaceId}/nodes/${workflow!.id}`, {
+    data: {
+      payload: {
+        ...workflow!.payload,
+        status: 'succeeded',
+        activeRunId: null,
+        activeRun: null,
+        lastError: null,
+      },
+    },
+  });
+  expect(updated.ok(), await updated.text()).toBe(true);
+}
 
 /**
  * Auditoria dos tours: UM teste por tour — cada "Fazer por mim" precisa
@@ -21,6 +70,18 @@ for (const tour of TOURS_PT) {
     const workspaceName = `E2E tour-${tour.id} ${Date.now()}`;
     const created = await request.post('/api/agent-room/workspaces', { data: { name: workspaceName, workingDir: dir } });
     const workspace = (await created.json()).data as { id: string };
+
+    if (tour.id === 'creative-image-workflow') {
+      // The native workflow contract is exercised elsewhere. This catalog
+      // audit replaces only the authenticated external ImageGen execution.
+      await page.route('**/api/agent-room/workspaces/*/image-workflows/*', async (route) => {
+        if (route.request().method() === 'POST') {
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { queued: true } }) });
+          return;
+        }
+        await route.continue();
+      });
+    }
 
     try {
       await page.goto('/canvas');
@@ -45,7 +106,17 @@ for (const tour of TOURS_PT) {
         const doForMe = panel.getByRole('button', { name: /Fazer por mim/ });
         const doneStep = panel.getByRole('button', { name: /Concluir passo/ });
         const next = panel.getByRole('button', { name: /Próximo passo/ });
-        if (await doForMe.count()) await doForMe.click();
+        if (await doForMe.count()) {
+          await doForMe.click();
+          if (tour.id === 'creative-image-workflow') {
+            const currentStep = tour.steps.find((step) => step.title === titleBefore);
+            const actions = currentStep?.action ? (Array.isArray(currentStep.action) ? currentStep.action : [currentStep.action]) : [];
+            const run = actions.find((action) => action.kind === 'runImageWorkflow');
+            if (run?.kind === 'runImageWorkflow') {
+              await completeImageWorkflowFixture(request, workspace.id, run.title);
+            }
+          }
+        }
         else if (await doneStep.count()) await doneStep.click();
         else if (await next.count()) await next.click();
         // Espera o passo AVANCAR (titulo muda) ou o tour concluir — passos com

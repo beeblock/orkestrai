@@ -813,6 +813,16 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: 'September 4, 2026 · 0.24.1',
+      title: 'Orkestrai 0.24.1: secure dependencies and CI-gated releases',
+      summary: 'The dependency baseline is secure again, terminal packaging is deterministic, and a failing CI can no longer publish a desktop release.',
+      items: [
+        'Patched dependencies resolve the Faker, fast-uri, qs, and xmldom advisories while preserving every supported Postman dynamic variable and the Bruno and Postman script runtimes.',
+        'Clean macOS and Linux installs restore the executable permission required by the node-pty spawn helper, preventing terminal startup failures caused by package extraction modes.',
+        'CI now runs the complete Playwright end-to-end suite alongside the dependency audit, unit tests, and production build. Local preflight and Release Desktop both require that exact commit to pass before a tag can publish platform artifacts.',
+      ],
+    },
+    {
       date: 'September 4, 2026 · 0.24.0',
       title: 'Orkestrai 0.24.0: move complete Canvas selections between workspaces',
       summary: 'Reuse a connected working setup without rebuilding nodes or carrying unsafe runtime state.',

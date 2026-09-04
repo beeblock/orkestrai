@@ -12,6 +12,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -56,6 +57,43 @@ jobs:
 
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Require successful CI for tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          DEADLINE=$((SECONDS + 1800))
+
+          while (( SECONDS < DEADLINE )); do
+            RUN="$(gh api \
+              --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+              -f head_sha="$SHA" \
+              -f event=push \
+              -f per_page=10 \
+              --jq '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number) | last // {}')"
+            STATUS="$(jq -r '.status // "missing"' <<<"$RUN")"
+            CONCLUSION="$(jq -r '.conclusion // ""' <<<"$RUN")"
+            URL="$(jq -r '.html_url // ""' <<<"$RUN")"
+
+            if [[ "$STATUS" == "completed" ]]; then
+              if [[ "$CONCLUSION" == "success" ]]; then
+                echo "CI passed for $SHA: $URL"
+                exit 0
+              fi
+              echo "::error::CI for tagged commit $SHA concluded with '$CONCLUSION': $URL"
+              exit 1
+            fi
+
+            echo "Waiting for CI on $SHA (status: $STATUS)..."
+            sleep 15
+          done
+
+          echo "::error::Timed out waiting for CI on tagged commit $SHA"
+          exit 1
 
   build-macos:
     name: Build macOS (Apple Silicon + Intel)

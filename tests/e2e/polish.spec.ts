@@ -55,7 +55,8 @@ test.describe('polimento do canvas', () => {
 
     await page.keyboard.press('Control+p');
     await expect(palette).toBeVisible();
-    await page.mouse.click(2, 2);
+    const paletteOverlay = page.locator('[data-dialog-overlay]').last();
+    await paletteOverlay.click({ position: { x: 2, y: 2 } });
     await expect(palette).toHaveCount(0);
     await expect(huddle).toBeVisible();
     await huddle.getByRole('button', { name: /Fechar Huddles|Close Huddles|Cerrar Huddles/ }).click();

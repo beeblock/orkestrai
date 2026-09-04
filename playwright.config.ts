@@ -1,4 +1,12 @@
 import { defineConfig } from '@playwright/test';
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const e2eDataDir = resolve('test-results/runtime');
+const e2eNodeOptions = process.env.NODE_OPTIONS?.includes('--max-old-space-size')
+  ? process.env.NODE_OPTIONS
+  : [process.env.NODE_OPTIONS, '--max-old-space-size=8192'].filter(Boolean).join(' ');
+rmSync(e2eDataDir, { recursive: true, force: true });
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -24,10 +32,11 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && PORT=5199 node scripts/orkestrai-server.mjs',
     env: {
-      NODE_OPTIONS: [process.env.NODE_OPTIONS, '--max-old-space-size=8192'].filter(Boolean).join(' '),
+      NODE_OPTIONS: e2eNodeOptions,
+      ORKESTRAI_DATA_DIR: e2eDataDir,
     },
     url: 'http://127.0.0.1:5199',
     timeout: 180_000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
 });

@@ -55,7 +55,7 @@ test.describe('ponte CLI (bridge)', () => {
   });
 
   test('andares via bridge: criar, listar, preview e land', async ({ request }) => {
-    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
     const { execFileSync } = await import('node:child_process');
@@ -70,36 +70,46 @@ test.describe('ponte CLI (bridge)', () => {
     const workspaceName = `E2E bfloor ${Date.now()}`;
     const wsResponse = await request.post('/api/agent-room/workspaces', { data: { name: workspaceName, workingDir: dir } });
     const workspace = (await wsResponse.json()).data as { id: string };
-    const tokenResponse = await request.get(`/api/agent-room/workspaces/${workspace.id}/bridge-token`);
-    const { token } = (await tokenResponse.json()).data as { token: string };
-    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+    try {
+      // Provisioning intentionally writes tracked agent integration files. A
+      // Floor starts from a clean, committed main checkout just like production.
+      execFileSync('git', ['add', '-A'], { cwd: dir });
+      if (execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' }).trim()) {
+        execFileSync('git', ['commit', '-m', 'provision agent bridge'], { cwd: dir });
+      }
 
-    // lider cria o andar via bridge
-    const created = await request.post('/api/agent-room/bridge/floors', { headers, data: { name: 'feature-auth' } });
-    expect(created.status(), await created.text()).toBe(201);
-    const floor = (await created.json()).data as { id: string; branch: string };
-    expect(floor.branch).toContain('feature-auth');
+      const tokenResponse = await request.get(`/api/agent-room/workspaces/${workspace.id}/bridge-token`);
+      const { token } = (await tokenResponse.json()).data as { token: string };
+      const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 
-    const list = await request.get('/api/agent-room/bridge/floors', { headers });
-    const floors = (await list.json()).data as Array<{ id: string; name: string }>;
-    expect(floors.some((item) => item.name === 'feature-auth')).toBe(true);
+      // lider cria o andar via bridge
+      const created = await request.post('/api/agent-room/bridge/floors', { headers, data: { name: 'feature-auth' } });
+      expect(created.status(), await created.text()).toBe(201);
+      const floor = (await created.json()).data as { id: string; branch: string };
+      expect(floor.branch).toContain('feature-auth');
 
-    // commit no andar para a aterrissagem ter conteudo
-    const floorDir = join(dir, '.orkestrai', 'floors', 'feature-auth');
-    writeFileSync(join(floorDir, 'feature.txt'), 'nova feature\n');
-    execFileSync('git', ['add', '.'], { cwd: floorDir });
-    execFileSync('git', ['commit', '-m', 'feature'], { cwd: floorDir });
+      const list = await request.get('/api/agent-room/bridge/floors', { headers });
+      const floors = (await list.json()).data as Array<{ id: string; name: string }>;
+      expect(floors.some((item) => item.name === 'feature-auth')).toBe(true);
 
-    const preview = await request.get(`/api/agent-room/bridge/floors/${floor.id}/preview`, { headers });
-    expect(preview.status()).toBe(200);
-    const previewData = (await preview.json()).data as { conflicts: string[] };
-    expect(previewData.conflicts).toEqual([]);
+      // commit no andar para a aterrissagem ter conteudo
+      const floorDir = join(dir, '.orkestrai', 'floors', 'feature-auth');
+      writeFileSync(join(floorDir, 'feature.txt'), 'nova feature\n');
+      execFileSync('git', ['add', '.'], { cwd: floorDir });
+      execFileSync('git', ['commit', '-m', 'feature'], { cwd: floorDir });
 
-    const land = await request.post(`/api/agent-room/bridge/floors/${floor.id}/land`, { headers, data: {} });
-    expect(land.status(), await land.text()).toBe(200);
-    execFileSync('git', ['show', 'main:feature.txt'], { cwd: dir }); // existe na main apos o merge
+      const preview = await request.get(`/api/agent-room/bridge/floors/${floor.id}/preview`, { headers });
+      expect(preview.status()).toBe(200);
+      const previewData = (await preview.json()).data as { conflicts: string[] };
+      expect(previewData.conflicts).toEqual([]);
 
-    await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      const land = await request.post(`/api/agent-room/bridge/floors/${floor.id}/land`, { headers, data: {} });
+      expect(land.status(), await land.text()).toBe(200);
+      execFileSync('git', ['show', 'main:feature.txt'], { cwd: dir }); // existe na main apos o merge
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`).catch(() => {});
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('edge entre terminais acende (talking) durante um ask da bridge', async ({ page, request }) => {

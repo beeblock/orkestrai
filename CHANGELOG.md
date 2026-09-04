@@ -5,6 +5,21 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.24.1 - 2026-09-04
+
+### Fixed
+
+- Dependency overrides now resolve the Faker, `fast-uri`, `qs`, and `xmldom`
+  security advisories while preserving every supported Postman dynamic
+  variable and the existing Bruno and Postman script runtimes.
+- Clean macOS and Linux installs restore the executable permission required by
+  the `node-pty` spawn helper, preventing terminal startup failures caused by
+  package extraction modes.
+- CI now runs the complete Playwright end-to-end suite in addition to the
+  dependency audit, unit tests, and production build. Both local preflight and
+  Release Desktop require that exact commit to pass before a tag can publish
+  any platform artifact.
+
 ## 0.24.0 - 2026-09-04
 
 ### Added

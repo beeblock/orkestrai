@@ -72,6 +72,7 @@ test.describe('Workbench visual baseline', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.route('**/api/agent-room/usage*', (route) => route.fulfill({ json: { data: USAGE_FIXTURE } }));
     await page.route('**/api/agent-room/workspaces', (route) => route.fulfill({ json: { data: [workspace] } }));
+    await page.route(`**/api/agent-room/workspaces/${workspace.id}/load`, (route) => route.fulfill({ json: { data: workspace } }));
     await page.route(`**/api/agent-room/workspaces/${workspace.id}/nodes`, (route) => route.fulfill({ json: { data: [note] } }));
     await page.route(`**/api/agent-room/workspaces/${workspace.id}/edges`, (route) => route.fulfill({ json: { data: [] } }));
     await page.route(`**/api/agent-room/workspaces/${workspace.id}/floors`, (route) => route.fulfill({ json: { data: [] } }));
