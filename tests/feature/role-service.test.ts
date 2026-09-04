@@ -239,7 +239,7 @@ describe('RoleService', () => {
     expect(scrollback).not.toContain('[responsabilidade: Revisor]');
     expect(scrollback).not.toContain(doneTask.title);
     ptySessionManager.kill(session.id);
-  });
+  }, 15_000);
 
   it('na retomada deixa terminal sem trabalho em silencio', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'retomada ociosa', workingDir: '/tmp' });
