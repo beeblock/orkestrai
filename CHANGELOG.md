@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
   instead of assuming that `/bin/zsh` exists, including when old workspaces are
   reopened on another platform.
 - The attention counter keeps WCAG AA contrast in both built-in themes.
+- Embedded STT and TTS now use `sherpa-onnx-node` 1.13.7, including the
+  matching official native packages for macOS, Linux, and Windows.
 - CI now runs the complete Playwright end-to-end suite in addition to the
   dependency audit, unit tests, and production build. Both local preflight and
   Release Desktop require that exact commit to pass before a tag can publish

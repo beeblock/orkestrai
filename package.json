@@ -151,7 +151,7 @@
     "qrcode": "^1.5.4",
     "quickjs-emscripten": "^0.32.0",
     "serve-sim": "0.1.46",
-    "sherpa-onnx-node": "^1.13.6",
+    "sherpa-onnx-node": "^1.13.7",
     "sigma": "^3.0.3",
     "smol-toml": "1.8.0",
     "svelte-sonner": "^1.2.1",
