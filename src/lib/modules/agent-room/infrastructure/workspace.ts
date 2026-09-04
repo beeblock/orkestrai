@@ -80,7 +80,22 @@ export function defaultShell(options: { preferWsl?: boolean } = {}): string {
   if (process.platform === 'win32') {
     return options.preferWsl === false ? 'powershell.exe' : 'wsl.exe';
   }
-  return process.env.SHELL ?? '/bin/zsh';
+  return resolvePosixShell();
+}
+
+/** Resolves a shell that exists on the current POSIX host. */
+export function resolvePosixShell(
+  configured = process.env.SHELL,
+  platform = process.platform,
+  pathExists: (path: string) => boolean = existsSync,
+): string {
+  const preferred = configured?.trim();
+  if (preferred && pathExists(preferred)) return preferred;
+
+  const candidates = platform === 'darwin'
+    ? ['/bin/zsh', '/bin/bash', '/bin/sh']
+    : ['/bin/bash', '/bin/sh', '/bin/zsh'];
+  return candidates.find(pathExists) ?? '/bin/sh';
 }
 
 /** Comandos de shell disponiveis por plataforma (para presets da UI). */
@@ -93,5 +108,5 @@ export function shellPresets(): Array<{ command: string; label: string }> {
       { command: 'cmd.exe', label: 'CMD' },
     ];
   }
-  return [{ command: process.env.SHELL ?? '/bin/zsh', label: 'Shell' }];
+  return [{ command: resolvePosixShell(), label: 'Shell' }];
 }

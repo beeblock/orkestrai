@@ -1569,7 +1569,8 @@
         ? { command: spec.command, args: spec.args, env: spec.env, provider: provider.id, ...(creation?.leader ? { maestro: true } : {}) }
         : { command: provider.id, args: [], provider: provider.id };
     } else {
-      payload = { command: navigator.platform.startsWith('Win') ? 'powershell.exe' : '/bin/zsh', args: [] };
+      // The server resolves the native/WSL shell against the host where the PTY runs.
+      payload = { command: '', args: [] };
     }
     if (creation?.executionRuntime) payload.executionRuntime = creation.executionRuntime;
     if (creation?.profileId) payload.profileId = creation.profileId;

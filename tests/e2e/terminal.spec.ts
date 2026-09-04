@@ -383,7 +383,6 @@ test.describe('terminais PTY', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     // Arma a ferramenta do agente e clica no canvas (tamanho padrao); o

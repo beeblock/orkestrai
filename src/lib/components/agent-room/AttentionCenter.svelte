@@ -174,7 +174,7 @@
         >
           {#if actionable.length}<BellRing size={15} />{:else}<Bell size={15} />{/if}
           {#if actionable.length}
-            <span class="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-[var(--app-danger)] px-1 text-[9px] font-bold leading-4 text-white">
+            <span class="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-[color-mix(in_srgb,var(--app-danger)_75%,black)] px-1 text-[9px] font-bold leading-4 text-white">
               {actionable.length > 99 ? '99+' : actionable.length}
             </span>
           {/if}

@@ -121,7 +121,7 @@ test.describe('ponte CLI (bridge)', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName, { timeout: 15_000 });
 
     // Dois shells vivos (o PTY so nasce com o no montado no canvas).
     // Posicoes sem sobreposicao: terminais tem 560px — vizinho cobre o handle.
@@ -155,7 +155,7 @@ test.describe('ponte CLI (bridge)', () => {
     await page.waitForTimeout(2_500);
     const askPromise = request.post('/api/agent-room/bridge/ask', {
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      data: { to: 'Beta', from: canvasNodes[0].title, message: 'echo oi-beta', timeoutMs: 20_000 },
+      data: { to: 'Beta', from: canvasNodes[0].title, message: 'sleep 3; echo oi-beta', timeoutMs: 20_000 },
     });
 
     // Durante a conversa a edge fica verde/animada; depois volta ao normal.

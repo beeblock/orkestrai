@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test';
 
 /** Seleciona um provider no menu compacto de agentes da toolbar. */
 export async function selectAgentTool(page: Page, providerName: string) {
+  await expect(page.locator('.svelte-flow__pane')).toBeVisible();
   await page.getByTestId('agent-toolbar-menu').click();
   await page.getByRole('menuitem').filter({ hasText: providerName }).click();
 }

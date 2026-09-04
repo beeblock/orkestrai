@@ -819,6 +819,8 @@ Header: Authorization = Bearer {{accessToken}}`,
       items: [
         'Patched dependencies resolve the Faker, fast-uri, qs, and xmldom advisories while preserving every supported Postman dynamic variable and the Bruno and Postman script runtimes.',
         'Clean macOS and Linux installs restore the executable permission required by the node-pty spawn helper, preventing terminal startup failures caused by package extraction modes.',
+        'Shell terminals select an installed host shell instead of assuming that zsh exists, including when an older workspace is reopened on another platform.',
+        'The attention counter maintains WCAG AA contrast in the light and dark themes.',
         'CI now runs the complete Playwright end-to-end suite alongside the dependency audit, unit tests, and production build. Local preflight and Release Desktop both require that exact commit to pass before a tag can publish platform artifacts.',
       ],
     },

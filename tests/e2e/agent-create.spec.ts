@@ -10,7 +10,7 @@ test.describe('dialogo de criacao de agente', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName, { timeout: 15_000 });
 
     // Desenha um Claude no canvas: o dialogo precisa abrir ANTES de criar.
     await selectAgentTool(page, 'Claude');
@@ -59,7 +59,7 @@ test.describe('dialogo de criacao de agente', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName, { timeout: 15_000 });
 
     await selectCanvasTool(page, 'Shell');
     await page.locator('.svelte-flow__pane').click({ position: { x: 600, y: 350 } });

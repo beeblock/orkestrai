@@ -14,7 +14,6 @@ test.describe('restauracao de sessao', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill(dir);
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName, { timeout: 15_000 });
 
     await createNodeOnCanvas(page, 'Shell');
@@ -35,7 +34,7 @@ test.describe('restauracao de sessao', () => {
 
     // Recarrega: o terminal deve respawnar (nova sessao), nao mostrar erro
     await page.reload();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName, { timeout: 15_000 });
     await expect(page.locator('.canvas-terminal .xterm')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.canvas-terminal')).not.toContainText(/Sess[aã]o PTY n[aã]o encontrada/i);
 

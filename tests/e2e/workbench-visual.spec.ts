@@ -97,7 +97,12 @@ test.describe('Workbench visual baseline', () => {
           await expect(fileExplorer.getByRole('button', { name: 'brief.md', exact: true })).toBeVisible();
           await expect(shell).toHaveScreenshot(
             `workbench-${theme}-${viewport.width}x${viewport.height}.png`,
-            { animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.01 },
+            {
+              animations: 'disabled',
+              caret: 'hide',
+              // Linux and macOS rasterize the same bundled font differently.
+              maxDiffPixelRatio: process.env.CI ? 0.03 : 0.01,
+            },
           );
         }
       }

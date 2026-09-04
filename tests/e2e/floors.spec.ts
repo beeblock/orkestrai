@@ -10,7 +10,6 @@ async function createWorkspaceIn(page: import('@playwright/test').Page, name: st
   await page.getByPlaceholder('Nome', { exact: true }).fill(name);
   await page.getByPlaceholder('Diretório de trabalho').fill(dir);
   await page.getByRole('button', { name: 'Criar' }).click();
-  await page.locator('.workspace-list .workspace-item', { hasText: name }).click();
   await expect(page.locator('.workspace-list li.active')).toContainText(name, { timeout: 15_000 });
 }
 

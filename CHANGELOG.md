@@ -15,6 +15,10 @@ pt-BR, English, and Spanish translations.
 - Clean macOS and Linux installs restore the executable permission required by
   the `node-pty` spawn helper, preventing terminal startup failures caused by
   package extraction modes.
+- Shell terminals now resolve an installed host shell on macOS and Linux
+  instead of assuming that `/bin/zsh` exists, including when old workspaces are
+  reopened on another platform.
+- The attention counter keeps WCAG AA contrast in both built-in themes.
 - CI now runs the complete Playwright end-to-end suite in addition to the
   dependency audit, unit tests, and production build. Both local preflight and
   Release Desktop require that exact commit to pass before a tag can publish

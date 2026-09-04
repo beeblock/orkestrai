@@ -53,6 +53,15 @@ jobs:
       - name: Run end-to-end tests
         run: npm run test:e2e
 
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-failures-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   secrets:
     name: Scan Git history for secrets
     runs-on: ubuntu-latest

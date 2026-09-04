@@ -6,6 +6,7 @@ import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import { executionRuntimeKey } from '../../domain/runtime.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { defaultShell } from '../../infrastructure/workspace.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker, agentSessionTrackerForRuntime } from '../../infrastructure/pty/AgentSessionTracker.ts';
 import { bridgeService } from './BridgeService.js';
@@ -280,8 +281,8 @@ export class WorkspaceService {
     return Promise.all(nodes.map(async (node) => {
       if (node.type !== 'terminal') return node;
       let payload = { ...((node.payload ?? {}) as Record<string, unknown>) };
+      let changed = this.normalizeTerminalShell(workspace, payload);
       const executionRuntime = terminalExecutionRuntime(workspace, payload as never);
-      let changed = false;
       const storedSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
       let storedPty = storedSessionId ? ptySessionManager.get(storedSessionId) : null;
       const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
@@ -802,27 +803,43 @@ export class WorkspaceService {
     workspace: Workspace,
     input: CanvasNodePayload | undefined,
   ): Promise<CanvasNodePayload | undefined> {
-    if (!input || !Object.prototype.hasOwnProperty.call(input, 'executionRuntime')) return input;
+    if (!input) return input;
     const payload = { ...(input as Record<string, unknown>) };
-    const requested = payload.executionRuntime;
-    if (requested == null) {
-      delete payload.executionRuntime;
-      return payload;
+    if (Object.prototype.hasOwnProperty.call(payload, 'executionRuntime')) {
+      const requested = payload.executionRuntime;
+      if (requested == null) {
+        delete payload.executionRuntime;
+      } else {
+        if (typeof requested !== 'object' || !('kind' in requested)) {
+          throw new Error('Ambiente de execução inválido para o terminal.');
+        }
+        const runtime = requested as { kind?: string; distribution?: string; linuxWorkingDir?: string };
+        if (runtime.kind !== 'native' && runtime.kind !== 'wsl') {
+          throw new Error('Ambiente de execução inválido para o terminal.');
+        }
+        payload.executionRuntime = await resolveTerminalRuntimeOverride({
+          mode: runtime.kind,
+          workingDir: workspace.workingDir,
+          wslDistribution: runtime.distribution,
+          wslWorkingDir: runtime.linuxWorkingDir,
+        });
+      }
     }
-    if (typeof requested !== 'object' || !('kind' in requested)) {
-      throw new Error('Ambiente de execução inválido para o terminal.');
-    }
-    const runtime = requested as { kind?: string; distribution?: string; linuxWorkingDir?: string };
-    if (runtime.kind !== 'native' && runtime.kind !== 'wsl') {
-      throw new Error('Ambiente de execução inválido para o terminal.');
-    }
-    payload.executionRuntime = await resolveTerminalRuntimeOverride({
-      mode: runtime.kind,
-      workingDir: workspace.workingDir,
-      wslDistribution: runtime.distribution,
-      wslWorkingDir: runtime.linuxWorkingDir,
-    });
+    this.normalizeTerminalShell(workspace, payload);
     return payload;
+  }
+
+  private normalizeTerminalShell(workspace: Workspace, payload: Record<string, unknown>): boolean {
+    if (typeof payload.provider === 'string' && payload.provider.trim()) return false;
+    const command = typeof payload.command === 'string' ? payload.command.trim() : '';
+    const unavailableLegacyDefault = process.platform !== 'win32'
+      && command === '/bin/zsh'
+      && !existsSync(command);
+    if (command && !unavailableLegacyDefault) return false;
+
+    const runtime = terminalExecutionRuntime(workspace, payload as never);
+    payload.command = defaultShell({ preferWsl: runtime.kind === 'wsl' });
+    return true;
   }
 
   private assertWorkingDir(dir: string): string {

@@ -823,6 +823,8 @@ Header: Authorization = Bearer {{accessToken}}`,
       items: [
         'Dependências corrigidas resolvem os alertas do Faker, fast-uri, qs e xmldom, preservando todas as variáveis dinâmicas suportadas do Postman e os runtimes de scripts do Bruno e Postman.',
         'Instalações limpas no macOS e Linux restauram a permissão de execução exigida pelo helper do node-pty, evitando falhas ao iniciar terminais causadas pelos modos de extração de pacotes.',
+        'Terminais shell selecionam um shell instalado no host em vez de presumir que o zsh existe, inclusive ao reabrir em outra plataforma um workspace antigo.',
+        'O contador da Central de Atenção mantém contraste WCAG AA nos temas claro e escuro.',
         'A CI agora executa toda a suíte E2E do Playwright junto da auditoria de dependências, testes unitários e build de produção. O preflight local e o Release Desktop exigem que o commit exato passe antes que uma tag publique artefatos de plataforma.',
       ],
     },
