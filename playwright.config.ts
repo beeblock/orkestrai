@@ -35,6 +35,7 @@ export default defineConfig({
   webServer: {
     command: e2eServerCommand,
     env: {
+      APP_KEY: process.env.APP_KEY ?? 'orkestrai-e2e-test-key',
       NODE_OPTIONS: e2eNodeOptions,
       ORKESTRAI_DATA_DIR: e2eDataDir,
     },
