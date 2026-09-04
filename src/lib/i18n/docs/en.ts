@@ -814,7 +814,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   changelog: [
     {
       date: 'September 4, 2026 · 0.24.0',
-      title: 'Move complete Canvas selections between workspaces',
+      title: 'Orkestrai 0.24.0: move complete Canvas selections between workspaces',
       summary: 'Reuse a connected working setup without rebuilding nodes or carrying unsafe runtime state.',
       items: [
         'Select up to 100 Canvas nodes and copy or move them to another workspace while preserving relative layout and every connection whose two endpoints are selected.',

@@ -818,7 +818,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   changelog: [
     {
       date: '4 de setembro de 2026 · 0.24.0',
-      title: 'Mova seleções completas do Canvas entre workspaces',
+      title: 'Orkestrai 0.24.0: mova seleções completas do Canvas entre workspaces',
       summary: 'Reutilize uma estrutura de trabalho conectada sem recriar nós nem carregar estado inseguro de execução.',
       items: [
         'Selecione até 100 nós do Canvas e copie ou mova o conjunto para outro workspace, preservando o layout relativo e toda conexão cujas duas pontas estejam selecionadas.',
