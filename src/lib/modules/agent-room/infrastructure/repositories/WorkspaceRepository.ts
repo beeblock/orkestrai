@@ -1,4 +1,5 @@
 import { uuidv7 } from '@beeblock/svelar/support';
+import { Connection } from '@beeblock/svelar/database';
 import type {
   CanvasEdge,
   CodeIntelligenceMode,
@@ -377,6 +378,71 @@ export class WorkspaceRepository {
     await AgentCanvasEdge.query().where('source_node_id', id).orWhere('target_node_id', id).delete();
     const deleted = await AgentCanvasNode.query().where('id', id).delete();
     return deleted > 0;
+  }
+
+  async commitNodeTransfer(input: {
+    sourceWorkspaceId: string;
+    destinationWorkspaceId: string;
+    mode: 'copy' | 'move';
+    nodes: Array<{
+      id: string;
+      type: CanvasNodeType;
+      title: string | null;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      zIndex: number;
+      payload: CanvasNodePayload;
+    }>;
+    edges: Array<{
+      id: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+      style: CanvasEdgeStyle;
+    }>;
+    sourceNodeIds: string[];
+  }): Promise<{ nodes: CanvasNode[]; edges: CanvasEdge[] }> {
+    return Connection.transaction(async () => {
+      const createdNodes: CanvasNode[] = [];
+      const createdEdges: CanvasEdge[] = [];
+      for (const node of input.nodes) {
+        const model = await AgentCanvasNode.create({
+          id: node.id,
+          workspace_id: input.destinationWorkspaceId,
+          type: node.type,
+          title: node.title,
+          x: node.x,
+          y: node.y,
+          width: node.width,
+          height: node.height,
+          z_index: node.zIndex,
+          payload_json: JSON.stringify(node.payload),
+          floor_id: null,
+          archived_at: null,
+        });
+        createdNodes.push(mapNode(model));
+      }
+      for (const edge of input.edges) {
+        const model = await AgentCanvasEdge.create({
+          id: edge.id,
+          workspace_id: input.destinationWorkspaceId,
+          source_node_id: edge.sourceNodeId,
+          target_node_id: edge.targetNodeId,
+          style: edge.style,
+          created_at: new Date(),
+        });
+        createdEdges.push(mapEdge(model));
+      }
+      if (input.mode === 'move') {
+        await AgentBoardTask.query().where('workspace_id', input.sourceWorkspaceId).whereIn('assignee_node_id', input.sourceNodeIds).update({ assignee_node_id: null });
+        await AgentBoardTask.query().where('workspace_id', input.sourceWorkspaceId).whereIn('note_node_id', input.sourceNodeIds).update({ note_node_id: null });
+        await AgentCanvasEdge.query().where('workspace_id', input.sourceWorkspaceId).whereIn('source_node_id', input.sourceNodeIds).delete();
+        await AgentCanvasEdge.query().where('workspace_id', input.sourceWorkspaceId).whereIn('target_node_id', input.sourceNodeIds).delete();
+        await AgentCanvasNode.query().where('workspace_id', input.sourceWorkspaceId).whereIn('id', input.sourceNodeIds).delete();
+      }
+      return { nodes: createdNodes, edges: createdEdges };
+    });
   }
 
   // -- Arestas do canvas --------------------------------------------------------

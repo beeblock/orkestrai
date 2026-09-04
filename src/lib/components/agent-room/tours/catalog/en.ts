@@ -1606,6 +1606,18 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'workspace-node-transfer',
+    icon: 'Copy',
+    title: 'Move or copy Canvas nodes',
+    tagline: 'Reuse a complete connected setup in another workspace.',
+    steps: [
+      { id: 'select-transfer-nodes', title: 'Select the complete group', body: 'Use Shift+click or drag a selection rectangle around every node that belongs together. A connection travels only when both endpoint nodes are selected.' },
+      { id: 'open-transfer-dialog', title: 'Open the selection action', body: 'The bar above the Canvas shows the selected count. Choose Move or copy selection to review what will be transferred.' },
+      { id: 'choose-transfer-mode', title: 'Choose Copy or Move', body: 'Pick a destination workspace. Copy preserves the originals; Move removes them only after the destination and required files are ready. Confirm the action.' },
+      { id: 'verify-transfer-destination', title: 'Continue in the destination', body: 'Open the destination workspace. The group appears together in a free area with its internal connections and files. Terminals intentionally start a clean conversation.' },
+    ],
+  },
+  {
     id: 'creative-image-workflow',
     icon: 'Images',
     title: 'Create a character and a complete campaign',

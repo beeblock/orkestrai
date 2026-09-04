@@ -21,6 +21,11 @@ export const DOCS_ES: DocsCatalog = {
       body: `Agrupa workspaces en carpetas en la barra lateral cuando tengas varios proyectos (por cliente, por equipo, por entorno). Escribe un nombre en "Nueva carpeta" al final de la lista para crear una en la raíz; arrastra un workspace sobre el encabezado de una carpeta para guardarlo ahí, o arrástralo al espacio vacío de la lista para devolverlo a la raíz. Un workspace nuevo también puede empezar ya dentro de una carpeta: usa el ícono de más en su encabezado, o elige cualquier carpeta en el campo Carpeta del propio diálogo de nuevo workspace. Las carpetas se anidan dentro de otras carpetas de la misma forma, sin límite de profundidad — arrastra una carpeta sobre otra para convertirla en subcarpeta, o usa el ícono de "nueva subcarpeta" en el encabezado de cualquier carpeta para crear una ya dentro de ella; una carpeta nunca puede soltarse dentro de sí misma o de una subcarpeta suya. Haz doble clic en el nombre de la carpeta o usa su ícono de lápiz para renombrarla, y cada carpeta recuerda si está colapsada entre reinicios. Eliminar una carpeta (ícono de papelera, con confirmación) nunca es destructivo: cada workspace y subcarpeta dentro de ella sube a la raíz en lugar de eliminarse.`,
     },
     {
+      id: 'workspace-node-transfer',
+      title: 'Mueve o copia nodos del Canvas entre workspaces',
+      body: `Selecciona uno o más nodos del Canvas y usa la barra de selección superior para elegir otro workspace. Copiar conserva los originales; Mover solo elimina el origen después de confirmar los nodos, archivos y conexiones internas en el destino. El conjunto mantiene su layout relativo y ocupa un área libre. Una conexión solo acompaña la selección cuando se seleccionaron ambos extremos. Las Notas llevan sus adjuntos, los nodos de Imagen copian sus archivos y los documentos nativos de Design llevan el contenido visual y los assets. Las terminales conservan provider, rol, tema y comandos guardados, pero inician una sesión limpia; solo el primer líder copiado sigue como líder cuando el destino todavía no tiene uno. El historial de ejecución de Imagen y Flow se reinicia. Los Clientes de API desconectan metadatos y sincronización de origen y limpian campos conocidos de credenciales, variables de runtime, cookies, proxies, certificados y valores de la bóveda. Uso, Grafo de código y Dispositivo móvil admiten una sola instancia por workspace. Mover una terminal con una rutina activa o un flujo de imágenes en ejecución queda bloqueado hasta detener ese trabajo, evitando un origen parcialmente movido.`,
+    },
+    {
       id: 'wsl-runtime',
       title: 'Workspaces de Windows con WSL',
       body: `En Windows, el entorno seleccionado al crear o editar un workspace es el predeterminado del equipo. Cada terminal puede heredarlo o usar Entorno de ejecución en el diálogo de creación y en su menú compacto para forzar Windows nativo o una distribución WSL específica. Selecciona exactamente Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian u otra instalación e indica la ruta Linux de la misma carpeta del proyecto. Un único workspace puede combinar agentes Windows y WSL, incluso distribuciones diferentes. Un indicador WIN o WSL identifica la excepción. Detección y modelos del provider, PTY, reanudación exacta de la conversación, Council, agentes reclutados y el puente orkestrai siguen el runtime efectivo de cada terminal. Los reclutas del Maestro heredan el Piso activo del líder y solo se confirman después de que la PTY inicia en el entorno correcto; un fallo elimina el nodo incompleto. Al asignar una tarea, Orkestrai inicia o reanuda un agente desconectado y solo mueve la tarjeta a En progreso después de entregar el briefing completo. Orkestrai valida la CLI dentro de esa distribución y confirma el transcript del provider en su propia home Linux antes de persistir o restaurar un id; un agente vacío comienza limpio en vez de adivinar la conversación más reciente. Cambiar el runtime reinicia solo esa terminal. Una distribución, directorio o comando ausente produce errores distintos y accionables, sin fallback silencioso a Windows nativo.`,
@@ -446,6 +451,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Líder/Maestro', 'recruit/dismiss', 'kanban'],
     },
     {
+      id: 'workspace-node-transfer',
+      title: 'Reutiliza un Canvas funcional en otro workspace',
+      body: 'Selecciona los agentes, notas, imágenes, flujos u otros nodos que pertenecen al mismo conjunto y elige Mover o copiar selección en la barra superior del Canvas. Usa Copiar para reutilizar la estructura conservando el origen o Mover para trasladarla de forma transaccional. El destino recibe el mismo layout relativo, conexiones internas, adjuntos, archivos de imagen y contenido nativo de Design en un área libre. Abre el otro workspace para continuar con sesiones limpias en las terminales y sin credenciales de API ni historial de ejecución vinculados.',
+      tags: ['Selección múltiple', 'transferencia de workspace', 'copia segura'],
+    },
+    {
       id: 'watch-24-7',
       title: 'Empleado 24/7 (vigía de tareas)',
       body: 'Rutina cada 1–5 min en el líder: "verifica el tablero (orkestrai task list); asigna lo que esté sin dueño; si falta agente, recluta". El equipo entero trabaja sin que toques nada — asignar despacha la tarea directo a la terminal del agente.',
@@ -801,6 +812,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '4 de septiembre de 2026 · 0.24.0',
+      title: 'Mueve selecciones completas del Canvas entre workspaces',
+      summary: 'Reutiliza una estructura de trabajo conectada sin reconstruir nodos ni transportar estado inseguro de ejecución.',
+      items: [
+        'Selecciona hasta 100 nodos del Canvas y copia o mueve el conjunto a otro workspace, conservando el layout relativo y toda conexión cuyos dos extremos estén seleccionados.',
+        'Los adjuntos de notas, archivos de imagen y documentos nativos de Design se copian al destino; las terminales conservan configuración y comandos guardados, pero empiezan una conversación limpia, mientras las credenciales de API y el historial de ejecución permanecen desconectados.',
+        'Mover confirma el destino antes de eliminar el origen y bloquea rutinas activas, flujos de imagen en ejecución, archivos ausentes y nodos duplicados de dispositivo móvil con información accionable.',
+      ],
+    },
     {
       date: '2 de septiembre de 2026 · 0.23.0',
       title: 'Orkestrai 0.23.0: inteligencia de código operativa y continuidad confiable',

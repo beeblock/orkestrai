@@ -21,6 +21,11 @@ export const DOCS_EN: DocsCatalog = {
       body: `Group workspaces into folders in the sidebar once you have several projects (per client, per team, per environment). Type a name in "New folder" at the bottom of the list to create one at the root; drag a workspace onto a folder's header to file it there, or drag it onto empty space in the list to send it back to the root. A new workspace can start inside a folder right away too: use the plus icon in that folder's header, or pick any folder from the Folder field in the New workspace dialog itself. Folders nest inside other folders the same way, with no depth limit — drag one folder onto another to make it a subfolder, or use the "new subfolder" icon in any folder's header to create one already inside it; a folder can never be dropped into itself or into one of its own subfolders. Double-click a folder's name or use its pencil icon to rename it, and each folder remembers whether it's collapsed across restarts. Deleting a folder (trash icon, with confirmation) is never destructive: every workspace and subfolder inside it moves up to the root instead of being removed.`,
     },
     {
+      id: 'workspace-node-transfer',
+      title: 'Move or copy Canvas nodes between workspaces',
+      body: `Select one or more Canvas nodes and use the selection bar at the top to choose another workspace. Copy leaves the originals in place; Move removes them only after the destination nodes, files, and internal connections are committed successfully. The group keeps its relative layout and is placed in a free destination area. Connections are preserved only when both endpoints are selected. Notes bring their attachments, Image nodes copy their workspace files, and native Design documents copy their visual content and assets. Terminals preserve provider, role, theme, and saved commands but start a clean session; only the first copied leader remains a leader when the destination has none. Image and Flow execution history is reset. API Clients detach source metadata and synchronization, clear known credential fields, runtime variables, cookies, proxies, certificates, and vault values. Usage, Code Graph, and Mobile Device allow only one instance per workspace. Moving a terminal with an enabled routine or a running image workflow is blocked until that work is stopped, so the source cannot be left half-moved.`,
+    },
+    {
       id: 'wsl-runtime',
       title: 'Windows workspaces with WSL',
       body: `On Windows, the environment selected when creating or editing a workspace is the team default. Each terminal can inherit it or use Execution environment in the creation dialog and compact terminal menu to force native Windows or one specific WSL distribution. Select the exact Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian, or other installation and provide the Linux path for the same project folder. A single workspace can therefore combine Windows and WSL agents, including different distributions. A WIN or WSL badge identifies an override. Provider detection and models, PTY, exact conversation resume, Council, recruited agents, and the orkestrai bridge follow each terminal's effective runtime. Maestro recruits inherit the leader's active Floor and are confirmed only after the PTY starts in the correct environment; a failed launch removes the incomplete node. When a task is assigned, Orkestrai starts or resumes an offline agent and moves the card to In progress only after the complete briefing is delivered. Orkestrai validates the CLI in that distribution and confirms the provider transcript inside its own Linux home before persisting or restoring an id; an empty agent starts clean instead of guessing the latest conversation. Changing runtime restarts only that terminal. Missing distributions, directories, or commands produce distinct actionable errors without a silent native-Windows fallback.`,
@@ -446,6 +451,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Leader/Maestro', 'recruit/dismiss', 'kanban'],
     },
     {
+      id: 'workspace-node-transfer',
+      title: 'Reuse a working Canvas in another workspace',
+      body: 'Select the agents, notes, images, flows, or other nodes that belong together and choose Move or copy selection in the bar above the Canvas. Pick Copy to reuse the setup while keeping the source, or Move to relocate it transactionally. The destination receives the same relative layout, internal connections, attachments, image files, and native Design content in a free area. Open that workspace to continue with clean terminal sessions and detached API credentials or runtime history.',
+      tags: ['Multi-selection', 'workspace transfer', 'safe copy'],
+    },
+    {
       id: 'watch-24-7',
       title: '24/7 employee (task watcher)',
       body: 'Routine every 1–5 min on the leader: "check the board (orkestrai task list); assign whatever is unassigned; if an agent is missing, recruit". The whole team works without you touching anything — assigning dispatches the task straight to the agent\'s terminal.',
@@ -801,6 +812,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'September 4, 2026 · 0.24.0',
+      title: 'Move complete Canvas selections between workspaces',
+      summary: 'Reuse a connected working setup without rebuilding nodes or carrying unsafe runtime state.',
+      items: [
+        'Select up to 100 Canvas nodes and copy or move them to another workspace while preserving relative layout and every connection whose two endpoints are selected.',
+        'Note attachments, image files, and native Design documents are copied into the destination; terminals keep configuration and saved commands but begin a clean conversation, while API credentials and execution history remain detached.',
+        'Move commits the destination before removing the source and blocks active routines, running image workflows, missing files, and duplicate mobile-device nodes with actionable feedback.',
+      ],
+    },
     {
       date: 'September 2, 2026 · 0.23.0',
       title: 'Orkestrai 0.23.0: operational code intelligence and reliable continuity',

@@ -19,9 +19,11 @@
   import NoteCanvasNode from '$lib/components/agent-room/canvas/NoteCanvasNode.svelte';
   import WorkspaceEditDialog from '$lib/components/agent-room/canvas/WorkspaceEditDialog.svelte';
   import WorkspaceCreateDialog from '$lib/components/agent-room/canvas/WorkspaceCreateDialog.svelte';
+  import CanvasNodeTransferDialog from '$lib/components/agent-room/canvas/CanvasNodeTransferDialog.svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
+  import { Button } from '$lib/components/ui/button';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as m from '$lib/paraglide/messages.js';
   import FileTreeCanvasNode from '$lib/components/agent-room/canvas/FileTreeCanvasNode.svelte';
@@ -104,13 +106,15 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
     Floor,
     CanvasEdge,
     CanvasNode,
+    CanvasNodeTransferMode,
+    CanvasNodeTransferResult,
     NoteNodePayload,
     TerminalNodePayload,
     Workspace,
@@ -448,6 +452,7 @@
   let memoryOpen = $state(false);
   let annotationsOpen = $state(false);
   let huddleOpen = $state(false);
+  let transferOpen = $state(false);
   /** workspaceId -> sessoes PTY vivas (indicador de ativo na sidebar). */
   let activity = $state<Record<string, number>>({});
   let editingWorkspace = $state<Workspace | null>(null);
@@ -462,6 +467,11 @@
     getViewport: () => { x: number; y: number; zoom: number };
   } | null>(null);
   let flowWrapper: HTMLElement;
+  const selectedTransferNodeIds = $derived(nodes.filter((node) => node.selected).map((node) => node.id));
+  const selectedTransferNodeIdSet = $derived(new Set(selectedTransferNodeIds));
+  const selectedTransferConnectionCount = $derived(edges.filter((edge) => (
+    selectedTransferNodeIdSet.has(edge.source) && selectedTransferNodeIdSet.has(edge.target)
+  )).length);
 
   const explorationLeader = $derived.by(() => {
     const node = nodes.find((item) => item.type === 'terminal' && Boolean((item.data?.payload as { maestro?: boolean } | undefined)?.maestro));
@@ -2287,6 +2297,30 @@
     zoomApi?.setCenter(box.x + box.width / 2, box.y + box.height / 2, { zoom: 1, duration: 300 });
   }
 
+  async function transferSelectedNodes(destinationWorkspaceId: string, mode: CanvasNodeTransferMode) {
+    if (!activeWorkspace || !selectedTransferNodeIds.length) return;
+    const sourceWorkspaceId = activeWorkspace.id;
+    const sourceNodeIds = [...selectedTransferNodeIds];
+    const destination = workspaces.find((workspace) => workspace.id === destinationWorkspaceId);
+    const result = await api<CanvasNodeTransferResult>(`/api/agent-room/workspaces/${sourceWorkspaceId}/nodes/transfer`, {
+      method: 'POST',
+      body: JSON.stringify({ destinationWorkspaceId, nodeIds: sourceNodeIds, mode }),
+    });
+    removeWorkspaceViewCache(destinationWorkspaceId);
+    if (mode === 'move') {
+      const removed = new Set(result.sourceNodeIds);
+      nodes = nodes.filter((node) => !removed.has(node.id));
+      edges = edges.filter((edge) => !removed.has(edge.source) && !removed.has(edge.target));
+      removeWorkspaceViewCache(sourceWorkspaceId);
+    } else {
+      nodes = nodes.map((node) => ({ ...node, selected: false }));
+    }
+    const message = mode === 'copy'
+      ? m['canvas.transfer_success_copy']({ count: result.nodes.length, workspace: destination?.name ?? '' })
+      : m['canvas.transfer_success_move']({ count: result.nodes.length, workspace: destination?.name ?? '' });
+    toast.success(message);
+  }
+
   async function handleConnect(connection: Connection) {
     if (!activeWorkspace || !connection.source || !connection.target) return;
     const edge = await api<CanvasEdge>(`/api/agent-room/workspaces/${activeWorkspace.id}/edges`, {
@@ -2710,6 +2744,16 @@
         {#if appSettings.showMinimap !== 'false'}
           <MiniMap bgColor="var(--app-surface)" maskColor="color-mix(in srgb, var(--app-canvas) 72%, transparent)" nodeColor="var(--app-border-strong)" />
         {/if}
+        {#if selectedTransferNodeIds.length > 0}
+          <Panel position="top-center">
+            <div class="flex h-9 items-center gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] px-2 shadow-lg">
+              <span class="whitespace-nowrap text-[11px] font-medium text-[var(--app-text-muted)]">{m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}</span>
+              <Button size="sm" class="h-7 gap-1.5 px-2 text-xs" onclick={() => (transferOpen = true)}>
+                <Copy size={13} />{m['canvas.transfer_open']()}
+              </Button>
+            </div>
+          </Panel>
+        {/if}
         <Panel position="bottom-center">
           <div class="toolbar-wrap">
             {#if canScrollLeft}
@@ -2905,6 +2949,17 @@
     {/if}
     {#if sharingOpen && activeWorkspace}
       <WorkspaceSharingDialog workspaceId={activeWorkspace.id} onClose={() => (sharingOpen = false)} />
+    {/if}
+    {#if activeWorkspace}
+      <CanvasNodeTransferDialog
+        open={transferOpen}
+        sourceWorkspaceId={activeWorkspace.id}
+        {workspaces}
+        nodeCount={selectedTransferNodeIds.length}
+        connectionCount={selectedTransferConnectionCount}
+        onTransfer={transferSelectedNodes}
+        onClose={() => (transferOpen = false)}
+      />
     {/if}
     <AlertDialog.Root open={deletingWorkspace !== null} onOpenChange={(isOpen) => !isOpen && (deletingWorkspace = null)}>
       <AlertDialog.Content>

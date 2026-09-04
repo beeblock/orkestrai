@@ -993,6 +993,17 @@ export type CanvasEdge = {
   createdAt: string;
 };
 
+export type CanvasNodeTransferMode = 'copy' | 'move';
+
+export type CanvasNodeTransferResult = {
+  mode: CanvasNodeTransferMode;
+  sourceWorkspaceId: string;
+  destinationWorkspaceId: string;
+  sourceNodeIds: string[];
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+};
+
 // ---------------------------------------------------------------------------
 // Andares (floors) e automacao
 // ---------------------------------------------------------------------------

@@ -1610,6 +1610,18 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'workspace-node-transfer',
+    icon: 'Copy',
+    title: 'Mova ou copie nós do Canvas',
+    tagline: 'Reutilize uma estrutura completa e conectada em outro workspace.',
+    steps: [
+      { id: 'select-transfer-nodes', title: 'Selecione o conjunto completo', body: 'Use Shift+clique ou arraste um retângulo de seleção ao redor de todos os nós que fazem parte do conjunto. Uma conexão só acompanha a transferência quando as duas pontas estão selecionadas.' },
+      { id: 'open-transfer-dialog', title: 'Abra a ação da seleção', body: 'A barra acima do Canvas mostra a quantidade selecionada. Escolha Mover ou copiar seleção para revisar o que será transferido.' },
+      { id: 'choose-transfer-mode', title: 'Escolha Copiar ou Mover', body: 'Escolha o workspace de destino. Copiar preserva os originais; Mover só remove a origem depois que o destino e os arquivos necessários estão prontos. Confirme a ação.' },
+      { id: 'verify-transfer-destination', title: 'Continue no destino', body: 'Abra o workspace de destino. O conjunto aparece unido em uma área livre, com conexões internas e arquivos. Os terminais iniciam uma conversa limpa de forma intencional.' },
+    ],
+  },
+  {
     id: 'creative-image-workflow',
     icon: 'Images',
     title: 'Crie um personagem e uma campanha completa',

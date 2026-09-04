@@ -5,6 +5,25 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.24.0 - 2026-09-04
+
+### Added
+
+- Canvas multi-selection can now copy or move up to 100 nodes into another
+  workspace. Relative layout, connections whose two endpoints are selected,
+  note attachments, image files, and native Design documents travel together;
+  destination placement avoids existing nodes.
+- Transferred terminals preserve their provider, role, theme, and saved
+  commands while starting a clean conversation. Runtime histories, source API
+  synchronization, cookies, certificates, and vault references remain detached.
+
+### Fixed
+
+- Moving is transactional and removes source nodes only after the destination
+  database state and required files are ready. Active routines, running image
+  workflows, missing assets, and duplicate mobile devices block unsafe moves
+  with an actionable error.
+
 ## 0.23.0 - 2026-09-02
 
 ### Added

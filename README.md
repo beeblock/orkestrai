@@ -34,6 +34,10 @@ common credentials redacted; normal agent output is not persisted.
   physics or animation on lower-power hardware.
   Duplicate styled shapes with Cmd/Ctrl+D or copy and paste complete visual
   arrangements while preserving their relative layout.
+  Select any group of nodes to copy or move it into another workspace while
+  keeping its relative layout, internal connections, attachments, images, and
+  native Design content. Terminals start clean and sensitive runtime state is
+  never carried across projects.
 - **Organized workspace creation:** create a regular or preset-based workspace
   directly inside a validated nested sidebar folder, either from the folder
   header or the New workspace dialog, without an intermediate root-level item.

@@ -25,6 +25,11 @@ export const DOCS_PT: DocsCatalog = {
       body: `Agrupe workspaces em pastas na barra lateral quando tiver vários projetos (por cliente, por time, por ambiente). Digite um nome em "Nova pasta" no fim da lista pra criar uma na raiz; arraste um workspace pro cabeçalho de uma pasta pra guardá-lo lá, ou arraste pro espaço vazio da lista pra mandar de volta pra raiz. Um workspace novo também pode nascer já dentro de uma pasta: use o ícone de mais no cabeçalho dela, ou escolha qualquer pasta no campo Pasta do próprio diálogo de novo workspace. Pastas aninham dentro de outras pastas do mesmo jeito, sem limite de profundidade — arraste uma pasta sobre outra pra transformá-la em subpasta, ou use o ícone de "nova subpasta" no cabeçalho de qualquer pasta pra criar uma já dentro dela; uma pasta nunca pode ser solta dentro dela mesma ou de uma subpasta sua. Dê duplo-clique no nome da pasta ou use o ícone de lápis pra renomear, e cada pasta lembra se está recolhida entre reinícios. Apagar uma pasta (ícone de lixeira, com confirmação) nunca é destrutivo: todo workspace e subpasta dentro dela sobe pra raiz em vez de ser removido.`,
     },
     {
+      id: 'workspace-node-transfer',
+      title: 'Mova ou copie nós do Canvas entre workspaces',
+      body: `Selecione um ou mais nós do Canvas e use a barra de seleção no topo para escolher outro workspace. Copiar mantém os originais; Mover só remove a origem depois de confirmar os nós, arquivos e conexões internas no destino. O conjunto preserva o layout relativo e ocupa uma área livre. Uma conexão só acompanha a seleção quando as duas pontas foram selecionadas. Notas levam anexos, nós de Imagem copiam seus arquivos e documentos nativos de Design levam conteúdo visual e assets. Terminais preservam provider, role, tema e comandos salvos, mas iniciam uma sessão limpa; apenas o primeiro líder copiado continua líder quando o destino ainda não possui um. Históricos de execução de Imagem e Flow são zerados. Clientes de API desconectam metadados e sincronização de origem e limpam campos conhecidos de credencial, variáveis de runtime, cookies, proxies, certificados e valores do cofre. Uso, Grafo de código e Dispositivo móvel aceitam apenas uma instância por workspace. Mover um terminal com rotina ativa ou um fluxo de imagem em execução fica bloqueado até interromper esse trabalho, impedindo que a origem fique pela metade.`,
+    },
+    {
       id: 'wsl-runtime',
       title: 'Workspaces Windows com WSL',
       body: `No Windows, o ambiente escolhido ao criar ou editar o workspace é o padrão do time. Cada terminal pode herdá-lo ou, no diálogo de criação e no menu compacto do terminal, escolher Ambiente de execução para forçar Windows nativo ou uma distribuição WSL específica. Selecione exatamente Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian ou outra instalação e informe o caminho Linux da mesma pasta do projeto. Assim, um único workspace pode combinar agentes Windows e WSL, inclusive distribuições diferentes. O badge WIN ou WSL identifica uma sobrescrita. Detecção e modelos do provider, PTY, retomada exata da conversa, Council, agentes recrutados e a ponte orkestrai seguem o runtime efetivo de cada terminal. Recrutas do Maestro herdam o andar ativo do líder e só são confirmados depois que a PTY inicia no ambiente correto; uma falha remove o nó incompleto. Ao atribuir uma tarefa, o Orkestrai inicia ou retoma um agente offline e só move o cartão para Fazendo depois de entregar o briefing completo. O Orkestrai valida a CLI naquela distribuição e confirma o transcript do provider dentro da home Linux correspondente antes de persistir ou restaurar um id; um agente vazio começa limpo em vez de adivinhar a conversa mais recente. Trocar o runtime reinicia somente aquele terminal. Distribuição, diretório ou comando ausente gera erros distintos e acionáveis, sem fallback silencioso para Windows nativo.`,
@@ -450,6 +455,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Líder/Maestro', 'recruit/dismiss', 'kanban'],
     },
     {
+      id: 'workspace-node-transfer',
+      title: 'Reutilize um Canvas funcional em outro workspace',
+      body: 'Selecione os agentes, notas, imagens, fluxos ou outros nós que fazem parte do mesmo conjunto e escolha Mover ou copiar seleção na barra acima do Canvas. Use Copiar para reutilizar a estrutura mantendo a origem ou Mover para transferi-la de forma transacional. O destino recebe o mesmo layout relativo, conexões internas, anexos, arquivos de imagem e conteúdo nativo de Design em uma área livre. Abra o outro workspace para continuar com sessões limpas nos terminais e sem credenciais de API ou histórico de execução vinculados.',
+      tags: ['Seleção múltipla', 'transferência de workspace', 'cópia segura'],
+    },
+    {
       id: 'watch-24-7',
       title: 'Funcionário 24/7 (vigia de tarefas)',
       body: 'Rotina a cada 1–5 min no líder: “verifique o quadro (orkestrai task list); atribua o que estiver sem dono; se faltar agente, recrute”. O time inteiro trabalha sem você tocar em nada — atribuir despacha a tarefa direto pro terminal do agente.',
@@ -805,6 +816,16 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '4 de setembro de 2026 · 0.24.0',
+      title: 'Mova seleções completas do Canvas entre workspaces',
+      summary: 'Reutilize uma estrutura de trabalho conectada sem recriar nós nem carregar estado inseguro de execução.',
+      items: [
+        'Selecione até 100 nós do Canvas e copie ou mova o conjunto para outro workspace, preservando o layout relativo e toda conexão cujas duas pontas estejam selecionadas.',
+        'Anexos de notas, arquivos de imagem e documentos nativos de Design são copiados para o destino; terminais mantêm configuração e comandos salvos, mas começam uma conversa limpa, enquanto credenciais de API e histórico de execução permanecem desconectados.',
+        'Mover confirma o destino antes de remover a origem e bloqueia rotinas ativas, fluxos de imagem em execução, arquivos ausentes e nós duplicados de dispositivo móvel com feedback acionável.',
+      ],
+    },
     {
       date: '2 de setembro de 2026 · 0.23.0',
       title: 'Orkestrai 0.23.0: inteligência de código operacional e continuidade confiável',

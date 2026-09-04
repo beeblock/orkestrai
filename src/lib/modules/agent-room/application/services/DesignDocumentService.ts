@@ -20,6 +20,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { isDesignExplorationPayload } from '../../domain/design-exploration.js';
 import { resolveDesignVariableValue } from '../../domain/design-variables.js';
 import { designCollaborationService } from './DesignCollaborationService.js';
+import { workspacePathService } from './WorkspacePathService.js';
 
 export class DesignRevisionConflictError extends Error {
   constructor(public readonly current: DesignDocument) {
@@ -1204,6 +1205,80 @@ export class DesignDocumentService {
     return this.serialized(workspaceId, nodeId, () => this.getUnlocked(workspaceId, nodeId));
   }
 
+  async cloneToWorkspace(
+    sourceWorkspaceId: string,
+    sourceNodeId: string,
+    destinationWorkspaceId: string,
+    destinationNodeId: string,
+    name: string,
+  ): Promise<void> {
+    const source = await this.get(sourceWorkspaceId, sourceNodeId);
+    const [sourceWorkspace, destinationWorkspace] = await Promise.all([
+      workspaceRepository.getWorkspace(sourceWorkspaceId),
+      workspaceRepository.getWorkspace(destinationWorkspaceId),
+    ]);
+    if (!sourceWorkspace || !destinationWorkspace) throw new Error('canvas_transfer_workspace_not_found');
+    const destinationDirectory = await workspacePathService.resolveWritable(destinationWorkspace, '.orkestrai/designs');
+    const destinationPath = await workspacePathService.resolveWritable(destinationWorkspace, `.orkestrai/designs/${destinationNodeId}.orkestrai-design.json`);
+    const destinationAssetsDirectory = await workspacePathService.resolveWritable(destinationWorkspace, `.orkestrai/designs/assets/${destinationNodeId}`);
+    const assets: DesignAsset[] = [];
+    try {
+      for (const asset of source.assets) {
+        const sourcePath = await workspacePathService.resolveExisting(sourceWorkspace, asset.path);
+        const relativePath = `.orkestrai/designs/assets/${destinationNodeId}/${asset.id}-${safeAssetFilename(asset.name)}`;
+        const destinationAssetPath = await workspacePathService.resolveWritable(destinationWorkspace, relativePath);
+        await mkdir(dirname(destinationAssetPath), { recursive: true });
+        await copyFile(sourcePath, destinationAssetPath);
+        assets.push({ ...asset, path: relativePath });
+      }
+      const now = new Date().toISOString();
+      const clone = designDocumentSchema.parse({
+        ...structuredClone(source),
+        id: uuidv7(),
+        nodeId: destinationNodeId,
+        workspaceId: destinationWorkspaceId,
+        name: name.trim() || source.name,
+        revision: 0,
+        assets,
+        libraryLinks: [],
+        figmaLinks: [],
+        codeArtifacts: [],
+        comments: [],
+        proposals: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await this.writeAtomic(destinationPath, clone);
+    } catch (error) {
+      await Promise.all([
+        rm(destinationPath, { force: true }),
+        rm(destinationAssetsDirectory, { recursive: true, force: true }),
+      ]);
+      throw error;
+    }
+  }
+
+  async removeWorkspaceFiles(workspaceId: string, nodeId: string): Promise<void> {
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace) return;
+    const paths = await Promise.all([
+      `.orkestrai/designs/${nodeId}.orkestrai-design.json`,
+      `.orkestrai/designs/${nodeId}.backup.orkestrai-design.json`,
+      `.orkestrai/designs/${nodeId}.history.jsonl`,
+      `.orkestrai/designs/assets/${nodeId}`,
+      `.orkestrai/designs/thumbnails/${nodeId}.png`,
+      `.orkestrai/designs/thumbnails/${nodeId}.revision`,
+    ].map((path) => workspacePathService.resolveWritable(workspace, path)));
+    await Promise.all([
+      rm(paths[0], { force: true }),
+      rm(paths[1], { force: true }),
+      rm(paths[2], { force: true }),
+      rm(paths[3], { recursive: true, force: true }),
+      rm(paths[4], { force: true }),
+      rm(paths[5], { force: true }),
+    ]);
+  }
+
   async apply(dto: ApplyDesignOperationsDto): Promise<DesignDocument> {
     return this.serialized(dto.workspaceId, dto.nodeId, async () => {
       const context = await this.context(dto.workspaceId, dto.nodeId);
@@ -1439,14 +1514,8 @@ export class DesignDocumentService {
 
   async remove(workspaceId: string, nodeId: string): Promise<void> {
     await this.serialized(workspaceId, nodeId, async () => {
-      const context = await this.context(workspaceId, nodeId);
-      await Promise.all([
-        rm(context.path, { force: true }),
-        rm(context.historyPath, { force: true }),
-        rm(join(context.directory, 'assets', nodeId), { recursive: true, force: true }),
-        rm(context.thumbnailPath, { force: true }),
-        rm(context.thumbnailRevisionPath, { force: true }),
-      ]);
+      await this.context(workspaceId, nodeId);
+      await this.removeWorkspaceFiles(workspaceId, nodeId);
     });
   }
 }

@@ -3,6 +3,7 @@ import {
   canvasNodeTypeSchema,
   createCanvasNodeSchema,
 } from '$lib/modules/agent-room/contracts/schemas/workspaceSchemas.js';
+import { transferCanvasNodesSchema } from '$lib/modules/agent-room/contracts/schemas/transfer-canvas-nodes.schema.js';
 
 describe('workspaceSchemas — tipos de nó do canvas', () => {
   it('aceita todos os tipos suportados, incluindo image, device e design', () => {
@@ -24,5 +25,13 @@ describe('workspaceSchemas — tipos de nó do canvas', () => {
       payload: { path: '.orkestrai/images/ref.png' },
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it('validates bounded cross-workspace transfers and removes duplicate ids', () => {
+    const destinationWorkspaceId = '00000000-0000-7000-8000-000000000001';
+    const nodeId = '00000000-0000-7000-8000-000000000002';
+    expect(transferCanvasNodesSchema.parse({ destinationWorkspaceId, nodeIds: [nodeId, nodeId], mode: 'copy' }).nodeIds).toEqual([nodeId]);
+    expect(transferCanvasNodesSchema.safeParse({ destinationWorkspaceId, nodeIds: [], mode: 'move' }).success).toBe(false);
+    expect(transferCanvasNodesSchema.safeParse({ destinationWorkspaceId, nodeIds: [nodeId], mode: 'clone' }).success).toBe(false);
   });
 });
