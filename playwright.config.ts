@@ -6,6 +6,9 @@ const e2eDataDir = resolve('test-results/runtime');
 const e2eNodeOptions = process.env.NODE_OPTIONS?.includes('--max-old-space-size')
   ? process.env.NODE_OPTIONS
   : [process.env.NODE_OPTIONS, '--max-old-space-size=8192'].filter(Boolean).join(' ');
+const e2eServerCommand = process.env.CI
+  ? 'PORT=5199 node scripts/orkestrai-server.mjs'
+  : 'npm run build && PORT=5199 node scripts/orkestrai-server.mjs';
 rmSync(e2eDataDir, { recursive: true, force: true });
 
 export default defineConfig({
@@ -30,7 +33,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   webServer: {
-    command: 'npm run build && PORT=5199 node scripts/orkestrai-server.mjs',
+    command: e2eServerCommand,
     env: {
       NODE_OPTIONS: e2eNodeOptions,
       ORKESTRAI_DATA_DIR: e2eDataDir,
