@@ -503,7 +503,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'compose',
         title: 'Compose responsive vector interfaces',
-        body: 'Box-select vector points and transform them together, resize any layer from eight handles, and edit multiline text directly on the canvas. Shift-select layers to align, distribute, combine, mask, or group them; move and resize group descendants together, Alt-select a nested layer, and find, select, or replace matching fill and stroke colors across the page.',
+        body: 'Hover a layer before selecting it, Command/Ctrl-click to enter nested or overlapping artwork, and hold Alt/Option to inspect exact spacing. Box-select vector points and transform them together, rotate or resize layers directly, and edit multiline text on the canvas. Shift-select layers to align, distribute, tidy, combine, mask, or group them; smart guides display their coordinates, and complete descendants stay together. Agents use the same typed arrangement and vector commands.',
       },
       {
         id: 'assets-export',

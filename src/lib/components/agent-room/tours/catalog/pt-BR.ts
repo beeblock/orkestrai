@@ -507,7 +507,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'compose',
         title: 'Componha interfaces vetoriais responsivas',
-        body: 'Selecione pontos vetoriais por caixa e transforme-os juntos, redimensione qualquer camada pelas oito alças e edite texto multilinha diretamente no canvas. Use Shift para alinhar, distribuir, combinar, mascarar ou agrupar camadas; mova e redimensione descendentes do grupo juntos, selecione uma camada interna com Alt e encontre, selecione ou substitua cores iguais de preenchimento e contorno na página.',
+        body: 'Veja o contorno da camada antes de selecionar, use Command/Ctrl+clique para entrar em arte aninhada ou sobreposta e segure Alt/Option para inspecionar espaços exatos. Selecione pontos vetoriais por caixa e transforme-os juntos, gire ou redimensione camadas diretamente e edite texto multilinha no canvas. Use Shift para selecionar camadas e alinhar, distribuir, organizar, combinar, mascarar ou agrupar; smart guides exibem coordenadas e os descendentes permanecem juntos. Agentes usam os mesmos comandos tipados de organização e vetor.',
       },
       {
         id: 'assets-export',

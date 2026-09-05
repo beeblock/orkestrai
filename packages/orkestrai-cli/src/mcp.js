@@ -161,6 +161,18 @@ const TOOLS = [
     text: { type: 'string' }, fontSize: { type: 'number' }, fontWeight: { type: 'number' }, summary: { type: 'string' }, taskId: { type: 'string' },
   }, required: ['nodeId', 'baseRevision', 'pageId', 'type', 'name', 'x', 'y', 'width', 'height'] } },
   { name: 'design_update_element', description: 'Atualiza propriedades tipadas de um elemento existente no Design node.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, elementId: { type: 'string' }, changes: { type: 'object' }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'elementId', 'changes'] } },
+  { name: 'design_arrange_elements', description: 'Alinha, distribui ou organiza layers e seus descendentes pela mesma operacao transacional usada no editor.', inputSchema: { type: 'object', properties: {
+    nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, pageId: { type: 'string', format: 'uuid' },
+    elementIds: { type: 'array', minItems: 2, maxItems: 500, uniqueItems: true, items: { type: 'string', format: 'uuid' } },
+    mode: { type: 'string', enum: ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom', 'distribute-x', 'distribute-y', 'tidy'] },
+    spacing: { type: 'number', minimum: 0, maximum: 10000, default: 16 }, summary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['nodeId', 'baseRevision', 'pageId', 'elementIds', 'mode'] } },
+  { name: 'design_edit_vector', description: 'Substitui de forma tipada os pontos, subpaths, fechamento ou fill rule de um vetor nativo.', inputSchema: { type: 'object', properties: {
+    nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, elementId: { type: 'string', format: 'uuid' },
+    pathPoints: { type: 'array', maxItems: 20000, items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, inX: { type: ['number', 'null'] }, inY: { type: ['number', 'null'] }, outX: { type: ['number', 'null'] }, outY: { type: ['number', 'null'] }, mode: { type: 'string', enum: ['corner', 'mirrored', 'asymmetric', 'disconnected'] } }, required: ['x', 'y'] } },
+    pathSubpaths: { type: 'array', maxItems: 2000, items: { type: 'array', maxItems: 20000, items: { type: 'object' } } },
+    pathClosed: { type: 'boolean' }, fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] }, summary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['nodeId', 'baseRevision', 'elementId'] } },
   { name: 'design_delete_element', description: 'Exclui um elemento e seus descendentes do Design node, respeitando lock e revisao.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, elementId: { type: 'string' }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'elementId'] } },
   { name: 'task_list', description: 'Lista as tarefas do quadro (kanban) do workspace.', inputSchema: { type: 'object', properties: {} } },
   { name: 'task_columns', description: 'Lista as colunas e chaves validas do kanban.', inputSchema: { type: 'object', properties: {} } },
@@ -587,6 +599,27 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         from: selfAgent,
         taskId: args.taskId,
       });
+    case 'design_arrange_elements':
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [{ kind: 'arrange-elements', pageId: args.pageId, elementIds: args.elementIds, mode: args.mode, spacing: args.spacing ?? 16 }],
+        summary: args.summary ?? `${args.mode} ${args.elementIds.length} design elements`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    case 'design_edit_vector': {
+      const changes = Object.fromEntries(['pathPoints', 'pathSubpaths', 'pathClosed', 'fillRule']
+        .filter((key) => args[key] !== undefined)
+        .map((key) => [key, args[key]]));
+      if (!Object.keys(changes).length) throw new Error('design_edit_vector requires at least one vector field.');
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [{ kind: 'update', elementId: args.elementId, changes }],
+        summary: args.summary ?? `Edit vector ${args.elementId}`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    }
     case 'design_delete_element':
       return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
         baseRevision: args.baseRevision,

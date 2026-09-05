@@ -445,6 +445,31 @@ describe('orkestrai CLI', () => {
     expect(request.body.operations[0].page.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('design arrange e vector usam operacoes tipadas revisionadas', async () => {
+    const { out } = capture();
+    await run([
+      'design', 'arrange', 'design-1', 'tidy',
+      '00000000-0000-7000-8000-000000000002,00000000-0000-7000-8000-000000000003',
+      '--page', '00000000-0000-7000-8000-000000000001', '--revision', '5', '--spacing', '24',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body).toMatchObject({
+      baseRevision: 5,
+      operations: [{ kind: 'arrange-elements', mode: 'tidy', spacing: 24 }],
+    });
+
+    await run([
+      'design', 'vector', 'design-1', '00000000-0000-7000-8000-000000000002',
+      JSON.stringify({ pathPoints: [{ x: 0, y: 0 }, { x: 100, y: 80 }], pathClosed: false }),
+      '--revision', '6',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body).toMatchObject({ baseRevision: 6 });
+    expect(requests.at(-1)?.body.operations[0]).toMatchObject({
+      kind: 'update',
+      elementId: '00000000-0000-7000-8000-000000000002',
+      changes: { pathClosed: false },
+    });
+  });
+
   it('design import-code le arquivos e registra a importacao pela bridge', async () => {
     writeFileSync(join(cwd, 'card.html'), '<article class="p-4">Card</article>');
     writeFileSync(join(cwd, 'card.css'), 'article { color: red; }');

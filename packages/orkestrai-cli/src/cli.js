@@ -57,6 +57,8 @@ Uso:
   orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design page <nodeId> <create|update|duplicate|reorder|activate|delete> --revision <n> [--page <pageId>] [--name <nome>] [--width <n>] [--height <n>] [--background <cor>] [--order <n>]
+  orkestrai design arrange <nodeId> <left|hcenter|right|top|vcenter|bottom|distribute-x|distribute-y|tidy> <elementIds-csv> --page <pageId> --revision <n> [--spacing <n>]
+  orkestrai design vector <nodeId> <elementId> <geometry-json> --revision <n>
   orkestrai design apply <nodeId> <operations-json> --revision <n> [--summary <texto>] [--task <taskId>]
   orkestrai design import-code <nodeId> <arquivo> --format html|svelte|react|vue --name <nome> --revision <n> [--css <arquivo>]
   orkestrai design generate <nodeId> <elementIds-json> --framework svelar|svelte|react|next|vue|html --output <path> --name <nome> [--write --revision <n>]
@@ -1020,6 +1022,44 @@ export async function run(argv, options = {}) {
         });
         if (flags.json) out(JSON.stringify(data, null, 2));
         else out(`Pagina atualizada; design na revisao ${data.revision}.`);
+        return 0;
+      }
+      if (action === 'arrange' && nodeId && values[0] && values[1]) {
+        const mode = values[0];
+        const elementIds = values[1].split(',').map((value) => value.trim()).filter(Boolean);
+        const baseRevision = Number(flags.revision);
+        const modes = ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom', 'distribute-x', 'distribute-y', 'tidy'];
+        if (!Number.isInteger(baseRevision) || baseRevision < 0 || !flags.page || !modes.includes(mode) || elementIds.length < 2) {
+          throw new Error('Uso: orkestrai design arrange <nodeId> <mode> <elementIds-csv> --page <pageId> --revision <n> [--spacing <n>]');
+        }
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(nodeId)}`, {
+          baseRevision,
+          operations: [{ kind: 'arrange-elements', pageId: flags.page, elementIds, mode, spacing: Number(flags.spacing ?? 16) }],
+          summary: flags.summary ?? `${mode} ${elementIds.length} design elements`,
+          from: flags.from,
+          taskId: flags.task,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Layers organizadas; design na revisao ${data.revision}.`);
+        return 0;
+      }
+      if (action === 'vector' && nodeId && values[0] && values[1]) {
+        const baseRevision = Number(flags.revision);
+        if (!Number.isInteger(baseRevision) || baseRevision < 0) throw new Error('Uso: orkestrai design vector <nodeId> <elementId> <geometry-json> --revision <n>');
+        const geometry = JSON.parse(values.slice(1).join(' '));
+        const changes = Object.fromEntries(['pathPoints', 'pathSubpaths', 'pathClosed', 'fillRule']
+          .filter((key) => geometry[key] !== undefined)
+          .map((key) => [key, geometry[key]]));
+        if (!Object.keys(changes).length) throw new Error('geometry-json deve conter pathPoints, pathSubpaths, pathClosed ou fillRule.');
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(nodeId)}`, {
+          baseRevision,
+          operations: [{ kind: 'update', elementId: values[0], changes }],
+          summary: flags.summary ?? `Edit vector ${values[0]}`,
+          from: flags.from,
+          taskId: flags.task,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Vetor atualizado; design na revisao ${data.revision}.`);
         return 0;
       }
       if (action === 'apply' && nodeId) {

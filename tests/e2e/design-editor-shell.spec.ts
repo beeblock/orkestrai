@@ -155,4 +155,66 @@ test.describe('Design editor shell', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('reveals precision controls and tidies a multi-layer selection', async ({ page, request }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-design-precision-e2e-'));
+    const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;
+    const workspace = (await (await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E design precision ${Date.now()}`, workingDir: dir },
+    })).json()).data as { id: string };
+    const node = (await (await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+      data: { type: 'design', title: 'Precision design', x: 120, y: 120, width: 720, height: 520, payload: {} },
+    })).json()).data as { id: string };
+    const initial = (await (await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`)).json()).data as {
+      revision: number;
+      activePageId: string;
+    };
+    const elementIds = [randomUUID(), randomUUID(), randomUUID()];
+    await request.patch(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`, {
+      data: {
+        baseRevision: initial.revision,
+        operations: [
+          { kind: 'create', element: { id: elementIds[0], pageId: initial.activePageId, parentId: null, type: 'rectangle', name: 'Alpha card', x: 80, y: 80, width: 120, height: 72, order: 0 } },
+          { kind: 'create', element: { id: elementIds[1], pageId: initial.activePageId, parentId: null, type: 'rectangle', name: 'Beta card', x: 260, y: 92, width: 120, height: 72, order: 1 } },
+          { kind: 'create', element: { id: elementIds[2], pageId: initial.activePageId, parentId: null, type: 'rectangle', name: 'Gamma card', x: 90, y: 240, width: 120, height: 72, order: 2 } },
+        ],
+        summary: 'Seed precision controls',
+        actor: { kind: 'user', id: null, name: null, taskId: null },
+      },
+    });
+
+    try {
+      await request.put('/api/agent-room/settings', { data: { ...originalSettings, uiLanguage: 'en' } });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}&design=1`);
+
+      const designViewport = page.getByTestId('design-viewport');
+      const firstLayer = designViewport.locator(`[data-design-element="${elementIds[0]}"]`);
+      await firstLayer.hover();
+      await expect(firstLayer.locator('[data-design-hover]')).toBeVisible();
+      await firstLayer.click();
+      await expect(page.getByRole('button', { name: /Rotate selection/ })).toBeVisible();
+
+      await designViewport.locator(`[data-design-element="${elementIds[1]}"]`).click({ modifiers: ['Shift'] });
+      await designViewport.locator(`[data-design-element="${elementIds[2]}"]`).click({ modifiers: ['Shift'] });
+      await page.getByRole('button', { name: 'Tidy up' }).first().click();
+
+      await expect.poll(async () => {
+        const response = await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`);
+        const body = await response.json();
+        return body.data.elements
+          .filter((element: { id: string }) => elementIds.includes(element.id))
+          .map((element: { id: string; x: number; y: number }) => ({ id: element.id, x: element.x, y: element.y }));
+      }).toEqual([
+        { id: elementIds[0], x: 80, y: 80 },
+        { id: elementIds[1], x: 216, y: 80 },
+        { id: elementIds[2], x: 80, y: 168 },
+      ]);
+    } finally {
+      await page.goto('about:blank');
+      await request.put('/api/agent-room/settings', { data: originalSettings });
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

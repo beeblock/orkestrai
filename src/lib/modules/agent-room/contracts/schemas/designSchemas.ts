@@ -596,6 +596,7 @@ const designPrototypeFlowChangesSchema = designPrototypeFlowSchema.omit({ id: tr
 const designPrototypeInteractionChangesSchema = designPrototypeInteractionSchema.omit({ id: true, sourceElementId: true }).partial();
 const designMotionTokenChangesSchema = designMotionTokenSchema.omit({ id: true }).partial();
 const designMotionTrackChangesSchema = designMotionTrackSchema.omit({ id: true, elementId: true }).partial();
+export const designArrangeModeSchema = z.enum(['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom', 'distribute-x', 'distribute-y', 'tidy']);
 
 export const designOperationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -617,6 +618,13 @@ export const designOperationSchema = z.discriminatedUnion('kind', [
     }),
   }),
   z.object({ kind: z.literal('update'), elementId: z.string().uuid(), changes: designElementChangesSchema }),
+  z.object({
+    kind: z.literal('arrange-elements'),
+    pageId: z.string().uuid(),
+    elementIds: z.array(z.string().uuid()).min(2).max(500),
+    mode: designArrangeModeSchema,
+    spacing: z.number().finite().min(0).max(10_000).default(16),
+  }),
   z.object({ kind: z.literal('delete'), elementId: z.string().uuid() }),
   z.object({ kind: z.literal('reorder'), elementId: z.string().uuid(), order: z.number().int().min(0).max(1_000_000) }),
   z.object({ kind: z.literal('reparent'), elementId: z.string().uuid(), parentId: z.string().uuid().nullable(), order: z.number().int().min(0).max(1_000_000).optional() }),

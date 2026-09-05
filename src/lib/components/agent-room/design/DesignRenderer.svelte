@@ -8,6 +8,7 @@
     workspaceId = null,
     selectedId = null,
     selectedIds = [],
+    hoveredId = null,
     showFrameLabels = false,
   }: {
     elements: DesignElement[];
@@ -15,6 +16,7 @@
     workspaceId?: string | null;
     selectedId?: string | null;
     selectedIds?: string[];
+    hoveredId?: string | null;
     showFrameLabels?: boolean;
   } = $props();
 
@@ -142,6 +144,20 @@
         fill="none"
         stroke="#2563eb"
         stroke-width="2"
+        vector-effect="non-scaling-stroke"
+        pointer-events="none"
+      />
+    {:else if hoveredId === element.id}
+      <rect
+        data-design-hover
+        x={element.x - 1}
+        y={element.y - 1}
+        width={element.width + 2}
+        height={element.height + 2}
+        rx={Math.max(0, element.cornerRadius + 1)}
+        fill="none"
+        stroke="#0ea5e9"
+        stroke-width="1.25"
         vector-effect="non-scaling-stroke"
         pointer-events="none"
       />

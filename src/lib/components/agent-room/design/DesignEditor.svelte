@@ -30,6 +30,7 @@
     Hand,
     ImagePlus,
     Layers3,
+    LayoutGrid,
     MoveDiagonal2,
     Magnet,
     Maximize2,
@@ -41,6 +42,7 @@
     Redo2,
     RectangleHorizontal,
     Ruler,
+    RotateCw,
     ShieldCheck,
     Sparkles,
     Spline,
@@ -92,6 +94,7 @@
     splitDesignPathSegment,
     type DesignBooleanOperation,
   } from '$lib/modules/agent-room/domain/design-geometry.js';
+  import type { DesignArrangeMode } from '$lib/modules/agent-room/domain/design-arrangement.js';
   import { importSvgToDesign, SvgImportError } from '$lib/modules/agent-room/domain/design-svg-import.js';
   import { resolveDesignElements } from '$lib/modules/agent-room/domain/design-variables.js';
   import {
@@ -145,7 +148,6 @@
   type Tool = DesignEditorTool;
   type ShapeTool = Exclude<Tool, 'select' | 'hand' | 'path'>;
   type HistoryEntry = { forward: DesignOperation[]; inverse: DesignOperation[]; summary: string };
-  type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'distribute-x' | 'distribute-y';
   type PathPointSelection = { elementId: string; subpathIndex: number; pointIndex: number };
   type PathSegmentSelection = { elementId: string; subpathIndex: number; segmentIndex: number };
   type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -185,6 +187,10 @@
   let rulersVisible = $state(true);
   let snapLinesX = $state<number[]>([]);
   let snapLinesY = $state<number[]>([]);
+  let snapLabels = $state<Array<{ x: number; y: number; value: string }>>([]);
+  let hoveredElementId = $state<string | null>(null);
+  let altPressed = $state(false);
+  let lastDeepPick: { key: string; ids: string[]; index: number; at: number } | null = null;
   let exporting = $state(false);
   let colorMenuOpen = $state(false);
   let leftPanel = $state<DesignEditorLeftPanel>('layers');
@@ -234,12 +240,17 @@
     viewportBounds,
     [
       ...selectedIds,
+      ...(hoveredElementId ? [hoveredElementId] : []),
       ...(draftElement ? [draftElement.id] : []),
       ...(collaboration?.presences.flatMap((presence) => presence.elementIds) ?? []),
     ],
   ));
   const selectedElements = $derived(pageElements.filter((element) => selectedIds.includes(element.id)));
   const selected = $derived(selectedElements.length === 1 ? selectedElements[0] : null);
+  const hoveredElement = $derived(pageElements.find((element) => element.id === hoveredElementId) ?? null);
+  const measurementLines = $derived.by(() => selected && hoveredElement && selected.id !== hoveredElement.id && altPressed
+    ? elementMeasurements(selected, hoveredElement)
+    : []);
   const primaryPathPointSelection = $derived(pathPointSelections.at(-1) ?? null);
   const selectedPathPoint = $derived.by(() => {
     if (!selected || selected.type !== 'path' || primaryPathPointSelection?.elementId !== selected.id) return null;
@@ -440,6 +451,35 @@
     };
   }
 
+  function elementMeasurements(from: DesignElement, to: DesignElement): Array<{ x1: number; y1: number; x2: number; y2: number; value: string }> {
+    const fromRight = from.x + from.width;
+    const fromBottom = from.y + from.height;
+    const toRight = to.x + to.width;
+    const toBottom = to.y + to.height;
+    const lines: Array<{ x1: number; y1: number; x2: number; y2: number; value: string }> = [];
+    const overlapTop = Math.max(from.y, to.y);
+    const overlapBottom = Math.min(fromBottom, toBottom);
+    const overlapLeft = Math.max(from.x, to.x);
+    const overlapRight = Math.min(fromRight, toRight);
+    if (fromRight <= to.x || toRight <= from.x) {
+      const x1 = fromRight <= to.x ? fromRight : toRight;
+      const x2 = fromRight <= to.x ? to.x : from.x;
+      const y = overlapTop <= overlapBottom ? (overlapTop + overlapBottom) / 2 : (from.y + fromBottom + to.y + toBottom) / 4;
+      lines.push({ x1, y1: y, x2, y2: y, value: `${Math.round(Math.abs(x2 - x1))}` });
+    }
+    if (fromBottom <= to.y || toBottom <= from.y) {
+      const y1 = fromBottom <= to.y ? fromBottom : toBottom;
+      const y2 = fromBottom <= to.y ? to.y : from.y;
+      const x = overlapLeft <= overlapRight ? (overlapLeft + overlapRight) / 2 : (from.x + fromRight + to.x + toRight) / 4;
+      lines.push({ x1: x, y1, x2: x, y2, value: `${Math.round(Math.abs(y2 - y1))}` });
+    }
+    if (!lines.length) {
+      lines.push({ x1: from.x, y1: from.y, x2: to.x, y2: from.y, value: `${Math.round(Math.abs(to.x - from.x))}` });
+      lines.push({ x1: to.x, y1: from.y, x2: to.x, y2: to.y, value: `${Math.round(Math.abs(to.y - from.y))}` });
+    }
+    return lines.filter((line) => line.value !== '0');
+  }
+
   function rulerTicks(start: number, end: number): number[] {
     const first = Math.floor(start / 100) * 100;
     const last = Math.ceil(end / 100) * 100;
@@ -568,6 +608,8 @@
   function trackPresence(event: PointerEvent): void {
     cursorPoint = pagePoint(event);
     if (tool === 'path') penPointer = cursorPoint;
+    const target = event.target instanceof Element ? event.target.closest<SVGGElement>('[data-design-element]') : null;
+    hoveredElementId = target?.dataset.designElement ?? null;
     if (Date.now() - lastPresenceSentAt >= 700) void syncCollaboration(true);
   }
 
@@ -871,7 +913,9 @@
     if (tool === 'select') {
       const target = (event.target as SVGElement).closest<SVGGElement>('[data-design-element]');
       const hit = target ? pageElements.find((item) => item.id === target.dataset.designElement) : null;
-      const element = hit ? selectableElement(hit, event.altKey) : null;
+      const element = hit
+        ? (event.metaKey || event.ctrlKey ? deepSelectableElement(pagePoint(event), hit) : selectableElement(hit, false))
+        : null;
       if (!element) {
         startSelectionMarquee(event, vectorEditing ? 'points' : 'layers');
         return;
@@ -893,6 +937,28 @@
       current = parent;
     }
     return current;
+  }
+
+  function deepSelectableElement(point: { x: number; y: number }, hit: DesignElement): DesignElement {
+    const depth = (element: DesignElement): number => {
+      let count = 0;
+      let parentId = element.parentId;
+      while (parentId) {
+        count += 1;
+        parentId = pageElements.find((candidate) => candidate.id === parentId)?.parentId ?? null;
+      }
+      return count;
+    };
+    const candidates = pageElements
+      .filter((element) => element.visible && !element.locked && point.x >= element.x && point.x <= element.x + element.width && point.y >= element.y && point.y <= element.y + element.height)
+      .sort((left, right) => depth(right) - depth(left) || right.order - left.order || right.id.localeCompare(left.id));
+    if (!candidates.some((element) => element.id === hit.id)) candidates.unshift(hit);
+    const key = `${Math.round(point.x / 4)}:${Math.round(point.y / 4)}`;
+    const ids = candidates.map((element) => element.id);
+    const sameStack = lastDeepPick && lastDeepPick.key === key && Date.now() - lastDeepPick.at < 1_200 && lastDeepPick.ids.join(':') === ids.join(':');
+    const index = sameStack ? (lastDeepPick!.index + 1) % candidates.length : Math.max(0, candidates.findIndex((element) => element.id === hit.id));
+    lastDeepPick = { key, ids, index, at: Date.now() };
+    return candidates[index] ?? hit;
   }
 
   function startSelectionMarquee(event: PointerEvent, kind: 'layers' | 'points') {
@@ -1002,6 +1068,10 @@
       const snappedDeltaY = snapped.y - start.get(anchor.id)!.y;
       snapLinesX = snapped.linesX;
       snapLinesY = snapped.linesY;
+      snapLabels = [
+        ...(snapped.linesX.length ? [{ x: snapped.linesX[0], y: snapped.y - 10 / zoom, value: `x ${Math.round(snapped.x)}` }] : []),
+        ...(snapped.linesY.length ? [{ x: snapped.x + anchor.width + 10 / zoom, y: snapped.linesY[0], value: `y ${Math.round(snapped.y)}` }] : []),
+      ];
       document = {
         ...document,
         elements: document.elements.map((item) => {
@@ -1015,6 +1085,7 @@
       window.removeEventListener('pointerup', up);
       snapLinesX = [];
       snapLinesY = [];
+      snapLabels = [];
       const operations: DesignOperation[] = [];
       const inverse: DesignOperation[] = [];
       for (const element of moving) {
@@ -1204,6 +1275,75 @@
         inverse.push({ kind: 'update', elementId: child.id, changes: Object.fromEntries(Object.keys(childChanges).map((key) => [key, child[key as keyof DesignElement]])) as Partial<DesignElement> });
       }
       await apply(operations, m['design.operation_resize']({ name: original.name }), { inverse });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  function startRotate(event: PointerEvent) {
+    if (!selected || selected.locked || !document) return;
+    const childIds = descendantIds([selected.id]);
+    const childSnapshots = pageElements
+      .filter((element) => element.id !== selected.id && childIds.has(element.id))
+      .map(pathSnapshot);
+    const childMap = new Map(childSnapshots.map((element) => [element.id, element]));
+    if (childSnapshots.some((element) => element.locked)) {
+      toast.error(m['design.transform_locked']());
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const original = pathSnapshot(selected);
+    const center = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
+    const pointerId = event.pointerId;
+    const startPoint = pagePoint(event);
+    const startAngle = Math.atan2(startPoint.y - center.y, startPoint.x - center.x) * 180 / Math.PI;
+    let rotation = original.rotation;
+    let rotationDelta = 0;
+    const normalize = (value: number) => ((value + 180) % 360 + 360) % 360 - 180;
+    const move = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId || !document) return;
+      const point = pagePoint(moveEvent);
+      const angle = Math.atan2(point.y - center.y, point.x - center.x) * 180 / Math.PI;
+      rotationDelta = normalize(angle - startAngle);
+      rotation = normalize(original.rotation + rotationDelta);
+      if (moveEvent.shiftKey) {
+        rotation = Math.round(rotation / 15) * 15;
+        rotationDelta = normalize(rotation - original.rotation);
+      }
+      const radians = rotationDelta * Math.PI / 180;
+      const cosine = Math.cos(radians);
+      const sine = Math.sin(radians);
+      document = {
+        ...document,
+        elements: document.elements.map((element) => {
+          if (element.id === original.id) return { ...element, rotation };
+          const child = childMap.get(element.id);
+          if (!child) return element;
+          const childCenterX = child.x + child.width / 2;
+          const childCenterY = child.y + child.height / 2;
+          const offsetX = childCenterX - center.x;
+          const offsetY = childCenterY - center.y;
+          return {
+            ...element,
+            x: center.x + offsetX * cosine - offsetY * sine - child.width / 2,
+            y: center.y + offsetX * sine + offsetY * cosine - child.height / 2,
+            rotation: normalize(child.rotation + rotationDelta),
+          };
+        }),
+      };
+    };
+    const up = async (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (rotation === original.rotation) return;
+      const transformed = document?.elements.filter((element) => element.id === original.id || childSnapshots.some((child) => child.id === element.id)) ?? [];
+      await apply(transformed.map((element) => ({ kind: 'update', elementId: element.id, changes: { x: element.x, y: element.y, rotation: element.rotation } })), m['design.operation_rotate']({ name: original.name }), {
+        inverse: [original, ...childSnapshots].map((element) => ({ kind: 'update', elementId: element.id, changes: { x: element.x, y: element.y, rotation: element.rotation } })),
+      });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -1538,49 +1678,28 @@
     });
   }
 
-  async function alignSelection(mode: AlignMode) {
-    const elements = selectedElements.filter((element) => !element.locked);
-    if (elements.length < 2) return;
-    const left = Math.min(...elements.map((element) => element.x));
-    const right = Math.max(...elements.map((element) => element.x + element.width));
-    const top = Math.min(...elements.map((element) => element.y));
-    const bottom = Math.max(...elements.map((element) => element.y + element.height));
-    const changes = new Map<string, Partial<DesignElement>>();
-    if (mode === 'distribute-x' && elements.length >= 3) {
-      const ordered = [...elements].sort((a, b) => a.x - b.x);
-      const totalWidth = ordered.reduce((total, element) => total + element.width, 0);
-      const gap = (right - left - totalWidth) / (ordered.length - 1);
-      let x = left;
-      for (const element of ordered) {
-        changes.set(element.id, { x });
-        x += element.width + gap;
-      }
-    } else if (mode === 'distribute-y' && elements.length >= 3) {
-      const ordered = [...elements].sort((a, b) => a.y - b.y);
-      const totalHeight = ordered.reduce((total, element) => total + element.height, 0);
-      const gap = (bottom - top - totalHeight) / (ordered.length - 1);
-      let y = top;
-      for (const element of ordered) {
-        changes.set(element.id, { y });
-        y += element.height + gap;
-      }
-    } else for (const element of elements) {
-      if (mode === 'left') changes.set(element.id, { x: left });
-      else if (mode === 'hcenter') changes.set(element.id, { x: left + (right - left - element.width) / 2 });
-      else if (mode === 'right') changes.set(element.id, { x: right - element.width });
-      else if (mode === 'top') changes.set(element.id, { y: top });
-      else if (mode === 'vcenter') changes.set(element.id, { y: top + (bottom - top - element.height) / 2 });
-      else if (mode === 'bottom') changes.set(element.id, { y: bottom - element.height });
+  async function alignSelection(mode: DesignArrangeMode) {
+    if (!page) return;
+    const selectedSet = new Set(selectedIds);
+    const roots = selectedElements.filter((element) => !element.locked && !ancestorSelected(element, selectedSet));
+    if (roots.length < 2 || ((mode === 'distribute-x' || mode === 'distribute-y') && roots.length < 3)) return;
+    const affectedIds = descendantIds(roots.map((root) => root.id));
+    const affected = pageElements.filter((element) => affectedIds.has(element.id));
+    if (affected.some((element) => element.locked)) {
+      toast.error(m['design.arrange_locked']());
+      return;
     }
-    const operations: DesignOperation[] = [];
-    const inverse: DesignOperation[] = [];
-    for (const element of elements) {
-      const elementChanges = changes.get(element.id);
-      if (!elementChanges) continue;
-      operations.push({ kind: 'update', elementId: element.id, changes: elementChanges });
-      inverse.push({ kind: 'update', elementId: element.id, changes: Object.fromEntries(Object.keys(elementChanges).map((key) => [key, element[key as keyof DesignElement]])) as Partial<DesignElement> });
-    }
-    await apply(operations, m['design.operation_align']({ count: String(elements.length) }), { inverse });
+    await apply([{
+      kind: 'arrange-elements',
+      pageId: page.id,
+      elementIds: roots.map((element) => element.id),
+      mode,
+      spacing: 16,
+    }], mode === 'tidy'
+      ? m['design.operation_tidy']({ count: String(roots.length) })
+      : m['design.operation_align']({ count: String(roots.length) }), {
+      inverse: affected.map((element) => ({ kind: 'update', elementId: element.id, changes: { x: element.x, y: element.y } })),
+    });
   }
 
   type PaintRole = 'fill' | 'stroke';
@@ -2768,6 +2887,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 
   function keyboard(event: KeyboardEvent) {
     if (!editorRoot?.contains(globalThis.document?.activeElement ?? null)) return;
+    if (event.key === 'Alt') altPressed = true;
     if (eventTargetMatches(event.target, 'input, textarea, [contenteditable="true"]')) return;
     if (event.code === 'Space') {
       event.preventDefault();
@@ -2896,11 +3016,13 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 
   function keyboardUp(event: KeyboardEvent) {
     if (event.code === 'Space') spacePressed = false;
+    if (event.key === 'Alt') altPressed = false;
   }
 
   function resetTransientInput() {
     spacePressed = false;
     panning = false;
+    altPressed = false;
   }
 
   onMount(() => {
@@ -3059,6 +3181,8 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
           <DropdownMenu.Separator />
           <DropdownMenu.Item disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-x')}><AlignHorizontalDistributeCenter size={14} />{m['design.distribute_horizontal']()}</DropdownMenu.Item>
           <DropdownMenu.Item disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={14} />{m['design.distribute_vertical']()}</DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void alignSelection('tidy')}><LayoutGrid size={14} />{m['design.tidy_up']()}</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
 
@@ -3215,6 +3339,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             <span class="h-5 w-px bg-[var(--app-border)]"></span>
             <DesignToolbarButton label={m['design.distribute_horizontal']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-x')}><AlignHorizontalDistributeCenter size={15} /></DesignToolbarButton>
             <DesignToolbarButton label={m['design.distribute_vertical']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.tidy_up']()} onclick={() => void alignSelection('tidy')}><LayoutGrid size={15} /></DesignToolbarButton>
             <span class="h-5 w-px bg-[var(--app-border)]"></span>
             <DesignToolbarButton label={m['design.group_selection']()} onclick={() => void groupSelection()}><Group size={15} /></DesignToolbarButton>
           </div>
@@ -3235,13 +3360,13 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             style:background="transparent"
             onpointerdown={canvasPointerDown}
             onpointermove={trackPresence}
-            onpointerleave={() => { cursorPoint = null; if (tool === 'path') penPointer = null; void syncCollaboration(true); }}
+            onpointerleave={() => { cursorPoint = null; hoveredElementId = null; if (tool === 'path') penPointer = null; void syncCollaboration(true); }}
             ondblclick={canvasDoubleClick}
             role="application"
             aria-label={page.name}
           >
             <rect data-design-ui x="0" y="0" width={page.width} height={page.height} fill={page.background} pointer-events="none" />
-            <DesignRenderer elements={viewportRenderedElements} assets={document.assets} {workspaceId} selectedIds={rendererSelectionIds} showFrameLabels />
+            <DesignRenderer elements={viewportRenderedElements} assets={document.assets} {workspaceId} selectedIds={rendererSelectionIds} hoveredId={hoveredElementId} showFrameLabels />
             {#each (collaboration?.presences ?? []).filter((presence) => presence.participant.id !== participant.id && presence.pageId === page.id) as presence (presence.participant.id)}
               <g data-design-ui pointer-events="none">
                 {#each presence.elementIds as elementId}
@@ -3270,8 +3395,41 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             {/each}
             {#each snapLinesX as line}<line data-design-snap x1={line} x2={line} y1="0" y2={page.height} stroke="#2563eb" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />{/each}
             {#each snapLinesY as line}<line data-design-snap y1={line} y2={line} x1="0" x2={page.width} stroke="#2563eb" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />{/each}
+            {#each snapLabels as label}
+              <g data-design-snap-label data-design-ui pointer-events="none" transform={`translate(${label.x} ${label.y})`}>
+                <rect x={-22 / zoom} y={-9 / zoom} width={44 / zoom} height={18 / zoom} rx={4 / zoom} fill="#2563eb" />
+                <text x="0" y={3 / zoom} text-anchor="middle" fill="#ffffff" font-size={9 / zoom} font-weight="600">{label.value}</text>
+              </g>
+            {/each}
+            {#each measurementLines as line}
+              {@const labelX = (line.x1 + line.x2) / 2}
+              {@const labelY = (line.y1 + line.y2) / 2}
+              <g data-design-measurement data-design-ui pointer-events="none">
+                <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="#e11d48" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" />
+                <circle cx={line.x1} cy={line.y1} r={2 / zoom} fill="#e11d48" />
+                <circle cx={line.x2} cy={line.y2} r={2 / zoom} fill="#e11d48" />
+                <rect x={labelX - 18 / zoom} y={labelY - 9 / zoom} width={36 / zoom} height={18 / zoom} rx={4 / zoom} fill="#e11d48" />
+                <text x={labelX} y={labelY + 3 / zoom} text-anchor="middle" fill="#ffffff" font-size={9 / zoom} font-weight="700">{line.value}</text>
+              </g>
+            {/each}
             {#if selected && !vectorEditing && !selected.locked}
               <g data-design-resize data-design-ui transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
+                <line x1={selected.x + selected.width / 2} y1={selected.y} x2={selected.x + selected.width / 2} y2={selected.y - 24 / zoom} stroke="#2563eb" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                <circle
+                  cx={selected.x + selected.width / 2}
+                  cy={selected.y - 28 / zoom}
+                  r={7 / zoom}
+                  fill="#ffffff"
+                  stroke="#2563eb"
+                  stroke-width={1.5 / zoom}
+                  vector-effect="non-scaling-stroke"
+                  class="cursor-grab active:cursor-grabbing"
+                  role="button"
+                  aria-label={m['design.rotate_handle']()}
+                  tabindex="0"
+                  onpointerdown={startRotate}
+                />
+                <RotateCw x={selected.x + selected.width / 2 - 4 / zoom} y={selected.y - 32 / zoom} size={8 / zoom} color="#2563eb" strokeWidth={2.2} pointer-events="none" />
                 {#each resizeHandles as handle}
                   {@const position = resizeHandlePosition(selected, handle)}
                   <rect
@@ -3524,6 +3682,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <Button variant="outline" size="icon-sm" title={m['design.align_vertical_center']()} aria-label={m['design.align_vertical_center']()} onclick={() => void alignSelection('vcenter')}><AlignVerticalJustifyCenter size={14} /></Button>
               <Button variant="outline" size="icon-sm" title={m['design.align_bottom']()} aria-label={m['design.align_bottom']()} onclick={() => void alignSelection('bottom')}><AlignVerticalJustifyEnd size={14} /></Button>
               <Button variant="outline" size="icon-sm" title={m['design.distribute_vertical']()} aria-label={m['design.distribute_vertical']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={14} /></Button>
+              <Button variant="outline" size="icon-sm" title={m['design.tidy_up']()} aria-label={m['design.tidy_up']()} onclick={() => void alignSelection('tidy')}><LayoutGrid size={14} /></Button>
             </div>
           </section>
           <section class="space-y-2">

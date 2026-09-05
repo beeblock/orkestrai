@@ -272,6 +272,10 @@ common credentials redacted; normal agent output is not persisted.
   Organize large files with first-class pages and a searchable, collapsible
   hierarchy; rename, reorder, reparent, copy, cut, paste, and duplicate through
   the same revisioned command bus used by the UI, CLI, and connected agents.
+  Hover layers before selecting them, Command/Ctrl-click through nested or
+  overlapping artwork, rotate directly with 15-degree snapping, inspect spacing
+  with Alt/Option, follow labeled smart guides, and align, distribute, or tidy
+  complete hierarchies without detaching their children.
   Raster images remain reusable
   assets, while full documents export to SVG, PNG, JPEG, WebP, or PDF. A designer or leader
   can edit the exact same revision through typed Orkestrai tools while the UI

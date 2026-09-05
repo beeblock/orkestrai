@@ -141,6 +141,8 @@ const EXPECTED: Record<string, Expectation> = {
   design_generate_code_apply: { method: 'POST', path: /\/bridge\/designs\/n1\/delivery\/apply$/, schema: bridgeApplyDesignDeliverySchema },
   design_create_element: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_update_element: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
+  design_arrange_elements: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
+  design_edit_vector: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_delete_element: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   task_list: { method: 'GET', path: /\/bridge\/tasks$/ },
   task_add: { method: 'POST', path: /\/bridge\/tasks$/, schema: bridgeBoardTaskSchema },
@@ -356,6 +358,21 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
     changes: { x: 48 },
     taskId: '00000000-0000-7000-8000-000000000003',
   },
+  design_arrange_elements: {
+    nodeId: 'n1',
+    baseRevision: 2,
+    pageId: '00000000-0000-7000-8000-000000000001',
+    elementIds: ['00000000-0000-7000-8000-000000000002', '00000000-0000-7000-8000-000000000004'],
+    mode: 'tidy',
+    spacing: 24,
+  },
+  design_edit_vector: {
+    nodeId: 'n1',
+    baseRevision: 3,
+    elementId: '00000000-0000-7000-8000-000000000002',
+    pathPoints: [{ x: 0, y: 0 }, { x: 100, y: 80, mode: 'mirrored' }],
+    pathClosed: false,
+  },
   design_delete_element: {
     nodeId: 'n1',
     baseRevision: 2,
@@ -384,6 +401,8 @@ describe('contrato MCP x bridge (todas as tools)', () => {
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('elements');
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('pages');
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('concept');
+    expect(referenceTool.inputSchema.properties.topic.enum).toContain('selection');
+    expect(referenceTool.inputSchema.properties.topic.enum).toContain('vectors');
     expect(elementBatchTool.inputSchema.properties.elements.items.required).toEqual(['type', 'name', 'x', 'y', 'width', 'height']);
     expect(blueprintTool.inputSchema.properties.variables.items.required).toContain('values');
 

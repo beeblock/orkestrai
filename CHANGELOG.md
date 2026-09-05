@@ -27,6 +27,11 @@ pt-BR, English, and Spanish translations.
 - Native layer copy, cut, paste, and duplicate preserve complete descendant
   hierarchies and work through familiar Command/Ctrl shortcuts. Page actions
   use the same revisioned command bus through the UI, API, MCP, and CLI.
+- Design selection now provides layer hover outlines, Command/Ctrl deep
+  selection with overlap cycling, direct rotation with 15-degree snapping,
+  Alt/Option distance measurements, coordinate labels on smart guides, and a
+  deterministic Tidy Up command that moves complete hierarchies. Arrangement
+  and vector geometry are also available through typed MCP and CLI commands.
 
 ### Fixed
 
@@ -36,6 +41,9 @@ pt-BR, English, and Spanish translations.
 - Deleting a Design page now removes dependent prototypes, interactions,
   comments, motion tracks, Figma mappings, and generated-code references
   transactionally instead of leaving stale document state.
+- Alt/Option is no longer overloaded for nested-layer selection, so it can
+  consistently expose visual spacing measurements while Command/Ctrl performs
+  deep selection as expected by professional design tools.
 
 ## 0.25.0 - 2026-09-05
 

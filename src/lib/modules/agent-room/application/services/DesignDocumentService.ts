@@ -20,6 +20,7 @@ import type { ApplyDesignOperationsDto } from '../dto/DesignDtos.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { isDesignExplorationPayload } from '../../domain/design-exploration.js';
 import { resolveDesignVariableValue } from '../../domain/design-variables.js';
+import { arrangeDesignElements } from '../../domain/design-arrangement.js';
 import { designCollaborationService } from './DesignCollaborationService.js';
 import { workspacePathService } from './WorkspacePathService.js';
 
@@ -774,6 +775,26 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
         }
       }
       next.elements[index] = { ...next.elements[index], ...operation.changes };
+      continue;
+    }
+    if (operation.kind === 'arrange-elements') {
+      const changes = arrangeDesignElements(next.elements, operation.pageId, operation.elementIds, operation.mode, operation.spacing);
+      const changedById = new Map(changes.map((change) => [change.elementId, change]));
+      const updates = changes.flatMap((change): DesignOperation[] => {
+        const element = next.elements.find((candidate) => candidate.id === change.elementId);
+        if (!element) return [];
+        if (element.instanceRootId && element.instanceRootId !== element.id) {
+          const instanceRoot = next.elements.find((candidate) => candidate.id === element.instanceRootId);
+          const rootChange = changedById.get(element.instanceRootId);
+          if (instanceRoot && rootChange
+            && change.x - element.x === rootChange.x - instanceRoot.x
+            && change.y - element.y === rootChange.y - instanceRoot.y) {
+            return [];
+          }
+        }
+        return [{ kind: 'update', elementId: change.elementId, changes: { x: change.x, y: change.y } }];
+      });
+      next = applyDesignOperations(next, updates, now);
       continue;
     }
     if (operation.kind === 'delete') {

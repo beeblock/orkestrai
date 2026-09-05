@@ -100,6 +100,19 @@ describe('Design components', () => {
     expect(label.fontSize).toBe(20);
   });
 
+  it('moves component instances without creating redundant child overrides', () => {
+    const current = applyDesignOperations(seeded(), [
+      { kind: 'create-component-instance', componentId: COMPONENT_ID, instanceId: INSTANCE_ID, pageId: PAGE_ID, parentId: null, x: 500, y: 100 },
+      { kind: 'arrange-elements', pageId: PAGE_ID, elementIds: [INSTANCE_ID, EXTERNAL_ID], mode: 'left', spacing: 16 },
+    ], NOW);
+    const root = current.elements.find((element) => element.id === INSTANCE_ID)!;
+    const label = current.elements.find((element) => element.instanceRootId === INSTANCE_ID && element.instanceSourceId === TEXT_ID)!;
+
+    expect(root.x).toBe(320);
+    expect(root.instanceOverrides).toEqual({});
+    expect(label.x).toBe(344);
+  });
+
   it('remapeia componentes e overrides ao duplicar uma página', () => {
     let current = applyDesignOperations(seeded(), [{ kind: 'create-component-instance', componentId: COMPONENT_ID, instanceId: INSTANCE_ID, pageId: PAGE_ID, parentId: null, x: 500, y: 100 }], NOW);
     const labelId = current.elements.find((element) => element.instanceRootId === INSTANCE_ID && element.instanceSourceId === TEXT_ID)!.id;
