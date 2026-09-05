@@ -495,6 +495,11 @@ export const TOURS_PT: Tour[] = [
         action: { kind: 'openDesign', title: 'Design de Interface' },
       },
       {
+        id: 'workspace',
+        title: 'Organize um workspace que não atrapalha',
+        body: 'O modo focado expande este mesmo node Design sem criar outro editor ou documento. Recolha Layers, Assets e Propriedades separadamente, use a barra de ferramentas inferior estável, aplique zoom ao redor do ponteiro com Command/Ctrl + roda e ajuste todo o conteúdo, a seleção atual ou a página em 100%. Voltar ao Canvas preserva revisão, seleção, ferramenta ativa, câmera, zoom e estado dos painéis.',
+      },
+      {
         id: 'compose',
         title: 'Componha interfaces vetoriais responsivas',
         body: 'Selecione pontos vetoriais por caixa e transforme-os juntos, redimensione qualquer camada pelas oito alças e edite texto multilinha diretamente no canvas. Use Shift para alinhar, distribuir, combinar, mascarar ou agrupar camadas; mova e redimensione descendentes do grupo juntos, selecione uma camada interna com Alt e encontre, selecione ou substitua cores iguais de preenchimento e contorno na página.',

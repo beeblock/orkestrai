@@ -117,6 +117,14 @@
   import DesignToolbarButton from './DesignToolbarButton.svelte';
   import DesignVariableBindings from './DesignVariableBindings.svelte';
   import DesignVariablesPanel from './DesignVariablesPanel.svelte';
+  import {
+    readDesignEditorSession,
+    writeDesignEditorSession,
+    type DesignEditorLeftPanel,
+    type DesignEditorRightPanel,
+    type DesignEditorSession,
+    type DesignEditorTool,
+  } from './design-editor-session.js';
 
   let {
     workspaceId,
@@ -130,7 +138,7 @@
     class?: string;
   } = $props();
 
-  type Tool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'text' | 'path';
+  type Tool = DesignEditorTool;
   type ShapeTool = Exclude<Tool, 'select' | 'hand' | 'path'>;
   type HistoryEntry = { forward: DesignOperation[]; inverse: DesignOperation[]; summary: string };
   type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'distribute-x' | 'distribute-y';
@@ -175,8 +183,13 @@
   let snapLinesY = $state<number[]>([]);
   let exporting = $state(false);
   let colorMenuOpen = $state(false);
-  let leftPanel = $state<'layers' | 'variables' | 'components'>('layers');
-  let rightPanel = $state<'design' | 'prototype' | 'collaboration' | 'quality'>('design');
+  let leftPanel = $state<DesignEditorLeftPanel>('layers');
+  let rightPanel = $state<DesignEditorRightPanel>('design');
+  let leftPanelVisible = $state(true);
+  let rightPanelVisible = $state(true);
+  let editorWidth = $state(0);
+  let sessionReady = false;
+  let sessionWriteTimer: ReturnType<typeof setTimeout> | null = null;
   let prototypeOpen = $state(false);
   let prototypeFlowId = $state<string | null>(null);
   let thumbnailRevision = $state(-1);
@@ -261,6 +274,10 @@
     : 0);
   const rulerXTicks = $derived(sceneBounds ? rulerTicks(sceneBounds.x, sceneBounds.x + sceneBounds.width) : []);
   const rulerYTicks = $derived(sceneBounds ? rulerTicks(sceneBounds.y, sceneBounds.y + sceneBounds.height) : []);
+  const panelsOverlay = $derived(editorWidth > 0 && editorWidth < 980);
+  const editorGridColumns = $derived(panelsOverlay
+    ? '0 minmax(0,1fr) 0'
+    : `${leftPanelVisible ? '240px' : '0'} minmax(0,1fr) ${rightPanelVisible ? '288px' : '0'}`);
 
   function uuidv7(): string {
     const timestamp = Date.now().toString(16).padStart(12, '0');
@@ -434,7 +451,7 @@
       if (!viewport || moveEvent.pointerId !== pointerId) return;
       viewport.scrollLeft = startLeft - (moveEvent.clientX - startX);
       viewport.scrollTop = startTop - (moveEvent.clientY - startY);
-      updateViewportBounds();
+      handleViewportScroll();
     };
     const finish = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
@@ -446,6 +463,53 @@
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', finish);
     window.addEventListener('pointercancel', finish);
+  }
+
+  function editorSession(): DesignEditorSession | null {
+    if (!viewport) return null;
+    return {
+      zoom,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+      selectedIds,
+      tool,
+      leftPanel,
+      rightPanel,
+      leftPanelVisible,
+      rightPanelVisible,
+    };
+  }
+
+  function persistEditorSession(): void {
+    const session = editorSession();
+    if (!session || typeof localStorage === 'undefined') return;
+    writeDesignEditorSession(localStorage, workspaceId, nodeId, session);
+  }
+
+  function scheduleEditorSessionWrite(): void {
+    if (!sessionReady) return;
+    if (sessionWriteTimer) clearTimeout(sessionWriteTimer);
+    sessionWriteTimer = setTimeout(() => {
+      sessionWriteTimer = null;
+      persistEditorSession();
+    }, 120);
+  }
+
+  function handleViewportScroll(): void {
+    updateViewportBounds();
+    scheduleEditorSessionWrite();
+  }
+
+  function toggleLeftPanel(): void {
+    const next = !leftPanelVisible;
+    leftPanelVisible = next;
+    if (next && panelsOverlay) rightPanelVisible = false;
+  }
+
+  function toggleRightPanel(): void {
+    const next = !rightPanelVisible;
+    rightPanelVisible = next;
+    if (next && panelsOverlay) leftPanelVisible = false;
   }
 
   function participantColor(id: string): string {
@@ -2462,11 +2526,43 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     });
   }
 
-  async function fitPage() {
-    if (!viewport || !contentBounds) return;
+  async function zoomAt(nextZoom: number, clientX?: number, clientY?: number): Promise<void> {
+    if (!viewport || !pageSvg || !sceneBounds) {
+      zoom = Math.max(0.02, Math.min(3, nextZoom));
+      return;
+    }
+    const before = pageSvg.getBoundingClientRect();
+    if (before.width <= 0 || before.height <= 0) {
+      zoom = Math.max(0.02, Math.min(3, nextZoom));
+      return;
+    }
+    const anchorX = clientX ?? viewport.getBoundingClientRect().left + viewport.clientWidth / 2;
+    const anchorY = clientY ?? viewport.getBoundingClientRect().top + viewport.clientHeight / 2;
+    const sceneX = sceneBounds.x + (anchorX - before.left) * sceneBounds.width / before.width;
+    const sceneY = sceneBounds.y + (anchorY - before.top) * sceneBounds.height / before.height;
+    zoom = Math.max(0.02, Math.min(3, nextZoom));
+    await tick();
+    if (!viewport || !pageSvg || !sceneBounds) return;
+    const after = pageSvg.getBoundingClientRect();
+    const projectedX = after.left + (sceneX - sceneBounds.x) * after.width / sceneBounds.width;
+    const projectedY = after.top + (sceneY - sceneBounds.y) * after.height / sceneBounds.height;
+    viewport.scrollLeft += projectedX - anchorX;
+    viewport.scrollTop += projectedY - anchorY;
+    handleViewportScroll();
+  }
+
+  function handleViewportWheel(event: WheelEvent): void {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const factor = Math.exp(-event.deltaY * 0.002);
+    void zoomAt(zoom * factor, event.clientX, event.clientY);
+  }
+
+  async function fitBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void> {
+    if (!viewport) return;
     zoom = Math.max(0.02, Math.min(1.5, Math.min(
-      (viewport.clientWidth - 96) / contentBounds.width,
-      (viewport.clientHeight - 96) / contentBounds.height,
+      (viewport.clientWidth - 96) / bounds.width,
+      (viewport.clientHeight - 96) / bounds.height,
     )));
     await tick();
     if (!viewport || !pageSvg || !sceneBounds) return;
@@ -2475,10 +2571,20 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     const canvasLeft = canvas.left - container.left + viewport.scrollLeft;
     const canvasTop = canvas.top - container.top + viewport.scrollTop;
     viewport.scrollTo({
-      left: canvasLeft + (contentBounds.x + contentBounds.width / 2 - sceneBounds.x) * zoom - viewport.clientWidth / 2,
-      top: canvasTop + (contentBounds.y + contentBounds.height / 2 - sceneBounds.y) * zoom - viewport.clientHeight / 2,
+      left: canvasLeft + (bounds.x + bounds.width / 2 - sceneBounds.x) * zoom - viewport.clientWidth / 2,
+      top: canvasTop + (bounds.y + bounds.height / 2 - sceneBounds.y) * zoom - viewport.clientHeight / 2,
     });
-    updateViewportBounds();
+    handleViewportScroll();
+  }
+
+  async function fitPage() {
+    if (!contentBounds) return;
+    await fitBounds(contentBounds);
+  }
+
+  async function fitSelection(): Promise<void> {
+    if (!page || !selectedElements.length) return;
+    await fitBounds(designContentBounds(selectedElements, page));
   }
 
   function updateViewportBounds() {
@@ -2617,18 +2723,46 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
   }
 
   onMount(() => {
+    const restoredSession = readDesignEditorSession(localStorage, workspaceId, nodeId);
+    if (restoredSession) {
+      zoom = restoredSession.zoom;
+      tool = restoredSession.tool;
+      leftPanel = restoredSession.leftPanel;
+      rightPanel = restoredSession.rightPanel;
+      leftPanelVisible = restoredSession.leftPanelVisible;
+      rightPanelVisible = restoredSession.rightPanelVisible;
+    }
     const storageKey = 'orkestrai.design.collaboration.participant';
     const storedId = sessionStorage.getItem(storageKey);
     const id = storedId && storedId.length >= 8 ? storedId : participant.id;
     sessionStorage.setItem(storageKey, id);
     participant = { ...participant, id, color: participantColor(id) };
-    const resizeObserver = new ResizeObserver(() => updateViewportBounds());
+    const resizeObserver = new ResizeObserver(() => {
+      const previousWidth = editorWidth;
+      editorWidth = editorRoot?.clientWidth ?? 0;
+      if (editorWidth < 980 && (previousWidth === 0 || previousWidth >= 980)) {
+        if (!restoredSession && previousWidth === 0) {
+          leftPanelVisible = false;
+          rightPanelVisible = false;
+        } else if (leftPanelVisible && rightPanelVisible) {
+          rightPanelVisible = false;
+        }
+      }
+      updateViewportBounds();
+    });
+    if (editorRoot) resizeObserver.observe(editorRoot);
     if (viewport) resizeObserver.observe(viewport);
     void load().then(async () => {
       await tick();
-      await fitPage();
+      if (restoredSession && viewport) {
+        selectedIds = restoredSession.selectedIds.filter((id) => document?.elements.some((element) => element.id === id));
+        viewport.scrollTo({ left: restoredSession.scrollLeft, top: restoredSession.scrollTop });
+      } else {
+        await fitPage();
+      }
       await tick();
       updateViewportBounds();
+      sessionReady = true;
       void syncCollaboration();
     });
     collaborationTimer = setInterval(() => void syncCollaboration(true), 3_000);
@@ -2641,6 +2775,8 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       window.removeEventListener('keyup', keyboardUp, { capture: true });
       window.removeEventListener('blur', resetTransientInput);
       window.removeEventListener('paste', handlePaste);
+      persistEditorSession();
+      if (sessionWriteTimer) clearTimeout(sessionWriteTimer);
       resizeObserver.disconnect();
       cancelDrawing?.();
       if (thumbnailTimer) clearTimeout(thumbnailTimer);
@@ -2659,6 +2795,17 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     const revision = externalRevision;
     if (!revision || saving || loading || !document || revision <= document.revision) return;
     void load(true);
+  });
+
+  $effect(() => {
+    zoom;
+    selectedIds;
+    tool;
+    leftPanel;
+    rightPanel;
+    leftPanelVisible;
+    rightPanelVisible;
+    scheduleEditorSessionWrite();
   });
 
   $effect(() => {
@@ -2686,35 +2833,16 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 <div class={`@container/design h-full min-h-0 ${className}`}>
   <div
     bind:this={editorRoot}
-    class="grid h-full min-h-0 grid-cols-[210px_minmax(0,1fr)_300px] grid-rows-[42px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)] @max-[660px]:grid-cols-[1fr]"
+    class="relative grid h-full min-h-0 grid-rows-[42px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]"
+    style:grid-template-columns={editorGridColumns}
+    data-testid="design-editor"
     aria-label={m['design.mode_aria']()}
     tabindex="-1"
     onpointerdowncapture={focusEditor}
   >
-    <header class="col-span-3 flex min-w-0 items-center gap-1 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2 @max-[660px]:col-span-1">
-      {#each [
-        { id: 'select' as const, icon: MousePointer2, shortcut: 'V' },
-        { id: 'hand' as const, icon: Hand, shortcut: 'H' },
-        { id: 'frame' as const, icon: Frame, shortcut: 'F' },
-        { id: 'rectangle' as const, icon: RectangleHorizontal, shortcut: 'R' },
-        { id: 'ellipse' as const, icon: Circle, shortcut: 'O' },
-        { id: 'text' as const, icon: Type, shortcut: 'T' },
-        { id: 'path' as const, icon: PenTool, shortcut: 'P' },
-      ] as item (item.id)}
-        <DesignToolbarButton
-          label={toolLabel(item.id)}
-          hint={item.id === 'path'
-            ? `${item.shortcut} · ${m['design.pen_hint']()}`
-            : item.id === 'hand'
-              ? `${item.shortcut} · ${m['design.pan_hint']()}`
-              : item.shortcut}
-          active={tool === item.id}
-          pressed={tool === item.id}
-          onclick={() => switchTool(item.id)}
-        >
-          <item.icon size={16} />
-        </DesignToolbarButton>
-      {/each}
+    <header class="col-span-3 flex min-w-0 items-center gap-1 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2" data-testid="design-toolbar">
+      <DesignToolbarButton label={leftPanelVisible ? m['design.hide_left_panel']() : m['design.show_left_panel']()} active={leftPanelVisible} pressed={leftPanelVisible} onclick={toggleLeftPanel}><Layers3 size={16} /></DesignToolbarButton>
+      <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]"></span>
       <DesignToolbarButton label={m['design.import_artwork']()} onclick={() => assetInput?.click()}><ImagePlus size={16} /></DesignToolbarButton>
       <input bind:this={assetInput} class="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" multiple onchange={(event: Event) => void importFiles(Array.from((event.currentTarget as HTMLInputElement).files ?? []))} />
       <span class="mx-1 h-5 w-px bg-[var(--app-border)]"></span>
@@ -2776,10 +2904,17 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 
       <div class="min-w-0 flex-1"></div>
       {#if document}<span class="hidden text-[10px] text-[var(--app-text-muted)] xl:inline">{m['design.revision']({ revision: document.revision })}</span>{/if}
-      <DesignToolbarButton label={m['design.zoom_out']()} onclick={() => (zoom = Math.max(0.02, zoom - 0.1))}><ZoomOut size={16} /></DesignToolbarButton>
+      <DesignToolbarButton label={m['design.zoom_out']()} onclick={() => void zoomAt(zoom - 0.1)}><ZoomOut size={16} /></DesignToolbarButton>
       <span class="w-10 shrink-0 text-center text-[10px] tabular-nums text-[var(--app-text-muted)]">{Math.round(zoom * 100)}%</span>
-      <DesignToolbarButton label={m['design.zoom_in']()} onclick={() => (zoom = Math.min(3, zoom + 0.1))}><ZoomIn size={16} /></DesignToolbarButton>
-      <DesignToolbarButton label={m['design.fit']()} onclick={fitPage}><Maximize2 size={16} /></DesignToolbarButton>
+      <DesignToolbarButton label={m['design.zoom_in']()} onclick={() => void zoomAt(zoom + 0.1)}><ZoomIn size={16} /></DesignToolbarButton>
+      <DropdownMenu.Root>
+        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.fit']()}><Maximize2 size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.fit']()}</Tooltip.Content></Tooltip.Root>
+        <DropdownMenu.Content align="end" class="z-[120] w-48">
+          <DropdownMenu.Item onclick={() => void fitPage()}>{m['design.fit_all']()}</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={!selectedElements.length} onclick={() => void fitSelection()}>{m['design.fit_selection']()}</DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => void zoomAt(1)}>{m['design.zoom_actual_size']()}</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
       <DesignToolbarButton label={m['design.prototype_play']()} disabled={!document?.prototypeFlows.length} onclick={() => openPrototype()}><Play size={16} fill="currentColor" /></DesignToolbarButton>
       <DropdownMenu.Root>
         <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" disabled={exporting} aria-label={m['design.export']()}><Download size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.export']()}</Tooltip.Content></Tooltip.Root>
@@ -2794,9 +2929,19 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
           <DropdownMenu.Item onclick={() => void exportDesign('pdf')}>{m['design.export_pdf']()}</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
+      <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]"></span>
+      <DesignToolbarButton label={rightPanelVisible ? m['design.hide_right_panel']() : m['design.show_right_panel']()} active={rightPanelVisible} pressed={rightPanelVisible} onclick={toggleRightPanel}><SlidersHorizontal size={16} /></DesignToolbarButton>
     </header>
 
-    <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-surface)] @max-[660px]:hidden">
+    {#if panelsOverlay && (leftPanelVisible || rightPanelVisible)}
+      <button class="absolute inset-x-0 top-[42px] bottom-0 z-30 cursor-default bg-black/20 backdrop-blur-[1px]" aria-label={m['design.close_panels']()} onclick={() => { leftPanelVisible = false; rightPanelVisible = false; }}></button>
+    {/if}
+
+    {#if leftPanelVisible}
+    <aside
+      class={`flex min-h-0 flex-col overflow-hidden border-r border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] bottom-0 left-0 z-40 w-[min(320px,calc(100%-48px))] shadow-2xl' : 'col-start-1 row-start-2'}`}
+      data-testid="design-left-panel"
+    >
       <div class="grid grid-cols-3 border-b border-[var(--app-border)] p-1">
         <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-[10px] font-medium ${leftPanel === 'layers' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'layers'} onclick={() => (leftPanel = 'layers')}><Layers3 size={12} />{m['design.layers']()}</button>
         <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-[10px] font-medium ${leftPanel === 'variables' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'variables'} onclick={() => (leftPanel = 'variables')}><Braces size={12} />{m['design.variables']()}</button>
@@ -2839,8 +2984,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         <div class="min-h-0 flex-1"><DesignComponentsPanel {document} {selectedIds} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} onCaptureDesign={captureDesignDataUrl} /></div>
       {/if}
     </aside>
+    {/if}
 
-    <main class={`relative min-h-0 min-w-0 overflow-auto bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} onpointerdowncapture={startViewportPan} onscroll={updateViewportBounds} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
+    <main class={`relative col-start-2 row-start-2 min-h-0 min-w-0 overflow-auto bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} data-testid="design-viewport" onpointerdowncapture={startViewportPan} onscroll={handleViewportScroll} onwheel={handleViewportWheel} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
       {#if errorMessage}
         <div class="grid h-full place-items-center p-8 text-center"><div><p class="text-sm text-[var(--app-danger)]">{errorMessage}</p><Button class="mt-3" variant="outline" size="sm" onclick={() => void load()}>{m['workspace_access.retry']()}</Button></div></div>
       {:else if loading || !document || !page}
@@ -2890,7 +3036,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             width={(sceneBounds?.width ?? page.width) * zoom}
             height={(sceneBounds?.height ?? page.height) * zoom}
             viewBox={`${sceneBounds?.x ?? 0} ${sceneBounds?.y ?? 0} ${sceneBounds?.width ?? page.width} ${sceneBounds?.height ?? page.height}`}
-            style:background={page.background}
+            style:background="transparent"
             onpointerdown={canvasPointerDown}
             onpointermove={trackPresence}
             onpointerleave={() => { cursorPoint = null; if (tool === 'path') penPointer = null; void syncCollaboration(true); }}
@@ -2898,6 +3044,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             role="application"
             aria-label={page.name}
           >
+            <rect data-design-ui x="0" y="0" width={page.width} height={page.height} fill={page.background} pointer-events="none" />
             <DesignRenderer elements={viewportRenderedElements} assets={document.assets} {workspaceId} selectedIds={rendererSelectionIds} showFrameLabels />
             {#each (collaboration?.presences ?? []).filter((presence) => presence.participant.id !== participant.id && presence.pageId === page.id) as presence (presence.participant.id)}
               <g data-design-ui pointer-events="none">
@@ -3051,13 +3198,51 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               </foreignObject>
             {/if}
           </svg>
-          {#if !renderedElements.length}<div class="pointer-events-none absolute inset-0 grid place-items-center p-10 text-center text-xs text-[var(--app-text-muted)]">{m['design.empty']()}</div>{/if}
           {#if tool === 'path' && penPoints.length}<div class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 bg-[var(--app-surface)] px-3 py-1.5 text-[10px] text-[var(--app-text-soft)] shadow-md">{m['design.finish_path']()}</div>{/if}
         </div>
       {/if}
     </main>
 
-    <aside class="flex min-h-0 flex-col border-l border-[var(--app-border)] bg-[var(--app-surface)] @max-[660px]:hidden">
+    <div class="pointer-events-none z-30 col-start-2 row-start-2 flex items-end justify-center p-3" data-testid="design-primary-tools">
+      <div class="pointer-events-auto flex items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-xl">
+        {#each [
+          { id: 'select' as const, icon: MousePointer2, shortcut: 'V' },
+          { id: 'hand' as const, icon: Hand, shortcut: 'H' },
+          { id: 'frame' as const, icon: Frame, shortcut: 'F' },
+          { id: 'rectangle' as const, icon: RectangleHorizontal, shortcut: 'R' },
+          { id: 'ellipse' as const, icon: Circle, shortcut: 'O' },
+          { id: 'text' as const, icon: Type, shortcut: 'T' },
+          { id: 'path' as const, icon: PenTool, shortcut: 'P' },
+        ] as item (item.id)}
+          <DesignToolbarButton
+            label={toolLabel(item.id)}
+            hint={item.id === 'path'
+              ? `${item.shortcut} · ${m['design.pen_hint']()}`
+              : item.id === 'hand'
+                ? `${item.shortcut} · ${m['design.pan_hint']()}`
+                : item.shortcut}
+            active={tool === item.id}
+            pressed={tool === item.id}
+            side="top"
+            onclick={() => switchTool(item.id)}
+          >
+            <item.icon size={16} />
+          </DesignToolbarButton>
+        {/each}
+      </div>
+    </div>
+
+    {#if !loading && document && page && !renderedElements.length}
+      <div class="pointer-events-none z-20 col-start-2 row-start-2 grid place-items-center p-16 text-center">
+        <span class="max-w-sm rounded-md border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-4 py-2 text-xs leading-5 text-[var(--app-text-muted)] shadow-sm">{m['design.empty']()}</span>
+      </div>
+    {/if}
+
+    {#if rightPanelVisible}
+    <aside
+      class={`flex min-h-0 flex-col overflow-hidden border-l border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] right-0 bottom-0 z-40 w-[min(320px,calc(100%-48px))] shadow-2xl' : 'col-start-3 row-start-2'}`}
+      data-testid="design-right-panel"
+    >
       <div class="grid grid-cols-4 gap-1 border-b border-[var(--app-border)] p-1.5">
         <button title={m['design.properties']()} class={`grid h-8 place-items-center rounded ${rightPanel === 'design' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.properties']()} aria-pressed={rightPanel === 'design'} onclick={() => (rightPanel = 'design')}><SlidersHorizontal size={14} /></button>
         <button title={m['design.prototype']()} class={`grid h-8 place-items-center rounded ${rightPanel === 'prototype' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.prototype']()} aria-pressed={rightPanel === 'prototype'} onclick={() => (rightPanel = 'prototype')}><Workflow size={14} /></button>
@@ -3158,6 +3343,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         <div class="min-h-0 flex-1 overflow-y-auto"><div class="space-y-4 p-3"><p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['design.no_selection']()}</p>{#if document?.guides.length}<section class="space-y-2"><h3 class="text-[11px] font-semibold">{m['design.rulers']()}</h3>{#each document.guides as guide}<div class="flex items-center gap-2"><span class="w-4 text-[10px] font-semibold uppercase text-[var(--app-text-muted)]">{guide.axis}</span><Input class="h-7 flex-1" type="number" value={guide.position} onchange={(event: Event) => void apply([{ kind: 'update-guide', guideId: guide.id, position: number(event) }], m['design.operation_guide'](), { inverse: [{ kind: 'update-guide', guideId: guide.id, position: guide.position }] })} /><Button variant="ghost" size="icon-sm" class="size-7" aria-label={m['design.remove_guide']()} onclick={() => void removeGuide(guide.id)}><Trash2 size={11} /></Button></div>{/each}</section>{/if}</div></div>
       {/if}
     </aside>
+    {/if}
   </div>
 </div>
 

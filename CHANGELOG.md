@@ -5,6 +5,28 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.26.0 - Unreleased
+
+### Added
+
+- Native Design focus mode now uses the complete app viewport while preserving
+  the exact Canvas node, document revision, selection, active tool, zoom,
+  camera position, and panel state when returning to the Canvas or reopening
+  the document.
+- Design creation tools now live in a stable bottom toolbar, while document,
+  arrangement, view, prototype, and export actions remain in the compact top
+  bar. Layers, assets, and properties can be collapsed at any size and become
+  dismissible overlays when the editor is narrow.
+- Design zoom can center on the pointer with Command/Ctrl + wheel, frame all
+  content, frame the current selection, or return to 100 percent without
+  confusing the themed canvas surface with the document artboard.
+
+### Fixed
+
+- Opening Design from a normal Canvas node no longer leaves the workspace
+  sidebar consuming the editor width, and compact Workbench panes no longer
+  hide Layers and Properties without a way to reopen them.
+
 ## 0.25.0 - 2026-09-05
 
 ### Added

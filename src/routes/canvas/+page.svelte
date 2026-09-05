@@ -2423,7 +2423,7 @@
 <svelte:window onkeydown={handleGlobalKeydown} oncopy={handleShapeCopy} onpaste={handleShapePaste} />
 
 <main class="canvas-page">
-  <aside class="sidebar">
+  <aside class="sidebar" inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
     {#if !sidebarCollapsed}
       <div class="brand-row">
         <img src="/brand/icon.svg" width="22" height="22" alt="Orkestrai" />
@@ -2691,12 +2691,12 @@
     <SvelteFlowProvider>
     {#if activeWorkspace}
       {#if designModeNodeId}
-        <div class="absolute inset-0 z-[70] flex min-h-0 flex-col bg-[var(--app-canvas)]" data-testid="canvas-design-mode">
-          <header class="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3">
+        <div class="fixed inset-0 z-[100] flex min-h-0 flex-col bg-[var(--app-canvas)]" data-testid="canvas-design-mode" role="dialog" aria-modal="true" aria-label={m['design.focus_mode']()}>
+          <header class="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 shadow-sm">
             <Palette size={15} class="text-[var(--app-secondary)]" />
             <strong class="min-w-0 flex-1 truncate text-xs">{String(nodes.find((item) => item.id === designModeNodeId)?.data?.title ?? m['design.title']())}</strong>
-            <span class="text-[10px] text-[var(--app-text-muted)]">{m['workspace_view.canvas']()} · {m['design.title']()}</span>
-            <HeaderIconButton label={m['onboarding.close']()} onclick={() => (designModeNodeId = null)}><X size={14} /></HeaderIconButton>
+            <span class="hidden text-[10px] text-[var(--app-text-muted)] sm:inline">{m['design.focus_mode']()}</span>
+            <HeaderIconButton label={m['design.back_to_canvas']()} onclick={() => (designModeNodeId = null)}><X size={14} /></HeaderIconButton>
           </header>
           <div class="min-h-0 flex-1">
             <DesignEditor workspaceId={activeWorkspace.id} nodeId={designModeNodeId} externalRevision={designRevisions[designModeNodeId] ?? 0} />

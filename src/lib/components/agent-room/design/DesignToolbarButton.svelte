@@ -9,6 +9,7 @@
     active = false,
     disabled = false,
     pressed,
+    side = 'bottom',
     onclick,
     children,
   }: {
@@ -17,6 +18,7 @@
     active?: boolean;
     disabled?: boolean;
     pressed?: boolean;
+    side?: 'top' | 'right' | 'bottom' | 'left';
     onclick?: (event: MouseEvent) => void;
     children: Snippet;
   } = $props();
@@ -39,7 +41,7 @@
       </Button>
     {/snippet}
   </Tooltip.Trigger>
-  <Tooltip.Content class="z-[120] max-w-64 flex-col items-start" side="bottom" sideOffset={6}>
+  <Tooltip.Content class="z-[120] max-w-64 flex-col items-start" {side} sideOffset={6}>
     <span>{label}</span>
     {#if hint}<span class="text-[10px] opacity-75">{hint}</span>{/if}
   </Tooltip.Content>

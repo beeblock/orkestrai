@@ -491,6 +491,11 @@ export const TOURS_ES: Tour[] = [
         action: { kind: 'openDesign', title: 'Diseño de Interfaz' },
       },
       {
+        id: 'workspace',
+        title: 'Organiza un workspace que no estorba',
+        body: 'El modo enfocado expande este mismo nodo Diseño sin crear otro editor ni documento. Contrae Capas, Assets y Propiedades por separado, usa la barra inferior estable, aplica zoom alrededor del puntero con Command/Ctrl + rueda y ajusta todo el contenido, la selección actual o la página al 100%. Volver al Canvas conserva revisión, selección, herramienta activa, cámara, zoom y estado de los paneles.',
+      },
+      {
         id: 'compose',
         title: 'Compón interfaces vectoriales responsivas',
         body: 'Selecciona puntos vectoriales por caja y transfórmalos juntos, redimensiona cualquier capa con ocho controles y edita texto multilínea directamente en el canvas. Usa Shift para alinear, distribuir, combinar, enmascarar o agrupar capas; mueve y redimensiona descendientes juntos, selecciona una capa interna con Alt y encuentra, selecciona o reemplaza colores iguales de relleno y contorno en la página.',
