@@ -821,6 +821,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'La navegación móvil mantiene visibles Resumen, Equipo, Tareas y Actividad, mientras Más ofrece Huddles y Revisiones con sus contadores de atención.',
         'Las columnas de tareas se convierten en un selector vertical legible en pantallas pequeñas, mientras el escritorio conserva el tablero horizontal.',
         'Los modales de agentes y las salas de Huddle tienen una acción explícita para volver, y las áreas seguras ya no recortan encabezados, compositores, navegación ni el terminal a pantalla completa.',
+        'La navegación móvil ocupa una fila estable del viewport en vez de una superposición independiente; los detalles de Huddle usan el espacio restante, los campos de texto evitan el zoom de Safari y el PWA se recarga cuando un service worker actualizado toma el control.',
       ],
     },
     {

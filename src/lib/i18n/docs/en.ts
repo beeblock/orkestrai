@@ -821,6 +821,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'The phone navigation keeps Overview, Team, Tasks, and Activity visible while More provides Huddles and Reviews with their attention counts.',
         'Task columns become a readable vertical selector on small screens, while desktop keeps the horizontal board.',
         'Agent dialogs and Huddle rooms have explicit return actions, and safe areas no longer clip headers, composers, navigation, or the full-screen terminal.',
+        'Mobile navigation occupies a stable viewport row instead of an independent overlay; Huddle details use the remaining space, text entry avoids Safari page zoom, and the PWA reloads when an upgraded service worker takes control.',
       ],
     },
     {

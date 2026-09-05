@@ -19,6 +19,10 @@ pt-BR, English, and Spanish translations.
 - The Remote PWA now keeps navigation visible across phone safe areas, uses a
   readable per-column task view on small screens, and provides explicit return
   actions for agent and Huddle details.
+- Mobile navigation now occupies a real viewport grid row instead of relying on
+  an independently fixed overlay. Huddle details fit the remaining content area,
+  text entry no longer triggers Safari page zoom, and an upgraded PWA reloads
+  when its new service worker takes control.
 - Remote headers, dialogs, Huddle composers, review actions, and the full-screen
   terminal no longer overflow or become clipped on narrow phones, tablets, or
   desktop browsers.

@@ -825,6 +825,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'A navegação do celular mantém Visão geral, Equipe, Tarefas e Atividade visíveis, enquanto Mais oferece Huddles e Revisões com seus contadores de atenção.',
         'As colunas de tarefas viram um seletor vertical legível em telas pequenas, enquanto o desktop preserva o quadro horizontal.',
         'Modais de agentes e salas de Huddle têm retorno explícito, e as áreas seguras não recortam mais cabeçalhos, compositores, navegação ou o terminal em tela cheia.',
+        'A navegação mobile ocupa uma linha estável do viewport em vez de uma sobreposição independente; detalhes de Huddle usam o espaço restante, campos de texto evitam o zoom do Safari e o PWA recarrega quando um service worker atualizado assume o controle.',
       ],
     },
     {
