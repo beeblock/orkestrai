@@ -13,11 +13,13 @@ function estimatedGlyphWidth(character: string, fontSize: number, fontWeight: nu
   return fontSize * (0.52 + weightAdjustment);
 }
 
-function estimatedTextWidth(value: string, fontSize: number, fontWeight: number): number {
-  return Array.from(value).reduce((width, character) => width + estimatedGlyphWidth(character, fontSize, fontWeight), 0);
+export function designTextWidth(value: string, fontSize: number, fontWeight = 400, letterSpacing = 0): number {
+  const characters = Array.from(value);
+  return characters.reduce((width, character) => width + estimatedGlyphWidth(character, fontSize, fontWeight), 0)
+    + Math.max(0, characters.length - 1) * letterSpacing;
 }
 
-export function designTextLines(value: string, width: number, fontSize: number, fontWeight = 400): string[] {
+export function designTextLines(value: string, width: number, fontSize: number, fontWeight = 400, letterSpacing = 0): string[] {
   const availableWidth = Math.max(fontSize, width);
   return value.split('\n').flatMap((paragraph) => {
     if (!paragraph) return [''];
@@ -25,18 +27,18 @@ export function designTextLines(value: string, width: number, fontSize: number, 
     let current = '';
     for (const word of paragraph.split(/\s+/)) {
       const candidate = current ? `${current} ${word}` : word;
-      if (estimatedTextWidth(candidate, fontSize, fontWeight) <= availableWidth) {
+      if (designTextWidth(candidate, fontSize, fontWeight, letterSpacing) <= availableWidth) {
         current = candidate;
         continue;
       }
       if (current) lines.push(current);
-      if (estimatedTextWidth(word, fontSize, fontWeight) <= availableWidth) {
+      if (designTextWidth(word, fontSize, fontWeight, letterSpacing) <= availableWidth) {
         current = word;
         continue;
       }
       let chunk = '';
       for (const character of Array.from(word)) {
-        if (chunk && estimatedTextWidth(chunk + character, fontSize, fontWeight) > availableWidth) {
+        if (chunk && designTextWidth(chunk + character, fontSize, fontWeight, letterSpacing) > availableWidth) {
           lines.push(chunk);
           chunk = character;
         } else {
@@ -50,8 +52,24 @@ export function designTextLines(value: string, width: number, fontSize: number, 
   });
 }
 
-export function designTextHeight(value: string, width: number, fontSize: number, fontWeight = 400): number {
-  return Math.max(fontSize * 1.2, designTextLines(value, width, fontSize, fontWeight).length * fontSize * 1.2);
+export function designTextHeight(value: string, width: number, fontSize: number, fontWeight = 400, lineHeight: number | null = null, letterSpacing = 0, paragraphSpacing = 0): number {
+  const resolvedLineHeight = lineHeight ?? fontSize * 1.2;
+  const lines = designTextLayoutLines(value, width, fontSize, fontWeight, lineHeight, letterSpacing, paragraphSpacing);
+  return Math.max(resolvedLineHeight, (lines.at(-1)?.offsetY ?? 0) + resolvedLineHeight);
+}
+
+export function designTextLayoutLines(value: string, width: number, fontSize: number, fontWeight = 400, lineHeight: number | null = null, letterSpacing = 0, paragraphSpacing = 0): Array<{ text: string; offsetY: number }> {
+  const resolvedLineHeight = lineHeight ?? fontSize * 1.2;
+  const result: Array<{ text: string; offsetY: number }> = [];
+  let offsetY = 0;
+  value.split('\n').forEach((paragraph, paragraphIndex, paragraphs) => {
+    for (const text of designTextLines(paragraph, width, fontSize, fontWeight, letterSpacing)) {
+      result.push({ text, offsetY });
+      offsetY += resolvedLineHeight;
+    }
+    if (paragraphIndex < paragraphs.length - 1) offsetY += paragraphSpacing;
+  });
+  return result.length ? result : [{ text: '', offsetY: 0 }];
 }
 
 function rotatePoint(point: [number, number], element: DesignElement): [number, number] {
@@ -358,32 +376,84 @@ export function bendDesignPathSegment(
 
 export function autoLayoutChanges(frame: DesignElement, children: DesignElement[]): Map<string, Partial<DesignElement>> {
   const changes = new Map<string, Partial<DesignElement>>();
-  if (frame.layoutMode === 'none' || !children.length) return changes;
-  const ordered = [...children].sort((a, b) => a.order - b.order);
+  const ordered = [...children].filter((child) => !child.layoutItemAbsolute).sort((a, b) => a.order - b.order);
+  if (frame.layoutMode === 'none' || !ordered.length) return changes;
+  const bounded = (value: number, min: number | null, max: number | null) => Math.max(min ?? 1, Math.min(max ?? 100_000, value));
+  const preferredWidth = (child: DesignElement) => bounded(child.width, child.minWidth, child.maxWidth);
+  const preferredHeight = (child: DesignElement) => bounded(child.height, child.minHeight, child.maxHeight);
+  const columnCount = frame.layoutMode === 'grid' ? Math.max(1, Math.min(frame.layoutGridColumns, ordered.length)) : 1;
+  const rowCount = Math.ceil(ordered.length / columnCount);
+  const contentWidth = frame.layoutMode === 'horizontal'
+    ? ordered.reduce((total, child) => total + preferredWidth(child), 0) + frame.layoutGap * Math.max(0, ordered.length - 1)
+    : frame.layoutMode === 'grid'
+      ? Math.max(...Array.from({ length: columnCount }, (_, column) => Math.max(...ordered.filter((_, index) => index % columnCount === column).map(preferredWidth)))) * columnCount + frame.layoutColumnGap * Math.max(0, columnCount - 1)
+      : Math.max(...ordered.map(preferredWidth));
+  const contentHeight = frame.layoutMode === 'vertical'
+    ? ordered.reduce((total, child) => total + preferredHeight(child), 0) + frame.layoutGap * Math.max(0, ordered.length - 1)
+    : frame.layoutMode === 'grid'
+      ? Array.from({ length: rowCount }, (_, row) => Math.max(...ordered.slice(row * columnCount, (row + 1) * columnCount).map(preferredHeight))).reduce((total, height) => total + height, 0) + frame.layoutRowGap * Math.max(0, rowCount - 1)
+      : Math.max(...ordered.map(preferredHeight));
+  const frameWidth = frame.widthSizing === 'hug'
+    ? bounded(contentWidth + frame.layoutPaddingLeft + frame.layoutPaddingRight, frame.minWidth, frame.maxWidth)
+    : bounded(frame.width, frame.minWidth, frame.maxWidth);
+  const frameHeight = frame.heightSizing === 'hug'
+    ? bounded(contentHeight + frame.layoutPaddingTop + frame.layoutPaddingBottom, frame.minHeight, frame.maxHeight)
+    : bounded(frame.height, frame.minHeight, frame.maxHeight);
+  if (frameWidth !== frame.width || frameHeight !== frame.height) changes.set(frame.id, { width: frameWidth, height: frameHeight });
   const left = frame.x + frame.layoutPaddingLeft;
   const top = frame.y + frame.layoutPaddingTop;
-  const availableWidth = Math.max(1, frame.width - frame.layoutPaddingLeft - frame.layoutPaddingRight);
+  const availableWidth = Math.max(1, frameWidth - frame.layoutPaddingLeft - frame.layoutPaddingRight);
+  const availableHeight = Math.max(1, frameHeight - frame.layoutPaddingTop - frame.layoutPaddingBottom);
+  const crossOffset = (available: number, size: number) => frame.layoutCrossAlign === 'center'
+    ? (available - size) / 2
+    : frame.layoutCrossAlign === 'end' ? available - size : 0;
   if (frame.layoutMode === 'grid') {
-    const columns = Math.max(1, Math.min(frame.layoutGridColumns, ordered.length));
+    const columns = columnCount;
     const cellWidth = Math.max(1, (availableWidth - frame.layoutColumnGap * (columns - 1)) / columns);
     let rowY = top;
     for (let index = 0; index < ordered.length; index += columns) {
       const row = ordered.slice(index, index + columns);
-      const rowHeight = Math.max(...row.map((child) => child.height));
-      row.forEach((child, column) => changes.set(child.id, {
-        x: left + column * (cellWidth + frame.layoutColumnGap),
-        y: rowY,
-        width: cellWidth,
-      }));
+      const rowHeight = Math.max(...row.map(preferredHeight));
+      row.forEach((child, column) => {
+        const width = child.widthSizing === 'fill' || frame.layoutCrossAlign === 'stretch' ? bounded(cellWidth, child.minWidth, child.maxWidth) : Math.min(cellWidth, preferredWidth(child));
+        const height = child.heightSizing === 'fill' ? bounded(rowHeight, child.minHeight, child.maxHeight) : preferredHeight(child);
+        changes.set(child.id, { x: left + column * (cellWidth + frame.layoutColumnGap) + crossOffset(cellWidth, width), y: rowY, width, height });
+      });
       rowY += rowHeight + frame.layoutRowGap;
     }
     return changes;
   }
   if (frame.layoutMode === 'vertical') {
-    let y = top;
+    const fixedHeight = ordered.filter((child) => child.heightSizing !== 'fill').reduce((total, child) => total + preferredHeight(child), 0);
+    const fillChildren = ordered.filter((child) => child.heightSizing === 'fill');
+    const gap = frame.layoutAlign === 'space-between' && !fillChildren.length && ordered.length > 1
+      ? Math.max(frame.layoutGap, (availableHeight - fixedHeight) / (ordered.length - 1))
+      : frame.layoutGap;
+    const remaining = Math.max(1, availableHeight - fixedHeight - gap * Math.max(0, ordered.length - 1));
+    const totalHeight = fixedHeight + fillChildren.length * (remaining / Math.max(1, fillChildren.length)) + gap * Math.max(0, ordered.length - 1);
+    let y = top + (frame.layoutAlign === 'center' ? (availableHeight - totalHeight) / 2 : frame.layoutAlign === 'end' ? availableHeight - totalHeight : 0);
     for (const child of ordered) {
-      changes.set(child.id, { x: left, y });
-      y += child.height + frame.layoutGap;
+      const width = child.widthSizing === 'fill' || frame.layoutCrossAlign === 'stretch' ? bounded(availableWidth, child.minWidth, child.maxWidth) : preferredWidth(child);
+      const height = child.heightSizing === 'fill' ? bounded(remaining / Math.max(1, fillChildren.length), child.minHeight, child.maxHeight) : preferredHeight(child);
+      changes.set(child.id, { x: left + crossOffset(availableWidth, width), y, width, height });
+      y += height + gap;
+    }
+    return changes;
+  }
+  if (!frame.layoutWrap) {
+    const fixedWidth = ordered.filter((child) => child.widthSizing !== 'fill').reduce((total, child) => total + preferredWidth(child), 0);
+    const fillChildren = ordered.filter((child) => child.widthSizing === 'fill');
+    const gap = frame.layoutAlign === 'space-between' && !fillChildren.length && ordered.length > 1
+      ? Math.max(frame.layoutGap, (availableWidth - fixedWidth) / (ordered.length - 1))
+      : frame.layoutGap;
+    const remaining = Math.max(1, availableWidth - fixedWidth - gap * Math.max(0, ordered.length - 1));
+    const totalWidth = fixedWidth + fillChildren.length * (remaining / Math.max(1, fillChildren.length)) + gap * Math.max(0, ordered.length - 1);
+    let x = left + (frame.layoutAlign === 'center' ? (availableWidth - totalWidth) / 2 : frame.layoutAlign === 'end' ? availableWidth - totalWidth : 0);
+    for (const child of ordered) {
+      const width = child.widthSizing === 'fill' ? bounded(remaining / Math.max(1, fillChildren.length), child.minWidth, child.maxWidth) : preferredWidth(child);
+      const height = child.heightSizing === 'fill' || frame.layoutCrossAlign === 'stretch' ? bounded(availableHeight, child.minHeight, child.maxHeight) : preferredHeight(child);
+      changes.set(child.id, { x, y: top + crossOffset(availableHeight, height), width, height });
+      x += width + gap;
     }
     return changes;
   }
@@ -391,14 +461,16 @@ export function autoLayoutChanges(frame: DesignElement, children: DesignElement[
   let y = top;
   let rowHeight = 0;
   for (const child of ordered) {
-    if (frame.layoutWrap && x > left && x + child.width > left + availableWidth) {
+    const width = preferredWidth(child);
+    const height = preferredHeight(child);
+    if (x > left && x + width > left + availableWidth) {
       x = left;
       y += rowHeight + frame.layoutRowGap;
       rowHeight = 0;
     }
-    changes.set(child.id, { x, y });
-    x += child.width + frame.layoutGap;
-    rowHeight = Math.max(rowHeight, child.height);
+    changes.set(child.id, { x, y, width, height });
+    x += width + frame.layoutGap;
+    rowHeight = Math.max(rowHeight, height);
   }
   return changes;
 }

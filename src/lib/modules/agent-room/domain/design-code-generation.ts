@@ -60,18 +60,31 @@ function px(value: number): string {
 
 function layoutClasses(context: RenderContext, element: DesignElement, parent: DesignElement | null): string[] {
   const classes: string[] = [];
-  const inLayout = parent && parent.layoutMode !== 'none';
+  const inLayout = parent && parent.layoutMode !== 'none' && !element.layoutItemAbsolute;
   if (!parent) classes.push('relative');
   else if (!inLayout) classes.push('absolute', `left-[${px(element.x - parent.x)}]`, `top-[${px(element.y - parent.y)}]`);
-  classes.push(`w-[${px(element.width)}]`, `h-[${px(element.height)}]`);
+  if (inLayout && element.widthSizing === 'fill') classes.push(parent?.layoutMode === 'horizontal' ? 'flex-1' : 'w-full');
+  else if (inLayout && element.widthSizing === 'hug') classes.push('w-fit');
+  else classes.push(`w-[${px(element.width)}]`);
+  if (inLayout && element.heightSizing === 'fill') classes.push(parent?.layoutMode === 'vertical' ? 'flex-1' : 'h-full');
+  else if (inLayout && element.heightSizing === 'hug') classes.push('h-fit');
+  else classes.push(`h-[${px(element.height)}]`);
+  if (element.minWidth !== null) classes.push(`min-w-[${px(element.minWidth)}]`);
+  if (element.maxWidth !== null) classes.push(`max-w-[${px(element.maxWidth)}]`);
+  if (element.minHeight !== null) classes.push(`min-h-[${px(element.minHeight)}]`);
+  if (element.maxHeight !== null) classes.push(`max-h-[${px(element.maxHeight)}]`);
   if (element.layoutMode === 'horizontal') classes.push('flex', element.layoutWrap ? 'flex-wrap' : 'flex-nowrap');
   if (element.layoutMode === 'vertical') classes.push('flex', 'flex-col', element.layoutWrap ? 'flex-wrap' : 'flex-nowrap');
   if (element.layoutMode === 'grid') classes.push('grid', `grid-cols-${element.layoutGridColumns}`);
   if (element.layoutMode !== 'none') {
-    classes.push(`gap-[${px(element.layoutGap)}]`, `pt-[${px(element.layoutPaddingTop)}]`, `pr-[${px(element.layoutPaddingRight)}]`, `pb-[${px(element.layoutPaddingBottom)}]`, `pl-[${px(element.layoutPaddingLeft)}]`);
+    classes.push(`gap-[${px(element.layoutGap)}]`, `gap-x-[${px(element.layoutColumnGap)}]`, `gap-y-[${px(element.layoutRowGap)}]`, `pt-[${px(element.layoutPaddingTop)}]`, `pr-[${px(element.layoutPaddingRight)}]`, `pb-[${px(element.layoutPaddingBottom)}]`, `pl-[${px(element.layoutPaddingLeft)}]`);
     if (element.layoutAlign === 'center') classes.push('justify-center');
     if (element.layoutAlign === 'end') classes.push('justify-end');
     if (element.layoutAlign === 'space-between') classes.push('justify-between');
+    if (element.layoutCrossAlign === 'start') classes.push('items-start');
+    if (element.layoutCrossAlign === 'center') classes.push('items-center');
+    if (element.layoutCrossAlign === 'end') classes.push('items-end');
+    if (element.layoutCrossAlign === 'stretch') classes.push('items-stretch');
   }
   if (element.clipContent) classes.push('overflow-hidden');
   if (element.cornerRadius > 0) classes.push(`rounded-[${px(element.cornerRadius)}]`);
@@ -89,7 +102,15 @@ function layoutClasses(context: RenderContext, element: DesignElement, parent: D
 function textClasses(context: RenderContext, element: DesignElement): string[] {
   const classes = layoutClasses(context, element, element.parentId ? context.elementMap.get(element.parentId) ?? null : null);
   const color = element.fills.find((paint) => paint.visible && paint.type === 'solid');
-  classes.push(`text-[length:${boundValue(context, element, 'fontSize', px(element.fontSize))}]`, `font-[${Math.round(element.fontWeight)}]`);
+  classes.push(`text-[length:${boundValue(context, element, 'fontSize', px(element.fontSize))}]`, `font-[${Math.round(element.fontWeight)}]`, `font-[family-name:${element.fontFamily.replace(/[^A-Za-z0-9_-]+/g, '_')}]`);
+  if (element.fontStyle === 'italic') classes.push('italic');
+  if (element.lineHeight !== null) classes.push(`leading-[${px(element.lineHeight)}]`);
+  if (element.letterSpacing) classes.push(`tracking-[${px(element.letterSpacing)}]`);
+  if (element.textDecoration === 'underline') classes.push('underline');
+  if (element.textDecoration === 'line-through') classes.push('line-through');
+  if (element.textTransform === 'uppercase') classes.push('uppercase');
+  if (element.textTransform === 'lowercase') classes.push('lowercase');
+  if (element.textTransform === 'capitalize') classes.push('capitalize');
   if (color?.type === 'solid' || element.fill !== 'transparent') classes.push(`text-[${boundValue(context, element, 'fill', color?.type === 'solid' ? color.color : element.fill)}]`, 'bg-transparent');
   if (element.textAlign === 'center') classes.push('text-center');
   if (element.textAlign === 'right') classes.push('text-right');

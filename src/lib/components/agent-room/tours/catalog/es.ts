@@ -503,7 +503,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'compose',
         title: 'Compón interfaces vectoriales responsivas',
-        body: 'Ve el contorno de una capa antes de seleccionarla, usa Command/Ctrl+clic para entrar en arte anidado o superpuesto y mantén Alt/Option para inspeccionar espacios exactos. Selecciona puntos vectoriales por caja y transfórmalos juntos, gira o redimensiona capas directamente y edita texto multilínea en el canvas. Usa Shift para seleccionar capas y alinear, distribuir, organizar, combinar, enmascarar o agrupar; las guías inteligentes muestran coordenadas y los descendientes permanecen juntos. Los agentes usan los mismos comandos tipados de organización y vectores.',
+        body: 'Ve el contorno de una capa antes de seleccionarla, usa Command/Ctrl+clic para entrar en arte anidado o superpuesto y mantén Alt/Option para inspeccionar espacios exactos. Selecciona puntos vectoriales por caja y transfórmalos juntos, gira o redimensiona capas directamente y edita texto multilínea en el canvas. Usa Shift para seleccionar capas y alinear, distribuir, organizar, combinar, enmascarar o agrupar; las guías inteligentes muestran coordenadas y los descendientes permanecen juntos. En Propiedades, arrastra la etiqueta de un número o escribe cálculos, valores relativos, píxeles y porcentajes. Configura fixed, hug, fill, min/max, auto layout, tipografía y valores de selección múltiple sin salir de la capa actual. Los agentes usan los mismos comandos tipados de organización, vectores, layout y tipografía.',
       },
       {
         id: 'assets-export',
@@ -513,7 +513,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'design-system',
         title: 'Haz reutilizable el lenguaje visual',
-        body: 'Abre Variables junto a Capas. Empieza con un preset de producto, marketing o mobile, importa DTCG/CSS o exporta DTCG/CSS/Tailwind; crea modos, aliases y bindings y audita repeticiones. En Componentes, convierte frames en fuentes reutilizables y crea instancias, propiedades, variantes y slots. En Bibliotecas, comparte versiones solo con workspaces autorizados. En Código, extrae CSS variables, Tailwind y contratos Svelte, React o Vue sin ejecutar archivos y conecta la fuente visual con su implementación. Los agentes usan el mismo command bus protegido por revisión.',
+        body: 'Usa el picker Hex/RGB/HSL para colores sólidos o degradados, alpha, cuentagotas, colores recientes y del documento, y vincula el paint activo a un token sin salir del inspector. Abre Variables junto a Capas para empezar con un preset de producto, marketing o mobile, importar DTCG/CSS o exportar DTCG/CSS/Tailwind, crear modos y aliases y auditar repeticiones. En Componentes, convierte frames en fuentes reutilizables y crea instancias, propiedades, variantes y slots. En Bibliotecas, comparte versiones solo con workspaces autorizados. En Código, extrae CSS variables, Tailwind y contratos Svelte, React o Vue sin ejecutar archivos y conecta la fuente visual con su implementación. Los agentes usan el mismo command bus protegido por revisión.',
       },
       {
         id: 'figma-bridge',

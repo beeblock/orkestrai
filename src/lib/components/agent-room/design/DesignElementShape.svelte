@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { DesignElement } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
-  import { designPathData, designTextLines } from '$lib/modules/agent-room/domain/design-geometry.js';
+  import { designPathData, designTextLayoutLines } from '$lib/modules/agent-room/domain/design-geometry.js';
 
   let {
     element,
@@ -22,6 +22,19 @@
     pointerEvents?: string;
   } = $props();
 
+  const textValue = $derived.by(() => {
+    const value = element.text || element.name;
+    if (element.textTransform === 'uppercase') return value.toUpperCase();
+    if (element.textTransform === 'lowercase') return value.toLowerCase();
+    if (element.textTransform === 'capitalize') return value.replace(/\b\p{L}/gu, (character) => character.toUpperCase());
+    return value;
+  });
+  const textLines = $derived(designTextLayoutLines(textValue, element.width, element.fontSize, element.fontWeight, element.lineHeight, element.letterSpacing, element.paragraphSpacing));
+  const resolvedLineHeight = $derived(element.lineHeight ?? element.fontSize * 1.2);
+  const textBlockHeight = $derived((textLines.at(-1)?.offsetY ?? 0) + resolvedLineHeight);
+  const textOffsetY = $derived(element.textVerticalAlign === 'middle'
+    ? Math.max(0, (element.height - textBlockHeight) / 2)
+    : element.textVerticalAlign === 'bottom' ? Math.max(0, element.height - textBlockHeight) : 0);
 </script>
 
 {#if element.type === 'ellipse'}
@@ -60,13 +73,16 @@
       {stroke}
       stroke-opacity={strokeOpacity}
       stroke-width={strokeWidth}
-      font-family="Inter Variable, Inter, sans-serif"
+      font-family={`${element.fontFamily}, Inter Variable, Inter, sans-serif`}
       font-size={element.fontSize}
       font-weight={element.fontWeight}
+      font-style={element.fontStyle}
+      letter-spacing={element.letterSpacing}
+      text-decoration={element.textDecoration}
       text-anchor={element.textAlign === 'center' ? 'middle' : element.textAlign === 'right' ? 'end' : 'start'}
     >
-      {#each designTextLines(element.text || element.name, element.width, element.fontSize, element.fontWeight) as line, index}
-        <tspan x={element.textAlign === 'center' ? element.width / 2 : element.textAlign === 'right' ? element.width : 0} y={element.fontSize + index * element.fontSize * 1.2}>{line}</tspan>
+      {#each textLines as line}
+        <tspan x={element.textAlign === 'center' ? element.width / 2 : element.textAlign === 'right' ? element.width : 0} y={textOffsetY + element.fontSize + line.offsetY}>{line.text}</tspan>
       {/each}
     </text>
   </svg>

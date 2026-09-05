@@ -470,6 +470,34 @@ describe('orkestrai CLI', () => {
     });
   });
 
+  it('design layout e typography limitam propriedades e usam o command bus', async () => {
+    const { out } = capture();
+    await run([
+      'design', 'layout', 'design-1', '00000000-0000-7000-8000-000000000002',
+      JSON.stringify({ layoutMode: 'horizontal', layoutGap: 24, widthSizing: 'hug' }), '--revision', '7',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body).toMatchObject({
+      baseRevision: 7,
+      operations: [{ kind: 'update', changes: { layoutMode: 'horizontal', layoutGap: 24, widthSizing: 'hug' } }],
+    });
+
+    await run([
+      'design', 'layout-apply', 'design-1', '00000000-0000-7000-8000-000000000002', '--revision', '8',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body.operations).toEqual([{ kind: 'apply-auto-layout', frameId: '00000000-0000-7000-8000-000000000002' }]);
+
+    await run([
+      'design', 'typography', 'design-1', '00000000-0000-7000-8000-000000000003',
+      JSON.stringify({ fontFamily: 'Inter Variable', fontSize: 32, textAutoResize: 'height' }), '--revision', '9',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body.operations[0].changes).toMatchObject({ fontSize: 32, textAutoResize: 'height' });
+
+    await expect(run([
+      'design', 'layout', 'design-1', '00000000-0000-7000-8000-000000000002',
+      JSON.stringify({ text: 'not layout' }), '--revision', '10',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out })).rejects.toThrow('Propriedades invalidas');
+  });
+
   it('design import-code le arquivos e registra a importacao pela bridge', async () => {
     writeFileSync(join(cwd, 'card.html'), '<article class="p-4">Card</article>');
     writeFileSync(join(cwd, 'card.css'), 'article { color: red; }');

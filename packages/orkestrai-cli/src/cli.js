@@ -13,6 +13,19 @@ import { dirname, resolve } from 'node:path';
 import { DESIGN_REFERENCE_TOPICS, designReference } from './design-reference.js';
 import { apiClientReference } from './api-client-reference.js';
 
+const DESIGN_LAYOUT_FIELDS = new Set([
+  'layoutMode', 'layoutWrap', 'layoutGap', 'layoutRowGap', 'layoutColumnGap',
+  'layoutPaddingTop', 'layoutPaddingRight', 'layoutPaddingBottom', 'layoutPaddingLeft',
+  'layoutGridColumns', 'layoutAlign', 'layoutCrossAlign', 'layoutItemAbsolute', 'clipContent',
+  'widthSizing', 'heightSizing', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+  'constraintHorizontal', 'constraintVertical',
+]);
+const DESIGN_TYPOGRAPHY_FIELDS = new Set([
+  'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight',
+  'letterSpacing', 'paragraphSpacing', 'textAlign', 'textVerticalAlign',
+  'textDecoration', 'textTransform', 'textAutoResize',
+]);
+
 /** Porta livre de verdade: binda na efemera, le o numero e libera. */
 export async function findFreePort() {
   return new Promise((resolvePromise, reject) => {
@@ -57,6 +70,9 @@ Uso:
   orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design page <nodeId> <create|update|duplicate|reorder|activate|delete> --revision <n> [--page <pageId>] [--name <nome>] [--width <n>] [--height <n>] [--background <cor>] [--order <n>]
+  orkestrai design layout <nodeId> <elementId> <changes-json> --revision <n>
+  orkestrai design layout-apply <nodeId> <frameId> --revision <n>
+  orkestrai design typography <nodeId> <elementId> <changes-json> --revision <n>
   orkestrai design arrange <nodeId> <left|hcenter|right|top|vcenter|bottom|distribute-x|distribute-y|tidy> <elementIds-csv> --page <pageId> --revision <n> [--spacing <n>]
   orkestrai design vector <nodeId> <elementId> <geometry-json> --revision <n>
   orkestrai design apply <nodeId> <operations-json> --revision <n> [--summary <texto>] [--task <taskId>]
@@ -1041,6 +1057,39 @@ export async function run(argv, options = {}) {
         });
         if (flags.json) out(JSON.stringify(data, null, 2));
         else out(`Layers organizadas; design na revisao ${data.revision}.`);
+        return 0;
+      }
+      if ((action === 'layout' || action === 'typography') && nodeId && values[0] && values[1]) {
+        const baseRevision = Number(flags.revision);
+        if (!Number.isInteger(baseRevision) || baseRevision < 0) throw new Error(`Uso: orkestrai design ${action} <nodeId> <elementId> <changes-json> --revision <n>`);
+        const changes = JSON.parse(values.slice(1).join(' '));
+        if (!changes || typeof changes !== 'object' || Array.isArray(changes) || !Object.keys(changes).length) throw new Error('changes-json deve ser um objeto nao vazio.');
+        const allowed = action === 'layout' ? DESIGN_LAYOUT_FIELDS : DESIGN_TYPOGRAPHY_FIELDS;
+        const invalid = Object.keys(changes).filter((key) => !allowed.has(key));
+        if (invalid.length) throw new Error(`Propriedades invalidas para ${action}: ${invalid.join(', ')}.`);
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(nodeId)}`, {
+          baseRevision,
+          operations: [{ kind: 'update', elementId: values[0], changes }],
+          summary: flags.summary ?? `Update ${action} ${values[0]}`,
+          from: flags.from,
+          taskId: flags.task,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`${action === 'layout' ? 'Layout' : 'Tipografia'} atualizado; design na revisao ${data.revision}.`);
+        return 0;
+      }
+      if (action === 'layout-apply' && nodeId && values[0]) {
+        const baseRevision = Number(flags.revision);
+        if (!Number.isInteger(baseRevision) || baseRevision < 0) throw new Error('Uso: orkestrai design layout-apply <nodeId> <frameId> --revision <n>');
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(nodeId)}`, {
+          baseRevision,
+          operations: [{ kind: 'apply-auto-layout', frameId: values[0] }],
+          summary: flags.summary ?? `Apply auto layout ${values[0]}`,
+          from: flags.from,
+          taskId: flags.task,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Auto layout aplicado; design na revisao ${data.revision}.`);
         return 0;
       }
       if (action === 'vector' && nodeId && values[0] && values[1]) {

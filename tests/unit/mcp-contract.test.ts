@@ -141,6 +141,9 @@ const EXPECTED: Record<string, Expectation> = {
   design_generate_code_apply: { method: 'POST', path: /\/bridge\/designs\/n1\/delivery\/apply$/, schema: bridgeApplyDesignDeliverySchema },
   design_create_element: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_update_element: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
+  design_update_layout: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
+  design_apply_auto_layout: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
+  design_update_typography: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_arrange_elements: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_edit_vector: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_delete_element: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
@@ -358,6 +361,23 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
     changes: { x: 48 },
     taskId: '00000000-0000-7000-8000-000000000003',
   },
+  design_update_layout: {
+    nodeId: 'n1',
+    baseRevision: 2,
+    elementId: '00000000-0000-7000-8000-000000000002',
+    changes: { layoutMode: 'horizontal', layoutGap: 16, widthSizing: 'hug', layoutCrossAlign: 'center' },
+  },
+  design_apply_auto_layout: {
+    nodeId: 'n1',
+    baseRevision: 3,
+    frameId: '00000000-0000-7000-8000-000000000002',
+  },
+  design_update_typography: {
+    nodeId: 'n1',
+    baseRevision: 4,
+    elementId: '00000000-0000-7000-8000-000000000002',
+    changes: { fontFamily: 'Inter Variable', fontSize: 24, lineHeight: 32, textAutoResize: 'height' },
+  },
   design_arrange_elements: {
     nodeId: 'n1',
     baseRevision: 2,
@@ -403,6 +423,8 @@ describe('contrato MCP x bridge (todas as tools)', () => {
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('concept');
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('selection');
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('vectors');
+    expect(referenceTool.inputSchema.properties.topic.enum).toContain('layout');
+    expect(referenceTool.inputSchema.properties.topic.enum).toContain('typography');
     expect(elementBatchTool.inputSchema.properties.elements.items.required).toEqual(['type', 'name', 'x', 'y', 'width', 'height']);
     expect(blueprintTool.inputSchema.properties.variables.items.required).toContain('values');
 

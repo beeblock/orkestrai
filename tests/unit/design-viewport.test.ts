@@ -60,4 +60,21 @@ describe('incremental Design rendering', () => {
     const hidden = { ...item(parentId, 100), visible: false };
     expect(designContentBounds([hidden], { width: 390, height: 844 })).toEqual({ x: 0, y: 0, width: 390, height: 844 });
   });
+
+  it('fits visible artwork instead of expanding it to the nominal page', () => {
+    const local = designElementSchema.parse({
+      id: parentId,
+      pageId: PAGE,
+      parentId: null,
+      type: 'frame',
+      name: 'Local frame',
+      x: 160,
+      y: 120,
+      width: 480,
+      height: 220,
+      order: 0,
+    });
+    expect(designContentBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: 160, y: 120, width: 480, height: 220 });
+    expect(designSceneBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: -4_096, y: -4_096, width: 8_192, height: 8_192 });
+  });
 });

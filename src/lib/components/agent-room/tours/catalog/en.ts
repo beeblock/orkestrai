@@ -503,7 +503,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'compose',
         title: 'Compose responsive vector interfaces',
-        body: 'Hover a layer before selecting it, Command/Ctrl-click to enter nested or overlapping artwork, and hold Alt/Option to inspect exact spacing. Box-select vector points and transform them together, rotate or resize layers directly, and edit multiline text on the canvas. Shift-select layers to align, distribute, tidy, combine, mask, or group them; smart guides display their coordinates, and complete descendants stay together. Agents use the same typed arrangement and vector commands.',
+        body: 'Hover a layer before selecting it, Command/Ctrl-click to enter nested or overlapping artwork, and hold Alt/Option to inspect exact spacing. Box-select vector points and transform them together, rotate or resize layers directly, and edit multiline text on the canvas. Shift-select layers to align, distribute, tidy, combine, mask, or group them; smart guides display their coordinates, and complete descendants stay together. In Properties, scrub a numeric label or enter calculations, relative values, pixels, and percentages. Configure fixed, hug, fill, min/max, auto layout, typography, and multi-selection values without leaving the current layer. Agents use the same typed arrangement, vector, layout, and typography commands.',
       },
       {
         id: 'assets-export',
@@ -513,7 +513,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'design-system',
         title: 'Make the visual language reusable',
-        body: 'Open Variables beside Layers. Start from a product, marketing, or mobile preset, import DTCG/CSS or export DTCG/CSS/Tailwind; create modes, aliases, and bindings, then audit repetition. Under Components, turn frames into reusable sources and create instances, properties, variants, and slots. Under Libraries, share versions only with authorized workspaces. Under Code, extract CSS variables, Tailwind, and Svelte, React, or Vue contracts without executing files and connect the visual source to its implementation. Agents use the same revision-safe command bus.',
+        body: 'Use the Hex/RGB/HSL picker for solid or gradient paints, alpha, eyedropper, recent and document colors, then bind an active paint to a token without leaving the inspector. Open Variables beside Layers to start from a product, marketing, or mobile preset, import DTCG/CSS or export DTCG/CSS/Tailwind, create modes and aliases, and audit repetition. Under Components, turn frames into reusable sources and create instances, properties, variants, and slots. Under Libraries, share versions only with authorized workspaces. Under Code, extract CSS variables, Tailwind, and Svelte, React, or Vue contracts without executing files and connect the visual source to its implementation. Agents use the same revision-safe command bus.',
       },
       {
         id: 'figma-bridge',

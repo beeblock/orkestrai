@@ -21,6 +21,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { isDesignExplorationPayload } from '../../domain/design-exploration.js';
 import { resolveDesignVariableValue } from '../../domain/design-variables.js';
 import { arrangeDesignElements } from '../../domain/design-arrangement.js';
+import { autoLayoutChanges } from '../../domain/design-geometry.js';
 import { designCollaborationService } from './DesignCollaborationService.js';
 import { workspacePathService } from './WorkspacePathService.js';
 
@@ -79,6 +80,15 @@ function sortElements(elements: DesignElement[]): DesignElement[] {
 
 function sortedPages(pages: DesignPage[]): DesignPage[] {
   return [...pages].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+
+function validateElementSizing(element: DesignElement): void {
+  if (element.minWidth !== null && element.maxWidth !== null && element.minWidth > element.maxWidth) {
+    throw new Error('Minimum width cannot exceed maximum width.');
+  }
+  if (element.minHeight !== null && element.maxHeight !== null && element.minHeight > element.maxHeight) {
+    throw new Error('Minimum height cannot exceed maximum height.');
+  }
 }
 
 function withoutKeys<T>(record: Record<string, T>, keys: Set<string>): Record<string, T> {
@@ -737,7 +747,9 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
       const siblingOrders = next.elements
         .filter((element) => element.pageId === operation.element.pageId && element.parentId === operation.element.parentId)
         .map((element) => element.order);
-      next.elements.push({ ...operation.element, id: elementId, order: operation.element.order ?? (Math.max(-1, ...siblingOrders) + 1) });
+      const created = { ...operation.element, id: elementId, order: operation.element.order ?? (Math.max(-1, ...siblingOrders) + 1) };
+      validateElementSizing(created);
+      next.elements.push(created);
       continue;
     }
     if (operation.kind === 'update') {
@@ -764,7 +776,13 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
           'name', 'x', 'y', 'width', 'height', 'rotation', 'opacity', 'visible',
           'fill', 'stroke', 'strokeWidth', 'fills', 'strokes', 'effects',
           'blendMode', 'cornerRadius', 'text', 'fontSize', 'fontWeight',
-          'textAlign', 'assetId', 'imageFit',
+          'fontFamily', 'fontStyle', 'lineHeight', 'letterSpacing', 'paragraphSpacing',
+          'textAlign', 'textVerticalAlign', 'textDecoration', 'textTransform', 'textAutoResize',
+          'layoutMode', 'layoutWrap', 'layoutGap', 'layoutRowGap', 'layoutColumnGap',
+          'layoutPaddingTop', 'layoutPaddingRight', 'layoutPaddingBottom', 'layoutPaddingLeft',
+          'layoutGridColumns', 'layoutAlign', 'layoutCrossAlign', 'layoutItemAbsolute',
+          'widthSizing', 'heightSizing', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+          'assetId', 'imageFit',
         ]);
         const overrides = Object.fromEntries(Object.entries(changes).filter(([key]) => allowed.has(key)));
         if (Object.keys(overrides).length) {
@@ -774,7 +792,24 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
           } as DesignElement['instanceOverrides'][string];
         }
       }
-      next.elements[index] = { ...next.elements[index], ...operation.changes };
+      const updated = { ...next.elements[index], ...operation.changes };
+      validateElementSizing(updated);
+      next.elements[index] = updated;
+      continue;
+    }
+    if (operation.kind === 'apply-auto-layout') {
+      const frame = next.elements.find((element) => element.id === operation.frameId);
+      if (!frame || frame.type !== 'frame') throw new Error('Auto layout frame not found.');
+      if (frame.locked) throw new Error('Design element is locked.');
+      const children = next.elements.filter((element) => element.parentId === frame.id);
+      const changes = autoLayoutChanges(frame, children);
+      const updates = [...changes].map(([elementId, elementChanges]): DesignOperation => {
+        const target = next.elements.find((element) => element.id === elementId);
+        if (!target) throw new Error('Design element not found.');
+        if (target.locked) throw new Error('Locked design elements cannot be laid out.');
+        return { kind: 'update', elementId, changes: elementChanges };
+      });
+      next = applyDesignOperations(next, updates, now);
       continue;
     }
     if (operation.kind === 'arrange-elements') {

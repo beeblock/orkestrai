@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { designElementSchema, type DesignElement } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
-import { autoLayoutChanges, bendDesignPathSegment, combineDesignElements, constrainedChildChanges, convertDesignPathPointMode, cornerDesignPathPoint, designPathBounds, designPathData, designTextHeight, designTextLines, scaleDesignPathSubpaths, smoothDesignPathPoint, splitDesignPathSegment } from '$lib/modules/agent-room/domain/design-geometry.js';
+import { autoLayoutChanges, bendDesignPathSegment, combineDesignElements, constrainedChildChanges, convertDesignPathPointMode, cornerDesignPathPoint, designPathBounds, designPathData, designTextHeight, designTextLayoutLines, designTextLines, scaleDesignPathSubpaths, smoothDesignPathPoint, splitDesignPathSegment } from '$lib/modules/agent-room/domain/design-geometry.js';
 
 const PAGE_ID = '00000000-0000-7000-8000-000000000004';
 
@@ -57,6 +57,32 @@ describe('geometria do Design Mode', () => {
     const grid = autoLayoutChanges({ ...frame, layoutMode: 'grid', layoutGridColumns: 2, layoutColumnGap: 20 }, children);
     expect(grid.get(children[0].id)).toMatchObject({ x: 20, width: 100 });
     expect(grid.get(children[1].id)).toMatchObject({ x: 140, width: 100 });
+  });
+
+  it('calcula fill, hug, cross alignment e preserva filhos absolutos', () => {
+    const frame = element('00000000-0000-7000-8000-000000000020', {
+      type: 'frame',
+      width: 400,
+      height: 120,
+      heightSizing: 'hug',
+      layoutMode: 'horizontal',
+      layoutGap: 12,
+      layoutPaddingLeft: 20,
+      layoutPaddingRight: 20,
+      layoutPaddingTop: 10,
+      layoutPaddingBottom: 10,
+      layoutCrossAlign: 'center',
+    });
+    const fixed = element('00000000-0000-7000-8000-000000000021', { parentId: frame.id, width: 100, height: 40, order: 0 });
+    const fill = element('00000000-0000-7000-8000-000000000022', { parentId: frame.id, width: 80, height: 60, widthSizing: 'fill', minWidth: 120, order: 1 });
+    const absolute = element('00000000-0000-7000-8000-000000000023', { parentId: frame.id, x: 300, y: 80, layoutItemAbsolute: true, order: 2 });
+
+    const changes = autoLayoutChanges(frame, [fixed, fill, absolute]);
+
+    expect(changes.get(frame.id)).toMatchObject({ height: 80 });
+    expect(changes.get(fixed.id)).toMatchObject({ x: 20, y: 20, width: 100, height: 40 });
+    expect(changes.get(fill.id)).toMatchObject({ x: 132, y: 10, width: 248, height: 60 });
+    expect(changes.has(absolute.id)).toBe(false);
   });
 
   it('preserva constraints ao redimensionar o frame', () => {
@@ -160,5 +186,9 @@ describe('geometria do Design Mode', () => {
     const lines = designTextLines('Design text edited on canvas', 240, 32, 600);
     expect(lines.length).toBeGreaterThan(1);
     expect(designTextHeight('Design text edited on canvas', 240, 32, 600)).toBe(lines.length * 32 * 1.2);
+    expect(designTextLayoutLines('First\nSecond', 300, 20, 400, 28, 1, 12)).toEqual([
+      { text: 'First', offsetY: 0 },
+      { text: 'Second', offsetY: 40 },
+    ]);
   });
 });

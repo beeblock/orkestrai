@@ -276,6 +276,11 @@ common credentials redacted; normal agent output is not persisted.
   overlapping artwork, rotate directly with 15-degree snapping, inspect spacing
   with Alt/Option, follow labeled smart guides, and align, distribute, or tidy
   complete hierarchies without detaching their children.
+  The compact contextual inspector supports draggable numeric values,
+  calculations, fixed/hug/fill sizing, min/max bounds, complete auto layout,
+  rich text controls, and multi-selection edits. Its color workflow includes
+  Hex, RGB, HSL, alpha, native eyedropper, recent and document colors, variable
+  binding, and editable solid, linear, and radial gradient stops.
   Raster images remain reusable
   assets, while full documents export to SVG, PNG, JPEG, WebP, or PDF. A designer or leader
   can edit the exact same revision through typed Orkestrai tools while the UI

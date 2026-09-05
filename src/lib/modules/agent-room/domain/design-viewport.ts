@@ -8,10 +8,10 @@ export function designContentBounds(
 ): DesignViewportBounds {
   const visible = elements.filter((element) => element.visible);
   if (!visible.length) return { x: 0, y: 0, width: page.width, height: page.height };
-  const x = Math.min(0, ...visible.map((element) => element.x));
-  const y = Math.min(0, ...visible.map((element) => element.y));
-  const right = Math.max(page.width, ...visible.map((element) => element.x + element.width));
-  const bottom = Math.max(page.height, ...visible.map((element) => element.y + element.height));
+  const x = Math.min(...visible.map((element) => element.x));
+  const y = Math.min(...visible.map((element) => element.y));
+  const right = Math.max(...visible.map((element) => element.x + element.width));
+  const bottom = Math.max(...visible.map((element) => element.y + element.height));
   return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
 }
 
@@ -21,11 +21,17 @@ export function designSceneBounds(
   margin = 640,
 ): DesignViewportBounds {
   const content = designContentBounds(elements, page);
+  const pageAndContent = {
+    x: Math.min(0, content.x),
+    y: Math.min(0, content.y),
+    width: Math.max(page.width, content.x + content.width) - Math.min(0, content.x),
+    height: Math.max(page.height, content.y + content.height) - Math.min(0, content.y),
+  };
   const quantum = 4_096;
-  const x = Math.floor((content.x - margin) / quantum) * quantum;
-  const y = Math.floor((content.y - margin) / quantum) * quantum;
-  const right = Math.ceil((content.x + content.width + margin) / quantum) * quantum;
-  const bottom = Math.ceil((content.y + content.height + margin) / quantum) * quantum;
+  const x = Math.floor((pageAndContent.x - margin) / quantum) * quantum;
+  const y = Math.floor((pageAndContent.y - margin) / quantum) * quantum;
+  const right = Math.ceil((pageAndContent.x + pageAndContent.width + margin) / quantum) * quantum;
+  const bottom = Math.ceil((pageAndContent.y + pageAndContent.height + margin) / quantum) * quantum;
   return {
     x,
     y,

@@ -105,6 +105,22 @@ describe('documento de Design', () => {
     }], NOW)).toThrow('locked');
   });
 
+  it('aplica auto layout atomicamente e rejeita limites ou filhos bloqueados', () => {
+    const populated = designDocumentSchema.parse({
+      ...document(),
+      elements: [
+        { id: FRAME_ID, pageId: PAGE_ID, parentId: null, type: 'frame', name: 'Row', x: 0, y: 0, width: 300, height: 100, order: 0, layoutMode: 'horizontal', layoutGap: 10, layoutPaddingLeft: 20, layoutPaddingRight: 20 },
+        { id: TEXT_ID, pageId: PAGE_ID, parentId: FRAME_ID, type: 'text', name: 'Label', x: 0, y: 0, width: 80, height: 30, order: 0, text: 'Hello' },
+      ],
+    });
+    const laidOut = applyDesignOperations(populated, [{ kind: 'apply-auto-layout', frameId: FRAME_ID }], NOW);
+    expect(laidOut.elements.find((element) => element.id === TEXT_ID)).toMatchObject({ x: 20, y: 24 });
+
+    const locked = designDocumentSchema.parse({ ...populated, elements: populated.elements.map((element) => element.id === TEXT_ID ? { ...element, locked: true } : element) });
+    expect(() => applyDesignOperations(locked, [{ kind: 'apply-auto-layout', frameId: FRAME_ID }], NOW)).toThrow('Locked');
+    expect(() => applyDesignOperations(populated, [{ kind: 'update', elementId: FRAME_ID, changes: { minWidth: 500, maxWidth: 200 } }], NOW)).toThrow('Minimum width');
+  });
+
   it('permite filhos somente dentro de frames da mesma pagina', () => {
     const populated = designDocumentSchema.parse({
       ...document(),

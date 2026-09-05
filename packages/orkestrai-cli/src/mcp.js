@@ -161,6 +161,51 @@ const TOOLS = [
     text: { type: 'string' }, fontSize: { type: 'number' }, fontWeight: { type: 'number' }, summary: { type: 'string' }, taskId: { type: 'string' },
   }, required: ['nodeId', 'baseRevision', 'pageId', 'type', 'name', 'x', 'y', 'width', 'height'] } },
   { name: 'design_update_element', description: 'Atualiza propriedades tipadas de um elemento existente no Design node.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, elementId: { type: 'string' }, changes: { type: 'object' }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'elementId', 'changes'] } },
+  { name: 'design_update_layout', description: 'Configura sizing, limites, auto layout, padding, alinhamento e constraints de uma layer nativa.', inputSchema: { type: 'object', properties: {
+    nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, elementId: { type: 'string', format: 'uuid' },
+    changes: { type: 'object', additionalProperties: false, properties: {
+      layoutMode: { type: 'string', enum: ['none', 'horizontal', 'vertical', 'grid'] }, layoutWrap: { type: 'boolean' }, layoutGap: { type: 'number', minimum: 0, maximum: 10000 }, layoutRowGap: { type: 'number', minimum: 0, maximum: 10000 }, layoutColumnGap: { type: 'number', minimum: 0, maximum: 10000 },
+      layoutPaddingTop: { type: 'number', minimum: 0, maximum: 10000 }, layoutPaddingRight: { type: 'number', minimum: 0, maximum: 10000 }, layoutPaddingBottom: { type: 'number', minimum: 0, maximum: 10000 }, layoutPaddingLeft: { type: 'number', minimum: 0, maximum: 10000 }, layoutGridColumns: { type: 'integer', minimum: 1, maximum: 64 },
+      layoutAlign: { type: 'string', enum: ['start', 'center', 'end', 'space-between'] }, layoutCrossAlign: { type: 'string', enum: ['start', 'center', 'end', 'stretch'] }, layoutItemAbsolute: { type: 'boolean' }, clipContent: { type: 'boolean' },
+      widthSizing: { type: 'string', enum: ['fixed', 'hug', 'fill'] }, heightSizing: { type: 'string', enum: ['fixed', 'hug', 'fill'] }, minWidth: { type: ['number', 'null'] }, maxWidth: { type: ['number', 'null'] }, minHeight: { type: ['number', 'null'] }, maxHeight: { type: ['number', 'null'] },
+      constraintHorizontal: { type: 'string', enum: ['left', 'right', 'left-right', 'center', 'scale'] }, constraintVertical: { type: 'string', enum: ['top', 'bottom', 'top-bottom', 'center', 'scale'] },
+    } }, summary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['nodeId', 'baseRevision', 'elementId', 'changes'] } },
+  { name: 'design_apply_auto_layout', description: 'Recalcula atomicamente os filhos de um frame com o contrato de auto layout salvo nele.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, frameId: { type: 'string', format: 'uuid' }, summary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' } }, required: ['nodeId', 'baseRevision', 'frameId'] } },
+  {
+    name: 'design_update_typography',
+    description: 'Configura familia, estilo, metricas, alinhamento, decoracao e resize de uma layer de texto.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: { type: 'string' },
+        baseRevision: { type: 'integer', minimum: 0 },
+        elementId: { type: 'string', format: 'uuid' },
+        changes: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            text: { type: 'string', maxLength: 20000 },
+            fontFamily: { type: 'string', minLength: 1, maxLength: 160 },
+            fontSize: { type: 'number', minimum: 4, maximum: 1000 },
+            fontWeight: { type: 'integer', minimum: 100, maximum: 900 },
+            fontStyle: { type: 'string', enum: ['normal', 'italic'] },
+            lineHeight: { type: ['number', 'null'] },
+            letterSpacing: { type: 'number', minimum: -100, maximum: 1000 },
+            paragraphSpacing: { type: 'number', minimum: 0, maximum: 10000 },
+            textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
+            textVerticalAlign: { type: 'string', enum: ['top', 'middle', 'bottom'] },
+            textDecoration: { type: 'string', enum: ['none', 'underline', 'line-through'] },
+            textTransform: { type: 'string', enum: ['none', 'uppercase', 'lowercase', 'capitalize'] },
+            textAutoResize: { type: 'string', enum: ['fixed', 'height', 'width-height'] },
+          },
+        },
+        summary: { type: 'string', maxLength: 500 },
+        taskId: { type: 'string', format: 'uuid' },
+      },
+      required: ['nodeId', 'baseRevision', 'elementId', 'changes'],
+    },
+  },
   { name: 'design_arrange_elements', description: 'Alinha, distribui ou organiza layers e seus descendentes pela mesma operacao transacional usada no editor.', inputSchema: { type: 'object', properties: {
     nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, pageId: { type: 'string', format: 'uuid' },
     elementIds: { type: 'array', minItems: 2, maxItems: 500, uniqueItems: true, items: { type: 'string', format: 'uuid' } },
@@ -596,6 +641,23 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         baseRevision: args.baseRevision,
         operations: [{ kind: 'update', elementId: args.elementId, changes: args.changes }],
         summary: args.summary ?? `Update design element ${args.elementId}`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    case 'design_update_layout':
+    case 'design_update_typography':
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [{ kind: 'update', elementId: args.elementId, changes: args.changes }],
+        summary: args.summary ?? `${name === 'design_update_layout' ? 'Update layout' : 'Update typography'} ${args.elementId}`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    case 'design_apply_auto_layout':
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [{ kind: 'apply-auto-layout', frameId: args.frameId }],
+        summary: args.summary ?? `Apply auto layout ${args.frameId}`,
         from: selfAgent,
         taskId: args.taskId,
       });

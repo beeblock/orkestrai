@@ -32,6 +32,14 @@ pt-BR, English, and Spanish translations.
   Alt/Option distance measurements, coordinate labels on smart guides, and a
   deterministic Tidy Up command that moves complete hierarchies. Arrangement
   and vector geometry are also available through typed MCP and CLI commands.
+- The contextual Design inspector now provides compact collapsible sections,
+  draggable numeric fields with calculations and relative values, aspect
+  locking, fixed/hug/fill sizing with min/max bounds, complete auto layout,
+  richer typography, and multi-selection property editing.
+- Fills and strokes now use a professional color and gradient workflow with
+  Hex, RGB, HSL, alpha, eyedropper, recent and document colors, design-variable
+  binding, visual gradient stops, and keyboard-accessible controls. Layout and
+  typography changes use the same revision-safe UI, API, MCP, and CLI contract.
 
 ### Fixed
 
@@ -44,6 +52,8 @@ pt-BR, English, and Spanish translations.
 - Alt/Option is no longer overloaded for nested-layer selection, so it can
   consistently expose visual spacing measurements while Command/Ctrl performs
   deep selection as expected by professional design tools.
+- Fit all content and Fit selection now frame the visible artwork instead of
+  shrinking it to the nominal page dimensions when the page is mostly empty.
 
 ## 0.25.0 - 2026-09-05
 

@@ -507,7 +507,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'compose',
         title: 'Componha interfaces vetoriais responsivas',
-        body: 'Veja o contorno da camada antes de selecionar, use Command/Ctrl+clique para entrar em arte aninhada ou sobreposta e segure Alt/Option para inspecionar espaços exatos. Selecione pontos vetoriais por caixa e transforme-os juntos, gire ou redimensione camadas diretamente e edite texto multilinha no canvas. Use Shift para selecionar camadas e alinhar, distribuir, organizar, combinar, mascarar ou agrupar; smart guides exibem coordenadas e os descendentes permanecem juntos. Agentes usam os mesmos comandos tipados de organização e vetor.',
+        body: 'Veja o contorno da camada antes de selecionar, use Command/Ctrl+clique para entrar em arte aninhada ou sobreposta e segure Alt/Option para inspecionar espaços exatos. Selecione pontos vetoriais por caixa e transforme-os juntos, gire ou redimensione camadas diretamente e edite texto multilinha no canvas. Use Shift para selecionar camadas e alinhar, distribuir, organizar, combinar, mascarar ou agrupar; smart guides exibem coordenadas e os descendentes permanecem juntos. Em Propriedades, arraste o label de um número ou digite cálculos, valores relativos, pixels e porcentagens. Configure fixed, hug, fill, min/max, auto layout, tipografia e valores multisseleção sem sair da camada atual. Agentes usam os mesmos comandos tipados de organização, vetor, layout e tipografia.',
       },
       {
         id: 'assets-export',
@@ -517,7 +517,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'design-system',
         title: 'Torne a linguagem visual reutilizável',
-        body: 'Abra Variáveis ao lado de Camadas. Comece por um preset de produto, marketing ou mobile, importe DTCG/CSS ou exporte DTCG/CSS/Tailwind; crie modos, aliases e bindings e use a auditoria para localizar repetições. Em Componentes, transforme frames em fontes reutilizáveis, crie instâncias, propriedades, variantes e slots. Em Bibliotecas, compartilhe versões apenas com workspaces autorizados. Em Código, extraia CSS variables, Tailwind e contratos Svelte, React ou Vue sem executar arquivos e conecte a fonte visual à implementação. Agentes usam o mesmo command bus protegido por revisão.',
+        body: 'Use o picker Hex/RGB/HSL para cores sólidas ou gradientes, alpha, conta-gotas, cores recentes e do documento e vincule o paint ativo a um token sem sair do inspector. Abra Variáveis ao lado de Camadas para começar por um preset de produto, marketing ou mobile, importar DTCG/CSS ou exportar DTCG/CSS/Tailwind, criar modos e aliases e auditar repetição. Em Componentes, transforme frames em fontes reutilizáveis, crie instâncias, propriedades, variantes e slots. Em Bibliotecas, compartilhe versões apenas com workspaces autorizados. Em Código, extraia CSS variables, Tailwind e contratos Svelte, React ou Vue sem executar arquivos e conecte a fonte visual à implementação. Agentes usam o mesmo command bus protegido por revisão.',
       },
       {
         id: 'figma-bridge',

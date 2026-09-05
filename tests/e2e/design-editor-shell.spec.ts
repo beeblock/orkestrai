@@ -217,4 +217,107 @@ test.describe('Design editor shell', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('edits responsive layout, color, and typography from the contextual inspector', async ({ page, request }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-design-inspector-e2e-'));
+    const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;
+    const workspace = (await (await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E design inspector ${Date.now()}`, workingDir: dir },
+    })).json()).data as { id: string };
+    const node = (await (await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+      data: { type: 'design', title: 'Inspector design', x: 120, y: 120, width: 720, height: 520, payload: {} },
+    })).json()).data as { id: string };
+    const initial = (await (await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`)).json()).data as {
+      revision: number;
+      activePageId: string;
+    };
+    const frameId = randomUUID();
+    const textId = randomUUID();
+    await request.patch(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`, {
+      data: {
+        baseRevision: initial.revision,
+        operations: [
+          {
+            kind: 'create',
+            element: {
+              id: frameId,
+              pageId: initial.activePageId,
+              parentId: null,
+              type: 'frame',
+              name: 'Responsive card',
+              x: 100,
+              y: 100,
+              width: 320,
+              height: 160,
+              order: 0,
+              layoutMode: 'horizontal',
+              layoutGap: 12,
+              layoutPaddingTop: 20,
+              layoutPaddingLeft: 24,
+            },
+          },
+          {
+            kind: 'create',
+            element: {
+              id: textId,
+              pageId: initial.activePageId,
+              parentId: frameId,
+              type: 'text',
+              name: 'Card label',
+              x: 0,
+              y: 0,
+              width: 120,
+              height: 32,
+              order: 0,
+              text: 'Responsive text',
+            },
+          },
+        ],
+        summary: 'Seed inspector design',
+        actor: { kind: 'user', id: null, name: null, taskId: null },
+      },
+    });
+
+    try {
+      await request.put('/api/agent-room/settings', { data: { ...originalSettings, uiLanguage: 'en' } });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}&design=1`);
+
+      const filePanel = page.getByTestId('design-file-panel');
+      await filePanel.getByRole('button', { name: 'Responsive card', exact: true }).click();
+      const widthInput = page.getByRole('textbox', { name: 'W', exact: true });
+      await widthInput.fill('160 * 2 + 40');
+      await widthInput.press('Enter');
+      await page.getByRole('button', { name: 'Apply layout' }).click();
+
+      await expect.poll(async () => {
+        const response = await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`);
+        const body = await response.json();
+        const frame = body.data.elements.find((element: { id: string }) => element.id === frameId);
+        const text = body.data.elements.find((element: { id: string }) => element.id === textId);
+        return { frameWidth: frame.width, textX: text.x, textY: text.y };
+      }).toEqual({ frameWidth: 360, textX: 124, textY: 120 });
+
+      await page.getByRole('button', { name: 'Color picker' }).first().click();
+      await expect(page.getByRole('button', { name: 'hex', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await page.getByRole('button', { name: 'rgb', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'rgb', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await page.keyboard.press('Escape');
+
+      await filePanel.getByRole('button', { name: 'Card label', exact: true }).click();
+      await expect(page.getByRole('textbox', { name: 'Font family' })).toHaveValue('Inter Variable');
+      await page.getByRole('textbox', { name: 'Font family' }).fill('JetBrains Mono');
+      await page.getByRole('textbox', { name: 'Font family' }).press('Enter');
+      await expect.poll(async () => {
+        const response = await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`);
+        const body = await response.json();
+        return body.data.elements.find((element: { id: string }) => element.id === textId).fontFamily;
+      }).toBe('JetBrains Mono');
+    } finally {
+      await page.goto('about:blank');
+      await request.put('/api/agent-room/settings', { data: originalSettings });
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
