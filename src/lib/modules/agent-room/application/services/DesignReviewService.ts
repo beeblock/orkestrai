@@ -4,6 +4,7 @@ import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js
 import { designDocumentService } from './DesignDocumentService.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { isDesignExplorationPayload } from '../../domain/design-exploration.js';
+import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 
 function broadcast(workspaceId: string, nodeId: string): void {
   const send = (globalThis as { __orkestraiBroadcast?: (payload: Record<string, unknown>) => void }).__orkestraiBroadcast;
@@ -67,10 +68,12 @@ export class DesignReviewService {
     const session = sessionId ? ptySessionManager.get(sessionId) : null;
     if (session && !session.exited) {
       const outcome = dto.status === 'approved' ? 'approved for expansion' : 'returned with visual feedback';
-      await ptySessionManager.writeWithSubmit(
-        session.id,
-        `[design review] "${node.title ?? document.name}" revision ${dto.revision} was ${outcome}. Check orkestrai design list and the linked Kanban task before continuing.`,
-      ).catch(() => undefined);
+      await agentTerminalDeliveryService.deliver({
+        workspaceId: dto.workspaceId,
+        nodeId: leader!.id,
+        sessionId: session.id,
+        message: `[design review] "${node.title ?? document.name}" revision ${dto.revision} was ${outcome}. Check orkestrai design list and the linked Kanban task before continuing.`,
+      }).catch(() => undefined);
     }
 
     broadcast(dto.workspaceId, dto.nodeId);

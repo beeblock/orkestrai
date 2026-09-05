@@ -136,6 +136,7 @@ export class AgentSessionService {
     const mcpArgs = payload.provider === 'codex'
       ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
       : [];
+    const activeAgentSessionId = resumableAgentSessionId;
     const session = ptySessionManager.create({
       command: payload.command,
       args: [...(payload.args ?? []), ...mcpArgs, ...(!resumableAgentSessionId ? (payload.initialRoleArgs ?? []) : []), ...conversationArgs],
@@ -154,8 +155,10 @@ export class AgentSessionService {
       forwardEnvToWsl: Object.keys(profileEnv),
       runtime,
       workspaceRoot: workspace.workingDir,
+      transcriptHome: wslContext?.homeHostPath,
+      transcriptCwd: trackingCwd,
+      agentSessionId: activeAgentSessionId ?? freshAgentSessionId ?? undefined,
     });
-    const activeAgentSessionId = resumableAgentSessionId;
     if (activeAgentSessionId) tracker.bind(session.id, activeAgentSessionId);
     const nextPayload: AgentNodePayload = {
       ...payload,
@@ -176,6 +179,7 @@ export class AgentSessionService {
     if (payload.provider && adapter && !activeAgentSessionId) {
       const reportAgentSession = (agentSessionId: string) => {
         tracker.bind(session.id, agentSessionId);
+        ptySessionManager.bindAgentSession(session.id, agentSessionId);
         void workspaceRepository.getNode(target.id).then((fresh) => {
           if (!fresh) return;
           if (String((fresh.payload as AgentNodePayload | null)?.sessionId ?? '') !== session.id) return;

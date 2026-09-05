@@ -359,6 +359,9 @@ common credentials redacted; normal agent output is not persisted.
   roles, and desktop notifications. Codex receives the Orkestrai and official
   Figma MCP definitions as ephemeral launch overrides, so workspace
   provisioning never rewrites the user's global `~/.codex/config.toml`.
+  Automatic handoffs use one serialized delivery path; on Windows and WSL,
+  Orkestrai waits for the TUI composer to settle and confirms the exact prompt
+  in the provider transcript before reporting that the message was delivered.
 - **Parallel workspaces:** agents continue running when you switch to another
   workspace, with activity indicators and native notifications.
 - **Mixed Windows and WSL runtimes:** choose a default runtime per workspace,

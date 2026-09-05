@@ -38,6 +38,7 @@
     args?: string[];
     conversationArgs?: string[];
     freshSessionArgs?: string[];
+    agentSessionId?: string;
     cwd: string;
     env?: Record<string, string>;
     profileId?: string | null;

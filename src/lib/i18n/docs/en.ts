@@ -28,7 +28,7 @@ export const DOCS_EN: DocsCatalog = {
     {
       id: 'wsl-runtime',
       title: 'Windows workspaces with WSL',
-      body: `On Windows, the environment selected when creating or editing a workspace is the team default. Each terminal can inherit it or use Execution environment in the creation dialog and compact terminal menu to force native Windows or one specific WSL distribution. Select the exact Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian, or other installation and provide the Linux path for the same project folder. A single workspace can therefore combine Windows and WSL agents, including different distributions. A WIN or WSL badge identifies an override. Provider detection and models, PTY, exact conversation resume, Council, recruited agents, and the orkestrai bridge follow each terminal's effective runtime. Maestro recruits inherit the leader's active Floor and are confirmed only after the PTY starts in the correct environment; a failed launch removes the incomplete node. When a task is assigned, Orkestrai starts or resumes an offline agent and moves the card to In progress only after the complete briefing is delivered. Orkestrai validates the CLI in that distribution and confirms the provider transcript inside its own Linux home before persisting or restoring an id; an empty agent starts clean instead of guessing the latest conversation. Changing runtime restarts only that terminal. Missing distributions, directories, or commands produce distinct actionable errors without a silent native-Windows fallback.`,
+      body: `On Windows, the environment selected when creating or editing a workspace is the team default. Each terminal can inherit it or use Execution environment in the creation dialog and compact terminal menu to force native Windows or one specific WSL distribution. Select the exact Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian, or other installation and provide the Linux path for the same project folder. A single workspace can therefore combine Windows and WSL agents, including different distributions. A WIN or WSL badge identifies an override. Provider detection and models, PTY, exact conversation resume, Council, recruited agents, and the orkestrai bridge follow each terminal's effective runtime. Maestro recruits inherit the leader's active Floor and are confirmed only after the PTY starts in the correct environment; a failed launch removes the incomplete node. When a task is assigned, Orkestrai starts or resumes an offline agent and moves the card to In progress only after the complete briefing is delivered. Automatic questions, handoffs, assignments, roles, routines, and review feedback wait for the TUI composer to settle; on Windows and WSL, delivery is acknowledged only after the exact prompt appears in the provider transcript, with bounded Enter retries when it does not. Orkestrai validates the CLI in that distribution and reads the provider transcript from its own Linux home before persisting or restoring an id; an empty agent starts clean instead of guessing the latest conversation. Changing runtime restarts only that terminal. Missing distributions, directories, or commands produce distinct actionable errors without a silent native-Windows fallback.`,
     },
     {
       id: 'agentes',
@@ -812,6 +812,17 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'September 5, 2026 · 0.24.2',
+      title: 'Orkestrai 0.24.2: confirmed agent message delivery on Windows',
+      summary: 'Inter-agent messages now start a real provider turn instead of stopping as pasted text in a terminal composer.',
+      items: [
+        'Windows and WSL wait for the TUI composer redraw to settle before sending Enter, preventing the key from overtaking a pasted prompt.',
+        'A terminal redraw no longer counts as delivery: Orkestrai confirms the exact prompt in the provider transcript and retries only Enter within a bounded window when needed.',
+        'Direct questions, one-way handoffs, Kanban assignments and completion notices, roles, routines, and design reviews now use the same confirmed delivery path.',
+        'WSL sessions preserve their distribution-specific transcript home and Linux working directory for both delivery acknowledgement and exact reply correlation.',
+      ],
+    },
     {
       date: 'September 4, 2026 · 0.24.1',
       title: 'Orkestrai 0.24.1: secure dependencies and CI-gated releases',

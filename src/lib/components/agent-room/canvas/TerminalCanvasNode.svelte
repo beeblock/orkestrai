@@ -505,6 +505,7 @@
     return {
       command: data.payload.command ?? '',
       ...conversation,
+      agentSessionId: payload.agentSessionId,
       cwd: launchWorkingDir,
       env: agentEnv,
       profileId: currentProfileId,

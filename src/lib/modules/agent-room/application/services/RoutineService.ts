@@ -23,6 +23,7 @@ import { usageService } from './UsageService.js';
 import { gitService } from './GitService.js';
 import { automationIntegrationService } from './AutomationIntegrationService.js';
 import { RunAutomationJob } from '../jobs/RunAutomationJob.js';
+import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 
 const TICK_MS = 15_000;
 const POLL_INTERVALS: Partial<Record<AutomationTriggerType, number>> = {
@@ -547,7 +548,15 @@ export class RoutineService {
       const session = sessionId ? ptySessionManager.get(sessionId) : null;
       if (!sessionId || !session || session.exited) throw new Error('O terminal alvo não tem sessão PTY ativa.');
       const steps = prompt.split('\n').map((line) => line.replace(/^&&\s*/, '').trim()).filter(Boolean);
-      for (const step of steps) await ptySessionManager.writeWithSubmit(sessionId, step, 120);
+      for (const step of steps) {
+        await agentTerminalDeliveryService.deliver({
+          workspaceId: routine.workspaceId,
+          nodeId: targetNodeId,
+          sessionId,
+          message: step,
+          submitDelayMs: 120,
+        });
+      }
       return { detail: `${steps.length} etapa(s) enviadas para ${node?.title ?? 'terminal'}.`, steps: steps.length, target: node?.title };
     }
     if (routine.actionType === 'create_task') {

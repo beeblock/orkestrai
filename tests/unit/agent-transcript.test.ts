@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  findPromptInTranscript,
   parseClaudeTranscriptReply,
   parseCodexTranscriptReply,
   parseCodexTranscriptReplyForPrompt,
@@ -9,6 +13,7 @@ import {
   parseStructuredMessagesReply,
   parseTranscriptReplyForPrompt,
   parseTranscriptReplyStateForPrompt,
+  transcriptContainsPrompt,
 } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 
 describe('parseClaudeTranscriptReply', () => {
@@ -143,6 +148,48 @@ describe('parseKimiTranscriptReply (formato real do wire.jsonl, 0.33)', () => {
 });
 
 describe('transcritos estruturados dos providers adicionais', () => {
+  it('confirma o prompt antes de existir qualquer resposta do provider', () => {
+    const claude = JSON.stringify({ type: 'user', message: { content: 'mensagem entre agentes' } });
+    const codex = JSON.stringify({
+      type: 'response_item',
+      payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'mensagem entre agentes' }] },
+    });
+    const kimi = JSON.stringify({ type: 'turn.prompt', input: [{ type: 'text', text: 'mensagem entre agentes' }] });
+
+    expect(transcriptContainsPrompt('claude-project-jsonl', claude, ' mensagem   entre agentes ')).toBe(true);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex, 'mensagem entre agentes')).toBe(true);
+    expect(transcriptContainsPrompt('kimi-session-dir', kimi, 'mensagem entre agentes')).toBe(true);
+    expect(transcriptContainsPrompt('claude-project-jsonl', claude, 'outra mensagem')).toBe(false);
+    expect(parseTranscriptReplyForPrompt('claude-project-jsonl', claude, 'mensagem entre agentes')).toBeNull();
+
+    const newerClaudeTurn = `${claude}\n${JSON.stringify({ type: 'user', message: { content: 'mensagem posterior' } })}`;
+    expect(transcriptContainsPrompt('claude-project-jsonl', newerClaudeTurn, 'mensagem entre agentes')).toBe(false);
+  });
+
+  it('encontra o prompt do Claude no home da distribuição WSL', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'orkestrai-wsl-transcript-'));
+    const sessionId = '01a11111-2222-7333-8444-555555555555';
+    const directory = join(home, '.claude', 'projects', '-home-dev-project');
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, `${sessionId}.jsonl`),
+        `${JSON.stringify({ type: 'user', message: { content: 'execute a tarefa' } })}\n`,
+      );
+
+      await expect(findPromptInTranscript(
+        'claude',
+        '/home/dev/project',
+        sessionId,
+        'execute a tarefa',
+        Date.now() - 1_000,
+        { homeDir: home, posixCwd: true },
+      )).resolves.toEqual({ sessionId });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it('le Cursor e Antigravity em JSONL sem misturar a resposta anterior', () => {
     const jsonl = [
       JSON.stringify({ role: 'assistant', content: 'resposta antiga' }),

@@ -5,6 +5,19 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.24.2 - 2026-09-05
+
+### Fixed
+
+- Automatic messages between agents on Windows and WSL now wait for the TUI
+  composer to finish rendering pasted text before sending Enter. Delivery is
+  confirmed only when the provider persists the exact prompt, so a redraw can
+  no longer be mistaken for an accepted turn.
+- The same confirmed delivery path now covers direct questions, one-way
+  handoffs, Kanban assignments and completion notices, roles, routines, and
+  design reviews. WSL sessions retain their distribution-specific transcript
+  home and working directory for acknowledgement and reply correlation.
+
 ## 0.24.1 - 2026-09-04
 
 ### Fixed

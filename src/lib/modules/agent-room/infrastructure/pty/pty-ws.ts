@@ -33,7 +33,7 @@ import { codexMcpLaunchForRuntime, codexMcpOverrideArgs } from '../codex-mcp-con
 export const PTY_WS_PATH = '/ws/agent-room/pty';
 
 type ClientMessage =
-  | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string }
+  | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; agentSessionId?: string; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string }
   | { type: 'attach'; sessionId: string; cols?: number; rows?: number }
   | { type: 'input'; sessionId: string; data: string }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
@@ -247,6 +247,9 @@ export function handlePtyConnection(socket: WebSocket): void {
             provider: typeof message.provider === 'string' ? message.provider : null,
             runtime: message.runtime,
             workspaceRoot: typeof message.workspaceRoot === 'string' ? message.workspaceRoot : undefined,
+            transcriptHome: wslContext?.homeHostPath,
+            transcriptCwd: wslContext?.linuxWorkingDir ?? resolvedCwd,
+            agentSessionId: typeof message.agentSessionId === 'string' ? message.agentSessionId : freshSessionId ?? undefined,
           });
           sessionTrackers.set(session.id, tracker);
           const scrollback = attachSession(session.id);
@@ -274,6 +277,7 @@ export function handlePtyConnection(socket: WebSocket): void {
           if (provider) {
             const reportAgentSession = (agentSessionId: string) => {
               tracker.bind(session.id, agentSessionId);
+              ptySessionManager.bindAgentSession(session.id, agentSessionId);
               // Broadcast global: o socket criador pode já ter sido fechado
               // (o no remonta em modo attach ao receber o sessionId).
               wsGlobal.__orkestraiBroadcast?.({

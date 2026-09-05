@@ -6,6 +6,7 @@ import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts
 import { builtinRoleCatalog } from '../catalogs/BuiltinRoleCatalog.js';
 import type { AgentRoleLaunchContext } from '../adapters/types.js';
 import { taskBoardService } from './TaskBoardService.js';
+import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 
 export type AgentRole = {
   slug: string;
@@ -260,10 +261,12 @@ export class RoleService {
     if (shouldApplyRole && role) {
       // Providers sem system/developer prompt nativo recebem apenas uma
       // referencia curta. O prompt completo permanece no arquivo versionavel.
-      await ptySessionManager.writeWithSubmit(
-        payload.sessionId,
-        `[responsabilidade: ${role.name}] Leia e siga .orkestrai/roles/${role.slug}/AGENTS.md como sua funcao permanente neste workspace.`,
-      );
+      await agentTerminalDeliveryService.deliver({
+        workspaceId,
+        nodeId,
+        sessionId: payload.sessionId,
+        message: `[responsabilidade: ${role.name}] Leia e siga .orkestrai/roles/${role.slug}/AGENTS.md como sua funcao permanente neste workspace.`,
+      });
       applied = true;
     }
 
@@ -285,7 +288,12 @@ export class RoleService {
       const instruction = mode === 'resume'
         ? `[retomada do workspace] Continue somente o trabalho aberto abaixo a partir do ponto em que parou. Consulte o estado atual com orkestrai task list e mantenha cada etapa atualizada.`
         : `[fila inicial do Kanban] Revise o trabalho aberto abaixo. Tarefas sem responsável devem ser atribuídas com orkestrai task assign <id> "<Agente>" antes de mensagens diretas.`;
-      await ptySessionManager.writeWithSubmit(payload.sessionId, `${instruction}\n\n${briefs}`);
+      await agentTerminalDeliveryService.deliver({
+        workspaceId,
+        nodeId,
+        sessionId: payload.sessionId,
+        message: `${instruction}\n\n${briefs}`,
+      });
     }
     return { applied, tasksDelivered: tasks.length };
   }

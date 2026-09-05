@@ -28,7 +28,7 @@ export const DOCS_ES: DocsCatalog = {
     {
       id: 'wsl-runtime',
       title: 'Workspaces de Windows con WSL',
-      body: `En Windows, el entorno seleccionado al crear o editar un workspace es el predeterminado del equipo. Cada terminal puede heredarlo o usar Entorno de ejecución en el diálogo de creación y en su menú compacto para forzar Windows nativo o una distribución WSL específica. Selecciona exactamente Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian u otra instalación e indica la ruta Linux de la misma carpeta del proyecto. Un único workspace puede combinar agentes Windows y WSL, incluso distribuciones diferentes. Un indicador WIN o WSL identifica la excepción. Detección y modelos del provider, PTY, reanudación exacta de la conversación, Council, agentes reclutados y el puente orkestrai siguen el runtime efectivo de cada terminal. Los reclutas del Maestro heredan el Piso activo del líder y solo se confirman después de que la PTY inicia en el entorno correcto; un fallo elimina el nodo incompleto. Al asignar una tarea, Orkestrai inicia o reanuda un agente desconectado y solo mueve la tarjeta a En progreso después de entregar el briefing completo. Orkestrai valida la CLI dentro de esa distribución y confirma el transcript del provider en su propia home Linux antes de persistir o restaurar un id; un agente vacío comienza limpio en vez de adivinar la conversación más reciente. Cambiar el runtime reinicia solo esa terminal. Una distribución, directorio o comando ausente produce errores distintos y accionables, sin fallback silencioso a Windows nativo.`,
+      body: `En Windows, el entorno seleccionado al crear o editar un workspace es el predeterminado del equipo. Cada terminal puede heredarlo o usar Entorno de ejecución en el diálogo de creación y en su menú compacto para forzar Windows nativo o una distribución WSL específica. Selecciona exactamente Ubuntu, Ubuntu-22.04, Ubuntu-24.04, Debian u otra instalación e indica la ruta Linux de la misma carpeta del proyecto. Un único workspace puede combinar agentes Windows y WSL, incluso distribuciones diferentes. Un indicador WIN o WSL identifica la excepción. Detección y modelos del provider, PTY, reanudación exacta de la conversación, Council, agentes reclutados y el puente orkestrai siguen el runtime efectivo de cada terminal. Los reclutas del Maestro heredan el Piso activo del líder y solo se confirman después de que la PTY inicia en el entorno correcto; un fallo elimina el nodo incompleto. Al asignar una tarea, Orkestrai inicia o reanuda un agente desconectado y solo mueve la tarjeta a En progreso después de entregar el briefing completo. Las preguntas automáticas, handoffs, asignaciones, roles, rutinas y feedback de revisión esperan que se estabilice el compositor del TUI; en Windows y WSL, la entrega solo se confirma cuando el prompt exacto aparece en el transcript del provider, con reintentos limitados únicamente de Enter cuando hace falta. Orkestrai valida la CLI dentro de esa distribución y lee el transcript del provider desde su propia home Linux antes de persistir o restaurar un id; un agente vacío comienza limpio en vez de adivinar la conversación más reciente. Cambiar el runtime reinicia solo esa terminal. Una distribución, directorio o comando ausente produce errores distintos y accionables, sin fallback silencioso a Windows nativo.`,
     },
     {
       id: 'agentes',
@@ -812,6 +812,17 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '5 de septiembre de 2026 · 0.24.2',
+      title: 'Orkestrai 0.24.2: entrega confirmada de mensajes en Windows',
+      summary: 'Los mensajes entre agentes ahora inician un turno real del provider en vez de quedar como texto pegado en el compositor de la terminal.',
+      items: [
+        'Windows y WSL esperan que se estabilice el redibujado del compositor del TUI antes de enviar Enter, evitando que la tecla se adelante al texto pegado.',
+        'Un redibujado de la terminal ya no cuenta como entrega: Orkestrai confirma el prompt exacto en el transcript del provider y repite solo Enter, dentro de un límite, cuando hace falta.',
+        'Preguntas directas, handoffs sin respuesta, asignaciones y finalizaciones de Kanban, roles, rutinas y revisiones de diseño usan ahora la misma ruta de entrega confirmada.',
+        'Las sesiones WSL conservan el home de transcripts de su distribución y el directorio Linux para confirmar la entrega y correlacionar la respuesta exacta.',
+      ],
+    },
     {
       date: '4 de septiembre de 2026 · 0.24.1',
       title: 'Orkestrai 0.24.1: dependencias seguras y releases bloqueadas por CI',

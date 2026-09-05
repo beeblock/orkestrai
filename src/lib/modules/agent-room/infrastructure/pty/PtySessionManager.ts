@@ -34,6 +34,11 @@ export type PtySessionInfo = {
   nodeId?: string | null;
   /** Provider registrado; ausente em shells puros. */
   provider?: string | null;
+  /** Conversa real observada no armazenamento do provider. */
+  agentSessionId?: string | null;
+  /** Home e cwd usados pelo provider para persistir transcripts (WSL-safe). */
+  transcriptHome?: string | null;
+  transcriptCwd?: string | null;
   /** Stable native/WSL identity used to avoid cross-runtime reattachment. */
   runtimeKey: string;
 };
@@ -167,12 +172,18 @@ export type CreatePtySessionInput = {
   runtime?: WorkspaceExecutionRuntime;
   /** Host path corresponding to runtime.linuxWorkingDir. */
   workspaceRoot?: string;
+  /** Transcript location resolved before spawning a WSL-backed provider. */
+  transcriptHome?: string;
+  transcriptCwd?: string;
+  agentSessionId?: string;
 };
 
 const SCROLLBACK_LIMIT = 256 * 1024; // 256 KB por sessão
 const SESSION_IDLE_MS = 2_500;
 const AGENT_DELIVERY_SETTLE_MS = 8_000;
 const SHELL_DELIVERY_SETTLE_MS = 400;
+const COMPOSER_OUTPUT_QUIET_MS = 400;
+const COMPOSER_SETTLE_LIMIT_MS = 5_000;
 
 /**
  * Texto seguro para composers de TUI (Claude/Codex/Kimi): remove bytes de
@@ -249,6 +260,9 @@ export class PtySessionManager {
       workspaceId: input.workspaceId ?? null,
       nodeId: input.nodeId ?? null,
       provider: input.provider ?? null,
+      agentSessionId: input.agentSessionId ?? null,
+      transcriptHome: input.transcriptHome ?? null,
+      transcriptCwd: input.transcriptCwd ?? input.cwd,
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
@@ -331,6 +345,18 @@ export class PtySessionManager {
     session.workspaceId = workspaceId;
     session.nodeId = nodeId;
     return true;
+  }
+
+  bindAgentSession(id: string, agentSessionId: string): boolean {
+    const session = this.sessions.get(id);
+    if (!session || session.exited) return false;
+    session.agentSessionId = agentSessionId;
+    return true;
+  }
+
+  requiresSubmitConfirmation(id: string): boolean {
+    const session = this.requireSession(id);
+    return Boolean(session.provider && session.conptySubmitGuard);
   }
 
   get(id: string): PtySessionInfo | null {
@@ -501,19 +527,41 @@ export class PtySessionManager {
   async writeWithConfirmedSubmit(
     id: string,
     text: string,
-    options: { submitDelayMs?: number; confirmationWindowMs?: number; maxAttempts?: number } = {},
+    options: {
+      submitDelayMs?: number;
+      confirmationWindowMs?: number;
+      maxAttempts?: number;
+      isAccepted?: () => Promise<boolean>;
+      signal?: AbortSignal;
+    } = {},
   ): Promise<void> {
     const session = this.requireSession(id);
-    await this.queueWithSubmit(id, text, options.submitDelayMs ?? 200).submitted;
+    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200);
+    if (options.signal?.aborted) {
+      queued.cancel();
+      throw new Error('Agent message delivery cancelled.');
+    }
+    const cancelQueuedDelivery = () => queued.cancel();
+    options.signal?.addEventListener('abort', cancelQueuedDelivery, { once: true });
+    try {
+      await queued.submitted;
+    } finally {
+      options.signal?.removeEventListener('abort', cancelQueuedDelivery);
+    }
+    if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
     if (!session.provider || !session.conptySubmitGuard) return;
 
     const confirmationWindowMs = options.confirmationWindowMs ?? 4_000;
     const maxAttempts = Math.max(1, options.maxAttempts ?? 3);
     let revisionAtSubmit = session.lastSubmitOutputRevision;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      if (await this.waitForOutputAfter(id, revisionAtSubmit, confirmationWindowMs)) return;
+      const confirmed = options.isAccepted
+        ? await this.waitForAcceptance(options.isAccepted, confirmationWindowMs, options.signal)
+        : await this.waitForOutputAfter(id, revisionAtSubmit, confirmationWindowMs, options.signal);
+      if (confirmed) return;
       const current = this.requireSession(id);
       if (current.exited) throw new Error(`Sessão PTY ${id} finalizada antes de confirmar o envio.`);
+      if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
       if (attempt === maxAttempts) break;
       revisionAtSubmit = current.outputRevision;
       if (!this.submitIfComposerFree(id)) {
@@ -632,6 +680,8 @@ export class PtySessionManager {
 
     session.activeDelivery = delivery;
     session.deliveryInProgress = true;
+    const outputRevisionAtWrite = session.outputRevision;
+    const textWrittenAt = Date.now();
     try {
       this.write(session.id, delivery.text);
     } catch (error) {
@@ -643,11 +693,22 @@ export class PtySessionManager {
     }
 
     // ConPTY/WSL precisa de mais tempo para processar prompts grandes antes do
-    // Enter. Shells mantêm o delay solicitado; TUIs usam um delay adaptativo.
+    // Enter. Alem do piso adaptativo, esperamos o redraw do composer ficar
+    // quieto: um timeout fixo deixava o Enter ultrapassar a colagem no Windows.
     const submitDelayMs = session.provider && session.conptySubmitGuard
       ? Math.max(delivery.submitDelayMs, Math.min(2_000, 250 + Math.ceil(delivery.text.length / 8)))
       : delivery.submitDelayMs;
-    const timer = setTimeout(() => {
+    const submit = () => {
+      if (session.exited || this.sessions.get(session.id) !== session) return;
+      const now = Date.now();
+      const elapsed = now - textWrittenAt;
+      const sawComposerOutput = session.outputRevision > outputRevisionAtWrite;
+      const outputQuiet = !sawComposerOutput || now - session.lastOutputAt >= COMPOSER_OUTPUT_QUIET_MS;
+      if (elapsed < submitDelayMs || (!outputQuiet && elapsed < COMPOSER_SETTLE_LIMIT_MS)) {
+        session.deliveryTimer = setTimeout(submit, Math.min(100, Math.max(20, submitDelayMs - elapsed)));
+        session.deliveryTimer.unref?.();
+        return;
+      }
       try {
         session.lastSubmitOutputRevision = session.outputRevision;
         this.write(session.id, '\r');
@@ -667,17 +728,31 @@ export class PtySessionManager {
           session.deferredHumanInput.length = 0;
         }
       }
-    }, submitDelayMs);
-    timer.unref?.();
+    };
+    session.deliveryTimer = setTimeout(submit, Math.min(100, submitDelayMs));
+    session.deliveryTimer.unref?.();
   }
 
-  private async waitForOutputAfter(id: string, revision: number, timeoutMs: number): Promise<boolean> {
+  private async waitForOutputAfter(id: string, revision: number, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+    while (!signal?.aborted && Date.now() < deadline) {
       const session = this.sessions.get(id);
       if (!session || session.exited) return false;
       if (session.outputRevision > revision) return true;
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    return false;
+  }
+
+  private async waitForAcceptance(
+    isAccepted: () => Promise<boolean>,
+    timeoutMs: number,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (!signal?.aborted && Date.now() < deadline) {
+      if (await isAccepted().catch(() => false)) return true;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
     }
     return false;
   }
@@ -770,6 +845,9 @@ export class PtySessionManager {
       workspaceId: session.workspaceId,
       nodeId: session.nodeId,
       provider: session.provider,
+      agentSessionId: session.agentSessionId,
+      transcriptHome: session.transcriptHome,
+      transcriptCwd: session.transcriptCwd,
       runtimeKey: session.runtimeKey,
       /** Já produziu algum output (boot comecou/terminou) — usado na prontidao do ask. */
       hasOutput: session.scrollback.length > 0,

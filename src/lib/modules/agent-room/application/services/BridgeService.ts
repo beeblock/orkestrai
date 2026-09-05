@@ -24,6 +24,7 @@ import { AutomationTriggerReceived } from '../../domain/events/AutomationTrigger
 import { agentSessionService } from './AgentSessionService.js';
 import { roleService } from './RoleService.js';
 import { providerProfileService } from './ProviderProfileService.js';
+import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 
 export function resolveAgentReplyText(
   transcriptText: string | null,
@@ -253,8 +254,13 @@ export class BridgeService {
       content: input.message,
       metadata,
     });
-    const delivery = ptySessionManager.queueWithSubmit(target.sessionId, input.message, 120);
-    await delivery.submitted;
+    await agentTerminalDeliveryService.deliver({
+      workspaceId,
+      nodeId: target.nodeId,
+      sessionId: target.sessionId,
+      message: input.message,
+      submitDelayMs: 120,
+    });
     await controlCenterService.recordDelivery({
       messageId,
       workspaceId,
@@ -349,6 +355,8 @@ export class BridgeService {
     });
     try {
       const terminalReply = this.askAndWait(
+        workspaceId,
+        target.nodeId,
         target.sessionId,
         input.message,
         input.timeoutMs ?? 180_000,
@@ -606,16 +614,24 @@ export class BridgeService {
   ): Promise<MatchedTranscriptReply | null> {
     const node = await workspaceRepository.getNode(nodeId);
     const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };
-    const preferredSessionId = agentSessionTracker.agentSessionIdForPty(ptySessionId) ?? payload.agentSessionId ?? null;
+    const session = ptySessionManager.get(ptySessionId);
+    const preferredSessionId = session?.agentSessionId
+      ?? agentSessionTracker.agentSessionIdForPty(ptySessionId)
+      ?? payload.agentSessionId
+      ?? null;
     if (!node || !payload.provider) return null;
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
-    let cwd = workspace?.workingDir ?? '.';
-    if (node.floorId) {
+    let cwd = session?.transcriptCwd ?? workspace?.workingDir ?? '.';
+    if (!session?.transcriptCwd && node.floorId) {
       const floor = await floorService.get(node.floorId).catch(() => null);
       if (floor?.path) cwd = floor.path;
     }
-    const match = await findReplyToPrompt(payload.provider, cwd, preferredSessionId, prompt, since);
+    const match = await findReplyToPrompt(payload.provider, cwd, preferredSessionId, prompt, since, {
+      homeDir: session?.transcriptHome ?? undefined,
+      posixCwd: session?.runtimeKey.startsWith('wsl:') ?? false,
+    });
     if (!match || match.sessionId === payload.agentSessionId) return match;
+    ptySessionManager.bindAgentSession(ptySessionId, match.sessionId);
     await workspaceRepository.updateNode(node.id, {
       payload: { ...payload, agentSessionId: match.sessionId } as never,
     });
@@ -1558,6 +1574,8 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
   }
 
   private askAndWait(
+    workspaceId: string,
+    nodeId: string,
     sessionId: string,
     message: string,
     timeoutMs: number,
@@ -1578,20 +1596,24 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       // mensagem e a resposta se perde.
       const MIN_AFTER_SEND_MS = 3_500;
       const QUIET_MS = 2_000;
-      let retryTimer: ReturnType<typeof setInterval> | null = null;
-
-      let cancelQueuedDelivery: (() => boolean) | null = null;
       const finish = (timedOut: boolean) => {
         if (done) return;
         done = true;
-        cancelQueuedDelivery?.();
         if (timer) clearTimeout(timer);
         if (quietTimer) clearTimeout(quietTimer);
-        if (retryTimer) clearInterval(retryTimer);
         signal?.removeEventListener('abort', onAbort);
         detach();
         // Só conta o que saiu DEPOIS do envio (boot paint não e resposta).
         resolvePromise({ text: stripAnsi(captured.slice(capturedAtSend)), timedOut });
+      };
+      const fail = (error: unknown) => {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        if (quietTimer) clearTimeout(quietTimer);
+        signal?.removeEventListener('abort', onAbort);
+        detach();
+        reject(error instanceof Error ? error : new Error(String(error)));
       };
 
       let quietTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1647,13 +1669,17 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       signal?.addEventListener('abort', onAbort, { once: true });
 
       const send = () => {
-        const delivery = ptySessionManager.queueWithSubmit(sessionId, message, 120);
-        cancelQueuedDelivery = delivery.cancel;
-        delivery.submitted
+        agentTerminalDeliveryService.deliver({
+          workspaceId,
+          nodeId,
+          sessionId,
+          message,
+          submitDelayMs: 120,
+          signal,
+        })
           .then(async () => {
             if (done) return;
             await onSubmitted?.();
-            cancelQueuedDelivery = null;
             // Ignora boot/eco/comandos observados enquanto a mensagem aguardava
             // um rascunho humano ser enviado. Daqui em diante e resposta real.
             capturedAtSend = captured.length;
@@ -1661,29 +1687,10 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
             sentRealAt = Date.now();
             lastOutputAt = sentRealAt;
             timer = setTimeout(() => finish(true), timeoutMs);
-            // Seguro contra Enter engolido: o eco do texto engana o "output
-            // novo". O que conta e ATIVIDADE RECENTE: se ficou quieto de novo
-            // (composer parado, nada processando), tenta reenviar o \r. O
-            // gerenciador recusa se o usuário já tiver iniciado outro rascunho.
-            let retries = 0;
-            retryTimer = setInterval(() => {
-              if (done || retries >= 3) {
-                if (retryTimer) clearInterval(retryTimer);
-                return;
-              }
-              if (Date.now() - lastOutputAt < 3_500) return; // atividade recente: segue
-              retries += 1;
-              try {
-                ptySessionManager.submitIfComposerFree(sessionId);
-              } catch {
-                finish(true);
-              }
-            }, 4_000);
-            retryTimer.unref?.();
             // Rede de segurança caso o evento de ociosidade nunca dispare.
             quietTimer = setTimeout(maybeFinish, MIN_AFTER_SEND_MS);
           })
-          .catch(() => finish(true));
+          .catch(fail);
       };
 
       // PRONTIDAO: escrever durante o boot faz o Enter virar newline no

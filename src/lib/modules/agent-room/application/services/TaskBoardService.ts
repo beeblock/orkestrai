@@ -13,6 +13,7 @@ import {
 } from '../../contracts/schemas/workspaceAttachmentSchemas.js';
 import { AutomationTriggerReceived } from '../../domain/events/AutomationTriggerReceived.js';
 import { agentSessionService } from './AgentSessionService.js';
+import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 
 export type BoardTask = {
   id: string;
@@ -580,10 +581,12 @@ export class TaskBoardService {
     const hint = assigned
       ? `O usuário atribuiu direto para um agente — acompanhe com: orkestrai task list`
       : `SEM responsável. Distribua: orkestrai task assign ${taskId} "<Agente>" (ou coordene como achar melhor)`;
-    await ptySessionManager.writeWithSubmit(
-      session.id,
-      `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`,
-    );
+    await agentTerminalDeliveryService.deliver({
+      workspaceId,
+      nodeId: leader.id,
+      sessionId: session.id,
+      message: `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`,
+    });
   }
 
   /**
@@ -639,11 +642,12 @@ export class TaskBoardService {
       content,
       metadata: { kind: 'task_completion', taskId: task.id },
     });
-    const delivery = ptySessionManager.queueWithSubmit(
-      session.id,
-      content,
-    );
-    void delivery.submitted
+    void agentTerminalDeliveryService.deliver({
+      workspaceId,
+      nodeId: leader.id,
+      sessionId: session.id,
+      message: content,
+    })
       .then(async () => {
         await controlCenterService.recordDelivery({
           messageId,
@@ -741,11 +745,17 @@ export class TaskBoardService {
         notifyWorkspaceChanged(workspaceId);
       }
     }
-    // Texto e Enter separados — ver writeWithSubmit (composer do Codex).
+    // A entrega espera o composer estabilizar e, em ConPTY/WSL, confirma no
+    // transcript que o provider realmente iniciou o turno.
     const prompt = `[nova tarefa do quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\nQuando terminar, marque com: orkestrai task done ${taskId}`;
     const activeSessionId = sessionId;
     if (!activeSessionId) throw new Error(`O agente "${node.title ?? node.id}" não possui uma sessão PTY para receber a tarefa.`);
-    await ptySessionManager.writeWithConfirmedSubmit(activeSessionId, prompt);
+    await agentTerminalDeliveryService.deliver({
+      workspaceId,
+      nodeId: node.id,
+      sessionId: activeSessionId,
+      message: prompt,
+    });
     await controlCenterService.recordActivity({
       workspaceId,
       nodeId: node.id,

@@ -198,16 +198,43 @@ describe('PtySessionManager', () => {
     expect(writes).toEqual(['mensagem automatica', '\r', 'rascunho humano']);
   });
 
+  it('cancela uma entrega confirmada que ainda aguarda o rascunho humano', async () => {
+    const writes: string[] = [];
+    const fakePty = {
+      write: (data: string) => writes.push(data),
+      resize: () => {},
+      kill: () => {},
+      onData: () => ({ dispose: () => {} }),
+      onExit: () => ({ dispose: () => {} }),
+      pid: 1,
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'claude', provider: 'claude', cwd: process.cwd() });
+    const abortController = new AbortController();
+
+    manager.writeHumanInput(session.id, 'rascunho humano');
+    const delivery = manager.writeWithConfirmedSubmit(session.id, 'mensagem cancelada', {
+      signal: abortController.signal,
+    });
+    abortController.abort();
+
+    await expect(delivery).rejects.toThrow('cancelada');
+    manager.writeHumanInput(session.id, '\r');
+    expect(writes).toEqual(['rascunho humano', '\r']);
+  });
+
   it('repete Enter quando um TUI WSL não confirma o primeiro submit', async () => {
     const writes: string[] = [];
     let emitData: ((data: string) => void) | null = null;
     let enterCount = 0;
+    let accepted = false;
     const fakePty = {
       write: (data: string) => {
         writes.push(data);
         if (data === '\r') {
           enterCount += 1;
-          if (enterCount === 2) emitData?.('Working');
+          if (enterCount === 1) emitData?.('redraw do composer');
+          if (enterCount === 2) accepted = true;
         }
       },
       resize: () => {},
@@ -231,9 +258,43 @@ describe('PtySessionManager', () => {
       submitDelayMs: 5,
       confirmationWindowMs: 20,
       maxAttempts: 3,
+      isAccepted: async () => accepted,
     });
 
     expect(writes).toEqual(['execute a tarefa', '\r', '\r']);
+    manager.kill(session.id);
+  });
+
+  it('espera o redraw do composer estabilizar antes de enviar Enter no ConPTY', async () => {
+    const writes: Array<{ data: string; at: number }> = [];
+    let emitData: ((data: string) => void) | null = null;
+    const startedAt = Date.now();
+    const fakePty = {
+      write: (data: string) => {
+        writes.push({ data, at: Date.now() - startedAt });
+        if (data !== '\r') emitData?.('composer redraw');
+      },
+      resize: () => {},
+      kill: () => {},
+      onData: (callback: (data: string) => void) => {
+        emitData = callback;
+        return { dispose: () => {} };
+      },
+      onExit: () => ({ dispose: () => {} }),
+      pid: 1,
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({
+      command: 'claude',
+      provider: 'claude',
+      cwd: process.cwd(),
+      runtime: { kind: 'wsl', distribution: 'Ubuntu-24.04', linuxWorkingDir: '/workspace' },
+    });
+
+    await manager.writeWithSubmit(session.id, 'mensagem entre agentes', 5);
+
+    expect(writes.map((entry) => entry.data)).toEqual(['mensagem entre agentes', '\r']);
+    expect(writes[1].at).toBeGreaterThanOrEqual(350);
     manager.kill(session.id);
   });
 });
