@@ -765,7 +765,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'remote-collaboration',
       title: 'Share a workspace without sharing your machine',
-      body: 'Enable experimental workspace sharing, start an end-to-end encrypted session, and choose a Browser/mobile or Orkestrai app invite. The web link opens the installable Remote PWA. The app invite opens the installed Orkestrai app automatically; the guest can also use Workspace → Join remote workspace and paste the invite. Both remove the secret from the URL before connecting and store a non-extractable pairing key only on that device. Approve the exact device fingerprint and choose Viewer, Collaborator, Operator, or Administrator. An Operator can hold sanitized, traceable conversations with the leader or another agent and dictate into either one through the host local STT. The overview keeps the leader history visible; when the leader uses tools and speaks in several stages, Remote waits for the real end of the turn and combines every text block before publishing the reply. An Administrator can also start or restore an offline agent. Raw terminal control is a separate Administrator-only switch on that device, disabled by default, limited to one responsive terminal, rate-limited, encrypted, and audited. Terminal dictation inserts text without pressing Enter. It never grants file browsing, Portal or mobile-device viewing, or Canvas editing. Revoke a device or stop the session at any time, and inspect accepted and rejected commands in the audit trail.',
+      body: 'Enable experimental workspace sharing, start an end-to-end encrypted session, and choose a Browser/mobile or Orkestrai app invite. The web link opens the installable Remote PWA. The app invite opens the installed Orkestrai app automatically; the guest can also use Workspace → Join remote workspace and paste the invite. Both remove the secret from the URL before connecting and store a non-extractable pairing key only on that device. Approve the exact device fingerprint and choose Viewer, Collaborator, Operator, or Administrator. An Operator can hold sanitized, traceable conversations with the leader or another agent and dictate into either one through the host local STT. The overview keeps the leader history visible; when the leader uses tools and speaks in several stages, Remote waits for the real end of the turn and combines every text block before publishing the reply. Open Team to inspect each agent\'s current focus, recent semantic activity, and bounded coordination totals without exposing internal message bodies or terminal output. On phones, the fixed navigation keeps Overview, Team, Tasks, and Activity available while More opens Huddles and Reviews; task columns become a readable vertical view and every detail screen has an explicit return action. An Administrator can also start or restore an offline agent. Raw terminal control is a separate Administrator-only switch on that device, disabled by default, limited to one responsive terminal, rate-limited, encrypted, and audited. Terminal dictation inserts text without pressing Enter. It never grants file browsing, Portal or mobile-device viewing, or Canvas editing. Revoke a device or stop the session at any time, and inspect accepted and rejected commands in the audit trail.',
       tags: ['Encrypted Remote PWA', 'host-side dictation', 'responsive opt-in terminal'],
     },
     {
@@ -812,6 +812,17 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'September 5, 2026 · 0.25.0',
+      title: 'Orkestrai 0.25.0: a complete Remote workspace on every screen',
+      summary: 'Remote navigation is reliable on phones, and each agent now has a safe operational work summary.',
+      items: [
+        'Team shows each agent\'s current focus, recent semantic activity, and bounded sent, received, reply, and failure totals without exposing internal message bodies or terminal output.',
+        'The phone navigation keeps Overview, Team, Tasks, and Activity visible while More provides Huddles and Reviews with their attention counts.',
+        'Task columns become a readable vertical selector on small screens, while desktop keeps the horizontal board.',
+        'Agent dialogs and Huddle rooms have explicit return actions, and safe areas no longer clip headers, composers, navigation, or the full-screen terminal.',
+      ],
+    },
     {
       date: 'September 5, 2026 · 0.24.2',
       title: 'Orkestrai 0.24.2: confirmed agent message delivery on Windows',

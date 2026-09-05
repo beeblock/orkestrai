@@ -765,7 +765,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'remote-collaboration',
       title: 'Compartir un workspace sin compartir tu equipo',
-      body: 'Habilita el uso compartido experimental, inicia una sesión cifrada de extremo a extremo y elige una invitación para Navegador/móvil o App Orkestrai. El enlace web abre la PWA Remote instalable. La invitación de la app abre automáticamente Orkestrai instalado; el invitado también puede usar Workspace → Entrar a workspace remoto y pegar la invitación. Ambos eliminan el secreto de la URL antes de conectar y guardan una clave de emparejamiento no extraíble solo en ese dispositivo. Comprueba la huella y elige Lector, Colaborador, Operador o Administrador. Un Operador puede mantener conversaciones sanitizadas y trazables con el líder u otro agente y dictar en cualquiera de ellas mediante el STT local del host. La pantalla principal conserva visible el historial del líder; cuando usa herramientas y responde en varias etapas, Remote espera el final real del turno y reúne todos los bloques antes de publicar la respuesta. Un Administrador también puede iniciar o restaurar un agente desconectado. El terminal sin filtrar es un permiso separado y exclusivo del Administrador en ese dispositivo, desactivado por defecto, limitado a un terminal adaptable a la pantalla, con límite de tráfico, cifrado y auditoría. El dictado del terminal inserta el texto sin presionar Enter. No habilita navegación de archivos, visualización de Portales o dispositivos móviles ni edición del Canvas. Revoca el dispositivo o detén la sesión en cualquier momento y consulta los comandos aceptados y rechazados en la auditoría.',
+      body: 'Habilita el uso compartido experimental, inicia una sesión cifrada de extremo a extremo y elige una invitación para Navegador/móvil o App Orkestrai. El enlace web abre la PWA Remote instalable. La invitación de la app abre automáticamente Orkestrai instalado; el invitado también puede usar Workspace → Entrar a workspace remoto y pegar la invitación. Ambos eliminan el secreto de la URL antes de conectar y guardan una clave de emparejamiento no extraíble solo en ese dispositivo. Comprueba la huella y elige Lector, Colaborador, Operador o Administrador. Un Operador puede mantener conversaciones sanitizadas y trazables con el líder u otro agente y dictar en cualquiera de ellas mediante el STT local del host. La pantalla principal conserva visible el historial del líder; cuando usa herramientas y responde en varias etapas, Remote espera el final real del turno y reúne todos los bloques antes de publicar la respuesta. Abre Equipo para consultar el enfoque actual, la actividad semántica reciente y los totales limitados de coordinación de cada agente sin exponer mensajes internos ni la salida del terminal. En móvil, la navegación fija mantiene Resumen, Equipo, Tareas y Actividad disponibles; Más abre Huddles y Revisiones, las columnas se convierten en una vista vertical legible y cada detalle tiene una acción explícita para volver. Un Administrador también puede iniciar o restaurar un agente desconectado. El terminal sin filtrar es un permiso separado y exclusivo del Administrador en ese dispositivo, desactivado por defecto, limitado a un terminal adaptable a la pantalla, con límite de tráfico, cifrado y auditoría. El dictado del terminal inserta el texto sin presionar Enter. No habilita navegación de archivos, visualización de Portales o dispositivos móviles ni edición del Canvas. Revoca el dispositivo o detén la sesión en cualquier momento y consulta los comandos aceptados y rechazados en la auditoría.',
       tags: ['PWA Remote cifrada', 'dictado en el host', 'terminal adaptable opt-in'],
     },
     {
@@ -812,6 +812,17 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: '5 de septiembre de 2026 · 0.25.0',
+      title: 'Orkestrai 0.25.0: workspace Remote completo en cualquier pantalla',
+      summary: 'La navegación remota funciona en móvil y cada agente ahora tiene un resumen operativo seguro del trabajo.',
+      items: [
+        'Equipo muestra el enfoque actual, la actividad semántica reciente y totales limitados de mensajes enviados, recibidos, respondidos y fallidos sin exponer mensajes internos ni la salida del terminal.',
+        'La navegación móvil mantiene visibles Resumen, Equipo, Tareas y Actividad, mientras Más ofrece Huddles y Revisiones con sus contadores de atención.',
+        'Las columnas de tareas se convierten en un selector vertical legible en pantallas pequeñas, mientras el escritorio conserva el tablero horizontal.',
+        'Los modales de agentes y las salas de Huddle tienen una acción explícita para volver, y las áreas seguras ya no recortan encabezados, compositores, navegación ni el terminal a pantalla completa.',
+      ],
+    },
     {
       date: '5 de septiembre de 2026 · 0.24.2',
       title: 'Orkestrai 0.24.2: entrega confirmada de mensajes en Windows',

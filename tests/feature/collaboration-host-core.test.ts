@@ -114,6 +114,39 @@ describe('collaboration host core', () => {
     expect(JSON.stringify(snapshot.conversations)).not.toContain('Internal secret');
   });
 
+  it('projects a bounded agent work summary without exposing internal message bodies', async () => {
+    const { share, workspace, agent } = await setup();
+    await controlCenterService.recordActivity({
+      workspaceId: workspace.id,
+      nodeId: agent.id,
+      state: 'working',
+      category: 'task',
+      verb: 'implementing',
+      objectType: 'task',
+      objectTitle: 'Implement checkout from /Users/host/private/spec.md',
+      action: 'internal:verbose_action_that_is_not_shared',
+    });
+    await controlCenterService.recordDelivery({
+      messageId: uuidv7(), workspaceId: workspace.id, toNodeId: agent.id,
+      state: 'replied', content: 'Internal instructions must stay on the host', reply: 'Internal result',
+    });
+
+    const snapshot = await sharedWorkspaceQuery.snapshot(share.id);
+    const summary = snapshot.agents.find((candidate) => candidate.id === agent.id)?.workSummary;
+    expect(summary).toMatchObject({
+      coordination: { received: 1, replied: 1, failed: 0 },
+      recentActivity: [{ category: 'task', verb: 'implementing', state: 'working' }],
+    });
+    expect(summary?.recentActivity[0]?.objectTitle).toContain('[redacted-path]');
+    expect(JSON.stringify(summary)).not.toContain('Internal instructions');
+    expect(JSON.stringify(summary)).not.toContain('Internal result');
+    expect(JSON.stringify(summary)).not.toContain('verbose_action');
+
+    const withoutActivityScope = scopeSharedWorkspaceSnapshot(snapshot, ['workspace.view']);
+    expect(withoutActivityScope.agents.every((candidate) => candidate.workSummary === null)).toBe(true);
+    expect(withoutActivityScope.activity).toEqual([]);
+  });
+
   it('removes design data from snapshots when the device has no design scope', async () => {
     const { share, workspace } = await setup();
     await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'design', title: 'Private design', payload: {} });

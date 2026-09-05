@@ -5,6 +5,24 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.25.0 - 2026-09-05
+
+### Added
+
+- Remote Team now shows each agent's current focus, recent semantic activity,
+  and bounded coordination totals. Internal agent messages and terminal output
+  remain on the host; only conversations initiated by the approved remote
+  device keep their full text.
+
+### Fixed
+
+- The Remote PWA now keeps navigation visible across phone safe areas, uses a
+  readable per-column task view on small screens, and provides explicit return
+  actions for agent and Huddle details.
+- Remote headers, dialogs, Huddle composers, review actions, and the full-screen
+  terminal no longer overflow or become clipped on narrow phones, tablets, or
+  desktop browsers.
+
 ## 0.24.2 - 2026-09-05
 
 ### Fixed

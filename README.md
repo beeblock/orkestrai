@@ -219,7 +219,11 @@ common credentials redacted; normal agent output is not persisted.
   session, choose a browser/mobile or installed-app invite, approve the device
   fingerprint, and assign a Viewer, Collaborator, Operator, or Administrator
   role. The installable Remote PWA follows sanitized team state, tasks, reviews,
-  activity, provider usage, and leader messages; its pairing key stays
+  activity, provider usage, and leader messages. Team details expose each
+  agent's current focus, recent semantic events, and bounded coordination totals
+  without sending internal message bodies or terminal output through the relay.
+  Responsive navigation keeps every area reachable on phones and tablets, with
+  a readable per-column task view and explicit return actions. Its pairing key stays
   non-extractable in the browser and the invitation secret is removed from the
   URL before connecting. Installed-app invites open Orkestrai automatically;
   guests can also paste one through **Workspace → Join remote workspace**.

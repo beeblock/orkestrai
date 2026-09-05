@@ -93,6 +93,29 @@ export type SharedWorkspaceDto = {
   agents: Array<{
     id: string; title: string; provider: string | null; role: string | null;
     state: string; stateSince: string; currentTask: { id: string; title: string; status: string } | null;
+    workSummary: {
+      focus: string | null;
+      lastActiveAt: string;
+      recentActivity: Array<{
+        id: string;
+        category: string;
+        verb: string;
+        objectTitle: string | null;
+        state: string;
+        severity: 'info' | 'success' | 'warning' | 'error';
+        occurredAt: string;
+      }>;
+      coordination: {
+        sent: number;
+        received: number;
+        replied: number;
+        failed: number;
+        lastPeerTitle: string | null;
+        lastDirection: 'sent' | 'received' | null;
+        lastState: 'queued' | 'sent' | 'delivered' | 'acknowledged' | 'replied' | 'failed' | null;
+        lastAt: string | null;
+      };
+    } | null;
   }>;
   conversations: Array<{
     messageId: string;

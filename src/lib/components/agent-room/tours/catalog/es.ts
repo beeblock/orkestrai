@@ -1422,7 +1422,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'work-remotely',
         title: 'Usa o instala Remote',
-        body: 'Después de que el invitado solicite acceso, el host abre Compartir workspace → Accesos, compara la huella y aprueba el dispositivo. En el navegador o PWA instalable, sigue el resumen sanitizado y usa solo los comandos concedidos. Archivos, notas, Portales, dispositivos móviles, credenciales, rutas locales y edición del Canvas siguen sin estar disponibles; la salida sin filtrar solo aparece mientras su permiso separado está habilitado.',
+        body: 'Después de que el invitado solicite acceso, el host abre Compartir workspace → Accesos, compara la huella y aprueba el dispositivo. En el navegador o PWA instalable, Resumen, Equipo, Tareas, Actividad, Huddles y Revisiones siguen accesibles en móviles, tablets y escritorios. Abre un agente en Equipo para consultar su enfoque actual, actividad semántica reciente y totales de coordinación; los mensajes internos y la salida del terminal permanecen en el host. Archivos, notas, Portales, dispositivos móviles, credenciales, rutas locales y edición del Canvas siguen sin estar disponibles; la salida sin filtrar solo aparece mientras su permiso separado está habilitado.',
       },
       {
         id: 'stop-sharing',

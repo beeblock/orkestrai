@@ -22,6 +22,7 @@ export function scopeSharedWorkspaceSnapshot(
   scopes: readonly CollaborationScope[],
 ): SharedWorkspaceDto {
   const canViewDesign = scopes.includes('design.view');
+  const canViewActivity = scopes.includes('activity.view');
   const nodes = canViewDesign ? snapshot.nodes : snapshot.nodes.filter((node) => node.type !== 'design');
   const nodeIds = new Set(nodes.map((node) => node.id));
   return {
@@ -30,6 +31,8 @@ export function scopeSharedWorkspaceSnapshot(
     edges: snapshot.edges.filter((edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId)),
     designs: canViewDesign ? snapshot.designs : [],
     huddles: scopes.includes('huddles.view') ? snapshot.huddles : [],
+    agents: canViewActivity ? snapshot.agents : snapshot.agents.map((agent) => ({ ...agent, workSummary: null })),
+    activity: canViewActivity ? snapshot.activity : [],
   };
 }
 
@@ -51,7 +54,13 @@ export function fitSharedWorkspaceSnapshot(snapshot: SharedWorkspaceDto): Shared
         title: task.title.slice(0, 180),
         description: task.description?.slice(0, descriptionLimit) ?? null,
       })),
-      agents: snapshot.agents.slice(0, agentLimit),
+      agents: snapshot.agents.slice(0, agentLimit).map((agent) => ({
+        ...agent,
+        workSummary: agent.workSummary ? {
+          ...agent.workSummary,
+          recentActivity: agent.workSummary.recentActivity.slice(0, 6),
+        } : null,
+      })),
       conversations: snapshot.conversations.slice(0, 80).map((conversation) => ({
         ...conversation,
         message: conversation.message.slice(0, descriptionLimit),
@@ -167,6 +176,33 @@ export class SharedWorkspaceQuery {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     }));
+    const activityByAgent = new Map<string, typeof control.activity>();
+    for (const event of control.activity) {
+      const events = activityByAgent.get(event.nodeId) ?? [];
+      if (events.length < 6) events.push(event);
+      activityByAgent.set(event.nodeId, events);
+    }
+    const coordinationByAgent = new Map<string, NonNullable<SharedWorkspaceDto['agents'][number]['workSummary']>['coordination']>();
+    for (const thread of control.communications) {
+      for (const [nodeId, direction] of [[thread.fromNodeId, 'sent'], [thread.toNodeId, 'received']] as const) {
+        if (!nodeId) continue;
+        const previous = coordinationByAgent.get(nodeId) ?? {
+          sent: 0, received: 0, replied: 0, failed: 0,
+          lastPeerTitle: null, lastDirection: null, lastState: null, lastAt: null,
+        };
+        previous[direction] += 1;
+        if (thread.state === 'replied') previous.replied += 1;
+        if (thread.state === 'failed') previous.failed += 1;
+        if (!previous.lastAt || thread.updatedAt > previous.lastAt) {
+          const peerTitle = direction === 'sent' ? thread.toTitle : thread.fromTitle;
+          previous.lastPeerTitle = peerTitle ? sanitizeSharedText(peerTitle).slice(0, 120) : null;
+          previous.lastDirection = direction;
+          previous.lastState = thread.state;
+          previous.lastAt = thread.updatedAt;
+        }
+        coordinationByAgent.set(nodeId, previous);
+      }
+    }
     const projection: SharedWorkspaceDto = {
       shareId: share.id,
       revision: share.revision,
@@ -183,19 +219,43 @@ export class SharedWorkspaceQuery {
         color: column.color, position: column.position,
       })),
       tasks: projectedTasks,
-      agents: control.agents.map((agent) => ({
-        id: agent.nodeId,
-        title: sanitizeSharedText(agent.title),
-        provider: agent.provider ? sanitizeSharedText(agent.provider) : null,
-        role: agent.role ? sanitizeSharedText(agent.role) : null,
-        state: agent.state,
-        stateSince: agent.stateSince,
-        currentTask: agent.currentTask ? {
-          id: agent.currentTask.id,
-          title: sanitizeSharedText(agent.currentTask.title),
-          status: sanitizeSharedText(agent.currentTask.status),
-        } : null,
-      })),
+      agents: control.agents.map((agent) => {
+        const recent = activityByAgent.get(agent.nodeId) ?? [];
+        return {
+          id: agent.nodeId,
+          title: sanitizeSharedText(agent.title),
+          provider: agent.provider ? sanitizeSharedText(agent.provider) : null,
+          role: agent.role ? sanitizeSharedText(agent.role) : null,
+          state: agent.state,
+          stateSince: agent.stateSince,
+          currentTask: agent.currentTask ? {
+            id: agent.currentTask.id,
+            title: sanitizeSharedText(agent.currentTask.title),
+            status: sanitizeSharedText(agent.currentTask.status),
+          } : null,
+          workSummary: {
+            focus: agent.currentTask?.title
+              ? sanitizeSharedText(agent.currentTask.title).slice(0, 180)
+              : recent[0]?.objectTitle
+                ? sanitizeSharedText(recent[0].objectTitle).slice(0, 180)
+                : null,
+            lastActiveAt: recent[0]?.createdAt ?? agent.stateSince,
+            recentActivity: recent.map((event) => ({
+              id: event.id,
+              category: event.category,
+              verb: sanitizeSharedText(event.verb).slice(0, 80),
+              objectTitle: event.objectTitle ? sanitizeSharedText(event.objectTitle).slice(0, 180) : null,
+              state: event.state,
+              severity: event.severity,
+              occurredAt: event.createdAt,
+            })),
+            coordination: coordinationByAgent.get(agent.nodeId) ?? {
+              sent: 0, received: 0, replied: 0, failed: 0,
+              lastPeerTitle: null, lastDirection: null, lastState: null, lastAt: null,
+            },
+          },
+        };
+      }),
       conversations: control.communications
         .filter((thread) => thread.events.some((event) => event.metadata.remoteShareId === share.id))
         .map((thread) => ({

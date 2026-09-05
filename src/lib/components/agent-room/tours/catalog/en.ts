@@ -1422,7 +1422,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'work-remotely',
         title: 'Use or install Remote',
-        body: 'After the guest requests access, the host opens Share workspace → Access, compares the fingerprint, and approves the device. In the browser or installable PWA, the guest follows the sanitized overview and can use only the granted commands. Files, notes, portals, mobile devices, credentials, local paths, and Canvas editing remain unavailable; raw terminal output appears only while its separate permission is enabled.',
+        body: 'After the guest requests access, the host opens Share workspace → Access, compares the fingerprint, and approves the device. In the browser or installable PWA, Overview, Team, Tasks, Activity, Huddles, and Reviews stay reachable on phones, tablets, and desktops. Open an agent in Team to inspect its current focus, recent semantic activity, and coordination totals; internal message bodies and terminal output stay on the host. Files, notes, portals, mobile devices, credentials, local paths, and Canvas editing remain unavailable; raw terminal output appears only while its separate permission is enabled.',
       },
       {
         id: 'stop-sharing',
