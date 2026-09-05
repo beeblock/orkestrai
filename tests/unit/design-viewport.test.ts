@@ -3,6 +3,7 @@ import { designElementSchema } from '$lib/modules/agent-room/contracts/schemas/d
 import {
   designContentBounds,
   designSceneBounds,
+  visibleDesignConnections,
   visibleDesignElements,
 } from '$lib/modules/agent-room/domain/design-viewport.js';
 
@@ -76,5 +77,21 @@ describe('incremental Design rendering', () => {
     });
     expect(designContentBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: 160, y: 120, width: 480, height: 220 });
     expect(designSceneBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: -4_096, y: -4_096, width: 8_192, height: 8_192 });
+  });
+
+  it('culls large prototype connection sets while preserving crossing and selected connections', () => {
+    const connections = Array.from({ length: 250 }, (_, index) => ({
+      id: String(index),
+      source: item(`00000000-0000-7000-8100-${String(index).padStart(12, '0')}`, 2_000 + index * 100),
+      target: item(`00000000-0000-7000-8200-${String(index).padStart(12, '0')}`, 2_100 + index * 100),
+    }));
+    connections.push({ id: 'crossing', source: item('00000000-0000-7000-8300-000000000001', -200), target: item('00000000-0000-7000-8300-000000000002', 300) });
+
+    const visible = visibleDesignConnections(connections, { x: 0, y: 0, width: 200, height: 200 });
+    expect(visible.map((connection) => connection.id)).toEqual(['crossing']);
+
+    const selectedId = connections[0].source.id;
+    const retained = visibleDesignConnections(connections, { x: 0, y: 0, width: 200, height: 200 }, [selectedId]);
+    expect(retained.map((connection) => connection.id)).toEqual(['0', 'crossing']);
   });
 });

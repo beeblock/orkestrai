@@ -53,9 +53,9 @@ test.describe('Design delivery', () => {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}&design=1`);
       const editor = page.locator('[data-testid="canvas-design-mode"]');
-      const sidebar = editor.locator('aside').first();
+      const sidebar = editor.getByTestId('design-right-panel');
       await expect(editor).toBeVisible();
-      await sidebar.getByRole('button', { name: 'Components', exact: true }).click();
+      await sidebar.getByRole('button', { name: 'Inspect', exact: true }).click();
       await sidebar.getByRole('button', { name: 'Code', exact: true }).click();
       const delivery = sidebar.locator('[data-design-delivery]');
       await expect(delivery).toBeVisible();

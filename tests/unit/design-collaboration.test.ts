@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { applyDesignOperations } from '$lib/modules/agent-room/application/services/DesignDocumentService.js';
 import { designCollaborationService } from '$lib/modules/agent-room/application/services/DesignCollaborationService.js';
-import { designDocumentSchema, type DesignCollaborator, type DesignDocument } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
+import {
+  designDocumentSchema,
+  designPresenceHeartbeatSchema,
+  leaveDesignPresenceSchema,
+  type DesignCollaborator,
+  type DesignDocument,
+} from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
 
 const WORKSPACE_ID = '00000000-0000-7000-8000-000000000101';
 const NODE_ID = '00000000-0000-7000-8000-000000000102';
@@ -36,6 +42,24 @@ function document(): DesignDocument {
 }
 
 describe('colaboracao no Design Mode', () => {
+  it('aceita os parametros de rota adicionados pelo FormRequest sem poluir o DTO', () => {
+    const heartbeat = designPresenceHeartbeatSchema.parse({
+      id: WORKSPACE_ID,
+      nodeId: NODE_ID,
+      participant: user,
+      pageId: PAGE_ID,
+      elementIds: [],
+      cursor: null,
+      viewport: { x: 3424, y: 3288, zoom: 0.82 },
+      followParticipantId: null,
+    });
+    const leave = leaveDesignPresenceSchema.parse({ id: WORKSPACE_ID, nodeId: NODE_ID, participantId: user.id });
+
+    expect(heartbeat).not.toHaveProperty('id');
+    expect(heartbeat).not.toHaveProperty('nodeId');
+    expect(leave).toEqual({ participantId: user.id });
+  });
+
   it('mantem threads versionadas com autoria e resolucao', () => {
     const withComment = applyDesignOperations(document(), [{
       kind: 'add-design-comment',

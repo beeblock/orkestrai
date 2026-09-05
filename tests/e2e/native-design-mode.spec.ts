@@ -40,11 +40,12 @@ test.describe('Native Design Mode', () => {
       await request.put('/api/agent-room/settings', { data: { ...originalSettings, uiLanguage: 'en' } });
       await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}&design=1`);
       const editor = page.locator('[data-testid="canvas-design-mode"]');
-      await editor.getByRole('button', { name: 'Quality', exact: true }).click();
-      await expect(editor.getByRole('heading', { name: 'Design quality' })).toBeVisible();
-      await expect(editor.getByText('Accessibility metadata', { exact: true })).toBeVisible();
+      await editor.getByRole('button', { name: 'Open quality and history', exact: true }).click();
+      const qualityDrawer = page.getByTestId('design-quality-drawer');
+      await expect(qualityDrawer.getByRole('heading', { name: 'Design quality' })).toBeVisible();
+      await expect(qualityDrawer.getByText('Accessibility metadata', { exact: true })).toBeVisible();
 
-      await editor.getByRole('button', { name: 'Product dashboard', exact: true }).click();
+      await qualityDrawer.getByRole('button', { name: 'Product dashboard', exact: true }).click();
       const dialog = page.getByRole('alertdialog');
       await expect(dialog.getByRole('heading', { name: 'Apply template' })).toBeVisible();
       const applied = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith(`/designs/${node.id}/quality`));
@@ -102,8 +103,8 @@ test.describe('Native Design Mode', () => {
       await page.mouse.up();
       await created;
 
-      await expect(page.getByRole('spinbutton', { name: 'W', exact: true })).not.toHaveValue('180');
-      await expect(page.getByRole('spinbutton', { name: 'H', exact: true })).not.toHaveValue('120');
+      await expect(page.getByRole('textbox', { name: 'W', exact: true })).not.toHaveValue('180');
+      await expect(page.getByRole('textbox', { name: 'H', exact: true })).not.toHaveValue('120');
       const afterCreate = (await (await request.get(
         `/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`,
       )).json()).data as { elements: unknown[] };
@@ -552,7 +553,7 @@ test.describe('Native Design Mode', () => {
       await instanceCreated;
 
       await sidebar.getByRole('button', { name: 'Layers', exact: true }).click();
-      await sidebar.getByRole('button', { name: 'Label', exact: true }).last().click();
+      await sidebar.getByTestId(`design-layer-${textId}`).getByRole('button', { name: 'Label', exact: true }).click();
       await sidebar.getByRole('button', { name: 'Components', exact: true }).click();
       const exposeProperty = sidebar.getByRole('button', { name: 'Expose property', exact: true });
       await expect(exposeProperty).toBeEnabled();
@@ -568,14 +569,16 @@ test.describe('Native Design Mode', () => {
       await presetAdded;
       await expect(sidebar.getByLabel('Collection name')).toHaveValue('Product foundation');
 
-      await sidebar.getByRole('button', { name: 'Components', exact: true }).click();
-      await sidebar.getByRole('button', { name: 'Code', exact: true }).click();
-      await expect(sidebar.getByText('app.css', { exact: true })).toBeVisible();
+      const inspector = editor.getByTestId('design-right-panel');
+      await inspector.getByRole('button', { name: 'Inspect', exact: true }).click();
+      await inspector.getByRole('button', { name: 'Code', exact: true }).click();
+      await expect(inspector.getByText('app.css', { exact: true })).toBeVisible();
       const componentLinked = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes(`/designs/${node.id}`));
-      await sidebar.getByRole('button', { name: /Button.*Button\.svelte/ }).click();
+      await inspector.getByRole('button', { name: /Button.*Button\.svelte/ }).click();
       await componentLinked;
-      await expect(sidebar.getByText('Connected', { exact: true })).toBeVisible();
+      await expect(inspector.getByText('Connected', { exact: true })).toBeVisible();
 
+      await sidebar.getByRole('button', { name: 'Components', exact: true }).click();
       await sidebar.getByRole('button', { name: 'Libraries', exact: true }).click();
       const published = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith(`/designs/${node.id}/libraries`));
       await sidebar.getByRole('button', { name: 'Publish library', exact: true }).click();

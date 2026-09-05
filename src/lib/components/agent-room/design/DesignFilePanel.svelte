@@ -216,7 +216,7 @@
             {/if}
             <button class="grid size-7 shrink-0 cursor-grab place-items-center text-[var(--app-text-muted)] opacity-40 group-hover/page:opacity-100" draggable="true" aria-label={m['design.reorder_page']()} onpointerdown={(event) => event.stopPropagation()} ondragstart={(event) => { draggedPageId = item.id; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }} ondragend={() => { draggedPageId = null; pageDrop = null; }}><GripVertical size={12} /></button>
             {#if editingPageId === item.id}
-              <Input bind:ref={renameInput} class="h-7 min-w-0 flex-1 px-1.5 text-[11px]" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
+              <Input bind:ref={renameInput} data-testid="design-page-rename" class="h-7 min-w-0 flex-1 px-1.5 text-[11px]" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
             {:else}
               <button class="min-w-0 flex-1 truncate text-left text-[11px]" aria-current={item.id === activePageId ? 'page' : undefined} onclick={() => void onActivatePage(item.id)} ondblclick={() => beginPageRename(item)}>{item.name}</button>
             {/if}
@@ -285,7 +285,7 @@
               {/if}
               <LayerIcon size={13} class={`shrink-0 ${element.componentId ? 'text-[var(--app-accent)]' : element.instanceRootId === element.id ? 'text-[var(--app-info)]' : 'text-[var(--app-text-muted)]'}`} />
               {#if editingLayerId === element.id}
-                <Input bind:ref={renameInput} class="h-7 min-w-0 flex-1 px-1.5 text-[11px]" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
+                <Input bind:ref={renameInput} data-testid="design-layer-rename" class="h-7 min-w-0 flex-1 px-1.5 text-[11px]" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
               {:else}
                 <button class="min-w-0 flex-1 truncate px-1.5 text-left text-[11px]" onclick={(event) => onSelect(element.id, event.shiftKey)} ondblclick={() => beginLayerRename(element)}>{element.name}</button>
               {/if}

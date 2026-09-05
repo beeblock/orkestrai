@@ -302,8 +302,15 @@ common credentials redacted; normal agent output is not persisted.
   conflicting edits. Proposals can move into Council or an isolated Git Floor,
   while the encrypted Remote Companion receives only sanitized summaries and
   separately granted View, Comment, Propose, Edit, and Decide permissions.
+- **Focused prototype and inspect workflows:** draw an interaction directly
+  from a selected layer to its destination frame, select its visible canvas
+  connection, and refine triggers, actions, transitions, flows, and motion in
+  Prototype. Inspect keeps accessibility, resolved tokens, component and Code
+  Connect contracts, Figma provenance, generated artifacts, and copyable CSS
+  together. Reviews and quality history open as contextual drawers so they do
+  not replace the layer properties needed during the decision.
 - **Official Figma interoperability:** the managed official Figma MCP gives
-  compatible agents direct design context, while the native Figma tab inspects
+  compatible agents direct design context, while Inspect → Figma inspects
   links and imports selected pages or frames, vectors, assets, styles,
   variables, components, variants, instances, and external-library identities
   into the same Orkestrai document. Linked

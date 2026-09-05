@@ -1,6 +1,6 @@
 export type DesignEditorTool = 'select' | 'hand' | 'frame' | 'rectangle' | 'ellipse' | 'text' | 'path';
 export type DesignEditorLeftPanel = 'layers' | 'variables' | 'components';
-export type DesignEditorRightPanel = 'design' | 'prototype' | 'collaboration' | 'quality';
+export type DesignEditorRightPanel = 'design' | 'prototype' | 'inspect';
 
 export type DesignEditorSession = {
   zoom: number;
@@ -17,7 +17,7 @@ export type DesignEditorSession = {
 const STORAGE_PREFIX = 'orkestrai.design.editor.v1';
 const tools = new Set<DesignEditorTool>(['select', 'hand', 'frame', 'rectangle', 'ellipse', 'text', 'path']);
 const leftPanels = new Set<DesignEditorLeftPanel>(['layers', 'variables', 'components']);
-const rightPanels = new Set<DesignEditorRightPanel>(['design', 'prototype', 'collaboration', 'quality']);
+const rightPanels = new Set<DesignEditorRightPanel>(['design', 'prototype', 'inspect']);
 
 function key(workspaceId: string, nodeId: string): string {
   return `${STORAGE_PREFIX}:${workspaceId}:${nodeId}`;
@@ -40,13 +40,17 @@ export function readDesignEditorSession(
     const zoom = finiteNumber(value.zoom, 0.02, 3);
     const scrollLeft = finiteNumber(value.scrollLeft, 0, 10_000_000);
     const scrollTop = finiteNumber(value.scrollTop, 0, 10_000_000);
+    const storedRightPanel = value.rightPanel as string | undefined;
+    const migratedRightPanel = storedRightPanel === 'collaboration' || storedRightPanel === 'quality'
+      ? 'design'
+      : storedRightPanel;
     if (
       zoom === null
       || scrollLeft === null
       || scrollTop === null
       || !tools.has(value.tool as DesignEditorTool)
       || !leftPanels.has(value.leftPanel as DesignEditorLeftPanel)
-      || !rightPanels.has(value.rightPanel as DesignEditorRightPanel)
+      || !rightPanels.has(migratedRightPanel as DesignEditorRightPanel)
       || typeof value.leftPanelVisible !== 'boolean'
       || typeof value.rightPanelVisible !== 'boolean'
       || !Array.isArray(value.selectedIds)
@@ -61,7 +65,7 @@ export function readDesignEditorSession(
       selectedIds,
       tool: value.tool as DesignEditorTool,
       leftPanel: value.leftPanel as DesignEditorLeftPanel,
-      rightPanel: value.rightPanel as DesignEditorRightPanel,
+      rightPanel: migratedRightPanel as DesignEditorRightPanel,
       leftPanelVisible: value.leftPanelVisible,
       rightPanelVisible: value.rightPanelVisible,
     };

@@ -39,6 +39,24 @@ const DESIGN_BATCH_BASE = {
   nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, pageId: { type: 'string', format: 'uuid' },
   summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
 };
+const DESIGN_PROTOTYPE_TRIGGER = { type: 'object', additionalProperties: false, properties: { type: { type: 'string', enum: ['click', 'hover', 'press', 'after-delay'] }, delayMs: { type: 'integer', minimum: 0, maximum: 60000 } }, required: ['type'] };
+const DESIGN_PROTOTYPE_ACTION = { oneOf: [
+  { type: 'object', additionalProperties: false, properties: { type: { const: 'navigate' }, targetFrameId: { type: 'string', format: 'uuid' } }, required: ['type', 'targetFrameId'] },
+  { type: 'object', additionalProperties: false, properties: { type: { const: 'open-overlay' }, targetFrameId: { type: 'string', format: 'uuid' }, position: { type: 'string', enum: ['center', 'top', 'right', 'bottom', 'left'] }, dismissOnOutside: { type: 'boolean' }, backgroundColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6,8}$' }, backgroundOpacity: { type: 'number', minimum: 0, maximum: 1 } }, required: ['type', 'targetFrameId'] },
+  { type: 'object', additionalProperties: false, properties: { type: { const: 'close-overlay' } }, required: ['type'] },
+  { type: 'object', additionalProperties: false, properties: { type: { const: 'back' } }, required: ['type'] },
+  { type: 'object', additionalProperties: false, properties: { type: { const: 'scroll-to' }, targetElementId: { type: 'string', format: 'uuid' } }, required: ['type', 'targetElementId'] },
+  { type: 'object', additionalProperties: false, properties: { type: { const: 'set-variable-mode' }, collectionId: { type: 'string', format: 'uuid' }, modeId: { type: 'string', format: 'uuid' } }, required: ['type', 'collectionId', 'modeId'] },
+] };
+const DESIGN_PROTOTYPE_TRANSITION = { type: 'object', additionalProperties: false, properties: {
+  type: { type: 'string', enum: ['instant', 'dissolve', 'slide', 'push', 'smart-animate'] },
+  direction: { type: 'string', enum: ['left', 'right', 'up', 'down'] }, durationMs: { type: 'integer', minimum: 0, maximum: 10000 },
+  easing: { oneOf: [
+    { type: 'object', additionalProperties: false, properties: { type: { const: 'preset' }, value: { type: 'string', enum: ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out'] } }, required: ['type', 'value'] },
+    { type: 'object', additionalProperties: false, properties: { type: { const: 'cubic-bezier' }, x1: { type: 'number', minimum: 0, maximum: 1 }, y1: { type: 'number', minimum: -4, maximum: 4 }, x2: { type: 'number', minimum: 0, maximum: 1 }, y2: { type: 'number', minimum: -4, maximum: 4 } }, required: ['type', 'x1', 'y1', 'x2', 'y2'] },
+    { type: 'object', additionalProperties: false, properties: { type: { const: 'spring' }, mass: { type: 'number', minimum: 0.1, maximum: 10 }, stiffness: { type: 'number', minimum: 1, maximum: 1000 }, damping: { type: 'number', minimum: 1, maximum: 100 }, velocity: { type: 'number', minimum: -100, maximum: 100 } }, required: ['type'] },
+  ] },
+} };
 
 /** Tools expostas (inputSchema JSON Schema). args -> bridge no callTool(). */
 const TOOLS = [
@@ -127,6 +145,16 @@ const TOOLS = [
     background: { type: 'string', pattern: '^(transparent|#[0-9a-fA-F]{3,8})$' }, order: { type: 'integer', minimum: 0, maximum: 10000 },
     summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
   }, required: ['nodeId', 'baseRevision', 'action'] } },
+  { name: 'design_manage_prototype_flow', description: 'Cria, atualiza ou exclui um fluxo de prototipo pelo mesmo documento revisionado visivel na UI.', inputSchema: { type: 'object', additionalProperties: false, properties: {
+    nodeId: { type: 'string', format: 'uuid' }, baseRevision: { type: 'integer', minimum: 0 }, operation: { type: 'string', enum: ['create', 'update', 'delete'] },
+    flowId: { type: 'string', format: 'uuid' }, name: { type: 'string', minLength: 1, maxLength: 120 }, description: { type: 'string', maxLength: 1000 }, startFrameId: { type: 'string', format: 'uuid' }, order: { type: 'integer', minimum: 0, maximum: 10000 },
+    summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['nodeId', 'baseRevision', 'operation'] } },
+  { name: 'design_manage_prototype_interaction', description: 'Cria, atualiza ou exclui uma interacao de prototipo tipada. A UI e os agentes editam o mesmo command bus e a mesma revisao.', inputSchema: { type: 'object', additionalProperties: false, properties: {
+    nodeId: { type: 'string', format: 'uuid' }, baseRevision: { type: 'integer', minimum: 0 }, operation: { type: 'string', enum: ['create', 'update', 'delete'] },
+    interactionId: { type: 'string', format: 'uuid' }, sourceElementId: { type: 'string', format: 'uuid' }, trigger: DESIGN_PROTOTYPE_TRIGGER, prototypeAction: DESIGN_PROTOTYPE_ACTION, transition: DESIGN_PROTOTYPE_TRANSITION, order: { type: 'integer', minimum: 0, maximum: 100000 },
+    summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['nodeId', 'baseRevision', 'operation'] } },
   { name: 'design_apply_operations', description: 'Aplica operacoes transacionais ao documento: layers, vetores, design system, prototipo, motion, comentarios e propostas. Leia a revisao antes e verifique o resultado depois.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, operations: { type: 'array', minItems: 1, maxItems: 2000, items: { type: 'object' } }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'operations', 'summary'] } },
   { name: 'design_create_elements', description: 'Cria ate 2000 layers em uma unica revisao. Use para frames e telas completas; coordenadas de filhos continuam absolutas. Nao faca uma chamada por layer.', inputSchema: { type: 'object', properties: { ...DESIGN_BATCH_BASE, elements: { type: 'array', minItems: 1, maxItems: 2000, items: DESIGN_ELEMENT_INPUT } }, required: ['nodeId', 'baseRevision', 'pageId', 'elements', 'summary'] } },
   { name: 'design_apply_blueprint', description: 'Aplica layers, tokens, bindings, componentes, prototipo e motion em um unico lote tipado. Prefira esta tool para uma direcao completa e use design_reference para exemplos.', inputSchema: { type: 'object', properties: {
@@ -507,6 +535,53 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         baseRevision: args.baseRevision,
         operations: [operation],
         summary: args.summary ?? `${args.action} design page`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    }
+    case 'design_manage_prototype_flow': {
+      if (args.operation !== 'create' && !args.flowId) throw new Error(`design_manage_prototype_flow operation ${args.operation} requires flowId.`);
+      if (args.operation === 'create' && (!args.name || !args.startFrameId)) throw new Error('design_manage_prototype_flow operation create requires name and startFrameId.');
+      const flowId = args.flowId ?? crypto.randomUUID();
+      const changes = Object.fromEntries(['name', 'description', 'startFrameId', 'order'].filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
+      if (args.operation === 'update' && !Object.keys(changes).length) throw new Error('design_manage_prototype_flow operation update requires at least one change.');
+      const operation = args.operation === 'create'
+        ? { kind: 'add-prototype-flow', flow: { id: flowId, name: args.name, description: args.description ?? '', startFrameId: args.startFrameId, order: args.order ?? 0 } }
+        : args.operation === 'update'
+          ? { kind: 'update-prototype-flow', flowId, changes }
+          : { kind: 'delete-prototype-flow', flowId };
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [operation],
+        summary: args.summary ?? `${args.operation} prototype flow`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    }
+    case 'design_manage_prototype_interaction': {
+      if (args.operation !== 'create' && !args.interactionId) throw new Error(`design_manage_prototype_interaction operation ${args.operation} requires interactionId.`);
+      if (args.operation === 'create' && (!args.sourceElementId || !args.prototypeAction)) throw new Error('design_manage_prototype_interaction operation create requires sourceElementId and prototypeAction.');
+      const interactionId = args.interactionId ?? crypto.randomUUID();
+      const changes = Object.fromEntries([
+        ['trigger', args.trigger], ['action', args.prototypeAction], ['transition', args.transition], ['order', args.order],
+      ].filter(([, value]) => value !== undefined));
+      if (args.operation === 'update' && !Object.keys(changes).length) throw new Error('design_manage_prototype_interaction operation update requires at least one change.');
+      const operation = args.operation === 'create'
+        ? { kind: 'add-prototype-interaction', interaction: {
+            id: interactionId,
+            sourceElementId: args.sourceElementId,
+            trigger: args.trigger ?? { type: 'click', delayMs: 0 },
+            action: args.prototypeAction,
+            transition: args.transition ?? { type: 'dissolve', direction: 'left', durationMs: 300, easing: { type: 'preset', value: 'ease-out' } },
+            order: args.order ?? 0,
+          } }
+        : args.operation === 'update'
+          ? { kind: 'update-prototype-interaction', interactionId, changes }
+          : { kind: 'delete-prototype-interaction', interactionId };
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [operation],
+        summary: args.summary ?? `${args.operation} prototype interaction`,
         from: selfAgent,
         taskId: args.taskId,
       });

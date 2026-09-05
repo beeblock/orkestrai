@@ -793,11 +793,11 @@ export const designPresenceHeartbeatSchema = z.object({
     zoom: z.number().finite().min(0.01).max(10),
   }).nullable().default(null),
   followParticipantId: z.string().trim().min(1).max(128).nullable().default(null),
-}).strict();
+});
 
 export const leaveDesignPresenceSchema = z.object({
   participantId: z.string().trim().min(8).max(128),
-}).strict();
+});
 
 const nullableDimensionSchema = z.preprocess(
   (value) => value === '' || value === undefined ? null : value,

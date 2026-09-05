@@ -35,11 +35,21 @@ pt-BR, English, and Spanish translations.
 - The contextual Design inspector now provides compact collapsible sections,
   draggable numeric fields with calculations and relative values, aspect
   locking, fixed/hug/fill sizing with min/max bounds, complete auto layout,
-  richer typography, and multi-selection property editing.
+  richer typography, vertically auto-sizing new text layers, and
+  multi-selection property editing.
 - Fills and strokes now use a professional color and gradient workflow with
   Hex, RGB, HSL, alpha, eyedropper, recent and document colors, design-variable
   binding, visual gradient stops, and keyboard-accessible controls. Layout and
   typography changes use the same revision-safe UI, API, MCP, and CLI contract.
+- The right inspector now follows the focused Design, Prototype, and Inspect
+  workflow. Inspect centralizes accessibility, variable bindings, component
+  and Code Connect contracts, Figma provenance, generated artifacts, and
+  deterministic CSS, while Code and Figma remain attached to the same native
+  document instead of living in a disconnected secondary navigation.
+- Prototype connections can be drawn directly from a selected layer to a
+  destination frame, remain visible and selectable on the canvas, and can be
+  created or maintained through typed MCP and CLI operations. Agent reviews
+  and quality history open as contextual drawers without replacing properties.
 
 ### Fixed
 
@@ -54,6 +64,14 @@ pt-BR, English, and Spanish translations.
   deep selection as expected by professional design tools.
 - Fit all content and Fit selection now frame the visible artwork instead of
   shrinking it to the nominal page dimensions when the page is mostly empty.
+- Opening a Design document now waits for the SVG layout before restoring its
+  camera, so the artwork no longer starts outside the visible viewport.
+- Large prototypes cull off-screen connection paths without hiding selected
+  endpoints, and collaboration presence no longer fails validation on the
+  route parameters supplied by Svelar FormRequest.
+- Confirmation dialogs opened from contextual Design drawers now remain above
+  the focused editor and receive pointer input instead of rendering behind the
+  canvas surface.
 
 ## 0.25.0 - 2026-09-05
 

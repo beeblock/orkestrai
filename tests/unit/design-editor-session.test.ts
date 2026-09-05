@@ -46,4 +46,17 @@ describe('Design editor session', () => {
     storage.setItem('orkestrai.design.editor.v1:workspace-a:design-a', '{');
     expect(readDesignEditorSession(storage, 'workspace-a', 'design-a')).toBeNull();
   });
+
+  it('migrates removed contextual tabs without discarding the viewport', () => {
+    const storage = memoryStorage();
+    storage.setItem('orkestrai.design.editor.v1:workspace-a:design-a', JSON.stringify({
+      ...session,
+      rightPanel: 'collaboration',
+    }));
+
+    expect(readDesignEditorSession(storage, 'workspace-a', 'design-a')).toEqual({
+      ...session,
+      rightPanel: 'design',
+    });
+  });
 });

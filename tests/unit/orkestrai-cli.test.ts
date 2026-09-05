@@ -445,6 +445,32 @@ describe('orkestrai CLI', () => {
     expect(request.body.operations[0].page.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it('design prototype cria fluxos e interacoes pelo command bus tipado', async () => {
+    const { out } = capture();
+    const frameId = '00000000-0000-7000-8000-000000000021';
+    const sourceElementId = '00000000-0000-7000-8000-000000000022';
+    await run([
+      'design', 'prototype-flow', 'design-1', 'create', JSON.stringify({ name: 'Checkout', startFrameId: frameId }), '--revision', '4',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body).toMatchObject({
+      baseRevision: 4,
+      operations: [{ kind: 'add-prototype-flow', flow: { name: 'Checkout', startFrameId: frameId } }],
+    });
+
+    await run([
+      'design', 'prototype-interaction', 'design-1', 'create',
+      JSON.stringify({ sourceElementId, action: { type: 'navigate', targetFrameId: frameId } }), '--revision', '5',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    expect(requests.at(-1)?.body).toMatchObject({
+      baseRevision: 5,
+      operations: [{ kind: 'add-prototype-interaction', interaction: {
+        sourceElementId,
+        action: { type: 'navigate', targetFrameId: frameId },
+        trigger: { type: 'click', delayMs: 0 },
+      } }],
+    });
+  });
+
   it('design arrange e vector usam operacoes tipadas revisionadas', async () => {
     const { out } = capture();
     await run([

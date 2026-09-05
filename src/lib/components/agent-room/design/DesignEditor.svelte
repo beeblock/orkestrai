@@ -64,6 +64,7 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as NativeSelect from '$lib/components/ui/native-select';
+  import * as Sheet from '$lib/components/ui/sheet';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import {
     designElementSchema,
@@ -78,6 +79,7 @@
     type DesignPaint,
     type DesignPathPoint,
     type DesignProposal,
+    type DesignPrototypeInteraction,
   } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
   import type { DesignCollaborationSnapshot } from '$lib/modules/agent-room/application/services/DesignCollaborationService.js';
   import {
@@ -102,15 +104,18 @@
   import {
     designContentBounds,
     designSceneBounds,
+    visibleDesignConnections,
     visibleDesignElements,
     type DesignViewportBounds,
   } from '$lib/modules/agent-room/domain/design-viewport.js';
   import { defaultPrototypeFlow, exportMotionCss, prototypeFrames } from '$lib/modules/agent-room/domain/design-prototype.js';
   import * as m from '$lib/paraglide/messages.js';
   import { eventTargetMatches } from '$lib/components/agent-room/event-target.js';
+  import DesignColorControl from './DesignColorControl.svelte';
   import DesignColorTools from './DesignColorTools.svelte';
   import DesignCollaborationPanel from './DesignCollaborationPanel.svelte';
   import DesignComponentsPanel from './DesignComponentsPanel.svelte';
+  import DesignInspectPanel from './DesignInspectPanel.svelte';
   import DesignPaintEditor from './DesignPaintEditor.svelte';
   import DesignPrototypePanel from './DesignPrototypePanel.svelte';
   import DesignQualityPanel from './DesignQualityPanel.svelte';
@@ -156,6 +161,7 @@
   type PathSegmentSelection = { elementId: string; subpathIndex: number; segmentIndex: number };
   type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
   type SelectionMarquee = { start: { x: number; y: number }; current: { x: number; y: number } };
+  type PrototypeConnectionDraft = { sourceId: string; start: { x: number; y: number }; current: { x: number; y: number } };
   const resizeHandles: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
   let document = $state<DesignDocument | null>(null);
@@ -208,6 +214,8 @@
   let clipboardVersion = $state(0);
   let prototypeOpen = $state(false);
   let prototypeFlowId = $state<string | null>(null);
+  let prototypeConnectionDraft = $state<PrototypeConnectionDraft | null>(null);
+  let contextualDrawer = $state<'collaboration' | 'quality' | null>(null);
   let thumbnailRevision = $state(-1);
   let thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
   let collaboration = $state<DesignCollaborationSnapshot | null>(null);
@@ -314,6 +322,28 @@
     const value = resolveDesignVariableValue(document, variable.id);
     return value?.kind === 'color' ? [{ id: variable.id, name: variable.name, color: value.value }] : [];
   }) : []);
+  const prototypeConnections = $derived.by(() => {
+    if (!document || rightPanel !== 'prototype') return [];
+    const elementById = new Map(pageElements.map((element) => [element.id, element]));
+    const connections = document.prototypeInteractions.flatMap((interaction) => {
+      const targetId = interaction.action.type === 'navigate' || interaction.action.type === 'open-overlay'
+        ? interaction.action.targetFrameId
+        : interaction.action.type === 'scroll-to'
+          ? interaction.action.targetElementId
+          : null;
+      if (!targetId) return [];
+      const source = elementById.get(interaction.sourceElementId);
+      const target = elementById.get(targetId);
+      return source && target ? [{ interaction, source, target }] : [];
+    });
+    return visibleDesignConnections(connections, viewportBounds, selectedIds);
+  });
+  const prototypeDraftTarget = $derived(prototypeConnectionDraft && selected
+    ? prototypeTargetAt(prototypeConnectionDraft.current, selected)
+    : null);
+  const collaborationAttentionCount = $derived((collaboration?.presences.filter((presence) => presence.participant.id !== participant.id).length ?? 0)
+    + (document?.comments.filter((comment) => comment.status === 'open').length ?? 0)
+    + (document?.proposals.filter((proposal) => proposal.status === 'pending').length ?? 0));
 
   function uuidv7(): string {
     const timestamp = Date.now().toString(16).padStart(12, '0');
@@ -452,6 +482,7 @@
       strokeWidth: kind === 'frame' || kind === 'path' ? 1 : 0,
       cornerRadius: kind === 'ellipse' || kind === 'path' ? 0 : 8,
       text: kind === 'text' ? m['design.text']() : '',
+      textAutoResize: kind === 'text' ? 'height' : 'fixed',
       fontSize: kind === 'text' ? 32 : 16,
       fontWeight: kind === 'text' ? 600 : 400,
       order: Math.max(-1, ...pageElements.map((element) => element.order)) + 1,
@@ -459,8 +490,9 @@
   }
 
   function pagePoint(event: PointerEvent, svg = pageSvg): { x: number; y: number } {
-    if (!svg || !sceneBounds) return { x: 0, y: 0 };
-    const bounds = svg.getBoundingClientRect();
+    const currentSvg = svg ?? viewport?.querySelector<SVGSVGElement>('svg[role="application"]');
+    if (!currentSvg || !sceneBounds) return { x: 0, y: 0 };
+    const bounds = currentSvg.getBoundingClientRect();
     return {
       x: Math.round(sceneBounds.x + (event.clientX - bounds.left) * sceneBounds.width / bounds.width),
       y: Math.round(sceneBounds.y + (event.clientY - bounds.top) * sceneBounds.height / bounds.height),
@@ -2684,6 +2716,127 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     prototypeOpen = true;
   }
 
+  function prototypeConnectionPath(
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+  ): string {
+    const distance = Math.max(48, Math.abs(end.x - start.x) * 0.5);
+    return `M ${start.x} ${start.y} C ${start.x + distance} ${start.y}, ${end.x - distance} ${end.y}, ${end.x} ${end.y}`;
+  }
+
+  function prototypeConnectionStart(element: DesignElement): { x: number; y: number } {
+    return { x: element.x + element.width, y: element.y + element.height / 2 };
+  }
+
+  function prototypeConnectionEnd(element: DesignElement): { x: number; y: number } {
+    return { x: element.x, y: element.y + element.height / 2 };
+  }
+
+  function containingFrame(element: DesignElement): DesignElement | null {
+    let current: DesignElement | undefined = element;
+    while (current) {
+      if (current.type === 'frame') return current;
+      current = current.parentId ? pageElements.find((candidate) => candidate.id === current?.parentId) : undefined;
+    }
+    return null;
+  }
+
+  function prototypeTargetAt(point: { x: number; y: number }, source: DesignElement): DesignElement | null {
+    const sourceFrame = containingFrame(source);
+    return pageElements
+      .filter((element) => element.type === 'frame'
+        && element.id !== sourceFrame?.id
+        && point.x >= element.x
+        && point.x <= element.x + element.width
+        && point.y >= element.y
+        && point.y <= element.y + element.height)
+      .sort((left, right) => left.width * left.height - right.width * right.height || right.order - left.order)[0] ?? null;
+  }
+
+  function selectPrototypeConnection(event: PointerEvent, interaction: DesignPrototypeInteraction): void {
+    event.preventDefault();
+    event.stopPropagation();
+    activatePrototypeConnection(interaction);
+  }
+
+  function activatePrototypeConnection(interaction: DesignPrototypeInteraction): void {
+    selectedIds = [interaction.sourceElementId];
+    vectorEditId = null;
+    pathPointSelections = [];
+  }
+
+  function startPrototypeConnection(event: PointerEvent, source: DesignElement): void {
+    if (event.button !== 0 || saving || rightPanel !== 'prototype') return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerId = event.pointerId;
+    const handle = event.currentTarget instanceof SVGCircleElement ? event.currentTarget : null;
+    handle?.setPointerCapture?.(pointerId);
+    const start = prototypeConnectionStart(source);
+    prototypeConnectionDraft = { sourceId: source.id, start, current: start };
+    const move = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      prototypeConnectionDraft = { sourceId: source.id, start, current: pagePoint(moveEvent) };
+    };
+    const finish = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', cancel);
+      if (handle?.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
+      const point = pagePoint(upEvent);
+      const target = prototypeTargetAt(point, source);
+      prototypeConnectionDraft = null;
+      if (!target || !document) return;
+      const duplicate = document.prototypeInteractions.some((interaction) => interaction.sourceElementId === source.id
+        && (interaction.action.type === 'navigate' || interaction.action.type === 'open-overlay')
+        && interaction.action.targetFrameId === target.id);
+      if (duplicate) {
+        toast.info(m['design.prototype_connection_exists']());
+        return;
+      }
+      const interaction: DesignPrototypeInteraction = {
+        id: uuidv7(),
+        sourceElementId: source.id,
+        trigger: { type: 'click', delayMs: 0 },
+        action: { type: 'navigate', targetFrameId: target.id },
+        transition: { type: 'dissolve', direction: 'left', durationMs: 300, easing: { type: 'preset', value: 'ease-out' } },
+        order: Math.max(-1, ...document.prototypeInteractions.map((candidate) => candidate.order)) + 1,
+      };
+      const sourceFrame = containingFrame(source);
+      const flow = !document.prototypeFlows.length && sourceFrame ? {
+        id: uuidv7(),
+        name: m['design.prototype_flow_name']({ count: '1' }),
+        description: '',
+        startFrameId: sourceFrame.id,
+        order: 0,
+      } : null;
+      const operations: DesignOperation[] = [...(flow ? [{ kind: 'add-prototype-flow' as const, flow }] : []), { kind: 'add-prototype-interaction', interaction }];
+      const inverse: DesignOperation[] = [{ kind: 'delete-prototype-interaction', interactionId: interaction.id }, ...(flow ? [{ kind: 'delete-prototype-flow' as const, flowId: flow.id }] : [])];
+      void apply(operations, m['design.prototype_operation_interaction_add'](), { inverse }).then((created) => {
+        if (created) toast.success(m['design.prototype_connection_created']());
+      });
+    };
+    const cancel = (cancelEvent: PointerEvent) => {
+      if (cancelEvent.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', cancel);
+      if (handle?.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
+      prototypeConnectionDraft = null;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', cancel);
+  }
+
+  function focusPrototypeInteractionEditor(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    editorRoot?.querySelector<HTMLElement>('[data-design-add-interaction]')?.focus();
+  }
+
   async function rasterBlob(format: 'png' | 'jpeg' | 'webp', maxDimension = Number.POSITIVE_INFINITY, ids: string[] | null = null): Promise<Blob> {
     const bounds = serializationBounds(ids);
     const svg = await serializedSvg(ids);
@@ -2848,11 +3001,12 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
   }
 
   async function zoomAt(nextZoom: number, clientX?: number, clientY?: number): Promise<void> {
-    if (!viewport || !pageSvg || !sceneBounds) {
+    const beforeSvg = pageSvg ?? viewport?.querySelector<SVGSVGElement>('svg[role="application"]');
+    if (!viewport || !beforeSvg || !sceneBounds) {
       zoom = Math.max(0.02, Math.min(3, nextZoom));
       return;
     }
-    const before = pageSvg.getBoundingClientRect();
+    const before = beforeSvg.getBoundingClientRect();
     if (before.width <= 0 || before.height <= 0) {
       zoom = Math.max(0.02, Math.min(3, nextZoom));
       return;
@@ -2863,8 +3017,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     const sceneY = sceneBounds.y + (anchorY - before.top) * sceneBounds.height / before.height;
     zoom = Math.max(0.02, Math.min(3, nextZoom));
     await tick();
-    if (!viewport || !pageSvg || !sceneBounds) return;
-    const after = pageSvg.getBoundingClientRect();
+    const afterSvg = pageSvg ?? viewport?.querySelector<SVGSVGElement>('svg[role="application"]');
+    if (!viewport || !afterSvg || !sceneBounds) return;
+    const after = afterSvg.getBoundingClientRect();
     const projectedX = after.left + (sceneX - sceneBounds.x) * after.width / sceneBounds.width;
     const projectedY = after.top + (sceneY - sceneBounds.y) * after.height / sceneBounds.height;
     viewport.scrollLeft += projectedX - anchorX;
@@ -2879,6 +3034,10 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     void zoomAt(zoom * factor, event.clientX, event.clientY);
   }
 
+  function afterLayout(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
   async function fitBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void> {
     if (!viewport) return;
     zoom = Math.max(0.02, Math.min(1.5, Math.min(
@@ -2886,15 +3045,22 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       (viewport.clientHeight - 96) / bounds.height,
     )));
     await tick();
-    if (!viewport || !pageSvg || !sceneBounds) return;
+    await afterLayout();
+    const svg = pageSvg ?? viewport?.querySelector<SVGSVGElement>('svg[role="application"]');
+    if (!viewport || !svg || !sceneBounds) return;
     const container = viewport.getBoundingClientRect();
-    const canvas = pageSvg.getBoundingClientRect();
+    const canvas = svg.getBoundingClientRect();
     const canvasLeft = canvas.left - container.left + viewport.scrollLeft;
     const canvasTop = canvas.top - container.top + viewport.scrollTop;
-    viewport.scrollTo({
-      left: canvasLeft + (bounds.x + bounds.width / 2 - sceneBounds.x) * zoom - viewport.clientWidth / 2,
-      top: canvasTop + (bounds.y + bounds.height / 2 - sceneBounds.y) * zoom - viewport.clientHeight / 2,
-    });
+    const left = canvasLeft + (bounds.x + bounds.width / 2 - sceneBounds.x) * zoom - viewport.clientWidth / 2;
+    const top = canvasTop + (bounds.y + bounds.height / 2 - sceneBounds.y) * zoom - viewport.clientHeight / 2;
+    viewport.scrollLeft = left;
+    viewport.scrollTop = top;
+    await afterLayout();
+    if (Math.abs(viewport.scrollLeft - left) > 1 || Math.abs(viewport.scrollTop - top) > 1) {
+      viewport.scrollLeft = left;
+      viewport.scrollTop = top;
+    }
     handleViewportScroll();
   }
 
@@ -3280,6 +3446,10 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         </DropdownMenu.Content>
       </DropdownMenu.Root>
       <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]"></span>
+      <DesignToolbarButton label={m['design.open_agents_reviews']()} active={contextualDrawer === 'collaboration'} pressed={contextualDrawer === 'collaboration'} onclick={() => (contextualDrawer = contextualDrawer === 'collaboration' ? null : 'collaboration')}>
+        <span class="relative"><UsersRound size={16} />{#if collaborationAttentionCount > 0}<span class="absolute -top-2 -right-2 grid min-w-3.5 place-items-center rounded-full bg-[var(--app-accent)] px-0.5 text-[7px] font-bold leading-3.5 text-[var(--app-accent-contrast)]">{Math.min(collaborationAttentionCount, 99)}</span>{/if}</span>
+      </DesignToolbarButton>
+      <DesignToolbarButton label={m['design.open_quality_history']()} active={contextualDrawer === 'quality'} pressed={contextualDrawer === 'quality'} onclick={() => (contextualDrawer = contextualDrawer === 'quality' ? null : 'quality')}><ShieldCheck size={16} /></DesignToolbarButton>
       <DesignToolbarButton label={rightPanelVisible ? m['design.hide_right_panel']() : m['design.show_right_panel']()} active={rightPanelVisible} pressed={rightPanelVisible} onclick={toggleRightPanel}><SlidersHorizontal size={16} /></DesignToolbarButton>
     </header>
 
@@ -3346,12 +3516,12 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       {:else if leftPanel === 'variables' && document}
         <div class="min-h-0 flex-1"><DesignVariablesPanel {document} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} /></div>
       {:else if document}
-        <div class="min-h-0 flex-1"><DesignComponentsPanel {document} {selectedIds} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} onCaptureDesign={captureDesignDataUrl} /></div>
+        <div class="min-h-0 flex-1"><DesignComponentsPanel {document} {selectedIds} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} /></div>
       {/if}
     </aside>
     {/if}
 
-    <main class={`relative col-start-2 row-start-2 min-h-0 min-w-0 overflow-auto bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} data-testid="design-viewport" onpointerdowncapture={startViewportPan} onscroll={handleViewportScroll} onwheel={handleViewportWheel} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
+    <main class={`relative col-start-2 row-start-2 min-h-0 min-w-0 overflow-auto [overflow-anchor:none] bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} data-testid="design-viewport" onpointerdowncapture={startViewportPan} onscroll={handleViewportScroll} onwheel={handleViewportWheel} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
       {#if errorMessage}
         <div class="grid h-full place-items-center p-8 text-center"><div><p class="text-sm text-[var(--app-danger)]">{errorMessage}</p><Button class="mt-3" variant="outline" size="sm" onclick={() => void load()}>{m['workspace_access.retry']()}</Button></div></div>
       {:else if loading || !document || !page}
@@ -3411,6 +3581,25 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             aria-label={page.name}
           >
             <rect data-design-ui x="0" y="0" width={page.width} height={page.height} fill={page.background} pointer-events="none" />
+            {#if rightPanel === 'prototype'}
+              <defs data-design-ui>
+                <marker id={`prototype-arrow-${nodeId}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 8 4 L 0 8 z" fill="#7c3aed" /></marker>
+              </defs>
+              <g data-design-ui data-testid="design-prototype-connections">
+                {#each prototypeConnections as connection (connection.interaction.id)}
+                  {@const start = prototypeConnectionStart(connection.source)}
+                  {@const end = prototypeConnectionEnd(connection.target)}
+                  {@const active = selectedIds.includes(connection.source.id)}
+                  <path data-design-prototype-hit d={prototypeConnectionPath(start, end)} fill="none" stroke="transparent" stroke-width={14 / zoom} vector-effect="non-scaling-stroke" class="cursor-pointer" role="button" tabindex="0" aria-label={m['design.prototype_connection_label']({ source: connection.source.name, target: connection.target.name })} onpointerdown={(event) => selectPrototypeConnection(event, connection.interaction)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); activatePrototypeConnection(connection.interaction); } }} />
+                  <path data-design-prototype-connection={connection.interaction.id} d={prototypeConnectionPath(start, end)} fill="none" stroke={active ? '#7c3aed' : '#8b5cf6'} stroke-width={(active ? 2.25 : 1.5) / zoom} stroke-opacity={active ? 1 : 0.68} marker-end={`url(#prototype-arrow-${nodeId})`} vector-effect="non-scaling-stroke" pointer-events="none" />
+                {/each}
+                {#if prototypeConnectionDraft}
+                  <path data-testid="design-prototype-draft" d={prototypeConnectionPath(prototypeConnectionDraft.start, prototypeConnectionDraft.current)} fill="none" stroke="#7c3aed" stroke-width={2 / zoom} stroke-dasharray={`${6 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />
+                  <circle cx={prototypeConnectionDraft.current.x} cy={prototypeConnectionDraft.current.y} r={5 / zoom} fill={prototypeDraftTarget ? '#16a34a' : '#7c3aed'} stroke="#ffffff" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                {/if}
+                {#if prototypeDraftTarget}<rect data-testid="design-prototype-target" x={prototypeDraftTarget.x} y={prototypeDraftTarget.y} width={prototypeDraftTarget.width} height={prototypeDraftTarget.height} fill="none" stroke="#16a34a" stroke-width={2 / zoom} stroke-dasharray={`${7 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />{/if}
+              </g>
+            {/if}
             <DesignRenderer elements={viewportRenderedElements} assets={document.assets} {workspaceId} selectedIds={rendererSelectionIds} hoveredId={hoveredElementId} showFrameLabels />
             {#each (collaboration?.presences ?? []).filter((presence) => presence.participant.id !== participant.id && presence.pageId === page.id) as presence (presence.participant.id)}
               <g data-design-ui pointer-events="none">
@@ -3457,6 +3646,13 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                 <text x={labelX} y={labelY + 3 / zoom} text-anchor="middle" fill="#ffffff" font-size={9 / zoom} font-weight="700">{line.value}</text>
               </g>
             {/each}
+            {#if rightPanel === 'prototype' && selected && !selected.locked}
+              <g data-design-ui data-design-prototype-handle transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
+                <line x1={selected.x + selected.width} y1={selected.y + selected.height / 2} x2={selected.x + selected.width + 18 / zoom} y2={selected.y + selected.height / 2} stroke="#7c3aed" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                <circle data-testid="design-prototype-handle" cx={selected.x + selected.width + 22 / zoom} cy={selected.y + selected.height / 2} r={7 / zoom} fill="#7c3aed" stroke="#ffffff" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" tabindex="0" aria-label={m['design.prototype_drag_connection']()} onpointerdown={(event) => startPrototypeConnection(event, selected)} onkeydown={focusPrototypeInteractionEditor}><title>{m['design.prototype_drag_connection']()}</title></circle>
+                <Plus x={selected.x + selected.width + 18 / zoom} y={selected.y + selected.height / 2 - 4 / zoom} size={8 / zoom} color="#ffffff" strokeWidth={2.5} pointer-events="none" />
+              </g>
+            {/if}
             {#if selected && !vectorEditing && !selected.locked}
               <g data-design-resize data-design-ui transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
                 <line x1={selected.x + selected.width / 2} y1={selected.y} x2={selected.x + selected.width / 2} y2={selected.y - 24 / zoom} stroke="#2563eb" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
@@ -3642,18 +3838,15 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       class={`flex min-h-0 flex-col overflow-hidden border-l border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] right-0 bottom-0 z-40 w-[min(320px,calc(100%-48px))] shadow-2xl' : 'col-start-3 row-start-2'}`}
       data-testid="design-right-panel"
     >
-      <div class="grid grid-cols-4 gap-1 border-b border-[var(--app-border)] p-1.5">
-        <button title={m['design.properties']()} class={`grid h-8 place-items-center rounded ${rightPanel === 'design' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.properties']()} aria-pressed={rightPanel === 'design'} onclick={() => (rightPanel = 'design')}><SlidersHorizontal size={14} /></button>
-        <button title={m['design.prototype']()} class={`grid h-8 place-items-center rounded ${rightPanel === 'prototype' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.prototype']()} aria-pressed={rightPanel === 'prototype'} onclick={() => (rightPanel = 'prototype')}><Workflow size={14} /></button>
-        <button title={m['design.collaboration']()} class={`grid h-8 place-items-center rounded ${rightPanel === 'collaboration' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.collaboration']()} aria-pressed={rightPanel === 'collaboration'} onclick={() => (rightPanel = 'collaboration')}><UsersRound size={14} /></button>
-        <button title={m['design.quality']()} class={`grid h-8 place-items-center rounded ${rightPanel === 'quality' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.quality']()} aria-pressed={rightPanel === 'quality'} onclick={() => (rightPanel = 'quality')}><ShieldCheck size={14} /></button>
+      <div class="grid grid-cols-3 gap-0.5 border-b border-[var(--app-border)] p-1">
+        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-[9px] font-medium ${rightPanel === 'design' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.properties']()} aria-pressed={rightPanel === 'design'} onclick={() => (rightPanel = 'design')}><SlidersHorizontal size={12} />{m['design.properties']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-[9px] font-medium ${rightPanel === 'prototype' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.prototype']()} aria-pressed={rightPanel === 'prototype'} onclick={() => (rightPanel = 'prototype')}><Workflow size={12} />{m['design.prototype']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-[9px] font-medium ${rightPanel === 'inspect' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.inspect']()} aria-pressed={rightPanel === 'inspect'} onclick={() => (rightPanel = 'inspect')}><Braces size={12} />{m['design.inspect']()}</button>
       </div>
-      {#if rightPanel === 'quality' && document}
-        <div class="min-h-0 flex-1"><DesignQualityPanel {workspaceId} {nodeId} {document} {saving} onSelect={(elementId) => { selectedIds = [elementId]; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} /></div>
-      {:else if rightPanel === 'collaboration' && document}
-        <div class="min-h-0 flex-1"><DesignCollaborationPanel {document} {selected} {participant} {collaboration} {followParticipantId} {saving} makeId={uuidv7} onApply={(operations, summary) => apply(operations, summary)} onFollow={followParticipant} onPreview={previewProposal} onOpenCouncil={openProposalCouncil} onCreateFloor={createProposalFloor} /></div>
-      {:else if rightPanel === 'prototype' && document}
+      {#if rightPanel === 'prototype' && document}
         <div class="min-h-0 flex-1"><DesignPrototypePanel {document} {selected} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onPreview={openPrototype} onShare={sharePrototype} /></div>
+      {:else if rightPanel === 'inspect' && document}
+        <div class="min-h-0 flex-1"><DesignInspectPanel {document} {selectedIds} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} onCaptureDesign={captureDesignDataUrl} /></div>
       {:else if selected && document}
         <div class="min-h-0 flex-1 overflow-y-auto">
         <div class="text-[11px]">
@@ -3873,6 +4066,28 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     {/if}
   </div>
 </div>
+
+{#if document}
+  <Sheet.Root open={contextualDrawer === 'collaboration'} onOpenChange={(open) => { if (!open && contextualDrawer === 'collaboration') contextualDrawer = null; }}>
+    <Sheet.Content side="right" class="flex w-full max-w-[min(520px,96vw)] flex-col gap-0 border-[var(--app-border)] bg-[var(--app-surface)] p-0 text-[var(--app-text)] sm:max-w-[520px]" data-testid="design-collaboration-drawer">
+      <Sheet.Header class="shrink-0 border-b border-[var(--app-border)] px-4 py-3 pr-12 text-left">
+        <Sheet.Title class="flex items-center gap-2 text-sm font-semibold"><UsersRound size={16} class="text-[var(--app-accent)]" />{m['design.agents_reviews']()}</Sheet.Title>
+        <Sheet.Description class="mt-1 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.agents_reviews_help']()}</Sheet.Description>
+      </Sheet.Header>
+      <div class="min-h-0 flex-1"><DesignCollaborationPanel {document} {selected} {participant} {collaboration} {followParticipantId} {saving} makeId={uuidv7} onApply={(operations, summary) => apply(operations, summary)} onFollow={followParticipant} onPreview={previewProposal} onOpenCouncil={openProposalCouncil} onCreateFloor={createProposalFloor} /></div>
+    </Sheet.Content>
+  </Sheet.Root>
+
+  <Sheet.Root open={contextualDrawer === 'quality'} onOpenChange={(open) => { if (!open && contextualDrawer === 'quality') contextualDrawer = null; }}>
+    <Sheet.Content side="right" class="flex w-full max-w-[min(520px,96vw)] flex-col gap-0 border-[var(--app-border)] bg-[var(--app-surface)] p-0 text-[var(--app-text)] sm:max-w-[520px]" data-testid="design-quality-drawer">
+      <Sheet.Header class="shrink-0 border-b border-[var(--app-border)] px-4 py-3 pr-12 text-left">
+        <Sheet.Title class="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={16} class="text-[var(--app-accent)]" />{m['design.quality_history']()}</Sheet.Title>
+        <Sheet.Description class="mt-1 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.quality_history_help']()}</Sheet.Description>
+      </Sheet.Header>
+      <div class="min-h-0 flex-1"><DesignQualityPanel {workspaceId} {nodeId} {document} {saving} onSelect={(elementId) => { selectedIds = [elementId]; vectorEditId = null; pathPointSelections = []; contextualDrawer = null; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} /></div>
+    </Sheet.Content>
+  </Sheet.Root>
+{/if}
 
 {#if prototypeOpen && document}
   <DesignPrototypePlayer {document} {workspaceId} flowId={prototypeFlowId} onClose={() => (prototypeOpen = false)} onShare={sharePrototype} />

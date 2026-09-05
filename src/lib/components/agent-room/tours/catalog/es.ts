@@ -513,12 +513,17 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'design-system',
         title: 'Haz reutilizable el lenguaje visual',
-        body: 'Usa el picker Hex/RGB/HSL para colores sólidos o degradados, alpha, cuentagotas, colores recientes y del documento, y vincula el paint activo a un token sin salir del inspector. Abre Variables junto a Capas para empezar con un preset de producto, marketing o mobile, importar DTCG/CSS o exportar DTCG/CSS/Tailwind, crear modos y aliases y auditar repeticiones. En Componentes, convierte frames en fuentes reutilizables y crea instancias, propiedades, variantes y slots. En Bibliotecas, comparte versiones solo con workspaces autorizados. En Código, extrae CSS variables, Tailwind y contratos Svelte, React o Vue sin ejecutar archivos y conecta la fuente visual con su implementación. Los agentes usan el mismo command bus protegido por revisión.',
+        body: 'Usa el picker Hex/RGB/HSL para colores sólidos o degradados, alpha, cuentagotas, colores recientes y del documento, y vincula el paint activo a un token sin salir del inspector. Abre Variables junto a Capas para empezar con un preset de producto, marketing o mobile, importar DTCG/CSS o exportar DTCG/CSS/Tailwind, crear modos y aliases y auditar repeticiones. En Componentes, convierte frames en fuentes reutilizables y crea instancias, propiedades, variantes y slots. En Bibliotecas, comparte versiones solo con workspaces autorizados. En Inspeccionar → Código, extrae CSS variables, Tailwind y contratos Svelte, React o Vue sin ejecutar archivos y conecta la fuente visual con su implementación. Los agentes usan el mismo command bus protegido por revisión.',
+      },
+      {
+        id: 'inspect-contract',
+        title: 'Inspecciona el contrato de implementación en contexto',
+        body: 'Mantén la capa seleccionada y abre Inspeccionar a la derecha. Accesibilidad, vínculos de variables resueltos, componente propietario, Code Connect, origen Figma, artefactos generados y CSS copiable quedan juntos. Código y Figma son vistas contiguas del mismo documento nativo; revisiones de agentes e historial de calidad se abren desde la barra superior sin reemplazar Propiedades.',
       },
       {
         id: 'figma-bridge',
         title: 'Vincula el mismo trabajo con Figma',
-        body: 'Abre Componentes → Figma. El MCP oficial ya está administrado para agentes compatibles. Guarda un token REST de solo lectura en la bóveda del sistema operativo, pega el enlace de una página o frame, inspecciona, elige qué entra al documento nativo y revisa cambios remotos, locales o en conflicto antes de sincronizar. Mantener la versión local agrega solo esa capa revisada a la cola de Figma. Instala el plugin propio desde su carpeta, pega la conexión loopback restringida al workspace copiada por Orkestrai y después transfiere una selección en vivo o envía únicamente las capas en cola.',
+        body: 'Abre Inspeccionar → Figma. El MCP oficial ya está administrado para agentes compatibles. Guarda un token REST de solo lectura en la bóveda del sistema operativo, pega el enlace de una página o frame, inspecciona, elige qué entra al documento nativo y revisa cambios remotos, locales o en conflicto antes de sincronizar. Mantener la versión local agrega solo esa capa revisada a la cola de Figma. Instala el plugin propio desde su carpeta, pega la conexión loopback restringida al workspace copiada por Orkestrai y después transfiere una selección en vivo o envía únicamente las capas en cola.',
       },
       {
         id: 'designer',
@@ -552,7 +557,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'open-code',
         title: 'Abre el área de entrega de Código',
-        body: 'Abre el documento Diseño, elige Componentes y después Código. Conectar escanea tokens y componentes reales; Importar código, Generar y Validar son pasos contiguos del mismo flujo.',
+        body: 'Abre el documento Diseño, elige Inspeccionar y después Código. Conectar escanea tokens y componentes reales; Importar código, Generar y Validar son pasos contiguos del mismo flujo.',
         action: { kind: 'openDesign', title: 'Entrega de Diseño' },
       },
       {
@@ -595,6 +600,11 @@ export const TOURS_ES: Tour[] = [
         title: 'Abre el inspector de Prototipo',
         body: 'Abre el documento y selecciona Prototipo en el inspector derecho. Crea un flujo inicial y selecciona un frame o capa para acceder a sus interacciones y controles de desplazamiento.',
         action: { kind: 'openDesign', title: 'Prototipo del Producto' },
+      },
+      {
+        id: 'connect-on-canvas',
+        title: 'Dibuja la interacción donde ocurre',
+        body: 'Selecciona una capa y arrastra su control morado de prototipo hasta un frame de destino. La conexión visible se puede seleccionar en el canvas, mientras el inspector de Prototipo refina disparador, acción, transición, easing, overlay, desplazamiento y flujo inicial. Los agentes conectados usan las mismas operaciones tipadas de flujo e interacción mediante MCP o CLI.',
       },
       {
         id: 'interactions',

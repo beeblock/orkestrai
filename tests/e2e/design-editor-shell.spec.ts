@@ -114,7 +114,7 @@ test.describe('Design editor shell', () => {
       await filePanel.getByRole('button', { name: 'Add page' }).click();
       await expect(filePanel.getByRole('button', { name: 'Page 2', exact: true })).toBeVisible();
       await filePanel.getByRole('button', { name: 'Page 2', exact: true }).dblclick();
-      const rename = filePanel.getByRole('textbox').first();
+      const rename = filePanel.getByTestId('design-page-rename');
       await expect(rename).toBeFocused();
       await rename.fill('Archive');
       await rename.press('Enter');
@@ -142,7 +142,8 @@ test.describe('Design editor shell', () => {
       const checkoutLayer = filePanel.getByRole('treeitem', { name: /Checkout/ });
       await filePanel.getByRole('button', { name: 'Checkout', exact: true }).click();
       await expect(checkoutLayer).toHaveAttribute('aria-selected', 'true');
-      await page.keyboard.press('Meta+d');
+      await checkoutLayer.click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'Duplicate' }).click();
       await expect.poll(async () => {
         const response = await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`);
         const body = await response.json();
@@ -313,6 +314,73 @@ test.describe('Design editor shell', () => {
         const body = await response.json();
         return body.data.elements.find((element: { id: string }) => element.id === textId).fontFamily;
       }).toBe('JetBrains Mono');
+    } finally {
+      await page.goto('about:blank');
+      await request.put('/api/agent-room/settings', { data: originalSettings });
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('connects prototypes on canvas and keeps inspect, agents, and quality contextual', async ({ page, request }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-design-prototype-e2e-'));
+    const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;
+    const workspace = (await (await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E design prototype ${Date.now()}`, workingDir: dir },
+    })).json()).data as { id: string };
+    const node = (await (await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+      data: { type: 'design', title: 'Prototype design', x: 120, y: 120, width: 720, height: 520, payload: {} },
+    })).json()).data as { id: string };
+    const initial = (await (await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`)).json()).data as { revision: number; activePageId: string };
+    const sourceFrameId = randomUUID();
+    const targetFrameId = randomUUID();
+    const buttonId = randomUUID();
+    await request.patch(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`, {
+      data: {
+        baseRevision: initial.revision,
+        operations: [
+          { kind: 'create', element: { id: sourceFrameId, pageId: initial.activePageId, parentId: null, type: 'frame', name: 'Sign in', x: 80, y: 80, width: 320, height: 420, order: 0 } },
+          { kind: 'create', element: { id: buttonId, pageId: initial.activePageId, parentId: sourceFrameId, type: 'rectangle', name: 'Continue button', x: 120, y: 400, width: 240, height: 48, fill: '#7c3aed', order: 0, accessibilityRole: 'button', accessibilityLabel: 'Continue' } },
+          { kind: 'create', element: { id: targetFrameId, pageId: initial.activePageId, parentId: null, type: 'frame', name: 'Dashboard', x: 560, y: 80, width: 320, height: 420, order: 1 } },
+        ],
+        summary: 'Seed interactive prototype',
+        actor: { kind: 'user', id: null, name: null, taskId: null },
+      },
+    });
+
+    try {
+      await request.put('/api/agent-room/settings', { data: { ...originalSettings, uiLanguage: 'en' } });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}&design=1`);
+      await page.getByRole('button', { name: 'Continue button', exact: true }).click();
+      await page.getByRole('button', { name: 'Prototype', exact: true }).click();
+
+      const handle = page.getByTestId('design-prototype-handle');
+      const target = page.getByTestId('design-viewport').locator(`[data-design-element="${targetFrameId}"]`);
+      await handle.hover();
+      await page.mouse.down();
+      await expect(page.getByTestId('design-prototype-draft')).toHaveCount(1);
+      const targetBox = await target.boundingBox();
+      expect(targetBox).not.toBeNull();
+      await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2);
+      await expect(page.getByTestId('design-prototype-target')).toBeVisible();
+      await page.mouse.up();
+
+      await expect(page.locator('[data-design-prototype-connection]')).toHaveCount(1);
+      await expect.poll(async () => {
+        const body = await (await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`)).json();
+        return { flows: body.data.prototypeFlows.length, interactions: body.data.prototypeInteractions.length };
+      }).toEqual({ flows: 1, interactions: 1 });
+
+      await page.getByRole('button', { name: 'Inspect', exact: true }).click();
+      await expect(page.getByTestId('design-inspect-panel')).toContainText('Continue button');
+      await expect(page.getByTestId('design-inspect-panel')).toContainText('Accessibility');
+
+      await page.getByRole('button', { name: 'Open agents and reviews' }).click();
+      await expect(page.getByTestId('design-collaboration-drawer')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Open quality and history' }).click();
+      await expect(page.getByTestId('design-quality-drawer')).toBeVisible();
     } finally {
       await page.goto('about:blank');
       await request.put('/api/agent-room/settings', { data: originalSettings });

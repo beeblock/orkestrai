@@ -41,8 +41,8 @@ test('reviews a native design through comments and versioned proposals', async (
     const editor = page.locator('[data-testid="canvas-design-mode"]');
     await expect(editor).toBeVisible();
     await editor.getByRole('button', { name: 'Review card', exact: true }).click();
-    await editor.getByRole('button', { name: 'Collaboration', exact: true }).click();
-    const panel = editor.locator('[data-testid="design-collaboration-panel"]');
+    await editor.getByRole('button', { name: 'Open agents and reviews', exact: true }).click();
+    const panel = page.locator('[data-testid="design-collaboration-panel"]');
     await expect(panel).toBeVisible();
     await expect(panel.getByText('You', { exact: true }).first()).toBeVisible();
 

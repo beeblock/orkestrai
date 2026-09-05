@@ -385,7 +385,7 @@
 
       {#if selected}
         <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-start justify-between gap-2"><div class="min-w-0"><h3 class="truncate font-semibold text-[var(--app-text)]">{m['design.prototype_interactions']()}</h3><p class="mt-0.5 truncate text-[9px] text-[var(--app-text-muted)]">{selected.name}</p></div><Button variant="ghost" size="icon-sm" class="size-7 shrink-0" disabled={saving} aria-label={m['design.prototype_add_interaction']()} onclick={() => void addInteraction()}><Plus size={13} /></Button></div>
+          <div class="flex items-start justify-between gap-2"><div class="min-w-0"><h3 class="truncate font-semibold text-[var(--app-text)]">{m['design.prototype_interactions']()}</h3><p class="mt-0.5 truncate text-[9px] text-[var(--app-text-muted)]">{selected.name}</p></div><Button data-design-add-interaction variant="ghost" size="icon-sm" class="size-7 shrink-0" disabled={saving} aria-label={m['design.prototype_add_interaction']()} onclick={() => void addInteraction()}><Plus size={13} /></Button></div>
           {#if !interactions.length}<div class="border border-dashed border-[var(--app-border)] p-3 text-center text-[10px] leading-4 text-[var(--app-text-muted)]"><MousePointerClick size={18} class="mx-auto mb-2 text-[var(--app-accent)]" />{m['design.prototype_interactions_empty']()}</div>{/if}
           {#each interactions as interaction (interaction.id)}
             <div class="border border-[var(--app-border)] bg-[var(--app-surface-raised)]">

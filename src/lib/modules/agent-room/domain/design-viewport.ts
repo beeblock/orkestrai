@@ -41,10 +41,14 @@ export function designSceneBounds(
 }
 
 function intersects(element: DesignElement, bounds: DesignViewportBounds): boolean {
-  return element.x + element.width >= bounds.x
-    && element.y + element.height >= bounds.y
-    && element.x <= bounds.x + bounds.width
-    && element.y <= bounds.y + bounds.height;
+  return intersectsBounds(element, bounds);
+}
+
+function intersectsBounds(subject: DesignViewportBounds, bounds: DesignViewportBounds): boolean {
+  return subject.x + subject.width >= bounds.x
+    && subject.y + subject.height >= bounds.y
+    && subject.x <= bounds.x + bounds.width
+    && subject.y <= bounds.y + bounds.height;
 }
 
 export function visibleDesignElements(
@@ -69,4 +73,22 @@ export function visibleDesignElements(
   };
   for (const id of [...visible]) preserveDependencies(map.get(id));
   return elements.filter((element) => visible.has(element.id));
+}
+
+export function visibleDesignConnections<T extends { source: DesignElement; target: DesignElement }>(
+  connections: T[],
+  bounds: DesignViewportBounds | null,
+  retainedIds: Iterable<string> = [],
+  threshold = 200,
+): T[] {
+  if (!bounds || connections.length <= threshold) return connections;
+  const retained = new Set(retainedIds);
+  return connections.filter(({ source, target }) => {
+    if (retained.has(source.id) || retained.has(target.id)) return true;
+    const left = Math.min(source.x + source.width, target.x);
+    const top = Math.min(source.y + source.height / 2, target.y + target.height / 2);
+    const right = Math.max(source.x + source.width, target.x);
+    const bottom = Math.max(source.y + source.height / 2, target.y + target.height / 2);
+    return intersectsBounds({ x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) }, bounds);
+  });
 }

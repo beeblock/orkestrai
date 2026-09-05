@@ -2691,7 +2691,7 @@
     <SvelteFlowProvider>
     {#if activeWorkspace}
       {#if designModeNodeId}
-        <div class="fixed inset-0 z-[100] flex min-h-0 flex-col bg-[var(--app-canvas)]" data-testid="canvas-design-mode" role="dialog" aria-modal="true" aria-label={m['design.focus_mode']()}>
+        <div class="fixed inset-0 z-40 flex min-h-0 flex-col bg-[var(--app-canvas)]" data-testid="canvas-design-mode" role="dialog" aria-modal="true" aria-label={m['design.focus_mode']()}>
           <header class="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 shadow-sm">
             <Palette size={15} class="text-[var(--app-secondary)]" />
             <strong class="min-w-0 flex-1 truncate text-xs">{String(nodes.find((item) => item.id === designModeNodeId)?.data?.title ?? m['design.title']())}</strong>

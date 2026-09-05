@@ -462,7 +462,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'compare-directions',
         title: 'Review the visual concept',
-        body: 'Open Quality inside each document and use Visual review to approve it or request changes with traceable feedback. Evaluate hierarchy, composition, identity, clarity, and polish: the automatic audit checks structure, not taste or visual quality.',
+        body: 'Open Quality and history inside each document and use Visual review to approve it or request changes with traceable feedback. Evaluate hierarchy, composition, identity, clarity, and polish: the automatic audit checks structure, not taste or visual quality.',
       },
       {
         id: 'approve-deliver',
@@ -513,12 +513,17 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'design-system',
         title: 'Make the visual language reusable',
-        body: 'Use the Hex/RGB/HSL picker for solid or gradient paints, alpha, eyedropper, recent and document colors, then bind an active paint to a token without leaving the inspector. Open Variables beside Layers to start from a product, marketing, or mobile preset, import DTCG/CSS or export DTCG/CSS/Tailwind, create modes and aliases, and audit repetition. Under Components, turn frames into reusable sources and create instances, properties, variants, and slots. Under Libraries, share versions only with authorized workspaces. Under Code, extract CSS variables, Tailwind, and Svelte, React, or Vue contracts without executing files and connect the visual source to its implementation. Agents use the same revision-safe command bus.',
+        body: 'Use the Hex/RGB/HSL picker for solid or gradient paints, alpha, eyedropper, recent and document colors, then bind an active paint to a token without leaving the inspector. Open Variables beside Layers to start from a product, marketing, or mobile preset, import DTCG/CSS or export DTCG/CSS/Tailwind, create modes and aliases, and audit repetition. Under Components, turn frames into reusable sources and create instances, properties, variants, and slots. Under Libraries, share versions only with authorized workspaces. In Inspect → Code, extract CSS variables, Tailwind, and Svelte, React, or Vue contracts without executing files and connect the visual source to its implementation. Agents use the same revision-safe command bus.',
+      },
+      {
+        id: 'inspect-contract',
+        title: 'Inspect the implementation contract in context',
+        body: 'Keep the layer selected and open Inspect on the right. Accessibility, resolved variable bindings, the owning component, Code Connect, Figma provenance, generated artifacts, and copyable CSS remain together. Code and Figma are adjacent views of this same native document; agent reviews and quality history open from the top bar without replacing Properties.',
       },
       {
         id: 'figma-bridge',
         title: 'Link the same work to Figma',
-        body: 'Open Components → Figma. The official MCP is already managed for compatible agents. Store a read-only REST token in the operating-system vault, paste a Figma page or frame link, inspect it, select what enters the native document, and review remote, local, or conflicting changes before synchronization. Keeping the local version queues only that reviewed layer for Figma. Install the first-party plugin from its folder, paste the workspace-scoped loopback connection copied by Orkestrai, then transfer a live selection or send only the queued layers back.',
+        body: 'Open Inspect → Figma. The official MCP is already managed for compatible agents. Store a read-only REST token in the operating-system vault, paste a Figma page or frame link, inspect it, select what enters the native document, and review remote, local, or conflicting changes before synchronization. Keeping the local version queues only that reviewed layer for Figma. Install the first-party plugin from its folder, paste the workspace-scoped loopback connection copied by Orkestrai, then transfer a live selection or send only the queued layers back.',
       },
       {
         id: 'designer',
@@ -552,7 +557,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'open-code',
         title: 'Open the Code delivery area',
-        body: 'Open the Design document, choose Components, then Code. Connect scans tokens and real components; Import code, Generate, and Validate are adjacent workflow steps instead of separate tools.',
+        body: 'Open the Design document, choose Inspect, then Code. Connect scans tokens and real components; Import code, Generate, and Validate are adjacent workflow steps instead of separate tools.',
         action: { kind: 'openDesign', title: 'Design Delivery' },
       },
       {
@@ -595,6 +600,11 @@ export const TOURS_EN: Tour[] = [
         title: 'Open the Prototype inspector',
         body: 'Open the document and select Prototype in the right inspector. Create a starting flow, then select a frame or layer to expose its interaction and scrolling controls.',
         action: { kind: 'openDesign', title: 'Product Prototype' },
+      },
+      {
+        id: 'connect-on-canvas',
+        title: 'Draw the interaction where it happens',
+        body: 'Select a layer and drag its purple prototype handle to a destination frame. The visible connection can be selected on the canvas, while the Prototype inspector refines its trigger, action, transition, easing, overlay, scrolling, and starting flow. Connected agents use the same typed flow and interaction operations through MCP or CLI.',
       },
       {
         id: 'interactions',

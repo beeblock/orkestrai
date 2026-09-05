@@ -70,6 +70,8 @@ Uso:
   orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design page <nodeId> <create|update|duplicate|reorder|activate|delete> --revision <n> [--page <pageId>] [--name <nome>] [--width <n>] [--height <n>] [--background <cor>] [--order <n>]
+  orkestrai design prototype-flow <nodeId> <create|update|delete> <flow-json> --revision <n>
+  orkestrai design prototype-interaction <nodeId> <create|update|delete> <interaction-json> --revision <n>
   orkestrai design layout <nodeId> <elementId> <changes-json> --revision <n>
   orkestrai design layout-apply <nodeId> <frameId> --revision <n>
   orkestrai design typography <nodeId> <elementId> <changes-json> --revision <n>
@@ -1038,6 +1040,67 @@ export async function run(argv, options = {}) {
         });
         if (flags.json) out(JSON.stringify(data, null, 2));
         else out(`Pagina atualizada; design na revisao ${data.revision}.`);
+        return 0;
+      }
+      if ((action === 'prototype-flow' || action === 'prototype-interaction') && nodeId && values[0]) {
+        const prototypeOperation = values[0];
+        const baseRevision = Number(flags.revision);
+        if (!Number.isInteger(baseRevision) || baseRevision < 0 || !['create', 'update', 'delete'].includes(prototypeOperation)) {
+          throw new Error(`Uso: orkestrai design ${action} <nodeId> <create|update|delete> <json> --revision <n>`);
+        }
+        const payload = JSON.parse(values.slice(1).join(' ') || '{}');
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('O payload do prototipo deve ser um objeto JSON.');
+        const allowed = action === 'prototype-flow'
+          ? new Set(['flowId', 'name', 'description', 'startFrameId', 'order'])
+          : new Set(['interactionId', 'sourceElementId', 'trigger', 'action', 'transition', 'order']);
+        const invalid = Object.keys(payload).filter((key) => !allowed.has(key));
+        if (invalid.length) throw new Error(`Propriedades invalidas para ${action}: ${invalid.join(', ')}.`);
+        let operation;
+        if (action === 'prototype-flow') {
+          const flowId = payload.flowId ?? crypto.randomUUID();
+          if (prototypeOperation === 'create') {
+            if (!payload.name || !payload.startFrameId) throw new Error('Criar fluxo exige name e startFrameId.');
+            operation = { kind: 'add-prototype-flow', flow: { id: flowId, name: payload.name, description: payload.description ?? '', startFrameId: payload.startFrameId, order: payload.order ?? 0 } };
+          } else if (prototypeOperation === 'update') {
+            if (!payload.flowId) throw new Error('Atualizar fluxo exige flowId.');
+            const { flowId: ignored, ...changes } = payload;
+            if (!Object.keys(changes).length) throw new Error('Atualizar fluxo exige ao menos uma alteracao.');
+            operation = { kind: 'update-prototype-flow', flowId, changes };
+          } else {
+            if (!payload.flowId) throw new Error('Excluir fluxo exige flowId.');
+            operation = { kind: 'delete-prototype-flow', flowId };
+          }
+        } else {
+          const interactionId = payload.interactionId ?? crypto.randomUUID();
+          if (prototypeOperation === 'create') {
+            if (!payload.sourceElementId || !payload.action) throw new Error('Criar interacao exige sourceElementId e action.');
+            operation = { kind: 'add-prototype-interaction', interaction: {
+              id: interactionId,
+              sourceElementId: payload.sourceElementId,
+              trigger: payload.trigger ?? { type: 'click', delayMs: 0 },
+              action: payload.action,
+              transition: payload.transition ?? { type: 'dissolve', direction: 'left', durationMs: 300, easing: { type: 'preset', value: 'ease-out' } },
+              order: payload.order ?? 0,
+            } };
+          } else if (prototypeOperation === 'update') {
+            if (!payload.interactionId) throw new Error('Atualizar interacao exige interactionId.');
+            const { interactionId: ignored, sourceElementId: ignoredSource, ...changes } = payload;
+            if (!Object.keys(changes).length) throw new Error('Atualizar interacao exige ao menos uma alteracao.');
+            operation = { kind: 'update-prototype-interaction', interactionId, changes };
+          } else {
+            if (!payload.interactionId) throw new Error('Excluir interacao exige interactionId.');
+            operation = { kind: 'delete-prototype-interaction', interactionId };
+          }
+        }
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(nodeId)}`, {
+          baseRevision,
+          operations: [operation],
+          summary: flags.summary ?? `${prototypeOperation} ${action}`,
+          from: flags.from,
+          taskId: flags.task,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Prototipo atualizado; design na revisao ${data.revision}.`);
         return 0;
       }
       if (action === 'arrange' && nodeId && values[0] && values[1]) {

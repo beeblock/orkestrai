@@ -146,6 +146,11 @@ const references = {
   },
   prototype: {
     rules: commonRules,
+    preferredTools: {
+      flows: 'design_manage_prototype_flow',
+      interactions: 'design_manage_prototype_interaction',
+      batch: 'design_apply_blueprint',
+    },
     flow: { required: ['id', 'name', 'startFrameId'], optional: ['description', 'order'] },
     interaction: { required: ['id', 'sourceElementId', 'trigger', 'action'], optional: ['transition', 'order'] },
     trigger: { type: ['click', 'hover', 'press', 'after-delay'], optional: ['delayMs'] },
@@ -156,6 +161,10 @@ const references = {
       { type: 'back' },
       { type: 'scroll-to', targetElementId: '<element-uuid>' },
       { type: 'set-variable-mode', collectionId: '<collection-uuid>', modeId: '<mode-uuid>' },
+    ],
+    examples: [
+      { tool: 'design_manage_prototype_flow', args: { nodeId: '<design-node-uuid>', baseRevision: 4, operation: 'create', name: 'Checkout', startFrameId: '<frame-uuid>', order: 0 } },
+      { tool: 'design_manage_prototype_interaction', args: { nodeId: '<design-node-uuid>', baseRevision: 5, operation: 'create', sourceElementId: '<button-uuid>', trigger: { type: 'click', delayMs: 0 }, prototypeAction: { type: 'navigate', targetFrameId: '<frame-uuid>' }, transition: { type: 'dissolve', direction: 'left', durationMs: 300, easing: { type: 'preset', value: 'ease-out' } }, order: 0 } },
     ],
   },
   motion: {
