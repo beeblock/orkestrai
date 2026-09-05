@@ -269,6 +269,9 @@ common credentials redacted; normal agent output is not persisted.
   and Svelte, React, or Vue component contracts without executing project code.
   Switching a mode updates every bound layer immediately, components and tokens
   are searchable, and agents use the same revision-safe operations through MCP.
+  Organize large files with first-class pages and a searchable, collapsible
+  hierarchy; rename, reorder, reparent, copy, cut, paste, and duplicate through
+  the same revisioned command bus used by the UI, CLI, and connected agents.
   Raster images remain reusable
   assets, while full documents export to SVG, PNG, JPEG, WebP, or PDF. A designer or leader
   can edit the exact same revision through typed Orkestrai tools while the UI

@@ -129,6 +129,7 @@ const EXPECTED: Record<string, Expectation> = {
   design_read: { method: 'GET', path: /\/bridge\/designs\/n1$/ },
   design_audit: { method: 'GET', path: /\/bridge\/designs\/n1\/quality$/ },
   design_apply_template: { method: 'POST', path: /\/bridge\/designs\/n1\/quality$/ },
+  design_manage_page: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_apply_operations: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_create_elements: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
   design_apply_blueprint: { method: 'PATCH', path: /\/bridge\/designs\/n1$/, schema: bridgeDesignApplySchema },
@@ -221,6 +222,15 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
     nodeId: 'n1',
     baseRevision: 0,
     templateId: 'product',
+  },
+  design_manage_page: {
+    nodeId: 'n1',
+    baseRevision: 0,
+    action: 'create',
+    pageId: '00000000-0000-7000-8000-000000000019',
+    name: 'Exploration',
+    width: 1440,
+    height: 1024,
   },
   design_apply_operations: {
     nodeId: 'n1',
@@ -372,6 +382,7 @@ describe('contrato MCP x bridge (todas as tools)', () => {
     const elementBatchTool = MCP_TOOLS.find((tool) => tool.name === 'design_create_elements') as any;
     const blueprintTool = MCP_TOOLS.find((tool) => tool.name === 'design_apply_blueprint') as any;
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('elements');
+    expect(referenceTool.inputSchema.properties.topic.enum).toContain('pages');
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('concept');
     expect(elementBatchTool.inputSchema.properties.elements.items.required).toEqual(['type', 'name', 'x', 'y', 'width', 'height']);
     expect(blueprintTool.inputSchema.properties.variables.items.required).toContain('values');

@@ -496,6 +496,11 @@ export const TOURS_ES: Tour[] = [
         body: 'El modo enfocado expande este mismo nodo Diseño sin crear otro editor ni documento. Contrae Capas, Assets y Propiedades por separado, usa la barra inferior estable, aplica zoom alrededor del puntero con Command/Ctrl + rueda y ajusta todo el contenido, la selección actual o la página al 100%. Volver al Canvas conserva revisión, selección, herramienta activa, cámara, zoom y estado de los paneles.',
       },
       {
+        id: 'organize-file',
+        title: 'Organiza páginas y capas como en un archivo de diseño real',
+        body: 'Crea, renombra, duplica, reordena, activa o elimina páginas con seguridad encima del árbol de capas. Busca y contrae la jerarquía, renombra una capa en el lugar o arrastra una o varias capas seleccionadas antes, dentro o después de otra. Command/Ctrl+C, X, V y D conservan jerarquías completas de descendientes, y toda acción persistente usa el mismo command bus revisionado disponible para los agentes conectados.',
+      },
+      {
         id: 'compose',
         title: 'Compón interfaces vectoriales responsivas',
         body: 'Selecciona puntos vectoriales por caja y transfórmalos juntos, redimensiona cualquier capa con ocho controles y edita texto multilínea directamente en el canvas. Usa Shift para alinear, distribuir, combinar, enmascarar o agrupar capas; mueve y redimensiona descendientes juntos, selecciona una capa interna con Alt y encuentra, selecciona o reemplaza colores iguales de relleno y contorno en la página.',

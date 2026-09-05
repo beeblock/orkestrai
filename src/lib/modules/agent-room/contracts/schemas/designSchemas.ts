@@ -584,6 +584,7 @@ const designElementChangesSchema = designElementSchema
   .omit({ id: true, pageId: true, parentId: true, type: true })
   .partial();
 
+const designPageChangesSchema = designPageSchema.omit({ id: true, order: true }).partial();
 const designVariableCollectionChangesSchema = designVariableCollectionSchema.omit({ id: true }).partial();
 const designVariableChangesSchema = designVariableSchema.omit({ id: true }).partial();
 const designComponentChangesSchema = designComponentSchema.omit({ id: true, rootElementId: true }).partial();
@@ -597,6 +598,17 @@ const designMotionTokenChangesSchema = designMotionTokenSchema.omit({ id: true }
 const designMotionTrackChangesSchema = designMotionTrackSchema.omit({ id: true, elementId: true }).partial();
 
 export const designOperationSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('create-page'),
+    page: designPageSchema.omit({ id: true, order: true }).extend({
+      id: z.string().uuid().optional(),
+      order: z.number().int().min(0).max(10_000).optional(),
+    }),
+  }),
+  z.object({ kind: z.literal('update-page'), pageId: z.string().uuid(), changes: designPageChangesSchema }),
+  z.object({ kind: z.literal('duplicate-page'), pageId: z.string().uuid(), duplicateId: z.string().uuid().optional(), name: z.string().trim().min(1).max(120).optional() }),
+  z.object({ kind: z.literal('delete-page'), pageId: z.string().uuid() }),
+  z.object({ kind: z.literal('reorder-page'), pageId: z.string().uuid(), order: z.number().int().min(0).max(10_000) }),
   z.object({
     kind: z.literal('create'),
     element: designElementSchema.omit({ id: true, order: true }).extend({
@@ -673,6 +685,15 @@ export const designOperationSchema = z.discriminatedUnion('kind', [
     note: z.string().trim().max(4_000).nullable().default(null),
   }),
   z.object({ kind: z.literal('delete-design-proposal'), proposalId: z.string().uuid() }),
+  z.object({
+    kind: z.literal('restore-component-instance'),
+    componentId: z.string().uuid(),
+    instanceId: z.string().uuid(),
+    members: z.array(z.object({ elementId: z.string().uuid(), sourceElementId: z.string().uuid() })).min(1).max(25_000),
+    instanceProperties: z.record(z.string().uuid(), designComponentPropertyValueSchema),
+    instanceOverrides: z.record(z.string().uuid(), designInstanceElementOverridesSchema),
+    slotAssignments: z.record(z.string().uuid(), z.array(z.string().uuid()).max(200)),
+  }),
   z.object({
     kind: z.literal('create-component-instance'),
     componentId: z.string().uuid(),

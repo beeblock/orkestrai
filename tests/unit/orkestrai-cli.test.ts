@@ -426,6 +426,25 @@ describe('orkestrai CLI', () => {
     });
   });
 
+  it('design page envia operacao tipada pela mesma bridge', async () => {
+    const { out } = capture();
+    await run([
+      'design', 'page', 'design-1', 'create', '--revision', '4', '--name', 'Exploration',
+      '--width', '1920', '--height', '1080', '--background', '#ffffff', '--order', '2',
+    ], { env: { ORKESTRAI_NODE_ID: 'designer-1' }, cwd, out });
+    const request = requests.filter((entry) => entry.url === '/api/agent-room/bridge/designs/design-1').at(-1);
+    expect(request.method).toBe('PATCH');
+    expect(request.body).toMatchObject({
+      baseRevision: 4,
+      from: 'designer-1',
+      operations: [{
+        kind: 'create-page',
+        page: { name: 'Exploration', width: 1920, height: 1080, background: '#ffffff', order: 2 },
+      }],
+    });
+    expect(request.body.operations[0].page.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it('design import-code le arquivos e registra a importacao pela bridge', async () => {
     writeFileSync(join(cwd, 'card.html'), '<article class="p-4">Card</article>');
     writeFileSync(join(cwd, 'card.css'), 'article { color: red; }');

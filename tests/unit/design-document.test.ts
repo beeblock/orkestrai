@@ -11,6 +11,10 @@ const TEXT_ID = '00000000-0000-7000-8000-000000000006';
 const ASSET_ID = '00000000-0000-7000-8000-000000000007';
 const GUIDE_ID = '00000000-0000-7000-8000-000000000008';
 const GROUP_ID = '00000000-0000-7000-8000-000000000009';
+const SECOND_PAGE_ID = '00000000-0000-7000-8000-000000000010';
+const THIRD_PAGE_ID = '00000000-0000-7000-8000-000000000011';
+const ARTIFACT_ID = '00000000-0000-7000-8000-000000000012';
+const REMOVED_ARTIFACT_ID = '00000000-0000-7000-8000-000000000013';
 const NOW = '2026-08-16T12:00:00.000Z';
 
 function document(): DesignDocument {
@@ -120,6 +124,79 @@ describe('documento de Design', () => {
     expect(renamed.name).toBe('Design system');
     expect(renamed.elements).toEqual([]);
     expect(renamed.updatedAt).toBe(NOW);
+  });
+
+  it('gerencia paginas pelo mesmo command bus revisionado', () => {
+    let current = applyDesignOperations(document(), [designOperationSchema.parse({
+      kind: 'create-page',
+      page: { id: SECOND_PAGE_ID, name: 'Components', width: 1920, height: 1080, background: '#ffffff' },
+    })], NOW);
+    expect(current.activePageId).toBe(SECOND_PAGE_ID);
+    expect(current.pages.map((page) => page.name)).toEqual(['Page 1', 'Components']);
+
+    current = applyDesignOperations(current, [
+      { kind: 'update-page', pageId: SECOND_PAGE_ID, changes: { name: 'Library', background: '#111111' } },
+      { kind: 'reorder-page', pageId: SECOND_PAGE_ID, order: 0 },
+      { kind: 'reorder-page', pageId: PAGE_ID, order: 1 },
+    ], NOW);
+    expect(current.pages.map((page) => page.name)).toEqual(['Library', 'Page 1']);
+    expect(current.pages[0].background).toBe('#111111');
+
+    current = applyDesignOperations(current, [{ kind: 'set-active-page', pageId: PAGE_ID }], NOW);
+    expect(current.activePageId).toBe(PAGE_ID);
+    expect(() => applyDesignOperations(document(), [{ kind: 'delete-page', pageId: PAGE_ID }], NOW)).toThrow('at least one page');
+  });
+
+  it('duplica a hierarquia da pagina com ids independentes', () => {
+    const populated = designDocumentSchema.parse({
+      ...document(),
+      elements: [
+        { id: FRAME_ID, pageId: PAGE_ID, parentId: null, type: 'frame', name: 'Frame', x: 0, y: 0, width: 300, height: 500, order: 0 },
+        { id: TEXT_ID, pageId: PAGE_ID, parentId: FRAME_ID, type: 'text', name: 'Title', x: 20, y: 20, width: 200, height: 40, order: 0, text: 'Hello' },
+      ],
+    });
+    const duplicated = applyDesignOperations(populated, [{
+      kind: 'duplicate-page',
+      pageId: PAGE_ID,
+      duplicateId: SECOND_PAGE_ID,
+      name: 'Page 1 copy',
+    }], NOW);
+    const copies = duplicated.elements.filter((element) => element.pageId === SECOND_PAGE_ID);
+    const copiedFrame = copies.find((element) => element.type === 'frame')!;
+    const copiedText = copies.find((element) => element.type === 'text')!;
+    expect(duplicated.activePageId).toBe(SECOND_PAGE_ID);
+    expect(copies).toHaveLength(2);
+    expect(copiedFrame.id).not.toBe(FRAME_ID);
+    expect(copiedText).toMatchObject({ name: 'Title', parentId: copiedFrame.id });
+  });
+
+  it('remove uma pagina e suas referencias sem tocar no conteudo restante', () => {
+    const populated = designDocumentSchema.parse({
+      ...document(),
+      pages: [
+        ...document().pages,
+        { id: SECOND_PAGE_ID, name: 'Archive', width: 1440, height: 1024, background: '#ffffff', order: 1 },
+        { id: THIRD_PAGE_ID, name: 'Keep', width: 1440, height: 1024, background: '#ffffff', order: 2 },
+      ],
+      elements: [
+        { id: FRAME_ID, pageId: PAGE_ID, parentId: null, type: 'frame', name: 'Delete', x: 0, y: 0, width: 300, height: 500, order: 0 },
+        { id: TEXT_ID, pageId: THIRD_PAGE_ID, parentId: null, type: 'text', name: 'Keep', x: 20, y: 20, width: 200, height: 40, order: 0, text: 'Hello' },
+      ],
+      prototypeFlows: [{ id: GROUP_ID, name: 'Delete flow', description: '', startFrameId: FRAME_ID, order: 0 }],
+      codeArtifacts: [
+        { id: ARTIFACT_ID, name: 'Shared view', path: 'src/shared.svelte', framework: 'svelte', elementIds: [FRAME_ID, TEXT_ID], sourceRevision: 0, contentHash: 'a'.repeat(64), generatedAt: NOW },
+        { id: REMOVED_ARTIFACT_ID, name: 'Deleted view', path: 'src/deleted.svelte', framework: 'svelte', elementIds: [FRAME_ID], sourceRevision: 0, contentHash: 'b'.repeat(64), generatedAt: NOW },
+      ],
+      presentation: { defaultFlowId: GROUP_ID, background: '#111111', showDeviceFrame: true, showHotspots: false, showCursor: true },
+    });
+    const deleted = applyDesignOperations(populated, [{ kind: 'delete-page', pageId: PAGE_ID }], NOW);
+    expect(deleted.pages.map((page) => page.id)).toEqual([SECOND_PAGE_ID, THIRD_PAGE_ID]);
+    expect(deleted.elements.map((element) => element.id)).toEqual([TEXT_ID]);
+    expect(deleted.prototypeFlows).toEqual([]);
+    expect(deleted.codeArtifacts).toHaveLength(1);
+    expect(deleted.codeArtifacts[0]).toMatchObject({ id: ARTIFACT_ID, elementIds: [TEXT_ID] });
+    expect(deleted.presentation.defaultFlowId).toBeNull();
+    expect(deleted.activePageId).toBe(SECOND_PAGE_ID);
   });
 
   it('mantem paints, efeitos, paths e layout retrocompativeis no schema v1', () => {

@@ -316,7 +316,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'design-workspace',
       title: 'Professional Design workspace',
-      body: `Expand any Design node into optional focus mode to use the complete app viewport. Back to Canvas returns to that exact node without losing its revision, selection, active tool, zoom, camera, or panel state. Layers and assets on the left and Properties on the right can be collapsed independently; in a narrow Canvas or Workbench surface they open as dismissible overlays without shrinking the drawing area. Creation tools stay in the stable bottom toolbar, while document, organization, view, prototype, and export actions remain in the compact top bar. Use Command/Ctrl + wheel to zoom around the pointer, or choose Fit all content, Fit selection, or Zoom to 100%. The themed workspace remains visually separate from the real page background, including when frames are far apart. These controls change only local visual state; every design mutation still uses the revisioned command bus shared with agents, MCP, and CLI.`,
+      body: `Expand any Design node into optional focus mode to use the complete app viewport. Back to Canvas returns to that exact node without losing its revision, selection, active tool, zoom, camera, or panel state. Layers and assets on the left and Properties on the right can be collapsed independently; in a narrow Canvas or Workbench surface they open as dismissible overlays without shrinking the drawing area. Creation tools stay in the stable bottom toolbar, while document, organization, view, prototype, and export actions remain in the compact top bar. Use Command/Ctrl + wheel to zoom around the pointer, or choose Fit all content, Fit selection, or Zoom to 100%. The themed workspace remains visually separate from the real page background, including when frames are far apart. Pages are first-class: create, rename, duplicate, reorder, activate, or delete them from the file panel. Search the real layer hierarchy, collapse frames and groups, rename in place, or drag a selection before, inside, or after another layer with a precise insertion indicator. Command/Ctrl+C, X, V, and D copy complete descendant hierarchies; pasted layers get independent identities. Page and layer changes use the same undoable, revisioned command bus as connected agents, MCP, and CLI.`,
     },
     {
       id: 'design-collaboration',
@@ -827,6 +827,8 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Layers, assets, and properties are independently collapsible and become dismissible overlays in narrow Canvas and Workbench surfaces.',
         'Command/Ctrl + wheel zooms around the pointer, while view commands frame all content, frame the selection, or restore 100 percent.',
         'The themed infinite workspace is visually separate from the actual page background, so distant frames no longer create a giant white scene.',
+        'Pages can be created, renamed, duplicated, reordered, activated, and safely deleted; the searchable layer tree supports collapse, inline rename, visibility, lock, precise drag-and-drop reparenting, and context actions.',
+        'Command/Ctrl copy, cut, paste, and duplicate preserve complete descendant hierarchies, while typed page operations give connected agents the same revision-safe control through MCP and CLI.',
       ],
     },
     {

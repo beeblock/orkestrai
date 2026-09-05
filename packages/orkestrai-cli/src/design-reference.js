@@ -2,6 +2,7 @@ export const DESIGN_REFERENCE_TOPICS = [
   'quickstart',
   'concept',
   'elements',
+  'pages',
   'tokens',
   'components',
   'prototype',
@@ -74,6 +75,19 @@ const references = {
         { id: '<title-uuid>', parentId: '<frame-uuid>', type: 'text', name: 'Page title', x: 144, y: 144, width: 520, height: 52, text: 'Account', fontSize: 40, fontWeight: 700, fill: '#111827', accessibilityRole: 'heading' },
       ],
     },
+  },
+  pages: {
+    rules: commonRules,
+    operations: [
+      { kind: 'create-page', page: { id: '<optional-page-uuid>', name: 'Exploration', width: 1440, height: 1024, background: '#f5f5f3', order: 1 } },
+      { kind: 'update-page', pageId: '<page-uuid>', changes: { name: 'Approved direction', background: '#ffffff' } },
+      { kind: 'duplicate-page', pageId: '<source-page-uuid>', duplicateId: '<optional-target-page-uuid>', name: 'Direction B' },
+      { kind: 'reorder-page', pageId: '<page-uuid>', order: 0 },
+      { kind: 'set-active-page', pageId: '<page-uuid>' },
+      { kind: 'delete-page', pageId: '<page-uuid>' },
+    ],
+    safety: 'A document always keeps at least one page. Duplicate remaps page-owned layers, component sources, instances, prototype interactions, and motion. Delete removes dependent references transactionally.',
+    preferredTool: 'Use design_manage_page for one page action or design_apply_operations when page and layer changes must share one atomic revision.',
   },
   tokens: {
     rules: commonRules,

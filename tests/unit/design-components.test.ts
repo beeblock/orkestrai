@@ -17,6 +17,7 @@ const INSTANCE_ID = '00000000-0000-7000-8000-000000000112';
 const SECOND_ROOT_ID = '00000000-0000-7000-8000-000000000113';
 const SECOND_COMPONENT_ID = '00000000-0000-7000-8000-000000000114';
 const SET_ID = '00000000-0000-7000-8000-000000000115';
+const DUPLICATE_PAGE_ID = '00000000-0000-7000-8000-000000000116';
 const NOW = '2026-08-16T19:00:00.000Z';
 
 function document(): DesignDocument {
@@ -97,6 +98,22 @@ describe('Design components', () => {
     const label = current.elements.find((element) => element.id === labelId)!;
     expect(label.opacity).toBe(0.4);
     expect(label.fontSize).toBe(20);
+  });
+
+  it('remapeia componentes e overrides ao duplicar uma página', () => {
+    let current = applyDesignOperations(seeded(), [{ kind: 'create-component-instance', componentId: COMPONENT_ID, instanceId: INSTANCE_ID, pageId: PAGE_ID, parentId: null, x: 500, y: 100 }], NOW);
+    const labelId = current.elements.find((element) => element.instanceRootId === INSTANCE_ID && element.instanceSourceId === TEXT_ID)!.id;
+    current = applyDesignOperations(current, [{ kind: 'update', elementId: labelId, changes: { opacity: 0.4 } }], NOW);
+    current = applyDesignOperations(current, [{ kind: 'duplicate-page', pageId: PAGE_ID, duplicateId: DUPLICATE_PAGE_ID, name: 'Components copy' }], NOW);
+
+    const copiedComponent = current.components.find((item) => item.id !== COMPONENT_ID)!;
+    const copiedRoot = current.elements.find((element) => element.pageId === DUPLICATE_PAGE_ID && element.instanceOf === copiedComponent.id)!;
+    const copiedSourceLabel = current.elements.find((element) => element.pageId === DUPLICATE_PAGE_ID && element.parentId === copiedComponent.rootElementId && element.name === 'Label')!;
+    const copiedInstanceLabel = current.elements.find((element) => element.instanceRootId === copiedRoot.id && element.instanceSourceId === copiedSourceLabel.id)!;
+
+    expect(copiedRoot.instanceOverrides).toHaveProperty(copiedSourceLabel.id);
+    expect(copiedRoot.instanceOverrides).not.toHaveProperty(TEXT_ID);
+    expect(copiedInstanceLabel.opacity).toBe(0.4);
   });
 
   it('atribui conteúdo arbitrário a slots e permite desanexar', () => {

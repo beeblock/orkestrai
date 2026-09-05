@@ -496,6 +496,11 @@ export const TOURS_EN: Tour[] = [
         body: 'Focus mode expands this same Design node without creating a second editor or document. Collapse Layers, Assets, and Properties independently, use the stable bottom tool rail, zoom around the pointer with Command/Ctrl + wheel, and fit all content, the current selection, or the page at 100%. Back to Canvas preserves the revision, selection, active tool, camera, zoom, and panel state.',
       },
       {
+        id: 'organize-file',
+        title: 'Organize pages and layers like a real design file',
+        body: 'Create, rename, duplicate, reorder, activate, or safely delete pages above the layer tree. Search and collapse the hierarchy, rename a layer in place, or drag one or several selected layers before, inside, or after another layer. Command/Ctrl+C, X, V, and D preserve complete descendant hierarchies, and every persistent action uses the same revisioned command bus available to connected agents.',
+      },
+      {
         id: 'compose',
         title: 'Compose responsive vector interfaces',
         body: 'Box-select vector points and transform them together, resize any layer from eight handles, and edit multiline text directly on the canvas. Shift-select layers to align, distribute, combine, mask, or group them; move and resize group descendants together, Alt-select a nested layer, and find, select, or replace matching fill and stroke colors across the page.',

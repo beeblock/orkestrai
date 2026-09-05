@@ -11,6 +11,7 @@ import {
   type DesignDocument,
   type DesignElement,
   type DesignOperation,
+  type DesignPage,
   type DesignVariable,
   type DesignVariableType,
   type DesignVariableValue,
@@ -73,6 +74,162 @@ function broadcastDesignChanged(workspaceId: string, nodeId: string, revision: n
 
 function sortElements(elements: DesignElement[]): DesignElement[] {
   return [...elements].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+
+function sortedPages(pages: DesignPage[]): DesignPage[] {
+  return [...pages].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+
+function withoutKeys<T>(record: Record<string, T>, keys: Set<string>): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !keys.has(key)));
+}
+
+function removePage(document: DesignDocument, pageId: string): void {
+  if (document.pages.length <= 1) throw new Error('A design document must keep at least one page.');
+  if (!document.pages.some((page) => page.id === pageId)) throw new Error('Design page not found.');
+
+  const elementIds = new Set(document.elements.filter((element) => element.pageId === pageId).map((element) => element.id));
+  const componentIds = new Set(document.components.filter((component) => elementIds.has(component.rootElementId)).map((component) => component.id));
+  for (const instance of document.elements.filter((element) => element.instanceOf && componentIds.has(element.instanceOf) && element.instanceRootId === element.id)) {
+    detachComponentInstance(document, instance.id);
+  }
+  document.components = document.components.filter((component) => !componentIds.has(component.id));
+  document.elements = document.elements.filter((element) => !elementIds.has(element.id));
+
+  const flowIds = new Set(document.prototypeFlows.filter((flow) => elementIds.has(flow.startFrameId)).map((flow) => flow.id));
+  document.prototypeFlows = document.prototypeFlows.filter((flow) => !flowIds.has(flow.id));
+  document.prototypeInteractions = document.prototypeInteractions.filter((interaction) => {
+    if (elementIds.has(interaction.sourceElementId)) return false;
+    if ((interaction.action.type === 'navigate' || interaction.action.type === 'open-overlay') && elementIds.has(interaction.action.targetFrameId)) return false;
+    return interaction.action.type !== 'scroll-to' || !elementIds.has(interaction.action.targetElementId);
+  });
+  document.motionTracks = document.motionTracks.filter((track) => !elementIds.has(track.elementId));
+  document.comments = document.comments.filter((comment) => comment.pageId !== pageId);
+  document.codeArtifacts = document.codeArtifacts
+    .map((artifact) => ({ ...artifact, elementIds: artifact.elementIds.filter((elementId) => !elementIds.has(elementId)) }))
+    .filter((artifact) => artifact.elementIds.length > 0);
+  if (document.presentation.defaultFlowId && flowIds.has(document.presentation.defaultFlowId)) document.presentation.defaultFlowId = null;
+
+  document.figmaLinks = document.figmaLinks.map((link) => {
+    const removedSourceIds = new Set(Object.entries(link.mappings)
+      .filter(([, elementId]) => elementIds.has(elementId))
+      .map(([sourceId]) => sourceId));
+    if (!removedSourceIds.size) return link;
+    return {
+      ...link,
+      mappings: withoutKeys(link.mappings, removedSourceIds),
+      baselineHashes: withoutKeys(link.baselineHashes, removedSourceIds),
+      localHashes: withoutKeys(link.localHashes, removedSourceIds),
+      imageRefs: withoutKeys(link.imageRefs, removedSourceIds),
+      pendingPushNodeIds: link.pendingPushNodeIds.filter((sourceId) => !removedSourceIds.has(sourceId)),
+    };
+  });
+
+  document.pages = sortedPages(document.pages.filter((page) => page.id !== pageId));
+  if (document.activePageId === pageId) document.activePageId = document.pages[0].id;
+}
+
+function duplicatePage(document: DesignDocument, sourcePageId: string, duplicateId: string, now: string, name?: string): void {
+  const sourcePage = document.pages.find((page) => page.id === sourcePageId);
+  if (!sourcePage) throw new Error('Design page not found.');
+  if (document.pages.length >= 100) throw new Error('A design document cannot contain more than 100 pages.');
+  if (document.pages.some((page) => page.id === duplicateId)) throw new Error('Design page already exists.');
+
+  const sourceElements = document.elements.filter((element) => element.pageId === sourcePageId);
+  const elementIds = new Map(sourceElements.map((element) => [element.id, uuidv7()]));
+  const sourceComponents = document.components.filter((component) => elementIds.has(component.rootElementId));
+  const componentIds = new Map(sourceComponents.map((component) => [component.id, uuidv7()]));
+  const propertyIds = new Map(sourceComponents.flatMap((component) => component.properties.map((property) => [property.id, uuidv7()] as const)));
+
+  const duplicatedElements = sourceElements.map((element) => {
+    const instanceOf = element.instanceOf ? componentIds.get(element.instanceOf) ?? element.instanceOf : null;
+    return {
+      ...structuredClone(element),
+      id: elementIds.get(element.id)!,
+      pageId: duplicateId,
+      parentId: element.parentId ? elementIds.get(element.parentId) ?? null : null,
+      maskId: element.maskId ? elementIds.get(element.maskId) ?? null : null,
+      componentId: element.componentId ? componentIds.get(element.componentId) ?? null : null,
+      instanceOf,
+      instanceRootId: element.instanceRootId ? elementIds.get(element.instanceRootId) ?? null : null,
+      instanceSourceId: element.instanceSourceId ? elementIds.get(element.instanceSourceId) ?? element.instanceSourceId : null,
+      instanceProperties: Object.fromEntries(Object.entries(element.instanceProperties).map(([id, value]) => [propertyIds.get(id) ?? id, value])),
+      instanceOverrides: Object.fromEntries(Object.entries(element.instanceOverrides).map(([id, value]) => [elementIds.get(id) ?? id, value])),
+      slotAssignments: Object.fromEntries(Object.entries(element.slotAssignments).map(([id, ids]) => [propertyIds.get(id) ?? id, ids.map((candidate) => elementIds.get(candidate) ?? candidate)])),
+      figmaSource: null,
+    } satisfies DesignElement;
+  });
+  const duplicatedComponents = sourceComponents.map((component) => ({
+    ...structuredClone(component),
+    id: componentIds.get(component.id)!,
+    rootElementId: elementIds.get(component.rootElementId)!,
+    name: `${component.name} copy`,
+    key: uuidv7(),
+    properties: component.properties.map((property) => ({
+      ...property,
+      id: propertyIds.get(property.id)!,
+      targetElementId: elementIds.get(property.targetElementId)!,
+      preferredValues: property.preferredValues.map((id) => componentIds.get(id) ?? id),
+    })),
+    libraryId: null,
+    librarySourceId: null,
+    figmaSource: null,
+    updatedAt: now,
+  }));
+
+  const flowIds = new Map(document.prototypeFlows
+    .filter((flow) => elementIds.has(flow.startFrameId))
+    .map((flow) => [flow.id, uuidv7()]));
+  document.prototypeFlows.push(...document.prototypeFlows
+    .filter((flow) => flowIds.has(flow.id))
+    .map((flow) => ({ ...structuredClone(flow), id: flowIds.get(flow.id)!, startFrameId: elementIds.get(flow.startFrameId)!, name: `${flow.name} copy` })));
+  document.prototypeInteractions.push(...document.prototypeInteractions
+    .filter((interaction) => elementIds.has(interaction.sourceElementId))
+    .map((interaction) => {
+      const action = structuredClone(interaction.action);
+      if (action.type === 'navigate' || action.type === 'open-overlay') action.targetFrameId = elementIds.get(action.targetFrameId) ?? action.targetFrameId;
+      if (action.type === 'scroll-to') action.targetElementId = elementIds.get(action.targetElementId) ?? action.targetElementId;
+      return { ...structuredClone(interaction), id: uuidv7(), sourceElementId: elementIds.get(interaction.sourceElementId)!, action };
+    }));
+  document.motionTracks.push(...document.motionTracks
+    .filter((track) => elementIds.has(track.elementId))
+    .map((track) => ({
+      ...structuredClone(track),
+      id: uuidv7(),
+      elementId: elementIds.get(track.elementId)!,
+      keyframes: track.keyframes.map((keyframe) => ({ ...keyframe, id: uuidv7() })),
+    })));
+
+  document.pages.push({ ...sourcePage, id: duplicateId, name: name ?? `${sourcePage.name} copy`, order: Math.max(-1, ...document.pages.map((page) => page.order)) + 1 });
+  document.elements.push(...duplicatedElements);
+  document.components.push(...duplicatedComponents);
+  document.activePageId = duplicateId;
+}
+
+function validateDesignPages(document: DesignDocument): void {
+  const pageIds = new Set(document.pages.map((page) => page.id));
+  if (pageIds.size !== document.pages.length) throw new Error('Design page ids must be unique.');
+  if (!pageIds.has(document.activePageId)) throw new Error('The active design page is invalid.');
+  const elements = new Map<string, DesignElement>();
+  for (const element of document.elements) {
+    if (elements.has(element.id)) throw new Error('Design element ids must be unique.');
+    if (!pageIds.has(element.pageId)) throw new Error('Design element page not found.');
+    elements.set(element.id, element);
+  }
+  for (const element of document.elements) {
+    if (!element.parentId) continue;
+    const parent = elements.get(element.parentId);
+    if (!parent || parent.pageId !== element.pageId || (parent.type !== 'frame' && parent.type !== 'group')) {
+      throw new Error('Invalid design parent.');
+    }
+    const visited = new Set([element.id]);
+    let ancestor: DesignElement | undefined = parent;
+    while (ancestor) {
+      if (visited.has(ancestor.id)) throw new Error('Design element hierarchy cannot contain a cycle.');
+      visited.add(ancestor.id);
+      ancestor = ancestor.parentId ? elements.get(ancestor.parentId) : undefined;
+    }
+  }
 }
 
 function safeAssetFilename(name: string): string {
@@ -524,6 +681,38 @@ function validateDesignCollaboration(document: DesignDocument): void {
 export function applyDesignOperations(document: DesignDocument, operations: DesignOperation[], now: string): DesignDocument {
   let next: DesignDocument = structuredClone(document);
   for (const operation of operations) {
+    if (operation.kind === 'create-page') {
+      if (next.pages.length >= 100) throw new Error('A design document cannot contain more than 100 pages.');
+      const pageId = operation.page.id ?? uuidv7();
+      if (next.pages.some((page) => page.id === pageId)) throw new Error('Design page already exists.');
+      next.pages.push({
+        ...operation.page,
+        id: pageId,
+        order: operation.page.order ?? Math.max(-1, ...next.pages.map((page) => page.order)) + 1,
+      });
+      next.activePageId = pageId;
+      continue;
+    }
+    if (operation.kind === 'update-page') {
+      const page = next.pages.find((candidate) => candidate.id === operation.pageId);
+      if (!page) throw new Error('Design page not found.');
+      Object.assign(page, operation.changes);
+      continue;
+    }
+    if (operation.kind === 'duplicate-page') {
+      duplicatePage(next, operation.pageId, operation.duplicateId ?? uuidv7(), now, operation.name);
+      continue;
+    }
+    if (operation.kind === 'delete-page') {
+      removePage(next, operation.pageId);
+      continue;
+    }
+    if (operation.kind === 'reorder-page') {
+      const page = next.pages.find((candidate) => candidate.id === operation.pageId);
+      if (!page) throw new Error('Design page not found.');
+      page.order = operation.order;
+      continue;
+    }
     if (operation.kind === 'create') {
       const elementId = operation.element.id ?? uuidv7();
       if (next.elements.some((element) => element.id === elementId)) {
@@ -986,6 +1175,43 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
       next.proposals = next.proposals.filter((candidate) => candidate.id !== operation.proposalId);
       continue;
     }
+    if (operation.kind === 'restore-component-instance') {
+      const component = next.components.find((candidate) => candidate.id === operation.componentId);
+      const sourceRoot = component ? next.elements.find((element) => element.id === component.rootElementId) : null;
+      const root = next.elements.find((element) => element.id === operation.instanceId);
+      if (!component || !sourceRoot || !root || root.componentId || root.instanceRootId || root.instanceOf || root.instanceSourceId) {
+        throw new Error('Detached component instance not found.');
+      }
+      const memberIds = new Set<string>();
+      const sourceIds = new Set<string>();
+      const expectedSourceIds = new Set(elementDescendants(next, sourceRoot.id).map((element) => element.id));
+      for (const member of operation.members) {
+        const element = next.elements.find((candidate) => candidate.id === member.elementId);
+        const source = next.elements.find((candidate) => candidate.id === member.sourceElementId);
+        if (!element || !source || element.pageId !== root.pageId || element.componentId || element.instanceRootId || element.instanceOf || element.instanceSourceId) {
+          throw new Error('Invalid detached component instance member.');
+        }
+        if (!isElementDescendant(next, source.id, sourceRoot.id) || element.type !== source.type || memberIds.has(element.id) || sourceIds.has(source.id)) {
+          throw new Error('Invalid component instance source mapping.');
+        }
+        memberIds.add(element.id);
+        sourceIds.add(source.id);
+      }
+      const rootMember = operation.members.find((member) => member.elementId === root.id);
+      if (rootMember?.sourceElementId !== sourceRoot.id || sourceIds.size !== expectedSourceIds.size || [...sourceIds].some((id) => !expectedSourceIds.has(id))) {
+        throw new Error('Invalid component instance root mapping.');
+      }
+      for (const member of operation.members) {
+        const element = next.elements.find((candidate) => candidate.id === member.elementId)!;
+        element.instanceOf = element.id === root.id ? component.id : null;
+        element.instanceRootId = root.id;
+        element.instanceSourceId = member.sourceElementId;
+        element.instanceProperties = element.id === root.id ? structuredClone(operation.instanceProperties) : {};
+        element.instanceOverrides = element.id === root.id ? structuredClone(operation.instanceOverrides) : {};
+        element.slotAssignments = element.id === root.id ? structuredClone(operation.slotAssignments) : {};
+      }
+      continue;
+    }
     if (operation.kind === 'create-component-instance') {
       if (next.elements.some((element) => element.id === operation.instanceId)) throw new Error('Component instance already exists.');
       const component = next.components.find((candidate) => candidate.id === operation.componentId);
@@ -1060,6 +1286,8 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
     if (element.maskId && (!elementIds.has(element.maskId) || element.maskId === element.id)) throw new Error('Invalid design mask.');
   }
   syncComponentInstances(next);
+  next.pages = sortedPages(next.pages);
+  validateDesignPages(next);
   validateDesignVariables(next);
   validateDesignComponents(next);
   validateDesignPrototype(next);

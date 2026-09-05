@@ -25,13 +25,10 @@
     CornerDownRight,
     Diamond,
     Download,
-    Eye,
-    EyeOff,
     Frame,
     Group,
     Hand,
     ImagePlus,
-    Lock,
     Layers3,
     MoveDiagonal2,
     Magnet,
@@ -52,7 +49,6 @@
     Undo2,
     Ungroup,
     Unlink2,
-    Unlock,
     SlidersHorizontal,
     UsersRound,
     Workflow,
@@ -75,6 +71,7 @@
     type DesignEffect,
     type DesignElement,
     type DesignOperation,
+    type DesignPage,
     type DesignPaint,
     type DesignPathPoint,
     type DesignProposal,
@@ -115,6 +112,7 @@
   import DesignPrototypePlayer from './DesignPrototypePlayer.svelte';
   import DesignRenderer from './DesignRenderer.svelte';
   import DesignToolbarButton from './DesignToolbarButton.svelte';
+  import DesignFilePanel from './DesignFilePanel.svelte';
   import DesignVariableBindings from './DesignVariableBindings.svelte';
   import DesignVariablesPanel from './DesignVariablesPanel.svelte';
   import {
@@ -125,6 +123,12 @@
     type DesignEditorSession,
     type DesignEditorTool,
   } from './design-editor-session.js';
+  import {
+    canPasteDesignLayers,
+    copyDesignLayers,
+    pasteDesignLayerOperations,
+  } from './design-clipboard.js';
+  import { pageDeleteInverseOperations } from './design-page-history.js';
 
   let {
     workspaceId,
@@ -190,6 +194,7 @@
   let editorWidth = $state(0);
   let sessionReady = false;
   let sessionWriteTimer: ReturnType<typeof setTimeout> | null = null;
+  let clipboardVersion = $state(0);
   let prototypeOpen = $state(false);
   let prototypeFlowId = $state<string | null>(null);
   let thumbnailRevision = $state(-1);
@@ -278,6 +283,10 @@
   const editorGridColumns = $derived(panelsOverlay
     ? '0 minmax(0,1fr) 0'
     : `${leftPanelVisible ? '240px' : '0'} minmax(0,1fr) ${rightPanelVisible ? '288px' : '0'}`);
+  const internalPasteAvailable = $derived.by(() => {
+    void clipboardVersion;
+    return Boolean(document && canPasteDesignLayers(document.id));
+  });
 
   function uuidv7(): string {
     const timestamp = Date.now().toString(16).padStart(12, '0');
@@ -1255,6 +1264,164 @@
     });
   }
 
+  function selectLayer(elementId: string, additive: boolean): void {
+    vectorEditId = null;
+    pathPointSelections = [];
+    if (additive) selectedIds = selectedIds.includes(elementId)
+      ? selectedIds.filter((id) => id !== elementId)
+      : [...selectedIds, elementId];
+    else selectedIds = [elementId];
+  }
+
+  async function activatePage(pageId: string): Promise<void> {
+    if (!document || pageId === document.activePageId) return;
+    const previousPageId = document.activePageId;
+    if (await apply([{ kind: 'set-active-page', pageId }], m['design.operation_activate_page'](), {
+      inverse: [{ kind: 'set-active-page', pageId: previousPageId }],
+    })) {
+      selectedIds = [];
+      vectorEditId = null;
+      pathPointSelections = [];
+      await tick();
+      await fitPage();
+    }
+  }
+
+  async function createPage(): Promise<void> {
+    if (!document || document.pages.length >= 100) return;
+    const id = uuidv7();
+    const nextNumber = document.pages.length + 1;
+    if (await apply([{
+      kind: 'create-page',
+      page: { id, name: m['design.default_page_name']({ number: String(nextNumber) }), width: 1440, height: 1024, background: '#f5f5f3' },
+    }], m['design.operation_create_page'](), { inverse: [{ kind: 'delete-page', pageId: id }] })) {
+      selectedIds = [];
+      await tick();
+      await fitPage();
+    }
+  }
+
+  async function renamePage(item: DesignPage, name: string): Promise<void> {
+    await apply([{ kind: 'update-page', pageId: item.id, changes: { name } }], m['design.operation_rename_page']({ name }), {
+      inverse: [{ kind: 'update-page', pageId: item.id, changes: { name: item.name } }],
+    });
+  }
+
+  async function duplicatePage(item: DesignPage): Promise<void> {
+    const duplicateId = uuidv7();
+    if (await apply([{
+      kind: 'duplicate-page',
+      pageId: item.id,
+      duplicateId,
+      name: m['design.copy_name']({ name: item.name }),
+    }], m['design.operation_duplicate_page']({ name: item.name }), { inverse: [{ kind: 'delete-page', pageId: duplicateId }] })) {
+      selectedIds = [];
+      await tick();
+      await fitPage();
+    }
+  }
+
+  async function deletePage(item: DesignPage): Promise<void> {
+    if (!document || document.pages.length <= 1) return;
+    const inverse = pageDeleteInverseOperations(document, item.id);
+    if (await apply([{ kind: 'delete-page', pageId: item.id }], m['design.operation_delete_page']({ name: item.name }), { inverse })) {
+      selectedIds = [];
+      await tick();
+      await fitPage();
+    }
+  }
+
+  async function reorderPages(sourceId: string, targetId: string, placement: 'before' | 'after'): Promise<void> {
+    if (!document || sourceId === targetId) return;
+    const ordered = [...document.pages].sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
+    const source = ordered.find((item) => item.id === sourceId);
+    const targetIndex = ordered.filter((item) => item.id !== sourceId).findIndex((item) => item.id === targetId);
+    if (!source || targetIndex < 0) return;
+    const next = ordered.filter((item) => item.id !== sourceId);
+    next.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, source);
+    const forward = next.map((item, order) => ({ kind: 'reorder-page' as const, pageId: item.id, order }));
+    const inverse = ordered.map((item) => ({ kind: 'reorder-page' as const, pageId: item.id, order: item.order }));
+    await apply(forward, m['design.operation_reorder_page'](), { inverse });
+  }
+
+  function copyLayers(elementId?: string): void {
+    if (!document) return;
+    const ids = elementId && !selectedIds.includes(elementId) ? [elementId] : selectedIds;
+    const count = copyDesignLayers(document.id, pageElements, ids);
+    if (!count) return;
+    clipboardVersion += 1;
+    toast.success(m['design.layers_copied']({ count: String(count) }));
+  }
+
+  async function pasteLayers(offset = 24): Promise<void> {
+    if (!document || !page) return;
+    const pasted = pasteDesignLayerOperations(document.id, page.id, pageElements, uuidv7, offset);
+    if (!pasted.operations.length) return;
+    const inverse = pasted.selectedIds.map((elementId) => ({ kind: 'delete' as const, elementId }));
+    if (await apply(pasted.operations, m['design.operation_paste_layers']({ count: String(pasted.selectedIds.length) }), { inverse })) {
+      selectedIds = pasted.selectedIds;
+      vectorEditId = null;
+      pathPointSelections = [];
+    }
+  }
+
+  async function duplicateLayers(elementId?: string): Promise<void> {
+    if (elementId && !selectedIds.includes(elementId)) selectedIds = [elementId];
+    copyLayers(elementId);
+    await pasteLayers(24);
+  }
+
+  async function cutLayers(): Promise<void> {
+    copyLayers();
+    await removeSelected();
+  }
+
+  async function deleteLayer(elementId?: string): Promise<void> {
+    if (elementId && !selectedIds.includes(elementId)) selectedIds = [elementId];
+    await removeSelected();
+  }
+
+  async function moveLayer(elementId: string, direction: -1 | 1): Promise<void> {
+    const element = pageElements.find((candidate) => candidate.id === elementId);
+    if (!element) return;
+    const siblings = pageElements.filter((candidate) => candidate.parentId === element.parentId).sort((left, right) => left.order - right.order);
+    const index = siblings.findIndex((candidate) => candidate.id === elementId);
+    const other = siblings[index + direction];
+    if (!other) return;
+    await apply([
+      { kind: 'reorder', elementId, order: other.order },
+      { kind: 'reorder', elementId: other.id, order: element.order },
+    ], m['design.operation_reorder_layers'](), {
+      inverse: [
+        { kind: 'reorder', elementId, order: element.order },
+        { kind: 'reorder', elementId: other.id, order: other.order },
+      ],
+    });
+  }
+
+  async function dropLayers(elementIds: string[], targetId: string | null, placement: 'before' | 'inside' | 'after'): Promise<void> {
+    const roots = elementIds.map((id) => pageElements.find((element) => element.id === id)).filter((element): element is DesignElement => Boolean(element));
+    const target = targetId ? pageElements.find((element) => element.id === targetId) ?? null : null;
+    if (!roots.length || (target && roots.some((root) => descendantIds([root.id]).has(target.id)))) return;
+    const parentId = placement === 'inside' ? target?.id ?? null : target?.parentId ?? null;
+    if (placement === 'inside' && target && target.type !== 'frame' && target.type !== 'group') return;
+    const siblings = pageElements
+      .filter((element) => element.parentId === parentId && !roots.some((root) => root.id === element.id))
+      .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
+    let index = siblings.length;
+    if (target && placement !== 'inside') {
+      const targetIndex = siblings.findIndex((element) => element.id === target.id);
+      if (targetIndex >= 0) index = targetIndex + (placement === 'after' ? 1 : 0);
+    }
+    const next = [...siblings];
+    next.splice(index, 0, ...roots);
+    const forward: DesignOperation[] = next.flatMap((element, order) => roots.some((root) => root.id === element.id)
+      ? [{ kind: 'reparent' as const, elementId: element.id, parentId, order }]
+      : element.order === order ? [] : [{ kind: 'reorder' as const, elementId: element.id, order }]);
+    const inverse = roots.map((element) => ({ kind: 'reparent' as const, elementId: element.id, parentId: element.parentId, order: element.order }));
+    if (await apply(forward, m['design.operation_reparent_layers']({ count: String(roots.length) }), { inverse })) selectedIds = roots.map((element) => element.id);
+  }
+
   async function removeSelected() {
     const selectedSet = new Set(selectedIds);
     const targets = selectedElements.filter((element) => !element.locked && !ancestorSelected(element, selectedSet));
@@ -1303,16 +1470,6 @@
       }
     }
     return descendants;
-  }
-
-  function layerDepth(element: DesignElement): number {
-    let depth = 0;
-    let parentId = element.parentId;
-    while (parentId && depth < 32) {
-      depth += 1;
-      parentId = pageElements.find((candidate) => candidate.id === parentId)?.parentId ?? null;
-    }
-    return depth;
   }
 
   async function groupSelection() {
@@ -2623,6 +2780,30 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       void (event.shiftKey ? redo() : undo());
       return;
     }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      copyLayers();
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'x') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void cutLayers();
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void pasteLayers();
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void duplicateLayers();
+      return;
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && vectorEditing && selected?.type === 'path') {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -2948,21 +3129,36 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-[10px] font-medium ${leftPanel === 'components' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'components'} onclick={() => (leftPanel = 'components')}><Diamond size={12} />{m['design.components']()}</button>
       </div>
       {#if leftPanel === 'layers'}
-        <div class="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_190px]">
-          <section class="min-h-0 overflow-y-auto">
-            {#if loading}<p class="p-3 text-xs text-[var(--app-text-muted)]">{m['design.loading']()}</p>{:else}
-              <div class="flex flex-col-reverse p-1">
-                {#each pageElements as element (element.id)}
-                  <div class={`group flex h-8 items-center gap-1 rounded px-1 ${selectedIds.includes(element.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)]'}`} style:padding-left={`${4 + layerDepth(element) * 12}px`}>
-                    {#if element.componentId || element.instanceRootId === element.id}<Diamond size={10} class={`shrink-0 ${element.componentId ? 'text-[var(--app-accent)]' : 'text-[var(--app-info)]'}`} />{/if}
-                    <button class="min-w-0 flex-1 truncate px-1 text-left text-[11px]" onclick={(event) => { vectorEditId = null; pathPointSelections = []; if (event.shiftKey) selectedIds = selectedIds.includes(element.id) ? selectedIds.filter((id) => id !== element.id) : [...selectedIds, element.id]; else selectedIds = [element.id]; }} ondblclick={() => { if (element.type === 'path') enterVectorEdit(element); else if (element.type === 'text') beginTextEditing(element); }}>{element.name}</button>
-                    <button class="grid size-6 place-items-center text-[var(--app-text-muted)] hover:text-[var(--app-text)]" aria-label={element.visible ? m['design.hide']() : m['design.show']()} onclick={() => void updateElement(element, { visible: !element.visible })}>{#if element.visible}<Eye size={12} />{:else}<EyeOff size={12} />{/if}</button>
-                    <button class="grid size-6 place-items-center text-[var(--app-text-muted)] hover:text-[var(--app-text)]" aria-label={element.locked ? m['design.unlock']() : m['design.lock']()} onclick={() => void updateElement(element, { locked: !element.locked })}>{#if element.locked}<Lock size={12} />{:else}<Unlock size={12} />{/if}</button>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </section>
+        <div class="grid min-h-0 flex-1 grid-rows-[minmax(260px,1fr)_190px]">
+          {#if loading}
+            <p class="p-3 text-xs text-[var(--app-text-muted)]">{m['design.loading']()}</p>
+          {:else if document}
+            <DesignFilePanel
+              pages={document.pages}
+              activePageId={document.activePageId}
+              elements={pageElements}
+              {selectedIds}
+              {saving}
+              canPaste={internalPasteAvailable}
+              onActivatePage={activatePage}
+              onCreatePage={createPage}
+              onRenamePage={renamePage}
+              onDuplicatePage={duplicatePage}
+              onDeletePage={deletePage}
+              onReorderPage={reorderPages}
+              onSelect={selectLayer}
+              onRenameLayer={(element, name) => updateElement(element, { name })}
+              onToggleVisibility={(element) => updateElement(element, { visible: !element.visible })}
+              onToggleLock={(element) => updateElement(element, { locked: !element.locked })}
+              onDropLayers={dropLayers}
+              onCopy={() => copyLayers()}
+              onCut={cutLayers}
+              onPaste={pasteLayers}
+              onDuplicate={duplicateLayers}
+              onDelete={deleteLayer}
+              onMoveLayer={moveLayer}
+            />
+          {/if}
           <section class="min-h-0 overflow-y-auto border-t border-[var(--app-border)]">
             <div class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-[10px] font-semibold uppercase text-[var(--app-text-muted)]"><span>{m['design.assets']()}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.import_asset']()} onclick={() => assetInput?.click()}><Plus size={12} /></Button></div>
             {#if !document?.assets.length}<p class="p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.assets_empty']()}</p>{:else}

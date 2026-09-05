@@ -20,12 +20,22 @@ pt-BR, English, and Spanish translations.
 - Design zoom can center on the pointer with Command/Ctrl + wheel, frame all
   content, frame the current selection, or return to 100 percent without
   confusing the themed canvas surface with the document artboard.
+- Design files now expose real Pages and a searchable hierarchical Layers tree.
+  Pages can be created, renamed, duplicated, reordered, activated, and safely
+  deleted; layers can be collapsed, renamed in place, reordered, or reparented
+  with precise before, inside, and after drop feedback.
+- Native layer copy, cut, paste, and duplicate preserve complete descendant
+  hierarchies and work through familiar Command/Ctrl shortcuts. Page actions
+  use the same revisioned command bus through the UI, API, MCP, and CLI.
 
 ### Fixed
 
 - Opening Design from a normal Canvas node no longer leaves the workspace
   sidebar consuming the editor width, and compact Workbench panes no longer
   hide Layers and Properties without a way to reopen them.
+- Deleting a Design page now removes dependent prototypes, interactions,
+  comments, motion tracks, Figma mappings, and generated-code references
+  transactionally instead of leaving stale document state.
 
 ## 0.25.0 - 2026-09-05
 

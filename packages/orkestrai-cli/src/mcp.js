@@ -120,6 +120,13 @@ const TOOLS = [
   { name: 'design_reference', description: 'Retorna o contrato exato e exemplos para criar Design nativo sem probes, scripts temporarios ou inspecao do app. Consulte uma vez e escreva em lotes.', inputSchema: { type: 'object', properties: { topic: { type: 'string', enum: DESIGN_REFERENCE_TOPICS, default: 'quickstart' } } } },
   { name: 'design_audit', description: 'Audita naming, clipping, overlap, contraste e acessibilidade sem alterar o documento. E uma auditoria estrutural, nunca uma aprovacao de qualidade visual.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'design_apply_template', description: 'Aplica um template nativo completo pelo command bus transacional.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, templateId: { type: 'string', enum: ['product', 'marketing', 'mobile', 'design-system'] }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'templateId'] } },
+  { name: 'design_manage_page', description: 'Cria, atualiza, duplica, reordena, ativa ou exclui uma pagina pelo mesmo command bus revisionado usado pela UI.', inputSchema: { type: 'object', properties: {
+    nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, action: { type: 'string', enum: ['create', 'update', 'duplicate', 'reorder', 'activate', 'delete'] },
+    pageId: { type: 'string', format: 'uuid' }, duplicateId: { type: 'string', format: 'uuid' }, name: { type: 'string', minLength: 1, maxLength: 120 },
+    width: { type: 'number', exclusiveMinimum: 0, maximum: 100000 }, height: { type: 'number', exclusiveMinimum: 0, maximum: 100000 },
+    background: { type: 'string', pattern: '^(transparent|#[0-9a-fA-F]{3,8})$' }, order: { type: 'integer', minimum: 0, maximum: 10000 },
+    summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['nodeId', 'baseRevision', 'action'] } },
   { name: 'design_apply_operations', description: 'Aplica operacoes transacionais ao documento: layers, vetores, design system, prototipo, motion, comentarios e propostas. Leia a revisao antes e verifique o resultado depois.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, operations: { type: 'array', minItems: 1, maxItems: 2000, items: { type: 'object' } }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'operations', 'summary'] } },
   { name: 'design_create_elements', description: 'Cria ate 2000 layers em uma unica revisao. Use para frames e telas completas; coordenadas de filhos continuam absolutas. Nao faca uma chamada por layer.', inputSchema: { type: 'object', properties: { ...DESIGN_BATCH_BASE, elements: { type: 'array', minItems: 1, maxItems: 2000, items: DESIGN_ELEMENT_INPUT } }, required: ['nodeId', 'baseRevision', 'pageId', 'elements', 'summary'] } },
   { name: 'design_apply_blueprint', description: 'Aplica layers, tokens, bindings, componentes, prototipo e motion em um unico lote tipado. Prefira esta tool para uma direcao completa e use design_reference para exemplos.', inputSchema: { type: 'object', properties: {
@@ -427,6 +434,26 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         from: selfAgent,
         taskId: args.taskId,
       });
+    case 'design_manage_page': {
+      if (args.action !== 'create' && !args.pageId) throw new Error(`design_manage_page action ${args.action} requires pageId.`);
+      if (args.action === 'reorder' && !Number.isInteger(args.order)) throw new Error('design_manage_page action reorder requires an integer order.');
+      if (args.action === 'update' && !['name', 'width', 'height', 'background'].some((key) => args[key] !== undefined)) throw new Error('design_manage_page action update requires at least one change.');
+      const pageId = args.pageId ?? crypto.randomUUID();
+      let operation;
+      if (args.action === 'create') operation = { kind: 'create-page', page: { id: pageId, name: args.name ?? 'Page', width: args.width ?? 1440, height: args.height ?? 1024, background: args.background ?? '#f5f5f3', ...(args.order === undefined ? {} : { order: args.order }) } };
+      else if (args.action === 'update') operation = { kind: 'update-page', pageId, changes: Object.fromEntries(['name', 'width', 'height', 'background'].filter((key) => args[key] !== undefined).map((key) => [key, args[key]])) };
+      else if (args.action === 'duplicate') operation = { kind: 'duplicate-page', pageId, duplicateId: args.duplicateId ?? crypto.randomUUID(), ...(args.name ? { name: args.name } : {}) };
+      else if (args.action === 'reorder') operation = { kind: 'reorder-page', pageId, order: args.order };
+      else if (args.action === 'activate') operation = { kind: 'set-active-page', pageId };
+      else operation = { kind: 'delete-page', pageId };
+      return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
+        baseRevision: args.baseRevision,
+        operations: [operation],
+        summary: args.summary ?? `${args.action} design page`,
+        from: selfAgent,
+        taskId: args.taskId,
+      });
+    }
     case 'design_apply_operations':
       return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
         baseRevision: args.baseRevision,

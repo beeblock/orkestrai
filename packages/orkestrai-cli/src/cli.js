@@ -56,6 +56,7 @@ Uso:
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
   orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
+  orkestrai design page <nodeId> <create|update|duplicate|reorder|activate|delete> --revision <n> [--page <pageId>] [--name <nome>] [--width <n>] [--height <n>] [--background <cor>] [--order <n>]
   orkestrai design apply <nodeId> <operations-json> --revision <n> [--summary <texto>] [--task <taskId>]
   orkestrai design import-code <nodeId> <arquivo> --format html|svelte|react|vue --name <nome> --revision <n> [--css <arquivo>]
   orkestrai design generate <nodeId> <elementIds-json> --framework svelar|svelte|react|next|vue|html --output <path> --name <nome> [--write --revision <n>]
@@ -992,6 +993,33 @@ export async function run(argv, options = {}) {
         });
         if (flags.json) out(JSON.stringify(data, null, 2));
         else out(`Template aplicado; design atualizado para a revisao ${data.revision}.`);
+        return 0;
+      }
+      if (action === 'page' && nodeId && values[0]) {
+        const pageAction = values[0];
+        const baseRevision = Number(flags.revision);
+        const pageId = flags.page;
+        if (!Number.isInteger(baseRevision) || baseRevision < 0 || !['create', 'update', 'duplicate', 'reorder', 'activate', 'delete'].includes(pageAction)) {
+          throw new Error('Uso: orkestrai design page <nodeId> <create|update|duplicate|reorder|activate|delete> --revision <n> [--page <pageId>]');
+        }
+        if (pageAction !== 'create' && !pageId) throw new Error(`A acao ${pageAction} exige --page <pageId>.`);
+        const resolvedPageId = pageId ?? crypto.randomUUID();
+        let operation;
+        if (pageAction === 'create') operation = { kind: 'create-page', page: { id: resolvedPageId, name: flags.name ?? 'Page', width: Number(flags.width ?? 1440), height: Number(flags.height ?? 1024), background: flags.background ?? '#f5f5f3', ...(flags.order === undefined ? {} : { order: Number(flags.order) }) } };
+        else if (pageAction === 'update') operation = { kind: 'update-page', pageId: resolvedPageId, changes: Object.fromEntries([['name', flags.name], ['width', flags.width === undefined ? undefined : Number(flags.width)], ['height', flags.height === undefined ? undefined : Number(flags.height)], ['background', flags.background]].filter(([, value]) => value !== undefined)) };
+        else if (pageAction === 'duplicate') operation = { kind: 'duplicate-page', pageId: resolvedPageId, duplicateId: crypto.randomUUID(), ...(flags.name ? { name: flags.name } : {}) };
+        else if (pageAction === 'reorder') operation = { kind: 'reorder-page', pageId: resolvedPageId, order: Number(flags.order) };
+        else if (pageAction === 'activate') operation = { kind: 'set-active-page', pageId: resolvedPageId };
+        else operation = { kind: 'delete-page', pageId: resolvedPageId };
+        const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(nodeId)}`, {
+          baseRevision,
+          operations: [operation],
+          summary: flags.summary ?? `${pageAction} design page`,
+          from: flags.from,
+          taskId: flags.task,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(`Pagina atualizada; design na revisao ${data.revision}.`);
         return 0;
       }
       if (action === 'apply' && nodeId) {
