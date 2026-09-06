@@ -5,7 +5,7 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## 0.26.0 - Unreleased
+## 0.26.0 - 2026-09-06
 
 ### Added
 
@@ -192,6 +192,10 @@ pt-BR, English, and Spanish translations.
 - Concept directions now have a five-minute limit for the complete first gate,
   not merely its first revision, with one import and at most one corrective
   mutation before human review.
+- API Client compatibility now runs on the latest reviewed Bruno filestore,
+  script, and request runtimes, while CI publishes failure diagnostics through
+  the Node 24-compatible artifact action. Production dependencies audit with
+  zero known vulnerabilities after the upgrade.
 
 ## 0.25.0 - 2026-09-05
 

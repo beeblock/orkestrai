@@ -845,7 +845,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Unreleased · 0.26.0',
+      date: 'September 6, 2026 · 0.26.0',
       title: 'Orkestrai 0.26.0: a professional native Design workspace',
       summary: 'The same Design node now expands into a focused, responsive workspace without losing visual context.',
       items: [
@@ -885,6 +885,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'A prompt submitted by a person holds the automatic delivery queue until the provider consumes Enter and returns to an idle boundary, so a simultaneous ask, task handoff, or role cannot be appended to the same turn.',
         'API Client HTML visualizers resolve relative media and styles against the credential-free request URL instead of Orkestrai\'s local server, under a bounded sandbox that blocks active content.',
         'Desktop diagnostics omit expected bridge activations, intentional server shutdowns, ordinary browser 404s, and Portal navigation failures already represented by the node state; the updater bypasses a repeatedly failing differential path for the complete SHA-512-verified artifact, and Electron uses its current console event contract while preserving real failures.',
+        'API Client compatibility now uses the latest reviewed Bruno filestore, script, and request runtimes, while CI uploads failure diagnostics through the Node 24-compatible artifact action. Production dependencies audit with zero known vulnerabilities after the upgrade.',
       ],
     },
     {

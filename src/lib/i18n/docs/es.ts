@@ -845,7 +845,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'No publicado · 0.26.0',
+      date: '6 de septiembre de 2026 · 0.26.0',
       title: 'Orkestrai 0.26.0: workspace profesional de Diseño nativo',
       summary: 'El mismo nodo Diseño ahora se expande en un workspace enfocado y responsivo sin perder el contexto visual.',
       items: [
@@ -885,6 +885,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Un prompt enviado por una persona retiene la cola de entrega automática hasta que el provider consume Enter y vuelve a un límite inactivo, evitando que un ask, handoff de tarea o role simultáneo se agregue al mismo turno.',
         'Los visualizadores HTML del Cliente de API resuelven medios y estilos relativos contra la URL de la solicitud sin credenciales en vez del servidor local de Orkestrai, bajo un sandbox limitado que bloquea contenido activo.',
         'El diagnóstico del escritorio omite activaciones esperadas del puente, cierres intencionales del servidor, errores 404 comunes del navegador y fallos de navegación del Portal ya representados por el estado del nodo; el actualizador evita una ruta diferencial que fallaba repetidamente, descarga el artefacto completo validado por SHA-512 y Electron usa el contrato actual del evento de consola, conservando los fallos reales.',
+        'La compatibilidad del Cliente de API ahora usa las versiones más recientes revisadas de filestore, scripts y requests de Bruno, mientras CI sube los diagnósticos de fallos mediante la acción de artefactos compatible con Node 24. Las dependencias de producción no tienen vulnerabilidades conocidas después de la actualización.',
       ],
     },
     {
