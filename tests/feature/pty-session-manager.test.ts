@@ -7,6 +7,27 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it('authenticates a bridge caller only against its private live PTY credential', () => {
+    const manager = new PtySessionManager(spawn);
+    const session = manager.create({
+      command: '/bin/cat',
+      cwd: process.cwd(),
+      workspaceId: 'workspace-1',
+      nodeId: 'node-1',
+      provider: 'codex',
+      bridgeAgentToken: 'private-terminal-token',
+      env: { ORKESTRAI_AGENT_TOKEN: 'private-terminal-token' },
+    });
+
+    expect(manager.resolveBridgeAgent('workspace-1', 'private-terminal-token')).toBe('node-1');
+    expect(manager.resolveBridgeAgent('workspace-2', 'private-terminal-token')).toBeNull();
+    expect(manager.resolveBridgeAgent('workspace-1', 'wrong-terminal-token')).toBeNull();
+    expect(JSON.stringify(manager.get(session.id))).not.toContain('private-terminal-token');
+
+    manager.kill(session.id);
+    expect(manager.resolveBridgeAgent('workspace-1', 'private-terminal-token')).toBeNull();
+  });
+
   it('encerra a arvore do processo gerenciado e localiza uma conversa mesmo sem vinculo do no', () => {
     const treeKill = vi.fn();
     const directKill = vi.fn();
@@ -176,6 +197,33 @@ describe('PtySessionManager', () => {
     manager.writeHumanInput(session.id, '\r');
     await delivery;
     expect(writes).toEqual(['minha mensagem', '\r', 'mensagem do agente', '\r']);
+  });
+
+  it('nao concatena uma entrega automatica logo apos o submit humano de um agente', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const fakePty = {
+      write: (data: string) => writes.push(data),
+      resize: () => {},
+      kill: () => {},
+      onData: () => ({ dispose: () => {} }),
+      onExit: () => ({ dispose: () => {} }),
+      pid: 1,
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', provider: 'codex', cwd: process.cwd() });
+
+    manager.writeHumanInput(session.id, 'prompt humano\r');
+    const delivery = manager.writeWithSubmit(session.id, 'handoff automatico', 20);
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(writes).toEqual(['prompt humano\r']);
+
+    await vi.advanceTimersByTimeAsync(50);
+    await delivery;
+    expect(writes).toEqual(['prompt humano\r', 'handoff automatico', '\r']);
+
+    manager.kill(session.id);
+    vi.useRealTimers();
   });
 
   it('preserva teclas humanas recebidas durante o intervalo do submit automatico', async () => {

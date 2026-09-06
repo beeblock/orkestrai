@@ -15,7 +15,7 @@ const path = require('node:path');
 const net = require('node:net');
 const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-policy.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
-const { isExpectedPortalDiagnostic } = require('./diagnostic-filter.cjs');
+const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas } = require('./portal-policy.cjs');
 
@@ -528,7 +528,7 @@ async function startServer(port) {
     }
   });
   serverProcess.stderr.on('data', (chunk) => {
-    diagnostics?.write('error', 'server', String(chunk));
+    if (!isExpectedServerDiagnostic([chunk])) diagnostics?.write('error', 'server', String(chunk));
     process.stderr.write(`[server] ${chunk}`);
   });
   const startedServerProcess = serverProcess;
@@ -626,6 +626,7 @@ async function createWindow() {
     const level = details.level;
     if (level !== 'warning' && level !== 'error') return;
     const message = details.message ?? '';
+    if (isExpectedPortalDiagnostic([message])) return;
     const line = details.lineNumber ?? 0;
     const source = details.sourceId ?? 'renderer';
     diagnostics?.write(level === 'warning' ? 'warn' : 'error', 'renderer', `${source}:${line}`, message);

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { readlink } from 'node:fs/promises';
 import { platform } from 'node:os';
@@ -118,6 +118,8 @@ export function killPtyProcessTree(pty: IPty, owned: boolean): void {
 
 type PtySession = PtySessionInfo & {
   pty: IPty;
+  /** Per-process bridge credential. It must never leave this private record. */
+  bridgeAgentToken: string | null;
   ownsProcessTree: boolean;
   initialIdleObserved: boolean;
   scrollback: string;
@@ -186,12 +188,15 @@ export type CreatePtySessionInput = {
   transcriptHome?: string;
   transcriptCwd?: string;
   agentSessionId?: string;
+  /** Ephemeral credential injected only into this PTY's environment. */
+  bridgeAgentToken?: string;
 };
 
 const SCROLLBACK_LIMIT = 256 * 1024; // 256 KB por sessão
 const SESSION_IDLE_MS = 2_500;
 const AGENT_DELIVERY_SETTLE_MS = 8_000;
 const SHELL_DELIVERY_SETTLE_MS = 400;
+const HUMAN_SUBMIT_SETTLE_MS = 400;
 const COMPOSER_OUTPUT_QUIET_MS = 400;
 const COMPOSER_SETTLE_LIMIT_MS = 5_000;
 
@@ -275,6 +280,7 @@ export class PtySessionManager {
       transcriptCwd: input.transcriptCwd ?? input.cwd,
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
+      bridgeAgentToken: input.bridgeAgentToken ?? null,
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       initialIdleObserved: false,
       scrollback: '',
@@ -373,6 +379,18 @@ export class PtySessionManager {
   get(id: string): PtySessionInfo | null {
     const session = this.sessions.get(id);
     return session ? this.toInfo(session) : null;
+  }
+
+  /** Resolves a bridge caller from a live PTY without exposing its credential. */
+  resolveBridgeAgent(workspaceId: string, token: string): string | null {
+    if (!token) return null;
+    const candidate = Buffer.from(token);
+    for (const session of this.sessions.values()) {
+      if (session.exited || session.workspaceId !== workspaceId || !session.nodeId || !session.bridgeAgentToken) continue;
+      const expected = Buffer.from(session.bridgeAgentToken);
+      if (candidate.length === expected.length && timingSafeEqual(candidate, expected)) return session.nodeId;
+    }
+    return null;
   }
 
   /**
@@ -839,8 +857,21 @@ export class PtySessionManager {
   }
 
   private writeHumanInputNow(session: PtySession, data: string): void {
+    const submitted = /[\r\n]/.test(data);
     this.updateHumanComposerState(session, data);
     this.write(session.id, data);
+    if (session.provider && submitted) {
+      // The renderer may submit a human prompt while an automatic handoff is
+      // already queued. Give the TUI time to consume Enter and keep the queue
+      // behind any response; otherwise both prompts can become one turn.
+      session.awaitingDeliveryIdle = true;
+      session.deliveryReadyAt = Math.max(
+        session.deliveryReadyAt,
+        Date.now() + HUMAN_SUBMIT_SETTLE_MS,
+      );
+      this.scheduleDeliveryBarrierFallback(session);
+      return;
+    }
     if (session.humanComposerLength === 0) queueMicrotask(() => this.drainDeliveryQueue(session));
   }
 

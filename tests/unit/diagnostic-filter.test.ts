@@ -2,8 +2,9 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { isExpectedPortalDiagnostic } = require('../../electron/diagnostic-filter.cjs') as {
+const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('../../electron/diagnostic-filter.cjs') as {
   isExpectedPortalDiagnostic: (values: unknown[]) => boolean;
+  isExpectedServerDiagnostic: (values: unknown[]) => boolean;
 };
 
 describe('desktop diagnostic filter', () => {
@@ -25,6 +26,9 @@ describe('desktop diagnostic filter', () => {
         `(node:123) electron: Failed to load URL: https://invalid.test with error: ${code}`,
       ])).toBe(true);
     }
+    expect(isExpectedPortalDiagnostic([
+      "Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL': Error:  (-3) loading 'http://localhost:50574/harness/'",
+    ])).toBe(true);
   });
 
   it('keeps unexpected Electron and renderer failures actionable', () => {
@@ -32,5 +36,18 @@ describe('desktop diagnostic filter', () => {
     expect(isExpectedPortalDiagnostic([
       "Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL': Error: permission denied",
     ])).toBe(false);
+  });
+
+  it('omits missing page assets while retaining missing API routes', () => {
+    expect(isExpectedServerDiagnostic([
+      '[2026-09-05T22:09:14.397Z] ERROR Not found: /assets/sfx-mix.wav',
+    ])).toBe(true);
+    expect(isExpectedServerDiagnostic([
+      '[2026-09-05T22:09:14.397Z] ERROR Not found: /...',
+    ])).toBe(true);
+    expect(isExpectedServerDiagnostic([
+      '[2026-09-05T22:09:14.397Z] ERROR Not found: /api/agent-room/providers',
+    ])).toBe(false);
+    expect(isExpectedServerDiagnostic(['Error: database unavailable'])).toBe(false);
   });
 });

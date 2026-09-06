@@ -238,6 +238,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             ? message.freshSessionArgs!.map((arg) => String(arg).replace('__ORKESTRAI_SESSION_ID__', freshSessionId))
             : [];
           if (freshSessionId) tracker.claim(freshSessionId);
+          const bridgeAgentToken = message.provider && message.workspaceId && message.nodeId ? randomUUID() : null;
           const session = ptySessionManager.create({
             command: message.command.trim(),
             args: [
@@ -250,7 +251,11 @@ export function handlePtyConnection(socket: WebSocket): void {
             cwd: resolvedCwd,
             cols: message.cols,
             rows: message.rows,
-            env: { ...(message.env ?? {}), ...profileEnv },
+            env: {
+              ...(message.env ?? {}),
+              ...profileEnv,
+              ...(bridgeAgentToken ? { ORKESTRAI_AGENT_TOKEN: bridgeAgentToken } : {}),
+            },
             forwardEnvToWsl: Object.keys(profileEnv),
             label: typeof message.label === 'string' ? message.label : null,
             workspace: typeof message.workspace === 'string' ? message.workspace : null,
@@ -262,6 +267,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             transcriptHome: wslContext?.homeHostPath,
             transcriptCwd: wslContext?.linuxWorkingDir ?? resolvedCwd,
             agentSessionId: typeof message.agentSessionId === 'string' ? message.agentSessionId : freshSessionId ?? undefined,
+            bridgeAgentToken: bridgeAgentToken ?? undefined,
           });
           sessionTrackers.set(session.id, tracker);
           const scrollback = attachSession(session.id);

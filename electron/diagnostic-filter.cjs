@@ -18,11 +18,22 @@ function diagnosticText(values) {
  */
 function isExpectedPortalDiagnostic(values) {
   const text = diagnosticText(values);
-  const expectedNavigationFailure = /ERR_(?:ABORTED|CONNECTION_REFUSED|FAILED|NAME_NOT_RESOLVED)/.test(text);
+  const expectedNavigationFailure = /ERR_(?:ABORTED|CONNECTION_REFUSED|FAILED|NAME_NOT_RESOLVED)/.test(text)
+    // Electron occasionally drops ERR_ABORTED from the serialized error but
+    // keeps Chromium's net error code for an intentionally superseded load.
+    || /\(-3\)\s+loading\s+['"]https?:\/\//.test(text);
   if (text.includes("Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL'")) {
     return expectedNavigationFailure || text.includes('Script failed to execute');
   }
   return /electron: Failed to load URL: .* with error: ERR_(?:ABORTED|CONNECTION_REFUSED|FAILED|NAME_NOT_RESOLVED)/.test(text);
 }
 
-module.exports = { diagnosticText, isExpectedPortalDiagnostic };
+function isExpectedServerDiagnostic(values) {
+  const text = diagnosticText(values);
+  const match = text.match(/\bERROR Not found: (\/\S+)/);
+  if (!match) return false;
+  const requestPath = match[1].split(/[?#]/, 1)[0];
+  return !requestPath.startsWith('/api/');
+}
+
+module.exports = { diagnosticText, isExpectedPortalDiagnostic, isExpectedServerDiagnostic };

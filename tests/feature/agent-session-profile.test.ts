@@ -34,11 +34,15 @@ describe('AgentSessionService provider profiles', () => {
       SAFE_VALUE: 'kept',
       TEST_PROFILE_SECRET: 'runtime-only',
       ORKESTRAI_NODE_ID: node.id,
+      ORKESTRAI_WORKSPACE_CONFIG: '/tmp/.orkestrai/workspace.json',
     });
+    expect(create.mock.calls[0][0].env.ORKESTRAI_AGENT_TOKEN).toMatch(/^[0-9a-f-]{36}$/);
+    expect(create.mock.calls[0][0].bridgeAgentToken).toBe(create.mock.calls[0][0].env.ORKESTRAI_AGENT_TOKEN);
     expect(create.mock.calls[0][0].forwardEnvToWsl).toEqual(['TEST_PROFILE_SECRET']);
     expect(create.mock.calls[0][0].args).toContain(`projects={${JSON.stringify(realpathSync('/tmp'))}={trust_level="trusted"}}`);
     const persisted = await workspaceRepository.getNode(node.id);
     expect(JSON.stringify(persisted?.payload)).not.toContain('runtime-only');
+    expect(JSON.stringify(persisted?.payload)).not.toContain(create.mock.calls[0][0].env.ORKESTRAI_AGENT_TOKEN);
     ptySessionManager.kill(ensured.sessionId);
   });
 });

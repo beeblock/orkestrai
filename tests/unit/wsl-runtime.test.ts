@@ -80,6 +80,8 @@ describe('WSL workspace runtime', () => {
       hostEnv: {
         PATH: 'C:\\Windows',
         ORKESTRAI_API_URL: 'http://127.0.0.1:4321',
+        ORKESTRAI_AGENT_TOKEN: 'terminal-token',
+        ORKESTRAI_WORKSPACE_CONFIG: '/home/raoni/app/.orkestrai/workspace.json',
         ORKESTRAI_CLI_JS: 'C:\\Orkestrai\\orkestrai.js',
         CODEX_HOME: '/home/raoni/.codex-work',
       },
@@ -102,6 +104,8 @@ describe('WSL workspace runtime', () => {
     ]);
     expect(launch.env.ORKESTRAI_CLI).toBe('/home/raoni/app/.orkestrai/bin/orkestrai');
     expect(launch.env.WSLENV).toContain('ORKESTRAI_NODE_ID');
+    expect(launch.env.WSLENV.split(':')).toContain('ORKESTRAI_WORKSPACE_CONFIG');
+    expect(launch.env.WSLENV.split(':')).toContain('ORKESTRAI_AGENT_TOKEN');
     expect(launch.env.WSLENV.split(':')).toContain('CODEX_HOME');
     expect(launch.env.WSLENV.split(':')).not.toContain('PATH');
   });

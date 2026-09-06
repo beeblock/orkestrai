@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { posix } from 'node:path';
+import { join, posix } from 'node:path';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentSessionTracker, agentSessionTrackerForRuntime } from '../../infrastructure/pty/AgentSessionTracker.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
@@ -147,6 +147,10 @@ export class AgentSessionService {
         )
       : [];
     const activeAgentSessionId = resumableAgentSessionId;
+    const workspaceConfig = runtime.kind === 'wsl'
+      ? posix.join(runtime.linuxWorkingDir, '.orkestrai', 'workspace.json')
+      : join(workspace.workingDir, '.orkestrai', 'workspace.json');
+    const bridgeAgentToken = randomUUID();
     const session = ptySessionManager.create({
       command: payload.command,
       args: [
@@ -167,6 +171,8 @@ export class AgentSessionService {
         ...profileEnv,
         ORKESTRAI_NODE_ID: target.id,
         ORKESTRAI_AGENT_TITLE: title,
+        ORKESTRAI_AGENT_TOKEN: bridgeAgentToken,
+        ORKESTRAI_WORKSPACE_CONFIG: workspaceConfig,
       },
       forwardEnvToWsl: Object.keys(profileEnv),
       runtime,
@@ -174,6 +180,7 @@ export class AgentSessionService {
       transcriptHome: wslContext?.homeHostPath,
       transcriptCwd: trackingCwd,
       agentSessionId: activeAgentSessionId ?? freshAgentSessionId ?? undefined,
+      bridgeAgentToken,
     });
     if (activeAgentSessionId) tracker.bind(session.id, activeAgentSessionId);
     const nextPayload: AgentNodePayload = {
