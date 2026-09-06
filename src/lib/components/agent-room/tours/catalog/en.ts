@@ -467,7 +467,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'approve-deliver',
         title: 'Expand only what was approved',
-        body: 'After approval, the chosen direction receives responsive states, tokens, components, a prototype, and code. Validate it in a Portal or mobile device, run tests, and register the Git-linked result in Review Center.',
+        body: 'Approval records one delivery target and dispatches its tracked expansion task when the leader runs the workflow. Follow the eight-part checklist on the node and in Quality: platform frames, Brand board, typed and bound tokens, components, prototype, applied code, and approval of the final revision. The Kanban will not close an incomplete stage. Validate the result in a Portal or mobile device and register its Git-linked evidence in Review Center.',
       },
     ],
   },

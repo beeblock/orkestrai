@@ -14,7 +14,9 @@ export type DesignEditorSession = {
   rightPanelVisible: boolean;
 };
 
-const STORAGE_PREFIX = 'orkestrai.design.editor.v1';
+// v2 invalidates camera coordinates persisted against the old 4096px scene
+// quantization, which could reopen valid documents centered on empty space.
+const STORAGE_PREFIX = 'orkestrai.design.editor.v2';
 const tools = new Set<DesignEditorTool>(['select', 'hand', 'frame', 'rectangle', 'ellipse', 'text', 'path']);
 const leftPanels = new Set<DesignEditorLeftPanel>(['layers', 'variables', 'components']);
 const rightPanels = new Set<DesignEditorRightPanel>(['design', 'prototype', 'inspect']);

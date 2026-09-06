@@ -37,7 +37,7 @@ import { DesignLeaseConflictError } from '$lib/modules/agent-room/application/se
 import { auditDesignDocument } from '$lib/modules/agent-room/domain/design-quality.js';
 import { createDesignTemplate, designTemplateIds } from '$lib/modules/agent-room/domain/design-templates.js';
 import { uuidv7 } from '@beeblock/svelar/support';
-import { isDesignExplorationPayload } from '$lib/modules/agent-room/domain/design-exploration.js';
+import { isDesignExplorationPayload, isDesignExplorationStalled } from '$lib/modules/agent-room/domain/design-exploration.js';
 import { ApiClientFingerprintConflictError, apiClientService } from '$lib/modules/agent-room/application/services/ApiClientService.js';
 import { CreateAgentApiClientRequest, ExecuteAgentApiClientRunnerRequest, ExecuteSavedApiClientRequest, ExportAgentApiClientRequest, ImportAgentApiClientRequest, ReplaceAgentApiClientRequest, SyncAgentApiClientRequest } from '$lib/modules/agent-room/interface/http/requests/ApiClientRequests.js';
 import { CreateAgentApiClientDto, ExecuteAgentApiClientRunnerDto, ExecuteSavedApiClientRequestDto, ExportAgentApiClientDto, ImportAgentApiClientDto, ReplaceAgentApiClientDto, SyncAgentApiClientDto } from '$lib/modules/agent-room/application/dto/ApiClientDtos.js';
@@ -741,8 +741,7 @@ export class BridgeController extends Controller {
         const work = (payload.explorationWork ?? {}) as Record<string, unknown>;
         const review = (payload.visualReview ?? {}) as Record<string, unknown>;
         const lastProgressAt = typeof work.lastProgressAt === 'string' ? work.lastProgressAt : document.updatedAt;
-        const stalled = work.phase === 'active'
-          && Date.now() - Date.parse(lastProgressAt) >= 5 * 60 * 1_000;
+        const stalled = isDesignExplorationStalled(work);
         const reviewStatus = review.status === 'approved' && review.revision === document.revision
           ? 'approved'
           : review.status === 'changes_requested' && review.revision === document.revision
@@ -1006,6 +1005,7 @@ export class BridgeController extends Controller {
             to: input.to,
             message: input.message,
             from: input.from,
+            taskId: input.taskId,
             timeoutMs: input.timeoutMs,
             signal: event.request.signal,
           });

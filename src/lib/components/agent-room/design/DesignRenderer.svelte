@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { DesignAsset, DesignElement, DesignPaint } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
+  import { labeledDesignFrames } from '$lib/modules/agent-room/domain/design-viewport.js';
   import DesignElementShape from './DesignElementShape.svelte';
 
   let {
@@ -167,8 +168,9 @@
 
 {#if showFrameLabels}
   <g data-design-ui pointer-events="none">
-    {#each ordered.filter((element) => element.type === 'frame') as frame (frame.id)}
+    {#each labeledDesignFrames(ordered) as frame (frame.id)}
       <text
+        data-design-frame-label={frame.id}
         x={frame.x}
         y={Math.max(13, frame.y - 8)}
         fill="#2563eb"

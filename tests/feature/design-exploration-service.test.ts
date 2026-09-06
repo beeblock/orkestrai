@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { CreateDesignExplorationDto } from '$lib/modules/agent-room/application/dto/CreateDesignExplorationDto.js';
 import { designExplorationService } from '$lib/modules/agent-room/application/services/DesignExplorationService.js';
@@ -98,6 +98,29 @@ describe('DesignExplorationService', () => {
     attached.detach();
     expect(attached.scrollback).toContain('Required output for every direction');
     expect(attached.scrollback).toContain('Three checkout directions');
+    ptySessionManager.kill(session.id);
+  });
+
+  it('removes the complete exploration package when its initial dispatch fails', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Atomic exploration', workingDir: '/tmp' });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    const leader = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Leader',
+      payload: { provider: 'codex', maestro: true, sessionId: session.id },
+    });
+    const update = vi.spyOn(taskBoardService, 'update').mockRejectedValueOnce(new Error('delivery_failed'));
+
+    await expect(designExplorationService.create(workspace.id, exploration({
+      executionMode: 'leader',
+      leaderNodeId: leader.id,
+    }))).rejects.toThrow('delivery_failed');
+
+    update.mockRestore();
+    expect((await workspaceRepository.listNodes(workspace.id)).map((node) => node.id)).toEqual([leader.id]);
+    expect(await taskBoardService.list(workspace.id)).toEqual([]);
+    expect(await workspaceRepository.listEdges(workspace.id)).toEqual([]);
     ptySessionManager.kill(session.id);
   });
 });

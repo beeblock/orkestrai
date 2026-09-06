@@ -471,7 +471,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'approve-deliver',
         title: 'Expanda somente o aprovado',
-        body: 'Depois da aprovação, a direção escolhida recebe estados responsivos, tokens, componentes, protótipo e código. Valide em Portal ou dispositivo móvel, rode os testes e registre o resultado ligado ao Git no Review Center.',
+        body: 'A aprovação registra um único alvo de entrega e despacha sua tarefa rastreada de expansão quando o líder executa o fluxo. Siga o checklist de oito partes no node e em Qualidade: frames da plataforma, Branding board, tokens tipados e vinculados, componentes, protótipo, código aplicado e aprovação da revisão final. O Kanban não deixa encerrar uma etapa incompleta. Valide em Portal ou dispositivo móvel e registre a evidência ligada ao Git no Review Center.',
       },
     ],
   },

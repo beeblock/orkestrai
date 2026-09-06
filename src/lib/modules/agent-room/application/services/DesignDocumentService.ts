@@ -74,6 +74,21 @@ function broadcastDesignChanged(workspaceId: string, nodeId: string, revision: n
   broadcast?.({ type: 'designChanged', workspaceId, nodeId, revision });
 }
 
+const REVIEW_NEUTRAL_OPERATIONS = new Set<DesignOperation['kind']>([
+  'add-design-comment',
+  'add-design-comment-message',
+  'set-design-comment-status',
+  'delete-design-comment',
+  'add-design-proposal',
+  'link-design-proposal',
+  'delete-design-proposal',
+  'set-active-page',
+]);
+
+function preservesVisualReview(operations: DesignOperation[]): boolean {
+  return operations.length > 0 && operations.every((operation) => REVIEW_NEUTRAL_OPERATIONS.has(operation.kind));
+}
+
 function sortElements(elements: DesignElement[]): DesignElement[] {
   return [...elements].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 }
@@ -1588,12 +1603,22 @@ export class DesignDocumentService {
       }).catch((error) => {
         console.error('[design] Failed to append document history.', error);
       });
-      const nodePayload = context.node.payload as Record<string, unknown>;
+      // The design write can overlap a human review update. Re-read the node so
+      // progress metadata never replaces a newer approval or delivery target.
+      const latestNode = await workspaceRepository.getNode(context.node.id);
+      const nodePayload = (latestNode?.payload ?? context.node.payload) as Record<string, unknown>;
       if (isDesignExplorationPayload(nodePayload)) {
         const work = (nodePayload.explorationWork ?? {}) as Record<string, unknown>;
+        const review = nodePayload.visualReview as Record<string, unknown> | undefined;
+        const visualReview = review
+          && review.revision === current.revision
+          && preservesVisualReview(dto.operations)
+            ? { ...review, revision: validated.revision }
+            : review;
         await workspaceRepository.updateNode(context.node.id, {
           payload: {
             ...nodePayload,
+            ...(visualReview ? { visualReview } : {}),
             explorationWork: {
               ...work,
               phase: work.phase === 'waiting' ? 'active' : work.phase,

@@ -2,6 +2,8 @@ import type { DesignElement, DesignPage } from '../contracts/schemas/designSchem
 
 export type DesignViewportBounds = { x: number; y: number; width: number; height: number };
 
+export const DESIGN_THUMBNAIL_MAX_DIMENSION = 2_048;
+
 export function designContentBounds(
   elements: DesignElement[],
   page: Pick<DesignPage, 'width' | 'height'>,
@@ -15,10 +17,14 @@ export function designContentBounds(
   return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
 }
 
+export function labeledDesignFrames(elements: DesignElement[]): DesignElement[] {
+  return elements.filter((element) => element.visible && element.type === 'frame' && element.parentId === null);
+}
+
 export function designSceneBounds(
   elements: DesignElement[],
   page: Pick<DesignPage, 'width' | 'height'>,
-  margin = 640,
+  margin = 384,
 ): DesignViewportBounds {
   const content = designContentBounds(elements, page);
   const pageAndContent = {
@@ -27,7 +33,10 @@ export function designSceneBounds(
     width: Math.max(page.width, content.x + content.width) - Math.min(0, content.x),
     height: Math.max(page.height, content.y + content.height) - Math.min(0, content.y),
   };
-  const quantum = 4_096;
+  // Keep enough room to create and move frames without turning an ordinary
+  // document into an 8192px empty SVG. A small quantum keeps bounds stable as
+  // nearby layers move while preserving a legible initial camera.
+  const quantum = 256;
   const x = Math.floor((pageAndContent.x - margin) / quantum) * quantum;
   const y = Math.floor((pageAndContent.y - margin) / quantum) * quantum;
   const right = Math.ceil((pageAndContent.x + pageAndContent.width + margin) / quantum) * quantum;

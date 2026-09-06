@@ -47,8 +47,14 @@ export class DesignExplorationService {
 
     let dispatched = false;
     if (data.executionMode === 'leader' && leader) {
-      await taskBoardService.update(workspaceId, created.taskIds[0], { assigneeNodeId: leader.id });
-      dispatched = true;
+      try {
+        await taskBoardService.update(workspaceId, created.taskIds[0], { assigneeNodeId: leader.id });
+        dispatched = true;
+      } catch (error) {
+        await designExplorationRepository.remove(created);
+        broadcast(workspaceId);
+        throw error;
+      }
     } else {
       broadcast(workspaceId);
     }

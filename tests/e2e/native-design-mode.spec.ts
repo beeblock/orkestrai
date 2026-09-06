@@ -505,6 +505,68 @@ test.describe('Native Design Mode', () => {
     }
   });
 
+  test('keeps multi-frame work sharp, framed, and free from nested label noise', async ({ page, request }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-design-legibility-e2e-'));
+    const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;
+    const workspace = (await (await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E design legibility ${Date.now()}`, workingDir: dir },
+    })).json()).data as { id: string };
+    const node = (await (await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+      data: { type: 'design', title: 'Todo responsive UI', x: 120, y: 120, width: 720, height: 520, payload: {} },
+    })).json()).data as { id: string };
+    const initial = (await (await request.get(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`)).json()).data as {
+      revision: number;
+      activePageId: string;
+    };
+    const desktopId = randomUUID();
+    const nestedFrameId = randomUUID();
+    const mobileId = randomUUID();
+    const seeded = (await (await request.patch(`/api/agent-room/workspaces/${workspace.id}/designs/${node.id}`, {
+      data: {
+        baseRevision: initial.revision,
+        operations: [
+          { kind: 'create', element: { id: desktopId, pageId: initial.activePageId, parentId: null, type: 'frame', name: 'Todo / Desktop', x: 80, y: 80, width: 1440, height: 900, fill: '#ffffff' } },
+          { kind: 'create', element: { id: nestedFrameId, pageId: initial.activePageId, parentId: desktopId, type: 'frame', name: 'Internal task list', x: 320, y: 220, width: 880, height: 560, fill: '#f8fafc' } },
+          { kind: 'create', element: { id: randomUUID(), pageId: initial.activePageId, parentId: nestedFrameId, type: 'text', name: 'Todo title', x: 368, y: 268, width: 420, height: 56, text: 'Today', fontSize: 40, fontWeight: 700 } },
+          { kind: 'create', element: { id: mobileId, pageId: initial.activePageId, parentId: null, type: 'frame', name: 'Todo / Mobile', x: 1600, y: 80, width: 390, height: 844, fill: '#ffffff' } },
+        ],
+        summary: 'Seed responsive Todo frames',
+        actor: { kind: 'user', id: null, name: null, taskId: null },
+      },
+    })).json()).data as { revision: number };
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    try {
+      await request.put('/api/agent-room/settings', { data: { ...originalSettings, uiLanguage: 'en' } });
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}&design=1`);
+      const editor = page.locator('[data-testid="canvas-design-mode"]');
+      await expect(editor).toBeVisible();
+      const frameLabels = editor.locator('[data-design-frame-label]');
+      await expect(frameLabels).toHaveCount(2);
+      await expect(frameLabels).toHaveText(['Todo / Desktop', 'Todo / Mobile']);
+      const desktopBounds = await editor.locator(`[data-design-element="${desktopId}"]`).boundingBox();
+      expect(desktopBounds?.width).toBeGreaterThan(500);
+
+      const thumbnailUrl = `/api/agent-room/workspaces/${workspace.id}/designs/${node.id}/thumbnail?revision=${seeded.revision}`;
+      await expect.poll(async () => (await request.get(thumbnailUrl)).status(), { timeout: 10_000 }).toBe(200);
+      const thumbnailSize = await page.evaluate(async (url) => {
+        const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+        const size = { width: bitmap.width, height: bitmap.height };
+        bitmap.close();
+        return size;
+      }, thumbnailUrl);
+      expect(Math.max(thumbnailSize.width, thumbnailSize.height)).toBeGreaterThan(640);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      if (!page.isClosed()) await page.goto('about:blank');
+      await request.put('/api/agent-room/settings', { data: originalSettings });
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('builds reusable components, token presets, code links, and a local library through the visible UI', async ({ page, request }) => {
     test.setTimeout(90_000);
     const dir = mkdtempSync(join(tmpdir(), 'orkestrai-design-system-e2e-'));

@@ -6,8 +6,9 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
   import DesignRenderer from '../design/DesignRenderer.svelte';
   import type { DesignDocument } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
+  import { designDeliveryReadiness, type DesignDeliveryRequirement } from '$lib/modules/agent-room/domain/design-delivery-readiness.js';
   import { resolveDesignElements } from '$lib/modules/agent-room/domain/design-variables.js';
-  import { isDesignExplorationPayload } from '$lib/modules/agent-room/domain/design-exploration.js';
+  import { isDesignExplorationPayload, isDesignExplorationStalled } from '$lib/modules/agent-room/domain/design-exploration.js';
   import * as m from '$lib/paraglide/messages.js';
 
   export type DesignNodeData = {
@@ -26,6 +27,7 @@
       explorationId?: string;
       explorationWork?: {
         phase?: string;
+        stage?: 'concept' | 'expand' | 'implement' | 'validate';
         startedAt?: string | null;
         lastProgressAt?: string | null;
         revision?: number | null;
@@ -48,6 +50,18 @@
   let clockTimer: ReturnType<typeof setInterval> | null = null;
   const page = $derived(document?.pages.find((item) => item.id === document?.activePageId) ?? document?.pages[0] ?? null);
   const elements = $derived(document && page ? resolveDesignElements(document, document.elements.filter((element) => element.pageId === page.id)) : []);
+  const delivery = $derived(document && isDesignExplorationPayload(data.payload) ? designDeliveryReadiness(document, data.payload) : null);
+
+  function deliveryRequirementLabel(requirement: DesignDeliveryRequirement): string {
+    if (requirement === 'responsiveFrames') return m['design.delivery_requirement_responsiveFrames']();
+    if (requirement === 'brandBoard') return m['design.delivery_requirement_brandBoard']();
+    if (requirement === 'tokenSystem') return m['design.delivery_requirement_tokenSystem']();
+    if (requirement === 'tokenBindings') return m['design.delivery_requirement_tokenBindings']();
+    if (requirement === 'components') return m['design.delivery_requirement_components']();
+    if (requirement === 'prototype') return m['design.delivery_requirement_prototype']();
+    if (requirement === 'codeArtifact') return m['design.delivery_requirement_codeArtifact']();
+    return m['design.delivery_requirement_currentApproval']();
+  }
   const explorationStatus = $derived.by(() => {
     if (!isDesignExplorationPayload(data.payload) || !document) return null;
     const review = data.payload.visualReview;
@@ -58,8 +72,7 @@
       return { label: m['design.exploration_status_changes'](), tone: 'warning', icon: MessageSquareWarning };
     }
     const work = data.payload.explorationWork;
-    const lastProgress = Date.parse(work?.lastProgressAt ?? '');
-    if (work?.phase === 'active' && Number.isFinite(lastProgress) && clock - lastProgress >= 5 * 60 * 1_000) {
+    if (isDesignExplorationStalled(work, clock)) {
       return { label: m['design.exploration_status_stalled'](), tone: 'danger', icon: AlertTriangle };
     }
     if (work?.phase === 'ready_for_review' || (document.revision > 0 && work?.phase !== 'active')) {
@@ -179,6 +192,16 @@
         >
           <StatusIcon size={11} class="shrink-0" />
           <span class="truncate">{explorationStatus.label}</span>
+        </span>
+      {/if}
+      {#if delivery}
+        <span
+          class="absolute right-2 bottom-8 left-2 flex items-center gap-2 rounded border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-2 py-1 text-[9px] shadow-sm backdrop-blur-sm"
+          title={delivery.missing.length ? m['design.delivery_missing']({ items: delivery.missing.map(deliveryRequirementLabel).join(', ') }) : m['design.delivery_complete']()}
+        >
+          <span class="shrink-0 font-medium text-[var(--app-text)]">{m['design.delivery_progress']({ completed: String(delivery.completed.length), total: String(delivery.total) })}</span>
+          <span class="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--app-surface-subtle)]"><span class={`block h-full ${delivery.deliveryComplete ? 'bg-[var(--app-success)]' : 'bg-[var(--app-warning)]'}`} style:width={`${delivery.completed.length / delivery.total * 100}%`}></span></span>
+          {#if delivery.missing.length}<span class="min-w-0 truncate text-[var(--app-text-muted)]">{deliveryRequirementLabel(delivery.missing[0])}</span>{:else}<CheckCircle2 size={11} class="shrink-0 text-[var(--app-success)]" />{/if}
         </span>
       {/if}
       <span class="absolute right-2 bottom-2 left-2 truncate rounded bg-[var(--app-surface)]/90 px-1.5 py-1 text-[9px] text-[var(--app-text-muted)] shadow-sm">

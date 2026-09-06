@@ -3,6 +3,7 @@ import { designElementSchema } from '$lib/modules/agent-room/contracts/schemas/d
 import {
   designContentBounds,
   designSceneBounds,
+  labeledDesignFrames,
   visibleDesignConnections,
   visibleDesignElements,
 } from '$lib/modules/agent-room/domain/design-viewport.js';
@@ -50,16 +51,22 @@ describe('incremental Design rendering', () => {
       height: 3_400,
     });
     expect(designSceneBounds(elements, { width: 1_440, height: 1_024 })).toEqual({
-      x: -4_096,
-      y: -4_096,
-      width: 16_384,
-      height: 8_192,
+      x: -1_280,
+      y: -512,
+      width: 13_312,
+      height: 4_352,
     });
   });
 
   it('uses the nominal page when the document has no visible artwork', () => {
     const hidden = { ...item(parentId, 100), visible: false };
     expect(designContentBounds([hidden], { width: 390, height: 844 })).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  });
+
+  it('labels only top-level frames like Figma instead of every internal layout frame', () => {
+    const root = designElementSchema.parse({ ...item(parentId, 0), type: 'frame', name: 'Desktop' });
+    const nested = designElementSchema.parse({ ...item(childId, 20, parentId), type: 'frame', name: 'Toolbar' });
+    expect(labeledDesignFrames([root, nested]).map((element) => element.name)).toEqual(['Desktop']);
   });
 
   it('fits visible artwork instead of expanding it to the nominal page', () => {
@@ -76,7 +83,7 @@ describe('incremental Design rendering', () => {
       order: 0,
     });
     expect(designContentBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: 160, y: 120, width: 480, height: 220 });
-    expect(designSceneBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: -4_096, y: -4_096, width: 8_192, height: 8_192 });
+    expect(designSceneBounds([local], { width: 1_440, height: 1_024 })).toEqual({ x: -512, y: -512, width: 2_560, height: 2_048 });
   });
 
   it('culls large prototype connection sets while preserving crossing and selected connections', () => {

@@ -4,6 +4,7 @@ import {
   designExplorationBrief,
   designExplorationLayout,
   isDesignExplorationPayload,
+  isDesignExplorationStalled,
 } from '$lib/modules/agent-room/domain/design-exploration.js';
 import { createDesignExplorationSchema } from '$lib/modules/agent-room/contracts/schemas/create-design-exploration.schema.js';
 import type { CanvasNode } from '$lib/modules/agent-room/domain/types.js';
@@ -24,6 +25,17 @@ function input(locale: 'pt-BR' | 'en' | 'es' = 'en') {
 }
 
 describe('design exploration workflow', () => {
+  it('only marks assigned active concept work as stalled', () => {
+    const now = Date.parse('2026-09-06T13:00:00.000Z');
+    const old = '2026-09-06T12:54:59.000Z';
+
+    expect(isDesignExplorationStalled({ phase: 'active', taskId: 'task', assigneeNodeId: 'agent', startedAt: old, lastProgressAt: '2026-09-06T12:59:59.000Z' }, now)).toBe(true);
+    expect(isDesignExplorationStalled({ phase: 'active', stage: 'expand', taskId: 'task', assigneeNodeId: 'agent', startedAt: old, lastProgressAt: '2026-09-06T12:59:59.000Z' }, now)).toBe(false);
+    expect(isDesignExplorationStalled({ phase: 'active', taskId: 'task', assigneeNodeId: 'agent', lastProgressAt: old }, now)).toBe(true);
+    expect(isDesignExplorationStalled({ phase: 'active', taskId: null, assigneeNodeId: null, lastProgressAt: old }, now)).toBe(false);
+    expect(isDesignExplorationStalled({ phase: 'waiting', taskId: 'task', assigneeNodeId: 'agent', lastProgressAt: old }, now)).toBe(false);
+  });
+
   it('recognizes both current and legacy exploration payloads', () => {
     expect(isDesignExplorationPayload({ workflowKind: 'design-exploration' })).toBe(true);
     expect(isDesignExplorationPayload({ explorationId: 'legacy-exploration' })).toBe(true);
@@ -48,7 +60,8 @@ describe('design exploration workflow', () => {
     expect(brief).toContain('Tokens tipados');
     expect(brief).toContain('30-120 capas útiles');
     expect(brief).toContain('Inspección visual humana');
-    expect(brief).toContain('Vista previa de código');
+    expect(brief).toContain('Código aplicado');
+    expect(brief).toContain('Brand board');
     expect(brief).toContain('note-1');
     expect(brief).not.toContain('lista de arquivos');
   });

@@ -26,9 +26,12 @@ export class DesignReviewService {
     if (document.revision !== dto.revision) throw new Error('design_review_revision_changed');
     if (document.elements.length < 10) throw new Error('design_review_empty');
 
-    const now = new Date().toISOString();
     const payload = node.payload as Record<string, unknown>;
     const work = (payload.explorationWork ?? {}) as Record<string, unknown>;
+    if (dto.status === 'approved' && work.phase === 'active') {
+      throw new Error('design_review_work_active');
+    }
+    const now = new Date().toISOString();
     const nextPayload = {
       ...payload,
       explorationWork: {
@@ -44,6 +47,57 @@ export class DesignReviewService {
       },
     };
     await workspaceRepository.updateNode(node.id, { payload: nextPayload });
+
+    const explorationId = typeof payload.explorationId === 'string' ? payload.explorationId : null;
+    let expansionTaskId: string | null = null;
+    let expansionDispatched = false;
+    if (dto.status === 'approved' && explorationId) {
+      const explorationNodes = await workspaceRepository.listNodes(dto.workspaceId);
+      const group = explorationNodes.find((candidate) => {
+        const candidatePayload = candidate.payload as Record<string, unknown>;
+        return candidate.type === 'group' && candidatePayload.explorationId === explorationId;
+      });
+      for (const candidate of explorationNodes) {
+        const candidatePayload = candidate.payload as Record<string, unknown>;
+        if (candidatePayload.explorationId !== explorationId) continue;
+        if (candidate.type === 'design') {
+          await workspaceRepository.updateNode(candidate.id, {
+            payload: {
+              ...(candidate.id === node.id ? nextPayload : candidatePayload),
+              deliveryTarget: candidate.id === node.id,
+            },
+          });
+        } else if (candidate.type === 'group') {
+          await workspaceRepository.updateNode(candidate.id, {
+            payload: { ...candidatePayload, selectedDesignNodeId: node.id },
+          });
+        }
+      }
+
+      const tasks = await taskBoardService.list(dto.workspaceId);
+      const reviewTask = tasks.find((task) => task.description?.includes(`orkestrai:design-review=${explorationId}`));
+      if (reviewTask && reviewTask.status !== 'done') {
+        await taskBoardService.update(dto.workspaceId, reviewTask.id, { status: 'done', completedBy: 'user' });
+      }
+      const expansionTask = tasks.find((task) => task.description?.includes(`orkestrai:design-stage=expand;exploration=${explorationId}`));
+      expansionTaskId = expansionTask?.id ?? null;
+      expansionDispatched = Boolean(expansionTask?.assigneeNodeId && expansionTask.status !== 'todo');
+
+      const leader = explorationNodes.find((candidate) => candidate.type === 'terminal' && Boolean((candidate.payload as { maestro?: boolean }).maestro));
+      const leaderSessionId = leader ? String((leader.payload as { sessionId?: string }).sessionId ?? '') : '';
+      const leaderSession = leaderSessionId ? ptySessionManager.get(leaderSessionId) : null;
+      if (
+        expansionTask
+        && expansionTask.status === 'todo'
+        && (group?.payload as { executionMode?: unknown } | undefined)?.executionMode === 'leader'
+        && leader
+        && leaderSession
+        && !leaderSession.exited
+      ) {
+        await taskBoardService.update(dto.workspaceId, expansionTask.id, { assigneeNodeId: leader.id });
+        expansionDispatched = true;
+      }
+    }
 
     const taskId = typeof work.taskId === 'string' ? work.taskId : null;
     if (dto.status === 'changes_requested' && taskId) {
@@ -66,13 +120,16 @@ export class DesignReviewService {
     const leader = nodes.find((candidate) => candidate.type === 'terminal' && Boolean((candidate.payload as { maestro?: boolean }).maestro));
     const sessionId = leader ? String((leader.payload as { sessionId?: string }).sessionId ?? '') : '';
     const session = sessionId ? ptySessionManager.get(sessionId) : null;
-    if (session && !session.exited) {
+    if (session && !session.exited && !expansionDispatched) {
       const outcome = dto.status === 'approved' ? 'approved for expansion' : 'returned with visual feedback';
+      const nextStep = dto.status === 'approved'
+        ? `The selected direction is recorded on the exploration group. Assign and execute expansion task ${expansionTaskId ?? '(not found)'} now; do not report final delivery until the Design node shows every delivery requirement complete.`
+        : 'Redispatch the linked concept task and keep the delivery blocked until the requested visual changes are approved.';
       await agentTerminalDeliveryService.deliver({
         workspaceId: dto.workspaceId,
         nodeId: leader!.id,
         sessionId: session.id,
-        message: `[design review] "${node.title ?? document.name}" revision ${dto.revision} was ${outcome}. Check orkestrai design list and the linked Kanban task before continuing.`,
+        message: `[design review] "${node.title ?? document.name}" revision ${dto.revision} was ${outcome}. ${nextStep}`,
       }).catch(() => undefined);
     }
 

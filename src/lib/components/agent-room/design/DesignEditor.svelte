@@ -102,6 +102,7 @@
   import { importSvgToDesign, SvgImportError } from '$lib/modules/agent-room/domain/design-svg-import.js';
   import { resolveDesignElements, resolveDesignVariableValue } from '$lib/modules/agent-room/domain/design-variables.js';
   import {
+    DESIGN_THUMBNAIL_MAX_DIMENSION,
     designContentBounds,
     designSceneBounds,
     visibleDesignConnections,
@@ -2904,7 +2905,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     if (!document || document.revision !== revision || !pageSvg) return;
     try {
       const form = new FormData();
-      form.set('file', new File([await rasterBlob('png', 640)], `${nodeId}.png`, { type: 'image/png' }));
+      form.set('file', new File([await rasterBlob('png', DESIGN_THUMBNAIL_MAX_DIMENSION)], `${nodeId}.png`, { type: 'image/png' }));
       form.set('revision', String(revision));
       const csrf = getCsrfToken();
       const response = await fetch(`/api/agent-room/workspaces/${workspaceId}/designs/${nodeId}/thumbnail`, {

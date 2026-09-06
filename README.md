@@ -292,9 +292,14 @@ common credentials redacted; normal agent output is not persisted.
   concept through compact semantic composition; the Canvas shows waiting,
   working, stalled, and ready states. A revision-aware visual review gate accepts
   or returns each concept with traceable feedback, while the automatic audit is
-  kept explicitly structural. Only the approved direction expands into states,
-  tokens, components, prototype, and framework code. Large directions remain
-  navigable by trackpad, Hand tool, Space-drag, fit-all, and zoom down to 2%.
+  kept explicitly structural. Approval records one delivery target and can
+  dispatch the tracked expansion task to the leader. An eight-part readiness
+  checklist then requires platform frames, a visible Brand board, typed and
+  bound tokens, components, a prototype, applied framework code, and approval
+  of the current revision; incomplete expansion, implementation, and validation
+  tasks cannot be closed. Large directions remain sharp and navigable in their
+  Canvas nodes and in focus mode by trackpad, Hand tool, Space-drag, fit-all,
+  and zoom down to 2%.
 - **Live Design collaboration:** see human and agent presence, cursors, and
   selections; follow another participant; discuss a page or layer in anchored
   comment threads; and review visual proposals as structural diffs before an
@@ -385,6 +390,8 @@ common credentials redacted; normal agent output is not persisted.
   Automatic handoffs use one serialized delivery path; on Windows and WSL,
   Orkestrai waits for the TUI composer to settle and confirms the exact prompt
   in the provider transcript before reporting that the message was delivered.
+  Task-scoped handoffs expire instead of reaching an agent after that task was
+  completed or reassigned, and late status cannot reopen completed work.
 - **Parallel workspaces:** agents continue running when you switch to another
   workspace, with activity indicators and native notifications.
 - **Mixed Windows and WSL runtimes:** choose a default runtime per workspace,
@@ -395,7 +402,10 @@ common credentials redacted; normal agent output is not persisted.
   Orkestrai validates the selected Linux environment before spawn and restores
   only a conversation confirmed inside that distribution's own home. Maestro
   recruitment validates and starts the PTY in that same environment instead of
-  leaving a hidden or non-running agent record behind.
+  leaving a hidden or non-running agent record behind. Windows packages include
+  a pinned console Node runtime verified by SHA-256; WSL bridge launchers use
+  that known runtime when available and fall back to Node inside the selected
+  distribution, never the GUI-subsystem executable that discards command output.
 - **Git floors:** isolate work in Git worktrees, inspect conflicts, and land
   completed changes from the canvas.
 - **Local voice:** dictate into any text field or use the no-focus workspace

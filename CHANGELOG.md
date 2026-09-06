@@ -53,12 +53,33 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Packaged Windows builds now include a pinned, SHA-256-verified console Node
+  runtime for the native bridge and WSL launchers. Bridge commands therefore
+  return stdout, stderr, typed MCP responses, and confirmed `ask` replies
+  instead of silently launching the GUI-subsystem `Orkestrai.exe`; existing WSL
+  workspaces repair their launcher lazily when opened.
+- Inter-agent asks can now carry their Kanban task identity. A handoff waiting
+  behind another conversation expires after a bounded interval and is cancelled
+  if its task is completed, archived, or reassigned before submission. Late
+  agent status cannot regress a completed task, completion notices also expire,
+  and failed dispatch rollback cannot overwrite a task that completed in the
+  meantime.
 - Windows WSL agent replies now keep waiting for the exact structured
   transcript when the live PTY already knows its reserved conversation id but
   UNC-backed node persistence has not caught up yet, and a stale persisted id
   no longer prevents discovery of the exact newer turn. Runtime-local homes
   are honored for every supported provider. Raw TUI output remains rejected,
   so delayed metadata cannot contaminate inter-agent replies.
+- Full-access Codex agents now receive process-local trust for the exact native
+  or WSL workspace they were launched in, preventing automatic tasks from
+  being pasted into Codex's directory-trust bootstrap screen. User Codex
+  configuration and non-full-access trust prompts remain untouched. Native
+  symlink aliases such as macOS `/tmp` are resolved to the physical directory
+  Codex uses for its trust decision.
+- Leader-run Design exploration creation is now atomic: if the initial task
+  cannot reach the selected leader, Orkestrai removes the just-created brief,
+  designs, tasks, group, and edges instead of leaving a partial workflow on
+  the Canvas.
 - API Client HTML visualizers now resolve relative images, audio, fonts, and
   styles against the credential-free request URL instead of Orkestrai's local
   server, while a bounded sandbox policy continues to block scripts, forms,
@@ -88,6 +109,46 @@ pt-BR, English, and Spanish translations.
 - Confirmation dialogs opened from contextual Design drawers now remain above
   the focused editor and receive pointer input instead of rendering behind the
   canvas surface.
+- Canvas Design previews are regenerated at 2048 px, label only top-level
+  frames, and use tightly bounded scenes, so complex work remains sharp in its
+  node and reopens framed on the artwork instead of on an empty black region.
+- Guided UI explorations now distinguish a reviewable concept from a finished
+  design-to-code delivery. The selected direction exposes an eight-part
+  readiness checklist and cannot close expansion, implementation, or final
+  validation without the required brand board, platform frames, typed and
+  bound tokens, components, prototype, applied code artifact, and approval of
+  the current revision.
+- Approving a direction records it as the sole delivery target, completes the
+  review gate, and, in leader-run explorations, immediately dispatches the
+  tracked expansion task. Completing each gated stage deterministically queues
+  implementation and then validation for the leader instead of relying on
+  untracked reminders; dispatch failures become visible blockers. Approval is
+  disabled while the concept task is still editing the document, and later
+  revisions preserve review metadata while correctly requiring a fresh gate.
+- The Design MCP now publishes the complete component-property contract,
+  supplies omitted property ordering defaults, and limits blueprint and raw
+  operation calls to 100 revision-checked items so agents cannot lose a long
+  expansion to one oversized or underspecified payload.
+- Versioned design comments, replies, resolutions, pending proposals, and page
+  navigation no longer invalidate a human review when they do not change the
+  reviewed visual delivery.
+- Expected Portal navigation failures including aborted, refused, unresolved,
+  and superseded loads stay visible in the Portal state without flooding the
+  desktop diagnostic log; unexpected renderer and application failures remain.
+- PTY lifecycle events now remain linked to the agent's active Kanban task. A
+  resumed terminal looks past intervening disconnect noise to the last semantic
+  task state, clears obsolete attention, and automatically re-dispatches a
+  still-active blocked task with its complete brief after the TUI is ready.
+  Recovery events are queued during startup until the Task Board handler is
+  registered, so import order cannot leave a leader narrating an obsolete
+  blocker instead of completing installation, validation, tasks, and its goal.
+- Maestro guidance now requires leaders to recheck environmental blockers after
+  a restart, install, login, or permission change; reconcile provider-native
+  goals with Control Center and Kanban; and execute the remaining validation
+  instead of merely describing steps that the leader can perform itself.
+- Concept directions now have a five-minute limit for the complete first gate,
+  not merely its first revision, with one import and at most one corrective
+  mutation before human review.
 
 ## 0.25.0 - 2026-09-05
 

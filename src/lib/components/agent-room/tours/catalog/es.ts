@@ -467,7 +467,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'approve-deliver',
         title: 'Expande solo lo aprobado',
-        body: 'Después de la aprobación, la dirección elegida recibe estados responsivos, tokens, componentes, prototipo y código. Valida en un Portal o dispositivo móvil, ejecuta pruebas y registra el resultado vinculado a Git en Review Center.',
+        body: 'La aprobación registra un único objetivo de entrega y despacha su tarea rastreada de expansión cuando el líder ejecuta el flujo. Sigue la lista de ocho partes en el nodo y en Calidad: frames de la plataforma, Brand board, tokens tipados y vinculados, componentes, prototipo, código aplicado y aprobación de la revisión final. Kanban no permite cerrar una etapa incompleta. Valida en un Portal o dispositivo móvil y registra la evidencia vinculada a Git en Review Center.',
       },
     ],
   },

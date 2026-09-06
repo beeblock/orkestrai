@@ -9,6 +9,8 @@ import {
   type DesignExplorationLayout,
 } from '../../domain/design-exploration.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
+import { AgentCanvasEdge } from '../../domain/models/AgentCanvasEdge.js';
+import { AgentCanvasNode } from '../../domain/models/AgentCanvasNode.js';
 import { workspaceRepository } from './WorkspaceRepository.js';
 
 export type PersistedDesignExploration = {
@@ -134,6 +136,7 @@ export class DesignExplorationRepository {
           taskIds,
           platform: input.data.platform,
           codeTarget: input.data.codeTarget,
+          executionMode: input.data.executionMode,
         },
       });
 
@@ -165,6 +168,21 @@ export class DesignExplorationRepository {
         taskIds,
         edges,
       };
+    });
+  }
+
+  /** Compensates a post-persistence dispatch failure as one atomic cleanup. */
+  async remove(created: PersistedDesignExploration): Promise<void> {
+    const nodeIds = [
+      created.group.id,
+      created.note.id,
+      ...created.designNodes.map((node) => node.id),
+      ...(created.tasksNodeCreated ? [created.tasksNode.id] : []),
+    ];
+    await Connection.transaction(async () => {
+      await AgentBoardTask.query().whereIn('id', created.taskIds).delete();
+      await AgentCanvasEdge.query().whereIn('id', created.edges.map((edge) => edge.id)).delete();
+      await AgentCanvasNode.query().whereIn('id', nodeIds).delete();
     });
   }
 }

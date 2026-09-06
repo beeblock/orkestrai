@@ -277,6 +277,7 @@
           <section class="mt-5">
             <h3 class="text-xs font-semibold uppercase text-muted-foreground">{m['design.exploration_every_direction_delivers']()}</h3>
             <ul class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[11px]">
+              <li class="flex items-center gap-2"><Palette size={14} aria-hidden="true" />{m['design.exploration_output_brand']()}</li>
               <li class="flex items-center gap-2"><Palette size={14} aria-hidden="true" />{m['design.exploration_output_design']()}</li>
               <li class="flex items-center gap-2"><SwatchBook size={14} aria-hidden="true" />{m['design.exploration_output_tokens']()}</li>
               <li class="flex items-center gap-2"><Boxes size={14} aria-hidden="true" />{m['design.exploration_output_components']()}</li>
