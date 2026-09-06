@@ -8,6 +8,7 @@ export type TourAction =
   | { kind: 'createTasksBoard' }
   | { kind: 'createUsage'; title: string }
   | { kind: 'createApiClient'; title: string }
+  | { kind: 'createGit'; title: string }
   | { kind: 'createCodeGraph'; title: string }
   | { kind: 'indexCodeGraph' }
   | {

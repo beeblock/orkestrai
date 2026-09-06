@@ -27,6 +27,7 @@
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as m from '$lib/paraglide/messages.js';
   import FileTreeCanvasNode from '$lib/components/agent-room/canvas/FileTreeCanvasNode.svelte';
+  import GitCanvasNode from '$lib/components/agent-room/canvas/GitCanvasNode.svelte';
   import EditorCanvasNode from '$lib/components/agent-room/canvas/EditorCanvasNode.svelte';
   import DiffCanvasNode from '$lib/components/agent-room/canvas/DiffCanvasNode.svelte';
   import PortalCanvasNode from '$lib/components/agent-room/canvas/PortalCanvasNode.svelte';
@@ -106,7 +107,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -127,6 +128,7 @@
     terminal: TerminalCanvasNode,
     note: NoteCanvasNode,
     fileTree: FileTreeCanvasNode,
+    git: GitCanvasNode,
     editor: EditorCanvasNode,
     diff: DiffCanvasNode,
     portal: PortalCanvasNode,
@@ -552,7 +554,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -576,6 +578,7 @@
     terminal: async (rect, provider) => { pendingAgentCreation = { provider: provider ?? null, rect }; },
     note: async (rect) => { await addNote(rect); },
     fileTree: async (rect) => { await addFileTree(rect); },
+    git: async (rect) => { await addGit(rect); },
     diff: async (rect) => { await addDiff(rect); },
     portal: async (rect) => { await addPortal(rect); },
     apiClient: async (rect) => { await addApiClient(rect); },
@@ -1611,6 +1614,16 @@
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'fileTree', title: m['canvas.default_files'](), ...position, ...nodeSize(rect, 260, 200, 300, 380), payload: {}, floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
+  async function addGit(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(620, 500);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'git', title: m['canvas.default_git'](), ...position, ...nodeSize(rect, 420, 320, 620, 500), payload: {}, floorId: visibleFloorId }),
     });
     nodes = [...nodes, toFlowNode(node)];
   }
@@ -2741,7 +2754,7 @@
         minZoom={0.05}
         maxZoom={4}
         panOnDrag={drawTool === null ? true : [1, 2]}
-        deleteKey={designModeNodeId ? null : ['Backspace', 'Delete']}
+        deleteKey={designModeNodeId ? [] : ['Backspace', 'Delete']}
         onconnect={handleConnect}
         onedgeclick={handleEdgeClick}
         onbeforedelete={handleBeforeDelete}
@@ -2808,6 +2821,9 @@
             />
             <ToolbarButton label={m['tool.files']()} active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
               <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
+            </ToolbarButton>
+            <ToolbarButton label={m['tool.git']()} active={drawTool === 'git'} onclick={() => toggleDrawTool('git')}>
+              <GitFork size={15} class="tool-icon-svg" /> {m['canvas.default_git']()}
             </ToolbarButton>
             <ToolbarButton label={m['code_graph.title']()} active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
               <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}

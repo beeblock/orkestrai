@@ -1,8 +1,8 @@
 /**
  * CLI `orkestrai` — ponte entre agentes e o canvas do Orkestrai.
  *
- * Config: sobe os diretorios a partir do cwd procurando
- * `.orkestrai/workspace.json` ({ token, apiUrl }). Variaveis de ambiente
+ * Config: usa ORKESTRAI_WORKSPACE_CONFIG quando o terminal muda de cwd ou
+ * sobe os diretorios procurando `.orkestrai/workspace.json` ({ token, apiUrl }).
  * ORKESTRAI_TOKEN e ORKESTRAI_API_URL tem precedencia.
  */
 import { execFileSync } from 'node:child_process';
@@ -25,6 +25,7 @@ const DESIGN_TYPOGRAPHY_FIELDS = new Set([
   'letterSpacing', 'paragraphSpacing', 'textAlign', 'textVerticalAlign',
   'textDecoration', 'textTransform', 'textAutoResize',
 ]);
+const BRIDGE_AGENT_TOKEN = Symbol('bridgeAgentToken');
 
 /** Porta livre de verdade: binda na efemera, le o numero e libera. */
 export async function findFreePort() {
@@ -54,6 +55,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
+  orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
   orkestrai graph status | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
   orkestrai memory list [consulta] [--history] [--json]
   orkestrai memory add <titulo> --content <texto> --source-label <fonte> [--kind fact|decision|preference|constraint|reference|lesson] [--source-type user|note|task|message|file|url|git|review|council|agent] [--source-id <id>] [--source-uri <path-ou-url>] [--source-excerpt <trecho>] [--tags <csv>] [--confidence <0-100>] [--pin]
@@ -116,23 +118,33 @@ Uso:
   orkestrai clip  — le a area de transferencia local
   orkestrai mcp  — servidor MCP em stdio (tools do canvas para agentes MCP)
 
-Config: .orkestrai/workspace.json (token, apiUrl) ou env ORKESTRAI_TOKEN/ORKESTRAI_API_URL.
-Identidade: ORKESTRAI_NODE_ID/ORKESTRAI_AGENT_TITLE no ambiente ja definem --from e --agent.
+Config: ORKESTRAI_WORKSPACE_CONFIG, .orkestrai/workspace.json (token, apiUrl) ou env ORKESTRAI_TOKEN/ORKESTRAI_API_URL.
+Identidade: ORKESTRAI_NODE_ID/ORKESTRAI_AGENT_TITLE definem --from/--agent; ORKESTRAI_AGENT_TOKEN autentica mutacoes Git do PTY ativo.
 `;
 
-function findBridgeConfig(startDir) {
+function readBridgeConfig(candidate, required = false) {
+  if (!existsSync(candidate)) {
+    if (required) throw new Error(`Config da ponte nao encontrado: ${candidate}`);
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(candidate, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('objeto JSON esperado');
+    return parsed;
+  } catch (error) {
+    throw new Error(`Config da ponte invalido em ${candidate}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function findBridgeConfig(startDir, env) {
+  const configured = env.ORKESTRAI_WORKSPACE_CONFIG?.trim();
+  if (configured) return readBridgeConfig(resolve(configured), true);
   let dir = resolve(startDir);
   for (let i = 0; i < 12; i += 1) {
     // .orkestrai/ e o atual; .pantheon/ e o legado (workspaces antigos).
     for (const folder of ['.orkestrai', '.pantheon']) {
       const candidate = resolve(dir, folder, 'workspace.json');
-      if (existsSync(candidate)) {
-        try {
-          return JSON.parse(readFileSync(candidate, 'utf8'));
-        } catch {
-          return null;
-        }
-      }
+      if (existsSync(candidate)) return readBridgeConfig(candidate);
     }
     const parent = dirname(dir);
     if (parent === dir) break;
@@ -156,7 +168,7 @@ function findRuntimeConfig(env) {
 }
 
 function resolveConfig(env, cwd) {
-  const fileConfig = findBridgeConfig(cwd) ?? {};
+  const fileConfig = findBridgeConfig(cwd, env) ?? {};
   const runtimeConfig = findRuntimeConfig(env);
   const token = env.ORKESTRAI_TOKEN ?? fileConfig.token;
   // A porta do app empacotado e livre (muda a cada execucao): o runtime.json
@@ -165,7 +177,7 @@ function resolveConfig(env, cwd) {
   if (!token) {
     throw new Error('Token da ponte nao encontrado (.orkestrai/workspace.json ou ORKESTRAI_TOKEN).');
   }
-  return { token, apiUrl };
+  return { token, apiUrl, [BRIDGE_AGENT_TOKEN]: env.ORKESTRAI_AGENT_TOKEN?.trim() || null };
 }
 
 async function bridge(config, method, path, body) {
@@ -174,6 +186,7 @@ async function bridge(config, method, path, body) {
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${config.token}`,
+      ...(config[BRIDGE_AGENT_TOKEN] ? { 'x-orkestrai-agent-token': config[BRIDGE_AGENT_TOKEN] } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -365,6 +378,53 @@ export async function run(argv, options = {}) {
         }
       }
       return 0;
+    }
+    case 'git': {
+      const [action, operation] = rest;
+      if (action === 'status') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/git');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          out(`${data.status.branch ?? '(detached)'} · ${data.status.changes.length} changes · ${data.commits.length} commits loaded`);
+          for (const change of data.status.changes) out(`- ${change.staged ? 'staged' : 'working'} ${change.status} ${change.path}`);
+        }
+        return 0;
+      }
+      const input = {
+        operation,
+        ref: flags.ref,
+        name: flags.name,
+        remote: flags.remote,
+        message: flags.message,
+        force: Boolean(flags.force),
+        setUpstream: Boolean(flags['set-upstream']),
+      };
+      if (!operation) throw new Error('Uso: orkestrai git <preview|execute> <operation> ...');
+      if (action === 'preview') {
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/git/preview', input);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          out(data.summary);
+          out(data.command.join(' '));
+          out(`revision=${data.revision}${data.confirmationRequired ? ' · confirmation required' : ''}`);
+        }
+        return 0;
+      }
+      if (action === 'execute') {
+        if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        if (!flags.revision || !flags.task) throw new Error('git execute exige --revision <sha256> e --task <taskId>.');
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/git/execute', {
+          ...input,
+          expectedRevision: flags.revision,
+          confirmed: Boolean(flags.confirm),
+          taskId: flags.task,
+          from: selfAgent,
+        });
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else out(data.output || `${operation} completed.`);
+        return 0;
+      }
+      throw new Error('Uso: orkestrai git <status|preview|execute> ...');
     }
     case 'graph': {
       const [action, value, ...queryParts] = rest;

@@ -1262,6 +1262,18 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'manage-git-workspace',
+    icon: 'GitBranch',
+    title: 'Manage Git with people and agents',
+    tagline: 'Branches, commits, worktrees, and reviews in one guarded workspace.',
+    steps: [
+      { id: 'add-git-workspace', title: 'Add the native Git workspace', body: 'I add one Git node to Canvas. Open the same persistent node in Workbench whenever you need more space.', action: { kind: 'createGit', title: 'Git' }, check: { kind: 'nodeExists', nodeType: 'git' } },
+      { id: 'inspect-git-state', title: 'Inspect before changing', body: 'Changes, commit graph, branches, tags, remotes, stashes, and worktrees come from the selected workspace repository. Credentials are redacted.' },
+      { id: 'preview-git-operation', title: 'Preview guarded operations', body: 'Use branch and commit menus for merge, rebase, cherry-pick, revert, and deletion. Destructive actions show the exact command and refuse stale repository revisions.' },
+      { id: 'coordinate-git-delivery', title: 'Keep delivery traceable', body: 'Use Floors for isolated worktrees and Review Center for the final diff. Agents use git_status, git_preview, and git_execute only with an active assigned Kanban task.' },
+    ],
+  },
+  {
     id: 'review-delivery',
     icon: 'GitPullRequestArrow',
     title: 'Review a delivery',

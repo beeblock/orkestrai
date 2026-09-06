@@ -1266,6 +1266,18 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'manage-git-workspace',
+    icon: 'GitBranch',
+    title: 'Gerenciar Git com pessoas e agentes',
+    tagline: 'Branches, commits, worktrees e revisão em um workspace protegido.',
+    steps: [
+      { id: 'add-git-workspace', title: 'Adicione o workspace Git nativo', body: 'Eu adiciono um único node Git ao Canvas. Abra o mesmo node persistente no Workbench quando precisar de mais espaço.', action: { kind: 'createGit', title: 'Git' }, check: { kind: 'nodeExists', nodeType: 'git' } },
+      { id: 'inspect-git-state', title: 'Inspecione antes de alterar', body: 'Mudanças, grafo de commits, branches, tags, remotes, stashes e worktrees vêm do repositório do workspace. Credenciais são ocultadas.' },
+      { id: 'preview-git-operation', title: 'Revise operações protegidas', body: 'Use os menus de branch e commit para merge, rebase, cherry-pick, revert e exclusão. Ações destrutivas mostram o comando exato e recusam revisões desatualizadas.' },
+      { id: 'coordinate-git-delivery', title: 'Mantenha a entrega rastreável', body: 'Use Andares para worktrees isolados e a Central de revisão para o diff final. Agentes usam git_status, git_preview e git_execute somente com uma tarefa Kanban ativa e atribuída.' },
+    ],
+  },
+  {
     id: 'review-delivery',
     icon: 'GitPullRequestArrow',
     title: 'Revisar uma entrega',

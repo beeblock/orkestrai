@@ -249,6 +249,12 @@ common credentials redacted; normal agent output is not persisted.
   Monaco diff, create reviews linked to tasks and assignees, leave persistent
   file and line comments, and approve, reject, or request changes. Feedback is
   routed back to the responsible live agent without losing the review history.
+- **Native Git workspace:** add one persistent Git node to Canvas or Workbench
+  to manage changes, commit history, branches, tags, remotes, stashes, and the
+  worktrees owned by Floors. Every destructive operation is previewed against
+  an exact repository revision; WSL uses the selected distribution, and agents
+  receive the same guarded operations only from their authenticated live
+  terminal while working on an assigned task.
 - **Portal Design Mode:** point at the exact interface element that needs work,
   review its cropped screenshot and safe visual context, then track feedback in
   a new leader-triage task, a task assigned to an agent, or an existing task.

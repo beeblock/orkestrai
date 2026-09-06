@@ -166,4 +166,65 @@ describe('FilesystemService + GitService', () => {
     expect(status.isRepo).toBe(false);
     expect(status.changes).toEqual([]);
   });
+
+  it('entrega grafo, branches, worktrees e operacoes revisionadas', async () => {
+    const dir = makeGitRepo();
+    execFileSync('git', ['branch', 'review'], { cwd: dir });
+    execFileSync('git', ['tag', 'v0.1.0'], { cwd: dir });
+    const workspace = await workspaceRepository.createWorkspace({ name: 'git-client', workingDir: dir });
+
+    const snapshot = await gitService.workspaceSnapshot(workspace.id);
+    expect(snapshot.status.branch).toBe('main');
+    expect(snapshot.commits[0]).toMatchObject({ subject: 'inicial', author: 'Teste' });
+    expect(snapshot.branches.map((branch) => branch.name)).toEqual(expect.arrayContaining(['main', 'review']));
+    expect(snapshot.tags).toContainEqual(expect.objectContaining({ name: 'v0.1.0' }));
+    expect(snapshot.worktrees[0]).toMatchObject({ branch: 'main', detached: false });
+
+    const preview = await gitService.previewOperation(workspace.id, { operation: 'checkout', ref: 'review', force: false, setUpstream: false });
+    expect(preview.command).toEqual(['git', 'switch', 'review']);
+    await gitService.executeOperation(workspace.id, {
+      operation: 'checkout',
+      ref: 'review',
+      force: false,
+      setUpstream: false,
+      confirmed: false,
+      expectedRevision: preview.revision,
+    });
+    expect((await gitService.status(workspace.id)).branch).toBe('review');
+  });
+
+  it('bloqueia operacao destrutiva sem confirmacao e revisao obsoleta', async () => {
+    const dir = makeGitRepo();
+    execFileSync('git', ['branch', 'discard-me'], { cwd: dir });
+    const workspace = await workspaceRepository.createWorkspace({ name: 'git-guards', workingDir: dir });
+    const preview = await gitService.previewOperation(workspace.id, { operation: 'deleteBranch', ref: 'discard-me', force: true, setUpstream: false });
+
+    await expect(gitService.executeOperation(workspace.id, {
+      operation: 'deleteBranch', ref: 'discard-me', force: true, setUpstream: false,
+      confirmed: false, expectedRevision: preview.revision,
+    })).rejects.toThrow('Confirme explicitamente');
+
+    writeFileSync(join(dir, 'README.md'), '# changed\n');
+    await expect(gitService.executeOperation(workspace.id, {
+      operation: 'deleteBranch', ref: 'discard-me', force: true, setUpstream: false,
+      confirmed: true, expectedRevision: preview.revision,
+    })).rejects.toThrow('mudou desde a prévia');
+  });
+
+  it('rejeita nomes de tag e referencias de stash que poderiam virar opcoes Git', async () => {
+    const dir = makeGitRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'git-arguments', workingDir: dir });
+
+    await expect(gitService.previewOperation(workspace.id, {
+      operation: 'deleteTag', ref: '--contains', force: false, setUpstream: false,
+    })).rejects.toThrow('Nome de tag Git inválido');
+
+    await expect(gitService.previewOperation(workspace.id, {
+      operation: 'stashPop', ref: '--index', force: false, setUpstream: false,
+    })).rejects.toThrow('Referência de stash inválida');
+
+    await expect(gitService.previewOperation(workspace.id, {
+      operation: 'stashPop', ref: 'stash@{0}', force: false, setUpstream: false,
+    })).resolves.toMatchObject({ command: ['git', 'stash', 'pop', 'stash@{0}'] });
+  });
 });

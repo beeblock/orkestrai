@@ -9,6 +9,19 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
+- A native Git workspace now lives as the same persistent node in Canvas and
+  Workbench, with structured changes, commit graph, branches, tags, remotes,
+  stashes, and worktrees shared with Floors. People can stage, unstage, commit,
+  fetch, fast-forward pull, push, switch or create branches, merge, rebase,
+  cherry-pick, revert, manage tags, and abort active operations without leaving
+  Orkestrai.
+- Git operations are shell-free and workspace-confined. Destructive actions
+  expose their exact command, require confirmation, and reject stale repository
+  revisions; remote credentials are redacted. Agents use the same state through
+  typed CLI/MCP operations and may execute only against an active assigned
+  Kanban task from that agent's authenticated live terminal, with the result
+  recorded in Control Center. Selected WSL distributions execute their own Git
+  instead of falling back to Windows Git.
 - Native Design focus mode now uses the complete app viewport while preserving
   the exact Canvas node, document revision, selection, active tool, zoom,
   camera position, and panel state when returning to the Canvas or reopening
@@ -53,6 +66,23 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Guided Design concepts now bind every designer to the literal product brief,
+  readable 100-percent-scale composition, moderate control radii, and a
+  zero-error audit before review. Placeholder/debug layers and stretched pill
+  controls can no longer be treated as finished concept work.
+- Opening focused Design mode no longer registers an empty Canvas deletion
+  shortcut or repeats the associated renderer warning in desktop diagnostics.
+- HTML, Svelte, React, and Vue imports now preserve explicit desktop and mobile
+  frame widths, scoped descendant selectors, inherited typography, complete
+  CSS box padding, content-hugging controls, mixed inline text, standard row
+  flex behavior, and flexible remaining space. The import wrapper expands to
+  the actual artwork instead of clipping, overlapping, or compressing complete
+  responsive directions into an 800-pixel region, and
+  absolute mobile navigation and floating actions stay inside their frame.
+- Agent bridge commands stay authenticated to their original native or WSL
+  workspace after the agent changes into a scratch or sibling directory. The
+  process carries only the existing workspace-config path; its token is not
+  copied into another file, response, or log.
 - Duplicating nested Design layers now submits parent frames and groups before
   their descendants, so context-menu duplication cannot fail when the stored
   layer order happens to place a child before its parent.
@@ -73,6 +103,10 @@ pt-BR, English, and Spanish translations.
   agent status cannot regress a completed task, completion notices also expire,
   and failed dispatch rollback cannot overwrite a task that completed in the
   meantime.
+- A prompt submitted by a person now holds the automatic agent-delivery queue
+  until the provider TUI consumes Enter and returns to an idle boundary. An
+  ask, task handoff, or role arriving at the same instant can no longer be
+  appended to the person's unfinished turn.
 - Windows WSL agent replies now keep waiting for the exact structured
   transcript when the live PTY already knows its reserved conversation id but
   UNC-backed node persistence has not caught up yet, and a stale persisted id

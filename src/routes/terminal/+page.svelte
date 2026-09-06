@@ -157,6 +157,7 @@
     'portal',
     'apiClient',
     'fileTree',
+    'git',
     'editor',
     'diff',
     'image',
@@ -206,7 +207,7 @@
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
     { id: 'content', types: ['note', 'image', 'imageWorkflow', 'design'] },
-    { id: 'tools', types: ['portal', 'apiClient', 'device', 'diff', 'usage', 'codeGraph'] },
+    { id: 'tools', types: ['portal', 'apiClient', 'device', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
   const selectedWorkspace = $derived(workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null);
@@ -619,6 +620,7 @@
     if (node.type === 'portal') return m['terminal_browser.kind_portal']();
     if (node.type === 'apiClient') return m['api_client.title']();
     if (node.type === 'fileTree') return m['terminal_browser.kind_files']();
+    if (node.type === 'git') return m['git.title']();
     if (node.type === 'editor') return m['terminal_browser.kind_editor']();
     if (node.type === 'diff') return m['terminal_browser.kind_diff']();
     if (node.type === 'image') return m['terminal_browser.kind_image']();

@@ -287,6 +287,16 @@ async function runAction(action: TourAction): Promise<void> {
         });
         break;
       }
+      case 'createGit': {
+        const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
+        if (!nodes?.some((node) => node.type === 'git')) {
+          await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+            method: 'POST',
+            body: JSON.stringify({ type: 'git', title: action.title, ...nextPosition(), width: 620, height: 500, payload: {} }),
+          });
+        }
+        break;
+      }
       case 'createCodeGraph': {
         const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
         if (!nodes?.some((node) => node.type === 'codeGraph')) {

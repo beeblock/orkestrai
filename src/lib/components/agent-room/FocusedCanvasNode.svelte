@@ -6,6 +6,7 @@
   import TerminalCanvasNode from './canvas/TerminalCanvasNode.svelte';
   import NoteCanvasNode from './canvas/NoteCanvasNode.svelte';
   import FileTreeCanvasNode from './canvas/FileTreeCanvasNode.svelte';
+  import GitCanvasNode from './canvas/GitCanvasNode.svelte';
   import EditorCanvasNode from './canvas/EditorCanvasNode.svelte';
   import DiffCanvasNode from './canvas/DiffCanvasNode.svelte';
   import PortalCanvasNode from './canvas/PortalCanvasNode.svelte';
@@ -61,6 +62,7 @@
     terminal: TerminalCanvasNode,
     note: NoteCanvasNode,
     fileTree: FileTreeCanvasNode,
+    git: GitCanvasNode,
     editor: EditorCanvasNode,
     diff: DiffCanvasNode,
     portal: PortalCanvasNode,

@@ -19,6 +19,7 @@ import { createAgentApiClientSchema, executeAgentApiClientRunnerSchema, exportAg
 import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
+import { executeGitOperationSchema, gitOperationInputSchema } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
 import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
 import {
   codeGraphContextSchema,
@@ -59,12 +60,16 @@ const apiClientExecuteSchema = z.object({
   from: z.string().trim().min(1).max(200).nullish(),
 }).strict();
 const bridgeHuddleContributeSchema = contributeHuddleTurnSchema.extend({ from: z.string().uuid() }).strict();
+const bridgeGitExecuteSchema = executeGitOperationSchema.extend({ from: z.string().trim().min(1).max(120), taskId: z.string().uuid() }).strict();
 
 type Expectation = { method: string; path: RegExp; schema?: z.ZodTypeAny };
 
 const EXPECTED: Record<string, Expectation> = {
   list: { method: 'GET', path: /\/bridge\/agents\?/ },
   usage: { method: 'GET', path: /\/bridge\/usage$/ },
+  git_status: { method: 'GET', path: /\/bridge\/git$/ },
+  git_preview: { method: 'POST', path: /\/bridge\/git\/preview$/, schema: gitOperationInputSchema },
+  git_execute: { method: 'POST', path: /\/bridge\/git\/execute$/, schema: bridgeGitExecuteSchema },
   code_graph_status: { method: 'GET', path: /\/bridge\/code-graph$/ },
   code_graph_index: { method: 'POST', path: /\/bridge\/code-graph$/, schema: codeGraphIndexSchema },
   code_graph_search: { method: 'GET', path: /\/bridge\/code-graph\/search\?/ },
@@ -168,6 +173,8 @@ const EXPECTED: Record<string, Expectation> = {
 };
 
 const TOOL_ARGS: Record<string, Record<string, unknown>> = {
+  git_preview: { operation: 'checkout', ref: 'review' },
+  git_execute: { operation: 'checkout', ref: 'review', expectedRevision: 'a'.repeat(64), taskId: '00000000-0000-7000-8000-000000000099' },
   code_graph_index: { projectIds: ['00000000-0000-7000-8000-000000000020'], force: true },
   code_graph_search: { query: 'OrderService', kinds: ['class'], limit: 20 },
   code_graph_symbol: { symbolId: '00000000-0000-7000-8000-000000000010' },

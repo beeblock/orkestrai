@@ -1262,6 +1262,18 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'manage-git-workspace',
+    icon: 'GitBranch',
+    title: 'Gestionar Git con personas y agentes',
+    tagline: 'Ramas, commits, worktrees y revisión en un workspace protegido.',
+    steps: [
+      { id: 'add-git-workspace', title: 'Agrega el workspace Git nativo', body: 'Agrego un único nodo Git al Canvas. Abre el mismo nodo persistente en Workbench cuando necesites más espacio.', action: { kind: 'createGit', title: 'Git' }, check: { kind: 'nodeExists', nodeType: 'git' } },
+      { id: 'inspect-git-state', title: 'Inspecciona antes de cambiar', body: 'Cambios, grafo de commits, ramas, etiquetas, remotes, stashes y worktrees vienen del repositorio del workspace. Las credenciales se ocultan.' },
+      { id: 'preview-git-operation', title: 'Revisa operaciones protegidas', body: 'Usa los menús de rama y commit para merge, rebase, cherry-pick, revert y eliminación. Las acciones destructivas muestran el comando exacto y rechazan revisiones desactualizadas.' },
+      { id: 'coordinate-git-delivery', title: 'Mantén la entrega trazable', body: 'Usa Pisos para worktrees aislados y el Centro de revisión para el diff final. Los agentes usan git_status, git_preview y git_execute solo con una tarea Kanban activa y asignada.' },
+    ],
+  },
+  {
     id: 'review-delivery',
     icon: 'GitPullRequestArrow',
     title: 'Revisar una entrega',

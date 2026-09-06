@@ -54,6 +54,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'edit-and-preview-files': 'edit-and-preview-files',
   'share-reference-material': 'share-reference-material',
   'universal-workspace-search': 'universal-workspace-search',
+  'manage-git-workspace': 'manage-git-workspace',
   'review-delivery': 'review-delivery',
   'portal-design-feedback': 'portal-design-feedback',
   'remote-collaboration': 'remote-workspace-collaboration',

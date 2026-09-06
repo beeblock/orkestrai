@@ -21,9 +21,21 @@ describe('orkestrai CLI', () => {
       let body = '';
       req.on('data', (chunk) => (body += chunk));
       req.on('end', () => {
-        requests.push({ method: req.method, url: req.url, body: body ? JSON.parse(body) : undefined, auth: req.headers.authorization });
+        requests.push({
+          method: req.method,
+          url: req.url,
+          body: body ? JSON.parse(body) : undefined,
+          auth: req.headers.authorization,
+          agentToken: req.headers['x-orkestrai-agent-token'],
+        });
         res.setHeader('content-type', 'application/json');
-        if (req.url?.startsWith('/api/agent-room/bridge/notes') && req.method === 'GET' && !req.url.includes('/n9')) {
+        if (req.url === '/api/agent-room/bridge/git' && req.method === 'GET') {
+          res.end(JSON.stringify({ data: { status: { branch: 'main', changes: [{ path: 'README.md', status: 'M', staged: false }] }, commits: [{ hash: 'a'.repeat(40) }] } }));
+        } else if (req.url === '/api/agent-room/bridge/git/preview' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { operation: 'checkout', summary: 'Switch to review', command: ['git', 'switch', 'review'], revision: 'a'.repeat(64), confirmationRequired: false } }));
+        } else if (req.url === '/api/agent-room/bridge/git/execute' && req.method === 'POST') {
+          res.end(JSON.stringify({ data: { output: 'Switched to branch review' } }));
+        } else if (req.url?.startsWith('/api/agent-room/bridge/notes') && req.method === 'GET' && !req.url.includes('/n9')) {
           res.end(JSON.stringify({ data: [] }));
         } else if (req.url?.includes('/api1/runners/smoke/execute')) {
           res.end(JSON.stringify({ data: { runnerName: 'Smoke', passed: true, executions: 2, stopReason: null, runs: [] } }));
@@ -209,6 +221,18 @@ describe('orkestrai CLI', () => {
     expect(code).toBe(0);
     expect(lines.join('\n')).toContain('Claude');
     expect(requests.at(-1).auth).toBe('Bearer tok123');
+  });
+
+  it('consulta, revisa e executa operacoes Git rastreadas', async () => {
+    const { lines, out } = capture();
+    const env = { ORKESTRAI_NODE_ID: 'n1', ORKESTRAI_AGENT_TOKEN: 'terminal-token' };
+    expect(await run(['git', 'status'], { cwd, out, env })).toBe(0);
+    expect(lines.join('\n')).toContain('main');
+    expect(await run(['git', 'preview', 'checkout', '--ref', 'review'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/git/preview', body: { operation: 'checkout', ref: 'review' } });
+    expect(await run(['git', 'execute', 'checkout', '--ref', 'review', '--revision', 'a'.repeat(64), '--task', '00000000-0000-7000-8000-000000000099'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/git/execute', body: { operation: 'checkout', ref: 'review', from: 'n1' } });
+    expect(requests.at(-1).agentToken).toBe('terminal-token');
   });
 
   it('list usa a identidade automatica e diferencia portais conectados', async () => {
@@ -631,6 +655,34 @@ describe('orkestrai CLI', () => {
     await run(['list'], { cwd, out, env: { ORKESTRAI_TOKEN: 'env-tok', ORKESTRAI_API_URL: apiUrl } });
     expect(requests.at(-1).auth).toBe('Bearer env-tok');
     expect(lines.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the workspace bridge config when an agent changes into a scratch directory', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'orkestrai-agent-scratch-'));
+    const configPath = join(cwd, '.orkestrai', 'workspace.json');
+    const { lines, out } = capture();
+
+    const code = await run(['list'], {
+      cwd: scratch,
+      out,
+      env: { ORKESTRAI_WORKSPACE_CONFIG: configPath },
+    });
+
+    expect(code).toBe(0);
+    expect(requests.at(-1).auth).toBe('Bearer tok123');
+    expect(lines.join('\n')).toContain('Claude');
+  });
+
+  it('does not silently replace an invalid configured workspace file', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'orkestrai-agent-scratch-invalid-'));
+    const invalidConfig = join(scratch, 'workspace.json');
+    writeFileSync(invalidConfig, '{broken');
+
+    await expect(run(['list'], {
+      cwd,
+      out: () => undefined,
+      env: { ORKESTRAI_WORKSPACE_CONFIG: invalidConfig },
+    })).rejects.toThrow('Config da ponte invalido');
   });
 
   it('recruit usa ORKESTRAI_NODE_ID como --from padrao', async () => {

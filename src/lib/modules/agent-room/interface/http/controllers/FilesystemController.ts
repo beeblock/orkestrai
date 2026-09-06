@@ -1,6 +1,11 @@
 import { Controller } from '@beeblock/svelar/routing';
 import { FormRequest } from '@beeblock/svelar/forms';
-import { fsWriteSchema, gitPathSchema } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
+import {
+  executeGitOperationSchema,
+  fsWriteSchema,
+  gitOperationInputSchema,
+  gitPathSchema,
+} from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
@@ -30,6 +35,18 @@ class GitPathRequest extends FormRequest {
   passedValidation(data: unknown) {
     return gitPathSchema.parse(data);
   }
+}
+
+class GitOperationPreviewRequest extends FormRequest {
+  rules() { return gitOperationInputSchema; }
+  authorize(): boolean { return true; }
+  passedValidation(data: unknown) { return gitOperationInputSchema.parse(data); }
+}
+
+class GitOperationExecuteRequest extends FormRequest {
+  rules() { return executeGitOperationSchema; }
+  authorize(): boolean { return true; }
+  passedValidation(data: unknown) { return executeGitOperationSchema.parse(data); }
 }
 
 export class FilesystemController extends Controller {
@@ -134,6 +151,33 @@ export class FilesystemController extends Controller {
       return this.json({ data: await gitService.logGraph(event.params.id) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao ler histórico.');
+    }
+  }
+
+  async gitWorkspace(event: any) {
+    try {
+      const limit = Number(event.url.searchParams.get('limit') ?? 100);
+      return this.json({ data: await gitService.workspaceSnapshot(event.params.id, limit) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao carregar o workspace Git.');
+    }
+  }
+
+  async gitPreviewOperation(event: any) {
+    try {
+      const input = await GitOperationPreviewRequest.validate(event);
+      return this.json({ data: await gitService.previewOperation(event.params.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao preparar a operação Git.');
+    }
+  }
+
+  async gitExecuteOperation(event: any) {
+    try {
+      const input = await GitOperationExecuteRequest.validate(event);
+      return this.json({ data: await gitService.executeOperation(event.params.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao executar a operação Git.');
     }
   }
 

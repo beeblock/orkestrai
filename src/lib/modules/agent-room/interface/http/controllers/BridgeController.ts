@@ -64,6 +64,10 @@ import { codeGraphSemanticService } from '$lib/modules/agent-room/application/se
 import { codeGraphRuntimeEvidenceService } from '$lib/modules/agent-room/application/services/CodeGraphRuntimeEvidenceService.js';
 import { codeGraphOperationsService } from '$lib/modules/agent-room/application/services/CodeGraphOperationsService.js';
 import { codeGraphInvestigationRepository } from '$lib/modules/agent-room/infrastructure/repositories/CodeGraphInvestigationRepository.js';
+import { executeGitOperationSchema, gitOperationInputSchema } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
+import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
+import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
+import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -96,6 +100,70 @@ export class BridgeController extends Controller {
       return this.json({ data: buildUsageRoutingReport(await usageService.getAll(false), policy) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao consultar uso dos providers.', 401);
+    }
+  }
+
+  async gitWorkspace(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await gitService.workspaceSnapshot(workspace.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to load the Git workspace.', 401);
+    }
+  }
+
+  async gitPreview(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const input = gitOperationInputSchema.parse(await event.request.json());
+      return this.json({ data: await gitService.previewOperation(workspace.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to preview the Git operation.');
+    }
+  }
+
+  async gitExecute(event: any) {
+    try {
+      const body = z.object({
+        ...executeGitOperationSchema.shape,
+        from: z.string().trim().min(1).max(120),
+        taskId: z.string().uuid(),
+      }).parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveAgentActor(workspace.id, body.from);
+      const authenticatedActor = ptySessionManager.resolveBridgeAgent(
+        workspace.id,
+        String(event.request.headers.get('x-orkestrai-agent-token') ?? ''),
+      );
+      if (!authenticatedActor || authenticatedActor !== actor) {
+        throw new Error('Git mutations require the active terminal identity of the assigned agent.');
+      }
+      const task = (await taskBoardService.list(workspace.id)).find((candidate) => candidate.id === body.taskId);
+      if (!task || task.assigneeNodeId !== actor || task.status === 'done') {
+        throw new Error('Git mutations require an active task assigned to this agent.');
+      }
+      const { from: _from, taskId, ...operation } = body;
+      const result = await gitService.executeOperation(workspace.id, operation);
+      await controlCenterService.recordActivity({
+        workspaceId: workspace.id,
+        nodeId: actor,
+        state: 'working',
+        action: `git:${operation.operation}`,
+        taskId,
+        metadata: { operation: operation.operation },
+        category: 'git',
+        verb: 'executed',
+        objectType: 'repository',
+        objectId: workspace.id,
+        objectTitle: workspace.name,
+        severity: 'info',
+        correlationId: `git:${taskId}`,
+        sourceType: 'git-client',
+        sourceId: operation.operation,
+      });
+      return this.json({ data: result });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to execute the Git operation.');
     }
   }
 
@@ -1498,6 +1566,15 @@ export class BridgeController extends Controller {
       agent.nodeId === from || agent.title.toLowerCase() === from.toLowerCase()
     ));
     if (!actor) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    return actor.nodeId;
+  }
+
+  private async resolveAgentActor(workspaceId: string, from: string): Promise<string> {
+    const normalized = from.trim().toLowerCase();
+    const actor = (await bridgeService.listAgents(workspaceId)).find((agent) => (
+      agent.nodeId === from || agent.title.toLowerCase() === normalized
+    ));
+    if (!actor) throw new Error('Agent is not part of this workspace.');
     return actor.nodeId;
   }
 
