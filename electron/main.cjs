@@ -36,6 +36,7 @@ let pendingCollaborationInvite = null;
 let portalStorageFlushTimer = null;
 let diagnostics = null;
 const configuredPortalContents = new WeakSet();
+const expectedServerExits = new WeakSet();
 
 function initializeDiagnostics() {
   app.setAppLogsPath();
@@ -524,10 +525,14 @@ async function startServer(port) {
     diagnostics?.write('error', 'server', String(chunk));
     process.stderr.write(`[server] ${chunk}`);
   });
-  serverProcess.on('exit', (code) => {
-    diagnostics?.write(code === 0 ? 'info' : 'error', 'server', `Internal server exited with code ${code}`);
+  const startedServerProcess = serverProcess;
+  serverProcess.on('exit', (code, signal) => {
+    const expected = expectedServerExits.has(startedServerProcess);
+    if (!expected) {
+      diagnostics?.write('error', 'server', `Internal server exited unexpectedly with code ${code} and signal ${signal ?? 'none'}`);
+    }
     console.log(`[server] finalizado com código ${code}`);
-    serverProcess = null;
+    if (serverProcess === startedServerProcess) serverProcess = null;
   });
 
   await waitForServer(`http://127.0.0.1:${port}/`);
@@ -536,12 +541,14 @@ async function startServer(port) {
 
 function stopServer() {
   if (!serverProcess) return;
+  const runningServerProcess = serverProcess;
+  expectedServerExits.add(runningServerProcess);
   try {
-    serverProcess.kill('SIGTERM');
+    runningServerProcess.kill('SIGTERM');
   } catch {
     // processo já morreu
   }
-  serverProcess = null;
+  if (serverProcess === runningServerProcess) serverProcess = null;
 }
 
 async function createWindow() {
@@ -609,7 +616,7 @@ async function createWindow() {
     configurePortalContents(guestContents);
   });
 
-  mainWindow.webContents.on('console-message', (_event, details) => {
+  mainWindow.webContents.on('console-message', (details) => {
     const level = details.level;
     if (level !== 'warning' && level !== 'error') return;
     const message = details.message ?? '';
@@ -798,6 +805,9 @@ function setupAutoUpdater() {
   automaticUpdateInstallSupported = canInstallUpdatesAutomatically();
   autoUpdater.autoDownload = automaticUpdateInstallSupported;
   autoUpdater.autoInstallOnAppQuit = automaticUpdateInstallSupported;
+  // Repeated Windows delta checksum failures already fall back to a complete
+  // artifact. Skip the unreliable delta path and keep SHA-512 verification.
+  autoUpdater.disableDifferentialDownload = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.disableWebInstaller = true;
   if (!automaticUpdateInstallSupported) {
@@ -1006,7 +1016,6 @@ if (!gotLock) {
     }
     if (isBackgroundRuntimeInvocation(argv)) {
       // Never log raw argv: bridge commands may contain user prompts or paths.
-      diagnostics?.write('info', 'app', 'Ignored a background runtime second-instance activation.');
       return;
     }
     if (mainWindow) {

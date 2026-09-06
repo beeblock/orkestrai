@@ -42,6 +42,15 @@ export function resolveAgentReplyText(
   return sanitizeComposerText(rawTerminalText);
 }
 
+export function hasStructuredReplySession(
+  provider: string | null | undefined,
+  persistedSessionId: string | null | undefined,
+  liveSessionId: string | null | undefined,
+  trackedSessionId: string | null | undefined,
+): boolean {
+  return Boolean(provider && (liveSessionId || trackedSessionId || persistedSessionId));
+}
+
 export type BridgeAgent = {
   nodeId: string;
   title: string;
@@ -455,9 +464,12 @@ export class BridgeService {
     if (!transcriptMatch) {
       const node = await workspaceRepository.getNode(target.nodeId);
       const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };
-      // Só espera quando a sessão da CLI já foi identificada; sem isso não há
-      // um transcrito estruturado que possa confirmar a resposta com segurança.
-      if (payload.provider && payload.agentSessionId) {
+      const liveSessionId = ptySessionManager.get(target.sessionId)?.agentSessionId;
+      const trackedSessionId = agentSessionTracker.agentSessionIdForPty(target.sessionId);
+      // No WSL, a sessao PTY recebe o id reservado antes de a atualizacao do
+      // node atravessar o UNC. A sessao viva e uma fonte igualmente exata e
+      // evita declarar falha enquanto o transcript ainda esta sendo gravado.
+      if (hasStructuredReplySession(payload.provider, payload.agentSessionId, liveSessionId, trackedSessionId)) {
         const deadline = Date.now() + 90_000;
         while (!transcriptMatch && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 2_000));

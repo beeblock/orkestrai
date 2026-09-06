@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   findPromptInTranscript,
+  findReplyToPrompt,
   parseClaudeTranscriptReply,
   parseCodexTranscriptReply,
   parseCodexTranscriptReplyForPrompt,
@@ -185,6 +186,39 @@ describe('transcritos estruturados dos providers adicionais', () => {
         Date.now() - 1_000,
         { homeDir: home, posixCwd: true },
       )).resolves.toEqual({ sessionId });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('confirma a resposta completa do Claude no transcript da distribuição WSL', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'orkestrai-wsl-reply-'));
+    const sessionId = '01a11111-2222-7333-8444-666666666666';
+    const directory = join(home, '.claude', 'projects', '-home-dev-project');
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, `${sessionId}.jsonl`),
+        [
+          { type: 'user', message: { content: 'analise o contrato' } },
+          { type: 'assistant', message: { stop_reason: 'tool_use', content: [{ type: 'text', text: 'Vou verificar.' }] } },
+          { type: 'user', message: { content: [{ type: 'tool_result', content: 'resultado' }] } },
+          { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Contrato confirmado.' }] } },
+        ].map(JSON.stringify).join('\n'),
+      );
+
+      await expect(findReplyToPrompt(
+        'claude',
+        '/home/dev/project',
+        'stale-session-id',
+        'analise o contrato',
+        Date.now() - 1_000,
+        { homeDir: home, posixCwd: true },
+      )).resolves.toEqual({
+        sessionId,
+        text: 'Vou verificar.\n\nContrato confirmado.',
+        complete: true,
+      });
     } finally {
       await rm(home, { recursive: true, force: true });
     }

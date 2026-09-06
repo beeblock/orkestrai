@@ -4,7 +4,7 @@
 
 import { createSvelarApp } from '@beeblock/svelar/hooks';
 import { DatabaseSessionStore } from '@beeblock/svelar/session';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 
 // Import app.ts to trigger database + hashing + auth configuration
 import { auth } from './app.js';
@@ -111,4 +111,9 @@ const normalizeLoopbackOrigin: Handle = async ({ event, resolve }) => {
 
 export const handle: Handle = normalizeLoopbackOrigin;
 
-export const handleError = svelar.handleError;
+export const handleError: HandleServerError = (input) => {
+  // Missing browser resources are ordinary 404 responses, not application
+  // failures. Keep the response visible in DevTools without polluting logs.
+  if (input.status === 404) return { message: input.message, status: 404 };
+  return svelar.handleError(input);
+};

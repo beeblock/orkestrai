@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { basename, dirname, join, posix, resolve } from 'node:path';
 import { getAgentAdapter, hasAgentAdapter } from '../../application/adapters/registry.js';
-import { agentSessionTracker } from '../pty/AgentSessionTracker.js';
+import { AgentSessionTracker, agentSessionTracker } from '../pty/AgentSessionTracker.js';
 
 /**
  * Le a ULTIMA resposta do agente direto do transcrito da CLI (JSONL em disco)
@@ -926,16 +926,32 @@ function candidateTranscriptPaths(storage: string | undefined, cwd: string, sinc
   return [];
 }
 
-function candidateSessionIds(storage: string | undefined, cwd: string, preferredSessionId: string | null): string[] {
+function candidateSessionIds(
+  storage: string | undefined,
+  cwd: string,
+  preferredSessionId: string | null,
+  options: TranscriptLookupOptions,
+): string[] {
   const ids: string[] = [];
   const exclude = new Set<string>(preferredSessionId ? [preferredSessionId] : []);
+  const tracker = options.homeDir || options.posixCwd
+    ? new AgentSessionTracker(options.homeDir ?? homedir(), options.posixCwd ? posix.normalize : null)
+    : agentSessionTracker;
   for (let index = 0; index < 12; index += 1) {
-    const id = agentSessionTracker.findLatestAgentSessionId(storage, cwd, exclude);
+    const id = tracker.findLatestAgentSessionId(storage, cwd, exclude);
     if (!id) break;
     ids.push(id);
     exclude.add(id);
   }
   return ids;
+}
+
+function transcriptModifiedSince(path: string, since: number): boolean {
+  try {
+    return statSync(path).mtimeMs >= since - 2_000;
+  } catch {
+    return false;
+  }
 }
 
 function codexTranscriptCwd(path: string, options: TranscriptLookupOptions = {}): string | null {
@@ -996,7 +1012,7 @@ export async function findPromptInTranscript(
   try {
     const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
     if (storage === 'opencode-session-json') {
-      const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId)]
+      const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
         .filter((sessionId): sessionId is string => Boolean(sessionId));
       for (const sessionId of sessionIds) {
         const turn = openCodeTurn(sessionId, options);
@@ -1012,7 +1028,7 @@ export async function findPromptInTranscript(
     const preferredPath = preferredSessionId
       ? preferredTranscriptPath(storage, cwd, preferredSessionId, options)
       : null;
-    if (preferredPath && statSync(preferredPath).mtimeMs >= since - 2_000 && promptAtPath(storage, preferredPath, expectedPrompt)) {
+    if (preferredPath && transcriptModifiedSince(preferredPath, since) && promptAtPath(storage, preferredPath, expectedPrompt)) {
       return { sessionId: preferredSessionId! };
     }
     for (const path of candidateTranscriptPaths(storage, cwd, since, options)) {
@@ -1020,9 +1036,9 @@ export async function findPromptInTranscript(
       const sessionId = sessionIdForPath(storage, path);
       if (sessionId) return { sessionId };
     }
-    for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId)) {
+    for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId, options)) {
       const path = preferredTranscriptPath(storage, cwd, sessionId, options);
-      if (!path || path === preferredPath || statSync(path).mtimeMs < since - 2_000) continue;
+      if (!path || path === preferredPath || !transcriptModifiedSince(path, since)) continue;
       if (promptAtPath(storage, path, expectedPrompt)) return { sessionId };
     }
     return null;
@@ -1047,7 +1063,7 @@ export async function findReplyToPrompt(
   try {
     const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
     if (storage === 'opencode-session-json') {
-      const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId)]
+      const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
         .filter((sessionId): sessionId is string => Boolean(sessionId));
       for (const sessionId of sessionIds) {
         const turn = openCodeTurn(sessionId, options);
@@ -1062,7 +1078,7 @@ export async function findReplyToPrompt(
       return null;
     }
     const preferredPath = preferredSessionId ? preferredTranscriptPath(storage, cwd, preferredSessionId, options) : null;
-    if (preferredPath && statSync(preferredPath).mtimeMs >= since - 2_000) {
+    if (preferredPath && transcriptModifiedSince(preferredPath, since)) {
       const reply = replyAtPath(storage, preferredPath, expectedPrompt);
       if (reply && preferredSessionId) return { sessionId: preferredSessionId, ...reply };
     }
@@ -1072,9 +1088,9 @@ export async function findReplyToPrompt(
       const sessionId = reply ? sessionIdForPath(storage, path) : null;
       if (reply && sessionId) return { sessionId, ...reply };
     }
-    for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId)) {
+    for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId, options)) {
       const path = preferredTranscriptPath(storage, cwd, sessionId, options);
-      if (!path || path === preferredPath || statSync(path).mtimeMs < since - 2_000) continue;
+      if (!path || path === preferredPath || !transcriptModifiedSince(path, since)) continue;
       const reply = replyAtPath(storage, path, expectedPrompt);
       if (reply) return { sessionId, ...reply };
     }

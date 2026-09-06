@@ -12,9 +12,12 @@ describe('runtime log hygiene', () => {
     expect(audio).not.toContain('createScriptProcessor');
     expect(audio).toContain("audioWorklet.addModule('/audio/pcm-capture-worklet.js')");
     expect(worklet).toContain("registerProcessor('orkestrai-pcm-capture'");
-    expect(electron).toContain("on('console-message', (_event, details) =>");
+    expect(electron).toContain("on('console-message', (details) =>");
     expect(electron).not.toContain('legacyLevel');
     expect(electron).toContain('autoUpdater.disableWebInstaller = true;');
+    expect(electron).toContain('autoUpdater.disableDifferentialDownload = true;');
+    expect(electron).not.toContain("diagnostics?.write('info', 'app', 'Ignored a background runtime second-instance activation.')");
+    expect(electron).toContain('expectedServerExits.has(startedServerProcess)');
     expect(tasks).not.toContain('FALLBACK_COLUMNS: BoardColumn[] = $derived');
     expect(tourGuide).not.toContain('const completed = $derived');
   });

@@ -19,6 +19,7 @@
   import { apiClientDescendantFolderIds, apiClientFolderPath, apiClientTreeRows, migrateApiClientFolders, normalizeApiClientRunners, type ApiClientTreeRow } from '$lib/modules/agent-room/domain/api-client-collection.js';
   import { exportOpenApiDocument } from '$lib/modules/agent-room/domain/api-client-openapi-export.js';
   import { postmanCollectionFilename, serializePostmanCollection } from '$lib/modules/agent-room/domain/api-client-postman.js';
+  import { apiClientVisualizerDocument } from '$lib/modules/agent-room/domain/api-client-visualizer.js';
   import * as m from '$lib/paraglide/messages.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
 
@@ -1891,7 +1892,7 @@
                 <div class="space-y-2">
                   {#each response.visualizations ?? [] as visualization}
                     {#if visualization.type === 'html'}
-                      <iframe sandbox="" title={m['api_client.visualizer']()} srcdoc={visualization.content} class="h-[420px] w-full rounded border border-[var(--app-border)] bg-white"></iframe>
+                      <iframe sandbox="" title={m['api_client.visualizer']()} srcdoc={apiClientVisualizerDocument(visualization.content, selectedRequest ? renderClientVariables(selectedRequest.url) : '')} class="h-[420px] w-full rounded border border-[var(--app-border)] bg-white"></iframe>
                     {:else}
                       <ApiResponseViewer body={JSON.stringify(visualization.data ?? {}, null, 2)} contentType="application/json" />
                     {/if}

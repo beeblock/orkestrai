@@ -53,6 +53,22 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Windows WSL agent replies now keep waiting for the exact structured
+  transcript when the live PTY already knows its reserved conversation id but
+  UNC-backed node persistence has not caught up yet, and a stale persisted id
+  no longer prevents discovery of the exact newer turn. Runtime-local homes
+  are honored for every supported provider. Raw TUI output remains rejected,
+  so delayed metadata cannot contaminate inter-agent replies.
+- API Client HTML visualizers now resolve relative images, audio, fonts, and
+  styles against the credential-free request URL instead of Orkestrai's local
+  server, while a bounded sandbox policy continues to block scripts, forms,
+  frames, and objects.
+- Desktop diagnostics no longer flood the log with expected background bridge
+  activations, intentional server shutdowns, or ordinary missing browser
+  resources. The updater skips a repeatedly failing differential path and
+  downloads the complete SHA-512-verified artifact directly; real server,
+  renderer, PTY, provider, and update failures remain reported, and Electron's
+  current single-event console contract no longer emits a deprecation warning.
 - Opening Design from a normal Canvas node no longer leaves the workspace
   sidebar consuming the editor width, and compact Workbench panes no longer
   hide Layers and Properties without a way to reopen them.
