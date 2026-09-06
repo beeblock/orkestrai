@@ -436,6 +436,22 @@
   let shapePasteSequence = 0;
   let errorMessage = $state('');
   let designModeNodeId = $state<string | null>(null);
+
+  function blurActiveElement() {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  }
+
+  function openDesignMode(nodeId: string) {
+    blurActiveElement();
+    designModeNodeId = nodeId;
+  }
+
+  function closeDesignMode() {
+    blurActiveElement();
+    designModeNodeId = null;
+  }
   let designRevisions = $state<Record<string, number>>({});
   let permissionWorkspace = $state<Workspace | null>(null);
 
@@ -1017,7 +1033,7 @@
             await tick();
             const requestedNode = nodes.find((node) => node.id === requestedNodeId);
             if (requestedNode?.type === 'design' && params.get('design') === '1') {
-              designModeNodeId = requestedNodeId;
+              openDesignMode(requestedNodeId);
             }
             requestAnimationFrame(() => requestAnimationFrame(() => (
               requestedNode?.type === 'device'
@@ -1148,7 +1164,7 @@
         onColorChange: (id: string, color: string) => updateNodePayload(id, { color }),
         onRoleChange: (id: string, role: string | null) => updateNodePayload(id, { role }),
         onOpenFile: (path: string) => openEditor(path),
-        onOpenWorkbench: (id: string) => (designModeNodeId = id),
+        onOpenWorkbench: openDesignMode,
         onUrlChange: (id: string, url: string) => updateNodePayload(id, { url }),
         onOpenNewPortal: (sourceNodeId: string, url: string) => void openPortalTab(sourceNodeId, url),
         onRename: (id: string, title: string) => {
@@ -1857,7 +1873,7 @@
       }),
     });
     nodes = [...nodes, toFlowNode(node)];
-    designModeNodeId = node.id;
+    openDesignMode(node.id);
   }
 
   async function handleDesignExplorationCreated(result: DesignExplorationData) {
@@ -2696,7 +2712,7 @@
             <Palette size={15} class="text-[var(--app-secondary)]" />
             <strong class="min-w-0 flex-1 truncate text-xs">{String(nodes.find((item) => item.id === designModeNodeId)?.data?.title ?? m['design.title']())}</strong>
             <span class="hidden text-[10px] text-[var(--app-text-muted)] sm:inline">{m['design.focus_mode']()}</span>
-            <HeaderIconButton label={m['design.back_to_canvas']()} onclick={() => (designModeNodeId = null)}><X size={14} /></HeaderIconButton>
+            <HeaderIconButton label={m['design.back_to_canvas']()} onclick={closeDesignMode}><X size={14} /></HeaderIconButton>
           </header>
           <div class="min-h-0 flex-1">
             <DesignEditor workspaceId={activeWorkspace.id} nodeId={designModeNodeId} externalRevision={designRevisions[designModeNodeId] ?? 0} />

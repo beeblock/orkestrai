@@ -53,6 +53,15 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Duplicating nested Design layers now submits parent frames and groups before
+  their descendants, so context-menu duplication cannot fail when the stored
+  layer order happens to place a child before its parent.
+- Kanban assignment now waits for a newly recruited agent terminal to reach
+  its first stable prompt before delivering work, preventing tasks from being
+  marked in progress while their initial prompt is lost during CLI startup.
+- Entering or leaving the focused Design workspace now releases focus before
+  hiding the previous surface, preventing inaccessible focused controls and
+  the associated Chromium warning in desktop logs.
 - Packaged Windows builds now include a pinned, SHA-256-verified console Node
   runtime for the native bridge and WSL launchers. Bridge commands therefore
   return stdout, stderr, typed MCP responses, and confirmed `ask` replies

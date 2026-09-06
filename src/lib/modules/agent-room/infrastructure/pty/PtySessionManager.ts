@@ -119,6 +119,7 @@ export function killPtyProcessTree(pty: IPty, owned: boolean): void {
 type PtySession = PtySessionInfo & {
   pty: IPty;
   ownsProcessTree: boolean;
+  initialIdleObserved: boolean;
   scrollback: string;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
@@ -275,6 +276,7 @@ export class PtySessionManager {
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
+      initialIdleObserved: false,
       scrollback: '',
       listeners: new Set(),
       exitListeners: new Set(),
@@ -618,6 +620,18 @@ export class PtySessionManager {
     return false;
   }
 
+  /** Aguarda somente a primeira estabilizacao do TUI; depois disso nao bloqueia trabalho enfileirado. */
+  async waitUntilInitialIdle(id: string, timeoutMs = 20_000): Promise<boolean> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const session = this.sessions.get(id);
+      if (!session || session.exited) return false;
+      if (!session.provider || session.initialIdleObserved) return true;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
+    }
+    return false;
+  }
+
   queueWithSubmit(id: string, text: string, submitDelayMs = 200): ComposerDeliveryHandle {
     const session = this.requireSession(id);
     if (session.exited) {
@@ -674,6 +688,7 @@ export class PtySessionManager {
   }
 
   private setWaiting(session: PtySession, waiting: boolean): void {
+    if (waiting) session.initialIdleObserved = true;
     if (session.waiting === waiting) return;
     session.waiting = waiting;
     for (const listener of session.attentionListeners) listener(waiting);

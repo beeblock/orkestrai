@@ -6,6 +6,12 @@ import { join } from 'node:path';
 
 test.describe('Design editor shell', () => {
   test('uses the full viewport, adapts its panels, and restores visual state', async ({ page, request }) => {
+    const accessibilityWarnings: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'warning' && message.text().includes('Blocked aria-hidden')) {
+        accessibilityWarnings.push(message.text());
+      }
+    });
     const dir = mkdtempSync(join(tmpdir(), 'orkestrai-design-shell-e2e-'));
     const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;
     const workspace = (await (await request.post('/api/agent-room/workspaces', {
@@ -62,6 +68,7 @@ test.describe('Design editor shell', () => {
       await expect(page.getByTestId('canvas-design-mode')).toBeVisible();
       await expect(page.getByTestId('design-right-panel')).toHaveCount(0);
       await expect(page.getByTestId('design-toolbar').locator('span.tabular-nums').last()).toHaveText(savedZoom ?? '');
+      expect(accessibilityWarnings).toEqual([]);
 
       await page.setViewportSize({ width: 700, height: 760 });
       await page.getByRole('button', { name: 'Hide layers and assets' }).click();

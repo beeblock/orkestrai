@@ -75,7 +75,7 @@ describe('DesignExplorationService', () => {
     // Raw mode mirrors agent TUIs and avoids the macOS canonical TTY line limit.
     const session = ptySessionManager.create({
       command: '/bin/sh',
-      args: ['-c', 'stty raw -echo; cat'],
+      args: ['-c', "printf 'agent ready\\n'; stty raw -echo; cat"],
       cwd: '/tmp',
       provider: 'claude',
     });

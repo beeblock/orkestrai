@@ -24,8 +24,8 @@ function element(input: Partial<DesignElement> & Pick<DesignElement, 'id' | 'typ
 }
 
 const elements = [
-  element({ id: FRAME_ID, type: 'frame', name: 'Card', componentId: '00000000-0000-7000-8000-000000000010' }),
   element({ id: TEXT_ID, type: 'text', name: 'Title', parentId: FRAME_ID, text: 'Hello' }),
+  element({ id: FRAME_ID, type: 'frame', name: 'Card', componentId: '00000000-0000-7000-8000-000000000010' }),
 ];
 
 describe('design layer clipboard', () => {
@@ -39,6 +39,7 @@ describe('design layer clipboard', () => {
     const clones = pasted.operations.map((operation) => operation.kind === 'create' ? operation.element : null).filter(Boolean) as DesignElement[];
     const frame = clones.find((candidate) => candidate.type === 'frame')!;
     const text = clones.find((candidate) => candidate.type === 'text')!;
+    expect(clones.map((candidate) => candidate.type)).toEqual(['frame', 'text']);
     expect(frame).toMatchObject({ x: 34, y: 44, componentId: null, parentId: null, order: 1 });
     expect(text).toMatchObject({ x: 34, y: 44, parentId: frame.id });
     expect(pasted.selectedIds).toEqual([frame.id]);

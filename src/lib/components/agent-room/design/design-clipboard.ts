@@ -44,8 +44,23 @@ export function pasteDesignLayerOperations(
   offset = 24,
 ): { operations: DesignOperation[]; selectedIds: string[] } {
   if (!clipboard || clipboard.documentId !== documentId) return { operations: [], selectedIds: [] };
-  const idMap = new Map(clipboard.elements.map((element) => [element.id, makeId()]));
-  const sourceIds = new Set(clipboard.elements.map((element) => element.id));
+  const copiedById = new Map(clipboard.elements.map((element) => [element.id, element]));
+  const depth = (element: DesignElement): number => {
+    const seen = new Set<string>();
+    let parentId = element.parentId;
+    let value = 0;
+    while (parentId && copiedById.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      value += 1;
+      parentId = copiedById.get(parentId)?.parentId ?? null;
+    }
+    return value;
+  };
+  const orderedElements = [...clipboard.elements].sort((left, right) => (
+    depth(left) - depth(right) || left.order - right.order || left.id.localeCompare(right.id)
+  ));
+  const idMap = new Map(orderedElements.map((element) => [element.id, makeId()]));
+  const sourceIds = new Set(orderedElements.map((element) => element.id));
   const currentById = new Map(currentElements.map((element) => [element.id, element]));
   const nextOrderByParent = new Map<string, number>();
   const rootOrder = new Map<string, number>();
@@ -62,7 +77,7 @@ export function pasteDesignLayerOperations(
     rootOrder.set(id, nextOrder);
     nextOrderByParent.set(key, nextOrder + 1);
   }
-  const operations: DesignOperation[] = clipboard.elements.map((element) => {
+  const operations: DesignOperation[] = orderedElements.map((element) => {
     const sourceParent = element.parentId ? currentById.get(element.parentId) : null;
     const parentId = element.parentId && sourceIds.has(element.parentId)
       ? idMap.get(element.parentId) ?? null

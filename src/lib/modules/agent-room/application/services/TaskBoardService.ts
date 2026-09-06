@@ -945,9 +945,9 @@ export class TaskBoardService {
       sessionId = ensured.sessionId;
       session = ptySessionManager.get(sessionId);
       if (!session || session.exited) throw new Error(`O agente "${node.title ?? node.id}" não iniciou uma sessão PTY funcional.`);
-      const ready = await ptySessionManager.waitUntilIdle(sessionId, 30_000);
-      if (!ready) throw new Error(`O agente "${node.title ?? node.id}" não ficou pronto para receber a tarefa.`);
     }
+    const ready = await ptySessionManager.waitUntilInitialIdle(sessionId, 30_000);
+    if (!ready) throw new Error(`O agente "${node.title ?? node.id}" não ficou pronto para receber a tarefa.`);
     const designNodeId = designNodeIdFromTask(task);
     if (designNodeId) {
       const designNode = await workspaceRepository.getNode(designNodeId);

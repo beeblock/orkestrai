@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { boardColumnService } from '$lib/modules/agent-room/application/services/BoardColumnService.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 
 async function createWorkspaceWithTerminal() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'board', workingDir: '/tmp' });
@@ -128,6 +129,31 @@ describe('TaskBoardService', () => {
     expect(scrollback).toContain('.orkestrai/attachments/brief.md');
     expect(scrollback).toContain('https://example.com/reference');
     expect(scrollback).toContain('orkestrai task done');
+    ptySessionManager.kill(session.id);
+  });
+
+  it('aguarda o primeiro idle de uma sessao viva antes de despachar a tarefa', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'agent-bootstrap', workingDir: '/tmp' });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', provider: 'claude' });
+    const terminal = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Newly recruited designer',
+      payload: { command: 'claude', provider: 'claude', sessionId: session.id },
+    });
+    const waitUntilInitialIdle = vi.spyOn(ptySessionManager, 'waitUntilInitialIdle').mockResolvedValue(true);
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+
+    await taskBoardService.create(workspace.id, {
+      title: 'Create the first visual direction',
+      assigneeNodeId: terminal.id,
+    });
+
+    expect(waitUntilInitialIdle).toHaveBeenCalledWith(session.id, 30_000);
+    expect(deliver).toHaveBeenCalledOnce();
+    expect(waitUntilInitialIdle.mock.invocationCallOrder[0]).toBeLessThan(deliver.mock.invocationCallOrder[0]);
+    waitUntilInitialIdle.mockRestore();
+    deliver.mockRestore();
     ptySessionManager.kill(session.id);
   });
 
