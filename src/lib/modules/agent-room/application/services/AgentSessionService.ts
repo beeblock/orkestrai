@@ -9,7 +9,11 @@ import { preflightWslLaunch, terminalExecutionRuntime } from '../../infrastructu
 import type { WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { executionRuntimeKey } from '../../domain/runtime.js';
 import { providerProfileService } from './ProviderProfileService.js';
-import { codexMcpLaunchForRuntime, codexMcpOverrideArgs } from '../../infrastructure/codex-mcp-config.js';
+import {
+  codexMcpLaunchForRuntime,
+  codexMcpOverrideArgs,
+  codexWorkspaceTrustOverrideArgs,
+} from '../../infrastructure/codex-mcp-config.js';
 
 type AgentNodePayload = {
   sessionId?: string;
@@ -136,10 +140,22 @@ export class AgentSessionService {
     const mcpArgs = payload.provider === 'codex'
       ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
       : [];
+    const codexTrustArgs = payload.provider === 'codex'
+      ? codexWorkspaceTrustOverrideArgs(
+          wslContext?.linuxWorkingDir ?? cwd,
+          (payload.args ?? []).includes('--dangerously-bypass-approvals-and-sandbox'),
+        )
+      : [];
     const activeAgentSessionId = resumableAgentSessionId;
     const session = ptySessionManager.create({
       command: payload.command,
-      args: [...(payload.args ?? []), ...mcpArgs, ...(!resumableAgentSessionId ? (payload.initialRoleArgs ?? []) : []), ...conversationArgs],
+      args: [
+        ...(payload.args ?? []),
+        ...mcpArgs,
+        ...codexTrustArgs,
+        ...(!resumableAgentSessionId ? (payload.initialRoleArgs ?? []) : []),
+        ...conversationArgs,
+      ],
       cwd,
       label: title,
       workspace: workspace.name,

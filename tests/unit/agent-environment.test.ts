@@ -17,6 +17,7 @@ describe('agent environment isolation', () => {
       ORKESTRAI_PRIVATE_ENV_KEYS: 'APP_URL,DB_DRIVER,RESEND_API_KEY,ORKESTRAI_API_URL',
       ORKESTRAI_API_URL: 'http://127.0.0.1:4173',
       ORKESTRAI_CLI: '/tmp/bin/orkestrai',
+      ORKESTRAI_CLI_CONSOLE_RUNTIME: 'C:\\Program Files\\Orkestrai\\resources\\orkestrai-cli-runtime\\node.exe',
       PATH: '/usr/local/bin:/usr/bin',
       HOME: '/Users/developer',
       SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',
@@ -37,6 +38,7 @@ describe('agent environment isolation', () => {
     expect(env).toMatchObject({
       ORKESTRAI_API_URL: 'http://127.0.0.1:4173',
       ORKESTRAI_CLI: '/tmp/bin/orkestrai',
+      ORKESTRAI_CLI_CONSOLE_RUNTIME: 'C:\\Program Files\\Orkestrai\\resources\\orkestrai-cli-runtime\\node.exe',
       PATH: '/usr/local/bin:/usr/bin',
       HOME: '/Users/developer',
       SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',

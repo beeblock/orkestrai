@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { realpathSync } from 'node:fs';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { agentSessionService } from '$lib/modules/agent-room/application/services/AgentSessionService.js';
 import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
@@ -19,6 +20,7 @@ describe('AgentSessionService provider profiles', () => {
       payload: {
         command: '/bin/cat',
         provider: 'codex',
+        args: ['--dangerously-bypass-approvals-and-sandbox'],
         profileId: 'profile-1',
         env: { SAFE_VALUE: 'kept' },
       },
@@ -34,6 +36,7 @@ describe('AgentSessionService provider profiles', () => {
       ORKESTRAI_NODE_ID: node.id,
     });
     expect(create.mock.calls[0][0].forwardEnvToWsl).toEqual(['TEST_PROFILE_SECRET']);
+    expect(create.mock.calls[0][0].args).toContain(`projects={${JSON.stringify(realpathSync('/tmp'))}={trust_level="trusted"}}`);
     const persisted = await workspaceRepository.getNode(node.id);
     expect(JSON.stringify(persisted?.payload)).not.toContain('runtime-only');
     ptySessionManager.kill(ensured.sessionId);

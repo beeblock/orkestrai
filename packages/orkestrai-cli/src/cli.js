@@ -61,7 +61,7 @@ Uso:
   orkestrai memory archive <id>
   orkestrai huddle list [--json]
   orkestrai huddle say <huddleId> <mensagem> [--json]
-  orkestrai ask <agente> <mensagem> [--from <agente>] [--timeout <ms>] [--raw] [--json]
+  orkestrai ask <agente> <mensagem> [--from <agente>] [--task <id>] [--timeout <ms>] [--raw] [--json]
   orkestrai note read <nodeId>
   orkestrai note write <nodeId> <conteudo>
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
@@ -329,11 +329,12 @@ export async function run(argv, options = {}) {
     case 'ask': {
       const [to, ...messageParts] = rest;
       const message = messageParts.join(' ').trim();
-      if (!to || !message) throw new Error('Uso: orkestrai ask <agente> <mensagem> [--from <agente>] [--timeout ms]');
+      if (!to || !message) throw new Error('Uso: orkestrai ask <agente> <mensagem> [--from <agente>] [--task <id>] [--timeout ms]');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/ask', {
         to,
         message,
         from: flags.from,
+        taskId: flags.task,
         timeoutMs: flags.timeout,
         raw: flags.raw || undefined,
       });

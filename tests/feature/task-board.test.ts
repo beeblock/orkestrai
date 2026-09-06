@@ -131,6 +131,39 @@ describe('TaskBoardService', () => {
     ptySessionManager.kill(session.id);
   });
 
+  it('retoma uma tarefa bloqueada quando a nova PTY fica pronta', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'recovery', workingDir: '/tmp' });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    const terminal = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Delivery lead',
+      payload: { command: '/bin/cat', sessionId: session.id },
+    });
+    const task = await taskBoardService.create(workspace.id, {
+      title: 'Install and validate the build',
+      description: 'Replace the old installation, rerun E2E, and close the work only after validation.',
+      assigneeNodeId: terminal.id,
+      dispatch: false,
+    });
+
+    await taskBoardService.recoverBlockedTask({
+      workspaceId: workspace.id,
+      nodeId: terminal.id,
+      taskId: task.id,
+      sessionId: session.id,
+      previousState: 'blocked',
+      previousAction: 'Installed app was still open',
+    });
+
+    const attached = ptySessionManager.attach(session.id, () => {});
+    attached.detach();
+    expect(attached.scrollback).toContain('automatic task recovery');
+    expect(attached.scrollback).toContain('Install and validate the build');
+    expect(attached.scrollback).toContain('You own this delivery');
+    ptySessionManager.kill(session.id);
+  });
+
   it('não deixa tarefa fantasma em andamento quando o agente não pode iniciar', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'dispatch-failure', workingDir: '/tmp' });
     const unavailable = await workspaceRepository.createNode({

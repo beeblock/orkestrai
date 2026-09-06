@@ -14,6 +14,8 @@ import {
 import { AutomationTriggerReceived } from '../../domain/events/AutomationTriggerReceived.js';
 import { agentSessionService } from './AgentSessionService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { designDocumentService } from './DesignDocumentService.js';
+import { designDeliveryReadiness } from '../../domain/design-delivery-readiness.js';
 
 export type BoardTask = {
   id: string;
@@ -130,11 +132,27 @@ function mapTask(model: AgentBoardTask, assigneeTitle: string | null = null, not
   };
 }
 
+type DesignDeliveryStage = 'review' | 'expand' | 'implement' | 'validate';
+
+function designDeliveryStage(task: AgentBoardTask): { explorationId: string; stage: DesignDeliveryStage } | null {
+  const description = String(task.getAttribute('description') ?? '');
+  const review = description.match(/orkestrai:design-review=([a-z0-9-]+)/i);
+  if (review) return { explorationId: review[1], stage: 'review' };
+  const delivery = description.match(/orkestrai:design-stage=(expand|implement|validate);exploration=([a-z0-9-]+)/i);
+  return delivery ? { explorationId: delivery[2], stage: delivery[1] as DesignDeliveryStage } : null;
+}
+
 function designNodeIdFromTask(task: AgentBoardTask): string | null {
   const description = String(task.getAttribute('description') ?? '');
   return description.match(/<!--\s*orkestrai:design-node=([0-9a-f-]{36})\s*-->/i)?.[1]
     ?? description.match(/\bnodeId\b\s*[:=]?\s*`?([0-9a-f-]{36})/i)?.[1]
     ?? null;
+}
+
+function designStageFromTask(task: AgentBoardTask): { stage: 'expand' | 'implement' | 'validate'; explorationId: string } | null {
+  const description = String(task.getAttribute('description') ?? '');
+  const match = description.match(/<!--\s*orkestrai:design-stage=(expand|implement|validate);exploration=([0-9a-f-]{36})\s*-->/i);
+  return match ? { stage: match[1].toLowerCase() as 'expand' | 'implement' | 'validate', explorationId: match[2] } : null;
 }
 
 /**
@@ -149,6 +167,35 @@ function notifyWorkspaceChanged(workspaceId: string) {
 }
 
 export class TaskBoardService {
+  private recoveryKeys = new Set<string>();
+
+  private async assertDesignStageComplete(workspaceId: string, task: AgentBoardTask, requestedStatus: string | undefined): Promise<void> {
+    if (requestedStatus !== 'done') return;
+    const stage = designStageFromTask(task);
+    if (!stage) return;
+    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const group = nodes.find((node) => {
+      const payload = node.payload as Record<string, unknown>;
+      return node.type === 'group' && payload.explorationId === stage.explorationId;
+    });
+    const selectedNodeId = (group?.payload as { selectedDesignNodeId?: unknown } | undefined)?.selectedDesignNodeId;
+    if (typeof selectedNodeId !== 'string') {
+      throw new Error('Design delivery is incomplete: approve one visual direction before completing this stage.');
+    }
+    const selectedNode = nodes.find((node) => node.id === selectedNodeId && node.type === 'design');
+    if (!selectedNode) throw new Error('Design delivery is incomplete: the approved Design node is unavailable.');
+    const document = await designDocumentService.get(workspaceId, selectedNode.id);
+    const readiness = designDeliveryReadiness(document, selectedNode.payload as { visualReview?: { status?: string; revision?: number | null } });
+    const complete = stage.stage === 'expand'
+      ? readiness.expansionComplete
+      : stage.stage === 'implement'
+        ? readiness.implementationComplete
+        : readiness.deliveryComplete;
+    if (!complete) {
+      throw new Error(`Design delivery is incomplete for ${stage.stage}: ${readiness.missing.join(', ')}.`);
+    }
+  }
+
   async list(workspaceId: string): Promise<BoardTask[]> {
     // Quadro: só tarefas NAO arquivadas (arquivadas vivem em history()).
     const rows = await AgentBoardTask.query().where('workspace_id', workspaceId).whereNull('archived_at').orderBy('created_at', 'asc').get();
@@ -255,6 +302,19 @@ export class TaskBoardService {
     return model;
   }
 
+  private async isTaskDeliveryActive(
+    workspaceId: string,
+    taskId: string,
+    assigneeNodeId?: string,
+    allowTodo = false,
+  ): Promise<boolean> {
+    const task = await AgentBoardTask.find(taskId);
+    if (!task || task.getAttribute('workspace_id') !== workspaceId || task.getAttribute('archived_at')) return false;
+    const status = String(task.getAttribute('status'));
+    if (status === 'done' || (status === 'todo' && !allowTodo)) return false;
+    return !assigneeNodeId || task.getAttribute('assignee_node_id') === assigneeNodeId;
+  }
+
   async create(
     workspaceId: string,
     input: {
@@ -305,11 +365,14 @@ export class TaskBoardService {
       try {
         await this.dispatch(workspaceId, id);
       } catch (error) {
-        await AgentBoardTask.query().where('id', id).update({
-          status: 'todo',
-          assignee_node_id: null,
-          updated_at: new Date().toISOString(),
-        });
+        const current = await AgentBoardTask.find(id);
+        if (current && current.getAttribute('status') !== 'done' && !current.getAttribute('archived_at')) {
+          await AgentBoardTask.query().where('id', id).update({
+            status: 'todo',
+            assignee_node_id: null,
+            updated_at: new Date().toISOString(),
+          });
+        }
         notifyWorkspaceChanged(workspaceId);
         throw error;
       }
@@ -336,6 +399,10 @@ export class TaskBoardService {
     input: { title?: string; description?: string | null; status?: string; assigneeNodeId?: string | null; imagePath?: string | null; noteId?: string | null; notifyCompletion?: boolean; completedBy?: string | null }
   ): Promise<BoardTask> {
     const task = await this.requireTask(workspaceId, taskId);
+    const resolvedStatus = input.status !== undefined
+      ? await boardColumnService.resolveKey(workspaceId, input.status)
+      : undefined;
+    await this.assertDesignStageComplete(workspaceId, task, resolvedStatus);
     const wasDone = task.getAttribute('status') === 'done';
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (input.title !== undefined) {
@@ -347,7 +414,7 @@ export class TaskBoardService {
       patch.description = input.description?.trim() || null;
     }
     if (input.status !== undefined) {
-      patch.status = await boardColumnService.resolveKey(workspaceId, input.status);
+      patch.status = resolvedStatus;
     }
     if (input.imagePath !== undefined) {
       patch.image_path = input.imagePath;
@@ -367,11 +434,20 @@ export class TaskBoardService {
       try {
         await this.dispatch(workspaceId, taskId);
       } catch (error) {
-        await AgentBoardTask.query().where('id', taskId).update({
-          status: task.getAttribute('status'),
-          assignee_node_id: task.getAttribute('assignee_node_id'),
-          updated_at: task.getAttribute('updated_at'),
-        });
+        const current = await AgentBoardTask.find(taskId);
+        const attemptedAssignee = input.assigneeNodeId ?? null;
+        if (
+          current
+          && current.getAttribute('status') !== 'done'
+          && !current.getAttribute('archived_at')
+          && current.getAttribute('assignee_node_id') === attemptedAssignee
+        ) {
+          await AgentBoardTask.query().where('id', taskId).update({
+            status: task.getAttribute('status'),
+            assignee_node_id: task.getAttribute('assignee_node_id'),
+            updated_at: task.getAttribute('updated_at'),
+          });
+        }
         notifyWorkspaceChanged(workspaceId);
         throw error;
       }
@@ -428,6 +504,7 @@ export class TaskBoardService {
           notifyWorkspaceChanged(workspaceId);
         }
       }
+      await this.advanceLeaderDesignDelivery(workspaceId, task);
     }
     let completionHandoff: BoardTask['completionHandoff'];
     if (input.notifyCompletion && !wasDone && updated.status === 'done') {
@@ -586,6 +663,62 @@ export class TaskBoardService {
       nodeId: leader.id,
       sessionId: session.id,
       message: `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`,
+      isStillRelevant: () => this.isTaskDeliveryActive(workspaceId, taskId, undefined, true),
+    });
+  }
+
+  /**
+   * Once a human selects a direction, the remaining delivery stages are a
+   * deterministic sequence. Keep that sequence in Kanban and dispatch each
+   * next step to the maestro instead of relying on an untracked reminder.
+   */
+  private async advanceLeaderDesignDelivery(workspaceId: string, completedTask: AgentBoardTask): Promise<void> {
+    const current = designDeliveryStage(completedTask);
+    if (!current || current.stage === 'validate') return;
+    const nextStage: Exclude<DesignDeliveryStage, 'review'> = current.stage === 'review'
+      ? 'expand'
+      : current.stage === 'expand'
+        ? 'implement'
+        : 'validate';
+    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const group = nodes.find((node) => {
+      const payload = node.payload as Record<string, unknown>;
+      return node.type === 'group'
+        && payload.explorationId === current.explorationId
+        && payload.executionMode === 'leader'
+        && typeof payload.selectedDesignNodeId === 'string';
+    });
+    if (!group) return;
+    const leader = nodes.find((node) => node.type === 'terminal' && Boolean((node.payload as { maestro?: boolean }).maestro));
+    if (!leader) return;
+    const marker = `orkestrai:design-stage=${nextStage};exploration=${current.explorationId}`;
+    const next = (await AgentBoardTask.query()
+      .where('workspace_id', workspaceId)
+      .where('status', 'todo')
+      .orderBy('created_at', 'asc')
+      .get())
+      .find((candidate) => String(candidate.getAttribute('description') ?? '').includes(marker));
+    if (!next || next.getAttribute('assignee_node_id')) return;
+    const nextTaskId = String(next.getAttribute('id'));
+    await this.update(workspaceId, nextTaskId, { assigneeNodeId: leader.id }).catch(async (error) => {
+      await controlCenterService.recordActivity({
+        workspaceId,
+        nodeId: leader.id,
+        state: 'blocked',
+        action: 'system:design_stage_dispatch_failed',
+        taskId: nextTaskId,
+        category: 'task',
+        verb: 'failed',
+        objectType: 'task',
+        objectId: nextTaskId,
+        objectTitle: String(next.getAttribute('title')),
+        outcome: error instanceof Error ? error.message : String(error),
+        severity: 'error',
+        correlationId: `task:${nextTaskId}`,
+        sourceType: 'kanban',
+        sourceId: nextTaskId,
+        attentionRequired: true,
+      });
     });
   }
 
@@ -624,6 +757,23 @@ export class TaskBoardService {
       'Verifique o resultado e o quadro agora; se estiver correto, integre o andar quando houver e distribua o proximo trabalho. ' +
       'Use orkestrai task list e orkestrai ask para qualquer confirmacao necessaria.';
     const messageId = uuidv7();
+    const expiresAt = Date.now() + 30_000;
+    const isStillRelevant = async () => {
+      if (Date.now() >= expiresAt) return false;
+      const [currentTask, currentLeader] = await Promise.all([
+        AgentBoardTask.find(task.id),
+        workspaceRepository.getNode(leader.id),
+      ]);
+      return Boolean(
+        currentTask
+        && currentTask.getAttribute('workspace_id') === workspaceId
+        && currentTask.getAttribute('status') === 'done'
+        && !currentTask.getAttribute('archived_at')
+        && currentLeader?.workspaceId === workspaceId
+        && currentLeader.type === 'terminal'
+        && Boolean((currentLeader.payload as { maestro?: boolean }).maestro)
+      );
+    };
     await controlCenterService.recordDelivery({
       messageId,
       workspaceId,
@@ -633,22 +783,23 @@ export class TaskBoardService {
       content,
       metadata: { kind: 'task_completion', taskId: task.id, correlationId: `task:${task.id}`, dedupKey: `task-completion:${task.id}:${leader.id}` },
     });
-    await controlCenterService.recordDelivery({
-      messageId,
-      workspaceId,
-      fromNodeId: completer?.id ?? null,
-      toNodeId: leader.id,
-      state: 'sent',
-      content,
-      metadata: { kind: 'task_completion', taskId: task.id },
-    });
     void agentTerminalDeliveryService.deliver({
       workspaceId,
       nodeId: leader.id,
       sessionId: session.id,
       message: content,
+      isStillRelevant,
     })
       .then(async () => {
+        await controlCenterService.recordDelivery({
+          messageId,
+          workspaceId,
+          fromNodeId: completer?.id ?? null,
+          toNodeId: leader.id,
+          state: 'sent',
+          content,
+          metadata: { kind: 'task_completion', taskId: task.id },
+        });
         await controlCenterService.recordDelivery({
           messageId,
           workspaceId,
@@ -663,7 +814,7 @@ export class TaskBoardService {
           nodeId: leader.id,
           state: 'working',
           action: 'system:task_review',
-          taskId: task.id,
+          taskId: null,
           metadata: { taskTitle: task.title },
           category: 'review',
           verb: 'requested',
@@ -677,6 +828,7 @@ export class TaskBoardService {
         });
       })
       .catch(async (error) => {
+        const cancelled = (error as { code?: string }).code === 'PTY_DELIVERY_OBSOLETE';
         await controlCenterService.recordDelivery({
           messageId,
           workspaceId,
@@ -685,7 +837,7 @@ export class TaskBoardService {
           state: 'failed',
           content,
           error: error instanceof Error ? error.message : String(error),
-          metadata: { kind: 'task_completion', taskId: task.id, correlationId: `task:${task.id}`, dedupKey: `task-completion:${task.id}:${leader.id}` },
+          metadata: { kind: 'task_completion', taskId: task.id, correlationId: `task:${task.id}`, dedupKey: `task-completion:${task.id}:${leader.id}`, ...(cancelled ? { cancelled: true } : {}) },
         });
       });
     return { status: 'queued', leaderTitle: leader.title ?? 'Lider' };
@@ -700,6 +852,80 @@ export class TaskBoardService {
     if (!task.getAttribute('assignee_node_id')) throw new Error('Tarefa sem responsável para despachar.');
     await this.dispatch(workspaceId, taskId);
     return { dispatched: true };
+  }
+
+  async recoverBlockedTask(input: {
+    workspaceId: string;
+    nodeId: string;
+    taskId: string;
+    sessionId: string | null;
+    previousState: string;
+    previousAction: string | null;
+  }): Promise<void> {
+    if (!input.sessionId) return;
+    const key = `${input.workspaceId}:${input.taskId}:${input.sessionId}`;
+    if (this.recoveryKeys.has(key)) return;
+    this.recoveryKeys.add(key);
+    try {
+      const [task, node] = await Promise.all([
+        this.requireTask(input.workspaceId, input.taskId),
+        workspaceRepository.getNode(input.nodeId),
+      ]);
+      if (
+        task.getAttribute('assignee_node_id') !== input.nodeId
+        || ['todo', 'done'].includes(String(task.getAttribute('status')))
+        || !node
+        || node.workspaceId !== input.workspaceId
+        || node.type !== 'terminal'
+        || String((node.payload as { sessionId?: string }).sessionId ?? '') !== input.sessionId
+      ) return;
+      const ready = await ptySessionManager.waitUntilIdle(input.sessionId, 30_000);
+      if (!ready) throw new Error(`The resumed agent "${node.title ?? node.id}" did not become ready.`);
+      const prompt = [
+        `[automatic task recovery #${input.taskId.slice(0, 8)}]`,
+        `The previous state was ${input.previousState}: ${input.previousAction ?? '(no details)'}.`,
+        'The session and environment are available again. Recheck the former blocker now. If it no longer exists, report working with the same taskId and resume execution through validation and completion. You own this delivery: do not return executable install, test, review, or cleanup steps to the user. Reconcile any provider-native goal or plan that remained blocked with the Orkestrai Control Center and Kanban state.',
+        await taskBrief(task),
+        `Only after the delivery is genuinely validated, finish it with: orkestrai task done ${input.taskId}`,
+      ].join('\n');
+      await agentTerminalDeliveryService.deliver({
+        workspaceId: input.workspaceId,
+        nodeId: input.nodeId,
+        sessionId: input.sessionId,
+        message: prompt,
+        isStillRelevant: () => this.isTaskDeliveryActive(input.workspaceId, input.taskId, input.nodeId),
+      });
+      await controlCenterService.recordActivity({
+        workspaceId: input.workspaceId,
+        nodeId: input.nodeId,
+        state: 'working',
+        action: 'system:task_recovery_dispatched',
+        taskId: input.taskId,
+        metadata: { taskTitle: String(task.getAttribute('title')), previousState: input.previousState },
+        category: 'task',
+        verb: 'resumed',
+        objectType: 'task',
+        objectId: input.taskId,
+        objectTitle: String(task.getAttribute('title')),
+        correlationId: `task:${input.taskId}`,
+        sourceType: 'kanban',
+        sourceId: input.taskId,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'PTY_DELIVERY_OBSOLETE') return;
+      this.recoveryKeys.delete(key);
+      await controlCenterService.recordActivity({
+        workspaceId: input.workspaceId,
+        nodeId: input.nodeId,
+        state: 'blocked',
+        action: 'system:task_recovery_failed',
+        taskId: input.taskId,
+        outcome: error instanceof Error ? error.message : String(error),
+        severity: 'error',
+        attentionRequired: true,
+        metadata: { previousState: input.previousState },
+      });
+    }
   }
 
   /**
@@ -735,6 +961,7 @@ export class TaskBoardService {
             explorationWork: {
               ...work,
               phase: 'active',
+              stage: designStageFromTask(task)?.stage ?? 'concept',
               taskId,
               assigneeNodeId,
               startedAt: now,
@@ -755,6 +982,7 @@ export class TaskBoardService {
       nodeId: node.id,
       sessionId: activeSessionId,
       message: prompt,
+      isStillRelevant: () => this.isTaskDeliveryActive(workspaceId, taskId, node.id),
     });
     await controlCenterService.recordActivity({
       workspaceId,
@@ -777,3 +1005,14 @@ export class TaskBoardService {
 }
 
 export const taskBoardService = new TaskBoardService();
+
+const recoveryLifecycle = globalThis as unknown as {
+  __orkestraiRecoverBlockedTask?: (input: Parameters<TaskBoardService['recoverBlockedTask']>[0]) => void;
+  __orkestraiPendingTaskRecoveries?: Array<Parameters<TaskBoardService['recoverBlockedTask']>[0]>;
+};
+recoveryLifecycle.__orkestraiRecoverBlockedTask = (input) => {
+  void taskBoardService.recoverBlockedTask(input);
+};
+for (const pending of recoveryLifecycle.__orkestraiPendingTaskRecoveries?.splice(0) ?? []) {
+  recoveryLifecycle.__orkestraiRecoverBlockedTask(pending);
+}

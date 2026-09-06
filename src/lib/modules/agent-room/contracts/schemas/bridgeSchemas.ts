@@ -27,6 +27,8 @@ export const bridgeAskSchema = z.object({
   to: z.string().trim().min(1, 'Informe o agente de destino (titulo ou id do no).'),
   message: z.string().min(1, 'Informe a mensagem.'),
   from: z.string().trim().nullish(),
+  /** Vincula a mensagem a uma tarefa para cancelar handoffs obsoletos antes do envio. */
+  taskId: z.string().uuid().nullish(),
   timeoutMs: z.coerce.number().int().min(1_000).max(600_000).default(180_000),
   /** Envia bytes brutos ao TUI (sem espera de resposta, sem CR extra). */
   raw: z.boolean().default(false),

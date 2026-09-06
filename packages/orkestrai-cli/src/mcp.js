@@ -35,6 +35,20 @@ const DESIGN_ELEMENT_PROPERTIES = {
 };
 
 const DESIGN_ELEMENT_INPUT = { type: 'object', properties: DESIGN_ELEMENT_PROPERTIES, required: ['type', 'name', 'x', 'y', 'width', 'height'] };
+const DESIGN_COMPONENT_PROPERTY = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string', minLength: 1, maxLength: 120 },
+    type: { type: 'string', enum: ['text', 'boolean', 'slot'] },
+    targetElementId: { type: 'string', format: 'uuid' },
+    defaultValue: { type: ['string', 'boolean', 'null'] },
+    preferredValues: { type: 'array', maxItems: 200, items: { type: 'string', format: 'uuid' } },
+    order: { type: 'integer', minimum: 0, maximum: 10000 },
+  },
+  required: ['id', 'name', 'type', 'targetElementId', 'defaultValue'],
+};
 const DESIGN_BATCH_BASE = {
   nodeId: { type: 'string' }, baseRevision: { type: 'integer', minimum: 0 }, pageId: { type: 'string', format: 'uuid' },
   summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
@@ -88,7 +102,7 @@ const TOOLS = [
   { name: 'code_graph_handoff', description: 'Cria um artefato rastreavel a partir de mudancas ou contexto: review, tarefa, envio ao lider/agente ou Council.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['review', 'task', 'leader', 'agent', 'council'] }, scopeId: { type: 'string', pattern: '^(workspace|floor:[0-9a-f-]{36})$' }, title: { type: 'string', minLength: 1, maxLength: 160 }, locale: { type: 'string', enum: ['en', 'pt-BR', 'es'], default: 'en' }, context: { type: 'object', properties: { selection: { type: 'object', properties: { symbolIds: { type: 'array', maxItems: 24, items: { type: 'string', format: 'uuid' } }, scopeId: { type: 'string' }, findingId: { type: 'string' } } }, purpose: { type: 'string', enum: ['investigate', 'implement', 'review', 'test'] }, maxTokens: { type: 'integer', minimum: 500, maximum: 16000 }, depth: { type: 'integer', minimum: 1, maximum: 3 }, includeSource: { type: 'boolean' } }, required: ['selection', 'purpose'] }, targetNodeId: { type: 'string', format: 'uuid' }, targetNodeIds: { type: 'array', minItems: 2, maxItems: 5, items: { type: 'string', format: 'uuid' } } }, required: ['kind', 'title'] } },
   { name: 'huddle_list', description: 'Lista huddles e retorna a sessao selecionada com participantes e transcricao.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' } } } },
   { name: 'huddle_say', description: 'Registra uma fala deste agente em um huddle ativo, sem disparar respostas recursivas.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 10000 } }, required: ['huddleId', 'text'] } },
-  { name: 'ask', description: 'Envia mensagem a outro agente e aguarda resposta confirmada. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' } }, required: ['agent', 'message'] } },
+  { name: 'ask', description: 'Envia mensagem a outro agente e aguarda resposta confirmada. Mensagens sobre trabalho do quadro devem informar taskId para serem canceladas se ficarem obsoletas. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' }, taskId: { type: 'string', format: 'uuid', description: 'Tarefa ativa que torna este handoff valido.' } }, required: ['agent', 'message'] } },
   { name: 'note_list', description: 'Lista notas acessiveis com nodeId, titulo e previa. Use antes de criar para atualizar a nota existente com note_read, note_write ou note_edit.', inputSchema: { type: 'object', properties: {} } },
   { name: 'note_read', description: 'Le uma nota pelo nodeId.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'note_write', description: 'Substitui o conteudo de uma nota.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, content: { type: 'string' } }, required: ['nodeId', 'content'] } },
@@ -155,22 +169,22 @@ const TOOLS = [
     interactionId: { type: 'string', format: 'uuid' }, sourceElementId: { type: 'string', format: 'uuid' }, trigger: DESIGN_PROTOTYPE_TRIGGER, prototypeAction: DESIGN_PROTOTYPE_ACTION, transition: DESIGN_PROTOTYPE_TRANSITION, order: { type: 'integer', minimum: 0, maximum: 100000 },
     summary: { type: 'string', minLength: 1, maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
   }, required: ['nodeId', 'baseRevision', 'operation'] } },
-  { name: 'design_apply_operations', description: 'Aplica operacoes transacionais ao documento: layers, vetores, design system, prototipo, motion, comentarios e propostas. Leia a revisao antes e verifique o resultado depois.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, operations: { type: 'array', minItems: 1, maxItems: 2000, items: { type: 'object' } }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'operations', 'summary'] } },
+  { name: 'design_apply_operations', description: 'Aplica ate 100 operacoes transacionais ao documento. Leia a revisao antes e verifique o resultado depois; divida mutacoes maiores em lotes coerentes para evitar chamadas longas.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, operations: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object' } }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'operations', 'summary'] } },
   { name: 'design_create_elements', description: 'Cria ate 2000 layers em uma unica revisao. Use para frames e telas completas; coordenadas de filhos continuam absolutas. Nao faca uma chamada por layer.', inputSchema: { type: 'object', properties: { ...DESIGN_BATCH_BASE, elements: { type: 'array', minItems: 1, maxItems: 2000, items: DESIGN_ELEMENT_INPUT } }, required: ['nodeId', 'baseRevision', 'pageId', 'elements', 'summary'] } },
-  { name: 'design_apply_blueprint', description: 'Aplica layers, tokens, bindings, componentes, prototipo e motion em um unico lote tipado. Prefira esta tool para uma direcao completa e use design_reference para exemplos.', inputSchema: { type: 'object', properties: {
+  { name: 'design_apply_blueprint', description: 'Aplica uma parte coerente do blueprint aprovado em ate 100 itens. Use chamadas separadas para tokens, bindings/componentes e prototipo/motion, relendo a revisao entre elas.', inputSchema: { type: 'object', properties: {
     ...DESIGN_BATCH_BASE,
     elements: { type: 'array', maxItems: 2000, items: DESIGN_ELEMENT_INPUT },
     variableCollections: { type: 'array', maxItems: 100, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, modes: { type: 'array', minItems: 1, maxItems: 16, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } }, required: ['id', 'name'] } }, defaultModeId: { type: 'string', format: 'uuid' }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'name', 'modes'] } },
     variables: { type: 'array', maxItems: 5000, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, collectionId: { type: 'string', format: 'uuid' }, name: { type: 'string' }, type: { type: 'string', enum: ['color', 'spacing', 'radius', 'font-size', 'font-weight', 'line-height', 'opacity', 'effect', 'breakpoint', 'string', 'boolean'] }, description: { type: 'string' }, values: { type: 'object' }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'collectionId', 'name', 'type', 'values'] } },
     bindings: { type: 'array', maxItems: 10000, items: { type: 'object', properties: { elementId: { type: 'string', format: 'uuid' }, property: { type: 'string', enum: ['fill', 'stroke', 'opacity', 'cornerRadius', 'strokeWidth', 'fontSize', 'fontWeight', 'layoutGap', 'layoutRowGap', 'layoutColumnGap', 'layoutPaddingTop', 'layoutPaddingRight', 'layoutPaddingBottom', 'layoutPaddingLeft', 'effects'] }, variableId: { type: ['string', 'null'], format: 'uuid' } }, required: ['elementId', 'property', 'variableId'] } },
     componentSets: { type: 'array', maxItems: 500, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, propertyNames: { type: 'array', items: { type: 'string' } }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'name'] } },
-    components: { type: 'array', maxItems: 2000, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, description: { type: 'string' }, rootElementId: { type: 'string', format: 'uuid' }, setId: { type: ['string', 'null'], format: 'uuid' }, variantValues: { type: 'object' }, properties: { type: 'array', items: { type: 'object' } }, key: { type: 'string' } }, required: ['id', 'name', 'rootElementId'] } },
+    components: { type: 'array', maxItems: 100, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, description: { type: 'string' }, rootElementId: { type: 'string', format: 'uuid' }, setId: { type: ['string', 'null'], format: 'uuid' }, variantValues: { type: 'object' }, properties: { type: 'array', maxItems: 200, items: DESIGN_COMPONENT_PROPERTY }, key: { type: 'string' } }, required: ['id', 'name', 'rootElementId'] } },
     prototypeFlows: { type: 'array', maxItems: 500, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, description: { type: 'string' }, startFrameId: { type: 'string', format: 'uuid' }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'name', 'startFrameId'] } },
     prototypeInteractions: { type: 'array', maxItems: 5000, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, sourceElementId: { type: 'string', format: 'uuid' }, trigger: { type: 'object' }, action: { type: 'object' }, transition: { type: 'object' }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'sourceElementId', 'trigger', 'action'] } },
     motionTokens: { type: 'array', maxItems: 500, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, durationMs: { type: 'integer' }, easing: { type: 'object' }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'name'] } },
     motionTracks: { type: 'array', maxItems: 5000, items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, elementId: { type: 'string', format: 'uuid' }, name: { type: 'string' }, durationMs: { type: 'integer' }, delayMs: { type: 'integer' }, iterations: { type: 'integer' }, direction: { type: 'string' }, fillMode: { type: 'string' }, tokenId: { type: ['string', 'null'], format: 'uuid' }, easing: { type: 'object' }, keyframes: { type: 'array', minItems: 2, items: { type: 'object' } }, order: { type: 'integer', minimum: 0 } }, required: ['id', 'elementId', 'name', 'keyframes'] } },
     presentation: { type: 'object', properties: { defaultFlowId: { type: ['string', 'null'], format: 'uuid' }, background: { type: 'string' }, showDeviceFrame: { type: 'boolean' }, showHotspots: { type: 'boolean' }, showCursor: { type: 'boolean' } } },
-  }, required: ['nodeId', 'baseRevision', 'pageId', 'summary'] } },
+  }, required: ['nodeId', 'baseRevision', 'summary'] } },
   { name: 'design_comment', description: 'Cria um comentario rastreavel em uma pagina ou layer, com autoria do agente e suporte a mencoes no texto.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, pageId: { type: 'string' }, elementId: { type: ['string', 'null'] }, body: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'pageId', 'body'] } },
   { name: 'design_propose', description: 'Submete operacoes visuais como proposta pendente para revisao humana, sem alterar o design aprovado.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, title: { type: 'string' }, description: { type: 'string' }, operations: { type: 'array', minItems: 1, maxItems: 2000, items: { type: 'object' } }, floorId: { type: ['string', 'null'] }, councilId: { type: ['string', 'null'] }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'title', 'operations'] } },
   { name: 'design_decide_proposal', description: 'Aprova ou rejeita uma proposta visual pendente. A aprovacao aplica as operacoes validadas de forma transacional.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, proposalId: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected'] }, note: { type: ['string', 'null'] }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'proposalId', 'status'] } },
@@ -400,7 +414,7 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('POST', `/api/agent-room/bridge/huddles/${encodeURIComponent(input.huddleId)}/turns`, { from: selfAgent, text: input.text });
     }
     case 'ask':
-      return bridge('POST', '/api/agent-room/bridge/ask', { to: args.agent, message: args.message, from: selfAgent });
+      return bridge('POST', '/api/agent-room/bridge/ask', { to: args.agent, message: args.message, from: selfAgent, taskId: args.taskId });
     case 'note_list': {
       const query = selfAgent ? `?agentNodeId=${encodeURIComponent(selfAgent)}` : '';
       return bridge('GET', `/api/agent-room/bridge/notes${query}`);
@@ -587,6 +601,7 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       });
     }
     case 'design_apply_operations':
+      if (args.operations.length > 100) throw new Error('design_apply_operations accepts at most 100 operations. Split the change into coherent revision-checked batches.');
       return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
         baseRevision: args.baseRevision,
         operations: args.operations,
@@ -603,6 +618,9 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         taskId: args.taskId,
       });
     case 'design_apply_blueprint': {
+      if ((args.elements?.length ?? 0) > 0 && !args.pageId) {
+        throw new Error('design_apply_blueprint requires pageId when creating elements. Token, component, prototype, motion, and presentation batches do not require a page.');
+      }
       const now = new Date().toISOString();
       const operations = [
         ...(args.elements ?? []).map((element) => ({ kind: 'create', element: { ...element, pageId: args.pageId, parentId: element.parentId ?? null } })),
@@ -610,7 +628,7 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         ...(args.variables ?? []).map((variable, order) => ({ kind: 'add-variable', variable: { ...variable, description: variable.description ?? '', order: variable.order ?? order } })),
         ...(args.bindings ?? []).map((binding) => ({ kind: 'bind-variable', ...binding })),
         ...(args.componentSets ?? []).map((componentSet, order) => ({ kind: 'add-component-set', componentSet: { ...componentSet, propertyNames: componentSet.propertyNames ?? [], order: componentSet.order ?? order } })),
-        ...(args.components ?? []).map((component) => ({ kind: 'add-component', component: { ...component, description: component.description ?? '', setId: component.setId ?? null, variantValues: component.variantValues ?? {}, properties: component.properties ?? [], key: component.key ?? component.id, updatedAt: now } })),
+        ...(args.components ?? []).map((component) => ({ kind: 'add-component', component: { ...component, description: component.description ?? '', setId: component.setId ?? null, variantValues: component.variantValues ?? {}, properties: (component.properties ?? []).map((property, order) => ({ ...property, preferredValues: property.preferredValues ?? [], order: property.order ?? order })), key: component.key ?? component.id, updatedAt: now } })),
         ...(args.prototypeFlows ?? []).map((flow, order) => ({ kind: 'add-prototype-flow', flow: { ...flow, description: flow.description ?? '', order: flow.order ?? order } })),
         ...(args.prototypeInteractions ?? []).map((interaction, order) => ({ kind: 'add-prototype-interaction', interaction: { ...interaction, order: interaction.order ?? order } })),
         ...(args.motionTokens ?? []).map((token, order) => ({ kind: 'add-motion-token', token: { ...token, order: token.order ?? order } })),
@@ -618,6 +636,7 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         ...(args.presentation ? [{ kind: 'update-presentation', changes: args.presentation }] : []),
       ];
       if (!operations.length) throw new Error('design_apply_blueprint needs at least one element, token, component, prototype, motion item, binding, or presentation change.');
+      if (operations.length > 100) throw new Error('design_apply_blueprint accepts at most 100 total items. Apply tokens, bindings/components, and prototype/motion as separate revision-checked batches.');
       return bridge('PATCH', `/api/agent-room/bridge/designs/${encodeURIComponent(args.nodeId)}`, {
         baseRevision: args.baseRevision,
         operations,

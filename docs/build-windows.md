@@ -58,6 +58,14 @@ Artefatos em `release/`:
   servidor sem `MODULE_NOT_FOUND` + janela abrindo no canvas.
 - **Sem assinatura de código**: não temos certificado. Instalador e exe saem
   unsigned (avisos do Windows são esperados).
+- **Runtime de console da ponte**: o hook `scripts/after-pack.mjs` baixa o
+  `node.exe` x64 pinado na versão usada pelo projeto, valida o arquivo contra o
+  SHA-256 oficial fixado no código e o inclui em
+  `resources/orkestrai-cli-runtime/node.exe`. Esse binário é intencional: o
+  executável Electron usa o subsistema gráfico do Windows e, quando chamado
+  pelo WSL, não devolve `stdout`/`stderr`; por isso não pode ser usado como
+  runtime da CLI ou do MCP. Não remova o hook nem substitua a validação por um
+  download sem checksum.
 - **`-c.npmRebuild=false` no comando (não no `package.json`)**: sem Visual Studio,
   o rebuild nativo interno do electron-builder falha em `node-pty` e
   `msgpackr-extract` (não publicam prebuild-download para o ABI do Electron — só
@@ -76,7 +84,10 @@ Artefatos em `release/`:
   automaticamente a cada boot do servidor interno).
 - **PTY**: `node-pty` usa **conpty** nativo do Windows 10+ (fallback winpty).
   Shells: `powershell.exe` por padrão; WSL funciona apontando o terminal para
-  `wsl.exe` (Windows e WSL lado a lado no mesmo canvas).
+  `wsl.exe` (Windows e WSL lado a lado no mesmo canvas). O launcher WSL usa o
+  runtime de console incluído no app quando disponível e mantém o `node` da
+  própria distribuição como fallback, preservando respostas da ponte e o
+  transporte JSON-RPC sem depender de um executável gráfico.
 - **CLIs de agente** (claude, codex, kimi) precisam estar instaladas e no
   PATH (o app também procura em locais comuns de instalação).
 

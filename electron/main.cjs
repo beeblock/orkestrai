@@ -460,6 +460,9 @@ async function startServer(port) {
   const serverEntry = path.join(runtimeRoot, 'scripts', 'orkestrai-server.mjs');
   const dotEnv = app.isPackaged ? {} : loadDotEnv(path.join(appRoot, '.env'));
   const ptyModuleDir = ensureNativePty(app.getPath('userData'));
+  const bundledCliRuntime = process.platform === 'win32'
+    ? path.join(process.resourcesPath, 'orkestrai-cli-runtime', 'node.exe')
+    : null;
   const privateEnvKeys = privateChildEnvKeys(dotEnv);
   serverProcess = spawn(process.execPath, [serverEntry], {
     cwd: runtimeRoot,
@@ -474,6 +477,9 @@ async function startServer(port) {
       // workspaces precisam da URL atual (ver também ~/.orkestrai/runtime.json).
       ORKESTRAI_API_URL: `http://127.0.0.1:${port}`,
       ORKESTRAI_PRIVATE_ENV_KEYS: privateEnvKeys,
+      ...(bundledCliRuntime && fs.existsSync(bundledCliRuntime)
+        ? { ORKESTRAI_CLI_CONSOLE_RUNTIME: bundledCliRuntime }
+        : {}),
       ...(ptyModuleDir ? { ORKESTRAI_PTY_MODULE: ptyModuleDir } : {}),
       // Em Electron, o banco e os dados ficam na pasta do usuário em producao;
       // em dev, usa a pasta do projeto como sempre.

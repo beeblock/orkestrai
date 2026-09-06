@@ -28,7 +28,11 @@ import { agentSessionTracker, agentSessionTrackerForRuntime, type AgentSessionTr
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
 import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { preflightWslLaunch, WslLaunchError, type WslTrackingContext } from '../WslRuntime.ts';
-import { codexMcpLaunchForRuntime, codexMcpOverrideArgs } from '../codex-mcp-config.ts';
+import {
+  codexMcpLaunchForRuntime,
+  codexMcpOverrideArgs,
+  codexWorkspaceTrustOverrideArgs,
+} from '../codex-mcp-config.ts';
 
 export const PTY_WS_PATH = '/ws/agent-room/pty';
 
@@ -203,8 +207,15 @@ export function handlePtyConnection(socket: WebSocket): void {
               )
             : agentSessionTracker;
           const runtime = message.runtime ?? { kind: 'native' as const };
+          const messageArgs = Array.isArray(message.args) ? message.args.map(String) : [];
           const providerArgs = message.provider === 'codex'
             ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
+            : [];
+          const codexTrustArgs = message.provider === 'codex'
+            ? codexWorkspaceTrustOverrideArgs(
+                wslContext?.linuxWorkingDir ?? resolvedCwd,
+                messageArgs.includes('--dangerously-bypass-approvals-and-sandbox'),
+              )
             : [];
           let profileEnv: Record<string, string> = {};
           if (message.profileId) {
@@ -230,8 +241,9 @@ export function handlePtyConnection(socket: WebSocket): void {
           const session = ptySessionManager.create({
             command: message.command.trim(),
             args: [
-              ...(Array.isArray(message.args) ? message.args.map(String) : []),
+              ...messageArgs,
               ...providerArgs,
+              ...codexTrustArgs,
               ...freshSessionArgs,
               ...(Array.isArray(message.conversationArgs) ? message.conversationArgs.map(String) : []),
             ],

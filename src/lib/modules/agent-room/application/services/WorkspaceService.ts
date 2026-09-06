@@ -165,7 +165,6 @@ export class WorkspaceService {
     await access(workspace.workingDir, fsConstants.R_OK | fsConstants.W_OK);
     const skillPath = resolve(workspace.workingDir, '.claude', 'skills', 'orkestrai', 'SKILL.md');
     const bridgeRuntime = await this.preferredBridgeRuntime(workspace);
-    const cliRuntime = process.env.ORKESTRAI_CLI_RUNTIME ?? process.execPath;
     const cliEntry = process.env.ORKESTRAI_CLI_JS ?? resolve(process.cwd(), 'packages', 'orkestrai-cli', 'bin', 'orkestrai.js');
     const [skillCurrent, hasConfig, agentsMdCurrent, hasWslLauncher] = await Promise.all([
       readFile(skillPath, 'utf8').then((content) => content === bridgeService.bridgeSkillContent()).catch(() => false),
@@ -173,7 +172,7 @@ export class WorkspaceService {
       readFile(resolve(workspace.workingDir, 'AGENTS.md'), 'utf8').catch(() => ''),
       bridgeRuntime?.kind === 'wsl'
         ? readFile(resolve(workspace.workingDir, '.orkestrai', 'bin', 'orkestrai'), 'utf8')
-            .then((content) => content.includes(cliRuntime) && content.includes(cliEntry))
+            .then((content) => content.includes('orkestrai:wsl-console-launcher-v2') && content.includes(cliEntry))
             .catch(() => false)
         : Promise.resolve(true),
     ]);

@@ -98,4 +98,42 @@ describe('WorkstreamService', () => {
     expect(snapshot.workstreams).toEqual([]);
     expect(snapshot.unlinked.reviews).toBe(1);
   });
+
+  it('returns a blocked workstream to active when its terminal resumes', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Recovered delivery', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Delivery lead',
+      payload: { provider: 'codex' },
+    });
+    const task = await taskBoardService.create(workspace.id, {
+      title: 'Validate installed build',
+      assigneeNodeId: agent.id,
+      createdBy: 'automation',
+      dispatch: false,
+    });
+    await controlCenterService.recordActivity({
+      workspaceId: workspace.id,
+      nodeId: agent.id,
+      state: 'blocked',
+      action: 'Waiting for the installed app to close',
+      taskId: task.id,
+    });
+    expect((await workstreamService.snapshot(workspace.id)).workstreams[0].stage).toBe('blocked');
+
+    await controlCenterService.recordLifecycleActivity({
+      workspaceId: workspace.id,
+      nodeId: agent.id,
+      state: 'starting',
+      action: 'system:pty_resumed',
+    });
+
+    const snapshot = await workstreamService.snapshot(workspace.id);
+    expect(snapshot.workstreams[0].stage).toBe('active');
+    expect(snapshot.workstreams[0].timeline.at(-1)).toMatchObject({
+      state: 'starting',
+      taskId: task.id,
+    });
+  });
 });

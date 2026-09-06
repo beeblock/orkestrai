@@ -123,7 +123,7 @@ Este projeto roda dentro de um workspace do Orkestrai. Você tem a CLI `orkestra
 - `orkestrai list` — agentes do workspace, notas e portais conectados. O [LIDER] marcado e o maestro do time: fale com ele pelo TITULO ("Maestro" e o papel, não um nome de agente).
 - Repositórios adicionais aprovados aparecem em `orkestrai list` como aliases `@nome`; use esses aliases em caminhos de tools como `api_client_import`, nunca tente escapar com `../`.
 - `orkestrai usage` — cotas reais e recomendação do nó Usage; líderes consultam antes de delegar e roteiam novas tarefas ao recommendedProvider quando shouldFallback=true.
-- `orkestrai ask "<Agente>" "<mensagem>"` — fala com outro agente e aguarda a resposta.
+- `orkestrai ask "<Agente>" "<mensagem>" --task <taskId>` — fala com outro agente e aguarda a resposta; em trabalho rastreado, informe sempre a tarefa para que uma mensagem atrasada seja cancelada se ela já terminou ou mudou de responsável.
 - `huddle_list` / `huddle_say` — acompanha huddles ativos e registra somente a contribuição deste agente no transcript.
 - `code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff` / `orkestrai graph ...` — consulta o mesmo grafo nativo visível no Canvas e Workbench. Use `explain` para procedência, `locate` para sincronizar código e grafo, `operations` para agentes/tarefas/Floors e conflitos, `context` para pacotes revisáveis com orçamento explícito, `compare` para revisões e `investigation` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte `changes` antes de integrar, `contracts` para APIs e `quality` como evidência. Em modo Assistido, `semantic` aguarda o índice local atualizado automaticamente; em modo Manual, construa ou reconstrua esse índice explicitamente. Importe `evidence` apenas de caminho relativo confinado. Use `handoff` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.
 - `orkestrai note read/write/edit/create` — notas compartilhadas no canvas.
@@ -135,10 +135,10 @@ Este projeto roda dentro de um workspace do Orkestrai. Você tem a CLI `orkestra
 - `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.
 - `orkestrai floor create/preview/land` — andares (worktrees git) isolados por frente.
 - `orkestrai device list/attach/tap/swipe/pinch/type/permissions/tree/screenshot/stop` — device mobile visivel no Workbench; aparelhos Android fisicos so podem ser anexados pelo usuario apos confirmacao na UI.
-- `orkestrai ask "<Agente>" "<mensagem>"` — só afirme que falou/consultou alguém quando a ponte retornar uma resposta confirmada; timeout ou erro NÃO contam como conversa.
+- `orkestrai ask "<Agente>" "<mensagem>" [--task <taskId>]` — só afirme que falou/consultou alguém quando a ponte retornar uma resposta confirmada; timeout, expiração da fila ou erro NÃO contam como conversa. Releia a tarefa antes de tentar de novo.
 - `orkestrai task done <id>` — conclui a tarefa, avisa o líder e envia uma notificação identificada; não duplique com notify.
 - `orkestrai notify "<msg>" --kind attention|project` — atenção ou conclusão do projeto inteiro (somente após conferir o quadro).
-- Todo trabalho delegado precisa de uma task no Kanban ANTES da mensagem direta; nunca execute ou delegue trabalho sem rastreamento.
+- Todo trabalho delegado precisa de uma task no Kanban ANTES da mensagem direta; passe seu id em `ask --task` e nunca execute ou delegue trabalho sem rastreamento. Uma tarefa `done` é terminal: mensagens e status atrasados não podem reabri-la.
 - Sua identidade está no ambiente (ORKESTRAI_NODE_ID) — `--from`/`--agent` são opcionais. Se `orkestrai` não resolver no PATH, execute o launcher `"$ORKESTRAI_CLI" ...` DIRETO (sem `node`; no Windows `%ORKESTRAI_CLI%`/`& $env:ORKESTRAI_CLI`) — nunca rode o `...orkestrai.js` cru.
 - Se as tools MCP `orkestrai` estiverem disponíveis, PREFIRA elas (chamadas tipadas); a CLI e o fallback.
 - Detalhes completos: `.claude/skills/orkestrai/SKILL.md`, `.cline/skills/orkestrai/SKILL.md`, `.devin/skills/orkestrai/SKILL.md`, `.agents/skills/orkestrai/SKILL.md` ou `.orkestrai/SKILL.md`.

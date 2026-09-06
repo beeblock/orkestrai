@@ -314,6 +314,13 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
       id: '00000000-0000-7000-8000-000000000020',
       name: 'Desktop shell',
       rootElementId: '00000000-0000-7000-8000-000000000002',
+      properties: [{
+        id: '00000000-0000-7000-8000-000000000021',
+        name: 'Label',
+        type: 'text',
+        targetElementId: '00000000-0000-7000-8000-000000000002',
+        defaultValue: 'Todo',
+      }],
     }],
     prototypeFlows: [{
       id: '00000000-0000-7000-8000-000000000030',
@@ -443,6 +450,11 @@ describe('contrato MCP x bridge (todas as tools)', () => {
     expect(referenceTool.inputSchema.properties.topic.enum).toContain('typography');
     expect(elementBatchTool.inputSchema.properties.elements.items.required).toEqual(['type', 'name', 'x', 'y', 'width', 'height']);
     expect(blueprintTool.inputSchema.properties.variables.items.required).toContain('values');
+    expect(blueprintTool.inputSchema.required).not.toContain('pageId');
+    expect(blueprintTool.inputSchema.properties.components.items.properties.properties.items.required).toEqual([
+      'id', 'name', 'type', 'targetElementId', 'defaultValue',
+    ]);
+    expect(blueprintTool.inputSchema.properties.components.items.properties.properties.items.properties.order).toBeDefined();
 
     const input = new PassThrough();
     const chunks: string[] = [];
@@ -509,7 +521,79 @@ describe('contrato MCP x bridge (todas as tools)', () => {
         const parsed = expected.schema.safeParse(captured!.body);
         expect(parsed.success, `${tool}: schema — ${parsed.success ? '' : JSON.stringify(parsed.error.issues.slice(0, 2))}`).toBe(true);
       }
+      if (tool === 'design_apply_blueprint') {
+        const operations = (captured!.body as { operations: Array<Record<string, any>> }).operations;
+        const component = operations.find((operation) => operation.kind === 'add-component')?.component;
+        expect(component.properties[0]).toMatchObject({ preferredValues: [], order: 0 });
+      }
     }
+  });
+
+  it('rejeita lotes de Design grandes antes de chamar a bridge', async () => {
+    for (const [tool, args] of [
+      ['design_apply_operations', {
+        nodeId: 'n1', baseRevision: 0, summary: 'Oversized operations',
+        operations: Array.from({ length: 101 }, () => ({ kind: 'noop' })),
+      }],
+      ['design_apply_blueprint', {
+        nodeId: 'n1', baseRevision: 0, summary: 'Oversized variables',
+        variables: Array.from({ length: 101 }, (_, index) => ({
+          id: `00000000-0000-7000-8000-${String(index).padStart(12, '0')}`,
+          collectionId: '00000000-0000-7000-8000-000000000010',
+          name: `Token ${index}`,
+          type: 'string',
+          values: {},
+        })),
+      }],
+    ] as const) {
+      const input = new PassThrough();
+      const chunks: string[] = [];
+      let bridgeCalled = false;
+      const done = runMcpServer({
+        input,
+        write: (chunk: string) => chunks.push(chunk),
+        bridge: async () => { bridgeCalled = true; return {}; },
+        findFreePort: async () => 45678,
+        selfAgent: 'n1',
+      });
+      send(input, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: tool, arguments: args } });
+      const response = await waitFor(chunks, 1);
+      input.end();
+      await done;
+
+      expect(response.result?.isError).toBe(true);
+      expect(response.result?.content?.[0]?.text).toMatch(/at most 100/);
+      expect(bridgeCalled).toBe(false);
+    }
+  });
+
+  it('exige pageId somente quando o blueprint cria layers', async () => {
+    const input = new PassThrough();
+    const chunks: string[] = [];
+    let bridgeCalled = false;
+    const done = runMcpServer({
+      input,
+      write: (chunk: string) => chunks.push(chunk),
+      bridge: async () => { bridgeCalled = true; return {}; },
+      findFreePort: async () => 45678,
+      selfAgent: 'n1',
+    });
+    send(input, {
+      jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+        name: 'design_apply_blueprint',
+        arguments: {
+          nodeId: 'n1', baseRevision: 0, summary: 'Missing page',
+          elements: [{ type: 'frame', name: 'Desktop', x: 0, y: 0, width: 1440, height: 900 }],
+        },
+      },
+    });
+    const response = await waitFor(chunks, 1);
+    input.end();
+    await done;
+
+    expect(response.result?.isError).toBe(true);
+    expect(response.result?.content?.[0]?.text).toContain('requires pageId when creating elements');
+    expect(bridgeCalled).toBe(false);
   });
 
   it('tools de maestro sem identidade (selfAgent null) dao erro claro, nao 422', async () => {

@@ -60,6 +60,15 @@ type RecordDeliveryInput = {
   metadata?: Record<string, unknown>;
 };
 
+type BlockedTaskRecovery = {
+  workspaceId: string;
+  nodeId: string;
+  taskId: string;
+  sessionId: string | null;
+  previousState: AgentActivityState;
+  previousAction: string | null;
+};
+
 function broadcast(payload: Record<string, unknown>): void {
   const send = (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast;
   send?.(payload);
@@ -106,6 +115,64 @@ function projectMessages(
 export class ControlCenterService {
   private latest = new Map<string, AgentActivity>();
   private writes = new Map<string, Promise<AgentActivity | null>>();
+
+  /**
+   * PTY lifecycle events do not know which Kanban card owns the terminal.
+   * Enrich them here so a resumed session supersedes stale task-scoped
+   * blocked/error events in Workbench and resolves obsolete attention items.
+   */
+  async recordLifecycleActivity(input: RecordActivityInput): Promise<AgentActivity | null> {
+    if (input.taskId) return this.recordActivity(input);
+    const candidates = await AgentBoardTask.query()
+      .where('workspace_id', input.workspaceId)
+      .where('assignee_node_id', input.nodeId)
+      .orderBy('updated_at', 'desc')
+      .get();
+    const task = candidates.find((candidate) => {
+      const status = String(candidate.getAttribute('status'));
+      return !candidate.getAttribute('archived_at') && status !== 'todo' && status !== 'done';
+    });
+    if (!task) return this.recordActivity(input);
+    const taskId = String(task.getAttribute('id'));
+    const previous = await controlCenterRepository.latestSemanticTaskActivity(input.nodeId, taskId);
+    const event = await this.recordActivity({
+      ...input,
+      taskId,
+      metadata: {
+        ...input.metadata,
+        taskTitle: String(task.getAttribute('title')),
+        lifecycle: true,
+      },
+    });
+    if (
+      event
+      && input.state === 'starting'
+      && previous?.taskId === taskId
+      && ['blocked', 'waiting_permission', 'error'].includes(previous.state)
+    ) {
+      const sessionId = typeof input.metadata?.sessionId === 'string' ? input.metadata.sessionId : null;
+      const lifecycle = globalThis as unknown as {
+        __orkestraiRecoverBlockedTask?: (recovery: BlockedTaskRecovery) => void;
+        __orkestraiPendingTaskRecoveries?: BlockedTaskRecovery[];
+      };
+      const recovery: BlockedTaskRecovery = {
+        workspaceId: input.workspaceId,
+        nodeId: input.nodeId,
+        taskId,
+        sessionId,
+        previousState: previous.state,
+        previousAction: previous.action,
+      };
+      if (lifecycle.__orkestraiRecoverBlockedTask) {
+        lifecycle.__orkestraiRecoverBlockedTask(recovery);
+      } else {
+        const pending = lifecycle.__orkestraiPendingTaskRecoveries ?? [];
+        if (!pending.some((item) => item.taskId === taskId && item.sessionId === sessionId)) pending.push(recovery);
+        lifecycle.__orkestraiPendingTaskRecoveries = pending.slice(-100);
+      }
+    }
+    return event;
+  }
 
   async recordActivity(input: RecordActivityInput): Promise<AgentActivity | null> {
     const key = `${input.workspaceId}:${input.nodeId}`;
@@ -156,7 +223,7 @@ export class ControlCenterService {
       state: event.state,
       event,
     });
-    if (event.state === 'failed') {
+    if (event.state === 'failed' && event.metadata.cancelled !== true) {
       await this.recordActivity({
         workspaceId: event.workspaceId,
         nodeId: event.toNodeId,
@@ -275,7 +342,7 @@ const lifecycle = globalThis as unknown as {
   __orkestraiRecordActivity?: (input: RecordActivityInput) => void;
 };
 lifecycle.__orkestraiRecordActivity = (input) => {
-  void controlCenterService.recordActivity(input).catch((error) => {
+  void controlCenterService.recordLifecycleActivity(input).catch((error) => {
     console.error('[orkestrai:activity] Falha ao registrar estado do agente:', error);
   });
 };

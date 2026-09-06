@@ -1,4 +1,5 @@
 import { parse } from 'smol-toml';
+import { realpathSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import type { WorkspaceExecutionRuntime } from '../domain/types.js';
 
@@ -91,6 +92,29 @@ export function codexMcpOverrideArgs(launch: CodexMcpLaunch): string[] {
       : []),
     '-c', `mcp_servers.figma.url=${JSON.stringify(FIGMA_MCP_URL)}`,
   ];
+}
+
+/**
+ * Codex asks for project trust before its composer becomes available. An
+ * automatic task sent to that screen would select an option instead of
+ * reaching the agent. Orkestrai only suppresses that bootstrap prompt when
+ * the same launch already opted into Codex's full-access mode, and the trust
+ * applies to this process and exact working directory only.
+ */
+export function codexWorkspaceTrustOverrideArgs(workingDirectory: string, fullAccess: boolean): string[] {
+  if (!fullAccess || !workingDirectory.trim()) return [];
+  const requestedPath = workingDirectory.trim();
+  let canonicalPath = requestedPath;
+  try {
+    // Codex evaluates trust against the physical cwd. On macOS, for example,
+    // /tmp resolves to /private/tmp; trusting the logical alias does not match.
+    canonicalPath = realpathSync(requestedPath);
+  } catch {
+    // WSL paths are not necessarily addressable from the Windows host. The
+    // Linux path produced by preflight remains the correct process-local key.
+  }
+  const path = JSON.stringify(canonicalPath);
+  return ['-c', `projects={${path}={trust_level="trusted"}}`];
 }
 
 /** Resolves an MCP launch in the same OS namespace where Codex will run. */

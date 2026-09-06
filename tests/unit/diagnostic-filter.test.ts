@@ -17,6 +17,14 @@ describe('desktop diagnostic filter', () => {
     expect(isExpectedPortalDiagnostic([
       "Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL': Error: Script failed to execute",
     ])).toBe(true);
+    for (const code of ['ERR_ABORTED', 'ERR_FAILED', 'ERR_NAME_NOT_RESOLVED']) {
+      expect(isExpectedPortalDiagnostic([
+        `Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL': Error: ${code}`,
+      ])).toBe(true);
+      expect(isExpectedPortalDiagnostic([
+        `(node:123) electron: Failed to load URL: https://invalid.test with error: ${code}`,
+      ])).toBe(true);
+    }
   });
 
   it('keeps unexpected Electron and renderer failures actionable', () => {

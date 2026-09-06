@@ -223,6 +223,32 @@ describe('PtySessionManager', () => {
     expect(writes).toEqual(['rascunho humano', '\r']);
   });
 
+  it('cancels a queued delivery when its task becomes obsolete', async () => {
+    const writes: string[] = [];
+    const fakePty = {
+      write: (data: string) => writes.push(data),
+      resize: () => {},
+      kill: () => {},
+      onData: () => ({ dispose: () => {} }),
+      onExit: () => ({ dispose: () => {} }),
+      pid: 1,
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'claude', provider: 'claude', cwd: process.cwd() });
+    let relevant = true;
+
+    manager.writeHumanInput(session.id, 'human draft');
+    const delivery = manager.writeWithConfirmedSubmit(session.id, 'obsolete handoff', {
+      isStillRelevant: async () => relevant,
+    });
+    relevant = false;
+
+    await expect(delivery).rejects.toMatchObject({ code: 'PTY_DELIVERY_OBSOLETE' });
+    manager.writeHumanInput(session.id, '\r');
+    expect(writes).toEqual(['human draft', '\r']);
+    manager.kill(session.id);
+  });
+
   it('repete Enter quando um TUI WSL não confirma o primeiro submit', async () => {
     const writes: string[] = [];
     let emitData: ((data: string) => void) | null = null;

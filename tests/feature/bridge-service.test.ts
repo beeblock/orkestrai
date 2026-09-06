@@ -1,18 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node-pty';
+import { execFile } from 'node:child_process';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { agentSessionService } from '$lib/modules/agent-room/application/services/AgentSessionService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+
+const execFileAsync = promisify(execFile);
 
 beforeEach(() => {
   vi.spyOn(agentSessionService, 'ensure').mockImplementation(async (_workspaceId, nodeId) => ({
@@ -70,8 +74,10 @@ describe('BridgeService', () => {
 
       const launcher = await readFile(join(dir, '.orkestrai', 'bin', 'orkestrai'), 'utf8');
       const mcp = JSON.parse(await readFile(join(dir, '.mcp.json'), 'utf8'));
-      expect(launcher).toContain('runtime="$(wslpath -u');
-      expect(launcher).toContain('exec "$runtime"');
+      expect(launcher).toContain('orkestrai:wsl-console-launcher-v2');
+      expect(launcher).toContain('command -v node');
+      expect(launcher).toContain('exec node "$cli_linux" "$@"');
+      expect(launcher).not.toContain('ELECTRON_RUN_AS_NODE');
       expect(mcp.mcpServers.orkestrai).toEqual({
         command: 'wsl.exe',
         args: [
@@ -84,6 +90,64 @@ describe('BridgeService', () => {
         ],
       });
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('provisiona fallback de console do Windows quando o WSL nao possui Node', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-wsl-console-'));
+    const previous = process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME;
+    try {
+      process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME = 'C:\\Program Files\\Orkestrai\\resources\\orkestrai-cli-runtime\\node.exe';
+      const workspace = await workspaceRepository.createWorkspace({
+        name: 'wsl-console',
+        workingDir: dir,
+        runtimeKind: 'wsl',
+        wslDistribution: 'Ubuntu-24.04',
+        wslWorkingDir: '/home/dev/project',
+      });
+      await bridgeService.provisionSkill(workspace, await bridgeService.getOrCreateToken(workspace.id));
+
+      const launcher = await readFile(join(dir, '.orkestrai', 'bin', 'orkestrai'), 'utf8');
+      expect(launcher).toContain("console_runtime=\"$(wslpath -u 'C:\\Program Files\\Orkestrai\\resources\\orkestrai-cli-runtime\\node.exe')\"");
+      expect(launcher).toContain('exec "$console_runtime" "$cli_win" "$@"');
+      expect(launcher).toContain('where node.exe');
+    } finally {
+      if (previous === undefined) delete process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME;
+      else process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME = previous;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserva stdout ao executar o launcher WSL pelo runtime de console', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-wsl-stdout-'));
+    const previous = process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME;
+    try {
+      const fakeBin = join(dir, 'fake-bin');
+      const fakeNode = join(dir, 'node.exe');
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(join(fakeBin, 'wslpath'), '#!/bin/sh\n[ "$1" = "-u" ] && shift\nprintf "%s\\n" "$1"\n');
+      await writeFile(fakeNode, '#!/bin/sh\nprintf "console:%s\\n" "$*"\n');
+      await Promise.all([chmod(join(fakeBin, 'wslpath'), 0o755), chmod(fakeNode, 0o755)]);
+      process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME = fakeNode;
+      const workspace = await workspaceRepository.createWorkspace({
+        name: 'wsl-stdout',
+        workingDir: dir,
+        runtimeKind: 'wsl',
+        wslDistribution: 'Ubuntu-24.04',
+        wslWorkingDir: '/home/dev/project',
+      });
+      await bridgeService.provisionSkill(workspace, await bridgeService.getOrCreateToken(workspace.id));
+
+      const launcher = join(dir, '.orkestrai', 'bin', 'orkestrai');
+      const { stdout } = await execFileAsync('/bin/sh', [launcher, 'ask', 'Leader', 'hello'], {
+        env: { ...process.env, PATH: fakeBin },
+      });
+      expect(stdout).toContain('console:');
+      expect(stdout).toContain('ask Leader hello');
+    } finally {
+      if (previous === undefined) delete process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME;
+      else process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME = previous;
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -174,6 +238,74 @@ describe('BridgeService', () => {
     expect(second.reply).not.toContain('primeira-mensagem');
     ptySessionManager.kill(session.id);
   }, 20_000);
+
+  it('expires a queued ask instead of injecting it after an old conversation', async () => {
+    const { workspace, session } = await createWorkspaceWithTerminal();
+    const first = bridgeService.ask(workspace.id, {
+      to: 'Gato',
+      message: 'long-running-conversation',
+      timeoutMs: 15_000,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await expect(bridgeService.ask(workspace.id, {
+      to: 'Gato',
+      message: 'must-not-arrive-late',
+      timeoutMs: 15_000,
+      maxQueueWaitMs: 40,
+    })).rejects.toThrow('expired while waiting');
+
+    expect((await first).reply).toContain('long-running-conversation');
+    const attached = ptySessionManager.attach(session.id, () => {});
+    attached.detach();
+    expect(attached.scrollback).not.toContain('must-not-arrive-late');
+    ptySessionManager.kill(session.id);
+  }, 20_000);
+
+  it('rejects task-scoped asks after the task is complete', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    const task = await taskBoardService.create(workspace.id, {
+      title: 'Finished work',
+      assigneeNodeId: terminal.id,
+      dispatch: false,
+    });
+    await taskBoardService.update(workspace.id, task.id, { status: 'done' });
+
+    await expect(bridgeService.ask(workspace.id, {
+      to: terminal.id,
+      message: 'stale follow-up',
+      taskId: task.id,
+      timeoutMs: 15_000,
+    })).rejects.toThrow('no longer active');
+
+    const attached = ptySessionManager.attach(session.id, () => {});
+    attached.detach();
+    expect(attached.scrollback).not.toContain('stale follow-up');
+    ptySessionManager.kill(session.id);
+  });
+
+  it('does not regress a completed task to working in the Control Center', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    const task = await taskBoardService.create(workspace.id, {
+      title: 'Validated delivery',
+      assigneeNodeId: terminal.id,
+      dispatch: false,
+    });
+    await taskBoardService.update(workspace.id, task.id, { status: 'done' });
+
+    const result = await bridgeService.reportActivity(workspace.id, {
+      from: terminal.id,
+      state: 'working',
+      action: 'late stale status',
+      taskId: task.id,
+    });
+
+    expect(result).toMatchObject({ recorded: false, state: 'done', ignoredReason: 'task_closed' });
+    const events = (await controlCenterRepository.listActivity(workspace.id))
+      .filter((event) => event.taskId === task.id);
+    expect(events.at(-1)).toMatchObject({ state: 'done', action: 'system:task_completed' });
+    ptySessionManager.kill(session.id);
+  });
 
   it('ask funciona nos dois sentidos entre terminais Claude e Codex', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'duplex', workingDir: '/tmp' });

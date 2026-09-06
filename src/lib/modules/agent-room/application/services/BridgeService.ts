@@ -9,7 +9,7 @@ import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/c
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { ptySessionManager, sanitizeComposerText } from '../../infrastructure/pty/PtySessionManager.ts';
+import { ObsoletePtyDeliveryError, ptySessionManager, sanitizeComposerText } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracker.js';
 import { findReplyToPrompt, type MatchedTranscriptReply } from '../../infrastructure/transcript/AgentTranscript.js';
 import { floorService } from './FloorService.js';
@@ -74,10 +74,13 @@ type BridgeAskInput = {
   to: string;
   message: string;
   from?: string | null;
+  taskId?: string | null;
   timeoutMs?: number;
   signal?: AbortSignal;
   messageId?: string;
   metadata?: Record<string, unknown>;
+  /** Internal test/automation override. Public callers use the bounded default. */
+  maxQueueWaitMs?: number;
 };
 
 type BridgeAskResult = {
@@ -94,6 +97,17 @@ function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPla
   return nodes
     .filter((node) => (node.floorId ?? null) === floorId)
     .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
+}
+
+const MAX_ASK_QUEUE_WAIT_MS = 30_000;
+
+class AskQueueExpiredError extends Error {
+  readonly code = 'AGENT_MESSAGE_QUEUE_EXPIRED';
+
+  constructor() {
+    super('Agent message expired while waiting for the target to finish its previous conversation. Recheck the task before retrying.');
+    this.name = 'AskQueueExpiredError';
+  }
 }
 
 // Remove sequencias ANSI (cores, cursor, etc.) do output de TUIs.
@@ -287,6 +301,8 @@ export class BridgeService {
 
   async ask(workspaceId: string, input: BridgeAskInput): Promise<BridgeAskResult> {
     const target = this.findAgent(await this.listAgents(workspaceId), input.to);
+    const origin = input.from ? this.findAgent(await this.listAgents(workspaceId), input.from) : null;
+    await this.assertTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, origin?.nodeId ?? null);
     const key = `${workspaceId}:${target.nodeId}`;
     const previous = this.askTails.get(key) ?? Promise.resolve();
     let release!: () => void;
@@ -296,21 +312,8 @@ export class BridgeService {
 
     try {
       if (input.signal?.aborted) throw new Error('Agent request cancelled.');
-      if (input.signal) {
-        await new Promise<void>((resolve, reject) => {
-          const onAbort = () => {
-            input.signal?.removeEventListener('abort', onAbort);
-            reject(new Error('Agent request cancelled.'));
-          };
-          input.signal?.addEventListener('abort', onAbort, { once: true });
-          previous.catch(() => undefined).then(() => {
-            input.signal?.removeEventListener('abort', onAbort);
-            resolve();
-          });
-        });
-      } else {
-        await previous.catch(() => undefined);
-      }
+      await this.waitForAskTurn(previous, input.maxQueueWaitMs ?? MAX_ASK_QUEUE_WAIT_MS, input.signal);
+      await this.assertTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, origin?.nodeId ?? null);
       return await this.performAsk(workspaceId, input);
     } finally {
       release();
@@ -331,7 +334,10 @@ export class BridgeService {
     if (origin) await this.ensureEdge(workspaceId, origin.nodeId, target.nodeId);
     const messageId = input.messageId ?? uuidv7();
     const requestStartedAt = Date.now();
-    const metadata = input.metadata ?? {};
+    const metadata = {
+      ...(input.metadata ?? {}),
+      ...(input.taskId ? { taskId: input.taskId, correlationId: `task:${input.taskId}` } : {}),
+    };
     await controlCenterService.recordDelivery({
       messageId,
       workspaceId,
@@ -341,16 +347,6 @@ export class BridgeService {
       content: input.message,
       metadata,
     });
-    await controlCenterService.recordDelivery({
-      messageId,
-      workspaceId,
-      fromNodeId: origin?.nodeId ?? null,
-      toNodeId: target.nodeId,
-      state: 'sent',
-      content: input.message,
-      metadata,
-    });
-
     this.broadcastTalking(workspaceId, origin?.nodeId ?? null, target.nodeId, true);
     let reply: { text: string; timedOut: boolean };
     let transcriptMatch: MatchedTranscriptReply | null = null;
@@ -378,6 +374,15 @@ export class BridgeService {
             workspaceId,
             fromNodeId: origin?.nodeId ?? null,
             toNodeId: target.nodeId,
+            state: 'sent',
+            content: input.message,
+            metadata,
+          });
+          await controlCenterService.recordDelivery({
+            messageId,
+            workspaceId,
+            fromNodeId: origin?.nodeId ?? null,
+            toNodeId: target.nodeId,
             state: 'delivered',
             content: input.message,
             metadata,
@@ -400,6 +405,9 @@ export class BridgeService {
           });
           markSubmitted?.();
         },
+        input.taskId
+          ? () => this.isTaskMessageRelevant(workspaceId, input.taskId!, target.nodeId, origin?.nodeId ?? null)
+          : undefined,
       );
       const structuredReply = submitted.then(() => this.waitForTranscriptReply(
         workspaceId,
@@ -432,6 +440,7 @@ export class BridgeService {
         else if (immediate) transcriptMatch = await structuredReply ?? immediate;
       }
     } catch (error) {
+      const cancelled = error instanceof ObsoletePtyDeliveryError || error instanceof AskQueueExpiredError;
       await controlCenterService.recordDelivery({
         messageId,
         workspaceId,
@@ -440,7 +449,7 @@ export class BridgeService {
         state: 'failed',
         content: input.message,
         error: error instanceof Error ? error.message : String(error),
-        metadata,
+        metadata: cancelled ? { ...metadata, cancelled: true } : metadata,
       });
       throw error;
     } finally {
@@ -594,6 +603,51 @@ export class BridgeService {
       messageId,
       deliveryState: replyConfirmed ? 'replied' : 'failed',
     };
+  }
+
+  private async waitForAskTurn(previous: Promise<void>, timeoutMs: number, signal?: AbortSignal): Promise<void> {
+    await new Promise<void>((resolvePromise, reject) => {
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        if (error) reject(error);
+        else resolvePromise();
+      };
+      const onAbort = () => finish(new Error('Agent request cancelled.'));
+      const timer = setTimeout(() => finish(new AskQueueExpiredError()), Math.max(1, timeoutMs));
+      timer.unref?.();
+      signal?.addEventListener('abort', onAbort, { once: true });
+      previous.catch(() => undefined).then(() => finish());
+    });
+  }
+
+  private async assertTaskMessageRelevant(
+    workspaceId: string,
+    taskId: string | null | undefined,
+    targetNodeId: string,
+    originNodeId: string | null,
+  ): Promise<void> {
+    if (!taskId) return;
+    if (!(await this.isTaskMessageRelevant(workspaceId, taskId, targetNodeId, originNodeId))) {
+      throw new ObsoletePtyDeliveryError();
+    }
+  }
+
+  private async isTaskMessageRelevant(
+    workspaceId: string,
+    taskId: string,
+    targetNodeId: string,
+    originNodeId: string | null,
+  ): Promise<boolean> {
+    const task = await AgentBoardTask.find(taskId);
+    if (!task || task.getAttribute('workspace_id') !== workspaceId || task.getAttribute('archived_at')) return false;
+    const status = String(task.getAttribute('status'));
+    if (status === 'todo' || status === 'done') return false;
+    const assigneeNodeId = task.getAttribute('assignee_node_id') as string | null;
+    return Boolean(assigneeNodeId && (assigneeNodeId === targetNodeId || assigneeNodeId === originNodeId));
   }
 
   private async waitForTranscriptReply(
@@ -870,19 +924,31 @@ export class BridgeService {
   async reportActivity(
     workspaceId: string,
     input: { from?: string | null; state: AgentActivityState; action?: string | null; taskId?: string | null },
-  ): Promise<{ recorded: boolean; nodeId: string; state: AgentActivityState }> {
+  ): Promise<{ recorded: boolean; nodeId: string; state: AgentActivityState; ignoredReason?: 'task_closed' }> {
     const agents = await this.listAgents(workspaceId);
+    const task = input.taskId ? await AgentBoardTask.find(input.taskId) : null;
+    if (input.taskId && (!task || task.getAttribute('workspace_id') !== workspaceId)) {
+      throw new Error('Não foi possível identificar a tarefa neste workspace.');
+    }
     let agent: BridgeAgent | null = input.from ? this.findAgent(agents, input.from) : null;
-    if (!agent && input.taskId) {
-      const task = await AgentBoardTask.find(input.taskId);
+    if (!agent && task) {
       const assigneeNodeId = task?.getAttribute('assignee_node_id') as string | null | undefined;
-      if (!task || task.getAttribute('workspace_id') !== workspaceId || !assigneeNodeId) {
+      if (!assigneeNodeId) {
         throw new Error('Não foi possível identificar o agente: a tarefa não existe neste workspace ou não tem responsável.');
       }
       agent = agents.find((candidate) => candidate.nodeId === assigneeNodeId) ?? null;
     }
     if (!agent) {
       throw new Error('Não foi possível identificar o agente que está reportando o estado.');
+    }
+    if (task) {
+      const assigneeNodeId = task.getAttribute('assignee_node_id') as string | null;
+      if (!assigneeNodeId || assigneeNodeId !== agent.nodeId) {
+        throw new Error('O agente não é o responsável atual por esta tarefa.');
+      }
+      if (task.getAttribute('archived_at') || task.getAttribute('status') === 'done') {
+        return { recorded: false, nodeId: agent.nodeId, state: 'done', ignoredReason: 'task_closed' };
+      }
     }
     const event = await controlCenterService.recordActivity({
       workspaceId,
@@ -1247,7 +1313,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/note_*/
 
 - \`orkestrai list\` — lista os agentes do workspace (título, provider, sessão viva), suas notas/designs conectados e TODOS os portais do workspace. Cada portal informa nome, URL, id e se está conectado a você; "não conectado" significa que ele JÁ EXISTE, não que deve ser criado. O agente marcado com [LIDER] e o maestro do time: "Maestro" e o PAPEL, não um título — fale com o líder pelo TITULO dele (ex.: \`orkestrai ask "Líder" ...\`), nunca por \`orkestrai ask "Maestro"\` (esse agente não existe).
 - \`orkestrai usage\` — consulta as cotas reais e a política do nó Usage; perfis de multi-conta aparecem como linhas próprias (\`profileId\`/\`profileName\`). Quando \`shouldFallback\` for verdadeiro, direcione NOVAS tarefas e tarefas ainda pendentes ao \`recommendedProvider\` (se ele tiver \`:profile:\`, use \`--provider\` + \`--profile\` juntos no recruit). Não troque silenciosamente o provider ou perfil de um terminal que já executa trabalho.
-- \`orkestrai ask "<TituloDoAgente>" "<mensagem>"\` — envia uma mensagem a outro agente e aguarda uma resposta confirmada. Só diga que falou/consultou o agente quando o comando terminar com sucesso e imprimir \`Resposta confirmada de ...\`. Timeout, erro ou \`Resposta nao confirmada\` significam que a conversa NÃO foi concluída — informe isso sem inventar resposta.
+- \`orkestrai ask "<TituloDoAgente>" "<mensagem>" --task <taskId>\` — envia uma mensagem a outro agente e aguarda uma resposta confirmada. Em trabalho do quadro, passe SEMPRE o id da tarefa: handoffs que expiram na fila, terminam ou mudam de responsável são cancelados antes de chegar ao composer. Só diga que falou/consultou o agente quando o comando terminar com sucesso e imprimir \`Resposta confirmada de ...\`. Timeout, expiração, erro ou \`Resposta nao confirmada\` significam que a conversa NÃO foi concluída — releia o quadro antes de tentar novamente.
 - Tools MCP \`huddle_list\` e \`huddle_say\` (ou \`orkestrai huddle list/say\`) — acompanhe a transcrição de um huddle e registre sua contribuição quando você for participante. \`huddle_say\` apenas registra sua fala; não use para simular outra pessoa nem para disparar fan-out recursivo.
 - Tools MCP \`code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff\` (ou \`orkestrai graph ...\`) — consulte o grafo compartilhado antes de explicar arquitetura, dependências ou impacto. Use \`explain\` para procedência, \`locate\` para sincronizar código e grafo, \`operations\` para agentes/tarefas/Floors e conflitos, \`context\` para pacotes revisáveis com orçamento explícito, \`compare\` para revisões e \`investigation\` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte \`changes\` antes de integrar, \`contracts\` para APIs e \`quality\` como evidência. Em modo Assistido, \`semantic\` aguarda o índice local atualizado automaticamente; em modo Manual, construa ou reconstrua esse índice explicitamente. Importe \`evidence\` apenas de caminho relativo confinado. Use \`handoff\` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.
 - \`orkestrai status working "<ação atual>" --task <taskId>\` — registra o trabalho atual no Control Center. Use \`waiting_input\`, \`waiting_permission\`, \`blocked\`, \`idle\`, \`done\` ou \`error\` sempre que houver uma transição real; não use como heartbeat.
@@ -1271,7 +1337,8 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/note_*/
 - Tool MCP \`design_manage_page\` (ou \`orkestrai design page ...\`) — cria, renomeia, duplica, reordena, ativa ou exclui pages pelo mesmo command bus revisionado da UI. Consulte \`design_reference\` com o tópico \`pages\`; exclusão preserva pelo menos uma page e remove referências dependentes de forma transacional.
 - Tools MCP \`design_arrange_elements\` e \`design_edit_vector\` (ou \`orkestrai design arrange|vector\`) — alinham, distribuem ou organizam hierarquias completas e editam geometria vetorial pelo mesmo documento revisionado da UI. Consulte os tópicos \`selection\` e \`vectors\`; nunca mova layers bloqueadas nem substitua pontos por payload não tipado.
 - Tools MCP \`design_update_layout\`, \`design_apply_auto_layout\` e \`design_update_typography\` (ou \`orkestrai design layout|layout-apply|typography\`) — configuram sizing fixed/hug/fill, limites, padding, alinhamento, constraints e tipografia completa, e recalculam o frame pelo mesmo command bus. Consulte os tópicos \`layout\` e \`typography\` antes de editar.
-- Tool MCP \`design_apply_operations\` — escape hatch do command bus completo para operações não cobertas pelas tools de lote. As tools \`design_create_element\`, \`design_update_element\` e \`design_delete_element\` são atalhos para operações pontuais. Passe \`taskId\` quando a alteração pertence a uma task; conflito exige reler, nunca sobrescrever o trabalho humano.
+- Tool MCP \`design_apply_blueprint\` — expande a direção aprovada em lotes tipados de no máximo 100 itens: primeiro tokens, depois bindings/componentes e, por fim, protótipo/motion. Releia a revisão entre os lotes. \`pageId\` só é obrigatório quando o lote cria layers; properties de componentes expõem o contrato completo e a ponte completa \`preferredValues\`/\`order\` omitidos.
+- Tool MCP \`design_apply_operations\` — escape hatch do command bus completo para operações não cobertas pelas tools de lote, também limitado a 100 operações revisionadas por chamada. As tools \`design_create_element\`, \`design_update_element\` e \`design_delete_element\` são atalhos para operações pontuais. Passe \`taskId\` quando a alteração pertence a uma task; conflito exige reler, nunca sobrescrever o trabalho humano.
 - Tools MCP \`design_comment\`, \`design_propose\` e \`design_decide_proposal\` — colaboram no documento nativo com autoria, threads e propostas pendentes. Propor não altera o design aprovado; nunca simule aprovação humana. Use Floors para variantes paralelas e Council quando perspectivas independentes forem úteis.
 - Tools MCP \`design_import_code\` e \`design_generate_code_preview/apply\` — transformam HTML/Svelte/React/Vue em scene graph nativo ou entregam seleções em Svelar/Svelte, React/Next, Vue e HTML/Tailwind. Gere preview primeiro; o apply valida hash do arquivo e revisão do documento antes de escrever e registra o artefato no Design Studio.
 - Tools MCP \`design_figma_inspect/import/sync_preview/sync_apply\` — inspecionam links do Figma, importam a seleção como scene graph nativo e exigem preview antes de resolver alterações remotas, locais ou conflitos. Combine-as com o MCP oficial \`figma\` quando ele estiver disponível; preserve mappings de Code Connect e nunca sobrescreva uma resolução humana.
@@ -1325,13 +1392,13 @@ Antes de propor o time e antes de cada nova rodada de delegação, consulte \`or
 2. Aprovado, crie com \`orkestrai recruit "<Título>" [--provider ${providerIds}] [--profile <nome-do-perfil>] [--model <id>] [--effort medium|high|xhigh] [--role <papel>]\`. \`--profile\` usa uma conta alternativa já cadastrada na Central de Providers para esse provider (multi-conta); sem isso, usa a conta padrão. Recrutas nascem CONECTADOS a você no organograma (não precisa de \`connect\`). Para composição visual estruturada, use \`medium\` ou \`high\`: \`xhigh\` aumenta muito a latência de payloads sem melhorar o gate visual. Use títulos CURTOS (2-3 palavras, ex.: "Dev API", "Designer UI") e roles de UMA palavra ("frontend", "qa", "design") — descrições longas vão para a nota de briefing.
 3. Escreva o spec/briefing do projeto numa nota: \`orkestrai note create "Spec — <projeto>" --content "..." --connect all\`. Sem \`--connect\`, a nota fica restrita ao agente que a criou.
 4. Trabalho em código? Cada agente trabalha no PRÓPRIO ANDAR (worktree isolada): \`orkestrai floor create "<frente>"\` antes do agente começar — NUNCA deixe vários agentes codando na mesma branch. Integre depois com \`orkestrai floor preview\` (vê conflitos) e \`orkestrai floor land\`.
-5. Distribua TODO trabalho com \`orkestrai task add --assign\` ANTES de usar \`orkestrai ask\` para o handoff (o quadro kanban aparece no canvas sozinho na primeira tarefa). É PROIBIDO delegar trabalho apenas por mensagem direta. Use notas com \`orkestrai note create\`; cada task tem que ser AUTOSSUFICIENTE (a descrição diz o que fazer e onde está o spec) OU citar o id de uma nota que JÁ EXISTE e já está conectada ao agente — NUNCA atribua uma task que depende de uma nota/artefato que você ainda não criou. E cada agente PRODUZ os próprios artefatos: o designer CRIA a nota de design com \`orkestrai note create\`; não fica esperando o líder mandar uma — deixe isso explícito na descrição da task.
+5. Distribua TODO trabalho com \`orkestrai task add --assign\` ANTES de usar \`orkestrai ask ... --task <taskId>\` para o handoff (o quadro kanban aparece no canvas sozinho na primeira tarefa). É PROIBIDO delegar trabalho apenas por mensagem direta ou agrupar tarefas independentes numa única cobrança. Use notas com \`orkestrai note create\`; cada task tem que ser AUTOSSUFICIENTE (a descrição diz o que fazer e onde está o spec) OU citar o id de uma nota que JÁ EXISTE e já está conectada ao agente — NUNCA atribua uma task que depende de uma nota/artefato que você ainda não criou. E cada agente PRODUZ os próprios artefatos: o designer CRIA a nota de design com \`orkestrai note create\`; não fica esperando o líder mandar uma — deixe isso explícito na descrição da task.
 6. Projeto web? Rode \`orkestrai list\` e REUTILIZE um Portal existente pelo nome/id, navegando-o para \`http://localhost:<porta-do-dev-server>\`. Só crie um se a listagem confirmar que não existe nenhum; nunca deduza ausência a partir do estado de conexão. Use \`orkestrai portal <nome-ou-nodeId> dom|screenshot|eval\` para testar o que o time está construindo. A porta do dev server vem de \`orkestrai port\` (NUNCA a padrão 5173/3000 — outro workspace pode estar usando).
    Projeto mobile? Use \`orkestrai device list\`, anexe um iOS Simulator ou Android AVD e valide pelo ciclo tree/screenshot → ação → tree/screenshot. Aparelhos Android físicos exigem que o usuário inicie e confirme a sessão na UI. Instalações ficam confinadas ao workspace e o usuário acompanha a sessão ao vivo no Workbench.
-7. Acompanhe o quadro com \`orkestrai task list\`, \`orkestrai design list\`, cobre os agentes com \`orkestrai ask\` e integre os andares com \`floor preview/land\`. \`design list\` marca uma direção como \`stalled\` quando há trabalho ativo sem revisão nova por 5 minutos; interrompa e reoriente para um conceito menor em vez de aguardar dezenas de minutos. Em exploração visual, \`audit\` sem erros NÃO é aprovação: abra o resultado e espere \`reviewStatus: approved\` na revisão atual. DESBLOQUEIO (regra dura): se um agente travar, ficar em silêncio ou pedir algo, resolva na hora; implementar você mesmo é o último recurso e reatribuir continua preferível.
-8. NUNCA afirme que consultou/falou com outro agente sem uma execução bem-sucedida de \`orkestrai ask\` e a confirmação explícita retornada pela ponte. \`orkestrai task done\` avisa o líder automaticamente, além da notificação nativa de TAREFA CONCLUÍDA. Não duplique esse aviso. Quando precisar de atenção/aprovação, use \`orkestrai notify "<pedido>" --kind attention\`. Somente ao concluir o PROJETO inteiro, após conferir o quadro, use \`orkestrai notify "<resumo>" --kind project --title "<projeto>"\`.
-9. Mantenha o Control Center fiel: reporte somente MUDANÇAS semânticas com \`orkestrai status\` (trabalhando, bloqueado, aguardando entrada/permissão, concluído ou erro). O ciclo do PTY já cobre inicialização/atividade/ociosidade; não envie pulsos repetidos.
-9. Ao finalizar uma frente, dispense o que não precisa mais com \`orkestrai dismiss <agente>\` — o time nasce e morre sob demanda.
+7. Acompanhe o quadro com \`orkestrai task list\`, \`orkestrai design list\`, cobre os agentes com \`orkestrai ask ... --task <taskId>\` e integre os andares com \`floor preview/land\`. \`design list\` marca o gate conceitual como \`stalled\` quando ele ultrapassa 5 minutos ou qualquer etapa como parada quando fica 5 minutos sem revisão; interrompa e reoriente para um conceito menor em vez de aguardar dezenas de minutos. Em exploração visual, \`audit\` sem erros NÃO é aprovação: abra o resultado e espere \`reviewStatus: approved\` na revisão atual. DESBLOQUEIO (regra dura): se um agente travar, ficar em silêncio ou pedir algo, resolva na hora; implementar você mesmo é o último recurso e reatribuir continua preferível. Um bloqueio só permanece enquanto a causa existe: depois de restart, instalação, login, permissão ou qualquer mudança de ambiente, verifique novamente imediatamente, registre \`orkestrai status working ... --task <id>\` e continue a execução. Se o provider mantiver goal/plano próprio, tire-o de \`blocked\` no mesmo momento. O líder não entrega ao usuário uma lista de passos executáveis por ele próprio; executa, valida, fecha as tasks e só então encerra o goal.
+8. NUNCA afirme que consultou/falou com outro agente sem uma execução bem-sucedida de \`orkestrai ask\` e a confirmação explícita retornada pela ponte. Uma tarefa concluída é terminal: não volte a marcá-la como trabalhando por causa de uma mensagem atrasada. \`orkestrai task done\` avisa o líder automaticamente, além da notificação nativa de TAREFA CONCLUÍDA. Não duplique esse aviso. Quando precisar de atenção/aprovação, use \`orkestrai notify "<pedido>" --kind attention\`. Somente ao concluir o PROJETO inteiro, após conferir o quadro, use \`orkestrai notify "<resumo>" --kind project --title "<projeto>"\`.
+9. Mantenha o Control Center fiel: reporte somente MUDANÇAS semânticas com \`orkestrai status\` (trabalhando, bloqueado, aguardando entrada/permissão, concluído ou erro). O ciclo do PTY já cobre inicialização/atividade/ociosidade; não envie pulsos repetidos. Antes de responder que uma entrega acabou, confronte o estado do provider, do Control Center e do Kanban; corrija estados obsoletos em vez de apenas descrevê-los.
+10. Ao finalizar uma frente, dispense o que não precisa mais com \`orkestrai dismiss <agente>\` — o time nasce e morre sob demanda.
 
 Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma skill: crie \`.claude/skills/<nome>/SKILL.md\` (frontmatter com name/description + instruções). Skills novas são descobertas nas próximas sessões do agente.
 `;
@@ -1364,15 +1431,34 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
         const launcherDir = resolve(workspace.workingDir, '.orkestrai', 'bin');
         const launcherPath = resolve(launcherDir, 'orkestrai');
         const shellQuote = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
-        const cliRuntime = process.env.ORKESTRAI_CLI_RUNTIME ?? process.execPath;
+        const consoleRuntime = process.env.ORKESTRAI_CLI_CONSOLE_RUNTIME ?? null;
         const cliEntry = process.env.ORKESTRAI_CLI_JS ?? resolve(process.cwd(), 'packages', 'orkestrai-cli', 'bin', 'orkestrai.js');
         await mkdir(launcherDir, { recursive: true });
         await writeFile(launcherPath, [
           '#!/bin/sh',
           'set -eu',
-          `runtime="$(wslpath -u ${shellQuote(cliRuntime)})"`,
-          'export ELECTRON_RUN_AS_NODE=1',
-          `exec "$runtime" ${shellQuote(cliEntry)} "$@"`,
+          '# orkestrai:wsl-console-launcher-v2',
+          `cli_win=${shellQuote(cliEntry)}`,
+          'cli_linux="$(wslpath -u "$cli_win")"',
+          ...(consoleRuntime ? [
+            `console_runtime="$(wslpath -u ${shellQuote(consoleRuntime)})"`,
+            'if [ -x "$console_runtime" ]; then',
+            '  exec "$console_runtime" "$cli_win" "$@"',
+            'fi',
+          ] : []),
+          'if command -v node >/dev/null 2>&1; then',
+          '  exec node "$cli_linux" "$@"',
+          'fi',
+          'if command -v cmd.exe >/dev/null 2>&1; then',
+          '  node_win="$(cmd.exe /d /s /c "where node.exe" 2>/dev/null | tr -d "\\r" | head -n 1 || true)"',
+          '  if [ -n "$node_win" ]; then',
+          '    node_runtime="$(wslpath -u "$node_win")"',
+          '    exec "$node_runtime" "$cli_win" "$@"',
+          '  fi',
+          'fi',
+          'echo "Orkestrai bridge needs a console Node runtime in WSL; the Electron GUI runtime cannot return stdout." >&2',
+          'echo "Install Node in this WSL distribution or repair the Orkestrai installation." >&2',
+          'exit 127',
           '',
         ].join('\n'));
         await chmod(launcherPath, 0o755).catch(() => undefined);
@@ -1421,7 +1507,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `orkestrai list` — agentes do workspace, notas e portais conectados. O [LIDER] marcado e o maestro do time: fale com ele pelo TITULO ("Maestro" e o papel, não um nome de agente).',
       '- Repositórios adicionais aprovados aparecem em `orkestrai list` como aliases `@nome`; use esses aliases em caminhos de tools como `api_client_import`, nunca tente escapar com `../`.',
       '- `orkestrai usage` — cotas reais e recomendação do nó Usage; líderes consultam antes de delegar e roteiam novas tarefas ao recommendedProvider quando shouldFallback=true.',
-      '- `orkestrai ask "<Agente>" "<mensagem>"` — fala com outro agente e aguarda a resposta.',
+      '- `orkestrai ask "<Agente>" "<mensagem>" --task <taskId>` — fala com outro agente e aguarda a resposta; em trabalho rastreado, informe sempre a tarefa para cancelar handoffs que terminarem ou mudarem de responsável enquanto aguardam.',
       '- `huddle_list` / `huddle_say` — acompanha huddles ativos e registra somente a contribuição deste agente no transcript.',
       '- `code_graph_status/index/search/symbol/neighbors/changes/contracts/quality/semantic/evidence/context/operations/explain/locate/revisions/compare/investigation/handoff` / `orkestrai graph ...` — consulta o mesmo grafo nativo visível no Canvas e Workbench. Use `explain` para procedência, `locate` para sincronizar código e grafo, `operations` para agentes/tarefas/Floors e conflitos, `context` para pacotes revisáveis com orçamento explícito, `compare` para revisões e `investigation` para salvar/restaurar visão, filtros, seleção, câmera e arquivo. Consulte `changes` antes de integrar, `contracts` para APIs e `quality` como evidência. Em modo Assistido, `semantic` aguarda o índice local atualizado automaticamente; em modo Manual, construa ou reconstrua esse índice explicitamente. Importe `evidence` apenas de caminho relativo confinado. Use `handoff` para Review Center ou tarefa rastreável; líder, agente e Council recebem revisão e ids de origem. Nunca invente relações ausentes nem peça SQL/Cypher arbitrário.',
       '- `orkestrai note read/write/edit/create` — notas compartilhadas no canvas.',
@@ -1433,10 +1519,10 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.',
       '- `orkestrai floor create/preview/land` — andares (worktrees git) isolados por frente.',
       '- `orkestrai device list/attach/tap/swipe/pinch/type/permissions/tree/screenshot/stop` — device mobile visivel no Workbench; aparelhos Android fisicos so podem ser anexados pelo usuario apos confirmacao na UI.',
-      '- `orkestrai ask "<Agente>" "<mensagem>"` — só afirme que falou/consultou alguém quando a ponte retornar uma resposta confirmada; timeout ou erro NÃO contam como conversa.',
+      '- `orkestrai ask "<Agente>" "<mensagem>" [--task <taskId>]` — só afirme que falou/consultou alguém quando a ponte retornar uma resposta confirmada; timeout, expiração da fila ou erro NÃO contam como conversa. Releia a tarefa antes de tentar de novo.',
       '- `orkestrai task done <id>` — conclui a tarefa, avisa o líder e envia uma notificação identificada; não duplique com notify.',
       '- `orkestrai notify "<msg>" --kind attention|project` — atenção ou conclusão do projeto inteiro (somente após conferir o quadro).',
-      '- Todo trabalho delegado precisa de uma task no Kanban ANTES da mensagem direta; nunca execute ou delegue trabalho sem rastreamento.',
+      '- Todo trabalho delegado precisa de uma task no Kanban ANTES da mensagem direta; passe seu id em `ask --task` e nunca execute ou delegue trabalho sem rastreamento. Uma tarefa `done` é terminal: mensagens e status atrasados não podem reabri-la.',
       '- Sua identidade está no ambiente (ORKESTRAI_NODE_ID) — `--from`/`--agent` são opcionais. Se `orkestrai` não resolver no PATH, execute o launcher `"$ORKESTRAI_CLI" ...` DIRETO (sem `node`; no Windows `%ORKESTRAI_CLI%`/`& $env:ORKESTRAI_CLI`) — nunca rode o `...orkestrai.js` cru.',
       '- Se as tools MCP `orkestrai` estiverem disponíveis, PREFIRA elas (chamadas tipadas); a CLI e o fallback.',
       '- Detalhes completos: `.claude/skills/orkestrai/SKILL.md`, `.cline/skills/orkestrai/SKILL.md`, `.devin/skills/orkestrai/SKILL.md`, `.agents/skills/orkestrai/SKILL.md` ou `.orkestrai/SKILL.md`.',
@@ -1597,6 +1683,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
     signal?: AbortSignal,
     provider?: string | null,
     onSubmitted?: () => Promise<void>,
+    isStillRelevant?: () => Promise<boolean>,
   ): Promise<{ text: string; timedOut: boolean }> {
     return new Promise((resolvePromise, reject) => {
       let captured = '';
@@ -1691,6 +1778,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
           message,
           submitDelayMs: 120,
           signal,
+          isStillRelevant,
         })
           .then(async () => {
             if (done) return;

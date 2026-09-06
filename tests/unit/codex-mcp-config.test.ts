@@ -3,6 +3,7 @@ import { parse } from 'smol-toml';
 import {
   codexMcpLaunchForRuntime,
   codexMcpOverrideArgs,
+  codexWorkspaceTrustOverrideArgs,
   FIGMA_MCP_URL,
   repairLegacyCodexMcpConfig,
 } from '$lib/modules/agent-room/infrastructure/codex-mcp-config.js';
@@ -79,6 +80,18 @@ describe('configuracao MCP do Codex', () => {
       args: ['mcp'],
       electronRuntime: false,
     });
+  });
+
+  it('confia somente o workspace exato em launches Codex de acesso total', () => {
+    expect(codexWorkspaceTrustOverrideArgs('C:\\Users\\Raoni\\project', true)).toEqual([
+      '-c',
+      'projects={"C:\\\\Users\\\\Raoni\\\\project"={trust_level="trusted"}}',
+    ]);
+    expect(codexWorkspaceTrustOverrideArgs('/home/raoni/project', true)).toEqual([
+      '-c',
+      'projects={"/home/raoni/project"={trust_level="trusted"}}',
+    ]);
+    expect(codexWorkspaceTrustOverrideArgs('/home/raoni/project', false)).toEqual([]);
   });
 
 });

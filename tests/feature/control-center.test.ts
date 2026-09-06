@@ -5,6 +5,7 @@ import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
+import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
@@ -177,6 +178,120 @@ describe('ControlCenterService', () => {
       action: 'Review resumed',
     });
     expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+  });
+
+  it('vincula a retomada da PTY à tarefa ativa e remove bloqueio obsoleto', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'resume blocked work', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Delivery lead' });
+    const taskId = uuidv7();
+    const now = new Date().toISOString();
+    await AgentBoardTask.query().insert({
+      id: taskId,
+      workspace_id: workspace.id,
+      title: 'Install and validate the build',
+      description: null,
+      status: 'doing',
+      assignee_node_id: agent.id,
+      image_path: null,
+      images_json: null,
+      attachments_json: null,
+      note_node_id: null,
+      created_by: 'automation',
+      created_at: now,
+      updated_at: now,
+    });
+    await controlCenterService.recordActivity({
+      workspaceId: workspace.id,
+      nodeId: agent.id,
+      state: 'blocked',
+      action: 'Installed app must be closed',
+      taskId,
+      attentionRequired: true,
+    });
+
+    const recoveries: unknown[] = [];
+    const lifecycle = globalThis as unknown as { __orkestraiRecoverBlockedTask?: (input: unknown) => void };
+    const previousRecovery = lifecycle.__orkestraiRecoverBlockedTask;
+    try {
+      lifecycle.__orkestraiRecoverBlockedTask = (input) => recoveries.push(input);
+      await controlCenterService.recordLifecycleActivity({
+        workspaceId: workspace.id,
+        nodeId: agent.id,
+        state: 'disconnected',
+        action: 'system:pty_disconnected',
+        metadata: { sessionId: 'old-session' },
+      });
+      await controlCenterService.recordLifecycleActivity({
+        workspaceId: workspace.id,
+        nodeId: agent.id,
+        state: 'starting',
+        action: 'system:pty_resumed',
+        metadata: { sessionId: 'resumed-session' },
+      });
+    } finally {
+      if (previousRecovery) lifecycle.__orkestraiRecoverBlockedTask = previousRecovery;
+      else delete lifecycle.__orkestraiRecoverBlockedTask;
+    }
+
+    const history = await controlCenterRepository.listActivity(workspace.id);
+    expect(history.at(-1)).toMatchObject({ state: 'starting', taskId, action: 'system:pty_resumed' });
+    expect(history.at(-1)?.metadata).toMatchObject({ taskTitle: 'Install and validate the build', lifecycle: true });
+    expect(recoveries).toEqual([expect.objectContaining({ taskId, sessionId: 'resumed-session', previousState: 'blocked' })]);
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+  });
+
+  it('preserva a recuperação até o TaskBoard registrar o handler global', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'pending recovery', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Release lead' });
+    const taskId = uuidv7();
+    const now = new Date().toISOString();
+    await AgentBoardTask.query().insert({
+      id: taskId,
+      workspace_id: workspace.id,
+      title: 'Resume release validation',
+      description: null,
+      status: 'doing',
+      assignee_node_id: agent.id,
+      image_path: null,
+      images_json: null,
+      attachments_json: null,
+      note_node_id: null,
+      created_by: 'automation',
+      created_at: now,
+      updated_at: now,
+    });
+    await controlCenterService.recordActivity({
+      workspaceId: workspace.id,
+      nodeId: agent.id,
+      state: 'blocked',
+      action: 'Installed app was open',
+      taskId,
+    });
+
+    const lifecycle = globalThis as unknown as {
+      __orkestraiRecoverBlockedTask?: (input: unknown) => void;
+      __orkestraiPendingTaskRecoveries?: unknown[];
+    };
+    const previousRecovery = lifecycle.__orkestraiRecoverBlockedTask;
+    const previousPending = lifecycle.__orkestraiPendingTaskRecoveries;
+    try {
+      delete lifecycle.__orkestraiRecoverBlockedTask;
+      lifecycle.__orkestraiPendingTaskRecoveries = [];
+      await controlCenterService.recordLifecycleActivity({
+        workspaceId: workspace.id,
+        nodeId: agent.id,
+        state: 'starting',
+        action: 'system:pty_resumed',
+        metadata: { sessionId: 'new-session' },
+      });
+      expect(lifecycle.__orkestraiPendingTaskRecoveries).toEqual([
+        expect.objectContaining({ taskId, sessionId: 'new-session', previousState: 'blocked' }),
+      ]);
+    } finally {
+      if (previousRecovery) lifecycle.__orkestraiRecoverBlockedTask = previousRecovery;
+      else delete lifecycle.__orkestraiRecoverBlockedTask;
+      lifecycle.__orkestraiPendingTaskRecoveries = previousPending;
+    }
   });
 
   it('preserva a mensagem completa e desabilita navegação para um agente removido', async () => {

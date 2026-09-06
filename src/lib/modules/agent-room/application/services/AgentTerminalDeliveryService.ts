@@ -1,6 +1,6 @@
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracker.js';
-import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
+import { ObsoletePtyDeliveryError, ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
 import { findPromptInTranscript } from '../../infrastructure/transcript/AgentTranscript.js';
 
 type DeliverAgentMessageInput = {
@@ -10,6 +10,7 @@ type DeliverAgentMessageInput = {
   message: string;
   submitDelayMs?: number;
   signal?: AbortSignal;
+  isStillRelevant?: () => Promise<boolean>;
 };
 
 /**
@@ -19,6 +20,9 @@ type DeliverAgentMessageInput = {
  */
 export class AgentTerminalDeliveryService {
   async deliver(input: DeliverAgentMessageInput): Promise<void> {
+    if (input.isStillRelevant && !(await input.isStillRelevant())) {
+      throw new ObsoletePtyDeliveryError();
+    }
     const startedAt = Date.now();
     const requiresConfirmation = ptySessionManager.requiresSubmitConfirmation(input.sessionId);
     const confirmAccepted = requiresConfirmation
@@ -28,6 +32,7 @@ export class AgentTerminalDeliveryService {
       submitDelayMs: input.submitDelayMs ?? 200,
       signal: input.signal,
       isAccepted: confirmAccepted,
+      isStillRelevant: input.isStillRelevant,
     });
   }
 

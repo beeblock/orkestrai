@@ -18,10 +18,11 @@ function diagnosticText(values) {
  */
 function isExpectedPortalDiagnostic(values) {
   const text = diagnosticText(values);
+  const expectedNavigationFailure = /ERR_(?:ABORTED|CONNECTION_REFUSED|FAILED|NAME_NOT_RESOLVED)/.test(text);
   if (text.includes("Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL'")) {
-    return text.includes('ERR_CONNECTION_REFUSED') || text.includes('Script failed to execute');
+    return expectedNavigationFailure || text.includes('Script failed to execute');
   }
-  return /electron: Failed to load URL: .* with error: ERR_CONNECTION_REFUSED/.test(text);
+  return /electron: Failed to load URL: .* with error: ERR_(?:ABORTED|CONNECTION_REFUSED|FAILED|NAME_NOT_RESOLVED)/.test(text);
 }
 
 module.exports = { diagnosticText, isExpectedPortalDiagnostic };

@@ -19,7 +19,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
     "postinstall": "patch-package && node scripts/ensure-node-pty-helper.mjs",
     "start": "node scripts/orkestrai-server.mjs",
@@ -45,6 +45,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@electron-internal/extract-zip": "^1.0.5",
     "@electron/rebuild": "^4.2.0",
     "@inlang/paraglide-js": "^2.25.0",
     "@lucide/svelte": "^1.37.0",
@@ -198,6 +199,7 @@
     ],
     "icon": "electron/resources/icon.png",
     "asar": false,
+    "afterPack": "scripts/after-pack.mjs",
     "directories": {
       "output": "release"
     },

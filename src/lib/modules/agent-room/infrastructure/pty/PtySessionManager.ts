@@ -151,8 +151,17 @@ type ComposerDelivery = {
 export type ComposerDeliveryHandle = {
   submitted: Promise<void>;
   /** Cancela somente enquanto a entrega ainda está aguardando na fila. */
-  cancel: () => boolean;
+  cancel: (reason?: Error) => boolean;
 };
+
+export class ObsoletePtyDeliveryError extends Error {
+  readonly code = 'PTY_DELIVERY_OBSOLETE';
+
+  constructor() {
+    super('Agent message delivery was cancelled because its task is no longer active.');
+    this.name = 'ObsoletePtyDeliveryError';
+  }
+}
 
 export type CreatePtySessionInput = {
   command: string;
@@ -532,6 +541,7 @@ export class PtySessionManager {
       confirmationWindowMs?: number;
       maxAttempts?: number;
       isAccepted?: () => Promise<boolean>;
+      isStillRelevant?: () => Promise<boolean>;
       signal?: AbortSignal;
     } = {},
   ): Promise<void> {
@@ -544,7 +554,31 @@ export class PtySessionManager {
     const cancelQueuedDelivery = () => queued.cancel();
     options.signal?.addEventListener('abort', cancelQueuedDelivery, { once: true });
     try {
-      await queued.submitted;
+      while (true) {
+        const submitted = await Promise.race([
+          queued.submitted.then(() => true),
+          new Promise<false>((resolvePromise) => {
+            setTimeout(() => resolvePromise(false), 200);
+          }),
+        ]);
+        if (submitted) break;
+        if (options.signal?.aborted) {
+          queued.cancel();
+          throw new Error('Agent message delivery cancelled.');
+        }
+        if (options.isStillRelevant) {
+          try {
+            if (await options.isStillRelevant()) continue;
+            const error = new ObsoletePtyDeliveryError();
+            if (queued.cancel(error)) await queued.submitted.catch(() => undefined);
+            throw error;
+          } catch (error) {
+            const reason = error instanceof Error ? error : new Error(String(error));
+            if (queued.cancel(reason)) await queued.submitted.catch(() => undefined);
+            throw reason;
+          }
+        }
+      }
     } finally {
       options.signal?.removeEventListener('abort', cancelQueuedDelivery);
     }
@@ -608,11 +642,11 @@ export class PtySessionManager {
     });
     return {
       submitted,
-      cancel: () => {
+      cancel: (reason = new Error('Entrega ao terminal cancelada antes do envio.')) => {
         const index = session.deliveryQueue.indexOf(delivery);
         if (index < 0) return false;
         session.deliveryQueue.splice(index, 1);
-        delivery.reject(new Error('Entrega ao terminal cancelada antes do envio.'));
+        delivery.reject(reason);
         return true;
       },
     };

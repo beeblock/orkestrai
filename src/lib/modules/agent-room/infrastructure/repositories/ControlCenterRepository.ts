@@ -178,6 +178,17 @@ export class ControlCenterRepository {
     return model ? mapActivity(model) : null;
   }
 
+  async latestSemanticTaskActivity(nodeId: string, taskId: string): Promise<AgentActivity | null> {
+    const rows = await AgentActivityEvent.query()
+      .where('node_id', nodeId)
+      .where('task_id', taskId)
+      .orderBy('created_at', 'desc')
+      .limit(50)
+      .get();
+    const semantic = rows.map(mapActivity).find((activity) => activity.metadata.lifecycle !== true);
+    return semantic ?? null;
+  }
+
   async appendDelivery(input: {
     messageId: string;
     workspaceId: string;

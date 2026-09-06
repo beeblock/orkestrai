@@ -140,6 +140,21 @@ describe('packaged updater', () => {
     expect(packageJson.build?.files).toContain('src/lib/modules/agent-room/infrastructure/codex-mcp-config.ts');
   });
 
+  it('ships a verified console Node runtime for the Windows and WSL bridge', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
+    const afterPack = readFileSync(path.resolve('scripts/after-pack.mjs'), 'utf8');
+    const main = readFileSync(path.resolve('electron/main.cjs'), 'utf8');
+    const shim = readFileSync(path.resolve('scripts/install-orkestrai-shim.mjs'), 'utf8');
+    expect(packageJson.build?.afterPack).toBe('scripts/after-pack.mjs');
+    expect(packageJson.devDependencies?.['@electron-internal/extract-zip']).toBeTruthy();
+    expect(afterPack).toContain("const NODE_VERSION = 'v24.12.0'");
+    expect(afterPack).toContain("const WINDOWS_NODE_SHA256 = '9c125f61ae947b52e779095830f9cac267846a043ef7192183c84016aaad2812'");
+    expect(afterPack).toContain("join(context.appOutDir, 'resources', 'orkestrai-cli-runtime', 'node.exe')");
+    expect(main).toContain("path.join(process.resourcesPath, 'orkestrai-cli-runtime', 'node.exe')");
+    expect(shim).toContain('const launcherRuntime = configuredConsoleRuntime');
+    expect(shim).toContain('ORKESTRAI_CLI_RUNTIME = launcherRuntime');
+  });
+
   it('requires trusted signing for releases while preserving the local ad-hoc fallback', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
     const packageScript = readFileSync(path.resolve('scripts/package-macos.sh'), 'utf8');
