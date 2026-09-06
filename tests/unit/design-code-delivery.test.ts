@@ -79,6 +79,144 @@ describe('Design code delivery domain', () => {
     ]));
   });
 
+  it('preserves explicit desktop and mobile widths and resolves default flex rows', () => {
+    const imported = importMarkupToDesign({
+      format: 'html',
+      name: 'Todo directions',
+      markup: `
+        <div class="canvas">
+          <section class="desktop">
+            <aside class="rail">Navigation</aside>
+            <main class="stage"><header class="head"><h1>Today</h1><span>September 6</span></header></main>
+          </section>
+          <section class="mobile">Mobile tasks</section>
+        </div>
+      `,
+      css: `
+        .canvas { display: flex; gap: 80px; }
+        .desktop { display: flex; width: 1440px; height: 1000px; }
+        .rail { width: 280px; }
+        .stage { flex: 1; }
+        .head { display: flex; gap: 16px; }
+        .mobile { width: 390px; height: 844px; }
+      `,
+      pageId: randomUUID(),
+      parentId: null,
+      x: 40,
+      y: 40,
+      startOrder: 0,
+      makeId: randomUUID,
+    });
+
+    const byName = new Map(imported.elements.map((element) => [element.name, element]));
+    const canvas = byName.get('canvas')!;
+    const desktop = byName.get('desktop')!;
+    const rail = byName.get('rail')!;
+    const stage = byName.get('stage')!;
+    const mobile = byName.get('mobile')!;
+    const wrapper = byName.get('Todo directions')!;
+
+    expect(canvas.layoutMode).toBe('horizontal');
+    expect(desktop).toMatchObject({ width: 1440, height: 1000, layoutMode: 'horizontal' });
+    expect(mobile).toMatchObject({ width: 390, height: 844 });
+    expect(stage.width).toBeGreaterThan(1000);
+    expect(stage.x).toBeGreaterThan(rail.x + rail.width);
+    expect(mobile.x).toBeGreaterThan(desktop.x + desktop.width);
+    expect(canvas.width).toBeGreaterThanOrEqual(1910);
+    expect(wrapper.width).toBeGreaterThan(canvas.width);
+    expect(wrapper.clipContent).toBe(false);
+  });
+
+  it('positions absolute mobile navigation and actions inside their frame', () => {
+    const imported = importMarkupToDesign({
+      format: 'html',
+      name: 'Mobile direction',
+      markup: `
+        <section class="mobile">
+          <main class="content">Tasks</main>
+          <button class="fab">+</button>
+          <nav class="tabs">Today Upcoming</nav>
+        </section>
+      `,
+      css: `
+        .mobile { position: relative; display: flex; flex-direction: column; width: 390px; height: 844px; padding: 24px 20px 0; }
+        .content { flex: 1; }
+        .fab { position: absolute; right: 20px; bottom: 96px; width: 60px; height: 60px; }
+        .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 76px; }
+      `,
+      pageId: randomUUID(),
+      parentId: null,
+      x: 40,
+      y: 40,
+      startOrder: 0,
+      makeId: randomUUID,
+    });
+
+    const byName = new Map(imported.elements.map((element) => [element.name, element]));
+    const mobile = byName.get('mobile')!;
+    const content = byName.get('content')!;
+    const fab = byName.get('fab')!;
+    const tabs = byName.get('tabs')!;
+
+    expect(content.y).toBe(mobile.y + 24);
+    expect(tabs).toMatchObject({ x: mobile.x, y: mobile.y + mobile.height - 76, width: 390, height: 76 });
+    expect(fab).toMatchObject({ x: mobile.x + mobile.width - 20 - 60, y: mobile.y + mobile.height - 96 - 60, width: 60, height: 60 });
+    expect(tabs.y + tabs.height).toBe(mobile.y + mobile.height);
+  });
+
+  it('preserves scoped selectors, CSS box padding, hugging controls, and mixed inline text', () => {
+    const imported = importMarkupToDesign({
+      format: 'html',
+      name: 'Todo details',
+      markup: `
+        <section class="mobile">
+          <div class="filters"><button class="chip active">All</button><button class="chip">Upcoming</button></div>
+          <div class="toast">Task complete <span class="undo">Undo</span></div>
+          <h1 class="title">Today <span class="count">5</span></h1>
+          <span class="outside">Other</span>
+        </section>
+      `,
+      css: `
+        .mobile { width: 390px; padding: 24px 20px 0; color: #202124; }
+        .filters { display: flex; gap: 8px; }
+        .chip { padding: 8px 16px; background: #eeeeee; }
+        .chip.active { background: #111111; color: #ffffff; }
+        .toast { display: flex; gap: 8px; padding: 12px 16px; }
+        .title { font-size: 32px; }
+        .title > span { color: #777777; font-size: 20px; }
+      `,
+      pageId: randomUUID(),
+      parentId: null,
+      x: 40,
+      y: 40,
+      startOrder: 0,
+      makeId: randomUUID,
+    });
+
+    const named = (name: string) => imported.elements.find((element) => element.name === name)!;
+    const mobile = named('mobile');
+    const filters = named('filters');
+    const chips = imported.elements.filter((element) => element.parentId === filters.id && element.name === 'chip');
+    const activeLabel = imported.elements.find((element) => element.parentId === chips[0].id && element.text === 'All')!;
+    const toast = named('toast');
+    const toastLabel = imported.elements.find((element) => element.parentId === toast.id && element.text === 'Task complete')!;
+    const undo = imported.elements.find((element) => element.parentId === toast.id && element.text === 'Undo')!;
+    const title = named('title');
+    const count = imported.elements.find((element) => element.parentId === title.id && element.text === '5')!;
+    const outside = named('outside');
+
+    expect(mobile).toMatchObject({ layoutPaddingTop: 24, layoutPaddingRight: 20, layoutPaddingBottom: 0, layoutPaddingLeft: 20 });
+    expect(chips).toHaveLength(2);
+    expect(chips[0].width).toBeLessThan(100);
+    expect(chips[1].width).toBeLessThan(150);
+    expect(chips[1].x).toBe(chips[0].x + chips[0].width + 8);
+    expect(activeLabel.fill).toBe('#ffffff');
+    expect(undo.x).toBe(toastLabel.x + toastLabel.width + 8);
+    expect(title).toMatchObject({ type: 'frame', fill: 'transparent' });
+    expect(count).toMatchObject({ fontSize: 20, fill: '#777777' });
+    expect(outside).toMatchObject({ fontSize: 16, fill: '#202124' });
+  });
+
   it('generates Svelar code and reuses a connected real component', () => {
     const source = document();
     const root = source.elements[0];

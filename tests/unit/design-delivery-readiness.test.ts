@@ -87,4 +87,36 @@ describe('design delivery readiness', () => {
     expect(designDeliveryReadiness(desktopOnly, { platform: 'desktop' }).completed).toContain('responsiveFrames');
     expect(designDeliveryReadiness(desktopOnly, { platform: 'native-mobile' }).missing).toContain('responsiveFrames');
   });
+
+  it('recognizes responsive product frames nested below a page wrapper', () => {
+    const nested = document();
+    const wrapperId = id(50);
+    nested.elements.push({
+      ...nested.elements.find((element) => element.id === id(20))!,
+      id: wrapperId,
+      parentId: null,
+      name: 'Exploration canvas',
+      width: 2100,
+      height: 1200,
+      order: 0,
+    });
+    nested.elements = nested.elements.map((element) => (
+      element.id === id(20) || element.id === id(21)
+        ? { ...element, parentId: wrapperId }
+        : element
+    ));
+
+    expect(designDeliveryReadiness(nested, {}).completed).toContain('responsiveFrames');
+  });
+
+  it('reports only requirements relevant to the requested delivery stage', () => {
+    const incomplete = document();
+    incomplete.prototypeInteractions = [];
+    incomplete.codeArtifacts = [];
+    const readiness = designDeliveryReadiness(incomplete, { visualReview: { status: 'pending', revision: 8 } });
+
+    expect(readiness.missingByStage.expansion).toEqual(['prototype']);
+    expect(readiness.missingByStage.implementation).toEqual(['prototype', 'codeArtifact']);
+    expect(readiness.missingByStage.delivery).toEqual(['prototype', 'codeArtifact', 'currentApproval']);
+  });
 });

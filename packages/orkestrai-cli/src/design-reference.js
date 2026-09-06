@@ -22,6 +22,8 @@ const commonRules = [
   'Element x/y coordinates are absolute page coordinates, including children. parentId controls hierarchy, not the coordinate origin.',
   'Use RFC 4122 UUIDs for explicit ids. References between elements, tokens, components and prototypes must use ids from the same batch.',
   'After each successful write, use the returned revision as the next baseRevision. Audit structure and inspect the rendered result; an error-free audit is not visual approval.',
+  'Match the requested product category and content literally. At 100% zoom, use professional hierarchy, readable copy, consistent spacing, and moderate control radii. Reserve full pills for compact semantic chips or toggles; never stretch a pill into a button, status banner, or content container.',
+  'Do not deliver placeholder glyphs, debug labels, arbitrary decoration, clipped content, unreadable contrast, or any remaining error-severity audit issue. A concept with an audit error is incomplete even when its layer count is within range.',
   'Never inspect the Orkestrai application/source, create schema probes, or write scratch scripts merely to discover the design API.',
 ];
 

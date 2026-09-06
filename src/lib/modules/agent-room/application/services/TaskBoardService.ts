@@ -192,7 +192,12 @@ export class TaskBoardService {
         ? readiness.implementationComplete
         : readiness.deliveryComplete;
     if (!complete) {
-      throw new Error(`Design delivery is incomplete for ${stage.stage}: ${readiness.missing.join(', ')}.`);
+      const missing = stage.stage === 'expand'
+        ? readiness.missingByStage.expansion
+        : stage.stage === 'implement'
+          ? readiness.missingByStage.implementation
+          : readiness.missingByStage.delivery;
+      throw new Error(`Design delivery is incomplete for ${stage.stage}: ${missing.join(', ')}.`);
     }
   }
 

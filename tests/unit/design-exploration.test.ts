@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CreateDesignExplorationDto } from '$lib/modules/agent-room/application/dto/CreateDesignExplorationDto.js';
 import {
   designExplorationBrief,
+  designExplorationCopy,
   designExplorationLayout,
   isDesignExplorationPayload,
   isDesignExplorationStalled,
@@ -64,6 +65,18 @@ describe('design exploration workflow', () => {
     expect(brief).toContain('Brand board');
     expect(brief).toContain('note-1');
     expect(brief).not.toContain('lista de arquivos');
+  });
+
+  it('keeps every concept task bound to a professional visual quality bar', () => {
+    for (const locale of ['pt-BR', 'en', 'es'] as const) {
+      const concepts = designExplorationCopy(locale).tasks.filter((task) => task.kind === 'concept');
+      expect(concepts).toHaveLength(3);
+      for (const concept of concepts) {
+        expect(concept.description).toContain('30-120');
+        expect(concept.description.toLowerCase()).toContain('pill');
+        expect(concept.description.toLowerCase()).toContain(locale === 'en' ? 'audit error' : locale === 'pt-BR' ? 'erro da auditoria' : 'error pendiente de auditoría');
+      }
+    }
   });
 
   it('places the package below existing nodes without overlapping their vertical extent', () => {

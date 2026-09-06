@@ -17,6 +17,11 @@ export type DesignDeliveryRequirement = (typeof DESIGN_DELIVERY_REQUIREMENTS)[nu
 export type DesignDeliveryReadiness = {
   completed: DesignDeliveryRequirement[];
   missing: DesignDeliveryRequirement[];
+  missingByStage: {
+    expansion: DesignDeliveryRequirement[];
+    implementation: DesignDeliveryRequirement[];
+    delivery: DesignDeliveryRequirement[];
+  };
   total: number;
   expansionComplete: boolean;
   implementationComplete: boolean;
@@ -35,16 +40,10 @@ export function designDeliveryReadiness(
   document: DesignDocument,
   payload: ExplorationPayload | null | undefined,
 ): DesignDeliveryReadiness {
-  const rootFrames = document.elements.filter((element) => element.visible && element.type === 'frame' && element.parentId === null);
-  const hasDesktop = rootFrames.some((frame) => frame.width >= 768);
-  const hasMobile = rootFrames.some((frame) => frame.width >= 280 && frame.width <= 600);
-  const frameCoverage = payload?.platform === 'desktop'
-    ? hasDesktop
-    : payload?.platform === 'mobile-web' || payload?.platform === 'native-mobile'
-      ? hasMobile
-      : hasDesktop && hasMobile;
   const brandPageIds = new Set(document.pages.filter((page) => BRAND_BOARD_NAME.test(page.name)).map((page) => page.id));
-  const brandFrameIds = new Set(rootFrames.filter((frame) => BRAND_BOARD_NAME.test(frame.name)).map((frame) => frame.id));
+  const brandFrameIds = new Set(document.elements
+    .filter((element) => element.type === 'frame' && BRAND_BOARD_NAME.test(element.name))
+    .map((element) => element.id));
   const elementsById = new Map(document.elements.map((element) => [element.id, element]));
   const belongsToBrandFrame = (elementId: string): boolean => {
     let current = elementsById.get(elementId);
@@ -54,6 +53,21 @@ export function designDeliveryReadiness(
     }
     return false;
   };
+  // Responsive screens can live below a page-sized wrapper. Only exclude the
+  // brand board hierarchy so a nested product frame remains valid evidence.
+  const productFrames = document.elements.filter((element) => (
+    element.visible
+    && element.type === 'frame'
+    && !brandPageIds.has(element.pageId)
+    && !belongsToBrandFrame(element.id)
+  ));
+  const hasDesktop = productFrames.some((frame) => frame.width >= 768);
+  const hasMobile = productFrames.some((frame) => frame.width >= 280 && frame.width <= 600);
+  const frameCoverage = payload?.platform === 'desktop'
+    ? hasDesktop
+    : payload?.platform === 'mobile-web' || payload?.platform === 'native-mobile'
+      ? hasMobile
+      : hasDesktop && hasMobile;
   const visibleBrandElements = document.elements.filter((element) => (
     element.visible && (brandPageIds.has(element.pageId) || belongsToBrandFrame(element.id))
   ));
@@ -90,13 +104,20 @@ export function designDeliveryReadiness(
     'components',
     'prototype',
   ];
+  const implementationRequirements: DesignDeliveryRequirement[] = [...expansionRequirements, 'codeArtifact'];
+  const missingFor = (requirements: DesignDeliveryRequirement[]) => requirements.filter((requirement) => !checks[requirement]);
 
   return {
     completed,
     missing,
+    missingByStage: {
+      expansion: missingFor(expansionRequirements),
+      implementation: missingFor(implementationRequirements),
+      delivery: missing,
+    },
     total: DESIGN_DELIVERY_REQUIREMENTS.length,
-    expansionComplete: expansionRequirements.every((requirement) => checks[requirement]),
-    implementationComplete: expansionRequirements.every((requirement) => checks[requirement]) && checks.codeArtifact,
+    expansionComplete: missingFor(expansionRequirements).length === 0,
+    implementationComplete: missingFor(implementationRequirements).length === 0,
     deliveryComplete: DESIGN_DELIVERY_REQUIREMENTS.every((requirement) => checks[requirement]),
   };
 }
