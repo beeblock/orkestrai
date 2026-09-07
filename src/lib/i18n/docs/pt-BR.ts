@@ -851,11 +851,12 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       date: '7 de setembro de 2026 · 0.28.0',
       title: 'Orkestrai 0.28.0: entrega social exata sem recorte inseguro',
-      summary: 'Fluxos de imagem ganham perfis, áreas seguras mensuráveis e entrega exata sem recorte inseguro.',
+      summary: 'Fluxos de imagem ganham perfis e áreas seguras explícitas, enquanto terminais nativos do Windows recuperam a rolagem confiável do histórico.',
       items: [
         'Fluxos de imagem agora persistem dimensões de Instagram quadrado e retrato, Stories/Reels, TikTok ou personalizadas e limitadas em Canvas, Workbench, CLI e MCP.',
         'O ImageGen recebe uma área segura mensurável para o quadro escolhido. O Orkestrai preserva o master nativo e redimensiona a imagem completa somente quando a proporção já corresponde; resultados incompatíveis voltam ao ImageGen nativo para recomposição ou expansão segura em vez de recortar conteúdo.',
         'Copiar uma imagem gerada junto com seu fluxo para outro workspace também copia e remapeia a proveniência do master nativo.',
+        'Terminais de agentes no PowerShell nativo do Windows anunciam os recursos de mouse do xterm e isolam a roda, restaurando a rolagem do histórico sem aplicar zoom no Canvas.',
       ],
     },
     {

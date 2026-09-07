@@ -23,6 +23,10 @@ pt-BR, English, and Spanish translations.
 - Copying a generated image together with its workflow to another workspace
   also copies and remaps the preserved native master, so delivery provenance
   never points back into the source workspace.
+- Native Windows PowerShell agent terminals now advertise complete xterm mouse
+  capabilities and consume their own wheel events, restoring terminal history
+  scrolling without zooming the Canvas underneath.
+
 ## 0.27.0 - 2026-09-07
 
 ### Added

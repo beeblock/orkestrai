@@ -847,11 +847,12 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       date: '7 de septiembre de 2026 · 0.28.0',
       title: 'Orkestrai 0.28.0: entrega social exacta sin recortes inseguros',
-      summary: 'Los flujos de imagen incorporan perfiles, áreas seguras medibles y entrega exacta sin recortes inseguros.',
+      summary: 'Los flujos de imagen incorporan perfiles y áreas seguras explícitas, mientras las terminales nativas de Windows recuperan el desplazamiento fiable del historial.',
       items: [
         'Los flujos de imagen ahora conservan dimensiones de Instagram cuadrado y retrato, Stories/Reels, TikTok o personalizadas y acotadas en Canvas, Workbench, CLI y MCP.',
         'ImageGen recibe un área segura medible para el cuadro elegido. Orkestrai conserva el máster nativo y remuestrea la imagen completa solo cuando la proporción ya coincide; los resultados incompatibles vuelven a ImageGen nativo para una recomposición o ampliación segura en vez de recortar contenido.',
         'Copiar una imagen generada junto con su flujo a otro workspace también copia y reasigna la procedencia del máster nativo.',
+        'Las terminales de agentes en PowerShell nativo de Windows anuncian las capacidades de ratón de xterm y aíslan la rueda, restaurando el desplazamiento del historial sin ampliar el Canvas.',
       ],
     },
     {

@@ -136,6 +136,50 @@ test.describe('terminais PTY', () => {
     }
   });
 
+  test('rola o histórico do terminal sem mover ou ampliar o Canvas', async ({ page, request }) => {
+    test.skip(process.platform === 'win32', 'O gerador de scrollback usa sintaxe POSIX; o contrato ConPTY é coberto no domínio');
+    const runId = Date.now();
+    const workspaceResponse = await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E terminal scroll ${runId}`, workingDir: '/tmp' },
+    });
+    const workspace = (await workspaceResponse.json()).data as { id: string };
+
+    try {
+      await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+        data: {
+          type: 'terminal',
+          title: 'Shell scroll',
+          x: 120,
+          y: 100,
+          width: 640,
+          height: 380,
+          payload: { command: '/bin/sh', args: [] },
+        },
+      });
+      await page.goto(`/canvas?workspace=${workspace.id}`);
+      const terminal = page.locator('.canvas-terminal');
+      const input = terminal.locator('.xterm-helper-textarea');
+      const visibleRows = terminal.locator('.xterm-rows');
+      await expect(input).toBeAttached({ timeout: 15_000 });
+      await input.focus();
+      await page.keyboard.type("i=1; while [ $i -le 160 ]; do printf 'SCROLL_LINE_%03d\\n' \"$i\"; i=$((i+1)); done");
+      await page.keyboard.press('Enter');
+      await expect(terminal.locator('.terminal-container')).toContainText('SCROLL_LINE_160', { timeout: 10_000 });
+
+      const bottomRows = await visibleRows.innerText();
+      expect(bottomRows).toContain('SCROLL_LINE_160');
+      const canvasTransform = await page.locator('.svelte-flow__viewport').getAttribute('style');
+
+      await terminal.locator('.terminal-container').hover();
+      await page.mouse.wheel(0, -720);
+      await expect.poll(() => visibleRows.innerText()).not.toBe(bottomRows);
+      await expect(visibleRows).not.toContainText('SCROLL_LINE_160');
+      await expect(page.locator('.svelte-flow__viewport')).toHaveAttribute('style', canvasTransform ?? '');
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    }
+  });
+
   test('copia a selecao e cola texto com os atalhos nativos do Windows', async ({ page, request, context }) => {
     const runId = Date.now();
     const marker = `ORKESTRAI_COPY_${runId}`;

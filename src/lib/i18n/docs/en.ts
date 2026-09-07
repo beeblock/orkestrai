@@ -847,11 +847,12 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       date: 'September 7, 2026 · 0.28.0',
       title: 'Orkestrai 0.28.0: exact social delivery without unsafe cropping',
-      summary: 'Image workflows gain explicit delivery profiles, measurable safe areas, and exact delivery without unsafe cropping.',
+      summary: 'Image workflows gain explicit delivery profiles and safe areas, while native Windows terminals recover reliable history scrolling.',
       items: [
         'Image workflows now persist Instagram square and portrait, Stories/Reels, TikTok, or bounded custom dimensions across Canvas, Workbench, CLI, and MCP.',
         'ImageGen receives a measurable safe area for the selected frame. Orkestrai preserves the native master and resamples the complete image only when its aspect ratio already matches; incompatible results return to native ImageGen for safe recomposition or outpainting instead of cropping content.',
         'Copying a generated image together with its workflow to another workspace also copies and remaps its native master provenance.',
+        'Native Windows PowerShell agent terminals advertise xterm mouse capabilities and isolate wheel events, restoring terminal history scrolling without zooming the Canvas.',
       ],
     },
     {

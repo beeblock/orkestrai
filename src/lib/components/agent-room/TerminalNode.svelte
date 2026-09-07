@@ -417,6 +417,13 @@
       return true;
     });
     terminal.open(container);
+    terminal.attachCustomWheelEventHandler((event) => {
+      // The terminal owns wheel/trackpad gestures. Keep xterm's native
+      // scrollback and alternate-buffer mouse handling, but never bubble the
+      // gesture into XYFlow where it would zoom or pan the Canvas instead.
+      event.stopPropagation();
+      return true;
+    });
     fitAddon.fit();
 
     // OSC 7 e o contrato padrao de shells integrados para publicar o cwd.
@@ -876,6 +883,7 @@
     flex: 1;
     min-height: 0;
     padding: var(--terminal-padding, 6px);
+    overscroll-behavior: contain;
   }
 
   .terminal-search {

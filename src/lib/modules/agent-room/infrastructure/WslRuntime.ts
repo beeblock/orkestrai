@@ -323,6 +323,8 @@ export function buildWslLaunch(input: {
     'ORKESTRAI_CLI',
     'ORKESTRAI_RUNTIME_WIN',
     'ORKESTRAI_CLI_JS_WIN',
+    'TERM',
+    'COLORTERM',
     ...(input.forwardEnvToWsl ?? []).filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)),
   ];
   env.WSLENV = appendWslEnv(env.WSLENV, forwarded);

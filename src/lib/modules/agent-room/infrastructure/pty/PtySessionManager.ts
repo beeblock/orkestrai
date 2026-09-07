@@ -239,6 +239,12 @@ export class PtySessionManager {
     const rows = input.rows ?? 30;
 
     const env = { ...agentEnv(), ...input.env } as Record<string, string>;
+    // node-pty defines TERM from `name` on Unix, but ConPTY only uses `name`
+    // internally and does not expose it to the Windows child process. Full-
+    // screen CLIs such as Codex use these capabilities to enable mouse-wheel
+    // navigation, so keep the child contract identical on every platform.
+    if (!env.TERM) env.TERM = 'xterm-256color';
+    if (!env.COLORTERM) env.COLORTERM = 'truecolor';
     const target = input.runtime?.kind === 'wsl'
       ? buildWslLaunch({
           runtime: input.runtime,

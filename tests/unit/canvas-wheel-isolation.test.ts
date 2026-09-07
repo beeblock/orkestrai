@@ -19,4 +19,12 @@ describe('Canvas node wheel isolation', () => {
   ])('covers the standalone node component %s', (path) => {
     expect(componentSource(path)).toContain('nowheel');
   });
+
+  it('keeps terminal wheel gestures inside xterm', () => {
+    const source = componentSource('src/lib/components/agent-room/TerminalNode.svelte');
+
+    expect(source).toContain('terminal.attachCustomWheelEventHandler');
+    expect(source).toContain('event.stopPropagation()');
+    expect(source).toContain('overscroll-behavior: contain');
+  });
 });

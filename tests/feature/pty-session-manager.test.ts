@@ -7,6 +7,54 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it('exposes xterm capabilities to native and WSL terminal children', () => {
+    let spawnedOptions: { env?: Record<string, string> } | undefined;
+    const fakePty = {
+      write: () => {},
+      resize: () => {},
+      kill: () => {},
+      onData: () => ({ dispose: () => {} }),
+      onExit: () => ({ dispose: () => {} }),
+      pid: 1,
+    };
+    const manager = new PtySessionManager(((_command, _args, options) => {
+      spawnedOptions = options as { env?: Record<string, string> };
+      return fakePty;
+    }) as unknown as typeof spawn);
+
+    const session = manager.create({ command: 'codex', cwd: process.cwd() });
+
+    expect(spawnedOptions?.env?.TERM).toBe('xterm-256color');
+    expect(spawnedOptions?.env?.COLORTERM).toBe('truecolor');
+    manager.kill(session.id);
+  });
+
+  it('preserves explicit terminal capability overrides', () => {
+    let spawnedOptions: { env?: Record<string, string> } | undefined;
+    const fakePty = {
+      write: () => {},
+      resize: () => {},
+      kill: () => {},
+      onData: () => ({ dispose: () => {} }),
+      onExit: () => ({ dispose: () => {} }),
+      pid: 1,
+    };
+    const manager = new PtySessionManager(((_command, _args, options) => {
+      spawnedOptions = options as { env?: Record<string, string> };
+      return fakePty;
+    }) as unknown as typeof spawn);
+
+    const session = manager.create({
+      command: 'codex',
+      cwd: process.cwd(),
+      env: { TERM: 'xterm-direct', COLORTERM: '24bit' },
+    });
+
+    expect(spawnedOptions?.env?.TERM).toBe('xterm-direct');
+    expect(spawnedOptions?.env?.COLORTERM).toBe('24bit');
+    manager.kill(session.id);
+  });
+
   it('authenticates a bridge caller only against its private live PTY credential', () => {
     const manager = new PtySessionManager(spawn);
     const session = manager.create({
