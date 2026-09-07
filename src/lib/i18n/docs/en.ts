@@ -366,7 +366,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'andares',
       title: 'Floors (worktrees)',
-      body: `A floor is a git worktree of the workspace repository with its own branch. For Ground and every active worktree, the Floors panel shows agents and a list of tasks with title, stage, and assignee, alongside changed files, branch synchronization, and the latest commit. Workbench and Control Center identify the floor of active agents. Landing or deleting automatically archives that floor's terminals, layout copies, and edges: they remain available for historical attribution but do not inflate counts or appear as current agents. Cloning a layout never reuses a PTY session or provider conversation. Create from the panel or CLI with orkestrai floor create/list/preview/land/remove; recruit --floor places a new agent on the selected active floor. Landing merges after a diff and conflict preview. Conflicts are never hidden: the error lists files and resolution becomes an explicit task.`,
+      body: `A floor is a git worktree of the workspace repository with its own branch. For Ground and every active worktree, the Floors panel shows agents and a list of tasks with title, stage, and assignee, alongside changed files, branch synchronization, and the latest commit. Workbench and Control Center identify the floor of active agents. In a WSL workspace, creation, Git hooks, status, preview, landing, and removal all run inside the exact selected distribution; Windows Git never validates or mutates the Linux checkout. Landing or deleting automatically archives that floor's terminals, layout copies, and edges: they remain available for historical attribution but do not inflate counts or appear as current agents. Cloning a layout never reuses a PTY session or provider conversation. Create from the panel or CLI with orkestrai floor create/list/preview/land/remove; recruit --floor places a new agent on the selected active floor. Landing merges after a diff and conflict preview. Conflicts are never hidden: the error lists files and resolution becomes an explicit task.`,
     },
     {
       id: 'rotinas',
@@ -844,6 +844,15 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Unreleased · 0.26.1',
+      title: 'Orkestrai 0.26.1: reliable Git Floors on WSL',
+      summary: 'Windows workspaces backed by WSL now keep every Floor operation inside the selected Linux distribution.',
+      items: [
+        'Floor creation, Git hooks, previews, landing, removal, status summaries, and code-graph change impact now execute through the workspace WSL runtime instead of Windows Git.',
+        'The agent bridge identifies the main . repository, its Git status, and its native or WSL runtime separately from optional additional repository aliases, so an empty alias list is no longer ambiguous.',
+      ],
+    },
     {
       date: 'September 6, 2026 · 0.26.0',
       title: 'Orkestrai 0.26.0: a professional native Design workspace',

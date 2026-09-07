@@ -1311,7 +1311,7 @@ Sua identidade já está no ambiente (ORKESTRAI_NODE_ID) — a CLI sabe quem voc
 Se \`orkestrai\` não resolver no seu shell (acontece em alguns executores, ex.: Codex no Windows), execute o launcher da variável ORKESTRAI_CLI DIRETO (SEM prefixar \`node\`): \`"$ORKESTRAI_CLI" ...\` (Linux/macOS), \`%ORKESTRAI_CLI% ...\` (cmd.exe) ou \`& $env:ORKESTRAI_CLI ...\` (PowerShell). ORKESTRAI_CLI aponta para um launcher autocontido que já chama o runtime certo — funciona sempre, sem depender de PATH. NUNCA rode o caminho \`...orkestrai.js\` cru no Windows: o shell o abre pelo Windows Script Host e falha ("Caractere inválido").
 Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/note_*/api_client_*/image_workflow_*/design_*/task_*/portal_*/floor_*/device_*/notify/port/recruit/dismiss) estiverem disponíveis como MCP neste ambiente, PREFIRA elas (chamadas tipadas, sem parse de shell) — a CLI continua valendo como fallback.
 
-- \`orkestrai list\` — lista os agentes do workspace (título, provider, sessão viva), suas notas/designs conectados e TODOS os portais do workspace. Cada portal informa nome, URL, id e se está conectado a você; "não conectado" significa que ele JÁ EXISTE, não que deve ser criado. O agente marcado com [LIDER] e o maestro do time: "Maestro" e o PAPEL, não um título — fale com o líder pelo TITULO dele (ex.: \`orkestrai ask "Líder" ...\`), nunca por \`orkestrai ask "Maestro"\` (esse agente não existe).
+- \`orkestrai list\` — lista os agentes do workspace (título, provider, sessão viva), suas notas/designs conectados e TODOS os portais do workspace. \`workspace.repository\` descreve o repositório principal (\`.\`), inclusive se Git foi confirmado no runtime nativo/WSL; \`repositories\` contém SOMENTE aliases adicionais, portanto uma lista vazia nunca significa que o workspace principal está ausente. Cada portal informa nome, URL, id e se está conectado a você; "não conectado" significa que ele JÁ EXISTE, não que deve ser criado. O agente marcado com [LIDER] e o maestro do time: "Maestro" e o PAPEL, não um título — fale com o líder pelo TITULO dele (ex.: \`orkestrai ask "Líder" ...\`), nunca por \`orkestrai ask "Maestro"\` (esse agente não existe).
 - \`orkestrai usage\` — consulta as cotas reais e a política do nó Usage; perfis de multi-conta aparecem como linhas próprias (\`profileId\`/\`profileName\`). Quando \`shouldFallback\` for verdadeiro, direcione NOVAS tarefas e tarefas ainda pendentes ao \`recommendedProvider\` (se ele tiver \`:profile:\`, use \`--provider\` + \`--profile\` juntos no recruit). Não troque silenciosamente o provider ou perfil de um terminal que já executa trabalho.
 - \`orkestrai ask "<TituloDoAgente>" "<mensagem>" --task <taskId>\` — envia uma mensagem a outro agente e aguarda uma resposta confirmada. Em trabalho do quadro, passe SEMPRE o id da tarefa: handoffs que expiram na fila, terminam ou mudam de responsável são cancelados antes de chegar ao composer. Só diga que falou/consultou o agente quando o comando terminar com sucesso e imprimir \`Resposta confirmada de ...\`. Timeout, expiração, erro ou \`Resposta nao confirmada\` significam que a conversa NÃO foi concluída — releia o quadro antes de tentar novamente.
 - Tools MCP \`huddle_list\` e \`huddle_say\` (ou \`orkestrai huddle list/say\`) — acompanhe a transcrição de um huddle e registre sua contribuição quando você for participante. \`huddle_say\` apenas registra sua fala; não use para simular outra pessoa nem para disparar fan-out recursivo.
@@ -1851,6 +1851,14 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
             workspaceName: workspace.name,
             token,
             apiUrl: apiUrl ?? process.env.ORKESTRAI_API_URL ?? 'http://127.0.0.1:4173',
+            repository: {
+              reference: '.',
+              primary: true,
+              runtimeKind: workspace.runtimeKind,
+              ...(workspace.runtimeKind === 'wsl' && workspace.wslDistribution
+                ? { wslDistribution: workspace.wslDistribution }
+                : {}),
+            },
             repositories: workspace.repositoryRoots.map(({ alias }) => ({ alias, reference: `@${alias}` })),
           },
           null,

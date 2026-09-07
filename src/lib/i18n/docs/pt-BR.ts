@@ -370,7 +370,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'andares',
       title: 'Andares (worktrees)',
-      body: `Um andar é um git worktree do repo do workspace com branch própria. O painel Andares mostra, para o térreo e cada worktree ativa, os agentes e uma lista das tarefas com título, etapa e responsável, além de arquivos alterados, sincronização da branch e último commit. Workbench e Central de controle identificam o andar dos agentes ativos. Ao aterrissar ou excluir, terminais, cópias de layout e edges daquele andar são arquivados automaticamente: continuam disponíveis para atribuição histórica, mas não inflam as contagens nem aparecem como agentes atuais. Clonar o layout nunca reutiliza a sessão PTY ou a conversa do provider. Crie pelo painel ou pela CLI: orkestrai floor create/list/preview/land/remove; recruit --floor posiciona um novo agente no andar ativo escolhido. Aterrissar faz merge da branch depois da prévia de diff e conflitos. Conflitos nunca são escondidos: o erro lista os arquivos e a resolução vira tarefa explícita.`,
+      body: `Um andar é um git worktree do repo do workspace com branch própria. O painel Andares mostra, para o térreo e cada worktree ativa, os agentes e uma lista das tarefas com título, etapa e responsável, além de arquivos alterados, sincronização da branch e último commit. Workbench e Central de controle identificam o andar dos agentes ativos. Em um workspace WSL, criação, hooks Git, status, prévia, aterrissagem e remoção executam na distribuição exata selecionada; o Git do Windows nunca valida nem altera o checkout Linux. Ao aterrissar ou excluir, terminais, cópias de layout e edges daquele andar são arquivados automaticamente: continuam disponíveis para atribuição histórica, mas não inflam as contagens nem aparecem como agentes atuais. Clonar o layout nunca reutiliza a sessão PTY ou a conversa do provider. Crie pelo painel ou pela CLI: orkestrai floor create/list/preview/land/remove; recruit --floor posiciona um novo agente no andar ativo escolhido. Aterrissar faz merge da branch depois da prévia de diff e conflitos. Conflitos nunca são escondidos: o erro lista os arquivos e a resolução vira tarefa explícita.`,
     },
     {
       id: 'rotinas',
@@ -848,6 +848,15 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Não lançado · 0.26.1',
+      title: 'Orkestrai 0.26.1: Andares Git confiáveis no WSL',
+      summary: 'Workspaces Windows apoiados pelo WSL agora mantêm todas as operações de Andares dentro da distribuição Linux selecionada.',
+      items: [
+        'Criação de Andar, hooks Git, prévias, aterrissagem, remoção, resumos de status e impacto de alterações no grafo agora executam pelo runtime WSL do workspace em vez do Git do Windows.',
+        'A ponte dos agentes identifica o repositório principal ., seu estado Git e o runtime nativo ou WSL separadamente dos aliases opcionais de repositórios adicionais, eliminando a ambiguidade de uma lista vazia.',
+      ],
+    },
     {
       date: '6 de setembro de 2026 · 0.26.0',
       title: 'Orkestrai 0.26.0: workspace profissional de Design nativo',

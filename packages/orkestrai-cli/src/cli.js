@@ -305,6 +305,13 @@ export async function run(argv, options = {}) {
         out(JSON.stringify(data, null, 2));
       } else {
         out(`Workspace: ${data.workspace.name}`);
+        const primary = data.workspace.repository;
+        if (primary) {
+          const runtime = primary.runtimeKind === 'wsl'
+            ? `WSL ${primary.wslDistribution ?? ''}`.trim()
+            : 'native';
+          out(`Repositorio principal: ${primary.reference ?? '.'} (${primary.isGit ? 'Git' : 'sem Git'} · ${runtime})`);
+        }
         for (const repository of data.repositories ?? []) {
           out(`Repositorio adicional: ${repository.reference}`);
         }

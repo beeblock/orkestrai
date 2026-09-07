@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { CanvasNode, Floor, TerminalNodePayload } from '../../domain/types.js';
+import type { CanvasNode, Floor, TerminalNodePayload, Workspace } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentEnv } from '../../infrastructure/agent-path.js';
+import { buildWorkspaceRuntimeLaunch } from '../../infrastructure/WslRuntime.js';
 import { floorService } from './FloorService.js';
 import { taskBoardService, type BoardTask } from './TaskBoardService.js';
 
@@ -68,11 +69,22 @@ function tasksFor(nodes: CanvasNode[], tasks: BoardTask[], includeUnassigned: bo
     .map(({ id, title, status, assigneeTitle }) => ({ id, title, status, assigneeTitle }));
 }
 
-async function worktreeOverview(path: string): Promise<WorktreeOverview> {
+async function runGit(workspace: Workspace, path: string, args: string[]): Promise<string> {
+  const launch = buildWorkspaceRuntimeLaunch({ workspace, command: 'git', args, hostCwd: path, hostEnv: agentEnv() });
+  const { stdout } = await execFileAsync(launch.command, launch.args, {
+    cwd: launch.cwd,
+    env: launch.env,
+    timeout: 10_000,
+    windowsHide: true,
+  });
+  return stdout;
+}
+
+async function worktreeOverview(workspace: Workspace, path: string): Promise<WorktreeOverview> {
   try {
-    const [{ stdout: statusOutput }, { stdout: logOutput }] = await Promise.all([
-      execFileAsync('git', ['status', '--porcelain=v1', '--branch'], { cwd: path, env: agentEnv(), timeout: 10_000 }),
-      execFileAsync('git', ['log', '-1', '--format=%cI%x00%s'], { cwd: path, env: agentEnv(), timeout: 10_000 }),
+    const [statusOutput, logOutput] = await Promise.all([
+      runGit(workspace, path, ['status', '--porcelain=v1', '--branch']),
+      runGit(workspace, path, ['log', '-1', '--format=%cI%x00%s']),
     ]);
     const [branchLine = '', ...changes] = statusOutput.trimEnd().split('\n');
     const branch = branchLine.replace(/^##\s*/, '').split('...')[0]?.trim() || 'HEAD';
@@ -109,8 +121,8 @@ export class FloorOverviewService {
     ]);
     const groundNodes = nodes.filter((node) => node.floorId === null);
     const [groundGit, ...floorGit] = await Promise.all([
-      worktreeOverview(workspace.workingDir),
-      ...floors.map((floor) => worktreeOverview(floor.path)),
+      worktreeOverview(workspace, workspace.workingDir),
+      ...floors.map((floor) => worktreeOverview(workspace, floor.path)),
     ]);
     return {
       ground: {

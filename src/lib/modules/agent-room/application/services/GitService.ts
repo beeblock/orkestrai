@@ -5,8 +5,7 @@ import { extname, isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentEnv } from '../../infrastructure/agent-path.js';
-import { buildWslLaunch } from '../../infrastructure/WslRuntime.js';
-import { workspaceExecutionRuntime } from '../../domain/runtime.js';
+import { buildWorkspaceRuntimeLaunch } from '../../infrastructure/WslRuntime.js';
 import type { Workspace } from '../../domain/types.js';
 import type { ExecuteGitOperationInput, GitOperationInput } from '../../contracts/schemas/fsSchemas.js';
 
@@ -176,24 +175,30 @@ export class GitService {
     return (await this.workspace(workspaceId)).workingDir;
   }
 
-  private launch(workspace: Workspace, args: string[]): GitLaunch {
-    const env = agentEnv();
-    const runtime = workspaceExecutionRuntime(workspace);
-    if (runtime.kind === 'native') {
-      return { command: 'git', args, cwd: workspace.workingDir, env };
-    }
-    return buildWslLaunch({
-      runtime,
+  private launch(workspace: Workspace, args: string[], cwd = workspace.workingDir): GitLaunch {
+    return buildWorkspaceRuntimeLaunch({
+      workspace,
       command: 'git',
       args,
-      hostCwd: workspace.workingDir,
-      workspaceRoot: workspace.workingDir,
-      hostEnv: env,
+      hostCwd: cwd,
+      hostEnv: agentEnv(),
     });
   }
 
   private async workspaceGit(workspaceId: string, args: string[]): Promise<string> {
     const launch = this.launch(await this.workspace(workspaceId), args);
+    const { stdout } = await execFileAsync(launch.command, launch.args, {
+      cwd: launch.cwd,
+      env: launch.env,
+      timeout: GIT_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    });
+    return stdout;
+  }
+
+  private async workspaceDirectoryGit(workspaceId: string, cwd: string, args: string[]): Promise<string> {
+    const launch = this.launch(await this.workspace(workspaceId), args, cwd);
     const { stdout } = await execFileAsync(launch.command, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
@@ -283,9 +288,20 @@ export class GitService {
     return this.statusWith((args) => this.workspaceGit(workspaceId, args));
   }
 
+  async isRepository(workspaceId: string): Promise<boolean> {
+    return this.workspaceGit(workspaceId, ['rev-parse', '--is-inside-work-tree'])
+      .then((output) => output.trim() === 'true')
+      .catch(() => false);
+  }
+
   /** Internal read-only status for an already authorized repository or Floor. */
   async statusDirectory(cwd: string): Promise<GitStatusResult> {
     return this.statusWith((args) => this.git(cwd, args));
+  }
+
+  /** Runtime-aware status for the primary checkout, an approved root, or a Floor. */
+  async statusWorkspaceDirectory(workspaceId: string, cwd: string): Promise<GitStatusResult> {
+    return this.statusWith((args) => this.workspaceDirectoryGit(workspaceId, cwd, args));
   }
 
   private async statusWith(run: (args: string[]) => Promise<string>): Promise<GitStatusResult> {
@@ -329,13 +345,26 @@ export class GitService {
    * injection while keeping every subprocess shell-free.
    */
   async changesSinceMergeBase(cwd: string, baseRef: string, headRef = 'HEAD'): Promise<GitChange[]> {
+    return this.changesSinceMergeBaseWith((args) => this.git(cwd, args), baseRef, headRef);
+  }
+
+  /** Runtime-aware committed changes for WSL-backed repositories and Floors. */
+  async changesSinceMergeBaseWorkspace(workspaceId: string, cwd: string, baseRef: string, headRef = 'HEAD'): Promise<GitChange[]> {
+    return this.changesSinceMergeBaseWith((args) => this.workspaceDirectoryGit(workspaceId, cwd, args), baseRef, headRef);
+  }
+
+  private async changesSinceMergeBaseWith(
+    run: (args: string[]) => Promise<string>,
+    baseRef: string,
+    headRef: string,
+  ): Promise<GitChange[]> {
     const [base, head] = await Promise.all([
-      this.resolveCommit(cwd, baseRef),
-      this.resolveCommit(cwd, headRef),
+      this.resolveCommitWith(run, baseRef),
+      this.resolveCommitWith(run, headRef),
     ]);
-    const mergeBase = (await this.git(cwd, ['merge-base', base, head])).trim();
+    const mergeBase = (await run(['merge-base', base, head])).trim();
     if (!mergeBase) return [];
-    const output = await this.git(cwd, [
+    const output = await run([
       'diff', '--name-status', '-z', '--find-renames', mergeBase, head, '--',
     ]);
     return parseNameStatus(output, `range:${head.slice(0, 12)}`);
@@ -724,10 +753,10 @@ export class GitService {
     return resolved;
   }
 
-  private async resolveCommit(cwd: string, ref: string): Promise<string> {
+  private async resolveCommitWith(run: (args: string[]) => Promise<string>, ref: string): Promise<string> {
     const value = ref.trim();
     if (!value || value.length > 300 || value.includes('\0')) throw new Error('Referência Git inválida.');
-    const resolved = (await this.git(cwd, ['rev-parse', '--verify', '--end-of-options', `${value}^{commit}`])).trim();
+    const resolved = (await run(['rev-parse', '--verify', '--end-of-options', `${value}^{commit}`])).trim();
     if (!/^[0-9a-f]{40,64}$/i.test(resolved)) throw new Error('Referência Git inválida.');
     return resolved;
   }

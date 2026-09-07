@@ -366,7 +366,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'andares',
       title: 'Pisos (worktrees)',
-      body: `Un piso es un git worktree del repositorio con branch propia. Para Planta baja y cada worktree activo, el panel Pisos muestra agentes y una lista de tareas con título, etapa y responsable, además de archivos modificados, sincronización de la branch y último commit. Workbench y Centro de control identifican el piso de los agentes activos. Al aterrizar o eliminar, las terminales, copias de layout y edges de ese piso se archivan automáticamente: siguen disponibles para atribución histórica, pero no inflan los conteos ni aparecen como agentes actuales. Clonar el layout nunca reutiliza una sesión PTY ni la conversación del provider. Crea desde el panel o la CLI con orkestrai floor create/list/preview/land/remove; recruit --floor coloca un agente nuevo en el piso activo seleccionado. Aterrizar hace merge después de una vista previa de diff y conflictos. Los conflictos nunca se ocultan: el error lista archivos y la resolución se convierte en tarea explícita.`,
+      body: `Un piso es un git worktree del repositorio con branch propia. Para Planta baja y cada worktree activo, el panel Pisos muestra agentes y una lista de tareas con título, etapa y responsable, además de archivos modificados, sincronización de la branch y último commit. Workbench y Centro de control identifican el piso de los agentes activos. En un workspace WSL, creación, hooks Git, estado, vista previa, aterrizaje y eliminación se ejecutan dentro de la distribución exacta seleccionada; Git de Windows nunca valida ni modifica el checkout Linux. Al aterrizar o eliminar, las terminales, copias de layout y edges de ese piso se archivan automáticamente: siguen disponibles para atribución histórica, pero no inflan los conteos ni aparecen como agentes actuales. Clonar el layout nunca reutiliza una sesión PTY ni la conversación del provider. Crea desde el panel o la CLI con orkestrai floor create/list/preview/land/remove; recruit --floor coloca un agente nuevo en el piso activo seleccionado. Aterrizar hace merge después de una vista previa de diff y conflictos. Los conflictos nunca se ocultan: el error lista archivos y la resolución se convierte en tarea explícita.`,
     },
     {
       id: 'rotinas',
@@ -844,6 +844,15 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Sin publicar · 0.26.1',
+      title: 'Orkestrai 0.26.1: Pisos Git confiables en WSL',
+      summary: 'Los workspaces Windows respaldados por WSL ahora mantienen todas las operaciones de Pisos dentro de la distribución Linux seleccionada.',
+      items: [
+        'La creación de Pisos, hooks Git, vistas previas, aterrizaje, eliminación, resúmenes de estado e impacto de cambios en el grafo ahora se ejecutan mediante el runtime WSL del workspace en vez de Git de Windows.',
+        'El puente de agentes identifica el repositorio principal ., su estado Git y el runtime nativo o WSL por separado de los aliases opcionales de repositorios adicionales, eliminando la ambigüedad de una lista vacía.',
+      ],
+    },
     {
       date: '6 de septiembre de 2026 · 0.26.0',
       title: 'Orkestrai 0.26.0: workspace profesional de Diseño nativo',

@@ -133,7 +133,11 @@ describe('orkestrai CLI', () => {
         } else if (req.url?.startsWith('/api/agent-room/bridge/agents')) {
           const identified = req.url.includes('agentNodeId=n1');
           res.end(JSON.stringify({ data: {
-            workspace: { id: 'w1', name: 'Teste' },
+            workspace: {
+              id: 'w1',
+              name: 'Teste',
+              repository: { reference: '.', primary: true, isGit: true, runtimeKind: 'wsl', wslDistribution: 'Ubuntu-24.04' },
+            },
             agents: [{ nodeId: 'n1', title: 'Claude', provider: 'claude', sessionAlive: true }],
             notes: [],
             portals: [{ id: 'p1', title: 'Checkout', url: 'http://localhost:5173', connected: identified }],
@@ -220,6 +224,7 @@ describe('orkestrai CLI', () => {
     const code = await run(['list'], { cwd, out, env: {} });
     expect(code).toBe(0);
     expect(lines.join('\n')).toContain('Claude');
+    expect(lines.join('\n')).toContain('Repositorio principal: . (Git · WSL Ubuntu-24.04)');
     expect(requests.at(-1).auth).toBe('Bearer tok123');
   });
 

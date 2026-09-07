@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { win32, posix, resolve } from 'node:path';
-import type { WorkspaceExecutionRuntime } from '../domain/types.js';
+import type { Workspace, WorkspaceExecutionRuntime } from '../domain/types.js';
+import { workspaceExecutionRuntime } from '../domain/runtime.ts';
 
 export { terminalExecutionRuntime, workspaceExecutionRuntime } from '../domain/runtime.ts';
 
@@ -344,4 +345,33 @@ export function buildWslLaunch(input: {
     cwd: process.env.SystemRoot ?? process.env.USERPROFILE ?? process.cwd(),
     env,
   };
+}
+
+/**
+ * Builds a process launch for the runtime selected by a workspace. Callers
+ * keep host-visible paths; WSL launches translate the cwd and workspace-local
+ * path arguments into the selected distribution.
+ */
+export function buildWorkspaceRuntimeLaunch(input: {
+  workspace: Pick<Workspace, 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir'>;
+  command: string;
+  args: string[];
+  hostCwd?: string;
+  hostEnv: Record<string, string>;
+  forwardEnvToWsl?: string[];
+}): { command: string; args: string[]; cwd: string; env: Record<string, string> } {
+  const runtime = workspaceExecutionRuntime(input.workspace);
+  const hostCwd = input.hostCwd ?? input.workspace.workingDir;
+  if (runtime.kind === 'native') {
+    return { command: input.command, args: input.args, cwd: hostCwd, env: input.hostEnv };
+  }
+  return buildWslLaunch({
+    runtime,
+    command: input.command,
+    args: input.args,
+    hostCwd,
+    workspaceRoot: input.workspace.workingDir,
+    hostEnv: input.hostEnv,
+    forwardEnvToWsl: input.forwardEnvToWsl,
+  });
 }

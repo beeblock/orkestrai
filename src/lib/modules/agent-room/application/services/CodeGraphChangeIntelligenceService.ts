@@ -87,7 +87,7 @@ export class CodeGraphChangeIntelligenceService {
 
     const workspaceChanges: ProjectChanges[] = [];
     for (const project of projects) {
-      const status = await gitService.statusDirectory(project.rootPath).catch(() => null);
+      const status = await gitService.statusWorkspaceDirectory(workspaceId, project.rootPath).catch(() => null);
       if (status?.isRepo && status.changes.length) {
         workspaceChanges.push({ project, changes: collapseChanges(status.changes) });
       }
@@ -103,12 +103,12 @@ export class CodeGraphChangeIntelligenceService {
 
     const primary = projects.find((project) => project.rootPath === workspace.workingDir || project.relativePath === '.');
     if (primary) {
-      const ground = await gitService.statusDirectory(primary.rootPath).catch(() => null);
+      const ground = await gitService.statusWorkspaceDirectory(workspaceId, primary.rootPath).catch(() => null);
       for (const floor of await floorService.list(workspaceId)) {
         const committed = ground?.head
-          ? await gitService.changesSinceMergeBase(primary.rootPath, ground.head, floor.branch).catch(() => [])
+          ? await gitService.changesSinceMergeBaseWorkspace(workspaceId, primary.rootPath, ground.head, floor.branch).catch(() => [])
           : [];
-        const dirty = await gitService.statusDirectory(floor.path).catch(() => null);
+        const dirty = await gitService.statusWorkspaceDirectory(workspaceId, floor.path).catch(() => null);
         const changes = collapseChanges([...committed, ...(dirty?.changes ?? [])]);
         if (!changes.length) continue;
         scopes.push(await this.buildScope(workspaceId, {

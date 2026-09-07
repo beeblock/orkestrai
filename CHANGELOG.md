@@ -5,6 +5,18 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.26.1 - Unreleased
+
+### Fixed
+
+- Floors now run Git, hooks, previews, landing, cleanup, overview status, and
+  code-graph change analysis inside the workspace's selected WSL distribution
+  instead of incorrectly invoking Windows Git against a Linux checkout.
+- The agent bridge now reports the main `.` repository and its verified Git
+  and native/WSL runtime separately from optional additional repository
+  aliases, preventing an empty alias list from being mistaken for a missing
+  workspace repository.
+
 ## 0.26.0 - 2026-09-06
 
 ### Added

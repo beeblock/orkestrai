@@ -228,7 +228,9 @@ describe('API Client OAuth, cookies, and sync', () => {
     const response = await new BridgeController().listAgents(bridgeEvent('GET', '/api/agent-room/bridge/agents', {}, {}, token) as any) as Response;
     const body = await response.json();
     expect(body.data.repositories).toEqual([{ alias: 'api-tests', reference: '@api-tests' }]);
+    expect(body.data.workspace.repository).toMatchObject({ reference: '.', primary: true, isGit: false, runtimeKind: 'native' });
     expect(JSON.stringify(body.data.repositories)).not.toContain(testRepository);
+    expect(JSON.stringify(body.data.workspace.repository)).not.toContain(coordinator);
   });
 
   it('writes linked Postman changes atomically and refuses silent conflict overwrites', async () => {
