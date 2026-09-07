@@ -5,6 +5,24 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.28.0 - 2026-09-07
+
+### Added
+
+- Native image workflows now offer persisted delivery profiles for Instagram
+  square and portrait, Stories/Reels, TikTok, and bounded custom dimensions.
+  The same controls are available in Canvas, Workbench, CLI, and MCP.
+
+### Fixed
+
+- Exact image delivery now gives ImageGen a measurable platform-aware safe
+  area, preserves the untouched native master, and resamples the complete frame
+  only when its aspect ratio already matches. An incompatible result is sent
+  back to native ImageGen for safe recomposition or outpainting instead of
+  silently cropping text, logos, people, products, or calls to action.
+- Copying a generated image together with its workflow to another workspace
+  also copies and remaps the preserved native master, so delivery provenance
+  never points back into the source workspace.
 ## 0.27.0 - 2026-09-07
 
 ### Added

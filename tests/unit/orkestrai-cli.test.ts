@@ -823,15 +823,15 @@ describe('orkestrai CLI', () => {
     expect(lines.join('\n')).toContain('Character poses');
     expect(await run(['image', 'read', 'img1'], { cwd, out, env })).toBe(0);
     expect(lines.join('\n')).toContain('Create a pose');
-    expect(await run(['image', 'create', '--title', 'Instagram carousel', '--count', '10'], { cwd, out, env })).toBe(0);
+    expect(await run(['image', 'create', '--title', 'Instagram carousel', '--count', '10', '--preset', 'instagram-portrait'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({
       method: 'POST', url: '/api/agent-room/bridge/image-workflows',
-      body: { title: 'Instagram carousel', count: '10', from: 'n1' },
+      body: { title: 'Instagram carousel', count: '10', outputPreset: 'instagram-portrait', from: 'n1' },
     });
-    expect(await run(['image', 'update', 'img1', '--title', 'Carousel directions', '--count', '10', '--opaque'], { cwd, out, env })).toBe(0);
+    expect(await run(['image', 'update', 'img1', '--title', 'Carousel directions', '--count', '10', '--width', '1200', '--height', '1500', '--opaque'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({
       method: 'PATCH', url: '/api/agent-room/bridge/image-workflows/img1',
-      body: { title: 'Carousel directions', count: '10', transparentBackground: false, from: 'n1' },
+      body: { title: 'Carousel directions', count: '10', outputPreset: 'custom', targetWidth: '1200', targetHeight: '1500', transparentBackground: false, from: 'n1' },
     });
     expect(await run(['image', 'connect', 'img1', targetNodeId, '--order', '0'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({
@@ -847,11 +847,11 @@ describe('orkestrai CLI', () => {
       method: 'POST', url: '/api/agent-room/bridge/image-workflows/img1/references',
       body: { path: 'references/character.png', title: 'Character', from: 'n1' },
     });
-    expect(await run(['image', 'run', 'img1', '--prompt', 'Create a complete carousel', '--transparent', '--count', '10'], { cwd, out, env })).toBe(0);
+    expect(await run(['image', 'run', 'img1', '--prompt', 'Create a complete carousel', '--transparent', '--count', '10', '--preset', 'tiktok'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({
       method: 'POST',
       url: '/api/agent-room/bridge/image-workflows/img1',
-      body: { prompt: 'Create a complete carousel', transparentBackground: true, count: '10', from: 'n1' },
+      body: { prompt: 'Create a complete carousel', transparentBackground: true, count: '10', outputPreset: 'tiktok', from: 'n1' },
     });
     const runId = '00000000-0000-7000-8000-000000000001';
     expect(await run(['image', 'validate', 'img1', runId, 'generated/images/pose-1.png'], { cwd, out, env })).toBe(0);

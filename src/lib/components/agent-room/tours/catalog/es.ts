@@ -1714,9 +1714,9 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'prepare-carousel-stage',
         title: 'Monta el carrusel a partir del resultado',
-        body: 'Creo la tercera etapa y reutilizo automáticamente el primer personaje con marca junto con el brief de campaña. El ejemplo usa tres slides para validar rápido; el selector permite aumentarlo a diez.',
+        body: 'Creo la tercera etapa como una entrega exacta de Instagram vertical en 1080x1350 y reutilizo automáticamente el primer personaje con marca y el brief. El área segura protege el copy y la marca; una proporción nativa incompatible vuelve a ImageGen para recomposición en vez de recortarse. El ejemplo usa tres slides para validar rápido; el selector permite aumentarlo a diez.',
         action: [
-          { kind: 'createImageWorkflow', title: '03 — Carrusel XYZ', position: { x: 2580, y: 60 }, prompt: 'Crea un carrusel coherente de tres imágenes 4:5 para Instagram usando el personaje con marca conectado como identidad visual. Sigue el orden y el contenido de los tres slides de la nota Campaña de la Marca XYZ. Preserva personaje, ropa, logo, paleta, iluminación y lenguaje visual entre todos los slides. Mantén áreas seguras y una composición clara para lectura móvil.', count: 3, transparentBackground: false, outputDirectory: 'generated/images/xyz-carousel', filePrefix: 'xyz-carousel-slide' },
+          { kind: 'createImageWorkflow', title: '03 — Carrusel XYZ', position: { x: 2580, y: 60 }, prompt: 'Crea un carrusel coherente de tres imágenes 4:5 para Instagram usando el personaje con marca conectado como identidad visual. Sigue el orden y el contenido de los tres slides de la nota Campaña de la Marca XYZ. Preserva personaje, ropa, logo, paleta, iluminación y lenguaje visual entre todos los slides. Mantén áreas seguras y una composición clara para lectura móvil.', count: 3, transparentBackground: false, outputPreset: 'instagram-portrait', outputDirectory: 'generated/images/xyz-carousel', filePrefix: 'xyz-carousel-slide' },
           { kind: 'connect', fromTitle: 'Director Creativo XYZ', toTitle: '03 — Carrusel XYZ' },
           { kind: 'connect', fromTitle: 'Campaña de la Marca XYZ', toTitle: '03 — Carrusel XYZ' },
           { kind: 'connect', fromTitle: 'Brief del Personaje XYZ', toTitle: '03 — Carrusel XYZ' },

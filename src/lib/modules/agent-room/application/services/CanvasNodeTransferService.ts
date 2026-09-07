@@ -207,7 +207,18 @@ export class CanvasNodeTransferService {
     await this.assertWritableAsset(destinationWorkspace, path);
     await filesystemService.writeBinary(destinationWorkspace.id, path, file.data);
     destinationFiles.push({ workspaceId: destinationWorkspace.id, path });
-    return { ...payload, path };
+    const generatedBy = payload.generatedBy ? { ...payload.generatedBy } : undefined;
+    if (generatedBy?.sourceMasterPath) {
+      await this.assertExistingAsset(sourceWorkspace, generatedBy.sourceMasterPath);
+      const master = await filesystemService.readBinary(sourceWorkspace.id, generatedBy.sourceMasterPath).catch(() => null);
+      if (!master) throw new CanvasNodeTransferError('canvas_transfer_asset_missing');
+      const masterPath = `.orkestrai/transfers/${destinationNodeId}/masters/${safeName(master.name)}`;
+      await this.assertWritableAsset(destinationWorkspace, masterPath);
+      await filesystemService.writeBinary(destinationWorkspace.id, masterPath, master.data);
+      destinationFiles.push({ workspaceId: destinationWorkspace.id, path: masterPath });
+      generatedBy.sourceMasterPath = masterPath;
+    }
+    return { ...payload, path, ...(generatedBy ? { generatedBy } : {}) };
   }
 
   private async assertExistingAsset(workspace: Workspace, path: string): Promise<void> {

@@ -17,6 +17,9 @@ export type TourAction =
       prompt: string;
       count?: number;
       transparentBackground?: boolean;
+      outputPreset?: 'auto' | 'instagram-square' | 'instagram-portrait' | 'instagram-story' | 'tiktok' | 'custom';
+      targetWidth?: number;
+      targetHeight?: number;
       outputDirectory?: string;
       filePrefix?: string;
       position?: TourPosition;

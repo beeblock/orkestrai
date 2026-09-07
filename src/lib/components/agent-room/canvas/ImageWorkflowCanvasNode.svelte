@@ -6,9 +6,10 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import * as NativeSelect from '$lib/components/ui/native-select';
+  import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
   import { Textarea } from '$lib/components/ui/textarea';
-  import type { ImageWorkflowNodePayload, ImageWorkflowRun } from '$lib/modules/agent-room/domain/types.js';
+  import type { ImageWorkflowNodePayload, ImageWorkflowOutputPreset, ImageWorkflowRun } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
@@ -38,12 +39,24 @@
 
   let { id, data, selected } = $props<NodeProps & { data: Data }>();
 
+  const presetDimensions: Record<Exclude<ImageWorkflowOutputPreset, 'auto' | 'custom'>, { width: number; height: number }> = {
+    'instagram-square': { width: 1080, height: 1080 },
+    'instagram-portrait': { width: 1080, height: 1350 },
+    'instagram-story': { width: 1080, height: 1920 },
+    tiktok: { width: 1080, height: 1920 },
+  };
+
   function initialConfig() {
     const payload = data.payload;
+    const preset = (payload.outputPreset ?? 'auto') as ImageWorkflowOutputPreset;
+    const dimensions = preset === 'auto' || preset === 'custom' ? null : presetDimensions[preset];
     return {
       prompt: String(payload.prompt ?? ''),
       count: Math.min(10, Math.max(1, Number(payload.count ?? 1))),
       transparentBackground: Boolean(payload.transparentBackground),
+      outputPreset: preset,
+      targetWidth: payload.targetWidth ?? dimensions?.width ?? 1080,
+      targetHeight: payload.targetHeight ?? dimensions?.height ?? 1920,
       outputDirectory: String(payload.outputDirectory ?? 'generated/images'),
       filePrefix: String(payload.filePrefix ?? 'orkestrai-image'),
       running: payload.status === 'running',
@@ -55,6 +68,9 @@
   let prompt = $state(initial.prompt);
   let count = $state(initial.count);
   let transparentBackground = $state(initial.transparentBackground);
+  let outputPreset = $state<ImageWorkflowOutputPreset>(initial.outputPreset);
+  let targetWidth = $state(initial.targetWidth);
+  let targetHeight = $state(initial.targetHeight);
   let outputDirectory = $state(initial.outputDirectory);
   let filePrefix = $state(initial.filePrefix);
   let status = $state<Status | null>(null);
@@ -65,6 +81,10 @@
     prompt = String(data.payload.prompt ?? '');
     count = Math.min(10, Math.max(1, Number(data.payload.count ?? 1)));
     transparentBackground = Boolean(data.payload.transparentBackground);
+    outputPreset = (data.payload.outputPreset ?? 'auto') as ImageWorkflowOutputPreset;
+    const dimensions = outputPreset === 'auto' || outputPreset === 'custom' ? null : presetDimensions[outputPreset];
+    targetWidth = data.payload.targetWidth ?? dimensions?.width ?? 1080;
+    targetHeight = data.payload.targetHeight ?? dimensions?.height ?? 1920;
     outputDirectory = String(data.payload.outputDirectory ?? 'generated/images');
     filePrefix = String(data.payload.filePrefix ?? 'orkestrai-image');
   });
@@ -133,6 +153,9 @@
       prompt: prompt.trim(),
       count,
       transparentBackground,
+      outputPreset,
+      targetWidth: outputPreset === 'auto' ? null : targetWidth,
+      targetHeight: outputPreset === 'auto' ? null : targetHeight,
       outputDirectory: outputDirectory.trim(),
       filePrefix: filePrefix.trim(),
     };
@@ -193,6 +216,35 @@
     void persist();
   }
 
+  function presetLabel(preset: ImageWorkflowOutputPreset): string {
+    const labels: Record<ImageWorkflowOutputPreset, () => string> = {
+      auto: m['image_workflow.size_auto'],
+      'instagram-square': m['image_workflow.size_instagram_square'],
+      'instagram-portrait': m['image_workflow.size_instagram_portrait'],
+      'instagram-story': m['image_workflow.size_instagram_story'],
+      tiktok: m['image_workflow.size_tiktok'],
+      custom: m['image_workflow.size_custom'],
+    };
+    return labels[preset]();
+  }
+
+  function choosePreset(next: string) {
+    outputPreset = next as ImageWorkflowOutputPreset;
+    const dimensions = outputPreset === 'auto' || outputPreset === 'custom' ? null : presetDimensions[outputPreset];
+    if (dimensions) {
+      targetWidth = dimensions.width;
+      targetHeight = dimensions.height;
+    }
+    void persist();
+  }
+
+  function changeDimension(axis: 'width' | 'height', value: string) {
+    const parsed = Math.min(3840, Math.max(256, Number.parseInt(value, 10) || 256));
+    if (axis === 'width') targetWidth = parsed;
+    else targetHeight = parsed;
+    stage({ targetWidth, targetHeight });
+  }
+
   function errorLabel(code: string): string {
     const labels: Record<string, () => string> = {
       image_workflow_prompt_required: m['image_workflow.error_prompt'],
@@ -212,6 +264,9 @@
       image_workflow_output_path_mismatch: m['image_workflow.error_output_path'],
       image_workflow_output_format_invalid: m['image_workflow.error_output_format'],
       image_workflow_output_dimensions_invalid: m['image_workflow.error_output_dimensions'],
+      image_workflow_output_aspect_mismatch: m['image_workflow.error_output_aspect'],
+      image_workflow_target_dimensions_required: m['image_workflow.error_target_dimensions'],
+      image_workflow_target_dimensions_invalid: m['image_workflow.error_target_dimensions'],
       image_workflow_output_alpha_missing: m['image_workflow.error_output_alpha'],
       image_workflow_timed_out: m['image_workflow.error_timeout'],
     };
@@ -301,6 +356,33 @@
           {/each}
         </div>
       {/if}
+    </section>
+
+    <section class="space-y-2 border-b border-[var(--app-border)] p-3">
+      <label class="block space-y-1">
+        <span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.output_size']()}</span>
+        <Select.Root type="single" value={outputPreset} onValueChange={choosePreset}>
+          <Select.Trigger class="h-8 w-full" aria-label={m['image_workflow.output_size']()}>{presetLabel(outputPreset)}</Select.Trigger>
+          <Select.Content>
+            {#each ['auto', 'instagram-square', 'instagram-portrait', 'instagram-story', 'tiktok', 'custom'] as preset}
+              <Select.Item value={preset} label={presetLabel(preset as ImageWorkflowOutputPreset)}>{presetLabel(preset as ImageWorkflowOutputPreset)}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </label>
+      {#if outputPreset === 'custom'}
+        <div class="grid grid-cols-2 gap-2">
+          <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.width']()}</span><Input type="number" min="256" max="3840" value={targetWidth} class="h-7" oninput={(event) => changeDimension('width', event.currentTarget.value)} onblur={() => void persist()} /></label>
+          <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.height']()}</span><Input type="number" min="256" max="3840" value={targetHeight} class="h-7" oninput={(event) => changeDimension('height', event.currentTarget.value)} onblur={() => void persist()} /></label>
+        </div>
+      {/if}
+      <p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">
+        {#if outputPreset === 'auto'}
+          {m['image_workflow.output_size_auto_help']()}
+        {:else}
+          {m['image_workflow.output_size_exact_help']({ width: String(targetWidth), height: String(targetHeight) })}
+        {/if}
+      </p>
     </section>
 
     <section class="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-[var(--app-border)] p-3">

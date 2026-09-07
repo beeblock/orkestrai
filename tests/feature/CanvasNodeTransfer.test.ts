@@ -9,7 +9,7 @@ import { canvasNodeTransferService } from '$lib/modules/agent-room/application/s
 import { designDocumentService } from '$lib/modules/agent-room/application/services/DesignDocumentService.js';
 import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
 import { AgentRoutine } from '$lib/modules/agent-room/domain/models/AgentRoutine.js';
-import type { ApiClientNodePayload, NoteNodePayload, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
+import type { ApiClientNodePayload, ImageNodePayload, NoteNodePayload, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 
 describe('CanvasNodeTransfer', () => {
@@ -103,6 +103,47 @@ describe('CanvasNodeTransfer', () => {
       .rejects.toThrow('canvas_transfer_asset_missing');
     expect(await workspaceRepository.listNodes(source.id)).toHaveLength(1);
     expect(await workspaceRepository.listNodes(destination.id)).toHaveLength(0);
+  });
+
+  it('copies an exact-delivery image together with its preserved native master', async () => {
+    const { source, destination, sourceRoot, destinationRoot } = await workspacePair();
+    const outputPath = 'generated/images/slide.png';
+    const masterPath = 'generated/images/.masters/slide-native.png';
+    await mkdir(join(sourceRoot, 'generated', 'images', '.masters'), { recursive: true });
+    await writeFile(join(sourceRoot, outputPath), 'exact delivery');
+    await writeFile(join(sourceRoot, masterPath), 'native master');
+    const workflow = await workspaceRepository.createNode({
+      workspaceId: source.id,
+      type: 'imageWorkflow',
+      title: 'TikTok workflow',
+      payload: { schemaVersion: 1, status: 'idle', history: [] },
+    });
+    const image = await workspaceRepository.createNode({
+      workspaceId: source.id,
+      type: 'image',
+      title: 'TikTok slide',
+      payload: {
+        path: outputPath,
+        generatedBy: {
+          workflowNodeId: workflow.id,
+          runId: uuidv7(),
+          outputIndex: 0,
+          inputHash: 'hash',
+          sourceMasterPath: masterPath,
+          targetWidth: 1080,
+          targetHeight: 1920,
+        },
+      },
+    });
+
+    const result = await canvasNodeTransferService.transfer(new TransferCanvasNodesDto(source.id, destination.id, [workflow.id, image.id], 'copy'));
+    const copiedNode = result.nodes.find((node) => node.type === 'image')!;
+    const copied = copiedNode.payload as ImageNodePayload;
+
+    expect(copied.path).toContain(`.orkestrai/transfers/${copiedNode.id}/`);
+    expect(copied.generatedBy?.sourceMasterPath).toContain(`.orkestrai/transfers/${copiedNode.id}/masters/`);
+    expect(await readFile(join(destinationRoot, copied.path!), 'utf8')).toBe('exact delivery');
+    expect(await readFile(join(destinationRoot, copied.generatedBy!.sourceMasterPath!), 'utf8')).toBe('native master');
   });
 
   it('rejects assets that escape the workspace through a symlink', async () => {

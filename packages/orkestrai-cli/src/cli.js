@@ -69,7 +69,7 @@ Uso:
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
   orkestrai note create <titulo> [--content <texto>] [--connect <agente|all>]
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
-  orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
+  orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--preset <auto|instagram-square|instagram-portrait|instagram-story|tiktok|custom>] [--width <px> --height <px>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--preset <perfil>] [--width <px> --height <px>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--preset <perfil>] [--width <px> --height <px>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
   orkestrai design page <nodeId> <create|update|duplicate|reorder|activate|delete> --revision <n> [--page <pageId>] [--name <nome>] [--width <n>] [--height <n>] [--background <cor>] [--order <n>]
   orkestrai design prototype-flow <nodeId> <create|update|delete> <flow-json> --revision <n>
@@ -945,6 +945,9 @@ export async function run(argv, options = {}) {
           prompt: flags.prompt,
           count: flags.count,
           transparentBackground: flags.transparent === undefined ? undefined : true,
+          outputPreset: flags.preset ?? (flags.width || flags.height ? 'custom' : undefined),
+          targetWidth: flags.width,
+          targetHeight: flags.height,
           outputDirectory: flags.output,
           filePrefix: flags.prefix,
           from: selfAgent,
@@ -961,6 +964,9 @@ export async function run(argv, options = {}) {
           prompt: flags.prompt,
           count: flags.count,
           transparentBackground,
+          outputPreset: flags.preset ?? (flags.width || flags.height ? 'custom' : undefined),
+          targetWidth: flags.width,
+          targetHeight: flags.height,
           outputDirectory: flags.output,
           filePrefix: flags.prefix,
           from: selfAgent,
@@ -1001,6 +1007,9 @@ export async function run(argv, options = {}) {
           prompt: flags.prompt,
           count: flags.count,
           transparentBackground: flags.transparent === undefined ? undefined : Boolean(flags.transparent),
+          outputPreset: flags.preset ?? (flags.width || flags.height ? 'custom' : undefined),
+          targetWidth: flags.width,
+          targetHeight: flags.height,
           outputDirectory: flags.output,
           filePrefix: flags.prefix,
           from: selfAgent,

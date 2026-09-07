@@ -71,6 +71,15 @@ test.describe('native image workflows', () => {
         return body?.payload?.count === 10;
       });
       await node.getByRole('combobox', { name: 'Resultados' }).selectOption('10');
+      await node.getByRole('button', { name: 'Tamanho de entrega' }).click();
+      const sizePersisted = page.waitForResponse((response) => {
+        if (response.request().method() !== 'PATCH' || !response.url().endsWith(`/nodes/${workflow.id}`)) return false;
+        const body = response.request().postDataJSON() as { payload?: { outputPreset?: string } } | null;
+        return body?.payload?.outputPreset === 'tiktok';
+      });
+      await page.getByRole('option', { name: 'TikTok · 1080 × 1920' }).click();
+      expect((await sizePersisted).ok()).toBeTruthy();
+      await expect(node).toContainText('Entrega exatamente 1080 × 1920px');
       await node.getByRole('switch').click();
       await expect(node.getByRole('switch')).not.toBeChecked();
       const outputDirectory = node.getByRole('textbox', { name: 'Pasta do workspace' });
@@ -88,6 +97,8 @@ test.describe('native image workflows', () => {
       await page.reload();
       const restored = page.locator('.canvas-image-workflow');
       await expect(restored.getByRole('combobox', { name: 'Resultados' })).toHaveValue('10');
+      await expect(restored.getByRole('button', { name: 'Tamanho de entrega' })).toContainText('TikTok');
+      await expect(restored).toContainText('Entrega exatamente 1080 × 1920px');
       await expect(restored.getByRole('switch')).not.toBeChecked();
       await expect(restored.getByRole('textbox', { name: 'Pasta do workspace' })).toHaveValue('assets/generated');
 
@@ -95,6 +106,7 @@ test.describe('native image workflows', () => {
       const workbenchNode = page.locator('.canvas-image-workflow');
       await expect(workbenchNode).toBeVisible();
       await expect(workbenchNode).toContainText('Codex ImageGen');
+      await expect(workbenchNode).toContainText('TikTok · 1080 × 1920');
       await expect(workbenchNode.getByRole('textbox', { name: 'Pasta do workspace' })).toHaveValue('assets/generated');
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);

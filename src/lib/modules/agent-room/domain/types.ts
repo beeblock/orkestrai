@@ -687,6 +687,10 @@ export type ImageWorkflowRun = {
   promptSnapshot: string;
   requestedOutputs: number;
   transparentBackground: boolean;
+  outputPreset: ImageWorkflowOutputPreset;
+  targetWidth: number | null;
+  targetHeight: number | null;
+  sourceMasterPaths: string[];
   outputPaths: string[];
   outputNodeIds: string[];
   errorCode: string | null;
@@ -705,16 +709,28 @@ export type ImageWorkflowActiveRun = {
   promptSnapshot: string;
   requestedOutputs: number;
   transparentBackground: boolean;
+  outputPreset: ImageWorkflowOutputPreset;
+  targetWidth: number | null;
+  targetHeight: number | null;
+  /** Native ImageGen sources retained before deterministic delivery normalization. */
+  normalizedOutputMasters?: Record<string, string>;
   transparencyStrategy?: 'direct-alpha' | 'white-matte-then-alpha';
   /** Machine-validation failures per output, used to escalate native ImageGen repairs. */
   alphaValidationFailures?: Record<string, number>;
+  /** Aspect-ratio validation failures per output, used to request a safe native reframe. */
+  deliveryValidationFailures?: Record<string, number>;
 };
+
+export type ImageWorkflowOutputPreset = 'auto' | 'instagram-square' | 'instagram-portrait' | 'instagram-story' | 'tiktok' | 'custom';
 
 export type ImageWorkflowNodePayload = {
   schemaVersion?: 1;
   prompt?: string;
   count?: number;
   transparentBackground?: boolean;
+  outputPreset?: ImageWorkflowOutputPreset;
+  targetWidth?: number | null;
+  targetHeight?: number | null;
   outputDirectory?: string;
   filePrefix?: string;
   /** Ordem explicita dos contextos e referencias conectados. */
@@ -734,6 +750,9 @@ export type ImageNodePayload = {
     runId: string;
     outputIndex: number;
     inputHash: string;
+    sourceMasterPath?: string;
+    targetWidth?: number;
+    targetHeight?: number;
   };
 };
 

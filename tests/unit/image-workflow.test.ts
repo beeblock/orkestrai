@@ -4,7 +4,7 @@ import {
   completeImageWorkflowSchema,
   imageWorkflowConfigSchema,
 } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
-import { ImageWorkflowError, ImageWorkflowService } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
+import { ImageWorkflowError, ImageWorkflowService, normalizePngDelivery } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
 import {
   ConnectImageWorkflowNodeDto,
   CreateImageWorkflowDto,
@@ -16,8 +16,8 @@ import { filesystemService } from '$lib/modules/agent-room/application/services/
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { PNG as PngCodec } from 'pngjs';
 
-function pngBytes(transparent: boolean): Uint8Array {
-  const image = new PngCodec({ width: 20, height: 20 });
+function pngBytes(transparent: boolean, width = 20, height = 20): Uint8Array {
+  const image = new PngCodec({ width, height });
   for (let index = 0; index < image.data.length; index += 4) {
     image.data[index] = 220;
     image.data[index + 1] = 30;
@@ -119,6 +119,30 @@ describe('image workflow schema', () => {
     }).outputPaths).toHaveLength(10);
     expect(() => addImageWorkflowReferenceSchema.parse({ path: '../private.png', from: 'Creative Director' })).toThrow();
   });
+
+  it('supports social delivery presets and bounds custom output dimensions', () => {
+    expect(config({ outputPreset: 'instagram-portrait' })).toMatchObject({
+      outputPreset: 'instagram-portrait', targetWidth: null, targetHeight: null,
+    });
+    expect(config({ outputPreset: 'custom', targetWidth: 1200, targetHeight: 1500 })).toMatchObject({
+      outputPreset: 'custom', targetWidth: 1200, targetHeight: 1500,
+    });
+    expect(() => config({ outputPreset: 'custom', targetWidth: null, targetHeight: null })).toThrow();
+    expect(() => config({ outputPreset: 'custom', targetWidth: 3840, targetHeight: 3840 })).toThrow();
+  });
+});
+
+describe('image delivery normalization', () => {
+  it('resamples matching aspect ratios to exact pixels and preserves genuine alpha', () => {
+    const result = normalizePngDelivery(pngBytes(true, 12, 8), 6, 4);
+    const decoded = PngCodec.sync.read(Buffer.from(result));
+    expect(decoded).toMatchObject({ width: 6, height: 4 });
+    expect(Array.from(decoded.data).filter((_value, index) => index % 4 === 3)).toContain(0);
+  });
+
+  it('rejects an incompatible aspect ratio instead of cropping content', () => {
+    expect(() => normalizePngDelivery(pngBytes(false, 12, 8), 6, 10)).toThrowError('image_workflow_output_aspect_mismatch');
+  });
 });
 
 describe('ImageWorkflowService', () => {
@@ -144,6 +168,7 @@ describe('ImageWorkflowService', () => {
     expect(result.tool.prompt).toContain('real alpha channel');
     expect(result.tool.prompt).toContain('alpha 0');
     expect(result.tool.maxAttemptsPerOutput).toBe(3);
+    expect(result.tool.maxAttemptsPerValidationIssue).toBe(3);
     expect(result.validation).toMatchObject({ tool: 'image_workflow_validate', genuineAlphaRequired: true });
     expect(result.outputPaths).toHaveLength(2);
     expect(result.outputPaths.every((path: string) => path.startsWith('generated/images/atomic-ant-'))).toBe(true);
@@ -158,6 +183,83 @@ describe('ImageWorkflowService', () => {
     expect(result.tool.calls).toBe(10);
     expect(result.outputPaths).toHaveLength(10);
     expect(new Set(result.outputPaths).size).toBe(10);
+  });
+
+  it('delivers social media outputs at exact pixels while preserving the native master', async () => {
+    setupWorkflow({ references: false });
+    const generated = pngBytes(false, 300, 375);
+    const writes = new Map<string, Uint8Array>();
+    vi.mocked(filesystemService.readBinary).mockImplementation(async (_workspaceId, path) => ({
+      data: writes.get(path) ?? generated,
+      contentType: 'image/png',
+      name: path.split('/').at(-1) ?? 'image.png',
+    }));
+    vi.spyOn(filesystemService, 'writeBinary').mockImplementation(async (_workspaceId, path, data) => {
+      writes.set(path, data);
+      return { path: `/workspace/${path}`, written: data.length };
+    });
+    const service = new ImageWorkflowService();
+    const execution = await service.begin(new RunImageWorkflowDto(
+      'workspace-1', 'workflow-1', config({
+        transparentBackground: false,
+        outputPreset: 'custom', targetWidth: 256, targetHeight: 320,
+      }), 'agent-1',
+    ));
+
+    expect(execution.tool.prompt).toContain('256 x 320 pixel canvas');
+    expect(execution.delivery).toMatchObject({ targetWidth: 256, targetHeight: 320, exactPixels: true });
+    const validation = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+    expect(validation).toMatchObject({
+      valid: true, normalized: true,
+      sourceWidth: 300, sourceHeight: 375,
+      width: 256, height: 320,
+      targetWidth: 256, targetHeight: 320,
+    });
+    expect(validation.sourceMasterPath).toContain('/.masters/');
+    const final = PngCodec.sync.read(Buffer.from(writes.get(execution.outputPaths[0])!));
+    expect(final).toMatchObject({ width: 256, height: 320 });
+    const master = PngCodec.sync.read(Buffer.from(writes.get(validation.sourceMasterPath)!));
+    expect(master).toMatchObject({ width: 300, height: 375 });
+  });
+
+  it('requests a native safe-area reframe instead of cropping an incompatible delivery', async () => {
+    setupWorkflow({ references: false });
+    const generated = pngBytes(false, 300, 500);
+    vi.mocked(filesystemService.readBinary).mockResolvedValue({
+      data: generated,
+      contentType: 'image/png',
+      name: 'result.png',
+    });
+    const write = vi.spyOn(filesystemService, 'writeBinary');
+    const service = new ImageWorkflowService();
+    const execution = await service.begin(new RunImageWorkflowDto(
+      'workspace-1', 'workflow-1', config({
+        transparentBackground: false,
+        outputPreset: 'tiktok',
+      }), 'agent-1',
+    ));
+
+    const validation = await service.validateOutput(
+      'workspace-1', 'workflow-1', execution.runId, execution.outputPaths[0], 'agent-1',
+    );
+
+    expect(validation).toMatchObject({
+      valid: false,
+      retryable: true,
+      errorCode: 'image_workflow_output_aspect_mismatch',
+      sourceWidth: 300,
+      sourceHeight: 500,
+      targetWidth: 1080,
+      targetHeight: 1920,
+      repairTool: 'image_gen.imagegen',
+      repairReferencedImagePaths: [execution.outputPaths[0]],
+      attemptsRemaining: 2,
+    });
+    expect(validation.repairPrompt).toContain('Do not crop, stretch, squeeze, or distort');
+    expect(validation.repairPrompt).toContain('16% from the right');
+    expect(write).not.toHaveBeenCalled();
   });
 
   it('uses a white matte before native alpha removal when multiple references are connected', async () => {
@@ -239,6 +341,18 @@ describe('ImageWorkflowService', () => {
     expect(createEdge).toHaveBeenCalledWith(expect.objectContaining({ targetNodeId: extraNote.id }));
   });
 
+  it('rejects an incomplete custom delivery profile before persisting the draft', async () => {
+    setupWorkflow();
+    const update = vi.mocked(workspaceRepository.updateNode);
+
+    const error = await new ImageWorkflowService().update(new UpdateImageWorkflowDto(
+      'workspace-1', 'workflow-1', { from: 'agent-1', outputPreset: 'custom' }, 'agent-1',
+    )).catch((caught) => caught);
+
+    expect(error).toMatchObject({ code: 'image_workflow_target_dimensions_required' });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('creates a visible draft next to the Codex and connects it before returning control', async () => {
     const state = setupWorkflow();
     const createdWorkflow = {
@@ -302,7 +416,7 @@ describe('ImageWorkflowService', () => {
     const message = send.mock.calls[0][1].message;
     expect(message).toContain('Do not ask for an API key');
     expect(message).toContain('do not call the OpenAI Images API directly');
-    expect(message).toContain('up to 3 built-in tool calls per output');
+    expect(message).toContain('up to 3 native ImageGen attempts for each validation class');
     expect(message).toContain('image_workflow_validate');
     expect(message).toContain('invalid assigned output as the reference');
     expect(message).toContain('MUST be performed by another built-in image_gen.imagegen call');

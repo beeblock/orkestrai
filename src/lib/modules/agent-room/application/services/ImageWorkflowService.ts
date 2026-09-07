@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { basename, relative, resolve, sep } from 'node:path';
+import { basename, posix, relative, resolve, sep } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { PNG } from 'pngjs';
 import type {
@@ -7,6 +7,7 @@ import type {
   ImageNodePayload,
   ImageWorkflowActiveRun,
   ImageWorkflowNodePayload,
+  ImageWorkflowOutputPreset,
   ImageWorkflowRun,
   NoteNodePayload,
   TerminalNodePayload,
@@ -43,6 +44,7 @@ const MIN_TRANSPARENT_PIXEL_RATIO = 0.005;
 const MAX_CONTEXT_LENGTH = 16_000;
 const HISTORY_LIMIT = 12;
 const MAX_ATTEMPTS_PER_OUTPUT = 3;
+const MAX_DELIVERY_ASPECT_DEVIATION = 0.005;
 const MIN_RUN_TIMEOUT_MS = 20 * 60 * 1_000;
 const RUN_TIMEOUT_PER_OUTPUT_MS = 9 * 60 * 1_000;
 const MAX_RUN_TIMEOUT_MS = 90 * 60 * 1_000;
@@ -89,6 +91,105 @@ const TRANSPARENT_REPAIR_PROMPTS = [
   ].join(' '),
 ] as const;
 
+const OUTPUT_PRESET_DIMENSIONS: Record<Exclude<ImageWorkflowOutputPreset, 'auto' | 'custom'>, { width: number; height: number }> = {
+  'instagram-square': { width: 1_080, height: 1_080 },
+  'instagram-portrait': { width: 1_080, height: 1_350 },
+  'instagram-story': { width: 1_080, height: 1_920 },
+  tiktok: { width: 1_080, height: 1_920 },
+};
+
+function targetDimensions(config: Pick<ImageWorkflowConfigInput, 'outputPreset' | 'targetWidth' | 'targetHeight'>) {
+  if (config.outputPreset === 'auto') return null;
+  if (config.outputPreset === 'custom') {
+    if (!config.targetWidth || !config.targetHeight) throw new ImageWorkflowError('image_workflow_target_dimensions_required');
+    return { width: config.targetWidth, height: config.targetHeight };
+  }
+  return OUTPUT_PRESET_DIMENSIONS[config.outputPreset];
+}
+
+function safeAreaContract(preset: ImageWorkflowOutputPreset): string {
+  if (preset === 'tiktok') {
+    return 'SAFE AREA: keep every essential subject, face, logo, headline, subtitle, and call to action inside the central area bounded by 8% from the left, 16% from the right, 10% from the top, and 20% from the bottom. Only expendable background may enter the outer area reserved for platform controls.';
+  }
+  if (preset === 'instagram-story') {
+    return 'SAFE AREA: keep every essential subject, face, logo, headline, subtitle, and call to action at least 8% from the left and right and 12% from the top and bottom. Only expendable background may enter those outer margins.';
+  }
+  return 'SAFE AREA: keep every essential subject, face, logo, headline, subtitle, and call to action at least 8% away from every edge. Only expendable background may enter those outer margins.';
+}
+
+function deliveryContract(target: { width: number; height: number } | null, preset: ImageWorkflowOutputPreset): string {
+  if (!target) return '';
+  const ratio = target.width / target.height;
+  return [
+    `DELIVERY FRAME CONTRACT: compose specifically for a ${target.width} x ${target.height} pixel canvas (${target.width}:${target.height}, aspect ratio ${ratio.toFixed(4)}).`,
+    safeAreaContract(preset),
+    'Fill the complete frame. Do not add letterboxing, pillarboxing, borders, a mock device, or a canvas shown inside another canvas.',
+    'Do not crop, stretch, squeeze, or distort the composition to imitate the requested frame.',
+    `The native tool may return a nearby pixel grid. Orkestrai accepts exact-size resampling only when its aspect ratio already matches this frame within ${(MAX_DELIVERY_ASPECT_DEVIATION * 100).toFixed(1)}%; otherwise native ImageGen must safely recompose it before delivery.`,
+  ].join(' ');
+}
+
+function normalizedMasterPath(outputPath: string): string {
+  const directory = posix.dirname(outputPath);
+  const extension = posix.extname(outputPath);
+  const stem = posix.basename(outputPath, extension);
+  return posix.join(directory, '.masters', `${stem}-native${extension || '.png'}`);
+}
+
+function deliveryAspectDeviation(sourceWidth: number, sourceHeight: number, targetWidth: number, targetHeight: number): number {
+  const sourceRatio = sourceWidth / sourceHeight;
+  const targetRatio = targetWidth / targetHeight;
+  return Math.abs(sourceRatio - targetRatio) / targetRatio;
+}
+
+/** Resample a composition whose aspect ratio already matches, preserving the entire frame. */
+export function normalizePngDelivery(bytes: Uint8Array, width: number, height: number): Uint8Array {
+  const source = PNG.sync.read(Buffer.from(bytes), { checkCRC: true });
+  if (source.width === width && source.height === height) return bytes;
+  if (deliveryAspectDeviation(source.width, source.height, width, height) > MAX_DELIVERY_ASPECT_DEVIATION) {
+    throw new ImageWorkflowError('image_workflow_output_aspect_mismatch');
+  }
+  const output = new PNG({ width, height, colorType: 6 });
+
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = ((y + 0.5) * source.height / height) - 0.5;
+    const y0 = Math.max(0, Math.min(source.height - 1, Math.floor(sourceY)));
+    const y1 = Math.max(0, Math.min(source.height - 1, y0 + 1));
+    const fy = Math.max(0, Math.min(1, sourceY - Math.floor(sourceY)));
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = ((x + 0.5) * source.width / width) - 0.5;
+      const x0 = Math.max(0, Math.min(source.width - 1, Math.floor(sourceX)));
+      const x1 = Math.max(0, Math.min(source.width - 1, x0 + 1));
+      const fx = Math.max(0, Math.min(1, sourceX - Math.floor(sourceX)));
+      const samples = [
+        [x0, y0, (1 - fx) * (1 - fy)],
+        [x1, y0, fx * (1 - fy)],
+        [x0, y1, (1 - fx) * fy],
+        [x1, y1, fx * fy],
+      ] as const;
+      let alpha = 0;
+      let red = 0;
+      let green = 0;
+      let blue = 0;
+      for (const [sampleX, sampleY, weight] of samples) {
+        const offset = (sampleY * source.width + sampleX) * 4;
+        const sampleAlpha = source.data[offset + 3] / 255;
+        const weightedAlpha = sampleAlpha * weight;
+        alpha += weightedAlpha;
+        red += source.data[offset] * weightedAlpha;
+        green += source.data[offset + 1] * weightedAlpha;
+        blue += source.data[offset + 2] * weightedAlpha;
+      }
+      const outputOffset = (y * width + x) * 4;
+      output.data[outputOffset] = alpha > 0 ? Math.round(red / alpha) : 0;
+      output.data[outputOffset + 1] = alpha > 0 ? Math.round(green / alpha) : 0;
+      output.data[outputOffset + 2] = alpha > 0 ? Math.round(blue / alpha) : 0;
+      output.data[outputOffset + 3] = Math.round(alpha * 255);
+    }
+  }
+  return Uint8Array.from(PNG.sync.write(output, { colorType: 6 }));
+}
+
 function transparentRepairPrompt(active: ImageWorkflowActiveRun, failedValidationCount: number): string {
   if (active.transparencyStrategy === 'white-matte-then-alpha' && failedValidationCount === 1) {
     return WHITE_MATTE_REMOVAL_PROMPT;
@@ -97,6 +198,25 @@ function transparentRepairPrompt(active: ImageWorkflowActiveRun, failedValidatio
     return CHECKERBOARD_REMOVAL_PROMPT;
   }
   return TRANSPARENT_REPAIR_PROMPTS[Math.min(Math.max(0, failedValidationCount - 1), TRANSPARENT_REPAIR_PROMPTS.length - 1)];
+}
+
+function deliveryRepairPrompt(active: ImageWorkflowActiveRun, sourceWidth: number | null, sourceHeight: number | null): string {
+  const width = active.targetWidth;
+  const height = active.targetHeight;
+  if (!width || !height) return '';
+  const source = sourceWidth && sourceHeight ? `The previous result was ${sourceWidth} x ${sourceHeight} and does not match the required aspect ratio.` : 'The previous result does not match the required aspect ratio.';
+  const transparency = active.transparentBackground
+    ? 'Return a true transparent RGBA PNG and preserve genuine alpha outside the foreground.'
+    : 'Extend or regenerate only the expendable background as needed to fill the complete frame.';
+  return [
+    `Recompose the referenced image for a ${width} x ${height} delivery frame (${width}:${height}, aspect ratio ${(width / height).toFixed(4)}).`,
+    source,
+    'Preserve the complete subject, identity, branding, typography, colors, and intended visual hierarchy.',
+    'Do not crop, stretch, squeeze, or distort any existing content. Do not remove, truncate, or push text, logos, faces, limbs, products, or calls to action beyond the frame.',
+    safeAreaContract(active.outputPreset ?? 'custom'),
+    transparency,
+    'Fill the frame itself; do not add letterboxing, pillarboxing, borders, a mock device, or a canvas inside another canvas.',
+  ].join(' ');
 }
 
 export class ImageWorkflowError extends Error {
@@ -183,6 +303,8 @@ function contextPrompt(
   contexts: CanvasNode[],
   transparentBackground: boolean,
   transparencyStrategy: ImageWorkflowActiveRun['transparencyStrategy'] = 'direct-alpha',
+  target: { width: number; height: number } | null = null,
+  outputPreset: ImageWorkflowOutputPreset = 'auto',
 ): string {
   const blocks = contexts.flatMap((node) => {
     const content = String((node.payload as NoteNodePayload).content ?? '').trim();
@@ -192,7 +314,7 @@ function contextPrompt(
   const transparent = transparentBackground
     ? transparencyStrategy === 'white-matte-then-alpha' ? WHITE_MATTE_OUTPUT_CONTRACT : TRANSPARENT_OUTPUT_CONTRACT
     : '';
-  const body = [prompt, ...blocks].filter(Boolean).join('\n\n');
+  const body = [prompt, ...blocks, deliveryContract(target, outputPreset)].filter(Boolean).join('\n\n');
   if (!transparent) return body.slice(0, 48_000);
   const separator = '\n\n';
   return `${body.slice(0, 48_000 - separator.length - transparent.length)}${separator}${transparent}`;
@@ -247,6 +369,10 @@ function runRecord(active: ImageWorkflowActiveRun, status: ImageWorkflowRun['sta
     promptSnapshot: active.promptSnapshot,
     requestedOutputs: active.requestedOutputs,
     transparentBackground: active.transparentBackground,
+    outputPreset: active.outputPreset ?? 'auto',
+    targetWidth: active.targetWidth ?? null,
+    targetHeight: active.targetHeight ?? null,
+    sourceMasterPaths: outputPaths.flatMap((path) => active.normalizedOutputMasters?.[path] ?? []),
     outputPaths,
     outputNodeIds,
     errorCode,
@@ -311,6 +437,11 @@ export class ImageWorkflowService {
     const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
     if (payload.status === 'running') throw new ImageWorkflowError('image_workflow_already_running', 409);
     const { from: _from, title, ...config } = dto.input;
+    targetDimensions({
+      outputPreset: config.outputPreset ?? payload.outputPreset ?? 'auto',
+      targetWidth: config.targetWidth === undefined ? payload.targetWidth ?? null : config.targetWidth,
+      targetHeight: config.targetHeight === undefined ? payload.targetHeight ?? null : config.targetHeight,
+    });
     await workspaceRepository.updateNode(workflow.id, {
       ...(title === undefined ? {} : { title }),
       payload: nextPayload(payload, config, {}),
@@ -461,12 +592,16 @@ export class ImageWorkflowService {
       'Call image_workflow_read for this node to obtain the exact prompt, reference paths, and preallocated output paths.',
       'Use the built-in image_gen.imagegen tool only. Do not ask for an API key, do not call the OpenAI Images API directly, and do not use scripts/image_gen.py.',
       'Every visual change, including background removal, MUST be performed by another built-in image_gen.imagegen call. Never use Python, Pillow, ImageMagick, ffmpeg, remove-bg, generated masks, canvas pixel processing, or any other script/tool to alter image pixels. Shell/file commands may only create the assigned directory and copy the exact native ImageGen result to its assigned path.',
+      execution.delivery.targetWidth
+        ? `Compose for the requested ${execution.delivery.targetWidth} x ${execution.delivery.targetHeight} delivery frame and obey its safe-area contract. Do not resize or crop the file yourself: image_workflow_validate only performs exact-size resampling when the native aspect ratio already matches, and otherwise returns a native ImageGen reframe prompt.`
+        : 'This workflow keeps the native ImageGen dimensions because its delivery size is Auto.',
       execution.transparencyStrategy === 'white-matte-then-alpha'
         ? 'This run uses the white-matte-then-alpha strategy because it has multiple image references. The first native ImageGen call intentionally composes the requested foreground on pure white. Copy and validate that intermediate output; the validator will return the exact native ImageGen background-removal edit for the second call. Do not skip either stage.'
         : 'This run uses direct alpha generation for its first native ImageGen call.',
-      `Produce every requested output. For each output, copy the native result to its assigned workspace path and call image_workflow_validate before moving to the next output. You may make up to ${MAX_ATTEMPTS_PER_OUTPUT} built-in tool calls per output.`,
+      `Produce every requested output. For each output, copy the native result to its assigned workspace path and call image_workflow_validate before moving to the next output. You may make up to ${MAX_ATTEMPTS_PER_OUTPUT} native ImageGen attempts for each validation class; do not stop merely because a transparent result then needs a separate delivery-frame repair.`,
       'When validation reports missing genuine alpha, call image_gen.imagegen again with repairReferencedImagePaths and the exact repairPrompt returned by the validator. The prompt escalates after another opaque result, so never reuse or paraphrase an earlier repair prompt. Replace the same assigned file with that native result and validate it again.',
-      'Use the original referenced_image_paths for the first attempt. For a corrective alpha edit, use the invalid assigned output as the reference so identity, composition, and branding are preserved.',
+      'When validation reports an incompatible delivery aspect ratio, call image_gen.imagegen again with repairReferencedImagePaths and the exact repairPrompt. It must recompose or outpaint safely; never crop, stretch, or squeeze content.',
+      'Use the original referenced_image_paths for the first attempt. For corrective alpha or delivery edits, use the invalid assigned output as the reference, and use it alone, so identity, composition, and branding are preserved.',
       'After every assigned output validates, call image_workflow_complete once. Only call image_workflow_fail after the allowed corrective attempts are exhausted or the native tool itself cannot run.',
     ].join('\n');
     try {
@@ -541,6 +676,7 @@ export class ImageWorkflowService {
     const transparencyStrategy: ImageWorkflowActiveRun['transparencyStrategy'] = dto.config.transparentBackground && references.length > 1
       ? 'white-matte-then-alpha'
       : 'direct-alpha';
+    const target = targetDimensions(dto.config);
     const active: ImageWorkflowActiveRun = {
       id: runId,
       startedAt: new Date().toISOString(),
@@ -551,9 +687,12 @@ export class ImageWorkflowService {
       referencePaths: references.map(({ path }) => path),
       outputPaths,
       inputHash: runHash(dto.config, contexts, references),
-      promptSnapshot: contextPrompt(dto.config.prompt, contexts, dto.config.transparentBackground, transparencyStrategy),
+      promptSnapshot: contextPrompt(dto.config.prompt, contexts, dto.config.transparentBackground, transparencyStrategy, target, dto.config.outputPreset),
       requestedOutputs: dto.config.count,
       transparentBackground: dto.config.transparentBackground,
+      outputPreset: dto.config.outputPreset,
+      targetWidth: target?.width ?? null,
+      targetHeight: target?.height ?? null,
       transparencyStrategy,
     };
     await workspaceRepository.updateNode(workflow.id, {
@@ -575,11 +714,21 @@ export class ImageWorkflowService {
     }
 
     let totalBytes = 0;
+    let completedActive = active;
     for (const path of dto.outputPaths) {
-      const validation = await this.validateOutputFile(dto.workspaceId, path, active.transparentBackground);
+      const validation = await this.validateOutputFile(dto.workspaceId, path, completedActive);
       totalBytes += validation.bytes;
       if (totalBytes > MAX_OUTPUT_TOTAL_BYTES) throw new ImageWorkflowError('image_workflow_outputs_too_large');
       if (!validation.valid) throw new ImageWorkflowError(validation.errorCode!);
+      if (validation.sourceMasterPath) {
+        completedActive = {
+          ...completedActive,
+          normalizedOutputMasters: {
+            ...(completedActive.normalizedOutputMasters ?? {}),
+            [path]: validation.sourceMasterPath,
+          },
+        };
+      }
     }
 
     const [nodes, edges] = await Promise.all([workspaceRepository.listNodes(dto.workspaceId), workspaceRepository.listEdges(dto.workspaceId)]);
@@ -608,14 +757,26 @@ export class ImageWorkflowService {
           height: 240,
           zIndex: workflow.zIndex,
           floorId: workflow.floorId,
-          payload: { path, generatedBy: { workflowNodeId: workflow.id, runId: active.id, outputIndex: index, inputHash: active.inputHash } } satisfies ImageNodePayload,
+          payload: {
+            path,
+            generatedBy: {
+              workflowNodeId: workflow.id,
+              runId: active.id,
+              outputIndex: index,
+              inputHash: active.inputHash,
+              ...(completedActive.normalizedOutputMasters?.[path] ? { sourceMasterPath: completedActive.normalizedOutputMasters[path] } : {}),
+              ...(completedActive.targetWidth && completedActive.targetHeight
+                ? { targetWidth: completedActive.targetWidth, targetHeight: completedActive.targetHeight }
+                : {}),
+            },
+          } satisfies ImageNodePayload,
         });
         occupied.push({ ...position, width: outputNode.width, height: outputNode.height });
         outputNodeIds.push(outputNode.id);
         await workspaceRepository.createEdge({ workspaceId: dto.workspaceId, sourceNodeId: workflow.id, targetNodeId: outputNode.id, style: 'cord' });
       }
       const current = ((await workspaceRepository.getNode(workflow.id))?.payload ?? payload) as ImageWorkflowNodePayload;
-      const run = runRecord(active, 'succeeded', new Date(), dto.outputPaths, outputNodeIds, null);
+      const run = runRecord(completedActive, 'succeeded', new Date(), dto.outputPaths, outputNodeIds, null);
       await workspaceRepository.updateNode(workflow.id, {
         payload: nextPayload(current, {}, {
           status: 'succeeded', activeRunId: null, activeRun: null, lastError: null,
@@ -647,14 +808,37 @@ export class ImageWorkflowService {
     if (payload.status !== 'running' || !active || active.id !== runId) throw new ImageWorkflowError('image_workflow_run_not_active', 409);
     if (active.executorNodeId !== actorNodeId) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
     if (!active.outputPaths.includes(outputPath)) throw new ImageWorkflowError('image_workflow_output_path_mismatch');
-    const result = await this.validateOutputFile(workspaceId, outputPath, active.transparentBackground);
+    const result = await this.validateOutputFile(workspaceId, outputPath, active);
     let failedValidationCount = active.alphaValidationFailures?.[outputPath] ?? 0;
+    let deliveryValidationCount = active.deliveryValidationFailures?.[outputPath] ?? 0;
+    let currentActive = active;
     if (result.errorCode === 'image_workflow_output_alpha_missing') {
       failedValidationCount += 1;
-      const currentActive: ImageWorkflowActiveRun = {
+      currentActive = {
         ...active,
         alphaValidationFailures: { ...(active.alphaValidationFailures ?? {}), [outputPath]: failedValidationCount },
       };
+    }
+    if (result.errorCode === 'image_workflow_output_aspect_mismatch') {
+      deliveryValidationCount += 1;
+      currentActive = {
+        ...currentActive,
+        deliveryValidationFailures: {
+          ...(currentActive.deliveryValidationFailures ?? {}),
+          [outputPath]: deliveryValidationCount,
+        },
+      };
+    }
+    if (result.sourceMasterPath) {
+      currentActive = {
+        ...currentActive,
+        normalizedOutputMasters: {
+          ...(currentActive.normalizedOutputMasters ?? {}),
+          [outputPath]: result.sourceMasterPath,
+        },
+      };
+    }
+    if (currentActive !== active) {
       await workspaceRepository.updateNode(workflow.id, {
         payload: nextPayload(payload, {}, { activeRun: currentActive }),
       });
@@ -662,24 +846,42 @@ export class ImageWorkflowService {
     }
     const alphaRetryable = result.errorCode === 'image_workflow_output_alpha_missing'
       && failedValidationCount < MAX_ATTEMPTS_PER_OUTPUT;
-    const repairPrompt = alphaRetryable ? transparentRepairPrompt(active, failedValidationCount) : null;
+    const deliveryRetryable = result.errorCode === 'image_workflow_output_aspect_mismatch'
+      && deliveryValidationCount < MAX_ATTEMPTS_PER_OUTPUT;
+    const repairPrompt = alphaRetryable
+      ? transparentRepairPrompt(active, failedValidationCount)
+      : deliveryRetryable
+        ? deliveryRepairPrompt(active, result.width ?? null, result.height ?? null)
+        : null;
+    const attemptsRemaining = result.errorCode === 'image_workflow_output_alpha_missing'
+      ? Math.max(0, MAX_ATTEMPTS_PER_OUTPUT - failedValidationCount)
+      : result.errorCode === 'image_workflow_output_aspect_mismatch'
+        ? Math.max(0, MAX_ATTEMPTS_PER_OUTPUT - deliveryValidationCount)
+        : null;
     return {
       path: outputPath,
       valid: result.valid,
       errorCode: result.errorCode,
-      retryable: alphaRetryable || result.errorCode === 'image_workflow_output_missing',
+      retryable: alphaRetryable || deliveryRetryable || result.errorCode === 'image_workflow_output_missing',
       transparentBackground: active.transparentBackground,
       transparencyStrategy: active.transparencyStrategy ?? 'direct-alpha',
       expectedIntermediate: active.transparencyStrategy === 'white-matte-then-alpha' && failedValidationCount === 1,
       failedValidationCount,
-      attemptsRemaining: result.errorCode === 'image_workflow_output_alpha_missing'
-        ? Math.max(0, MAX_ATTEMPTS_PER_OUTPUT - failedValidationCount)
-        : null,
+      deliveryValidationCount,
+      width: result.width ?? null,
+      height: result.height ?? null,
+      sourceWidth: result.sourceWidth ?? result.width ?? null,
+      sourceHeight: result.sourceHeight ?? result.height ?? null,
+      targetWidth: active.targetWidth,
+      targetHeight: active.targetHeight,
+      normalized: result.normalized ?? false,
+      sourceMasterPath: result.sourceMasterPath ?? null,
+      attemptsRemaining,
       repairTool: repairPrompt ? 'image_gen.imagegen' : null,
       repairPrompt,
       repairReferencedImagePaths: repairPrompt ? [outputPath] : [],
       repair: repairPrompt
-        ? `Call image_gen.imagegen with only this invalid output in referenced_image_paths and the exact repairPrompt returned in this response. Do not use Python or any non-ImageGen pixel manipulation. Replace the same file with the native result and validate again.`
+        ? `Call image_gen.imagegen with only this invalid output in referenced_image_paths and the exact repairPrompt returned in this response. Do not use Python or any non-ImageGen pixel manipulation. Replace the same assigned file with that native result and validate again.`
         : null,
     };
   }
@@ -756,16 +958,49 @@ export class ImageWorkflowService {
     return { workflowNodeId: node.id, run };
   }
 
-  private async validateOutputFile(workspaceId: string, path: string, transparentBackground: boolean) {
+  private async validateOutputFile(workspaceId: string, path: string, active: ImageWorkflowActiveRun) {
     const file = await filesystemService.readBinary(workspaceId, path).catch(() => null);
     if (!file) return { valid: false, errorCode: 'image_workflow_output_missing', bytes: 0 };
     if (file.data.length > MAX_OUTPUT_BYTES) return { valid: false, errorCode: 'image_workflow_output_too_large', bytes: file.data.length };
     try {
       const png = inspectPng(file.data);
-      if (transparentBackground && !png.hasGenuineTransparency) {
+      if (active.transparentBackground && !png.hasGenuineTransparency) {
         return { valid: false, errorCode: 'image_workflow_output_alpha_missing', bytes: file.data.length };
       }
-      return { valid: true, errorCode: null, bytes: file.data.length, width: png.width, height: png.height };
+      if (active.targetWidth && active.targetHeight && (png.width !== active.targetWidth || png.height !== active.targetHeight)) {
+        if (deliveryAspectDeviation(png.width, png.height, active.targetWidth, active.targetHeight) > MAX_DELIVERY_ASPECT_DEVIATION) {
+          return {
+            valid: false,
+            errorCode: 'image_workflow_output_aspect_mismatch',
+            bytes: file.data.length,
+            width: png.width,
+            height: png.height,
+            sourceWidth: png.width,
+            sourceHeight: png.height,
+            normalized: false,
+          };
+        }
+        const normalized = normalizePngDelivery(file.data, active.targetWidth, active.targetHeight);
+        if (normalized.length > MAX_OUTPUT_BYTES) {
+          return { valid: false, errorCode: 'image_workflow_output_too_large', bytes: normalized.length };
+        }
+        const sourceMasterPath = normalizedMasterPath(path);
+        await filesystemService.writeBinary(workspaceId, sourceMasterPath, file.data);
+        await filesystemService.writeBinary(workspaceId, path, normalized);
+        const final = inspectPng(normalized);
+        return {
+          valid: true,
+          errorCode: null,
+          bytes: normalized.length,
+          width: final.width,
+          height: final.height,
+          sourceWidth: png.width,
+          sourceHeight: png.height,
+          normalized: true,
+          sourceMasterPath,
+        };
+      }
+      return { valid: true, errorCode: null, bytes: file.data.length, width: png.width, height: png.height, normalized: false };
     } catch (error) {
       return {
         valid: false,
@@ -788,6 +1023,16 @@ export class ImageWorkflowService {
         referenced_image_paths: active.referencePaths.map((path) => agentPath(workspace, path)),
         calls: active.requestedOutputs,
         maxAttemptsPerOutput: MAX_ATTEMPTS_PER_OUTPUT,
+        maxAttemptsPerValidationIssue: MAX_ATTEMPTS_PER_OUTPUT,
+      },
+      delivery: {
+        preset: active.outputPreset ?? 'auto',
+        targetWidth: active.targetWidth ?? null,
+        targetHeight: active.targetHeight ?? null,
+        exactPixels: Boolean(active.targetWidth && active.targetHeight),
+        normalization: active.targetWidth && active.targetHeight ? 'aspect-safe-bilinear' : 'native',
+        maxAspectDeviation: active.targetWidth && active.targetHeight ? MAX_DELIVERY_ASPECT_DEVIATION : null,
+        preservesNativeMaster: Boolean(active.targetWidth && active.targetHeight),
       },
       transparencyStrategy: active.transparencyStrategy ?? 'direct-alpha',
       workspaceRoot: workspace.runtimeKind === 'wsl' && workspace.wslWorkingDir ? workspace.wslWorkingDir : workspace.workingDir,
@@ -803,6 +1048,12 @@ export class ImageWorkflowService {
           escalationPrompt: transparentRepairPrompt(active, 2),
           referenced_image_paths: ['<the invalid assigned output path only>'],
           forbiddenPixelTools: ['python', 'pillow', 'imagemagick', 'ffmpeg', 'remove-bg', 'generated masks', 'canvas pixel processing'],
+        } : null,
+        deliveryRepair: active.targetWidth && active.targetHeight ? {
+          tool: 'image_gen.imagegen',
+          prompt: deliveryRepairPrompt(active, null, null),
+          referenced_image_paths: ['<the invalid assigned output path only>'],
+          rejectsCropping: true,
         } : null,
       },
       completion: { tool: 'image_workflow_complete', arguments: { nodeId: workflow.id, runId: active.id, outputPaths: active.outputPaths } },
@@ -833,6 +1084,9 @@ export class ImageWorkflowService {
       config: {
         prompt: payload.prompt ?? '', count: payload.count ?? 1,
         transparentBackground: payload.transparentBackground ?? false,
+        outputPreset: payload.outputPreset ?? 'auto',
+        targetWidth: payload.targetWidth ?? null,
+        targetHeight: payload.targetHeight ?? null,
         outputDirectory: payload.outputDirectory ?? 'generated/images', filePrefix: payload.filePrefix ?? 'orkestrai-image',
       },
       status: payload.status ?? 'idle',

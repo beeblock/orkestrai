@@ -148,7 +148,15 @@ common credentials redacted; normal agent output is not persisted.
   configure the workflow, attach, remove, or reorder context and references,
   request one to ten outputs, run or cancel generation, and remove the workflow
   through the same typed bridge. It uses its authenticated built-in
-  `image_gen.imagegen` tool. Every result is validated independently; when the
+  `image_gen.imagegen` tool. Delivery presets produce exact Instagram square
+  (1080x1080), Instagram portrait (1080x1350), Stories/Reels and TikTok
+  (1080x1920) PNGs, with custom dimensions also available. Because the native
+  tool does not guarantee exact pixels, the prompt defines a measurable safe
+  area and Orkestrai validates the native aspect ratio before delivery. A close
+  match is resampled without cropping while preserving its original under
+  `.masters/`; an incompatible frame is sent back to ImageGen for safe
+  recomposition or outpainting instead of cutting or distorting content. Every result is
+  validated independently; when the
   node requires transparency, Orkestrai decodes the PNG and verifies real alpha
   pixels, then directs Codex to correct an opaque or fake-checkerboard result up
   to three times using another native `image_gen.imagegen` edit with the rejected
