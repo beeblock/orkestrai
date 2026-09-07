@@ -845,7 +845,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Unreleased · 0.26.1',
+      date: 'September 7, 2026 · 0.26.1',
       title: 'Orkestrai 0.26.1: reliable Git Floors on WSL',
       summary: 'Windows workspaces backed by WSL now keep every Floor operation inside the selected Linux distribution.',
       items: [

@@ -845,7 +845,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Sin publicar · 0.26.1',
+      date: '7 de septiembre de 2026 · 0.26.1',
       title: 'Orkestrai 0.26.1: Pisos Git confiables en WSL',
       summary: 'Los workspaces Windows respaldados por WSL ahora mantienen todas las operaciones de Pisos dentro de la distribución Linux seleccionada.',
       items: [

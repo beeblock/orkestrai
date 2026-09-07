@@ -849,7 +849,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Não lançado · 0.26.1',
+      date: '7 de setembro de 2026 · 0.26.1',
       title: 'Orkestrai 0.26.1: Andares Git confiáveis no WSL',
       summary: 'Workspaces Windows apoiados pelo WSL agora mantêm todas as operações de Andares dentro da distribuição Linux selecionada.',
       items: [
