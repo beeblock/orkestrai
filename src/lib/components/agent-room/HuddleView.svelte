@@ -248,7 +248,7 @@
         <h1 class="text-[14px] font-semibold">{m['huddle.title']()}</h1>
         {#if snapshot?.activeHuddleId}<Badge variant="secondary">{m['huddle.live']()}</Badge>{/if}
       </div>
-      <p class="mt-1 max-w-2xl text-[10px] leading-4 text-[var(--app-text-muted)]">
+      <p class="mt-1 max-w-2xl text-ui-xs leading-4 text-[var(--app-text-muted)]">
         {m['huddle.description']()}
       </p>
     </div>
@@ -263,13 +263,13 @@
       {/if}
     </div>
   </header>
-  {#if error}<div class="m-4 border-l-2 border-[var(--app-danger)] p-3 text-[10px] text-[var(--app-danger)]">
+  {#if error}<div class="m-4 border-l-2 border-[var(--app-danger)] p-3 text-ui-xs text-[var(--app-danger)]">
       {error}
     </div>{/if}
   <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[240px_minmax(0,1fr)] md:grid-rows-1 xl:grid-cols-[280px_minmax(0,1fr)]">
     <aside class="max-h-36 min-h-0 overflow-y-auto border-b border-[var(--app-border)] p-2 md:max-h-none md:border-r md:border-b-0">
       <div class="mb-2 flex items-center justify-between px-2">
-        <span class="flex items-center gap-1.5 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]"
+        <span class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"
           ><History size={11} />{m['huddle.history']()}</span
         >{#if !snapshot?.activeHuddleId}<Button
             size="icon"
@@ -287,12 +287,12 @@
             selectedId = huddle.id;
             void load();
           }}
-          ><span class="block truncate text-[10px] font-medium">{huddle.title}</span><span
-            class="mt-1 flex justify-between text-[8px] text-[var(--app-text-muted)]"
+          ><span class="block truncate text-ui-xs font-medium">{huddle.title}</span><span
+            class="mt-1 flex justify-between text-ui-xs text-[var(--app-text-muted)]"
             ><span>{huddle.participantCount} {m['huddle.people']()}</span><span>{huddle.status === 'active' ? m['huddle.live']() : m['huddle.finished']()}</span
             ></span
           ></button
-        >{:else}<p class="px-2 py-4 text-[9px] leading-4 text-[var(--app-text-muted)]">
+        >{:else}<p class="px-2 py-4 text-ui-xs leading-4 text-[var(--app-text-muted)]">
           {m['huddle.history_empty']()}
         </p>{/each}
     </aside>
@@ -306,18 +306,18 @@
             <h2 class="text-[14px] font-semibold">
               {m['huddle.start_title']()}
             </h2>
-            <p class="mt-1 text-[10px] text-[var(--app-text-muted)]">
+            <p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">
               {m['huddle.start_hint']()}
             </p>
           </div>
           <label class="block"
-            ><span class="mb-1.5 block text-[10px] font-medium">{m['huddle.topic']()}</span><Input
+            ><span class="mb-1.5 block text-ui-xs font-medium">{m['huddle.topic']()}</span><Input
               bind:value={title}
               maxlength={160}
               placeholder={m['huddle.topic_placeholder']()}
             /></label
           ><label class="block"
-            ><span class="mb-1.5 block text-[10px] font-medium">{m['huddle.agenda']()}</span><Textarea
+            ><span class="mb-1.5 block text-ui-xs font-medium">{m['huddle.agenda']()}</span><Textarea
               bind:value={agenda}
               maxlength={8000}
               class="min-h-24 resize-y"
@@ -326,7 +326,7 @@
           >
           <section>
             <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-[10px] font-medium">
+              <h3 class="text-ui-xs font-medium">
                 {m['huddle.choose_agents']()}
               </h3>
               <Badge variant="outline">{selectedAgents.length}/11</Badge>
@@ -338,15 +338,15 @@
                     disabled={!selectedAgents.includes(agent.id) && selectedAgents.length >= 11}
                     onCheckedChange={(value: boolean | 'indeterminate') => toggleSelected(agent.id, value === true)}
                   /><span class="min-w-0 flex-1"
-                    ><span class="block truncate text-[10px] font-medium">{agent.title}</span><span
-                      class="block truncate text-[8px] text-[var(--app-text-muted)]"
+                    ><span class="block truncate text-ui-xs font-medium">{agent.title}</span><span
+                      class="block truncate text-ui-xs text-[var(--app-text-muted)]"
                       >{(agent.payload as { provider?: string; role?: string }).provider}{(agent.payload as { role?: string }).role
                         ? ` · ${(agent.payload as { role?: string }).role}`
                         : ''}</span
                     ></span
                   >{#if selectedAgents.includes(agent.id)}<button
                       type="button"
-                      class="rounded px-2 py-1 text-[8px]"
+                      class="rounded px-2 py-1 text-ui-xs"
                       class:bg-[var(--app-accent-soft)]={facilitatorNodeId === agent.id}
                       onclick={(event) => {
                         event.preventDefault();
@@ -366,19 +366,19 @@
         <div class="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[var(--app-border)] px-5 py-3">
           <div>
             <div class="flex items-center gap-2">
-              <h2 class="text-[13px] font-semibold">{selected.title}</h2>
+              <h2 class="text-ui-lg font-semibold">{selected.title}</h2>
               <Badge variant="outline">{selected.status === 'active' ? m['huddle.live']() : m['huddle.finished']()}</Badge>{#if selected.linkedTaskId}<Badge
                   variant="secondary"><Link2 size={10} />{m['huddle.task_linked']()}</Badge
                 >{/if}
             </div>
-            {#if selected.agenda}<p class="mt-1 max-w-3xl text-[9px] text-[var(--app-text-muted)]">
+            {#if selected.agenda}<p class="mt-1 max-w-3xl text-ui-xs text-[var(--app-text-muted)]">
                 {selected.agenda}
               </p>{/if}
           </div>
           <div class="flex items-center gap-1.5">
-            {#if !selected.linkedTaskId}<Button variant="outline" size="sm" class="h-8 text-[9px]" onclick={() => void createTask()}
+            {#if !selected.linkedTaskId}<Button variant="outline" size="sm" class="h-8 text-ui-xs" onclick={() => void createTask()}
                 ><Check size={12} />{m['huddle.create_task']()}</Button
-              >{/if}{#if selected.status === 'active'}<Button variant="outline" size="sm" class="h-8 text-[9px]" onclick={() => void end()}
+              >{/if}{#if selected.status === 'active'}<Button variant="outline" size="sm" class="h-8 text-ui-xs" onclick={() => void end()}
                 ><CircleStop size={12} />{m['huddle.end']()}</Button
               >{/if}
           </div>
@@ -391,18 +391,18 @@
                 class:border-[var(--app-border-strong)]={turn.speakerKind === 'agent'}
               >
                 <div class="flex items-center gap-2">
-                  <strong class="text-[9px]">{turn.speakerName}</strong><span class="text-[8px] text-[var(--app-text-muted)]">#{turn.sequence}</span
+                  <strong class="text-ui-xs">{turn.speakerName}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">#{turn.sequence}</span
                   >{#if turn.state === 'pending'}<LoaderCircle size={10} class="animate-spin text-[var(--app-accent)]" />{:else if turn.state === 'failed'}<span
-                      class="text-[8px] text-[var(--app-danger)]">{m['huddle.reply_failed']()}</span
+                      class="text-ui-xs text-[var(--app-danger)]">{m['huddle.reply_failed']()}</span
                     >{/if}
                 </div>
-                {#if turn.text}<p class="mt-1 whitespace-pre-wrap text-[11px] leading-5">
+                {#if turn.text}<p class="mt-1 whitespace-pre-wrap text-ui-sm leading-5">
                     {turn.text}
                   </p>{/if}
               </article>{:else}<div class="grid min-h-48 place-items-center text-center">
                 <div>
                   <MessageCircleMore size={24} class="mx-auto text-[var(--app-text-muted)]" />
-                  <p class="mt-2 text-[10px] text-[var(--app-text-muted)]">
+                  <p class="mt-2 text-ui-xs text-[var(--app-text-muted)]">
                     {m['huddle.transcript_empty']()}
                   </p>
                 </div>
@@ -412,17 +412,17 @@
         {#if selected.status === 'active'}<footer class="shrink-0 border-t border-[var(--app-border)] bg-[var(--app-surface)] px-5 py-3">
             <div class="mx-auto max-w-3xl">
               <div class="mb-2 flex flex-wrap items-center gap-2">
-                <span class="flex items-center gap-1 text-[8px] font-semibold uppercase text-[var(--app-text-muted)]"
+                <span class="flex items-center gap-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"
                   ><Users size={10} />{m['huddle.ask']()}</span
                 >{#each participants as participant (participant.id)}<label
-                    class="flex items-center gap-1 rounded border border-[var(--app-border)] px-1.5 py-1 text-[8px]"
+                    class="flex items-center gap-1 rounded border border-[var(--app-border)] px-1.5 py-1 text-ui-xs"
                     ><Checkbox
                       class="size-3"
                       checked={targets.includes(participant.participantId)}
                       disabled={!targets.includes(participant.participantId) && targets.length >= 5}
                       onCheckedChange={(value: boolean | 'indeterminate') => toggleTarget(participant.participantId, value === true)}
                     />{participant.displayName}</label
-                  >{/each}<label class="ml-auto flex items-center gap-1.5 text-[8px] text-[var(--app-text-muted)]"
+                  >{/each}<label class="ml-auto flex items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]"
                   ><Switch checked={speakReplies} onCheckedChange={(value: boolean) => (speakReplies = value)} />{#if speakReplies}<Volume2
                       size={11}
                     />{:else}<VolumeX size={11} />{/if}{m['huddle.speak_replies']()}</label
@@ -432,7 +432,7 @@
                 <Textarea
                   bind:ref={composer}
                   bind:value={message}
-                  class="min-h-16 max-h-36 resize-y text-[11px]"
+                  class="min-h-16 max-h-36 resize-y text-ui-sm"
                   placeholder={m['huddle.message_placeholder']()}
                   onkeydown={(event: KeyboardEvent) => {
                     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {

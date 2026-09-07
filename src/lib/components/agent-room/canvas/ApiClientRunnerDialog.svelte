@@ -177,7 +177,7 @@
           >
             <ListChecks class="size-4 shrink-0" />
             <span class="min-w-0 flex-1 truncate text-xs font-medium">{runner.name}</span>
-            <span class="text-[10px] tabular-nums opacity-70">{runner.requestIds.length}</span>
+            <span class="text-ui-xs tabular-nums opacity-70">{runner.requestIds.length}</span>
           </button>
         {:else}
           <p class="px-3 py-8 text-center text-xs leading-5 text-muted-foreground">{m['api_client.no_runners']()}</p>
@@ -220,21 +220,21 @@
               minHeight={140}
               onchange={updateIterationData}
             />
-            <p class="mt-1.5 text-[11px] leading-4 text-muted-foreground">{m['api_client.runner_iteration_data_hint']()}</p>
-            {#if iterationDataError}<p class="mt-1 text-[11px] text-destructive" role="alert">{iterationDataError}</p>{/if}
+            <p class="mt-1.5 text-ui-sm leading-4 text-muted-foreground">{m['api_client.runner_iteration_data_hint']()}</p>
+            {#if iterationDataError}<p class="mt-1 text-ui-sm text-destructive" role="alert">{iterationDataError}</p>{/if}
           </div>
 
           <div class="mt-5 border-t border-border pt-4">
             <div class="mb-2 flex items-center justify-between gap-3">
               <h3 class="text-xs font-semibold">{m['api_client.runner_requests']()}</h3>
-              <span class="text-[11px] text-muted-foreground">{m['api_client.runner_selected']({ selected: current.requestIds.length, total: requests.length })}</span>
+              <span class="text-ui-sm text-muted-foreground">{m['api_client.runner_selected']({ selected: current.requestIds.length, total: requests.length })}</span>
             </div>
             <div class="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border p-1.5">
               {#each runnerRequests as request (request.id)}
                 {@const checked = current.requestIds.includes(request.id)}
                 <div class="flex min-w-0 items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/60">
                   <Checkbox {checked} onCheckedChange={(value: boolean) => toggleRequest(request.id, value)} aria-label={request.name} />
-                  <span class="w-10 shrink-0 text-[10px] font-bold text-[var(--app-secondary)]">{request.method}</span>
+                  <span class="w-10 shrink-0 text-ui-xs font-bold text-[var(--app-secondary)]">{request.method}</span>
                   <span class="min-w-0 flex-1 truncate text-xs">{request.name}</span>
                   {#if checked}
                     <Button size="icon-sm" variant="ghost" disabled={current.requestIds[0] === request.id} aria-label={m['api_client.move_up']()} onclick={() => moveRequest(request.id, -1)}><ArrowUp /></Button>

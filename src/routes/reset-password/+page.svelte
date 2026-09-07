@@ -12,7 +12,7 @@
   <title>Reset Password</title>
 </svelte:head>
 
-<div class="flex items-center justify-center min-h-[calc(100vh-200px)]">
+<div class="flex items-center justify-center min-h-screen">
   <Card class="w-full max-w-md">
     <CardHeader>
       <CardTitle>Reset Password</CardTitle>
@@ -42,7 +42,7 @@
             disabled={$delayed}
           />
           {#if $errors.password}
-            <p class="text-sm text-red-600">{$errors.password[0]}</p>
+            <p class="text-sm text-destructive">{$errors.password[0]}</p>
           {/if}
         </div>
 
@@ -58,7 +58,7 @@
             disabled={$delayed}
           />
           {#if $errors.password_confirmation}
-            <p class="text-sm text-red-600">{$errors.password_confirmation[0]}</p>
+            <p class="text-sm text-destructive">{$errors.password_confirmation[0]}</p>
           {/if}
         </div>
 

@@ -15,7 +15,7 @@
   <title>Forgot Password</title>
 </svelte:head>
 
-<div class="flex items-center justify-center min-h-[calc(100vh-200px)]">
+<div class="flex items-center justify-center min-h-screen">
   <Card class="w-full max-w-md">
     <CardHeader>
       <CardTitle>Forgot Password</CardTitle>
@@ -43,7 +43,7 @@
               disabled={$delayed}
             />
             {#if $errors.email}
-              <p class="text-sm text-red-600">{$errors.email[0]}</p>
+              <p class="text-sm text-destructive">{$errors.email[0]}</p>
             {/if}
           </div>
 

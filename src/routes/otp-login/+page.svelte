@@ -27,7 +27,7 @@
   <title>Sign In with Code</title>
 </svelte:head>
 
-<div class="flex items-center justify-center min-h-[calc(100vh-200px)]">
+<div class="flex items-center justify-center min-h-screen">
   <Card class="w-full max-w-md">
     <CardHeader>
       <CardTitle>Sign In with Code</CardTitle>
@@ -61,7 +61,7 @@
               disabled={$requestDelayed}
             />
             {#if $requestErrors.email}
-              <p class="text-sm text-red-600">{$requestErrors.email[0]}</p>
+              <p class="text-sm text-destructive">{$requestErrors.email[0]}</p>
             {/if}
           </div>
 
@@ -89,7 +89,7 @@
               class="text-center text-2xl tracking-[0.5em] font-mono"
             />
             {#if $verifyErrors.code}
-              <p class="text-sm text-red-600">{$verifyErrors.code[0]}</p>
+              <p class="text-sm text-destructive">{$verifyErrors.code[0]}</p>
             {/if}
           </div>
 

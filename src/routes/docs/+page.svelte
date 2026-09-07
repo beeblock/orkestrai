@@ -296,13 +296,13 @@
                   <div class="mt-4 grid gap-4">
                     {#each example.snippets as snippet (snippet.id)}
                       {@const snippetId = `${section.id}:${example.id}:${snippet.id}`}
-                      <div class="min-w-0 overflow-hidden rounded-md border border-[var(--line)] bg-[#0d0d17]">
-                        <div class="flex min-h-9 items-center justify-between gap-3 border-b border-white/10 px-3">
-                          <span class="min-w-0 truncate font-mono text-[10.5px] font-semibold text-[#aeadbd]">{snippet.title}</span>
+                      <div class="min-w-0 overflow-hidden rounded-md border border-app-border bg-app-code-bg">
+                        <div class="flex min-h-9 items-center justify-between gap-3 border-b border-app-border px-3">
+                          <span class="min-w-0 truncate font-mono text-ui-xs font-semibold text-app-text-muted">{snippet.title}</span>
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            class="text-[#aeadbd] hover:bg-white/10 hover:text-white"
+                            class="text-app-text-muted hover:bg-app-hover hover:text-app-code-text"
                             title={copiedSnippetId === snippetId ? m['docs.example_copied']() : m['docs.copy_example']()}
                             aria-label={copiedSnippetId === snippetId ? m['docs.example_copied']() : m['docs.copy_example']()}
                             onclick={() => copySnippet(snippetId, snippet.code)}
@@ -310,7 +310,7 @@
                             {#if copiedSnippetId === snippetId}<Check size={13} aria-hidden="true" />{:else}<Copy size={13} aria-hidden="true" />{/if}
                           </Button>
                         </div>
-                        <pre class="m-0 overflow-x-auto p-4 font-mono text-[11.5px] leading-5 text-[#e3e2ec]"><code translate="no">{snippet.code}</code></pre>
+                        <pre class="m-0 overflow-x-auto p-4 font-mono text-ui-sm leading-5 text-app-code-text"><code translate="no">{snippet.code}</code></pre>
                       </div>
                     {/each}
                   </div>
@@ -340,7 +340,7 @@
               <ol class="grid list-none p-0 pb-2">
                 {#each entry.items as item, index (index)}
                   <li class="grid grid-cols-[30px_minmax(0,1fr)] gap-3 border-t border-[var(--line)] py-3.5">
-                    <span class="pt-0.5 font-mono text-[10px] text-[var(--copy-muted)] tabular-nums">{String(index + 1).padStart(2, '0')}</span>
+                    <span class="pt-0.5 font-mono text-ui-xs text-[var(--copy-muted)] tabular-nums">{String(index + 1).padStart(2, '0')}</span>
                     <p class="m-0 text-[12.5px] leading-5 text-pretty text-[var(--copy-soft)]">{item}</p>
                   </li>
                 {/each}
@@ -621,7 +621,14 @@
   .usecases-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    align-items: stretch;
     gap: 12px;
+  }
+
+  .usecase-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
 
   .usecase-card h3 {
@@ -647,7 +654,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    margin-top: 10px;
+    margin-top: auto;
+    padding-top: 12px;
   }
 
   .usecase-tags {

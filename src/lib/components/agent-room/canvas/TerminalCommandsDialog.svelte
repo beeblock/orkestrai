@@ -185,7 +185,7 @@
               aria-pressed={selectedId === command.id}
               onclick={() => selectCommand(command)}
             >
-              <span class="min-w-0"><strong class="block truncate text-xs font-medium">{command.name}</strong><code class="mt-0.5 block truncate text-[10px] text-muted-foreground">{command.command}</code></span>
+              <span class="min-w-0"><strong class="block truncate text-xs font-medium">{command.name}</strong><code class="mt-0.5 block truncate text-ui-xs text-muted-foreground">{command.command}</code></span>
               {#if command.runOnResume}<History size={13} class="text-[var(--app-accent)]" aria-label={m['term.commands_resume']()} />{/if}
             </button>
           {:else}
@@ -204,10 +204,10 @@
               <Textarea id="terminal-command-value" bind:value={draftCommand} maxlength="4000" rows={7} class="resize-y font-mono text-xs" spellcheck="false" placeholder={m['term.commands_command_placeholder']()} />
             </label>
             <label class="flex items-start justify-between gap-4 border-y border-border py-3">
-              <span class="min-w-0"><span class="block text-xs font-medium">{m['term.commands_resume']()}</span><span class="mt-1 block text-[11px] leading-4 text-muted-foreground">{pureShell ? m['term.commands_resume_hint']() : m['term.commands_resume_agent_hint']()}</span></span>
+              <span class="min-w-0"><span class="block text-xs font-medium">{m['term.commands_resume']()}</span><span class="mt-1 block text-ui-sm leading-4 text-muted-foreground">{pureShell ? m['term.commands_resume_hint']() : m['term.commands_resume_agent_hint']()}</span></span>
               <Switch checked={draftRunOnResume} disabled={!pureShell} onCheckedChange={(checked: boolean) => (draftRunOnResume = checked)} aria-label={m['term.commands_resume']()} />
             </label>
-            <p class="flex items-start gap-2 text-[11px] leading-4 text-muted-foreground"><ShieldAlert size={14} class="mt-0.5 shrink-0" aria-hidden="true" />{m['term.commands_plaintext_warning']()}</p>
+            <p class="flex items-start gap-2 text-ui-sm leading-4 text-muted-foreground"><ShieldAlert size={14} class="mt-0.5 shrink-0" aria-hidden="true" />{m['term.commands_plaintext_warning']()}</p>
             {#if errorMessage}<p class="text-xs text-destructive" role="alert">{errorMessage}</p>{/if}
           </div>
 

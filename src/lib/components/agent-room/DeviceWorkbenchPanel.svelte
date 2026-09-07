@@ -359,13 +359,13 @@
   <header class="flex min-w-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2">
     <div class="flex h-7 shrink-0 items-center rounded-[5px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-0.5" aria-label={m['device.platform']()}>
       <button
-        class={`grid size-6 place-items-center rounded-[3px] text-[10px] font-semibold transition-colors ${selectedPlatform === 'ios' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
+        class={`grid size-6 place-items-center rounded-[3px] text-ui-xs font-semibold transition-colors ${selectedPlatform === 'ios' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
         aria-pressed={selectedPlatform === 'ios'}
         disabled={Boolean(session)}
         onclick={() => (selectedPlatform = 'ios')}
       >{m['device.platform_ios']()}</button>
       <button
-        class={`grid h-6 min-w-8 place-items-center rounded-[3px] px-1 text-[10px] font-semibold transition-colors ${selectedPlatform === 'android' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
+        class={`grid h-6 min-w-8 place-items-center rounded-[3px] px-1 text-ui-xs font-semibold transition-colors ${selectedPlatform === 'android' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
         aria-pressed={selectedPlatform === 'android'}
         disabled={Boolean(session)}
         onclick={() => (selectedPlatform = 'android')}
@@ -383,8 +383,8 @@
               <span class="flex min-w-0 items-center gap-2">
                 <span class={`size-1.5 rounded-full ${device.state === 'booted' ? 'bg-[var(--app-success)]' : 'bg-[var(--app-text-muted)]'}`}></span>
                 <span class="truncate">{device.name}</span>
-                <span class="truncate text-[10px] text-[var(--app-text-muted)]">{device.runtime}</span>
-                {#if device.physical}<span class="shrink-0 text-[9px] text-[var(--app-warning)]">{m['device.physical']()}</span>{/if}
+                <span class="truncate text-ui-xs text-[var(--app-text-muted)]">{device.runtime}</span>
+                {#if device.physical}<span class="shrink-0 text-ui-xs text-[var(--app-warning)]">{m['device.physical']()}</span>{/if}
               </span>
             </Select.Item>
           {/each}
@@ -404,7 +404,7 @@
       <div class="flex min-w-0 flex-1 items-center gap-2">
         <span class="size-1.5 shrink-0 rounded-full bg-[var(--app-success)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--app-success)_15%,transparent)]"></span>
         <span class="truncate text-xs font-medium">{session.deviceName}</span>
-        <span class="hidden truncate text-[10px] text-[var(--app-text-muted)] sm:inline">{devices.find((device) => device.id === session.deviceId)?.runtime ?? session.platform}</span>
+        <span class="hidden truncate text-ui-xs text-[var(--app-text-muted)] sm:inline">{devices.find((device) => device.id === session.deviceId)?.runtime ?? session.platform}</span>
       </div>
       <Tooltip.Root>
         <Tooltip.Trigger>
@@ -526,7 +526,7 @@
             </Tooltip.Trigger>
             <Tooltip.Content>{m['device.viewport_zoom_out']()}</Tooltip.Content>
           </Tooltip.Root>
-          <output class="w-11 select-none text-center font-mono text-[10px] text-[var(--app-text-soft)]" aria-label={m['device.viewport_zoom_level']({ percent: viewportZoomLabel })}>{viewportZoomLabel}</output>
+          <output class="w-11 select-none text-center font-mono text-ui-xs text-[var(--app-text-soft)]" aria-label={m['device.viewport_zoom_level']({ percent: viewportZoomLabel })}>{viewportZoomLabel}</output>
           <Tooltip.Root>
             <Tooltip.Trigger>
               {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[4px]" aria-label={m['device.viewport_zoom_in']()} disabled={!streamWidth || viewportScale >= 2} onclick={() => zoomViewport(1)}><Plus size={13} aria-hidden="true" /></Button>{/snippet}
@@ -542,14 +542,14 @@
           </Tooltip.Root>
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({ props })}<Button {...props} variant="ghost" size="sm" class={`h-7 min-w-8 rounded-[4px] px-1.5 font-mono text-[9px] ${viewportMode === 'custom' && customViewportScale === 1 ? 'bg-[var(--app-surface-raised)]' : ''}`} aria-label={m['device.viewport_actual']()} aria-pressed={viewportMode === 'custom' && customViewportScale === 1} disabled={!streamWidth} onclick={showActualSize}>1:1</Button>{/snippet}
+              {#snippet child({ props })}<Button {...props} variant="ghost" size="sm" class={`h-7 min-w-8 rounded-[4px] px-1.5 font-mono text-ui-xs ${viewportMode === 'custom' && customViewportScale === 1 ? 'bg-[var(--app-surface-raised)]' : ''}`} aria-label={m['device.viewport_actual']()} aria-pressed={viewportMode === 'custom' && customViewportScale === 1} disabled={!streamWidth} onclick={showActualSize}>1:1</Button>{/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content>{m['device.viewport_actual']()}</Tooltip.Content>
           </Tooltip.Root>
         </div>
 
         {#if busyCommand && !['logs', 'tree', 'screenshot'].includes(busyCommand)}
-          <div class="pointer-events-none absolute bottom-12 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-black/75 px-3 py-1.5 text-[10px] font-medium text-white shadow-lg backdrop-blur-sm"><LoaderCircle size={11} class="animate-spin" />{m['device.sending']()}</div>
+          <div class="pointer-events-none absolute bottom-12 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-black/75 px-3 py-1.5 text-ui-xs font-medium text-white shadow-lg backdrop-blur-sm"><LoaderCircle size={11} class="animate-spin" />{m['device.sending']()}</div>
         {/if}
       {/if}
     </main>
@@ -558,35 +558,35 @@
       <aside class="device-details min-h-0 min-w-0 border-l border-[var(--app-border)] bg-[var(--app-surface)]" aria-label={m['device.details']()}>
         <Tabs.Root value={detailTab} onValueChange={(value: string) => (detailTab = value)} class="grid h-full min-h-0 grid-rows-[38px_minmax(0,1fr)]">
           <Tabs.List class="h-[38px] w-full justify-start overflow-x-auto rounded-none border-b border-[var(--app-border)] bg-transparent px-2">
-            <Tabs.Trigger value="logs" class="h-7 gap-1.5 px-2 text-[10px]"><ScrollText size={12} />{m['device.logs']()}</Tabs.Trigger>
-            <Tabs.Trigger value="tree" class="h-7 gap-1.5 px-2 text-[10px]"><ListTree size={12} />{m['device.tree']()}</Tabs.Trigger>
-            <Tabs.Trigger value="screenshots" class="h-7 gap-1.5 px-2 text-[10px]"><Camera size={12} />{m['device.screenshots']()}</Tabs.Trigger>
-            <Tabs.Trigger value="permissions" class="h-7 gap-1.5 px-2 text-[10px]"><ShieldCheck size={12} />{m['device.permissions']()}</Tabs.Trigger>
+            <Tabs.Trigger value="logs" class="h-7 gap-1.5 px-2 text-ui-xs"><ScrollText size={12} />{m['device.logs']()}</Tabs.Trigger>
+            <Tabs.Trigger value="tree" class="h-7 gap-1.5 px-2 text-ui-xs"><ListTree size={12} />{m['device.tree']()}</Tabs.Trigger>
+            <Tabs.Trigger value="screenshots" class="h-7 gap-1.5 px-2 text-ui-xs"><Camera size={12} />{m['device.screenshots']()}</Tabs.Trigger>
+            <Tabs.Trigger value="permissions" class="h-7 gap-1.5 px-2 text-ui-xs"><ShieldCheck size={12} />{m['device.permissions']()}</Tabs.Trigger>
           </Tabs.List>
 
           <Tabs.Content value="logs" class="min-h-0 overflow-auto p-3">
-            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.logs']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-[10px]" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'logs', minutes: 2 })}><RefreshCw size={11} class={busyCommand === 'logs' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
-            <pre class="min-h-36 whitespace-pre-wrap break-words rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-[10px] leading-4 text-[var(--app-code-text)]">{logs || m['device.no_logs']()}</pre>
+            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.logs']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'logs', minutes: 2 })}><RefreshCw size={11} class={busyCommand === 'logs' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
+            <pre class="min-h-36 whitespace-pre-wrap break-words rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-code-text)]">{logs || m['device.no_logs']()}</pre>
             <div class="mt-4 space-y-2 border-t border-[var(--app-border)] pt-3">
-              <label class="text-[10px] font-medium text-[var(--app-text-soft)]" for="device-type-text">{m['device.type_text']()}</label>
+              <label class="text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-type-text">{m['device.type_text']()}</label>
               <div class="flex gap-2"><Input id="device-type-text" bind:value={typeText} class="h-8 min-w-0 text-xs" onkeydown={(event: KeyboardEvent) => { if (event.key === 'Enter') void sendText(); }} /><Button size="sm" class="h-8 w-8 shrink-0 p-0" aria-label={m['device.send_text']()} disabled={!session || !typeText.trim() || busyCommand !== null} onclick={sendText}><Keyboard size={13} /></Button></div>
-              <label class="block pt-2 text-[10px] font-medium text-[var(--app-text-soft)]" for="device-install-path">{m['device.install_app']()}</label>
+              <label class="block pt-2 text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-install-path">{m['device.install_app']()}</label>
               <div class="flex gap-2"><Input id="device-install-path" bind:value={installPath} class="h-8 min-w-0 text-xs" placeholder={m['device.install_placeholder']()} /><Button size="sm" variant="outline" class="h-8 w-8 shrink-0 p-0" aria-label={m['device.install_app']()} disabled={!session || !installPath.trim() || busyCommand !== null} onclick={() => void command({ command: 'install', path: installPath.trim() })}><PackagePlus size={13} /></Button></div>
-              <label class="block pt-2 text-[10px] font-medium text-[var(--app-text-soft)]" for="device-bundle-id">{m['device.launch_app']()}</label>
+              <label class="block pt-2 text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-bundle-id">{m['device.launch_app']()}</label>
               <div class="flex gap-2"><Input id="device-bundle-id" bind:value={bundleId} class="h-8 min-w-0 text-xs" placeholder={m['device.launch_placeholder']()} /><Button size="sm" variant="outline" class="h-8 w-8 shrink-0 p-0" aria-label={m['device.launch_app']()} disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void command({ command: 'launch', bundleId: bundleId.trim() })}><Play size={13} /></Button></div>
             </div>
           </Tabs.Content>
 
           <Tabs.Content value="tree" class="min-h-0 overflow-auto p-3">
-            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.accessibility_tree']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-[10px]" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'tree' })}><RefreshCw size={11} class={busyCommand === 'tree' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
-            <pre class="min-h-36 whitespace-pre-wrap break-all rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-[10px] leading-4 text-[var(--app-code-text)]">{tree || m['device.no_tree']()}</pre>
+            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.accessibility_tree']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'tree' })}><RefreshCw size={11} class={busyCommand === 'tree' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
+            <pre class="min-h-36 whitespace-pre-wrap break-all rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-code-text)]">{tree || m['device.no_tree']()}</pre>
           </Tabs.Content>
 
           <Tabs.Content value="screenshots" class="min-h-0 overflow-auto p-3">
-            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.screenshots']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-[10px]" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'screenshot' })}><Camera size={11} />{m['device.capture']()}</Button></div>
+            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.screenshots']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'screenshot' })}><Camera size={11} />{m['device.capture']()}</Button></div>
             {#if screenshotPath}
               <img class="w-full rounded-[5px] border border-[var(--app-border)] bg-black object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(screenshotPath)}`} alt={m['device.latest_screenshot']()} />
-              <p class="mt-2 break-all font-mono text-[9px] leading-4 text-[var(--app-text-muted)]">{screenshotPath}</p>
+              <p class="mt-2 break-all font-mono text-ui-xs leading-4 text-[var(--app-text-muted)]">{screenshotPath}</p>
             {:else}
               <div class="flex min-h-40 items-center justify-center rounded-[5px] border border-dashed border-[var(--app-border)] text-center text-xs text-[var(--app-text-muted)]">{m['device.no_screenshots']()}</div>
             {/if}
@@ -595,11 +595,11 @@
           <Tabs.Content value="permissions" class="min-h-0 overflow-auto p-3">
             <div class="space-y-3">
               <div>
-                <label class="text-[10px] font-medium text-[var(--app-text-soft)]" for="device-permission-bundle">{session?.platform === 'android' ? m['device.package_id']() : m['device.bundle_id']()}</label>
+                <label class="text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-permission-bundle">{session?.platform === 'android' ? m['device.package_id']() : m['device.bundle_id']()}</label>
                 <Input id="device-permission-bundle" bind:value={bundleId} class="mt-1 h-8 text-xs" placeholder={m['device.launch_placeholder']()} />
               </div>
               <div>
-                <span class="text-[10px] font-medium text-[var(--app-text-soft)]">{m['device.permission']()}</span>
+                <span class="text-ui-xs font-medium text-[var(--app-text-soft)]">{m['device.permission']()}</span>
                 <Select.Root type="single" value={selectedPermission} onValueChange={(value: string) => (selectedPermission = value as DevicePermission)}>
                   <Select.Trigger size="sm" class="mt-1 h-8 w-full border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs">
                     {permissionOptions.find((option) => option.value === selectedPermission)?.label ?? selectedPermission}
@@ -612,12 +612,12 @@
                 </Select.Root>
               </div>
               <div class="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-[10px]" disabled={!session || busyCommand !== null} onclick={() => void permissionCommand('list')}>{m['device.permission_list']()}</Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-[10px]" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('grant')}>{m['device.permission_grant']()}</Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-[10px]" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('revoke')}>{m['device.permission_revoke']()}</Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-[10px]" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('reset')}>{m['device.permission_reset']()}</Button>
+                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void permissionCommand('list')}>{m['device.permission_list']()}</Button>
+                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('grant')}>{m['device.permission_grant']()}</Button>
+                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('revoke')}>{m['device.permission_revoke']()}</Button>
+                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('reset')}>{m['device.permission_reset']()}</Button>
               </div>
-              <pre class="min-h-36 whitespace-pre-wrap break-words rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-[10px] leading-4 text-[var(--app-code-text)]">{permissions || m['device.no_permissions']()}</pre>
+              <pre class="min-h-36 whitespace-pre-wrap break-words rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-code-text)]">{permissions || m['device.no_permissions']()}</pre>
             </div>
           </Tabs.Content>
         </Tabs.Root>

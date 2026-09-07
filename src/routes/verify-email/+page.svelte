@@ -8,7 +8,7 @@
   <title>Verify Email</title>
 </svelte:head>
 
-<div class="flex items-center justify-center min-h-[calc(100vh-200px)]">
+<div class="flex items-center justify-center min-h-screen">
   <Card class="w-full max-w-md">
     <CardHeader>
       <CardTitle>Email Verification</CardTitle>

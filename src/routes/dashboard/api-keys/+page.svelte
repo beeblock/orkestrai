@@ -83,7 +83,7 @@
               aria-invalid={$createKeyErrors.name ? 'true' : undefined}
               disabled={$creatingKey}
             />
-            {#if $createKeyErrors.name}<p class="text-xs text-red-600">{$createKeyErrors.name[0]}</p>{/if}
+            {#if $createKeyErrors.name}<p class="text-xs text-destructive">{$createKeyErrors.name[0]}</p>{/if}
           </div>
           <div class="space-y-2">
             <Label for="permissions">Permissions</Label>
@@ -96,7 +96,7 @@
               disabled={$creatingKey}
             />
             <p class="text-xs text-muted-foreground">Comma-separated: read, write, admin</p>
-            {#if $createKeyErrors.permissions}<p class="text-xs text-red-600">{$createKeyErrors.permissions[0]}</p>{/if}
+            {#if $createKeyErrors.permissions}<p class="text-xs text-destructive">{$createKeyErrors.permissions[0]}</p>{/if}
           </div>
           <div class="flex gap-2">
             <Button type="submit" disabled={$creatingKey}>{$creatingKey ? 'Creating...' : 'Create Key'}</Button>

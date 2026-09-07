@@ -11,6 +11,7 @@
     selectedIds = [],
     hoveredId = null,
     showFrameLabels = false,
+    zoom = 1,
   }: {
     elements: DesignElement[];
     assets?: DesignAsset[];
@@ -19,6 +20,8 @@
     selectedIds?: string[];
     hoveredId?: string | null;
     showFrameLabels?: boolean;
+    /** Escala do viewport: o chrome contra-escala para ter tamanho fixo em px. */
+    zoom?: number;
   } = $props();
 
   const ordered = $derived(elements.filter((element) => element.visible).sort((a, b) => a.order - b.order));
@@ -65,6 +68,13 @@
     const parent = element.parentId ? elementMap.get(element.parentId) : null;
     return parent?.clipContent ? `url(#design-clip-${parent.id})` : null;
   }
+
+  function rotateAround(element: DesignElement): string {
+    return `rotate(${element.rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`;
+  }
+
+  const painted = $derived(ordered.filter((element) => !element.isMask));
+  const outlined = $derived(painted.filter((element) => selectedSet.has(element.id) || hoveredId === element.id));
 </script>
 
 <defs>
@@ -98,11 +108,11 @@
   {/each}
 </defs>
 
-{#each ordered.filter((element) => !element.isMask) as element (element.id)}
+{#each painted as element (element.id)}
   <g
     data-design-element={element.id}
     opacity={element.opacity}
-    transform={`rotate(${element.rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`}
+    transform={rotateAround(element)}
     clip-path={clippingId(element)}
     filter={element.effects.some((effect) => effect.visible) ? `url(#design-filter-${element.id})` : undefined}
     style={`mix-blend-mode:${element.blendMode}`}
@@ -134,54 +144,51 @@
         <DesignElementShape {element} fill="none" stroke={paintValue(element, 'stroke', paint, index)} strokeOpacity={paint.opacity} strokeWidth={element.strokeWidth || 1} pointerEvents="none" />
       {/each}
     {/if}
-    {#if selectedSet.has(element.id)}
-      <rect
-        data-design-selection
-        x={element.x - 2}
-        y={element.y - 2}
-        width={element.width + 4}
-        height={element.height + 4}
-        rx={Math.max(0, element.cornerRadius + 2)}
-        fill="none"
-        stroke="#2563eb"
-        stroke-width="2"
-        vector-effect="non-scaling-stroke"
-        pointer-events="none"
-      />
-    {:else if hoveredId === element.id}
-      <rect
-        data-design-hover
-        x={element.x - 1}
-        y={element.y - 1}
-        width={element.width + 2}
-        height={element.height + 2}
-        rx={Math.max(0, element.cornerRadius + 1)}
-        fill="none"
-        stroke="#0ea5e9"
-        stroke-width="1.25"
-        vector-effect="non-scaling-stroke"
-        pointer-events="none"
-      />
-    {/if}
   </g>
 {/each}
 
-{#if showFrameLabels}
-  <g data-design-ui pointer-events="none">
+<!--
+  Chrome do editor em uma camada irma da arte, nunca dentro dela.
+  Dentro do <g> do elemento, o contorno herdava opacity, mix-blend-mode, filter
+  e clip-path da propria camada: selecionar algo a 20% de opacidade dava um
+  contorno a 20%, e um filho de frame com clipContent tinha o contorno cortado.
+  Aqui tambem entra no data-design-ui que o serializador remove do export.
+-->
+<g data-design-ui pointer-events="none">
+  {#each outlined as element (element.id)}
+    {@const isSelected = selectedSet.has(element.id)}
+    <rect
+      data-design-selection={isSelected ? element.id : undefined}
+      data-design-hover={isSelected ? undefined : element.id}
+      x={element.x - (isSelected ? 2 : 1)}
+      y={element.y - (isSelected ? 2 : 1)}
+      width={element.width + (isSelected ? 4 : 2)}
+      height={element.height + (isSelected ? 4 : 2)}
+      rx={Math.max(0, element.cornerRadius + (isSelected ? 2 : 1))}
+      fill="none"
+      stroke={isSelected ? 'var(--design-selection)' : 'var(--design-hover)'}
+      stroke-width={isSelected ? 2 : 1.25}
+      vector-effect="non-scaling-stroke"
+      transform={rotateAround(element)}
+    />
+  {/each}
+
+  {#if showFrameLabels}
     {#each labeledDesignFrames(ordered) as frame (frame.id)}
+      {@const size = 11 / zoom}
       <text
         data-design-frame-label={frame.id}
         x={frame.x}
-        y={Math.max(13, frame.y - 8)}
-        fill="#2563eb"
-        stroke={frame.y < 22 ? '#ffffff' : 'none'}
-        stroke-width={frame.y < 22 ? 3 : 0}
+        y={frame.y - size * 0.55}
+        fill="var(--design-selection)"
+        stroke="var(--app-canvas)"
+        stroke-width={3 / zoom}
         paint-order="stroke"
         font-family="Inter Variable, Inter, sans-serif"
-        font-size="12"
+        font-size={size}
         font-weight="600"
         transform={`rotate(${frame.rotation} ${frame.x + frame.width / 2} ${frame.y + frame.height / 2})`}
       >{frame.name}</text>
     {/each}
-  </g>
-{/if}
+  {/if}
+</g>

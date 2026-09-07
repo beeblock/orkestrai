@@ -72,7 +72,7 @@
         textValue={provider.displayName}
         onclick={() => provider.installed || allowUnavailableSelection ? onSelect(provider) : onOpenProviderCenter()}
       >
-        <span class="provider-menu-icon" aria-hidden="true">
+        <span class="provider-menu-icon app-logo-plate" aria-hidden="true">
           {#if providerIcons[provider.id]}
             <img src={providerIcons[provider.id]} width="16" height="16" alt="" />
           {:else}
@@ -152,7 +152,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: #20242c;
+    background: var(--app-logo-plate);
     color: var(--app-text-soft);
     flex-shrink: 0;
   }

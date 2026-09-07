@@ -66,7 +66,7 @@
 
 {#if placement === 'vertical'}
   <section class="px-1.5 pb-2" aria-label={label}>
-    <div class="flex h-6 items-center gap-2 px-2 text-[10px] font-semibold uppercase text-[var(--app-text-muted)]">
+    <div class="flex h-6 items-center gap-2 px-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
       <span class={`size-1.5 rounded-full ${activePane ? 'bg-[var(--app-accent)]' : 'bg-[var(--app-border-strong)]'}`}></span>
       <span>{label}</span>
       <span class="ml-auto tabular-nums">{tabs.length}</span>
@@ -88,7 +88,7 @@
             <span class={pane.activeNodeId === node.id ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'}>
               <WorkbenchNodeIcon type={node.type} size={13} />
             </span>
-            <span data-testid="workbench-vertical-tab-name" class="min-w-0 flex-1 break-words text-[11px] leading-[14px]">{node.title || node.type}</span>
+            <span data-testid="workbench-vertical-tab-name" class="min-w-0 flex-1 break-words text-ui-sm leading-[14px]">{node.title || node.type}</span>
             {#if dirtyNodeIds.includes(node.id)}<span class="size-1.5 shrink-0 rounded-full bg-[var(--app-warning)]" aria-label={m['editor.unsaved']()}></span>{/if}
           </button>
           {@render moveMenu(node.id)}
@@ -128,7 +128,7 @@
           onclick={() => onSelect(node.id)}
         >
           <WorkbenchNodeIcon type={node.type} size={13} />
-          <span class="min-w-0 flex-1 truncate text-[11px]" title={node.title || node.type}>{node.title || node.type}</span>
+          <span class="min-w-0 flex-1 truncate text-ui-sm" title={node.title || node.type}>{node.title || node.type}</span>
           {#if dirtyNodeIds.includes(node.id)}<span class="size-1.5 shrink-0 rounded-full bg-[var(--app-warning)]" aria-label={m['editor.unsaved']()}></span>{/if}
         </button>
         {@render moveMenu(node.id)}

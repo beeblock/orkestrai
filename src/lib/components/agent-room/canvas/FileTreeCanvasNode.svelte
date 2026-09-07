@@ -7,7 +7,7 @@
   import { Input } from '$lib/components/ui/input';
   import { Button } from '$lib/components/ui/button';
   import NodeShell from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   export type FileTreeNodeData = {
@@ -206,13 +206,13 @@
   {/snippet}
   {#snippet actions()}
     {#if branch}
-      <IconAction label={graphMode ? m['files.view_files']() : m['files.view_graph']()} onclick={toggleGraph}>
+      <HeaderIconButton class="node-action-btn" label={graphMode ? m['files.view_files']() : m['files.view_graph']()} onclick={toggleGraph}>
         <GitCommitHorizontal size={13} />
-      </IconAction>
+      </HeaderIconButton>
     {/if}
-    <IconAction label={m['onboarding.back']()} disabled={!currentPath} onclick={goUp}><ArrowUp size={13} /></IconAction>
-    <IconAction label={m['files.reload']()} onclick={refresh}><RefreshCw size={13} /></IconAction>
-    <IconAction label={m['files.remove']()} danger onclick={() => data.onDelete(id)}><X size={13} /></IconAction>
+    <HeaderIconButton class="node-action-btn" label={m['onboarding.back']()} disabled={!currentPath} onclick={goUp}><ArrowUp size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['files.reload']()} onclick={refresh}><RefreshCw size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['files.remove']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   {#if currentPath && !graphMode}
@@ -402,7 +402,7 @@
     font-size: 10px;
     font-weight: 400;
     color: var(--app-success);
-    background: rgba(142, 201, 142, 0.12);
+    background: color-mix(in srgb, var(--app-success) 12%, transparent);
     padding: 1px 7px;
     border-radius: 8px;
     margin-left: 6px;

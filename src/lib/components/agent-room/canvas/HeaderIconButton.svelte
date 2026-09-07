@@ -21,7 +21,7 @@
     label,
     href,
     onclick,
-    side = 'bottom',
+    side = 'top',
     danger = false,
     active = false,
     disabled = false,
@@ -29,6 +29,14 @@
     type = 'button',
     children,
   }: Props = $props();
+
+  function handleClick(event: MouseEvent): void {
+    // Node header actions used to stop propagation in IconAction. Keep that
+    // contract in the shared replacement so a command cannot also interact
+    // with the canvas underneath it.
+    event.stopPropagation();
+    onclick?.(event);
+  }
 </script>
 
 <Tooltip.Root>
@@ -39,7 +47,7 @@
           {@render children()}
         </a>
       {:else}
-        <button {...props} aria-label={label} class={`hib ${klass}`} class:danger class:active {disabled} {type} {onclick}>
+        <button {...props} aria-label={label} class={`hib ${klass}`} class:danger class:active {disabled} {type} onclick={onclick ? handleClick : undefined}>
           {@render children()}
         </button>
       {/if}
@@ -53,8 +61,8 @@
      alguns contextos e quebra a linha do cabecalho. */
   .hib :global(svg),
   .hib :global(img) {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     display: block;
     flex-shrink: 0;
   }

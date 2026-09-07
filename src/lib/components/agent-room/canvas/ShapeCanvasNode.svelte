@@ -285,7 +285,14 @@
   bind:clientHeight={boxHeight}
   ondblclick={editLabel}
 >
-  <NodeResizer isVisible={selected ?? false} minWidth={60} minHeight={40} onResizeEnd={(_e, params) => data.onResize?.(id, params)} />
+  <NodeResizer
+    isVisible={selected ?? false}
+    minWidth={60}
+    minHeight={40}
+    onResizeEnd={(_e, params) => data.onResize?.(id, params)}
+    lineStyle="border-color: var(--app-accent)"
+    handleStyle="background: var(--app-accent)"
+  />
   {#if selected}
     <HeaderIconButton label={m['shape.remove']()} class="shape-delete nodrag" side="left" onclick={() => data.onDelete(id)}>
       <X size={12} />
@@ -577,6 +584,12 @@
     position: relative;
   }
 
+  /* Mesma linguagem de selecao do NodeShell. Sem border-color aqui: a caixa
+     nao tem borda e um border-width novo deslocaria o SVG em 1px. */
+  .canvas-shape.selected {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 18%, transparent);
+  }
+
   .shape-svg {
     position: absolute;
     inset: 0;
@@ -590,7 +603,7 @@
 
   .arrow-anchor {
     fill: var(--app-surface);
-    stroke: var(--accent, var(--app-accent));
+    stroke: var(--app-accent);
     stroke-width: 2;
     cursor: grab;
     pointer-events: all;
@@ -691,7 +704,7 @@
     border: 1px solid var(--app-border);
     border-radius: 12px;
     background: var(--app-surface);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--app-shadow-overlay);
     padding: 10px 12px 12px;
     user-select: none;
   }
@@ -780,7 +793,11 @@
   }
 
   .swatch.transparent {
-    background: repeating-conic-gradient(#3a3b46 0% 25%, #1e1f26 0% 50%) 0 0 / 8px 8px;
+    background: repeating-conic-gradient(
+        var(--app-surface-raised) 0% 25%,
+        var(--app-surface-subtle) 0% 50%
+      )
+      0 0 / 8px 8px;
   }
 
   .swatch.active {

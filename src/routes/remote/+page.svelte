@@ -392,7 +392,7 @@
           <span class="size-2 rounded-full bg-[var(--app-danger)]"></span><span
             class="size-2 rounded-full bg-[var(--app-warning)]"
           ></span><span class="size-2 rounded-full bg-[var(--app-success)]"
-          ></span><span class="ml-2 text-[10px] text-[var(--app-text-muted)]"
+          ></span><span class="ml-2 text-ui-xs text-[var(--app-text-muted)]"
             >{m["remote.preview_title"]()}</span
           >
         </div>

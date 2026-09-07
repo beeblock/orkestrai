@@ -1,9 +1,49 @@
 <!doctype html>
-<html lang="en">
+<!-- `dark` e o tema padrao do produto (DEFAULT_APP_THEME_ID); o bootstrap abaixo
+     troca para `light` quando o tema em cache for claro. -->
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d0f12" />
+    <script>
+      /*
+       * Bootstrap de tema (anti-flash).
+       *
+       * As settings vem por fetch, entao sem isso a primeira pintura usa o tema
+       * padrao e as rotas com SSR piscam ao hidratar. `applyAppTheme` grava o
+       * tema resolvido em localStorage; aqui so reaplicamos antes da pintura.
+       * Formato da chave definido em app-themes.ts (APP_THEME_CACHE_KEY).
+       *
+       * Nunca pode lancar: ha testes e2e que exigem zero erros de pagina.
+       */
+      (function () {
+        try {
+          var raw = localStorage.getItem('orkestrai.theme.v1');
+          if (!raw) return;
+          var cached = JSON.parse(raw);
+          if (!cached || typeof cached !== 'object') return;
+          var root = document.documentElement;
+          var isDark = cached.dark !== false;
+          if (cached.id) root.dataset.appTheme = String(cached.id);
+          root.classList.toggle('dark', isDark);
+          root.classList.toggle('light', !isDark);
+          root.style.colorScheme = isDark ? 'dark' : 'light';
+          var vars = cached.vars;
+          if (vars && typeof vars === 'object') {
+            for (var key in vars) {
+              if (key.charAt(0) === '-' && typeof vars[key] === 'string') root.style.setProperty(key, vars[key]);
+            }
+          }
+          var page = vars && vars['--app-page'];
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta && typeof page === 'string') meta.setAttribute('content', page);
+        } catch (error) {
+          /* storage indisponivel ou cache corrompido: segue com o tema padrao */
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-prerender="true">

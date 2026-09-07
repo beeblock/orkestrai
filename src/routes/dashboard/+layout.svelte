@@ -25,7 +25,7 @@
   }
 </script>
 
-<div class="flex min-h-[calc(100vh-130px)]">
+<div class="flex min-h-screen">
   <aside class="w-64 border-r border-border bg-muted/50 hidden md:block">
     <nav class="p-4 space-y-1">
       {#each navItems as item}

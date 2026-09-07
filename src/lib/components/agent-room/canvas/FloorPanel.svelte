@@ -1,5 +1,5 @@
 <script lang="ts">
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import { defaults, superForm } from 'sveltekit-superforms';
   import { zod } from 'sveltekit-superforms/adapters';
   import * as Form from '$lib/components/ui/form';
@@ -170,8 +170,8 @@
   <header class="panel-header">
     <h3>{m['floor.title']()}</h3>
     <div class="panel-header-actions">
-      <IconAction label={m['floor.hooks']()} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></IconAction>
-      <IconAction label={m['floor.close']()} onclick={onClose}><X size={14} /></IconAction>
+      <HeaderIconButton label={m['floor.hooks']()} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></HeaderIconButton>
+      <HeaderIconButton label={m['floor.close']()} onclick={onClose}><X size={14} /></HeaderIconButton>
     </div>
   </header>
 
@@ -180,10 +180,10 @@
       <button class="flex w-full items-center justify-between gap-2 border-0 bg-transparent p-0 text-left text-[var(--app-text)]" onclick={() => onSelectFloor(null)}>
         <span class="text-xs font-semibold">{m['floor.ground']()}</span>
         {#if overview.ground.git.available}
-          <span class="flex items-center gap-1 text-[9px] text-[var(--app-text-muted)]"><GitBranch size={10} />{overview.ground.git.branch}</span>
+          <span class="flex items-center gap-1 text-ui-xs text-[var(--app-text-muted)]"><GitBranch size={10} />{overview.ground.git.branch}</span>
         {/if}
       </button>
-      <div class="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+      <div class="mt-3 grid grid-cols-2 gap-2 text-ui-xs">
         <div class="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-2">
           <span class="mb-1 flex items-center gap-1 text-[var(--app-text-muted)]"><Users size={11} />{m['floor.agents']({ count: overview.ground.agents.length })}</span>
           <div class="flex flex-wrap gap-1">
@@ -200,7 +200,7 @@
       {#if overview.ground.tasks.length}
         <div class="mt-2 grid gap-1.5 border-t border-[var(--app-border)] pt-2">
           {#each overview.ground.tasks.slice(0, 4) as task (task.id)}
-            <div class="grid min-w-0 grid-cols-[12px_1fr_auto] items-start gap-x-1.5 text-[9px]">
+            <div class="grid min-w-0 grid-cols-[12px_1fr_auto] items-start gap-x-1.5 text-ui-xs">
               {#if task.status === 'done'}<CheckCircle2 size={10} class="mt-0.5 text-[var(--app-success)]" />{:else}<CircleDot size={10} class="mt-0.5 {task.status === 'doing' ? 'text-[var(--app-secondary)]' : 'text-[var(--app-text-muted)]'}" />{/if}
               <span class="min-w-0 truncate text-[var(--app-text-soft)]" title={task.title}>{task.title}</span>
               <span class="shrink-0 text-[var(--app-text-muted)]">{taskStatus(task.status)}</span>
@@ -210,12 +210,12 @@
             </div>
           {/each}
           {#if overview.ground.tasks.length > 4}
-            <span class="text-[9px] text-[var(--app-text-muted)]">{m['floor.more_tasks']({ count: overview.ground.tasks.length - 4 })}</span>
+            <span class="text-ui-xs text-[var(--app-text-muted)]">{m['floor.more_tasks']({ count: overview.ground.tasks.length - 4 })}</span>
           {/if}
         </div>
       {/if}
       {#if overview.ground.git.available}
-        <p class="mt-2 mb-0 truncate text-[9px] text-[var(--app-text-muted)]" title={overview.ground.git.lastCommitTitle ?? ''}>
+        <p class="mt-2 mb-0 truncate text-ui-xs text-[var(--app-text-muted)]" title={overview.ground.git.lastCommitTitle ?? ''}>
           {overview.ground.git.dirty ? m['floor.changed_files']({ count: overview.ground.git.changedFiles }) : m['floor.clean_worktree']()} · {activityLabel(overview.ground.git.lastCommitAt)}
         </p>
       {/if}
@@ -227,30 +227,30 @@
         <div class="flex items-start justify-between gap-2">
           <button class="min-w-0 flex-1 border-0 bg-transparent p-0 text-left text-[var(--app-text)]" onclick={() => onSelectFloor(floor.id)}>
             <strong class="block truncate text-xs">{floor.name}</strong>
-            <small class="mt-0.5 flex items-center gap-1 truncate text-[9px] text-[var(--app-text-muted)]"><GitBranch size={10} />{floor.branch}</small>
+            <small class="mt-0.5 flex items-center gap-1 truncate text-ui-xs text-[var(--app-text-muted)]"><GitBranch size={10} />{floor.branch}</small>
           </button>
           <div class="floor-actions">
-            <IconAction label={m['floor.preview_landing']()} onclick={() => previewLanding(floor)}><Plane size={13} /></IconAction>
-            <IconAction label={m['floor.run_hooks']()} onclick={() => runHooksNow(floor, 'run')}><Play size={13} /></IconAction>
-            <IconAction label={m['floor.delete_keep_branch']()} onclick={() => removeFloor(floor, false)}><X size={13} /></IconAction>
-            <IconAction label={m['floor.delete_branch']()} danger onclick={() => removeFloor(floor, true)}><Trash2 size={13} /></IconAction>
+            <HeaderIconButton label={m['floor.preview_landing']()} onclick={() => previewLanding(floor)}><Plane size={13} /></HeaderIconButton>
+            <HeaderIconButton label={m['floor.run_hooks']()} onclick={() => runHooksNow(floor, 'run')}><Play size={13} /></HeaderIconButton>
+            <HeaderIconButton label={m['floor.delete_keep_branch']()} onclick={() => removeFloor(floor, false)}><X size={13} /></HeaderIconButton>
+            <HeaderIconButton label={m['floor.delete_branch']()} danger onclick={() => removeFloor(floor, true)}><Trash2 size={13} /></HeaderIconButton>
           </div>
         </div>
 
         <div class="mt-3 flex flex-wrap gap-1">
           {#each item.agents as agent (agent.id)}
-            <span class="inline-flex max-w-full items-center gap-1 truncate rounded bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-[9px] text-[var(--app-text-soft)]" title={agent.role ?? agent.provider ?? ''}>
+            <span class="inline-flex max-w-full items-center gap-1 truncate rounded bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-soft)]" title={agent.role ?? agent.provider ?? ''}>
               <CircleDot size={8} class={agent.active ? 'text-[var(--app-success)]' : 'text-[var(--app-text-muted)]'} />{agent.title}
             </span>
           {:else}
-            <span class="text-[9px] text-[var(--app-text-muted)]">{m['floor.no_agents']()}</span>
+            <span class="text-ui-xs text-[var(--app-text-muted)]">{m['floor.no_agents']()}</span>
           {/each}
         </div>
 
         {#if item.tasks.length}
           <div class="mt-2 grid gap-1">
             {#each item.tasks.slice(0, 4) as task (task.id)}
-              <div class="grid min-w-0 grid-cols-[12px_1fr_auto] items-start gap-x-1.5 text-[9px]">
+              <div class="grid min-w-0 grid-cols-[12px_1fr_auto] items-start gap-x-1.5 text-ui-xs">
                 {#if task.status === 'done'}<CheckCircle2 size={10} class="mt-0.5 text-[var(--app-success)]" />{:else}<CircleDot size={10} class="mt-0.5 {task.status === 'doing' ? 'text-[var(--app-secondary)]' : 'text-[var(--app-text-muted)]'}" />{/if}
                 <span class="min-w-0 truncate text-[var(--app-text-soft)]" title={task.title}>{task.title}</span>
                 <span class="shrink-0 text-[var(--app-text-muted)]">{taskStatus(task.status)}</span>
@@ -260,12 +260,12 @@
               </div>
             {/each}
             {#if item.tasks.length > 4}
-              <span class="text-[9px] text-[var(--app-text-muted)]">{m['floor.more_tasks']({ count: item.tasks.length - 4 })}</span>
+              <span class="text-ui-xs text-[var(--app-text-muted)]">{m['floor.more_tasks']({ count: item.tasks.length - 4 })}</span>
             {/if}
           </div>
         {/if}
 
-        <div class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--app-border)] pt-2 text-[9px]">
+        <div class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--app-border)] pt-2 text-ui-xs">
           <span class={item.git.dirty ? 'text-amber-300' : 'text-emerald-400'}>
             {item.git.available ? (item.git.dirty ? m['floor.changed_files']({ count: item.git.changedFiles }) : m['floor.ready_to_land']()) : m['floor.git_unavailable']()}
           </span>

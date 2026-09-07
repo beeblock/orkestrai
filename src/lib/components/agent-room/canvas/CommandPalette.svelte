@@ -107,7 +107,7 @@
             type="button"
             role="option"
             aria-selected={index === selectedIndex}
-            class="flex min-h-10 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-[var(--app-text)] transition-colors hover:bg-[var(--app-surface-raised)] focus-visible:bg-[var(--app-surface-raised)] focus-visible:outline-none"
+            class="flex min-h-10 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-lg text-[var(--app-text)] transition-colors hover:bg-[var(--app-surface-raised)] focus-visible:bg-[var(--app-surface-raised)] focus-visible:outline-none"
             class:bg-[var(--app-surface-raised)]={index === selectedIndex}
             onpointerenter={() => (selectedIndex = index)}
             onclick={() => choose(item)}
@@ -116,7 +116,7 @@
               {#if item.kind === 'node'}<Box size={12} />{:else}<Zap size={12} />{/if}
             </span>
             <span class="min-w-0 flex-1 truncate">{item.label}</span>
-            <span class="shrink-0 text-[10px] text-[var(--app-text-muted)]">{item.hint}</span>
+            <span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{item.hint}</span>
           </button>
         </li>
       {:else}

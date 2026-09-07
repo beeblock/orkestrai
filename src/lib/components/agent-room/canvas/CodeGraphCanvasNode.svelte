@@ -1334,17 +1334,18 @@
           class={`absolute top-1/2 right-7 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${searchMode === 'semantic' ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]' : ''}`}
           active={searchMode === 'semantic'}
           disabled={intelligenceDisabled}
+          side="bottom"
           onclick={() => void toggleSearchMode()}
         >
           <Sparkles size={12} />
         </HeaderIconButton>
-        <HeaderIconButton label={m['code_graph.search']()} class="absolute top-1/2 right-1 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" type="submit" disabled={intelligenceDisabled}>
+        <HeaderIconButton label={m['code_graph.search']()} class="absolute top-1/2 right-1 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" side="bottom" type="submit" disabled={intelligenceDisabled}>
           <Search size={12} />
         </HeaderIconButton>
       </form>
       <Button
         size="sm"
-        class="h-8 bg-[var(--app-accent)] text-[11px] text-[var(--app-accent-contrast)] hover:brightness-105"
+        class="h-8 bg-[var(--app-accent)] text-ui-sm text-[var(--app-accent-contrast)] hover:brightness-105"
         disabled={indexing || intelligenceDisabled}
         onclick={() => void indexWorkspace()}
       >
@@ -1358,7 +1359,7 @@
               {...props}
               size="sm"
               variant={viewMode === 'changes' ? 'default' : 'outline'}
-              class="h-8 text-[11px]"
+              class="h-8 text-ui-sm"
               disabled={!hasIndexedGraph || changeLoading || intelligenceDisabled}
               onclick={() => void loadChanges()}
             >
@@ -1371,7 +1372,7 @@
       </Tooltip.Root>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-[11px] text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${['contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(viewMode) ? 'bg-[var(--app-accent-soft)]' : ''}`}
+          class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-ui-sm text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${['contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(viewMode) ? 'bg-[var(--app-accent-soft)]' : ''}`}
           disabled={!hasIndexedGraph || intelligenceDisabled}
           aria-label={m['code_graph.intelligence_views']()}
         >
@@ -1415,15 +1416,15 @@
 
     {#if snapshot}
       <div class="grid shrink-0 grid-cols-4 divide-x divide-[var(--app-border)] border-b border-[var(--app-border)] bg-[var(--app-surface)]">
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.files}</strong><span class="block truncate text-[9px] text-[var(--app-text-muted)]">{m['code_graph.files']()}</span></div>
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.symbols}</strong><span class="block truncate text-[9px] text-[var(--app-text-muted)]">{m['code_graph.symbols']()}</span></div>
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.edges}</strong><span class="block truncate text-[9px] text-[var(--app-text-muted)]">{m['code_graph.relationships']()}</span></div>
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.projects.length}</strong><span class="block truncate text-[9px] text-[var(--app-text-muted)]">{m['code_graph.repositories']()}</span></div>
+        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.files}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.files']()}</span></div>
+        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.symbols}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.symbols']()}</span></div>
+        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.edges}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.relationships']()}</span></div>
+        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.projects.length}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.repositories']()}</span></div>
       </div>
     {/if}
 
     {#if error}
-      <div class="flex shrink-0 items-center gap-2 border-b border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 px-3 py-2 text-[10px] text-[var(--app-danger)]">
+      <div class="flex shrink-0 items-center gap-2 border-b border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 px-3 py-2 text-ui-xs text-[var(--app-danger)]">
         <AlertTriangle size={12} /> <span class="min-w-0 truncate">{error}</span>
       </div>
     {/if}
@@ -1436,7 +1437,7 @@
           <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
             <Network size={28} class="text-[var(--app-secondary)]" />
             <strong class="text-sm">{intelligenceDisabled ? m['code_graph.disabled_title']() : m['code_graph.empty_title']()}</strong>
-            <p class="max-w-80 text-[11px] leading-5 text-[var(--app-text-muted)]">{intelligenceDisabled ? m['code_graph.disabled_description']() : m['code_graph.empty_description']()}</p>
+            <p class="max-w-80 text-ui-sm leading-5 text-[var(--app-text-muted)]">{intelligenceDisabled ? m['code_graph.disabled_description']() : m['code_graph.empty_description']()}</p>
           </div>
         {:else if graph && graph.nodes.length === 0}
           <div class="absolute inset-0 grid place-items-center text-xs text-[var(--app-text-muted)]">{m['code_graph.no_results']()}</div>
@@ -1448,19 +1449,19 @@
           aria-label={m['code_graph.visualization']()}
         ></div>
         {#if graph?.truncated}
-          <span class="absolute bottom-2 left-2 rounded bg-[var(--app-surface)]/90 px-2 py-1 text-[9px] text-[var(--app-warning)] shadow">{m['code_graph.truncated']()}</span>
+          <span class="absolute bottom-2 left-2 rounded bg-[var(--app-surface)]/90 px-2 py-1 text-ui-xs text-[var(--app-warning)] shadow">{m['code_graph.truncated']()}</span>
         {/if}
       </div>
 
       <aside class="min-h-0 overflow-y-auto overscroll-contain bg-[var(--app-surface)] p-2">
         {#if selectedRelationship}
-          <button class="mb-2 inline-flex items-center gap-1 text-[10px] text-[var(--app-secondary)] hover:underline" onclick={() => { selectedRelationship = null; }}>
+          <button class="mb-2 inline-flex items-center gap-1 text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => { selectedRelationship = null; }}>
             <ArrowUpFromLine size={11} /> {m['code_graph.back_to_graph']()}
           </button>
           <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2.5">
-            <span class="mb-2 inline-flex rounded bg-[var(--app-accent-soft)] px-1.5 py-0.5 text-[8px] font-semibold text-[var(--app-accent)]">{selectedRelationship.classification === 'runtime' ? m['code_graph.runtime_relationship']() : selectedRelationship.classification === 'inferred' ? m['code_graph.inferred_relationship']() : m['code_graph.static_relationship']()}</span>
-            <strong class="block break-words text-[10px] leading-4">{selectedRelationship.summary}</strong>
-            <dl class="mt-2 space-y-1 text-[8px] text-[var(--app-text-muted)]">
+            <span class="mb-2 inline-flex rounded bg-[var(--app-accent-soft)] px-1.5 py-0.5 text-ui-xs font-semibold text-[var(--app-accent)]">{selectedRelationship.classification === 'runtime' ? m['code_graph.runtime_relationship']() : selectedRelationship.classification === 'inferred' ? m['code_graph.inferred_relationship']() : m['code_graph.static_relationship']()}</span>
+            <strong class="block break-words text-ui-xs leading-4">{selectedRelationship.summary}</strong>
+            <dl class="mt-2 space-y-1 text-ui-xs text-[var(--app-text-muted)]">
               <div><dt>{m['code_graph.provenance']()}</dt><dd class="break-all font-mono text-[var(--app-text)]">{selectedRelationship.provenance.path ?? m['code_graph.index_inference']()}:{selectedRelationship.provenance.line ?? 1}</dd></div>
               <div><dt>{m['code_graph.confidence']()}</dt><dd class="text-[var(--app-text)]">{Math.round(selectedRelationship.provenance.confidence)}%</dd></div>
             </dl>
@@ -1472,15 +1473,15 @@
         {:else if viewMode === 'changes' && changes}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.change_impact']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           {#if changes.scopes.length === 0}
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.no_changes']()}</div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.no_changes']()}</div>
           {:else}
             <div class="space-y-3">
               {#each changes.scopes as scope (scope.id)}
                 <section>
-                  <div class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">
+                  <div class="mb-1 flex items-center gap-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
                     <span class="truncate">{scope.kind === 'floor' ? m['code_graph.floor_scope']({ name: scope.name }) : m['code_graph.workspace_scope']()}</span>
                     <span class="ml-auto tabular-nums">{scope.files.length}</span>
                     {#if scope.kind === 'workspace'}
@@ -1509,8 +1510,8 @@
                   <div class="space-y-1">
                     {#each scope.files.slice(0, 20) as file (`${scope.id}:${file.projectId}:${file.path}`)}
                       <button class="flex w-full min-w-0 items-center gap-2 rounded border border-transparent px-1.5 py-1 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-hover)]" onclick={() => openChangedFile(file)}>
-                        <span class="grid size-5 shrink-0 place-items-center rounded bg-[var(--app-canvas)] font-mono text-[9px] text-[var(--app-warning)]">{file.status}</span>
-                        <span class="min-w-0 flex-1"><span class="block truncate text-[10px]">{file.path}</span><span class="block truncate text-[8px] text-[var(--app-text-muted)]">{file.projectName} · {file.symbolIds.length} {m['code_graph.symbols']()}</span></span>
+                        <span class="grid size-5 shrink-0 place-items-center rounded bg-[var(--app-canvas)] font-mono text-ui-xs text-[var(--app-warning)]">{file.status}</span>
+                        <span class="min-w-0 flex-1"><span class="block truncate text-ui-xs">{file.path}</span><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{file.projectName} · {file.symbolIds.length} {m['code_graph.symbols']()}</span></span>
                       </button>
                     {/each}
                   </div>
@@ -1518,21 +1519,21 @@
               {/each}
               {#if changes.conflicts.length}
                 <section class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 p-2">
-                  <strong class="mb-1 block text-[10px] text-[var(--app-danger)]">{m['code_graph.floor_conflicts']()}</strong>
+                  <strong class="mb-1 block text-ui-xs text-[var(--app-danger)]">{m['code_graph.floor_conflicts']()}</strong>
                   {#each changes.conflicts as conflict (conflict.id)}
                     <div class="border-t border-[var(--app-danger)]/20 py-1.5 first:border-0">
-                      <span class="block text-[10px] font-semibold">{conflict.leftFloorName} ↔ {conflict.rightFloorName}</span>
-                      <span class="block text-[8px] leading-3 text-[var(--app-text-muted)]">{conflict.sharedPaths.length} {m['code_graph.shared_files']()} · {conflict.sharedImpactSymbolIds.length + conflict.sharedSymbolIds.length} {m['code_graph.shared_symbols']()}</span>
+                      <span class="block text-ui-xs font-semibold">{conflict.leftFloorName} ↔ {conflict.rightFloorName}</span>
+                      <span class="block text-ui-xs leading-3 text-[var(--app-text-muted)]">{conflict.sharedPaths.length} {m['code_graph.shared_files']()} · {conflict.sharedImpactSymbolIds.length + conflict.sharedSymbolIds.length} {m['code_graph.shared_symbols']()}</span>
                     </div>
                   {/each}
                 </section>
               {/if}
               {#if changes.likelyTests.length}
                 <section>
-                  <strong class="mb-1 block text-[10px]">{m['code_graph.likely_tests']()}</strong>
+                  <strong class="mb-1 block text-ui-xs">{m['code_graph.likely_tests']()}</strong>
                   <div class="space-y-0.5">
                     {#each changes.likelyTests.slice(0, 20) as path (path)}
-                      <div class="truncate rounded bg-[var(--app-canvas)] px-2 py-1 font-mono text-[8px] text-[var(--app-text-muted)]">{path}</div>
+                      <div class="truncate rounded bg-[var(--app-canvas)] px-2 py-1 font-mono text-ui-xs text-[var(--app-text-muted)]">{path}</div>
                     {/each}
                   </div>
                 </section>
@@ -1542,37 +1543,37 @@
         {:else if viewMode === 'contracts' && contracts}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.contract_map']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-emerald-500">{contracts.endpoints.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.endpoints']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{contracts.requests.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.requests']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{contracts.schemas.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.schemas']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{contracts.gateways.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.gateways']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-success)]">{contracts.matches.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.contract_matches']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-warning)]">{contracts.unmatchedRequestIds.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.unmatched_requests']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-emerald-500">{contracts.endpoints.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.endpoints']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{contracts.requests.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.requests']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{contracts.schemas.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.schemas']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{contracts.gateways.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.gateways']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-success)]">{contracts.matches.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.contract_matches']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-warning)]">{contracts.unmatchedRequestIds.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.unmatched_requests']()}</span></div>
           </div>
           {#if contracts.conflicts.length}
             <section class="mb-3 rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 p-2">
-              <strong class="mb-1 block text-[10px] text-[var(--app-danger)]">{m['code_graph.contract_conflicts']()}</strong>
+              <strong class="mb-1 block text-ui-xs text-[var(--app-danger)]">{m['code_graph.contract_conflicts']()}</strong>
               {#each contracts.conflicts.slice(0, 20) as conflict (conflict.id)}
                 <div class="border-t border-[var(--app-danger)]/20 py-1.5 first:border-0">
-                  <span class="block truncate font-mono text-[9px]">{conflict.method} {conflict.path}</span>
-                  <span class="block truncate text-[8px] text-[var(--app-text-muted)]">{conflict.projectNames.join(' · ')}</span>
+                  <span class="block truncate font-mono text-ui-xs">{conflict.method} {conflict.path}</span>
+                  <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{conflict.projectNames.join(' · ')}</span>
                 </div>
               {/each}
             </section>
           {/if}
           <section>
-            <strong class="mb-1 block text-[10px]">{m['code_graph.contract_matches']()}</strong>
+            <strong class="mb-1 block text-ui-xs">{m['code_graph.contract_matches']()}</strong>
             <div class="space-y-1">
               {#each contracts.matches.slice(0, 30) as match (match.id)}
                 {@const request = contractSymbol(match.requestSymbolId)}
                 {@const endpoint = contractSymbol(match.endpointSymbolId)}
                 {#if request && endpoint}
                   <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => void openGraphSymbol(request.id)}>
-                    <span class="block truncate font-mono text-[9px]">{request.name}</span>
-                    <span class="mt-0.5 block truncate text-[8px] text-[var(--app-text-muted)]">{request.projectName} → {endpoint.projectName} · {match.reason === 'exact' ? m['code_graph.match_exact']() : m['code_graph.match_gateway']()} · {match.confidence}%</span>
+                    <span class="block truncate font-mono text-ui-xs">{request.name}</span>
+                    <span class="mt-0.5 block truncate text-ui-xs text-[var(--app-text-muted)]">{request.projectName} → {endpoint.projectName} · {match.reason === 'exact' ? m['code_graph.match_exact']() : m['code_graph.match_gateway']()} · {match.confidence}%</span>
                   </button>
                 {/if}
               {/each}
@@ -1580,14 +1581,14 @@
           </section>
           {#if contracts.unmatchedRequestIds.length}
             <section class="mt-3 border-t border-[var(--app-border)] pt-3">
-              <strong class="mb-1 block text-[10px] text-[var(--app-warning)]">{m['code_graph.unmatched_requests']()}</strong>
+              <strong class="mb-1 block text-ui-xs text-[var(--app-warning)]">{m['code_graph.unmatched_requests']()}</strong>
               <div class="space-y-1">
                 {#each contracts.unmatchedRequestIds.slice(0, 30) as symbolId (symbolId)}
                   {@const request = contractSymbol(symbolId)}
                   {#if request}
                     <button class="w-full rounded border border-[var(--app-warning)]/25 bg-[var(--app-warning)]/5 p-2 text-left hover:bg-[var(--app-warning)]/10" onclick={() => void openGraphSymbol(request.id)}>
-                      <span class="block truncate font-mono text-[9px]">{request.name}</span>
-                      <span class="mt-0.5 block truncate text-[8px] text-[var(--app-text-muted)]">{request.projectName ?? request.projectId}</span>
+                      <span class="block truncate font-mono text-ui-xs">{request.name}</span>
+                      <span class="mt-0.5 block truncate text-ui-xs text-[var(--app-text-muted)]">{request.projectName ?? request.projectId}</span>
                     </button>
                   {/if}
                 {/each}
@@ -1597,31 +1598,31 @@
         {:else if viewMode === 'quality' && quality}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.quality_title']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-text)]">{quality.counts.findings}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_findings']()}</span></div>
-            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{quality.counts.errors}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_errors']()}</span></div>
-            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{quality.counts.warnings}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_warnings']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{quality.counts.duplicates}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_duplicates']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{quality.counts.cycles}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_cycles']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{quality.counts.deadCode}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.quality_dead_code']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-text)]">{quality.counts.findings}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_findings']()}</span></div>
+            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{quality.counts.errors}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_errors']()}</span></div>
+            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{quality.counts.warnings}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_warnings']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{quality.counts.duplicates}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_duplicates']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{quality.counts.cycles}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_cycles']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{quality.counts.deadCode}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_dead_code']()}</span></div>
           </div>
           <section class="mb-3">
-            <strong class="mb-1 block text-[10px]">{m['code_graph.data_flow']()}</strong>
+            <strong class="mb-1 block text-ui-xs">{m['code_graph.data_flow']()}</strong>
             <div class="flex flex-wrap gap-1">
               {#each Object.entries(quality.dataFlow.byType) as [type, count] (type)}
-                <span class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-1.5 py-1 text-[8px] text-[var(--app-text-muted)]"><strong class="text-[var(--app-text)]">{count}</strong> {resourceTypeLabel(type)}</span>
+                <span class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-1.5 py-1 text-ui-xs text-[var(--app-text-muted)]"><strong class="text-[var(--app-text)]">{count}</strong> {resourceTypeLabel(type)}</span>
               {/each}
               {#if Object.keys(quality.dataFlow.byType).length === 0}
-                <span class="text-[9px] text-[var(--app-text-muted)]">{m['code_graph.quality_resources_empty']()}</span>
+                <span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_resources_empty']()}</span>
               {/if}
             </div>
           </section>
           <section>
-            <strong class="mb-1 block text-[10px]">{m['code_graph.quality_findings']()}</strong>
+            <strong class="mb-1 block text-ui-xs">{m['code_graph.quality_findings']()}</strong>
             {#if quality.findings.length === 0}
-              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.quality_empty']()}</div>
+              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.quality_empty']()}</div>
             {:else}
               <div class="space-y-1">
                 {#each quality.findings as finding (finding.id)}
@@ -1630,10 +1631,10 @@
                       <span class="flex items-start gap-2">
                         <span class="mt-0.5 size-1.5 shrink-0 rounded-full {finding.severity === 'error' ? 'bg-[var(--app-danger)]' : finding.severity === 'warning' ? 'bg-[var(--app-warning)]' : 'bg-[var(--app-secondary)]'}"></span>
                         <span class="min-w-0 flex-1">
-                          <strong class="block text-[9px] leading-3">{findingTitle(finding)}</strong>
-                          <span class="mt-0.5 block break-words text-[8px] leading-3 text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
-                          <span class="mt-0.5 block break-words font-mono text-[8px] leading-3 text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
-                          <span class="mt-1 block text-[8px] font-semibold text-[var(--app-secondary)]">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
+                          <strong class="block text-ui-xs leading-3">{findingTitle(finding)}</strong>
+                          <span class="mt-0.5 block break-words text-ui-xs leading-3 text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
+                          <span class="mt-0.5 block break-words font-mono text-ui-xs leading-3 text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
+                          <span class="mt-1 block text-ui-xs font-semibold text-[var(--app-secondary)]">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
                         </span>
                       </span>
                     </button>
@@ -1646,20 +1647,20 @@
         {:else if viewMode === 'semantic' && semanticStatus}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.semantic_title']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           <section class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2.5">
             <div class="flex items-center gap-2">
               <span class="grid size-7 place-items-center rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Sparkles size={14} /></span>
               <div class="min-w-0 flex-1">
-                <strong class="block text-[10px]">{semanticStateLabel(semanticStatus.state)}</strong>
-                <span class="block truncate text-[8px] text-[var(--app-text-muted)]">{semanticStatus.model}</span>
+                <strong class="block text-ui-xs">{semanticStateLabel(semanticStatus.state)}</strong>
+                <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{semanticStatus.model}</span>
               </div>
             </div>
             <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--app-border)]">
               <div class="h-full bg-[var(--app-accent)]" style={`width: ${semanticStatus.totalSymbols ? Math.round((semanticStatus.indexedSymbols / semanticStatus.totalSymbols) * 100) : 0}%`}></div>
             </div>
-            <span class="mt-1 block text-[8px] text-[var(--app-text-muted)]">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
+            <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
             <div class={`mt-3 grid gap-1 ${data.codeIntelligenceMode === 'assisted' ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <Button size="xs" class="w-full" disabled={semanticLoading || !hasIndexedGraph || semanticStatus.totalSymbols === 0} onclick={() => void updateSemantic('build')}>
                 <RefreshCw size={11} class={semanticLoading ? 'animate-spin' : undefined} />
@@ -1677,22 +1678,22 @@
             </div>
           </section>
           {#if data.codeIntelligenceMode === 'assisted'}
-            <p class="mt-2 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_auto']()}</p>
+            <p class="mt-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_auto']()}</p>
           {/if}
-          <p class="mt-2 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_privacy']()}</p>
+          <p class="mt-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_privacy']()}</p>
         {:else if viewMode === 'runtime' && runtime}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.runtime_title']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{runtime.counts.runs}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_runs']()}</span></div>
-            <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">{runtime.counts.coveredSymbols}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_covered']()}</span></div>
-            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{runtime.counts.failures}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_failures']()}</span></div>
-            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{runtime.counts.runtimeOnlyCalls}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.evidence_runtime_only']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{runtime.counts.runs}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_runs']()}</span></div>
+            <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">{runtime.counts.coveredSymbols}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_covered']()}</span></div>
+            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{runtime.counts.failures}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_failures']()}</span></div>
+            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{runtime.counts.runtimeOnlyCalls}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_runtime_only']()}</span></div>
           </div>
           <form class="mb-3 space-y-1.5 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2" onsubmit={(event) => { event.preventDefault(); void importEvidence(); }}>
-            <strong class="block text-[10px]">{m['code_graph.evidence_import']()}</strong>
+            <strong class="block text-ui-xs">{m['code_graph.evidence_import']()}</strong>
             <Select.Root type="single" value={evidenceKind} onValueChange={(value: string) => { evidenceKind = value as typeof evidenceKind; }}>
               <Select.Trigger size="sm" class="w-full">{evidenceKindLabel(evidenceKind)}</Select.Trigger>
               <Select.Content>
@@ -1702,7 +1703,7 @@
               </Select.Content>
             </Select.Root>
             <input
-              class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 font-mono text-[9px] outline-none focus:border-[var(--app-accent)]"
+              class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 font-mono text-ui-xs outline-none focus:border-[var(--app-accent)]"
               bind:value={evidencePath}
               placeholder={m['code_graph.evidence_path_placeholder']()}
               aria-label={m['code_graph.evidence_path']()}
@@ -1712,16 +1713,16 @@
             </Button>
           </form>
           <section>
-            <strong class="mb-1 block text-[10px]">{m['code_graph.evidence_recent']()}</strong>
+            <strong class="mb-1 block text-ui-xs">{m['code_graph.evidence_recent']()}</strong>
             {#if runtime.runs.length === 0}
-              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.evidence_empty']()}</div>
+              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.evidence_empty']()}</div>
             {:else}
               <div class="space-y-1">
                 {#each runtime.runs.slice(0, 50) as run (run.id)}
                   <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
-                    <span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full {run.kind === 'coverage' ? 'bg-emerald-500' : run.kind === 'test' ? 'bg-[var(--app-danger)]' : 'bg-cyan-500'}"></span><strong class="min-w-0 flex-1 truncate text-[9px]">{run.label}</strong></span>
-                    <span class="mt-1 block truncate font-mono text-[8px] text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
-                    <span class="mt-1 block text-[8px] text-[var(--app-text-muted)]">{run.stats.coveredSymbols} {m['code_graph.evidence_covered']()} · {run.stats.failures} {m['code_graph.evidence_failures']()} · {run.stats.observedCalls} {m['code_graph.evidence_calls']()}</span>
+                    <span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full {run.kind === 'coverage' ? 'bg-emerald-500' : run.kind === 'test' ? 'bg-[var(--app-danger)]' : 'bg-cyan-500'}"></span><strong class="min-w-0 flex-1 truncate text-ui-xs">{run.label}</strong></span>
+                    <span class="mt-1 block truncate font-mono text-ui-xs text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
+                    <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{run.stats.coveredSymbols} {m['code_graph.evidence_covered']()} · {run.stats.failures} {m['code_graph.evidence_failures']()} · {run.stats.observedCalls} {m['code_graph.evidence_calls']()}</span>
                   </div>
                 {/each}
               </div>
@@ -1730,19 +1731,19 @@
         {:else if viewMode === 'operations' && operations}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.operations_title']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{activeAgents.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.active_agents']()}</span></div>
-            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{operations.conflicts.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.edit_conflicts']()}</span></div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{activeAgents.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.active_agents']()}</span></div>
+            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{operations.conflicts.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.edit_conflicts']()}</span></div>
           </div>
           {#if operations.conflicts.length}
             <section class="mb-3 space-y-1 rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2">
-              <strong class="block text-[10px] text-[var(--app-danger)]">{m['code_graph.conflict_warning']()}</strong>
+              <strong class="block text-ui-xs text-[var(--app-danger)]">{m['code_graph.conflict_warning']()}</strong>
               {#each operations.conflicts as conflict (conflict.id)}
                 {@const left = operations.agents.find((agent) => agent.nodeId === conflict.leftNodeId)}
                 {@const right = operations.agents.find((agent) => agent.nodeId === conflict.rightNodeId)}
-                <div class="border-t border-[var(--app-danger)]/20 pt-1.5 text-[8px] first:border-0 first:pt-0">
+                <div class="border-t border-[var(--app-danger)]/20 pt-1.5 text-ui-xs first:border-0 first:pt-0">
                   <strong class="block text-[var(--app-text)]">{left?.title} ↔ {right?.title}</strong>
                   <span class="block break-words text-[var(--app-text-muted)]">{conflict.sharedPaths.slice(0, 3).join(' · ') || m['code_graph.shared_symbols_count']({ count: conflict.sharedSymbolIds.length })}</span>
                 </div>
@@ -1753,19 +1754,19 @@
             {#each trackedAgents as agent (agent.nodeId)}
               {@const agentIndex = operations.agents.findIndex((candidate) => candidate.nodeId === agent.nodeId)}
               <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => data.onJumpToNode?.(agent.nodeId)}>
-                <span class="flex items-center gap-1.5"><span class="size-2 rounded-full ring-1 ring-black/10" style={`background:${AGENT_COLORS[Math.max(0, agentIndex) % AGENT_COLORS.length]}`}></span><strong class="min-w-0 flex-1 truncate text-[9px]">{agent.title}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{agentStateLabel(agent.state)}</span></span>
-                <span class="mt-1 block truncate text-[8px] text-[var(--app-text-muted)]">{agent.task?.title ?? m['code_graph.no_active_task']()} · {agent.floorName ?? m['code_graph.main_workspace']()}</span>
-                <span class="mt-1 block text-[8px] text-[var(--app-secondary)]">{m['code_graph.active_symbols_count']({ count: agent.symbolIds.length })}</span>
+                <span class="flex items-center gap-1.5"><span class="size-2 rounded-full ring-1 ring-black/10" style={`background:${AGENT_COLORS[Math.max(0, agentIndex) % AGENT_COLORS.length]}`}></span><strong class="min-w-0 flex-1 truncate text-ui-xs">{agent.title}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{agentStateLabel(agent.state)}</span></span>
+                <span class="mt-1 block truncate text-ui-xs text-[var(--app-text-muted)]">{agent.task?.title ?? m['code_graph.no_active_task']()} · {agent.floorName ?? m['code_graph.main_workspace']()}</span>
+                <span class="mt-1 block text-ui-xs text-[var(--app-secondary)]">{m['code_graph.active_symbols_count']({ count: agent.symbolIds.length })}</span>
               </button>
             {/each}
           </section>
         {:else if viewMode === 'compare'}
           <div class="mb-2 flex items-center justify-between gap-2">
             <strong class="text-xs">{m['code_graph.compare_title']()}</strong>
-            <button class="text-[9px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
           </div>
           {#if revisions.length < 2}
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-[9px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.compare_empty']()}</div>
+            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.compare_empty']()}</div>
           {:else}
             <div class="mb-3 space-y-1.5">
               <Select.Root type="single" value={compareFrom} onValueChange={(value: string) => { compareFrom = value; void compareRevisions(projectId); }}>
@@ -1779,46 +1780,46 @@
             </div>
             {#if comparison}
               <div class="mb-3 grid grid-cols-3 gap-1">
-                <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">+{comparison.added.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.comparison_added']()}</span></div>
-                <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">~{comparison.modified.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.comparison_modified']()}</span></div>
-                <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">-{comparison.removed.length}</strong><span class="text-[8px] text-[var(--app-text-muted)]">{m['code_graph.comparison_removed']()}</span></div>
+                <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">+{comparison.added.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.comparison_added']()}</span></div>
+                <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">~{comparison.modified.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.comparison_modified']()}</span></div>
+                <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">-{comparison.removed.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.comparison_removed']()}</span></div>
               </div>
-              <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 py-1.5 text-[8px] text-[var(--app-text-muted)]">
+              <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 py-1.5 text-ui-xs text-[var(--app-text-muted)]">
                 {m['code_graph.relationship_changes']({ added: comparison.relationships.added.length, modified: comparison.relationships.modified.length, removed: comparison.relationships.removed.length })}
               </div>
               <div class="space-y-1">
                 {#each [...comparison.added.map((symbol) => ({ symbol, state: 'added' })), ...comparison.modified.map((item) => ({ symbol: item.after, state: 'modified' })), ...comparison.removed.map((symbol) => ({ symbol, state: 'removed' }))].slice(0, 80) as item (`${item.state}:${item.symbol.fingerprint}`)}
                   <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
-                    <span class="block truncate text-[9px] font-semibold">{item.symbol.name}</span>
-                    <span class="block truncate font-mono text-[8px] text-[var(--app-text-muted)]">{comparisonStateLabel(item.state)} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
+                    <span class="block truncate text-ui-xs font-semibold">{item.symbol.name}</span>
+                    <span class="block truncate font-mono text-ui-xs text-[var(--app-text-muted)]">{comparisonStateLabel(item.state)} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
                   </div>
                 {/each}
               </div>
             {/if}
           {/if}
         {:else if results.length}
-          <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
+          <div class="mb-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
           <div class="space-y-1">
             {#each results as result (result.id)}
               <button class="w-full rounded border border-transparent p-2 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-hover)]" onclick={() => void openSymbol(result.id)}>
-                <span class="block truncate text-[11px] font-semibold">{result.name}</span>
-                <span class="block truncate text-[9px] text-[var(--app-text-muted)]">{symbolKind(result.kind)} · {result.path ?? result.projectName}</span>
+                <span class="block truncate text-ui-sm font-semibold">{result.name}</span>
+                <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{symbolKind(result.kind)} · {result.path ?? result.projectName}</span>
                 {#if searchMode === 'semantic'}
                   {@const semantic = semanticMatches.find((match) => match.symbol.id === result.id)}
-                  {#if semantic}<span class="mt-1 block text-[8px] font-semibold text-[var(--app-accent)]">{m['code_graph.semantic_score']({ score: semantic.score })}</span>{/if}
+                  {#if semantic}<span class="mt-1 block text-ui-xs font-semibold text-[var(--app-accent)]">{m['code_graph.semantic_score']({ score: semantic.score })}</span>{/if}
                 {/if}
               </button>
             {/each}
           </div>
         {:else if selectedSymbol}
-          <button class="mb-2 inline-flex items-center gap-1 text-[10px] text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>
+          <button class="mb-2 inline-flex items-center gap-1 text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>
             <ArrowUpFromLine size={11} /> {m['code_graph.overview']()}
           </button>
           <div class="mb-3 flex items-start gap-2">
             {#if selectedSymbol.kind === 'module'}<FileCode2 size={16} class="mt-0.5 shrink-0 text-sky-500" />{:else if selectedSymbol.kind === 'class' || selectedSymbol.kind === 'interface'}<Box size={16} class="mt-0.5 shrink-0 text-violet-500" />{:else}<Braces size={16} class="mt-0.5 shrink-0 text-emerald-500" />{/if}
-            <div class="min-w-0"><strong class="block break-words text-xs">{selectedSymbol.name}</strong><span class="block break-words text-[9px] text-[var(--app-text-muted)]">{symbolKind(selectedSymbol.kind)}</span></div>
+            <div class="min-w-0"><strong class="block break-words text-xs">{selectedSymbol.name}</strong><span class="block break-words text-ui-xs text-[var(--app-text-muted)]">{symbolKind(selectedSymbol.kind)}</span></div>
           </div>
-          <dl class="space-y-2 text-[10px]">
+          <dl class="space-y-2 text-ui-xs">
             <div><dt class="text-[var(--app-text-muted)]">{m['code_graph.qualified_name']()}</dt><dd class="mt-0.5 break-all font-mono">{selectedSymbol.qualifiedName}</dd></div>
             {#if selectedSymbol.path}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.location']()}</dt><dd class="mt-0.5 break-all font-mono">{selectedSymbol.projectName}/{selectedSymbol.path}:{selectedSymbol.startLine ?? 1}</dd></div>{/if}
             {#if selectedSymbol.signature}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.signature']()}</dt><dd class="mt-0.5 break-words font-mono leading-4">{selectedSymbol.signature}</dd></div>{/if}
@@ -1841,13 +1842,13 @@
           {/if}
           {#if selectedSymbol.revisionId !== 'live'}
           <div class="mt-3 border-t border-[var(--app-border)] pt-2">
-            <span class="mb-1 block text-[9px] font-semibold text-[var(--app-text-muted)]">{m['code_graph.direction']()}</span>
+            <span class="mb-1 block text-ui-xs font-semibold text-[var(--app-text-muted)]">{m['code_graph.direction']()}</span>
             <div class="grid grid-cols-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-0.5">
               {#each ['incoming', 'both', 'outgoing'] as value}
-                <button class="rounded px-1 py-1 text-[9px]" class:bg-[var(--app-surface-raised)]={direction === value} class:text-[var(--app-secondary)]={direction === value} onclick={() => { direction = value as typeof direction; void openSymbol(selectedSymbol!.id); }}>{value === 'incoming' ? m['code_graph.incoming']() : value === 'outgoing' ? m['code_graph.outgoing']() : m['code_graph.both']()}</button>
+                <button class="rounded px-1 py-1 text-ui-xs" class:bg-[var(--app-surface-raised)]={direction === value} class:text-[var(--app-secondary)]={direction === value} onclick={() => { direction = value as typeof direction; void openSymbol(selectedSymbol!.id); }}>{value === 'incoming' ? m['code_graph.incoming']() : value === 'outgoing' ? m['code_graph.outgoing']() : m['code_graph.both']()}</button>
               {/each}
             </div>
-            <label class="mt-2 block text-[9px] text-[var(--app-text-muted)]">
+            <label class="mt-2 block text-ui-xs text-[var(--app-text-muted)]">
               {m['code_graph.depth']({ depth })}
               <input class="mt-1 w-full accent-[var(--app-accent)]" type="range" min="1" max="4" bind:value={depth} onchange={() => void openSymbol(selectedSymbol!.id)} />
             </label>
@@ -1858,8 +1859,8 @@
             <strong class="text-xs">{m['code_graph.repositories']()}</strong>
             {#each snapshot?.projects ?? [] as project (project.id)}
               <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => void changeProject(project.id)}>
-                <span class="flex items-center justify-between gap-2"><strong class="min-w-0 truncate text-[10px]">{project.name}</strong><span class="text-[9px] text-[var(--app-text-muted)]">{projectStatus(project)}</span></span>
-                <span class="mt-1 block text-[9px] text-[var(--app-text-muted)]">{project.stats.files} {m['code_graph.files']()} · {project.stats.symbols} {m['code_graph.symbols']()}</span>
+                <span class="flex items-center justify-between gap-2"><strong class="min-w-0 truncate text-ui-xs">{project.name}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{projectStatus(project)}</span></span>
+                <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{project.stats.files} {m['code_graph.files']()} · {project.stats.symbols} {m['code_graph.symbols']()}</span>
               </button>
             {/each}
           </div>
@@ -1881,21 +1882,21 @@
           <Input bind:value={investigationName} maxlength={120} placeholder={m['code_graph.investigation_name']()} />
           <Button disabled={investigationBusy || !investigationName.trim()} onclick={() => void saveInvestigation()}><Bookmark size={14} /> {m['code_graph.save']()}</Button>
         </div>
-        <p class="text-[10px] leading-4 text-[var(--app-text-muted)]">{m['code_graph.investigation_current_state']()}</p>
+        <p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.investigation_current_state']()}</p>
       </div>
       <aside class="min-h-0 overflow-y-auto border-l border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3 max-[620px]:max-h-64 max-[620px]:border-t max-[620px]:border-l-0">
-        <strong class="mb-2 block text-[10px] uppercase text-[var(--app-text-muted)]">{m['code_graph.saved_investigations']()}</strong>
+        <strong class="mb-2 block text-ui-xs uppercase text-[var(--app-text-muted)]">{m['code_graph.saved_investigations']()}</strong>
         <div class="space-y-1">
           {#each investigations as item (item.id)}
             <div class="flex items-center gap-1 rounded border border-[var(--app-border)] bg-[var(--app-surface)] p-1">
               <button class="min-w-0 flex-1 rounded px-1.5 py-1 text-left hover:bg-[var(--app-hover)]" onclick={() => void restoreInvestigation(item)}>
-                <strong class="block truncate text-[10px]">{item.name}</strong>
-                <span class="block truncate text-[8px] text-[var(--app-text-muted)]">{viewModeLabel(item.state.viewMode)} · {new Date(item.updatedAt).toLocaleString(localeState.current)}</span>
+                <strong class="block truncate text-ui-xs">{item.name}</strong>
+                <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{viewModeLabel(item.state.viewMode)} · {new Date(item.updatedAt).toLocaleString(localeState.current)}</span>
               </button>
               <HeaderIconButton label={m['settings.delete']()} class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger)]/10 hover:text-[var(--app-danger)]" side="left" onclick={() => { pendingInvestigationDelete = item; }}><Trash2 size={12} /></HeaderIconButton>
             </div>
           {:else}
-            <p class="py-4 text-center text-[9px] text-[var(--app-text-muted)]">{m['code_graph.investigations_empty']()}</p>
+            <p class="py-4 text-center text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.investigations_empty']()}</p>
           {/each}
         </div>
       </aside>
@@ -1914,18 +1915,18 @@
         {#if contextBusy && !contextPackage}
           <div class="grid h-full place-items-center"><RefreshCw size={20} class="animate-spin text-[var(--app-accent)]" /></div>
         {:else if contextPackage}
-          <div class="mb-3 flex flex-wrap gap-1.5 text-[9px] text-[var(--app-text-muted)]">
+          <div class="mb-3 flex flex-wrap gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
             <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_tokens']({ used: contextPackage.estimatedTokens, max: contextPackage.maxTokens })}</span>
             <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_symbols']({ count: contextPackage.symbols.length })}</span>
             <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_relationships']({ count: contextPackage.relationships.length })}</span>
             {#if contextPackage.truncated}<span class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 px-2 py-1 text-[var(--app-warning)]">{m['code_graph.truncated']()}</span>{/if}
           </div>
-          <pre class="whitespace-pre-wrap break-words font-mono text-[10px] leading-5 text-[var(--app-text)]">{contextPackage.markdown}</pre>
+          <pre class="whitespace-pre-wrap break-words font-mono text-ui-xs leading-5 text-[var(--app-text)]">{contextPackage.markdown}</pre>
         {/if}
       </div>
       <aside class="min-h-0 overflow-y-auto border-l border-[var(--app-border)] bg-[var(--app-surface)] p-4 max-[760px]:border-t max-[760px]:border-l-0">
         <div class="space-y-4">
-          <label class="block"><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.context_purpose']()}</span>
+          <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.context_purpose']()}</span>
             <Select.Root type="single" value={contextPurpose} onValueChange={(value: string) => { contextPurpose = value as CodeGraphContextPurpose; void buildContext(); }}>
               <Select.Trigger class="w-full">{purposeLabel(contextPurpose)}</Select.Trigger>
               <Select.Content>
@@ -1936,9 +1937,9 @@
               </Select.Content>
             </Select.Root>
           </label>
-          <label class="block"><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.token_budget']()}</span><Input type="number" min="500" max="16000" step="500" bind:value={contextTokens} onblur={() => void buildContext()} /></label>
+          <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.token_budget']()}</span><Input type="number" min="500" max="16000" step="500" bind:value={contextTokens} onblur={() => void buildContext()} /></label>
           <div>
-            <span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.send_to']()}</span>
+            <span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.send_to']()}</span>
             <div class="grid grid-cols-2 gap-1">
               {#each ['leader', 'agent', 'council', 'task'] as target (target)}
                 <Button size="xs" variant={contextHandoff === target ? 'secondary' : 'outline'} onclick={() => { contextHandoff = target as typeof contextHandoff; }}>{target === 'leader' ? m['code_graph.leader']() : target === 'agent' ? m['code_graph.agent']() : target === 'council' ? m['code_graph.council']() : m['code_graph.task']()}</Button>
@@ -1946,17 +1947,17 @@
             </div>
           </div>
           {#if contextHandoff === 'agent'}
-            <label class="block"><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.target_agent']()}</span>
+            <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.target_agent']()}</span>
               <Select.Root type="single" value={contextTarget} onValueChange={(value: string) => { contextTarget = value; }}>
                 <Select.Trigger class="w-full">{activeAgents.find((agent) => agent.nodeId === contextTarget)?.title ?? m['code_graph.select_agent']()}</Select.Trigger>
                 <Select.Content>{#each activeAgents as agent (agent.nodeId)}<Select.Item value={agent.nodeId}>{agent.title}</Select.Item>{/each}</Select.Content>
               </Select.Root>
             </label>
           {:else if contextHandoff === 'council'}
-            <div><span class="mb-1.5 block text-[10px] font-medium">{m['code_graph.council_agents']()}</span>
+            <div><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.council_agents']()}</span>
               <div class="space-y-1">
                 {#each activeAgents as agent (agent.nodeId)}
-                  <label class="flex min-h-8 items-center gap-2 rounded border border-[var(--app-border)] px-2 text-[10px] hover:bg-[var(--app-hover)]"><Checkbox checked={councilTargets.includes(agent.nodeId)} disabled={!councilTargets.includes(agent.nodeId) && councilTargets.length >= 5} onCheckedChange={(checked: boolean | 'indeterminate') => { councilTargets = checked === true ? [...councilTargets, agent.nodeId] : councilTargets.filter((id) => id !== agent.nodeId); }} /><span class="truncate">{agent.title}</span></label>
+                  <label class="flex min-h-8 items-center gap-2 rounded border border-[var(--app-border)] px-2 text-ui-xs hover:bg-[var(--app-hover)]"><Checkbox checked={councilTargets.includes(agent.nodeId)} disabled={!councilTargets.includes(agent.nodeId) && councilTargets.length >= 5} onCheckedChange={(checked: boolean | 'indeterminate') => { councilTargets = checked === true ? [...councilTargets, agent.nodeId] : councilTargets.filter((id) => id !== agent.nodeId); }} /><span class="truncate">{agent.title}</span></label>
                 {/each}
               </div>
             </div>

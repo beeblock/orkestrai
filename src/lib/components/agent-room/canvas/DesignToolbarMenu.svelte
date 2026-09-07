@@ -37,11 +37,11 @@
     <DropdownMenu.Label>{m['design.menu']()}</DropdownMenu.Label>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onBlank}>
       <Palette size={16} class="shrink-0" aria-hidden="true" />
-      <span class="min-w-0"><strong class="block text-xs">{m['design.blank']()}</strong><small class="mt-0.5 block text-[10px] text-muted-foreground">{m['design.blank_hint']()}</small></span>
+      <span class="min-w-0"><strong class="block text-xs">{m['design.blank']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['design.blank_hint']()}</small></span>
     </DropdownMenu.Item>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onExploration}>
       <LayoutTemplate size={16} class="shrink-0" aria-hidden="true" />
-      <span class="min-w-0"><strong class="block text-xs">{m['design.exploration_menu_item']()}</strong><small class="mt-0.5 block text-[10px] text-muted-foreground">{m['design.exploration_menu_hint']()}</small></span>
+      <span class="min-w-0"><strong class="block text-xs">{m['design.exploration_menu_item']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['design.exploration_menu_hint']()}</small></span>
     </DropdownMenu.Item>
   </DropdownMenu.Content>
 </DropdownMenu.Root>

@@ -175,8 +175,8 @@
   <header class="flex min-h-10 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2.5">
     <GitBranch size={14} class="shrink-0 text-[var(--app-accent)]" />
     <div class="min-w-0 flex-1">
-      <p class="truncate text-[11px] font-semibold">{snapshot?.status.branch ?? m['git.detached']()}</p>
-      <p class="text-[9px] tabular-nums text-[var(--app-text-muted)]">
+      <p class="truncate text-ui-sm font-semibold">{snapshot?.status.branch ?? m['git.detached']()}</p>
+      <p class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">
         {snapshot?.status.head?.slice(0, 8) ?? m['git.no_commits']()}
         {#if snapshot?.status.upstream} · {snapshot.status.ahead}↑ {snapshot.status.behind}↓{/if}
       </p>
@@ -187,45 +187,45 @@
   </header>
 
   {#if errorMessage}
-    <button class="border-b border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 px-3 py-2 text-left text-[10px] text-[var(--app-danger)]" onclick={() => (errorMessage = '')}>{errorMessage}</button>
+    <button class="border-b border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 px-3 py-2 text-left text-ui-xs text-[var(--app-danger)]" onclick={() => (errorMessage = '')}>{errorMessage}</button>
   {/if}
 
   {#if loading}
     <div class="grid place-items-center"><LoaderCircle class="animate-spin text-[var(--app-text-muted)]" /></div>
   {:else if !snapshot?.status.isRepo}
-    <div class="grid place-items-center p-6 text-center"><div><GitFork class="mx-auto mb-2 text-[var(--app-text-muted)]" /><p class="text-xs font-semibold">{m['git.not_repo']()}</p><p class="mt-1 text-[10px] text-[var(--app-text-muted)]">{m['git.not_repo_hint']()}</p></div></div>
+    <div class="grid place-items-center p-6 text-center"><div><GitFork class="mx-auto mb-2 text-[var(--app-text-muted)]" /><p class="text-xs font-semibold">{m['git.not_repo']()}</p><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{m['git.not_repo_hint']()}</p></div></div>
   {:else}
     <Tabs.Root bind:value={activeTab} class="grid min-h-0 grid-rows-[34px_minmax(0,1fr)] gap-0">
       <Tabs.List class="h-8 justify-start overflow-x-auto rounded-none border-b border-[var(--app-border)] bg-[var(--app-surface-muted)] px-1" variant="line">
-        <Tabs.Trigger value="changes" class="h-7 flex-none text-[10px]"><GitCommitHorizontal />{m['git.changes']()} <span class="tabular-nums">{snapshot.status.changes.length}</span></Tabs.Trigger>
-        <Tabs.Trigger value="graph" class="h-7 flex-none text-[10px]"><History />{m['git.graph']()}</Tabs.Trigger>
-        <Tabs.Trigger value="branches" class="h-7 flex-none text-[10px]"><GitBranch />{m['git.branches']()}</Tabs.Trigger>
-        <Tabs.Trigger value="worktrees" class="h-7 flex-none text-[10px]"><GitFork />{m['git.worktrees']()}</Tabs.Trigger>
+        <Tabs.Trigger value="changes" class="h-7 flex-none text-ui-xs"><GitCommitHorizontal />{m['git.changes']()} <span class="tabular-nums">{snapshot.status.changes.length}</span></Tabs.Trigger>
+        <Tabs.Trigger value="graph" class="h-7 flex-none text-ui-xs"><History />{m['git.graph']()}</Tabs.Trigger>
+        <Tabs.Trigger value="branches" class="h-7 flex-none text-ui-xs"><GitBranch />{m['git.branches']()}</Tabs.Trigger>
+        <Tabs.Trigger value="worktrees" class="h-7 flex-none text-ui-xs"><GitFork />{m['git.worktrees']()}</Tabs.Trigger>
       </Tabs.List>
 
       <Tabs.Content value="changes" class="m-0 min-h-0 overflow-y-auto">
         <div class="sticky top-0 z-10 flex gap-1.5 border-b border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
-          <Input class="h-7 min-w-0 flex-1 text-[10px]" bind:value={commitMessage} placeholder={m['git.commit_placeholder']()} onkeydown={(event: KeyboardEvent) => event.key === 'Enter' && void commit()} />
-          <Button size="sm" class="h-7 px-2 text-[10px]" disabled={busy || !commitMessage.trim() || staged.length === 0} onclick={() => void commit()}><Check />{m['git.commit']()}</Button>
-          <Button variant="outline" size="sm" class="h-7 px-2 text-[10px]" onclick={openReviewCenter}>{m['git.review']()}</Button>
+          <Input class="h-7 min-w-0 flex-1 text-ui-xs" bind:value={commitMessage} placeholder={m['git.commit_placeholder']()} onkeydown={(event: KeyboardEvent) => event.key === 'Enter' && void commit()} />
+          <Button size="sm" class="h-7 px-2 text-ui-xs" disabled={busy || !commitMessage.trim() || staged.length === 0} onclick={() => void commit()}><Check />{m['git.commit']()}</Button>
+          <Button variant="outline" size="sm" class="h-7 px-2 text-ui-xs" onclick={openReviewCenter}>{m['git.review']()}</Button>
         </div>
         {#each [{ title: m['git.staged'](), items: staged }, { title: m['git.unstaged'](), items: unstaged }] as section}
           <section class="border-b border-[var(--app-border)]">
-            <div class="flex items-center justify-between px-3 py-1.5 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]"><span>{section.title}</span><span>{section.items.length}</span></div>
+            <div class="flex items-center justify-between px-3 py-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><span>{section.title}</span><span>{section.items.length}</span></div>
             {#each section.items as change (change.id)}
-              <div class="group flex h-7 items-center gap-2 px-3 text-[10px] hover:bg-[var(--app-surface-muted)]">
+              <div class="group flex h-7 items-center gap-2 px-3 text-ui-xs hover:bg-[var(--app-surface-muted)]">
                 <span class="w-3 font-mono font-bold text-[var(--app-warning)]">{change.status}</span>
                 <button class="min-w-0 flex-1 truncate text-left" onclick={openReviewCenter}>{change.path}</button>
                 <Button variant="ghost" size="icon-sm" class="h-6 w-6 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" aria-label={change.staged ? m['git.unstage']() : m['git.stage']()} onclick={() => void toggleStage(change)}>{#if change.staged}<Minus />{:else}<Plus />{/if}</Button>
               </div>
             {:else}
-              <p class="px-3 pb-2 text-[10px] text-[var(--app-text-muted)]">{m['git.no_changes']()}</p>
+              <p class="px-3 pb-2 text-ui-xs text-[var(--app-text-muted)]">{m['git.no_changes']()}</p>
             {/each}
           </section>
         {/each}
         <div class="flex flex-wrap gap-1.5 p-2">
-          <Button variant="outline" size="sm" class="h-7 text-[10px]" onclick={() => void prepare({ operation: 'stash', force: false, setUpstream: false })}><RotateCcw />{m['git.stash']()}</Button>
-          {#if snapshot.stashes[0]}<Button variant="outline" size="sm" class="h-7 text-[10px]" onclick={() => void prepare({ operation: 'stashPop', ref: snapshot?.stashes[0]?.ref, force: false, setUpstream: false })}>{m['git.stash_pop']()}</Button>{/if}
+          <Button variant="outline" size="sm" class="h-7 text-ui-xs" onclick={() => void prepare({ operation: 'stash', force: false, setUpstream: false })}><RotateCcw />{m['git.stash']()}</Button>
+          {#if snapshot.stashes[0]}<Button variant="outline" size="sm" class="h-7 text-ui-xs" onclick={() => void prepare({ operation: 'stashPop', ref: snapshot?.stashes[0]?.ref, force: false, setUpstream: false })}>{m['git.stash_pop']()}</Button>{/if}
         </div>
       </Tabs.Content>
 
@@ -234,33 +234,33 @@
           <div class="relative grid min-h-12 grid-cols-[24px_minmax(0,1fr)_auto] gap-2 border-b border-[var(--app-border)]/70 py-2">
             {#if index < snapshot.commits.length - 1}<span class="absolute bottom-0 left-[11px] top-6 w-px bg-[var(--app-border-strong)]"></span>{/if}
             <span class="relative mt-1 h-3 w-3 place-self-start rounded-full border-2 border-[var(--app-accent)] bg-[var(--app-canvas)]"></span>
-            <div class="min-w-0"><p class="truncate text-[10px] font-medium">{commit.subject}</p><p class="mt-0.5 truncate text-[9px] text-[var(--app-text-muted)]">{commit.author} · {new Date(commit.authoredAt).toLocaleString()}</p><div class="mt-1 flex flex-wrap gap-1">{#each commit.decorations as decoration}<span class="rounded-sm border border-[var(--app-border)] px-1 text-[8px] text-[var(--app-text-muted)]">{decoration}</span>{/each}</div></div>
-            <div class="flex items-center gap-1"><code class="text-[9px] text-[var(--app-text-muted)]">{commit.shortHash}</code><DropdownMenu.Root><DropdownMenu.Trigger class="grid h-6 w-6 place-items-center rounded hover:bg-[var(--app-surface-muted)]" aria-label={m['git.commit_actions']()}><MoreHorizontal size={13} /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item onclick={() => void prepare({ operation: 'cherryPick', ref: commit.hash, force: false, setUpstream: false })}>{m['git.cherry_pick']()}</DropdownMenu.Item><DropdownMenu.Item onclick={() => void prepare({ operation: 'revert', ref: commit.hash, force: false, setUpstream: false })}>{m['git.revert_commit']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root></div>
+            <div class="min-w-0"><p class="truncate text-ui-xs font-medium">{commit.subject}</p><p class="mt-0.5 truncate text-ui-xs text-[var(--app-text-muted)]">{commit.author} · {new Date(commit.authoredAt).toLocaleString()}</p><div class="mt-1 flex flex-wrap gap-1">{#each commit.decorations as decoration}<span class="rounded-sm border border-[var(--app-border)] px-1 text-ui-xs text-[var(--app-text-muted)]">{decoration}</span>{/each}</div></div>
+            <div class="flex items-center gap-1"><code class="text-ui-xs text-[var(--app-text-muted)]">{commit.shortHash}</code><DropdownMenu.Root><DropdownMenu.Trigger class="grid h-6 w-6 place-items-center rounded hover:bg-[var(--app-surface-muted)]" aria-label={m['git.commit_actions']()}><MoreHorizontal size={13} /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item onclick={() => void prepare({ operation: 'cherryPick', ref: commit.hash, force: false, setUpstream: false })}>{m['git.cherry_pick']()}</DropdownMenu.Item><DropdownMenu.Item onclick={() => void prepare({ operation: 'revert', ref: commit.hash, force: false, setUpstream: false })}>{m['git.revert_commit']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root></div>
           </div>
-        {:else}<p class="p-3 text-[10px] text-[var(--app-text-muted)]">{m['git.no_commits']()}</p>{/each}
+        {:else}<p class="p-3 text-ui-xs text-[var(--app-text-muted)]">{m['git.no_commits']()}</p>{/each}
       </Tabs.Content>
 
       <Tabs.Content value="branches" class="m-0 min-h-0 overflow-y-auto">
-        <div class="sticky top-0 z-10 flex justify-between border-b border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><span class="text-[10px] font-semibold">{m['git.local_and_remote']()}</span><div class="flex gap-1"><Button variant="outline" size="sm" class="h-7 text-[10px]" onclick={() => (tagDialogOpen = true)}><Tag />{m['git.new_tag']()}</Button><Button size="sm" class="h-7 text-[10px]" onclick={() => (branchDialogOpen = true)}><Plus />{m['git.new_branch']()}</Button></div></div>
+        <div class="sticky top-0 z-10 flex justify-between border-b border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><span class="text-ui-xs font-semibold">{m['git.local_and_remote']()}</span><div class="flex gap-1"><Button variant="outline" size="sm" class="h-7 text-ui-xs" onclick={() => (tagDialogOpen = true)}><Tag />{m['git.new_tag']()}</Button><Button size="sm" class="h-7 text-ui-xs" onclick={() => (branchDialogOpen = true)}><Plus />{m['git.new_branch']()}</Button></div></div>
         {#each snapshot.branches as branch (branch.name)}
-          <div class="group flex min-h-9 items-center gap-2 border-b border-[var(--app-border)]/70 px-3 text-[10px]">
+          <div class="group flex min-h-9 items-center gap-2 border-b border-[var(--app-border)]/70 px-3 text-ui-xs">
             <GitBranch size={12} class={branch.current ? 'text-[var(--app-success)]' : 'text-[var(--app-text-muted)]'} />
             <button class="min-w-0 flex-1 truncate text-left font-medium" disabled={branch.current || branch.remote} onclick={() => void prepare({ operation: 'checkout', ref: branch.name, force: false, setUpstream: false })}>{branch.name}</button>
-            {#if branch.remote}<span class="rounded-sm border border-[var(--app-border)] px-1 text-[8px] text-[var(--app-text-muted)]">{m['git.remote_branch']()}</span>{/if}
-            {#if branch.upstream}<span class="text-[9px] tabular-nums text-[var(--app-text-muted)]">{branch.ahead}↑ {branch.behind}↓</span>{/if}
+            {#if branch.remote}<span class="rounded-sm border border-[var(--app-border)] px-1 text-ui-xs text-[var(--app-text-muted)]">{m['git.remote_branch']()}</span>{/if}
+            {#if branch.upstream}<span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{branch.ahead}↑ {branch.behind}↓</span>{/if}
             {#if branch.current}<Check size={12} class="text-[var(--app-success)]" />{:else if !branch.remote}<DropdownMenu.Root><DropdownMenu.Trigger class="grid h-6 w-6 place-items-center rounded opacity-0 hover:bg-[var(--app-surface-muted)] group-hover:opacity-100 group-focus-within:opacity-100" aria-label={m['git.branch_actions']()}><MoreHorizontal size={13} /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item onclick={() => void prepare({ operation: 'merge', ref: branch.name, force: false, setUpstream: false })}>{m['git.merge_branch']()}</DropdownMenu.Item><DropdownMenu.Item onclick={() => void prepare({ operation: 'rebase', ref: branch.name, force: false, setUpstream: false })}>{m['git.rebase_branch']()}</DropdownMenu.Item><DropdownMenu.Separator /><DropdownMenu.Item class="text-[var(--app-danger)]" onclick={() => void prepare({ operation: 'deleteBranch', ref: branch.name, force: false, setUpstream: false })}><Trash2 />{m['git.delete_branch']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>{/if}
           </div>
         {/each}
-        {#if snapshot.tags.length}<div class="px-3 py-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['git.tags']()}</div>{#each snapshot.tags as tag}<div class="group flex h-7 items-center gap-2 px-3 text-[10px]"><Tag size={11} class="text-[var(--app-warning)]"/><span class="flex-1">{tag.name}</span><code class="text-[9px] text-[var(--app-text-muted)]">{tag.target.slice(0, 8)}</code><Button variant="ghost" size="icon-sm" class="h-6 w-6 text-[var(--app-danger)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" aria-label={m['git.delete_tag']()} onclick={() => void prepare({ operation: 'deleteTag', ref: tag.name, force: false, setUpstream: false })}><Trash2 /></Button></div>{/each}{/if}
+        {#if snapshot.tags.length}<div class="px-3 py-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['git.tags']()}</div>{#each snapshot.tags as tag}<div class="group flex h-7 items-center gap-2 px-3 text-ui-xs"><Tag size={11} class="text-[var(--app-warning)]"/><span class="flex-1">{tag.name}</span><code class="text-ui-xs text-[var(--app-text-muted)]">{tag.target.slice(0, 8)}</code><Button variant="ghost" size="icon-sm" class="h-6 w-6 text-[var(--app-danger)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" aria-label={m['git.delete_tag']()} onclick={() => void prepare({ operation: 'deleteTag', ref: tag.name, force: false, setUpstream: false })}><Trash2 /></Button></div>{/each}{/if}
       </Tabs.Content>
 
       <Tabs.Content value="worktrees" class="m-0 min-h-0 overflow-y-auto p-2">
-        {#if snapshot.operation}<div class="mb-2 flex items-center gap-2 border-l-2 border-[var(--app-warning)] bg-[var(--app-warning)]/10 p-2 text-[10px]"><GitMerge size={13}/><span class="min-w-0 flex-1">{m['git.operation_in_progress']({ operation: snapshot.operation })}</span>{#if snapshot.operation === 'merge'}<Button variant="outline" size="sm" class="h-6 text-[9px]" onclick={() => void prepare({ operation: 'abortMerge', force: false, setUpstream: false })}>{m['git.abort']()}</Button>{:else if snapshot.operation === 'rebase'}<Button variant="outline" size="sm" class="h-6 text-[9px]" onclick={() => void prepare({ operation: 'abortRebase', force: false, setUpstream: false })}>{m['git.abort']()}</Button>{/if}</div>{/if}
-        <p class="mb-2 text-[10px] text-[var(--app-text-muted)]">{m['git.worktrees_hint']()}</p>
+        {#if snapshot.operation}<div class="mb-2 flex items-center gap-2 border-l-2 border-[var(--app-warning)] bg-[var(--app-warning)]/10 p-2 text-ui-xs"><GitMerge size={13}/><span class="min-w-0 flex-1">{m['git.operation_in_progress']({ operation: snapshot.operation })}</span>{#if snapshot.operation === 'merge'}<Button variant="outline" size="sm" class="h-6 text-ui-xs" onclick={() => void prepare({ operation: 'abortMerge', force: false, setUpstream: false })}>{m['git.abort']()}</Button>{:else if snapshot.operation === 'rebase'}<Button variant="outline" size="sm" class="h-6 text-ui-xs" onclick={() => void prepare({ operation: 'abortRebase', force: false, setUpstream: false })}>{m['git.abort']()}</Button>{/if}</div>{/if}
+        <p class="mb-2 text-ui-xs text-[var(--app-text-muted)]">{m['git.worktrees_hint']()}</p>
         {#each snapshot.worktrees as worktree}
-          <div class="mb-1 border-l-2 border-[var(--app-accent)] bg-[var(--app-surface)] p-2"><div class="flex items-center gap-2"><GitFork size={12}/><span class="truncate text-[10px] font-medium">{worktree.branch ?? m['git.detached']()}</span></div><p class="mt-1 truncate font-mono text-[9px] text-[var(--app-text-muted)]">{worktree.path}</p></div>
+          <div class="mb-1 border-l-2 border-[var(--app-accent)] bg-[var(--app-surface)] p-2"><div class="flex items-center gap-2"><GitFork size={12}/><span class="truncate text-ui-xs font-medium">{worktree.branch ?? m['git.detached']()}</span></div><p class="mt-1 truncate font-mono text-ui-xs text-[var(--app-text-muted)]">{worktree.path}</p></div>
         {/each}
-        {#if snapshot.remotes.length}<p class="mb-1 mt-3 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['git.remotes']()}</p>{#each snapshot.remotes as remote}<div class="border-b border-[var(--app-border)] px-1 py-2"><p class="text-[10px] font-medium">{remote.name}</p><p class="truncate text-[9px] text-[var(--app-text-muted)]">{remote.fetchUrl}</p></div>{/each}{/if}
+        {#if snapshot.remotes.length}<p class="mb-1 mt-3 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['git.remotes']()}</p>{#each snapshot.remotes as remote}<div class="border-b border-[var(--app-border)] px-1 py-2"><p class="text-ui-xs font-medium">{remote.name}</p><p class="truncate text-ui-xs text-[var(--app-text-muted)]">{remote.fetchUrl}</p></div>{/each}{/if}
       </Tabs.Content>
     </Tabs.Root>
   {/if}
@@ -275,5 +275,5 @@
 </Dialog.Root>
 
 <AlertDialog.Root open={Boolean(pendingPreview)} onOpenChange={(open) => !open && (pendingPreview = null, pendingInput = null)}>
-  <AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['git.confirm_title']()}</AlertDialog.Title><AlertDialog.Description>{pendingPreview?.summary}</AlertDialog.Description></AlertDialog.Header>{#if pendingPreview}<code class="block overflow-x-auto rounded-sm bg-[var(--app-canvas)] p-2 text-[10px]">{pendingPreview.command.join(' ')}</code>{/if}<AlertDialog.Footer><AlertDialog.Cancel>{m['settings.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => void confirmOperation()}>{m['git.confirm_action']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
+  <AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['git.confirm_title']()}</AlertDialog.Title><AlertDialog.Description>{pendingPreview?.summary}</AlertDialog.Description></AlertDialog.Header>{#if pendingPreview}<code class="block overflow-x-auto rounded-sm bg-[var(--app-canvas)] p-2 text-ui-xs">{pendingPreview.command.join(' ')}</code>{/if}<AlertDialog.Footer><AlertDialog.Cancel>{m['settings.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => void confirmOperation()}>{m['git.confirm_action']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
 </AlertDialog.Root>

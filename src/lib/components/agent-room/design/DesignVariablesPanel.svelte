@@ -411,11 +411,11 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col text-[11px]">
+<div class="flex h-full min-h-0 flex-col text-ui-sm">
   <input class="hidden" type="file" accept=".json,.tokens.json,.css,application/json,text/css" bind:this={importInput} onchange={(event) => void importTokenFile(event)} />
   <div class="space-y-2 border-b border-[var(--app-border)] p-2">
     <div class="flex h-6 items-center justify-between">
-      <span class="text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.collections']()}</span>
+      <span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.collections']()}</span>
       <div class="flex items-center gap-0.5">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger class="inline-grid size-6 place-items-center rounded hover:bg-[var(--app-surface-raised)]" aria-label={m['design.token_presets']()}><Sparkles size={12} /></DropdownMenu.Trigger>
@@ -441,12 +441,12 @@
     </div>
     {#if auditOpen}
       <div class="max-h-52 space-y-2 overflow-y-auto border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-2">
-        <div class="grid grid-cols-3 gap-1 text-center text-[9px]"><div><strong class="block text-sm text-[var(--app-text)]">{audit.duplicateTokens.length}</strong>{m['design.audit_duplicates']()}</div><div><strong class="block text-sm text-[var(--app-text)]">{audit.unusedVariableIds.length}</strong>{m['design.audit_unused']()}</div><div><strong class="block text-sm text-[var(--app-text)]">{audit.componentCandidates.length}</strong>{m['design.audit_components']()}</div></div>
+        <div class="grid grid-cols-3 gap-1 text-center text-ui-xs"><div><strong class="block text-sm text-[var(--app-text)]">{audit.duplicateTokens.length}</strong>{m['design.audit_duplicates']()}</div><div><strong class="block text-sm text-[var(--app-text)]">{audit.unusedVariableIds.length}</strong>{m['design.audit_unused']()}</div><div><strong class="block text-sm text-[var(--app-text)]">{audit.componentCandidates.length}</strong>{m['design.audit_components']()}</div></div>
         {#each audit.hardcodedValues as group}
-          <button class="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-[var(--app-border)]" onclick={() => onSelectElements(group.elementIds)}><span class="truncate">{group.property} · {group.value}</span><span class="shrink-0 text-[9px] text-[var(--app-text-muted)]">{group.elementIds.length}</span></button>
+          <button class="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-[var(--app-border)]" onclick={() => onSelectElements(group.elementIds)}><span class="truncate">{group.property} · {group.value}</span><span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{group.elementIds.length}</span></button>
         {/each}
         {#each audit.componentCandidates as candidate, index}
-          <button class="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-[var(--app-border)]" onclick={() => onSelectElements(candidate.elementIds)}><span class="truncate">{m['design.component_candidate']({ number: String(index + 1) })}</span><span class="shrink-0 text-[9px] text-[var(--app-text-muted)]">{candidate.elementIds.length}</span></button>
+          <button class="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-[var(--app-border)]" onclick={() => onSelectElements(candidate.elementIds)}><span class="truncate">{m['design.component_candidate']({ number: String(index + 1) })}</span><span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{candidate.elementIds.length}</span></button>
         {/each}
       </div>
     {/if}
@@ -457,9 +457,9 @@
         </NativeSelect.Root>
         <Button variant="ghost" size="icon-sm" aria-label={m['design.delete_collection']()} title={m['design.delete_collection']()} disabled={saving} onclick={() => void deleteCollection()}><Trash2 size={12} /></Button>
       </div>
-      <label class="space-y-1"><span class="text-[9px] text-[var(--app-text-muted)]">{m['design.collection_name']()}</span><Input aria-label={m['design.collection_name']()} value={collection.name} onchange={(event: Event) => void updateCollection({ name: inputValue(event) })} /></label>
+      <label class="space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.collection_name']()}</span><Input aria-label={m['design.collection_name']()} value={collection.name} onchange={(event: Event) => void updateCollection({ name: inputValue(event) })} /></label>
       <div class="flex h-6 items-center justify-between border-t border-[var(--app-border)] pt-2">
-        <span class="text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.modes']()}</span>
+        <span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.modes']()}</span>
         <div class="flex gap-1"><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.add_mode']()} title={m['design.add_mode']()} disabled={saving} onclick={() => void addMode()}><Plus size={12} /></Button><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.delete_mode']()} title={m['design.delete_mode']()} disabled={saving || collection.modes.length <= 1} onclick={() => void deleteActiveMode()}><Trash2 size={12} /></Button></div>
       </div>
       <div>
@@ -467,7 +467,7 @@
           {#each collection.modes as mode (mode.id)}<NativeSelect.Option value={mode.id}>{mode.name}</NativeSelect.Option>{/each}
         </NativeSelect.Root>
       </div>
-      <label class="space-y-1"><span class="text-[9px] text-[var(--app-text-muted)]">{m['design.mode_name']()}</span><Input aria-label={m['design.mode_name']()} value={collection.modes.find((mode) => mode.id === (document.activeVariableModes[collection.id] ?? collection.defaultModeId))?.name ?? ''} onchange={(event: Event) => void renameActiveMode(inputValue(event))} /></label>
+      <label class="space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.mode_name']()}</span><Input aria-label={m['design.mode_name']()} value={collection.modes.find((mode) => mode.id === (document.activeVariableModes[collection.id] ?? collection.defaultModeId))?.name ?? ''} onchange={(event: Event) => void renameActiveMode(inputValue(event))} /></label>
     {/if}
   </div>
 
@@ -479,7 +479,7 @@
   {:else}
     <div class="flex min-h-0 flex-1 flex-col">
       <div class="space-y-2 border-b border-[var(--app-border)] p-2">
-        <span class="block text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.tokens']()}</span>
+        <span class="block text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.tokens']()}</span>
         <div class="relative"><Search size={12} class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[var(--app-text-muted)]" /><Input class="pl-7" placeholder={m['design.search_variables']()} bind:value={search} /></div>
         <div class="grid grid-cols-[minmax(0,1fr)_30px] gap-1.5">
           <NativeSelect.Root aria-label={m['design.new_variable_type']()} value={nextType} onchange={(event: Event) => (nextType = inputValue(event) as DesignVariableType)}>
@@ -491,15 +491,15 @@
 
       <div class="flex min-h-0 flex-1 flex-col">
         <div class="max-h-52 shrink-0 overflow-y-auto border-b border-[var(--app-border)] p-1">
-          {#if !variables.length}<p class="p-2 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.no_variable_results']()}</p>{/if}
+          {#if !variables.length}<p class="p-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.no_variable_results']()}</p>{/if}
           {#each variables as variable (variable.id)}
             <div class={`flex h-8 w-full items-center rounded pr-1 ${selectedVariable?.id === variable.id ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)]'}`}>
               <button class="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left" onclick={() => (selectedVariableId = variable.id)}>
                 {#if variable.type === 'color'}<span class="size-3 shrink-0 rounded-sm border border-black/15" style:background={rawValue(variable, document.activeVariableModes[collection.id] ?? collection.defaultModeId).kind === 'color' ? (rawValue(variable, document.activeVariableModes[collection.id] ?? collection.defaultModeId) as { kind: 'color'; value: string }).value : 'transparent'}></span>{:else}<Braces size={12} class="shrink-0 text-[var(--app-text-muted)]" />{/if}
                 <span class="min-w-0 flex-1 truncate">{variable.name}</span>
-                <span class="text-[8px] uppercase text-[var(--app-text-muted)]">{typeLabel(variable.type)}</span>
+                <span class="text-ui-xs uppercase text-[var(--app-text-muted)]">{typeLabel(variable.type)}</span>
               </button>
-              <button class="shrink-0 rounded px-1 text-[8px] tabular-nums text-[var(--app-text-muted)] hover:bg-[var(--app-border)]" aria-label={m['design.variable_usages']({ count: String(designVariableUsageCount(document, variable.id)) })} onclick={() => selectVariableUsages(variable.id)}>{designVariableUsageCount(document, variable.id)}</button>
+              <button class="shrink-0 rounded px-1 text-ui-xs tabular-nums text-[var(--app-text-muted)] hover:bg-[var(--app-border)]" aria-label={m['design.variable_usages']({ count: String(designVariableUsageCount(document, variable.id)) })} onclick={() => selectVariableUsages(variable.id)}>{designVariableUsageCount(document, variable.id)}</button>
             </div>
           {/each}
         </div>
@@ -519,7 +519,7 @@
               {#each collection.modes as mode (mode.id)}
                 {@const value = selectedVariable.values[mode.id] ?? defaultValue(selectedVariable.type)}
                 <section class="space-y-1.5 border-t border-[var(--app-border)] pt-2">
-                  <div class="flex items-center justify-between gap-2"><span class="font-semibold text-[var(--app-text-soft)]">{mode.name}</span>{#if value.kind === 'alias'}<span class="flex items-center gap-1 text-[9px] text-[var(--app-accent)]"><Link2 size={10} />{m['design.alias']()}</span>{/if}</div>
+                  <div class="flex items-center justify-between gap-2"><span class="font-semibold text-[var(--app-text-soft)]">{mode.name}</span>{#if value.kind === 'alias'}<span class="flex items-center gap-1 text-ui-xs text-[var(--app-accent)]"><Link2 size={10} />{m['design.alias']()}</span>{/if}</div>
                   <DesignVariableCombobox
                     value={value.kind === 'alias' ? value.variableId : ''}
                     options={compatibleAliases(selectedVariable)}
@@ -542,12 +542,12 @@
                       <div class="space-y-1.5">
                         {#each value.value as effect, index}
                           <div class="grid grid-cols-[minmax(0,1fr)_58px_26px] items-center gap-1">
-                            <span class="truncate text-[9px] text-[var(--app-text-soft)]">{effect.type === 'layer-blur' || effect.type === 'background-blur' ? m['design.blur']() : m['design.shadow']()}</span>
+                            <span class="truncate text-ui-xs text-[var(--app-text-soft)]">{effect.type === 'layer-blur' || effect.type === 'background-blur' ? m['design.blur']() : m['design.shadow']()}</span>
                             <Input class="h-7" type="number" min="0" value={effect.blur} onchange={(event: Event) => void updateValue(mode.id, { kind: 'effect', value: effectsWithChange(value.value, index, { blur: Number(inputValue(event)) }) })} />
                             <Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.delete']()} onclick={() => void updateValue(mode.id, { kind: 'effect', value: value.value.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={10} /></Button>
                           </div>
                         {/each}
-                        <div class="grid grid-cols-2 gap-1"><Button variant="outline" size="sm" class="h-7 px-1 text-[9px]" onclick={() => void updateValue(mode.id, { kind: 'effect', value: [...value.value, { type: 'drop-shadow', color: '#00000040', x: 0, y: 4, blur: 12, spread: 0, visible: true }] })}>{m['design.add_shadow']()}</Button><Button variant="outline" size="sm" class="h-7 px-1 text-[9px]" onclick={() => void updateValue(mode.id, { kind: 'effect', value: [...value.value, { type: 'layer-blur', blur: 8, visible: true }] })}>{m['design.add_blur']()}</Button></div>
+                        <div class="grid grid-cols-2 gap-1"><Button variant="outline" size="sm" class="h-7 px-1 text-ui-xs" onclick={() => void updateValue(mode.id, { kind: 'effect', value: [...value.value, { type: 'drop-shadow', color: '#00000040', x: 0, y: 4, blur: 12, spread: 0, visible: true }] })}>{m['design.add_shadow']()}</Button><Button variant="outline" size="sm" class="h-7 px-1 text-ui-xs" onclick={() => void updateValue(mode.id, { kind: 'effect', value: [...value.value, { type: 'layer-blur', blur: 8, visible: true }] })}>{m['design.add_blur']()}</Button></div>
                       </div>
                     {/if}
                   {/if}
@@ -555,7 +555,7 @@
               {/each}
             </div>
           {:else}
-            <p class="p-2 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.select_variable']()}</p>
+            <p class="p-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.select_variable']()}</p>
           {/if}
         </div>
       </div>

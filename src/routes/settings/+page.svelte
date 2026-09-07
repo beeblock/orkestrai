@@ -52,8 +52,8 @@
 
   const hotkeyLabel = $derived(comboLabel(settings.dictationHotkey || DEFAULT_DICTATION_HOTKEY));
   const ttsSpeed = $derived(normalizeEmbeddedTtsSpeed(settings.voiceTtsSpeed));
-  const settingsSectionClasses = 'settings-section flex scroll-mt-[84px] flex-col gap-[18px] border-0 border-t border-[var(--line)] bg-transparent px-0 py-6 first:border-t-0 max-[560px]:py-5';
-  const settingsNavLinkClasses = 'flex min-h-[34px] items-center gap-[9px] border-l-2 border-transparent py-[7px] pr-[11px] pl-[10px] text-xs leading-[1.35] text-[var(--copy-muted)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-l-[var(--app-accent)] hover:bg-[var(--surface-subtle)] hover:text-[var(--copy)] focus-visible:border-l-[var(--app-accent)] focus-visible:bg-[var(--surface-subtle)] focus-visible:text-[var(--copy)] [&_svg]:shrink-0 [&_svg]:text-[var(--app-text-muted)] hover:[&_svg]:text-[var(--app-accent)] focus-visible:[&_svg]:text-[var(--app-accent)] max-[900px]:mb-[-1px] max-[900px]:min-h-10 max-[900px]:whitespace-nowrap max-[900px]:border-l-0 max-[900px]:border-b-2 max-[900px]:hover:border-b-[var(--app-accent)] max-[900px]:focus-visible:border-b-[var(--app-accent)]';
+  const settingsSectionClasses = 'settings-section flex scroll-mt-[84px] flex-col gap-[18px] border-0 border-t border-[var(--app-border)] bg-transparent px-0 py-6 first:border-t-0 max-[560px]:py-5';
+  const settingsNavLinkClasses = 'flex min-h-[34px] items-center gap-[9px] border-l-2 border-transparent py-[7px] pr-[11px] pl-[10px] text-xs leading-[1.35] text-[var(--app-text-muted)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-l-[var(--app-accent)] hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)] focus-visible:border-l-[var(--app-accent)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-text)] [&_svg]:shrink-0 [&_svg]:text-[var(--app-text-muted)] hover:[&_svg]:text-[var(--app-accent)] focus-visible:[&_svg]:text-[var(--app-accent)] max-[900px]:mb-[-1px] max-[900px]:min-h-10 max-[900px]:whitespace-nowrap max-[900px]:border-l-0 max-[900px]:border-b-2 max-[900px]:hover:border-b-[var(--app-accent)] max-[900px]:focus-visible:border-b-[var(--app-accent)]';
 
   function captureHotkey(event: KeyboardEvent) {
     if (!capturingHotkey) return;
@@ -328,14 +328,14 @@
 <svelte:window onkeydown={captureHotkey} />
 
 <main class="settings-page gap-1">
-  <header class="settings-header min-h-[70px] w-[min(1120px,100%)] pt-2.5 pb-3 max-[560px]:grid max-[560px]:grid-cols-[auto_minmax(0,1fr)_60px] max-[560px]:pr-0">
+  <header class="settings-header">
     <Button variant="ghost" size="sm" href="/canvas">
       <ArrowLeft size={15} aria-hidden="true" />
       {m['settings.back_canvas']()}
     </Button>
     <div class="header-titles max-[560px]:col-[1/4] max-[560px]:row-start-2 max-[560px]:min-w-0">
       <h1 class="m-0 font-['Sora_Variable'] text-[21px] font-[650]">{m['settings.title']()}</h1>
-      <p class="mt-[3px] mb-0 text-xs text-[var(--copy-muted)] max-[560px]:text-pretty">{m['settings.subtitle']()}</p>
+      <p class="mt-[3px] mb-0 text-xs text-[var(--app-text-muted)] max-[560px]:text-pretty">{m['settings.subtitle']()}</p>
     </div>
     <span class="header-spacer max-[560px]:hidden"></span>
     <Button size="sm" onclick={save} class="save-btn min-w-[132px] active:scale-[.97] max-[560px]:col-start-2 max-[560px]:row-start-1 max-[560px]:min-w-0 max-[560px]:justify-self-end">
@@ -345,8 +345,8 @@
   </header>
 
   <div class="grid w-[min(1120px,100%)] grid-cols-[210px_minmax(0,1fr)] items-start gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-0">
-    <aside class="sticky top-[82px] max-h-[calc(100vh-102px)] overflow-y-auto max-[900px]:top-[70px] max-[900px]:z-[9] max-[900px]:max-h-none max-[900px]:overflow-x-auto max-[900px]:overflow-y-hidden max-[900px]:bg-[color-mix(in_srgb,var(--page)_94%,transparent)] max-[900px]:backdrop-blur-xl max-[900px]:[scrollbar-width:none]" aria-label={m['settings.title']()}>
-      <nav class="grid gap-0.5 border-l border-[var(--line)] py-1 max-[900px]:flex max-[900px]:w-max max-[900px]:min-w-full max-[900px]:border-l-0 max-[900px]:border-b">
+    <aside class="sticky top-[82px] max-h-[calc(100vh-102px)] overflow-y-auto max-[900px]:top-[70px] max-[900px]:z-[9] max-[900px]:max-h-none max-[900px]:overflow-x-auto max-[900px]:overflow-y-hidden max-[900px]:bg-[color-mix(in_srgb,var(--app-page)_94%,transparent)] max-[900px]:backdrop-blur-xl max-[900px]:[scrollbar-width:none]" aria-label={m['settings.title']()}>
+      <nav class="grid gap-0.5 border-l border-[var(--app-border)] py-1 max-[900px]:flex max-[900px]:w-max max-[900px]:min-w-full max-[900px]:border-l-0 max-[900px]:border-b">
         <a class={settingsNavLinkClasses} href="#terminal"><SquareTerminal size={14} />{m['settings.section_terminal']()}</a>
         <a class={settingsNavLinkClasses} href="#appearance"><Palette size={14} />{m['settings.section_appearance']()}</a>
         <a class={settingsNavLinkClasses} href="#dictation"><Mic size={14} />{m['settings.section_dictation']()}</a>
@@ -531,19 +531,31 @@
         <span class="field-label">{m['settings.workbench_editor']()}</span>
         <p class="field-hint">{m['settings.workbench_editor_desc']()}</p>
       </div>
-      <div class="grid gap-3 sm:grid-cols-3">
-        <label class="flex min-h-11 items-center justify-between gap-3 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3">
-          <span class="text-xs text-[var(--app-text-soft)]">{m['settings.editor_minimap']()}</span>
-          <Switch checked={settings.editorMinimap !== 'false'} onCheckedChange={(checked: boolean) => (settings = { ...settings, editorMinimap: String(checked) })} />
-        </label>
-        <label class="flex min-h-11 items-center justify-between gap-3 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3">
-          <span class="text-xs text-[var(--app-text-soft)]">{m['settings.editor_word_wrap']()}</span>
-          <Switch checked={settings.editorWordWrap === 'true'} onCheckedChange={(checked: boolean) => (settings = { ...settings, editorWordWrap: String(checked) })} />
-        </label>
-        <label class="flex min-h-11 items-center justify-between gap-3 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3">
-          <span class="text-xs text-[var(--app-text-soft)]">{m['settings.editor_autosave']()}</span>
-          <Switch checked={settings.editorAutoSave === 'true'} onCheckedChange={(checked: boolean) => (settings = { ...settings, editorAutoSave: String(checked) })} />
-        </label>
+      <div class="grid">
+        <div class="flex min-h-11 items-center justify-between gap-4 border-t border-[var(--app-border)] pt-3 first:border-t-0 first:pt-0">
+          <span class="field-label">{m['settings.editor_minimap']()}</span>
+          <Switch
+            checked={settings.editorMinimap !== 'false'}
+            aria-label={m['settings.editor_minimap']()}
+            onCheckedChange={(checked: boolean) => (settings = { ...settings, editorMinimap: String(checked) })}
+          />
+        </div>
+        <div class="flex min-h-11 items-center justify-between gap-4 border-t border-[var(--app-border)] pt-3 first:border-t-0 first:pt-0">
+          <span class="field-label">{m['settings.editor_word_wrap']()}</span>
+          <Switch
+            checked={settings.editorWordWrap === 'true'}
+            aria-label={m['settings.editor_word_wrap']()}
+            onCheckedChange={(checked: boolean) => (settings = { ...settings, editorWordWrap: String(checked) })}
+          />
+        </div>
+        <div class="flex min-h-11 items-center justify-between gap-4 border-t border-[var(--app-border)] pt-3 first:border-t-0 first:pt-0">
+          <span class="field-label">{m['settings.editor_autosave']()}</span>
+          <Switch
+            checked={settings.editorAutoSave === 'true'}
+            aria-label={m['settings.editor_autosave']()}
+            onCheckedChange={(checked: boolean) => (settings = { ...settings, editorAutoSave: String(checked) })}
+          />
+        </div>
       </div>
       <label class="field max-w-40">
         <span class="field-label">{m['settings.editor_font_size']()}</span>
@@ -584,7 +596,7 @@
       </p>
     </div>
 
-    <div class="flex min-h-11 items-center justify-between gap-4 border-t border-[var(--line)] pt-3.5">
+    <div class="flex min-h-11 items-center justify-between gap-4 border-t border-[var(--app-border)] pt-3.5">
       <div class="flex min-w-0 flex-col gap-1">
         <span class="field-label">{m['settings.dictation_auto_submit']()}</span>
         <p class="field-hint">{m['settings.dictation_auto_submit_desc']()}</p>
@@ -875,8 +887,8 @@
 <style>
   .settings-page {
     min-height: 100vh;
-    background: var(--page);
-    color: var(--copy);
+    background: var(--app-page);
+    color: var(--app-text);
     padding: 24px 24px 80px;
     display: flex;
     flex-direction: column;
@@ -892,7 +904,10 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    background: color-mix(in srgb, var(--page) 92%, transparent);
+    min-height: 70px;
+    width: min(1120px, 100%);
+    padding: 10px 0 12px;
+    background: color-mix(in srgb, var(--app-page) 92%, transparent);
     backdrop-filter: blur(12px);
   }
 
@@ -912,9 +927,9 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--app-border);
     border-radius: 6px;
-    background: var(--surface-raised);
+    background: var(--app-surface-raised);
     color: var(--app-accent);
     flex-shrink: 0;
   }
@@ -925,13 +940,13 @@
     font-weight: 650;
     letter-spacing: 0;
     margin: 0;
-    color: var(--copy);
+    color: var(--app-text);
   }
 
   .section-titles p {
     margin: 1px 0 0;
     font-size: 12px;
-    color: var(--copy-muted);
+    color: var(--app-text-muted);
   }
 
   .section-skeleton-head {
@@ -962,8 +977,8 @@
     gap: 10px;
     padding: 7px 10px;
     border-radius: 7px;
-    border: 1px solid var(--line);
-    background: var(--surface-subtle);
+    border: 1px solid var(--app-border);
+    background: var(--app-surface-subtle);
   }
 
   .preset-icon {
@@ -973,13 +988,13 @@
   .preset-name {
     font-size: 12.5px;
     font-weight: 500;
-    color: var(--copy);
+    color: var(--app-text);
   }
 
   .preset-meta {
     flex: 1;
     font-size: 11px;
-    color: var(--copy-muted);
+    color: var(--app-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -987,10 +1002,10 @@
 
   .preset-rename {
     font-size: 12.5px;
-    background: var(--surface-raised);
-    border: 1px solid var(--line-strong);
+    background: var(--app-surface-raised);
+    border: 1px solid var(--app-border-strong);
     border-radius: 6px;
-    color: var(--copy);
+    color: var(--app-text);
     padding: 3px 8px;
     outline: none;
   }
@@ -1001,13 +1016,13 @@
     border-radius: 6px;
     border: none;
     background: transparent;
-    color: var(--copy-muted);
+    color: var(--app-text-muted);
     cursor: pointer;
   }
 
   .preset-action:hover {
-    color: var(--copy);
-    background: var(--surface-raised);
+    color: var(--app-text);
+    background: var(--app-surface-raised);
   }
 
   .preset-action.danger:hover {
@@ -1035,6 +1050,11 @@
       overflow-x: hidden;
     }
 
+    .settings-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) 60px;
+    }
+
     .span-2 {
       grid-column: span 1;
     }
@@ -1050,7 +1070,7 @@
   .field-label {
     font-size: 12px;
     font-weight: 500;
-    color: var(--copy-soft);
+    color: var(--app-text-soft);
   }
 
   .theme-select-swatch {
@@ -1073,7 +1093,7 @@
     flex-direction: column;
     gap: 4px;
     border-radius: 8px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--app-border);
     overflow: hidden;
     white-space: pre;
   }
@@ -1099,7 +1119,7 @@
     text-align: right;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    color: var(--copy);
+    color: var(--app-text);
   }
 
   .speed-control {
@@ -1111,7 +1131,7 @@
     flex: 0 0 40px;
     font-size: 10.5px;
     font-variant-numeric: tabular-nums;
-    color: var(--copy-muted);
+    color: var(--app-text-muted);
   }
 
   .speed-control > span:last-child {
@@ -1122,7 +1142,7 @@
     margin: 0;
     font-size: 11.5px;
     line-height: 1.6;
-    color: var(--copy-muted);
+    color: var(--app-text-muted);
     text-wrap: pretty;
   }
 
@@ -1140,8 +1160,8 @@
   }
 
   :global(.hotkey-capture.capturing) {
-    border-color: var(--violet);
-    color: var(--violet);
+    border-color: var(--app-accent);
+    color: var(--app-accent);
   }
 
   /* ---- Status da voz em pildula ---------------------------------------- */
@@ -1178,7 +1198,7 @@
     padding: 10px 12px;
     border-radius: 0;
     border: 0;
-    border-block: 1px solid var(--line);
+    border-block: 1px solid var(--app-border);
     background: transparent;
   }
 
@@ -1192,7 +1212,7 @@
     font-size: 14px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    color: var(--copy);
+    color: var(--app-text);
   }
 
   /* ---- Atalhos em grade ------------------------------------------------- */
@@ -1217,19 +1237,19 @@
     flex-shrink: 0;
     min-width: 44px;
     text-align: center;
-    background: var(--surface-raised);
-    border: 1px solid var(--line-strong);
+    background: var(--app-surface-raised);
+    border: 1px solid var(--app-border-strong);
     border-bottom-width: 2px;
     border-radius: 6px;
     padding: 3px 8px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
-    color: var(--copy-soft);
+    color: var(--app-text-soft);
   }
 
   .shortcut-desc {
     font-size: 12px;
-    color: var(--copy-soft);
+    color: var(--app-text-soft);
     text-wrap: pretty;
   }
 

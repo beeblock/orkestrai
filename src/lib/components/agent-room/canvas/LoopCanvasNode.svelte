@@ -2,7 +2,6 @@
   import type { NodeProps } from '@xyflow/svelte';
   import { Users, X as XIcon, Plus, Trash2, Play, Square, Repeat } from '@lucide/svelte';
   import NodeShell from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import type { TeamMember, TeamMemberRole, AgentProviderInfo } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -244,13 +243,13 @@
       <Users size={13} />
     </HeaderIconButton>
     {#if running}
-      <IconAction label={m['loop.stop']()} danger onclick={stopLoop}><Square size={13} /></IconAction>
+      <HeaderIconButton class="node-action-btn" label={m['loop.stop']()} danger onclick={stopLoop}><Square size={13} /></HeaderIconButton>
     {:else}
       <HeaderIconButton label={m['loop.run']()} class="node-action-btn" side="top" onclick={runLoop} disabled={!objective.trim()}>
         <span style="color:var(--app-success);display:inline-flex"><Play size={13} /></span>
       </HeaderIconButton>
     {/if}
-    <IconAction label={m['loop.remove']()} danger onclick={() => data.onDelete(id)}><XIcon size={13} /></IconAction>
+    <HeaderIconButton class="node-action-btn" label={m['loop.remove']()} danger onclick={() => data.onDelete(id)}><XIcon size={13} /></HeaderIconButton>
   {/snippet}
 
   <div class="loop-config nodrag">
@@ -274,8 +273,8 @@
         <div class="member-row">
           <span class="member-title">{member.title}</span>
           <span class="member-meta">{member.provider} · {member.role}{member.canWrite ? ` · ${m['loop.member_writes']()}` : ''}</span>
-          <IconAction label={m['loop.remove']()} danger onclick={() => removeMember(member)}>
-            <Trash2 size={12} /></IconAction>
+          <HeaderIconButton class="node-action-btn" label={m['loop.remove']()} danger onclick={() => removeMember(member)}>
+            <Trash2 size={12} /></HeaderIconButton>
         </div>
       {/each}
       <form class="member-form" onsubmit={(event) => { event.preventDefault(); addMember(); }}>

@@ -3,7 +3,7 @@
   import { Image as ImageIcon, ImagePlus, X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
   import NodeShell from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
 
   export type ImageNodeData = {
     title: string;
@@ -76,11 +76,11 @@
   {#snippet icon()}<ImageIcon size={13} />{/snippet}
   {#snippet title()}{data.title || m['node.image']()}{/snippet}
   {#snippet actions()}
-    <IconAction label={m['node.image_replace']()} onclick={() => fileInput.click()}>
+    <HeaderIconButton class="node-action-btn" label={m['node.image_replace']()} onclick={() => fileInput.click()}>
       <ImagePlus size={13} />
-    </IconAction>
-    <IconAction label={m['node.image_remove']()} danger onclick={() => data.onDelete(id)}>
-      <X size={13} /></IconAction>
+    </HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['node.image_remove']()} danger onclick={() => data.onDelete(id)}>
+      <X size={13} /></HeaderIconButton>
   {/snippet}
 
   <input bind:this={fileInput} type="file" accept="image/*" class="hidden-input" onchange={onFilePicked} />
@@ -110,7 +110,6 @@
     justify-content: center;
     overflow: hidden;
     background: var(--app-canvas);
-    border-radius: 0 0 10px 10px;
   }
 
   .image-body img {

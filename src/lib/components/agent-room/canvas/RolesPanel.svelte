@@ -227,8 +227,8 @@
             <span class="mt-1 size-2.5 shrink-0 rounded-full" style:background={role.color}></span>
             <div class="min-w-0 flex-1">
               <h4 class="m-0 text-xs font-semibold text-[var(--app-text)]">{role.name}</h4>
-              <p class="mt-1 text-[10px] leading-4 text-[var(--app-text-muted)]">{role.description}</p>
-              <p class="mt-2 text-[9px] font-medium uppercase tracking-normal text-[var(--app-text-muted)]">{categoryLabel(role.category)}</p>
+              <p class="mt-1 text-ui-xs leading-4 text-[var(--app-text-muted)]">{role.description}</p>
+              <p class="mt-2 text-ui-xs font-medium uppercase tracking-normal text-[var(--app-text-muted)]">{categoryLabel(role.category)}</p>
             </div>
             <Button
               variant={installed ? 'secondary' : 'outline'}

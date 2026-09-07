@@ -126,7 +126,7 @@
     <div class="mb-1.5 space-y-2 rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-2 last:mb-0">
       <div class="flex items-center gap-1.5">
         <Button variant="ghost" size="icon-sm" class="size-7" aria-label={paint.visible ? m['design.hide_paint']() : m['design.show_paint']()} onclick={() => changePaint(index, { visible: !paint.visible })}>{#if paint.visible}<Eye size={12} />{:else}<EyeOff size={12} />{/if}</Button>
-        <NativeSelect.Root class="h-7 min-w-0 flex-1 text-[10px]" value={paint.type} onchange={(event: Event) => changeType(index, (event.currentTarget as HTMLSelectElement).value as DesignPaint['type'])} aria-label={title}>
+        <NativeSelect.Root class="h-7 min-w-0 flex-1 text-ui-xs" value={paint.type} onchange={(event: Event) => changeType(index, (event.currentTarget as HTMLSelectElement).value as DesignPaint['type'])} aria-label={title}>
           <NativeSelect.Option value="solid">{m['design.solid']()}</NativeSelect.Option>
           <NativeSelect.Option value="linear-gradient">{m['design.linear_gradient']()}</NativeSelect.Option>
           <NativeSelect.Option value="radial-gradient">{m['design.radial_gradient']()}</NativeSelect.Option>
@@ -136,7 +136,7 @@
       {#if paint.type === 'solid'}
         <div class="grid grid-cols-[34px_1fr_74px] items-center gap-1.5">
           <DesignColorControl color={paint.color} opacity={paint.opacity} {documentColors} {variables} onChange={(color, opacity) => changePaint(index, { color, opacity })} {onBindVariable} />
-          <span class="truncate font-mono text-[10px] uppercase text-[var(--app-text-soft)]">{paint.color}</span>
+          <span class="truncate font-mono text-ui-xs uppercase text-[var(--app-text-soft)]">{paint.color}</span>
           <DesignNumericInput label="%" value={Math.round(paint.opacity * 100)} min={0} max={100} onCommit={(value) => { if (value !== null) changePaint(index, { opacity: value / 100 }); }} />
         </div>
       {:else}
@@ -151,7 +151,7 @@
         <div class="h-3"></div>
         <div class="grid grid-cols-[34px_1fr_58px_58px_28px] items-center gap-1.5">
           <DesignColorControl color={stop.color} opacity={stop.opacity} {documentColors} onChange={(color, opacity) => changeStop(index, stopIndex, { color, opacity })} />
-          <span class="truncate font-mono text-[10px] uppercase text-[var(--app-text-soft)]">{stop.color}</span>
+          <span class="truncate font-mono text-ui-xs uppercase text-[var(--app-text-soft)]">{stop.color}</span>
           <DesignNumericInput label="%" value={Math.round(stop.offset * 100)} min={0} max={100} onCommit={(value) => { if (value !== null) changeStop(index, stopIndex, { offset: value / 100 }); }} />
           <DesignNumericInput label="α" value={Math.round(stop.opacity * 100)} min={0} max={100} onCommit={(value) => { if (value !== null) changeStop(index, stopIndex, { opacity: value / 100 }); }} />
           <Button variant="ghost" size="icon-sm" class="size-7" disabled={paint.stops.length <= 2} aria-label={m['design.delete_gradient_stop']()} onclick={() => removeStop(index, stopIndex)}><Minus size={12} /></Button>

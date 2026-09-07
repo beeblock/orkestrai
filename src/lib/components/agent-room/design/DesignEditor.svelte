@@ -142,6 +142,7 @@
     pasteDesignLayerOperations,
   } from './design-clipboard.js';
   import { pageDeleteInverseOperations } from './design-page-history.js';
+  import { stripDesignChrome } from './design-export-chrome.js';
 
   let {
     workspaceId,
@@ -261,6 +262,37 @@
   ));
   const selectedElements = $derived(pageElements.filter((element) => selectedIds.includes(element.id)));
   const selected = $derived(selectedElements.length === 1 ? selectedElements[0] : null);
+
+  /**
+   * Caixa envolvente da selecao multipla (AABB dos cantos ja rotacionados).
+   * Sem ela, selecionar varias camadas mostrava N contornos soltos e nenhuma
+   * indicacao de que formam um conjunto.
+   */
+  const multiSelectionBounds = $derived.by(() => {
+    if (selectedElements.length < 2) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const element of selectedElements) {
+      const centerX = element.x + element.width / 2;
+      const centerY = element.y + element.height / 2;
+      const radians = (element.rotation * Math.PI) / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      for (const [signX, signY] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+        const offsetX = (element.width / 2) * signX;
+        const offsetY = (element.height / 2) * signY;
+        const x = centerX + offsetX * cos - offsetY * sin;
+        const y = centerY + offsetX * sin + offsetY * cos;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  });
   const hoveredElement = $derived(pageElements.find((element) => element.id === hoveredElementId) ?? null);
   const measurementLines = $derived.by(() => selected && hoveredElement && selected.id !== hoveredElement.id && altPressed
     ? elementMeasurements(selected, hoveredElement)
@@ -1288,6 +1320,12 @@
       if (moveEvent.pointerId !== pointerId || !document) return;
       next = resizedElement(original, handle, unrotatePoint(pagePoint(moveEvent), original), moveEvent.shiftKey, moveEvent.altKey);
       changed = next.x !== original.x || next.y !== original.y || next.width !== original.width || next.height !== original.height;
+      // Leitura viva de W x H durante o arrasto, como no Figma.
+      snapLabels = [{
+        x: next.x + next.width / 2,
+        y: next.y + next.height + 18 / zoom,
+        value: `${Math.round(next.width)} x ${Math.round(next.height)}`,
+      }];
       const childChanges = new Map(childSnapshots.map((child) => [child.id, selected.type === 'group'
         ? scaledGroupChildChanges(child, original, next)
         : constrainedChildChanges(child, original, next)]));
@@ -1305,6 +1343,7 @@
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      snapLabels = [];
       if (!changed) return;
       const changes: Partial<DesignElement> = { x: next.x, y: next.y, width: next.width, height: next.height };
       if (original.type === 'path') {
@@ -1364,6 +1403,8 @@
         rotation = Math.round(rotation / 15) * 15;
         rotationDelta = normalize(rotation - original.rotation);
       }
+      // Leitura viva do angulo: antes o rotate nao mostrava nada.
+      snapLabels = [{ x: center.x, y: original.y - 46 / zoom, value: `${Math.round(rotation)}°` }];
       const radians = rotationDelta * Math.PI / 180;
       const cosine = Math.cos(radians);
       const sine = Math.sin(radians);
@@ -1391,6 +1432,7 @@
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      snapLabels = [];
       if (rotation === original.rotation) return;
       const transformed = document?.elements.filter((element) => element.id === original.id || childSnapshots.some((child) => child.id === element.id)) ?? [];
       await apply(transformed.map((element) => ({ kind: 'update', elementId: element.id, changes: { x: element.x, y: element.y, rotation: element.rotation } })), m['design.operation_rotate']({ name: original.name }), {
@@ -2576,7 +2618,7 @@
     clone.setAttribute('viewBox', `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`);
     clone.setAttribute('width', String(bounds.width));
     clone.setAttribute('height', String(bounds.height));
-    clone.querySelectorAll('[data-design-selection],[data-design-guide],[data-design-ruler],[data-design-snap],[data-design-ui],[data-design-hit]').forEach((element) => element.remove());
+    stripDesignChrome(clone);
     if (bounds.ids) {
       clone.querySelectorAll<SVGGElement>('[data-design-element]').forEach((element) => {
         if (!bounds.ids?.has(element.dataset.designElement || '')) element.remove();
@@ -2632,7 +2674,7 @@
     clone.setAttribute('viewBox', `${frame.x} ${frame.y} ${width} ${height}`);
     clone.setAttribute('width', String(width));
     clone.setAttribute('height', String(height));
-    clone.querySelectorAll('[data-design-selection],[data-design-guide],[data-design-ruler],[data-design-snap],[data-design-ui],[data-design-hit]').forEach((element) => element.remove());
+    stripDesignChrome(clone);
     clone.querySelectorAll<SVGGElement>('[data-design-element]').forEach((element) => {
       if (!ids.has(element.dataset.designElement || '')) element.remove();
     });
@@ -3345,7 +3387,10 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
   });
 </script>
 
-<div class={`@container/design h-full min-h-0 ${className}`}>
+<!-- 11px e a base do editor, como no Figma: sem isto tudo que nao declara um
+     tamanho herdava os 16px do app e a coluna de propriedades misturava seis
+     tamanhos diferentes. -->
+<div class={`@container/design h-full min-h-0 text-ui-sm ${className}`}>
   <div
     bind:this={editorRoot}
     class="relative grid h-full min-h-0 grid-rows-[42px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]"
@@ -3420,9 +3465,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       </DropdownMenu.Root>
 
       <div class="min-w-0 flex-1"></div>
-      {#if document}<span class="hidden text-[10px] text-[var(--app-text-muted)] xl:inline">{m['design.revision']({ revision: document.revision })}</span>{/if}
+      {#if document}<span class="hidden text-ui-xs text-[var(--app-text-muted)] xl:inline">{m['design.revision']({ revision: document.revision })}</span>{/if}
       <DesignToolbarButton label={m['design.zoom_out']()} onclick={() => void zoomAt(zoom - 0.1)}><ZoomOut size={16} /></DesignToolbarButton>
-      <span class="w-10 shrink-0 text-center text-[10px] tabular-nums text-[var(--app-text-muted)]">{Math.round(zoom * 100)}%</span>
+      <span class="w-10 shrink-0 text-center text-ui-xs tabular-nums text-[var(--app-text-muted)]">{Math.round(zoom * 100)}%</span>
       <DesignToolbarButton label={m['design.zoom_in']()} onclick={() => void zoomAt(zoom + 0.1)}><ZoomIn size={16} /></DesignToolbarButton>
       <DropdownMenu.Root>
         <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.fit']()}><Maximize2 size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.fit']()}</Tooltip.Content></Tooltip.Root>
@@ -3448,7 +3493,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       </DropdownMenu.Root>
       <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]"></span>
       <DesignToolbarButton label={m['design.open_agents_reviews']()} active={contextualDrawer === 'collaboration'} pressed={contextualDrawer === 'collaboration'} onclick={() => (contextualDrawer = contextualDrawer === 'collaboration' ? null : 'collaboration')}>
-        <span class="relative"><UsersRound size={16} />{#if collaborationAttentionCount > 0}<span class="absolute -top-2 -right-2 grid min-w-3.5 place-items-center rounded-full bg-[var(--app-accent)] px-0.5 text-[7px] font-bold leading-3.5 text-[var(--app-accent-contrast)]">{Math.min(collaborationAttentionCount, 99)}</span>{/if}</span>
+        <span class="relative"><UsersRound size={16} />{#if collaborationAttentionCount > 0}<span class="absolute -top-2 -right-2 grid min-w-3.5 place-items-center rounded-full bg-[var(--app-accent)] px-0.5 text-ui-xs font-bold leading-3.5 text-[var(--app-accent-contrast)]">{Math.min(collaborationAttentionCount, 99)}</span>{/if}</span>
       </DesignToolbarButton>
       <DesignToolbarButton label={m['design.open_quality_history']()} active={contextualDrawer === 'quality'} pressed={contextualDrawer === 'quality'} onclick={() => (contextualDrawer = contextualDrawer === 'quality' ? null : 'quality')}><ShieldCheck size={16} /></DesignToolbarButton>
       <DesignToolbarButton label={rightPanelVisible ? m['design.hide_right_panel']() : m['design.show_right_panel']()} active={rightPanelVisible} pressed={rightPanelVisible} onclick={toggleRightPanel}><SlidersHorizontal size={16} /></DesignToolbarButton>
@@ -3464,9 +3509,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       data-testid="design-left-panel"
     >
       <div class="grid grid-cols-3 border-b border-[var(--app-border)] p-1">
-        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-[10px] font-medium ${leftPanel === 'layers' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'layers'} onclick={() => (leftPanel = 'layers')}><Layers3 size={12} />{m['design.layers']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-[10px] font-medium ${leftPanel === 'variables' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'variables'} onclick={() => (leftPanel = 'variables')}><Braces size={12} />{m['design.variables']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-[10px] font-medium ${leftPanel === 'components' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'components'} onclick={() => (leftPanel = 'components')}><Diamond size={12} />{m['design.components']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-ui-xs font-medium ${leftPanel === 'layers' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'layers'} onclick={() => (leftPanel = 'layers')}><Layers3 size={12} />{m['design.layers']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-ui-xs font-medium ${leftPanel === 'variables' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'variables'} onclick={() => (leftPanel = 'variables')}><Braces size={12} />{m['design.variables']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-ui-xs font-medium ${leftPanel === 'components' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'components'} onclick={() => (leftPanel = 'components')}><Diamond size={12} />{m['design.components']()}</button>
       </div>
       {#if leftPanel === 'layers'}
         <div class="grid min-h-0 flex-1 grid-rows-[minmax(260px,1fr)_190px]">
@@ -3500,13 +3545,13 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             />
           {/if}
           <section class="min-h-0 overflow-y-auto border-t border-[var(--app-border)]">
-            <div class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-[10px] font-semibold uppercase text-[var(--app-text-muted)]"><span>{m['design.assets']()}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.import_asset']()} onclick={() => assetInput?.click()}><Plus size={12} /></Button></div>
-            {#if !document?.assets.length}<p class="p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.assets_empty']()}</p>{:else}
+            <div class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><span>{m['design.assets']()}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.import_asset']()} onclick={() => assetInput?.click()}><Plus size={12} /></Button></div>
+            {#if !document?.assets.length}<p class="p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.assets_empty']()}</p>{:else}
               <div class="grid grid-cols-2 gap-1.5 p-2">
                 {#each document.assets as asset (asset.id)}
                   <div class="group relative overflow-hidden border border-[var(--app-border)] bg-[var(--app-canvas)]">
                     <button class="block aspect-square w-full" title={m['design.insert_asset']()} onclick={() => void insertAsset(asset)}><img class="h-full w-full object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(asset.path)}`} alt={asset.name} /></button>
-                    <span class="block truncate border-t border-[var(--app-border)] px-1.5 py-1 text-[9px]">{asset.name}</span>
+                    <span class="block truncate border-t border-[var(--app-border)] px-1.5 py-1 text-ui-xs">{asset.name}</span>
                     {#if !document.elements.some((element) => element.assetId === asset.id)}<button class="absolute top-1 right-1 grid size-6 place-items-center bg-[var(--app-surface)] text-[var(--app-danger)] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100" aria-label={m['design.delete']()} onclick={() => void deleteAsset(asset)}><Trash2 size={11} /></button>{/if}
                   </div>
                 {/each}
@@ -3522,7 +3567,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     </aside>
     {/if}
 
-    <main class={`relative col-start-2 row-start-2 min-h-0 min-w-0 overflow-auto [overflow-anchor:none] bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} data-testid="design-viewport" onpointerdowncapture={startViewportPan} onscroll={handleViewportScroll} onwheel={handleViewportWheel} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
+    <main class={`design-canvas-ground relative col-start-2 row-start-2 min-h-0 min-w-0 overflow-auto [overflow-anchor:none] bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} data-testid="design-viewport" onpointerdowncapture={startViewportPan} onscroll={handleViewportScroll} onwheel={handleViewportWheel} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
       {#if errorMessage}
         <div class="grid h-full place-items-center p-8 text-center"><div><p class="text-sm text-[var(--app-danger)]">{errorMessage}</p><Button class="mt-3" variant="outline" size="sm" onclick={() => void load()}>{m['workspace_access.retry']()}</Button></div></div>
       {:else if loading || !document || !page}
@@ -3530,7 +3575,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       {:else}
         {#if vectorEditing && selected?.type === 'path'}
           <div class="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-            <span class="whitespace-nowrap px-2 text-[10px] font-medium text-[var(--app-text-soft)]">{m['design.vector_edit']()}</span>
+            <span class="whitespace-nowrap px-2 text-ui-xs font-medium text-[var(--app-text-soft)]">{m['design.vector_edit']()}</span>
             <span class="h-5 w-px bg-[var(--app-border)]"></span>
             <DesignToolbarButton label={m['design.path_corner']()} active={selectedPathPointMode === 'corner'} pressed={selectedPathPointMode === 'corner'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('corner')}><CornerDownRight size={15} /></DesignToolbarButton>
             <DesignToolbarButton label={m['design.path_mirrored']()} active={selectedPathPointMode === 'mirrored'} pressed={selectedPathPointMode === 'mirrored'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('mirrored')}><Spline size={15} /></DesignToolbarButton>
@@ -3539,11 +3584,11 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             <span class="h-5 w-px bg-[var(--app-border)]"></span>
             <DesignToolbarButton label={m['design.path_add_point']()} disabled={!pathPointSelections.length} onclick={() => void addPathPointAfterSelection()}><Plus size={15} /></DesignToolbarButton>
             <DesignToolbarButton label={m['design.path_delete_point']()} disabled={!pathPointSelections.length} onclick={() => void deleteSelectedPathPoint()}><Trash2 size={15} /></DesignToolbarButton>
-            <span class="min-w-7 px-1 text-center text-[10px] tabular-nums text-[var(--app-text-muted)]" aria-label={m['design.vector_selection_count']({ count: String(pathPointSelections.length) })}>{pathPointSelections.length}</span>
+            <span class="min-w-7 px-1 text-center text-ui-xs tabular-nums text-[var(--app-text-muted)]" aria-label={m['design.vector_selection_count']({ count: String(pathPointSelections.length) })}>{pathPointSelections.length}</span>
           </div>
         {:else if selectedElements.length > 1}
           <div class="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-            <span class="whitespace-nowrap px-2 text-[10px] font-medium text-[var(--app-text-soft)]">{m['design.layers_count']({ count: String(selectedElements.length) })}</span>
+            <span class="whitespace-nowrap px-2 text-ui-xs font-medium text-[var(--app-text-soft)]">{m['design.layers_count']({ count: String(selectedElements.length) })}</span>
             <span class="h-5 w-px bg-[var(--app-border)]"></span>
             <DesignToolbarButton label={m['design.align_left']()} onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={15} /></DesignToolbarButton>
             <DesignToolbarButton label={m['design.align_horizontal_center']()} onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={15} /></DesignToolbarButton>
@@ -3561,7 +3606,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
           </div>
         {:else if selected?.type === 'group'}
           <div class="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-            <span class="max-w-48 truncate px-2 text-[10px] font-medium text-[var(--app-text-soft)]">{selected.name}</span>
+            <span class="max-w-48 truncate px-2 text-ui-xs font-medium text-[var(--app-text-soft)]">{selected.name}</span>
             <span class="h-5 w-px bg-[var(--app-border)]"></span>
             <DesignToolbarButton label={m['design.ungroup_selection']()} onclick={() => void ungroupSelection()}><Ungroup size={15} /></DesignToolbarButton>
           </div>
@@ -3581,10 +3626,15 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             role="application"
             aria-label={page.name}
           >
-            <rect data-design-ui x="0" y="0" width={page.width} height={page.height} fill={page.background} pointer-events="none" />
+            <defs data-design-ui>
+              <filter id={`design-page-elevation-${nodeId}`} x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+                <feDropShadow dx="0" dy={6 / zoom} stdDeviation={9 / zoom} flood-color="#000000" flood-opacity="0.34" />
+              </filter>
+            </defs>
+            <rect data-design-ui x="0" y="0" width={page.width} height={page.height} fill={page.background} filter={`url(#design-page-elevation-${nodeId})`} pointer-events="none" />
             {#if rightPanel === 'prototype'}
               <defs data-design-ui>
-                <marker id={`prototype-arrow-${nodeId}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 8 4 L 0 8 z" fill="#7c3aed" /></marker>
+                <marker id={`prototype-arrow-${nodeId}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 8 4 L 0 8 z" fill="var(--design-prototype)" /></marker>
               </defs>
               <g data-design-ui data-testid="design-prototype-connections">
                 {#each prototypeConnections as connection (connection.interaction.id)}
@@ -3592,16 +3642,16 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                   {@const end = prototypeConnectionEnd(connection.target)}
                   {@const active = selectedIds.includes(connection.source.id)}
                   <path data-design-prototype-hit d={prototypeConnectionPath(start, end)} fill="none" stroke="transparent" stroke-width={14 / zoom} vector-effect="non-scaling-stroke" class="cursor-pointer" role="button" tabindex="0" aria-label={m['design.prototype_connection_label']({ source: connection.source.name, target: connection.target.name })} onpointerdown={(event) => selectPrototypeConnection(event, connection.interaction)} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); activatePrototypeConnection(connection.interaction); } }} />
-                  <path data-design-prototype-connection={connection.interaction.id} d={prototypeConnectionPath(start, end)} fill="none" stroke={active ? '#7c3aed' : '#8b5cf6'} stroke-width={(active ? 2.25 : 1.5) / zoom} stroke-opacity={active ? 1 : 0.68} marker-end={`url(#prototype-arrow-${nodeId})`} vector-effect="non-scaling-stroke" pointer-events="none" />
+                  <path data-design-prototype-connection={connection.interaction.id} d={prototypeConnectionPath(start, end)} fill="none" stroke={active ? 'var(--design-prototype)' : 'var(--design-prototype-soft)'} stroke-width={(active ? 2.25 : 1.5) / zoom} stroke-opacity={active ? 1 : 0.68} marker-end={`url(#prototype-arrow-${nodeId})`} vector-effect="non-scaling-stroke" pointer-events="none" />
                 {/each}
                 {#if prototypeConnectionDraft}
-                  <path data-testid="design-prototype-draft" d={prototypeConnectionPath(prototypeConnectionDraft.start, prototypeConnectionDraft.current)} fill="none" stroke="#7c3aed" stroke-width={2 / zoom} stroke-dasharray={`${6 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />
-                  <circle cx={prototypeConnectionDraft.current.x} cy={prototypeConnectionDraft.current.y} r={5 / zoom} fill={prototypeDraftTarget ? '#16a34a' : '#7c3aed'} stroke="#ffffff" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                  <path data-testid="design-prototype-draft" d={prototypeConnectionPath(prototypeConnectionDraft.start, prototypeConnectionDraft.current)} fill="none" stroke="var(--design-prototype)" stroke-width={2 / zoom} stroke-dasharray={`${6 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />
+                  <circle cx={prototypeConnectionDraft.current.x} cy={prototypeConnectionDraft.current.y} r={5 / zoom} fill={prototypeDraftTarget ? 'var(--design-valid)' : 'var(--design-prototype)'} stroke="var(--design-handle-fill)" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
                 {/if}
-                {#if prototypeDraftTarget}<rect data-testid="design-prototype-target" x={prototypeDraftTarget.x} y={prototypeDraftTarget.y} width={prototypeDraftTarget.width} height={prototypeDraftTarget.height} fill="none" stroke="#16a34a" stroke-width={2 / zoom} stroke-dasharray={`${7 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />{/if}
+                {#if prototypeDraftTarget}<rect data-testid="design-prototype-target" x={prototypeDraftTarget.x} y={prototypeDraftTarget.y} width={prototypeDraftTarget.width} height={prototypeDraftTarget.height} fill="none" stroke="var(--design-valid)" stroke-width={2 / zoom} stroke-dasharray={`${7 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />{/if}
               </g>
             {/if}
-            <DesignRenderer elements={viewportRenderedElements} assets={document.assets} {workspaceId} selectedIds={rendererSelectionIds} hoveredId={hoveredElementId} showFrameLabels />
+            <DesignRenderer elements={viewportRenderedElements} assets={document.assets} {workspaceId} selectedIds={rendererSelectionIds} hoveredId={hoveredElementId} showFrameLabels {zoom} />
             {#each (collaboration?.presences ?? []).filter((presence) => presence.participant.id !== participant.id && presence.pageId === page.id) as presence (presence.participant.id)}
               <g data-design-ui pointer-events="none">
                 {#each presence.elementIds as elementId}
@@ -3609,13 +3659,13 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                   {#if remoteElement}<rect x={remoteElement.x} y={remoteElement.y} width={remoteElement.width} height={remoteElement.height} fill="none" stroke={presence.participant.color} stroke-width={1.5 / zoom} stroke-dasharray={`${5 / zoom} ${3 / zoom}`} vector-effect="non-scaling-stroke" />{/if}
                 {/each}
                 {#if presence.cursor}
-                  <path d={`M ${presence.cursor.x} ${presence.cursor.y} l ${10 / zoom} ${18 / zoom} l ${4 / zoom} ${-7 / zoom} l ${7 / zoom} ${7 / zoom}`} fill={presence.participant.color} stroke="#ffffff" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" />
-                  <g transform={`translate(${presence.cursor.x + 12 / zoom} ${presence.cursor.y + 16 / zoom})`}><rect width={Math.max(48, presence.participant.name.length * 6) / zoom} height={18 / zoom} rx={3 / zoom} fill={presence.participant.color} /><text x={5 / zoom} y={12 / zoom} fill="#ffffff" font-size={9 / zoom} font-weight="600">{presence.participant.name}</text></g>
+                  <path d={`M ${presence.cursor.x} ${presence.cursor.y} l ${10 / zoom} ${18 / zoom} l ${4 / zoom} ${-7 / zoom} l ${7 / zoom} ${7 / zoom}`} fill={presence.participant.color} stroke="var(--design-handle-fill)" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" />
+                  <g transform={`translate(${presence.cursor.x + 12 / zoom} ${presence.cursor.y + 16 / zoom})`}><rect width={Math.max(48, presence.participant.name.length * 6) / zoom} height={18 / zoom} rx={3 / zoom} fill={presence.participant.color} /><text x={5 / zoom} y={12 / zoom} fill="var(--design-handle-fill)" font-size={9 / zoom} font-weight="600">{presence.participant.name}</text></g>
                 {/if}
               </g>
             {/each}
             {#each document.comments.filter((comment) => comment.pageId === page.id && comment.status === 'open' && comment.x !== null && comment.y !== null) as comment, index (comment.id)}
-              <g data-design-ui pointer-events="none" transform={`translate(${comment.x} ${comment.y})`}><circle r={10 / zoom} fill="var(--app-accent)" stroke="#ffffff" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" /><text x="0" y={3 / zoom} text-anchor="middle" fill="#ffffff" font-size={8 / zoom} font-weight="700">{index + 1}</text></g>
+              <g data-design-ui pointer-events="none" transform={`translate(${comment.x} ${comment.y})`}><circle r={10 / zoom} fill="var(--app-accent)" stroke="var(--design-handle-fill)" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" /><text x="0" y={3 / zoom} text-anchor="middle" fill="var(--design-handle-fill)" font-size={8 / zoom} font-weight="700">{index + 1}</text></g>
             {/each}
             {#if rulersVisible}
               <g data-design-ruler pointer-events="none" opacity="0.65">
@@ -3628,41 +3678,61 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             {#each document.guides as guide (guide.id)}
               <line data-design-guide={guide.id} x1={guide.axis === 'x' ? guide.position : 0} y1={guide.axis === 'y' ? guide.position : 0} x2={guide.axis === 'x' ? guide.position : page.width} y2={guide.axis === 'y' ? guide.position : page.height} stroke="var(--app-secondary)" stroke-width="1" vector-effect="non-scaling-stroke" class="cursor-col-resize" />
             {/each}
-            {#each snapLinesX as line}<line data-design-snap x1={line} x2={line} y1="0" y2={page.height} stroke="#2563eb" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />{/each}
-            {#each snapLinesY as line}<line data-design-snap y1={line} y2={line} x1="0" x2={page.width} stroke="#2563eb" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />{/each}
+            {#each snapLinesX as line}<line data-design-snap x1={line} x2={line} y1="0" y2={page.height} stroke="var(--design-selection)" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />{/each}
+            {#each snapLinesY as line}<line data-design-snap y1={line} y2={line} x1="0" x2={page.width} stroke="var(--design-selection)" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" pointer-events="none" />{/each}
             {#each snapLabels as label}
+              <!-- Largura acompanha o texto: a pilha fixa de 44 unidades cortava
+                   leituras longas como "1440 x 900". -->
+              {@const pill = Math.max(44, label.value.length * 6 + 16) / zoom}
               <g data-design-snap-label data-design-ui pointer-events="none" transform={`translate(${label.x} ${label.y})`}>
-                <rect x={-22 / zoom} y={-9 / zoom} width={44 / zoom} height={18 / zoom} rx={4 / zoom} fill="#2563eb" />
-                <text x="0" y={3 / zoom} text-anchor="middle" fill="#ffffff" font-size={9 / zoom} font-weight="600">{label.value}</text>
+                <rect x={-pill / 2} y={-9 / zoom} width={pill} height={18 / zoom} rx={4 / zoom} fill="var(--design-selection)" />
+                <text x="0" y={3 / zoom} text-anchor="middle" fill="var(--design-handle-fill)" font-size={9 / zoom} font-weight="600">{label.value}</text>
               </g>
             {/each}
             {#each measurementLines as line}
               {@const labelX = (line.x1 + line.x2) / 2}
               {@const labelY = (line.y1 + line.y2) / 2}
               <g data-design-measurement data-design-ui pointer-events="none">
-                <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="#e11d48" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" />
-                <circle cx={line.x1} cy={line.y1} r={2 / zoom} fill="#e11d48" />
-                <circle cx={line.x2} cy={line.y2} r={2 / zoom} fill="#e11d48" />
-                <rect x={labelX - 18 / zoom} y={labelY - 9 / zoom} width={36 / zoom} height={18 / zoom} rx={4 / zoom} fill="#e11d48" />
-                <text x={labelX} y={labelY + 3 / zoom} text-anchor="middle" fill="#ffffff" font-size={9 / zoom} font-weight="700">{line.value}</text>
+                <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="var(--design-measure)" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" />
+                <circle cx={line.x1} cy={line.y1} r={2 / zoom} fill="var(--design-measure)" />
+                <circle cx={line.x2} cy={line.y2} r={2 / zoom} fill="var(--design-measure)" />
+                <rect x={labelX - 18 / zoom} y={labelY - 9 / zoom} width={36 / zoom} height={18 / zoom} rx={4 / zoom} fill="var(--design-measure)" />
+                <text x={labelX} y={labelY + 3 / zoom} text-anchor="middle" fill="var(--design-handle-fill)" font-size={9 / zoom} font-weight="700">{line.value}</text>
               </g>
             {/each}
             {#if rightPanel === 'prototype' && selected && !selected.locked}
               <g data-design-ui data-design-prototype-handle transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
-                <line x1={selected.x + selected.width} y1={selected.y + selected.height / 2} x2={selected.x + selected.width + 18 / zoom} y2={selected.y + selected.height / 2} stroke="#7c3aed" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
-                <circle data-testid="design-prototype-handle" cx={selected.x + selected.width + 22 / zoom} cy={selected.y + selected.height / 2} r={7 / zoom} fill="#7c3aed" stroke="#ffffff" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" tabindex="0" aria-label={m['design.prototype_drag_connection']()} onpointerdown={(event) => startPrototypeConnection(event, selected)} onkeydown={focusPrototypeInteractionEditor}><title>{m['design.prototype_drag_connection']()}</title></circle>
-                <Plus x={selected.x + selected.width + 18 / zoom} y={selected.y + selected.height / 2 - 4 / zoom} size={8 / zoom} color="#ffffff" strokeWidth={2.5} pointer-events="none" />
+                <line x1={selected.x + selected.width} y1={selected.y + selected.height / 2} x2={selected.x + selected.width + 18 / zoom} y2={selected.y + selected.height / 2} stroke="var(--design-prototype)" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                <circle data-testid="design-prototype-handle" cx={selected.x + selected.width + 22 / zoom} cy={selected.y + selected.height / 2} r={7 / zoom} fill="var(--design-prototype)" stroke="var(--design-handle-fill)" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" tabindex="0" aria-label={m['design.prototype_drag_connection']()} onpointerdown={(event) => startPrototypeConnection(event, selected)} onkeydown={focusPrototypeInteractionEditor}><title>{m['design.prototype_drag_connection']()}</title></circle>
+                <Plus x={selected.x + selected.width + 18 / zoom} y={selected.y + selected.height / 2 - 4 / zoom} size={8 / zoom} color="var(--design-handle-fill)" strokeWidth={2.5} pointer-events="none" />
+              </g>
+            {/if}
+            {#if multiSelectionBounds}
+              <!-- Tracejada de proposito: marca o conjunto sem prometer alcas de
+                   redimensionamento, que ainda so existem para selecao unica. -->
+              <g data-design-ui pointer-events="none" data-testid="design-multi-selection">
+                <rect
+                  x={multiSelectionBounds.x}
+                  y={multiSelectionBounds.y}
+                  width={multiSelectionBounds.width}
+                  height={multiSelectionBounds.height}
+                  fill="none"
+                  stroke="var(--design-selection)"
+                  stroke-width={1.5 / zoom}
+                  stroke-dasharray={`${5 / zoom} ${3 / zoom}`}
+                  vector-effect="non-scaling-stroke"
+                />
               </g>
             {/if}
             {#if selected && !vectorEditing && !selected.locked}
               <g data-design-resize data-design-ui transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
-                <line x1={selected.x + selected.width / 2} y1={selected.y} x2={selected.x + selected.width / 2} y2={selected.y - 24 / zoom} stroke="#2563eb" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                <line x1={selected.x + selected.width / 2} y1={selected.y} x2={selected.x + selected.width / 2} y2={selected.y - 24 / zoom} stroke="var(--design-selection)" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
                 <circle
                   cx={selected.x + selected.width / 2}
                   cy={selected.y - 28 / zoom}
                   r={7 / zoom}
-                  fill="#ffffff"
-                  stroke="#2563eb"
+                  fill="var(--design-handle-fill)"
+                  stroke="var(--design-selection)"
                   stroke-width={1.5 / zoom}
                   vector-effect="non-scaling-stroke"
                   class="cursor-grab active:cursor-grabbing"
@@ -3671,7 +3741,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                   tabindex="0"
                   onpointerdown={startRotate}
                 />
-                <RotateCw x={selected.x + selected.width / 2 - 4 / zoom} y={selected.y - 32 / zoom} size={8 / zoom} color="#2563eb" strokeWidth={2.2} pointer-events="none" />
+                <RotateCw x={selected.x + selected.width / 2 - 4 / zoom} y={selected.y - 32 / zoom} size={8 / zoom} color="var(--design-selection)" strokeWidth={2.2} pointer-events="none" />
                 {#each resizeHandles as handle}
                   {@const position = resizeHandlePosition(selected, handle)}
                   <rect
@@ -3680,8 +3750,8 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                     width={8 / zoom}
                     height={8 / zoom}
                     rx={1.5 / zoom}
-                    fill="#ffffff"
-                    stroke="#2563eb"
+                    fill="var(--design-handle-fill)"
+                    stroke="var(--design-selection)"
                     stroke-width={1.5 / zoom}
                     vector-effect="non-scaling-stroke"
                     style:cursor={resizeCursor(handle)}
@@ -3695,12 +3765,12 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             {/if}
             {#if vectorEditing && selected?.type === 'path'}
               <g data-design-vector-edit data-design-ui transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
-                <path d={designPathData(selected)} fill="none" stroke="#2563eb" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                <path d={designPathData(selected)} fill="none" stroke="var(--design-selection)" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
                 {#if selectedPathPointBounds}
-                  <rect x={selectedPathPointBounds.x} y={selectedPathPointBounds.y} width={selectedPathPointBounds.width} height={selectedPathPointBounds.height} fill="none" stroke="#2563eb" stroke-width={1 / zoom} stroke-dasharray={`${4 / zoom} ${3 / zoom}`} pointer-events="none" />
+                  <rect x={selectedPathPointBounds.x} y={selectedPathPointBounds.y} width={selectedPathPointBounds.width} height={selectedPathPointBounds.height} fill="none" stroke="var(--design-selection)" stroke-width={1 / zoom} stroke-dasharray={`${4 / zoom} ${3 / zoom}`} pointer-events="none" />
                   {#each resizeHandles as handle}
                     {@const position = resizeHandlePosition(selectedPathPointBounds, handle)}
-                    <rect x={position.x - 3.5 / zoom} y={position.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom} rx={1 / zoom} fill="#ffffff" stroke="#2563eb" stroke-width={1.25 / zoom} style:cursor={resizeCursor(handle)} role="button" aria-label={m['design.resize_vector_points']({ handle })} tabindex="0" onpointerdown={(event) => startPathPointResize(event, handle)} />
+                    <rect x={position.x - 3.5 / zoom} y={position.y - 3.5 / zoom} width={7 / zoom} height={7 / zoom} rx={1 / zoom} fill="var(--design-handle-fill)" stroke="var(--design-selection)" stroke-width={1.25 / zoom} style:cursor={resizeCursor(handle)} role="button" aria-label={m['design.resize_vector_points']({ handle })} tabindex="0" onpointerdown={(event) => startPathPointResize(event, handle)} />
                   {/each}
                 {/if}
                 {#each pathSubpaths(selected) as points, subpathIndex}
@@ -3724,26 +3794,26 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                       onpointerdown={(event) => startPathSegmentDrag(event, subpathIndex, segmentIndex)}
                       ondblclick={(event) => void insertPathPoint(event, subpathIndex, segmentIndex)}
                     />
-                    {#if hovered}<path d={`M ${selected.x + from.x} ${selected.y + from.y} ${designPathSegmentData(from, to, selected.x, selected.y)}`} fill="none" stroke="#60a5fa" stroke-width={4 / zoom} pointer-events="none" />{/if}
+                    {#if hovered}<path d={`M ${selected.x + from.x} ${selected.y + from.y} ${designPathSegmentData(from, to, selected.x, selected.y)}`} fill="none" stroke="var(--design-path-hover)" stroke-width={4 / zoom} pointer-events="none" />{/if}
                   {/each}
                   {#each points as point, index}
                     {@const pointSelected = isPathPointSelected(selected.id, subpathIndex, index)}
                     {#if pointSelected}
                       {#if point.inX !== null && point.inY !== null}
-                        <line x1={selected.x + point.x} y1={selected.y + point.y} x2={selected.x + point.inX} y2={selected.y + point.inY} stroke="#60a5fa" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
-                        <circle cx={selected.x + point.inX} cy={selected.y + point.inY} r={4 / zoom} fill="#ffffff" stroke="#2563eb" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" aria-label={m['design.path_handle_in']({ index: String(index + 1) })} tabindex="0" onpointerdown={(event) => startPathHandleDrag(event, subpathIndex, index, 'in')} />
+                        <line x1={selected.x + point.x} y1={selected.y + point.y} x2={selected.x + point.inX} y2={selected.y + point.inY} stroke="var(--design-path-hover)" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                        <circle cx={selected.x + point.inX} cy={selected.y + point.inY} r={4 / zoom} fill="var(--design-handle-fill)" stroke="var(--design-selection)" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" aria-label={m['design.path_handle_in']({ index: String(index + 1) })} tabindex="0" onpointerdown={(event) => startPathHandleDrag(event, subpathIndex, index, 'in')} />
                       {/if}
                       {#if point.outX !== null && point.outY !== null}
-                        <line x1={selected.x + point.x} y1={selected.y + point.y} x2={selected.x + point.outX} y2={selected.y + point.outY} stroke="#60a5fa" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
-                        <circle cx={selected.x + point.outX} cy={selected.y + point.outY} r={4 / zoom} fill="#ffffff" stroke="#2563eb" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" aria-label={m['design.path_handle_out']({ index: String(index + 1) })} tabindex="0" onpointerdown={(event) => startPathHandleDrag(event, subpathIndex, index, 'out')} />
+                        <line x1={selected.x + point.x} y1={selected.y + point.y} x2={selected.x + point.outX} y2={selected.y + point.outY} stroke="var(--design-path-hover)" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                        <circle cx={selected.x + point.outX} cy={selected.y + point.outY} r={4 / zoom} fill="var(--design-handle-fill)" stroke="var(--design-selection)" stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" aria-label={m['design.path_handle_out']({ index: String(index + 1) })} tabindex="0" onpointerdown={(event) => startPathHandleDrag(event, subpathIndex, index, 'out')} />
                       {/if}
                     {/if}
                     <circle
                       cx={selected.x + point.x}
                       cy={selected.y + point.y}
                       r={(pointSelected ? 5 : 4) / zoom}
-                      fill={pointSelected ? '#2563eb' : '#ffffff'}
-                      stroke="#2563eb"
+                      fill={pointSelected ? 'var(--design-selection)' : 'var(--design-handle-fill)'}
+                      stroke="var(--design-selection)"
                       stroke-width={1.5 / zoom}
                       vector-effect="non-scaling-stroke"
                       class="cursor-move"
@@ -3761,29 +3831,29 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <g data-design-ui transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
                 {#each [0, selected.pathPoints.length - 1] as pointIndex}
                   {@const endpoint = selected.pathPoints[pointIndex]}
-                  <circle cx={selected.x + endpoint.x} cy={selected.y + endpoint.y} r={7 / zoom} fill="#ffffff" stroke="#2563eb" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" aria-label={m['design.path_continue']()} tabindex="0" onpointerdown={(event) => beginPathContinuation(event, selected, pointIndex === 0)} />
+                  <circle cx={selected.x + endpoint.x} cy={selected.y + endpoint.y} r={7 / zoom} fill="var(--design-handle-fill)" stroke="var(--design-selection)" stroke-width={2 / zoom} vector-effect="non-scaling-stroke" class="cursor-crosshair" role="button" aria-label={m['design.path_continue']()} tabindex="0" onpointerdown={(event) => beginPathContinuation(event, selected, pointIndex === 0)} />
                 {/each}
               </g>
             {/if}
             {#if tool === 'path' && penPoints.length && penPointer}
               <g data-design-ui>
-                <path d={penPreviewData()} fill="none" stroke={penWillClose ? '#16a34a' : '#2563eb'} stroke-width={1.5 / zoom} stroke-dasharray={`${5 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />
+                <path d={penPreviewData()} fill="none" stroke={penWillClose ? 'var(--design-valid)' : 'var(--design-selection)'} stroke-width={1.5 / zoom} stroke-dasharray={`${5 / zoom} ${4 / zoom}`} vector-effect="non-scaling-stroke" pointer-events="none" />
                 {#each penPoints as point, index}
-                  <circle cx={point.x} cy={point.y} r={(index === 0 && penWillClose ? 7 : 4) / zoom} fill={index === 0 && penWillClose ? '#16a34a' : '#ffffff'} stroke={index === 0 && penWillClose ? '#16a34a' : '#2563eb'} stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+                  <circle cx={point.x} cy={point.y} r={(index === 0 && penWillClose ? 7 : 4) / zoom} fill={index === 0 && penWillClose ? 'var(--design-valid)' : 'var(--design-handle-fill)'} stroke={index === 0 && penWillClose ? 'var(--design-valid)' : 'var(--design-selection)'} stroke-width={1.5 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
                 {/each}
               </g>
             {/if}
             {#if selectionMarquee}
               {@const marqueeX = Math.min(selectionMarquee.start.x, selectionMarquee.current.x)}
               {@const marqueeY = Math.min(selectionMarquee.start.y, selectionMarquee.current.y)}
-              <rect data-design-ui x={marqueeX} y={marqueeY} width={Math.abs(selectionMarquee.current.x - selectionMarquee.start.x)} height={Math.abs(selectionMarquee.current.y - selectionMarquee.start.y)} fill="#2563eb1a" stroke="#2563eb" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
+              <rect data-design-ui x={marqueeX} y={marqueeY} width={Math.abs(selectionMarquee.current.x - selectionMarquee.start.x)} height={Math.abs(selectionMarquee.current.y - selectionMarquee.start.y)} fill="var(--design-selection-wash)" stroke="var(--design-selection)" stroke-width={1 / zoom} vector-effect="non-scaling-stroke" pointer-events="none" />
             {/if}
             {#if editingTextId && selected?.type === 'text' && editingTextId === selected.id}
               <foreignObject data-design-ui x={selected.x} y={selected.y} width={Math.max(selected.width, 40)} height={Math.max(editingTextHeight, selected.fontSize * 1.5)} transform={`rotate(${selected.rotation} ${selected.x + selected.width / 2} ${selected.y + selected.height / 2})`}>
                 <textarea
                   bind:this={textEditor}
                   data-design-text-editor
-                  class="size-full resize-none overflow-hidden border-2 border-[#2563eb] bg-transparent p-0 outline-none"
+                  class="size-full resize-none overflow-hidden border-2 border-[var(--design-selection)] bg-transparent p-0 outline-none"
                   style={`font-family: ${selected.fontFamily}, Inter Variable, Inter, sans-serif; font-size: ${selected.fontSize}px; font-weight: ${selected.fontWeight}; font-style: ${selected.fontStyle}; line-height: ${selected.lineHeight ?? selected.fontSize * 1.2}px; letter-spacing: ${selected.letterSpacing}px; text-decoration: ${selected.textDecoration}; text-transform: ${selected.textTransform}; color: ${selected.fills[0]?.type === 'solid' ? selected.fills[0].color : selected.fill}; text-align: ${selected.textAlign};`}
                   value={editingTextDraft}
                   oninput={(event) => editingTextDraft = event.currentTarget.value}
@@ -3794,7 +3864,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               </foreignObject>
             {/if}
           </svg>
-          {#if tool === 'path' && penPoints.length}<div class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 bg-[var(--app-surface)] px-3 py-1.5 text-[10px] text-[var(--app-text-soft)] shadow-md">{m['design.finish_path']()}</div>{/if}
+          {#if tool === 'path' && penPoints.length}<div class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 bg-[var(--app-surface)] px-3 py-1.5 text-ui-xs text-[var(--app-text-soft)] shadow-md">{m['design.finish_path']()}</div>{/if}
         </div>
       {/if}
     </main>
@@ -3840,9 +3910,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       data-testid="design-right-panel"
     >
       <div class="grid grid-cols-3 gap-0.5 border-b border-[var(--app-border)] p-1">
-        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-[9px] font-medium ${rightPanel === 'design' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.properties']()} aria-pressed={rightPanel === 'design'} onclick={() => (rightPanel = 'design')}><SlidersHorizontal size={12} />{m['design.properties']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-[9px] font-medium ${rightPanel === 'prototype' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.prototype']()} aria-pressed={rightPanel === 'prototype'} onclick={() => (rightPanel = 'prototype')}><Workflow size={12} />{m['design.prototype']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-[9px] font-medium ${rightPanel === 'inspect' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.inspect']()} aria-pressed={rightPanel === 'inspect'} onclick={() => (rightPanel = 'inspect')}><Braces size={12} />{m['design.inspect']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-ui-xs font-medium ${rightPanel === 'design' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.properties']()} aria-pressed={rightPanel === 'design'} onclick={() => (rightPanel = 'design')}><SlidersHorizontal size={12} />{m['design.properties']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-ui-xs font-medium ${rightPanel === 'prototype' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.prototype']()} aria-pressed={rightPanel === 'prototype'} onclick={() => (rightPanel = 'prototype')}><Workflow size={12} />{m['design.prototype']()}</button>
+        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-ui-xs font-medium ${rightPanel === 'inspect' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.inspect']()} aria-pressed={rightPanel === 'inspect'} onclick={() => (rightPanel = 'inspect')}><Braces size={12} />{m['design.inspect']()}</button>
       </div>
       {#if rightPanel === 'prototype' && document}
         <div class="min-h-0 flex-1"><DesignPrototypePanel {document} {selected} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onPreview={openPrototype} onShare={sharePrototype} /></div>
@@ -3850,7 +3920,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         <div class="min-h-0 flex-1"><DesignInspectPanel {document} {selectedIds} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} onCaptureDesign={captureDesignDataUrl} /></div>
       {:else if selected && document}
         <div class="min-h-0 flex-1 overflow-y-auto">
-        <div class="text-[11px]">
+        <div class="text-ui-sm">
           <div class="border-b border-[var(--app-border)] p-3"><label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.name']()}</span><Input class="h-8" value={selected.name} onchange={(event: Event) => void updateSelected({ name: (event.currentTarget as HTMLInputElement).value })} /></label></div>
           <DesignInspectorSection id="transform" title={m['design.position']()}>
             <div class="grid grid-cols-2 gap-1.5">
@@ -3866,8 +3936,8 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <Button variant={aspectLocked ? 'secondary' : 'ghost'} size="icon-sm" class="size-8" aria-label={m['design.lock_aspect_ratio']()} aria-pressed={aspectLocked} onclick={() => (aspectLocked = !aspectLocked)}><Link2 size={13} /></Button>
             </div>
             <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-              <NativeSelect.Root class="h-8" value={selected.widthSizing} aria-label={m['design.width_sizing']()} onchange={(event: Event) => void updateSelected({ widthSizing: (event.currentTarget as HTMLSelectElement).value as DesignElement['widthSizing'] })}><NativeSelect.Option value="fixed">{m['design.sizing_fixed']()}</NativeSelect.Option><NativeSelect.Option value="hug">{m['design.sizing_hug']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.sizing_fill']()}</NativeSelect.Option></NativeSelect.Root>
-              <NativeSelect.Root class="h-8" value={selected.heightSizing} aria-label={m['design.height_sizing']()} onchange={(event: Event) => void updateSelected({ heightSizing: (event.currentTarget as HTMLSelectElement).value as DesignElement['heightSizing'] })}><NativeSelect.Option value="fixed">{m['design.sizing_fixed']()}</NativeSelect.Option><NativeSelect.Option value="hug">{m['design.sizing_hug']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.sizing_fill']()}</NativeSelect.Option></NativeSelect.Root>
+              <NativeSelect.Root class="h-8 w-full" value={selected.widthSizing} aria-label={m['design.width_sizing']()} onchange={(event: Event) => void updateSelected({ widthSizing: (event.currentTarget as HTMLSelectElement).value as DesignElement['widthSizing'] })}><NativeSelect.Option value="fixed">{m['design.sizing_fixed']()}</NativeSelect.Option><NativeSelect.Option value="hug">{m['design.sizing_hug']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.sizing_fill']()}</NativeSelect.Option></NativeSelect.Root>
+              <NativeSelect.Root class="h-8 w-full" value={selected.heightSizing} aria-label={m['design.height_sizing']()} onchange={(event: Event) => void updateSelected({ heightSizing: (event.currentTarget as HTMLSelectElement).value as DesignElement['heightSizing'] })}><NativeSelect.Option value="fixed">{m['design.sizing_fixed']()}</NativeSelect.Option><NativeSelect.Option value="hug">{m['design.sizing_hug']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.sizing_fill']()}</NativeSelect.Option></NativeSelect.Root>
             </div>
             <div class="mt-1.5 grid grid-cols-2 gap-1.5">
               <DesignNumericInput label={m['design.min_width_short']()} value={selected.minWidth} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ minWidth: value })} />
@@ -3876,6 +3946,46 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <DesignNumericInput label={m['design.max_height_short']()} value={selected.maxHeight} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ maxHeight: value })} />
             </div>
           </DesignInspectorSection>
+          {#if selected.type === 'frame'}
+            <DesignInspectorSection id="auto-layout" title={m['design.auto_layout']()}>
+              <NativeSelect.Root class="h-8 w-full" value={selected.layoutMode} aria-label={m['design.auto_layout']()} onchange={(event: Event) => void updateSelected({ layoutMode: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutMode'] })}><NativeSelect.Option value="none">{m['design.layout_none']()}</NativeSelect.Option><NativeSelect.Option value="horizontal">{m['design.layout_horizontal']()}</NativeSelect.Option><NativeSelect.Option value="vertical">{m['design.layout_vertical']()}</NativeSelect.Option><NativeSelect.Option value="grid">{m['design.layout_grid']()}</NativeSelect.Option></NativeSelect.Root>
+              {#if selected.layoutMode !== 'none'}
+                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                  <NativeSelect.Root class="h-8 w-full" value={selected.layoutAlign} aria-label={m['design.primary_alignment']()} onchange={(event: Event) => void updateSelected({ layoutAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="space-between">{m['design.space_between']()}</NativeSelect.Option></NativeSelect.Root>
+                  <NativeSelect.Root class="h-8 w-full" value={selected.layoutCrossAlign} aria-label={m['design.cross_alignment']()} onchange={(event: Event) => void updateSelected({ layoutCrossAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutCrossAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="stretch">{m['design.stretch']()}</NativeSelect.Option></NativeSelect.Root>
+                </div>
+                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                  {#if selected.layoutMode === 'grid'}
+                    <DesignNumericInput label={m['design.row_gap_short']()} value={selected.layoutRowGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutRowGap: value }); }} />
+                    <DesignNumericInput label={m['design.column_gap_short']()} value={selected.layoutColumnGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutColumnGap: value }); }} />
+                    <DesignNumericInput label={m['design.columns_short']()} value={selected.layoutGridColumns} min={1} max={64} onCommit={(value) => { if (value !== null) void updateSelected({ layoutGridColumns: Math.round(value) }); }} />
+                  {:else}
+                    <DesignNumericInput label={m['design.gap_short']()} value={selected.layoutGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutGap: value }); }} />
+                  {/if}
+                </div>
+                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                  <DesignNumericInput label={m['design.padding_top_short']()} value={selected.layoutPaddingTop} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingTop: value }); }} />
+                  <DesignNumericInput label={m['design.padding_right_short']()} value={selected.layoutPaddingRight} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingRight: value }); }} />
+                  <DesignNumericInput label={m['design.padding_bottom_short']()} value={selected.layoutPaddingBottom} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingBottom: value }); }} />
+                  <DesignNumericInput label={m['design.padding_left_short']()} value={selected.layoutPaddingLeft} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingLeft: value }); }} />
+                </div>
+                <div class="mt-2 space-y-2">
+                  <label class="flex items-center justify-between gap-3"><span>{m['design.wrap']()}</span><Switch size="sm" checked={selected.layoutWrap} onCheckedChange={(checked: boolean) => void updateSelected({ layoutWrap: checked })} /></label>
+                  <label class="flex items-center justify-between gap-3"><span>{m['design.clip_content']()}</span><Switch size="sm" checked={selected.clipContent} onCheckedChange={(checked: boolean) => void updateSelected({ clipContent: checked })} /></label>
+                </div>
+                <Button class="mt-2 w-full" variant="outline" size="sm" onclick={() => void applyAutoLayout()}><Sparkles size={13} />{m['design.apply_layout']()}</Button>
+              {/if}
+            </DesignInspectorSection>
+          {/if}
+          {#if selected.parentId}
+            <DesignInspectorSection id="constraints" title={m['design.constraints']()}>
+              <label class="mb-2 flex items-center justify-between gap-3"><span>{m['design.absolute_position']()}</span><Switch size="sm" checked={selected.layoutItemAbsolute} onCheckedChange={(checked: boolean) => void updateSelected({ layoutItemAbsolute: checked })} /></label>
+              <div class="grid grid-cols-2 gap-1.5">
+                <NativeSelect.Root class="h-8 w-full" value={selected.constraintHorizontal} aria-label={m['design.horizontal']()} onchange={(event: Event) => void updateSelected({ constraintHorizontal: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintHorizontal'] })}><NativeSelect.Option value="left">{m['design.align_left']()}</NativeSelect.Option><NativeSelect.Option value="right">{m['design.align_right']()}</NativeSelect.Option><NativeSelect.Option value="left-right">{m['design.constraint_left_right']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={selected.constraintVertical} aria-label={m['design.vertical']()} onchange={(event: Event) => void updateSelected({ constraintVertical: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintVertical'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option><NativeSelect.Option value="top-bottom">{m['design.constraint_top_bottom']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
+              </div>
+            </DesignInspectorSection>
+          {/if}
           <DesignInspectorSection id="appearance" title={m['design.appearance']()}>
             <div class="grid grid-cols-2 gap-1.5">
               <DesignNumericInput label={m['design.stroke_short']()} value={selected.strokeWidth} min={0} max={100} onCommit={(value) => { if (value !== null) void updateSelected({ strokeWidth: value }); }} />
@@ -3883,12 +3993,6 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <div class="col-span-2"><DesignNumericInput label="%" value={Math.round(selected.opacity * 100)} min={0} max={100} percentBase={100} onCommit={(value) => { if (value !== null) void updateSelected({ opacity: value / 100 }); }} /></div>
             </div>
             <NativeSelect.Root class="mt-1.5 h-8 w-full" value={selected.blendMode} aria-label={m['design.blend_mode']()} onchange={(event: Event) => void updateSelected({ blendMode: (event.currentTarget as HTMLSelectElement).value as DesignElement['blendMode'] })}><NativeSelect.Option value="normal">{m['design.blend_normal']()}</NativeSelect.Option><NativeSelect.Option value="multiply">{m['design.blend_multiply']()}</NativeSelect.Option><NativeSelect.Option value="screen">{m['design.blend_screen']()}</NativeSelect.Option><NativeSelect.Option value="overlay">{m['design.blend_overlay']()}</NativeSelect.Option><NativeSelect.Option value="darken">{m['design.blend_darken']()}</NativeSelect.Option><NativeSelect.Option value="lighten">{m['design.blend_lighten']()}</NativeSelect.Option></NativeSelect.Root>
-          </DesignInspectorSection>
-          <div class="px-3"><DesignVariableBindings document={document} element={selected} onBind={(property, variableId) => void bindSelectedVariable(property, variableId)} onOpenVariables={() => (leftPanel = 'variables')} /></div>
-          <DesignInspectorSection id="accessibility" title={m['design.accessibility']()} defaultOpen={false}>
-            <label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_role']()}</span><NativeSelect.Root class="w-full" value={selected.accessibilityRole} onchange={(event: Event) => void updateSelected({ accessibilityRole: (event.currentTarget as HTMLSelectElement).value as DesignElement['accessibilityRole'] })}><NativeSelect.Option value="none">{m['design.accessibility_role_none']()}</NativeSelect.Option><NativeSelect.Option value="button">{m['design.accessibility_role_button']()}</NativeSelect.Option><NativeSelect.Option value="link">{m['design.accessibility_role_link']()}</NativeSelect.Option><NativeSelect.Option value="heading">{m['design.accessibility_role_heading']()}</NativeSelect.Option><NativeSelect.Option value="image">{m['design.accessibility_role_image']()}</NativeSelect.Option><NativeSelect.Option value="text">{m['design.accessibility_role_text']()}</NativeSelect.Option><NativeSelect.Option value="input">{m['design.accessibility_role_input']()}</NativeSelect.Option><NativeSelect.Option value="navigation">{m['design.accessibility_role_navigation']()}</NativeSelect.Option><NativeSelect.Option value="region">{m['design.accessibility_role_region']()}</NativeSelect.Option></NativeSelect.Root></label>
-            <label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_label']()}</span><Input value={selected.accessibilityLabel ?? ''} placeholder={m['design.accessibility_label_placeholder']()} onchange={(event: Event) => void updateSelected({ accessibilityLabel: (event.currentTarget as HTMLInputElement).value.trim() || null })} /></label>
-            <label class="flex items-center justify-between gap-3"><span class="text-[var(--app-text-muted)]">{m['design.decorative']()}</span><Switch checked={selected.decorative} onCheckedChange={(checked: boolean) => void updateSelected({ decorative: checked })} /></label>
           </DesignInspectorSection>
           {#if selected.type !== 'image' && selected.type !== 'group'}
             <DesignPaintEditor id="fill" title={m['design.fill']()} paints={selected.fills} fallbackColor={selected.fill} {documentColors} variables={colorVariables} onBindVariable={(variableId) => void bindSelectedVariable('fill', variableId)} onChange={(fills: DesignPaint[]) => void updateSelected({ fills, fill: 'transparent' })} />
@@ -3900,8 +4004,8 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
           {/if}
           <DesignInspectorSection id="effects" title={m['design.effects']()} defaultOpen={false}>
             {#snippet actions()}
-              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[9px]" onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'drop-shadow', color: '#00000040', x: 0, y: 4, blur: 12, spread: 0, visible: true }] })}>{m['design.add_shadow']()}</Button>
-              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-[9px]" onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'layer-blur', blur: 8, visible: true }] })}>{m['design.add_blur']()}</Button>
+              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-ui-xs" onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'drop-shadow', color: '#00000040', x: 0, y: 4, blur: 12, spread: 0, visible: true }] })}>{m['design.add_shadow']()}</Button>
+              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-ui-xs" onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'layer-blur', blur: 8, visible: true }] })}>{m['design.add_blur']()}</Button>
             {/snippet}
             <div class="space-y-1.5">
               {#each selected.effects as effect, index}
@@ -3924,15 +4028,15 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                 <DesignNumericInput label={m['design.paragraph_spacing_short']()} value={selected.paragraphSpacing} min={0} max={10000} onCommit={(value) => { if (value !== null) void updateSelected({ paragraphSpacing: value }); }} />
               </div>
               <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                <NativeSelect.Root class="h-8" value={String(selected.fontWeight)} aria-label={m['design.font_weight']()} onchange={(event: Event) => void updateSelected({ fontWeight: Number((event.currentTarget as HTMLSelectElement).value) })}>{#each [100, 200, 300, 400, 500, 600, 700, 800, 900] as weight}<NativeSelect.Option value={String(weight)}>{weight}</NativeSelect.Option>{/each}</NativeSelect.Root>
-                <NativeSelect.Root class="h-8" value={selected.fontStyle} aria-label={m['design.font_style']()} onchange={(event: Event) => void updateSelected({ fontStyle: (event.currentTarget as HTMLSelectElement).value as DesignElement['fontStyle'] })}><NativeSelect.Option value="normal">{m['design.font_style_normal']()}</NativeSelect.Option><NativeSelect.Option value="italic">{m['design.font_style_italic']()}</NativeSelect.Option></NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={String(selected.fontWeight)} aria-label={m['design.font_weight']()} onchange={(event: Event) => void updateSelected({ fontWeight: Number((event.currentTarget as HTMLSelectElement).value) })}>{#each [100, 200, 300, 400, 500, 600, 700, 800, 900] as weight}<NativeSelect.Option value={String(weight)}>{weight}</NativeSelect.Option>{/each}</NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={selected.fontStyle} aria-label={m['design.font_style']()} onchange={(event: Event) => void updateSelected({ fontStyle: (event.currentTarget as HTMLSelectElement).value as DesignElement['fontStyle'] })}><NativeSelect.Option value="normal">{m['design.font_style_normal']()}</NativeSelect.Option><NativeSelect.Option value="italic">{m['design.font_style_italic']()}</NativeSelect.Option></NativeSelect.Root>
               </div>
               <div class="mt-1.5 grid grid-cols-3 gap-1">{#each [{ value: 'left' as const, icon: AlignLeft, label: m['design.align_left']() }, { value: 'center' as const, icon: AlignCenter, label: m['design.align_center']() }, { value: 'right' as const, icon: AlignRight, label: m['design.align_right']() }] as alignment}<Button variant={selected.textAlign === alignment.value ? 'secondary' : 'outline'} size="sm" aria-label={alignment.label} onclick={() => void updateSelected({ textAlign: alignment.value })}><alignment.icon size={14} /></Button>{/each}</div>
               <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                <NativeSelect.Root class="h-8" value={selected.textVerticalAlign} aria-label={m['design.vertical_alignment']()} onchange={(event: Event) => void updateSelected({ textVerticalAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['textVerticalAlign'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="middle">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8" value={selected.textAutoResize} aria-label={m['design.text_resize']()} onchange={(event: Event) => void updateSelected({ textAutoResize: (event.currentTarget as HTMLSelectElement).value as DesignElement['textAutoResize'] })}><NativeSelect.Option value="fixed">{m['design.text_resize_fixed']()}</NativeSelect.Option><NativeSelect.Option value="height">{m['design.text_resize_height']()}</NativeSelect.Option><NativeSelect.Option value="width-height">{m['design.text_resize_both']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8" value={selected.textDecoration} aria-label={m['design.text_decoration']()} onchange={(event: Event) => void updateSelected({ textDecoration: (event.currentTarget as HTMLSelectElement).value as DesignElement['textDecoration'] })}><NativeSelect.Option value="none">{m['design.none']()}</NativeSelect.Option><NativeSelect.Option value="underline">{m['design.underline']()}</NativeSelect.Option><NativeSelect.Option value="line-through">{m['design.strikethrough']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8" value={selected.textTransform} aria-label={m['design.text_transform']()} onchange={(event: Event) => void updateSelected({ textTransform: (event.currentTarget as HTMLSelectElement).value as DesignElement['textTransform'] })}><NativeSelect.Option value="none">{m['design.none']()}</NativeSelect.Option><NativeSelect.Option value="uppercase">{m['design.uppercase']()}</NativeSelect.Option><NativeSelect.Option value="lowercase">{m['design.lowercase']()}</NativeSelect.Option><NativeSelect.Option value="capitalize">{m['design.capitalize']()}</NativeSelect.Option></NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={selected.textVerticalAlign} aria-label={m['design.vertical_alignment']()} onchange={(event: Event) => void updateSelected({ textVerticalAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['textVerticalAlign'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="middle">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option></NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={selected.textAutoResize} aria-label={m['design.text_resize']()} onchange={(event: Event) => void updateSelected({ textAutoResize: (event.currentTarget as HTMLSelectElement).value as DesignElement['textAutoResize'] })}><NativeSelect.Option value="fixed">{m['design.text_resize_fixed']()}</NativeSelect.Option><NativeSelect.Option value="height">{m['design.text_resize_height']()}</NativeSelect.Option><NativeSelect.Option value="width-height">{m['design.text_resize_both']()}</NativeSelect.Option></NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={selected.textDecoration} aria-label={m['design.text_decoration']()} onchange={(event: Event) => void updateSelected({ textDecoration: (event.currentTarget as HTMLSelectElement).value as DesignElement['textDecoration'] })}><NativeSelect.Option value="none">{m['design.none']()}</NativeSelect.Option><NativeSelect.Option value="underline">{m['design.underline']()}</NativeSelect.Option><NativeSelect.Option value="line-through">{m['design.strikethrough']()}</NativeSelect.Option></NativeSelect.Root>
+                <NativeSelect.Root class="h-8 w-full" value={selected.textTransform} aria-label={m['design.text_transform']()} onchange={(event: Event) => void updateSelected({ textTransform: (event.currentTarget as HTMLSelectElement).value as DesignElement['textTransform'] })}><NativeSelect.Option value="none">{m['design.none']()}</NativeSelect.Option><NativeSelect.Option value="uppercase">{m['design.uppercase']()}</NativeSelect.Option><NativeSelect.Option value="lowercase">{m['design.lowercase']()}</NativeSelect.Option><NativeSelect.Option value="capitalize">{m['design.capitalize']()}</NativeSelect.Option></NativeSelect.Root>
               </div>
             </DesignInspectorSection>
           {/if}
@@ -3963,46 +4067,12 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             </DesignInspectorSection>
           {/if}
           {#if selected.type === 'image'}<section class="space-y-2 border-b border-[var(--app-border)] px-3 py-3"><h3 class="font-semibold text-[var(--app-text-soft)]">{m['design.image_fit']()}</h3><NativeSelect.Root class="w-full" value={selected.imageFit} onchange={(event: Event) => void updateSelected({ imageFit: (event.currentTarget as HTMLSelectElement).value as DesignElement['imageFit'] })}><NativeSelect.Option value="cover">{m['design.fit_cover']()}</NativeSelect.Option><NativeSelect.Option value="contain">{m['design.fit_contain']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.fit_fill']()}</NativeSelect.Option></NativeSelect.Root></section>{/if}
-          {#if selected.type === 'frame'}
-            <DesignInspectorSection id="auto-layout" title={m['design.auto_layout']()}>
-              <NativeSelect.Root class="h-8 w-full" value={selected.layoutMode} aria-label={m['design.auto_layout']()} onchange={(event: Event) => void updateSelected({ layoutMode: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutMode'] })}><NativeSelect.Option value="none">{m['design.layout_none']()}</NativeSelect.Option><NativeSelect.Option value="horizontal">{m['design.layout_horizontal']()}</NativeSelect.Option><NativeSelect.Option value="vertical">{m['design.layout_vertical']()}</NativeSelect.Option><NativeSelect.Option value="grid">{m['design.layout_grid']()}</NativeSelect.Option></NativeSelect.Root>
-              {#if selected.layoutMode !== 'none'}
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                  <NativeSelect.Root class="h-8" value={selected.layoutAlign} aria-label={m['design.primary_alignment']()} onchange={(event: Event) => void updateSelected({ layoutAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="space-between">{m['design.space_between']()}</NativeSelect.Option></NativeSelect.Root>
-                  <NativeSelect.Root class="h-8" value={selected.layoutCrossAlign} aria-label={m['design.cross_alignment']()} onchange={(event: Event) => void updateSelected({ layoutCrossAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutCrossAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="stretch">{m['design.stretch']()}</NativeSelect.Option></NativeSelect.Root>
-                </div>
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                  {#if selected.layoutMode === 'grid'}
-                    <DesignNumericInput label={m['design.row_gap_short']()} value={selected.layoutRowGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutRowGap: value }); }} />
-                    <DesignNumericInput label={m['design.column_gap_short']()} value={selected.layoutColumnGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutColumnGap: value }); }} />
-                    <DesignNumericInput label={m['design.columns_short']()} value={selected.layoutGridColumns} min={1} max={64} onCommit={(value) => { if (value !== null) void updateSelected({ layoutGridColumns: Math.round(value) }); }} />
-                  {:else}
-                    <DesignNumericInput label={m['design.gap_short']()} value={selected.layoutGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutGap: value }); }} />
-                  {/if}
-                </div>
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                  <DesignNumericInput label={m['design.padding_top_short']()} value={selected.layoutPaddingTop} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingTop: value }); }} />
-                  <DesignNumericInput label={m['design.padding_right_short']()} value={selected.layoutPaddingRight} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingRight: value }); }} />
-                  <DesignNumericInput label={m['design.padding_bottom_short']()} value={selected.layoutPaddingBottom} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingBottom: value }); }} />
-                  <DesignNumericInput label={m['design.padding_left_short']()} value={selected.layoutPaddingLeft} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingLeft: value }); }} />
-                </div>
-                <div class="mt-2 space-y-2">
-                  <label class="flex items-center justify-between gap-3"><span>{m['design.wrap']()}</span><Switch size="sm" checked={selected.layoutWrap} onCheckedChange={(checked: boolean) => void updateSelected({ layoutWrap: checked })} /></label>
-                  <label class="flex items-center justify-between gap-3"><span>{m['design.clip_content']()}</span><Switch size="sm" checked={selected.clipContent} onCheckedChange={(checked: boolean) => void updateSelected({ clipContent: checked })} /></label>
-                </div>
-                <Button class="mt-2 w-full" variant="outline" size="sm" onclick={() => void applyAutoLayout()}><Sparkles size={13} />{m['design.apply_layout']()}</Button>
-              {/if}
-            </DesignInspectorSection>
-          {/if}
-          {#if selected.parentId}
-            <DesignInspectorSection id="constraints" title={m['design.constraints']()}>
-              <label class="mb-2 flex items-center justify-between gap-3"><span>{m['design.absolute_position']()}</span><Switch size="sm" checked={selected.layoutItemAbsolute} onCheckedChange={(checked: boolean) => void updateSelected({ layoutItemAbsolute: checked })} /></label>
-              <div class="grid grid-cols-2 gap-1.5">
-                <NativeSelect.Root class="h-8" value={selected.constraintHorizontal} aria-label={m['design.horizontal']()} onchange={(event: Event) => void updateSelected({ constraintHorizontal: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintHorizontal'] })}><NativeSelect.Option value="left">{m['design.align_left']()}</NativeSelect.Option><NativeSelect.Option value="right">{m['design.align_right']()}</NativeSelect.Option><NativeSelect.Option value="left-right">{m['design.constraint_left_right']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8" value={selected.constraintVertical} aria-label={m['design.vertical']()} onchange={(event: Event) => void updateSelected({ constraintVertical: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintVertical'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option><NativeSelect.Option value="top-bottom">{m['design.constraint_top_bottom']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
-              </div>
-            </DesignInspectorSection>
-          {/if}
+          <div class="px-3"><DesignVariableBindings document={document} element={selected} onBind={(property, variableId) => void bindSelectedVariable(property, variableId)} onOpenVariables={() => (leftPanel = 'variables')} /></div>
+          <DesignInspectorSection id="accessibility" title={m['design.accessibility']()} defaultOpen={false}>
+            <label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_role']()}</span><NativeSelect.Root class="w-full" value={selected.accessibilityRole} onchange={(event: Event) => void updateSelected({ accessibilityRole: (event.currentTarget as HTMLSelectElement).value as DesignElement['accessibilityRole'] })}><NativeSelect.Option value="none">{m['design.accessibility_role_none']()}</NativeSelect.Option><NativeSelect.Option value="button">{m['design.accessibility_role_button']()}</NativeSelect.Option><NativeSelect.Option value="link">{m['design.accessibility_role_link']()}</NativeSelect.Option><NativeSelect.Option value="heading">{m['design.accessibility_role_heading']()}</NativeSelect.Option><NativeSelect.Option value="image">{m['design.accessibility_role_image']()}</NativeSelect.Option><NativeSelect.Option value="text">{m['design.accessibility_role_text']()}</NativeSelect.Option><NativeSelect.Option value="input">{m['design.accessibility_role_input']()}</NativeSelect.Option><NativeSelect.Option value="navigation">{m['design.accessibility_role_navigation']()}</NativeSelect.Option><NativeSelect.Option value="region">{m['design.accessibility_role_region']()}</NativeSelect.Option></NativeSelect.Root></label>
+            <label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_label']()}</span><Input value={selected.accessibilityLabel ?? ''} placeholder={m['design.accessibility_label_placeholder']()} onchange={(event: Event) => void updateSelected({ accessibilityLabel: (event.currentTarget as HTMLInputElement).value.trim() || null })} /></label>
+            <label class="flex items-center justify-between gap-3"><span class="text-[var(--app-text-muted)]">{m['design.decorative']()}</span><Switch checked={selected.decorative} onCheckedChange={(checked: boolean) => void updateSelected({ decorative: checked })} /></label>
+          </DesignInspectorSection>
           {#if selected.type === 'group'}<div class="p-3"><Button class="w-full" variant="outline" size="sm" onclick={() => void ungroupSelection()}><Ungroup size={13} />{m['design.ungroup_selection']()}</Button></div>{/if}
           <div class="flex items-center gap-1 border-t border-[var(--app-border)] p-3"><Button variant="outline" size="icon-sm" aria-label={m['design.move_down']()} onclick={() => void reorder(-1)}><ArrowDown /></Button><Button variant="outline" size="icon-sm" aria-label={m['design.move_up']()} onclick={() => void reorder(1)}><ArrowUp /></Button><div class="flex-1"></div><Button variant="destructive" size="icon-sm" disabled={selected.locked} aria-label={m['design.delete']()} onclick={() => void removeSelected()}><Trash2 /></Button></div>
         </div></div>
@@ -4010,7 +4080,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         <div class="min-h-0 flex-1 overflow-y-auto"><div class="space-y-4 p-3">
           <p class="text-xs font-medium">{m['design.multiple_selection']({ count: String(selectedElements.length) })}</p>
           <section class="space-y-2">
-            <h3 class="text-[11px] font-semibold text-[var(--app-text-soft)]">{m['design.alignment']()}</h3>
+            <h3 class="text-ui-sm font-semibold text-[var(--app-text-soft)]">{m['design.alignment']()}</h3>
             <div class="grid grid-cols-4 gap-1">
               <Button variant="outline" size="icon-sm" title={m['design.align_left']()} aria-label={m['design.align_left']()} onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={14} /></Button>
               <Button variant="outline" size="icon-sm" title={m['design.align_horizontal_center']()} aria-label={m['design.align_horizontal_center']()} onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={14} /></Button>
@@ -4024,23 +4094,23 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
             </div>
           </section>
           <section class="space-y-2">
-            <h3 class="text-[11px] font-semibold text-[var(--app-text-soft)]">{m['design.color_tools']()}</h3>
+            <h3 class="text-ui-sm font-semibold text-[var(--app-text-soft)]">{m['design.color_tools']()}</h3>
             <DesignColorTools role="fill" color={primaryColor(selectedElements[0], 'fill')} matches={matchingColorLayers('fill', primaryColor(selectedElements[0], 'fill'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selectedElements[0], 'fill'); if (color) selectMatchingColor('fill', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('fill', color)} onReplaceMatches={(color) => { const from = primaryColor(selectedElements[0], 'fill'); if (from) void replaceMatchingColor('fill', from, color); }} />
             <DesignColorTools role="stroke" color={primaryColor(selectedElements[0], 'stroke')} matches={matchingColorLayers('stroke', primaryColor(selectedElements[0], 'stroke'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selectedElements[0], 'stroke'); if (color) selectMatchingColor('stroke', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('stroke', color)} onReplaceMatches={(color) => { const from = primaryColor(selectedElements[0], 'stroke'); if (from) void replaceMatchingColor('stroke', from, color); }} />
           </section>
           <section class="space-y-2">
-            <h3 class="text-[11px] font-semibold text-[var(--app-text-soft)]">{m['design.common_properties']()}</h3>
+            <h3 class="text-ui-sm font-semibold text-[var(--app-text-soft)]">{m['design.common_properties']()}</h3>
             <div class="grid grid-cols-2 gap-1.5">
               <DesignNumericInput label="%" value={commonNumber('opacity') === null ? null : Math.round(commonNumber('opacity')! * 100)} min={0} max={100} placeholder={m['design.mixed_value']()} onCommit={(value) => { if (value !== null) void updateMultiple({ opacity: value / 100 }); }} />
               <DesignNumericInput label={m['design.radius_short']()} value={commonNumber('cornerRadius')} min={0} placeholder={m['design.mixed_value']()} onCommit={(value) => { if (value !== null) void updateMultiple({ cornerRadius: value }); }} />
             </div>
           </section>
           <Button variant="outline" size="sm" class="w-full" onclick={() => void groupSelection()}><Group size={13} />{m['design.group_selection']()}</Button>
-          <p class="text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.boolean']()} · {m['design.mask']()}</p>
+          <p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.boolean']()} · {m['design.mask']()}</p>
           <Button variant="destructive" size="sm" class="w-full" onclick={() => void removeSelected()}><Trash2 size={13} />{m['design.delete']()}</Button>
         </div></div>
       {:else}
-        <div class="min-h-0 flex-1 overflow-y-auto text-[11px]">
+        <div class="min-h-0 flex-1 overflow-y-auto text-ui-sm">
           {#if page}
             <DesignInspectorSection id="page" title={m['design.page_settings']()}>
               <Input class="h-8" value={page.name} aria-label={m['design.page_name']()} onchange={(event: Event) => void updateActivePage({ name: (event.currentTarget as HTMLInputElement).value })} />
@@ -4052,7 +4122,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                 <span class="text-[var(--app-text-muted)]">{m['design.page_background']()}</span>
                 <DesignColorControl color={page.background} opacity={1} {documentColors} onChange={(color) => void updateActivePage({ background: color })} />
               </div>
-              <div class="mt-2 grid grid-cols-3 gap-1 border-t border-[var(--app-border)] pt-2 text-center"><div><strong class="block text-xs text-[var(--app-text)]">{pageElements.length}</strong><span class="text-[9px] text-[var(--app-text-muted)]">{m['design.layers']()}</span></div><div><strong class="block text-xs text-[var(--app-text)]">{document?.components.length ?? 0}</strong><span class="text-[9px] text-[var(--app-text-muted)]">{m['design.components']()}</span></div><div><strong class="block text-xs text-[var(--app-text)]">{document?.variables.length ?? 0}</strong><span class="text-[9px] text-[var(--app-text-muted)]">{m['design.variables']()}</span></div></div>
+              <div class="mt-2 grid grid-cols-3 gap-1 border-t border-[var(--app-border)] pt-2 text-center"><div><strong class="block text-xs text-[var(--app-text)]">{pageElements.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.layers']()}</span></div><div><strong class="block text-xs text-[var(--app-text)]">{document?.components.length ?? 0}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.components']()}</span></div><div><strong class="block text-xs text-[var(--app-text)]">{document?.variables.length ?? 0}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.variables']()}</span></div></div>
             </DesignInspectorSection>
           {/if}
           {#if document?.guides.length}
@@ -4060,7 +4130,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <div class="space-y-1.5">{#each document.guides as guide}<div class="grid grid-cols-[1fr_28px] items-center gap-1.5"><DesignNumericInput label={guide.axis.toUpperCase()} value={guide.position} onCommit={(value) => { if (value !== null) void apply([{ kind: 'update-guide', guideId: guide.id, position: value }], m['design.operation_guide'](), { inverse: [{ kind: 'update-guide', guideId: guide.id, position: guide.position }] }); }} /><Button variant="ghost" size="icon-sm" class="size-7" aria-label={m['design.remove_guide']()} onclick={() => void removeGuide(guide.id)}><Trash2 size={11} /></Button></div>{/each}</div>
             </DesignInspectorSection>
           {/if}
-          <p class="p-3 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.no_selection_page_hint']()}</p>
+          <p class="p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.no_selection_page_hint']()}</p>
         </div>
       {/if}
     </aside>
@@ -4073,7 +4143,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     <Sheet.Content side="right" class="flex w-full max-w-[min(520px,96vw)] flex-col gap-0 border-[var(--app-border)] bg-[var(--app-surface)] p-0 text-[var(--app-text)] sm:max-w-[520px]" data-testid="design-collaboration-drawer">
       <Sheet.Header class="shrink-0 border-b border-[var(--app-border)] px-4 py-3 pr-12 text-left">
         <Sheet.Title class="flex items-center gap-2 text-sm font-semibold"><UsersRound size={16} class="text-[var(--app-accent)]" />{m['design.agents_reviews']()}</Sheet.Title>
-        <Sheet.Description class="mt-1 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.agents_reviews_help']()}</Sheet.Description>
+        <Sheet.Description class="mt-1 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.agents_reviews_help']()}</Sheet.Description>
       </Sheet.Header>
       <div class="min-h-0 flex-1"><DesignCollaborationPanel {document} {selected} {participant} {collaboration} {followParticipantId} {saving} makeId={uuidv7} onApply={(operations, summary) => apply(operations, summary)} onFollow={followParticipant} onPreview={previewProposal} onOpenCouncil={openProposalCouncil} onCreateFloor={createProposalFloor} /></div>
     </Sheet.Content>
@@ -4083,7 +4153,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     <Sheet.Content side="right" class="flex w-full max-w-[min(520px,96vw)] flex-col gap-0 border-[var(--app-border)] bg-[var(--app-surface)] p-0 text-[var(--app-text)] sm:max-w-[520px]" data-testid="design-quality-drawer">
       <Sheet.Header class="shrink-0 border-b border-[var(--app-border)] px-4 py-3 pr-12 text-left">
         <Sheet.Title class="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={16} class="text-[var(--app-accent)]" />{m['design.quality_history']()}</Sheet.Title>
-        <Sheet.Description class="mt-1 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['design.quality_history_help']()}</Sheet.Description>
+        <Sheet.Description class="mt-1 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.quality_history_help']()}</Sheet.Description>
       </Sheet.Header>
       <div class="min-h-0 flex-1"><DesignQualityPanel {workspaceId} {nodeId} {document} {saving} onSelect={(elementId) => { selectedIds = [elementId]; vectorEditId = null; pathPointSelections = []; contextualDrawer = null; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} /></div>
     </Sheet.Content>
@@ -4093,3 +4163,23 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 {#if prototypeOpen && document}
   <DesignPrototypePlayer {document} {workspaceId} flowId={prototypeFlowId} onClose={() => (prototypeOpen = false)} onShare={sharePrototype} />
 {/if}
+
+<style>
+  /*
+   * Chao do canvas. Antes o viewport era so uma cor chapada com as barras de
+   * rolagem nativas por cima — a prancheta e o vazio ficavam indistinguiveis.
+   * O grid de pontos rola junto com o conteudo (background-attachment: local),
+   * entao serve de referencia de deslocamento durante o pan.
+   */
+  .design-canvas-ground {
+    background-image: radial-gradient(var(--app-grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-attachment: local;
+    scrollbar-width: none;
+  }
+
+  .design-canvas-ground::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+</style>

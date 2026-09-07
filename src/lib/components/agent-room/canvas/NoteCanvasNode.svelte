@@ -24,7 +24,7 @@
     neutral: { color: '#777487', label: m['note.color_neutral']() },
   };
   import NodeShell from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import type { NoteNodePayload, WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
 
   export type NoteNodeData = {
@@ -211,13 +211,13 @@
         ></button>
       {/each}
     </span>
-    <IconAction label={m['attachment.add']()} disabled={attachmentBusy} onclick={() => attachmentInput.click()}>
-      <Paperclip size={13} /></IconAction>
-    <IconAction label={formatted ? m['note.edit_raw']() : m['note.view_formatted']()} onclick={toggleFormatted}>
+    <HeaderIconButton class="node-action-btn" label={m['attachment.add']()} disabled={attachmentBusy} onclick={() => attachmentInput.click()}>
+      <Paperclip size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={formatted ? m['note.edit_raw']() : m['note.view_formatted']()} onclick={toggleFormatted}>
       {#if formatted}<Pencil size={13} />{:else}<Eye size={13} />{/if}
-    </IconAction>
-    <IconAction label={m['note.remove']()} danger onclick={() => data.onDelete(id)}>
-      <X size={13} /></IconAction>
+    </HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['note.remove']()} danger onclick={() => data.onDelete(id)}>
+      <X size={13} /></HeaderIconButton>
   {/snippet}
 
   {#if formatted}

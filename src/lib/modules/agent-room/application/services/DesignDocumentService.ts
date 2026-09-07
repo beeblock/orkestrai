@@ -83,6 +83,9 @@ const REVIEW_NEUTRAL_OPERATIONS = new Set<DesignOperation['kind']>([
   'link-design-proposal',
   'delete-design-proposal',
   'set-active-page',
+  'add-guide',
+  'update-guide',
+  'delete-guide',
 ]);
 
 function preservesVisualReview(operations: DesignOperation[]): boolean {

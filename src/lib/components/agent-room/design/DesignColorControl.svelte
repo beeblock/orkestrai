@@ -162,7 +162,7 @@
     </div>
     <div class="grid grid-cols-3 gap-1 rounded bg-[var(--app-surface-subtle)] p-0.5" aria-label={m['design.color_format']()}>
       {#each ['hex', 'rgb', 'hsl'] as option}
-        <button class={`h-6 rounded text-[9px] font-medium uppercase ${format === option ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)]'}`} aria-pressed={format === option} onclick={() => (format = option as typeof format)}>{option}</button>
+        <button class={`h-6 rounded text-ui-xs font-medium uppercase ${format === option ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)]'}`} aria-pressed={format === option} onclick={() => (format = option as typeof format)}>{option}</button>
       {/each}
     </div>
     {#if format === 'hex'}
@@ -174,13 +174,13 @@
       <div class="grid grid-cols-4 gap-1"><DesignNumericInput label={m['design.hue_short']()} value={hsl.h} min={0} max={360} onCommit={(value) => { if (value !== null) updateHsl('h', value); }} /><DesignNumericInput label={m['design.saturation_short']()} value={hsl.s} min={0} max={100} onCommit={(value) => { if (value !== null) updateHsl('s', value); }} /><DesignNumericInput label={m['design.lightness_short']()} value={hsl.l} min={0} max={100} onCommit={(value) => { if (value !== null) updateHsl('l', value); }} /><DesignNumericInput label={m['design.alpha_short']()} value={Math.round(opacity * 100)} min={0} max={100} onCommit={(value) => { if (value !== null) commit(previewColor, value / 100); }} /></div>
     {/if}
     {#if recentColors.length}
-      <div><p class="mb-1 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.recent_colors']()}</p><div class="flex flex-wrap gap-1">{#each recentColors as recent}<button class="size-5 rounded-sm border border-[var(--app-border-strong)]" style:background={recent} aria-label={recent} onclick={() => commit(recent)}></button>{/each}</div></div>
+      <div><p class="mb-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.recent_colors']()}</p><div class="flex flex-wrap gap-1">{#each recentColors as recent}<button class="size-5 rounded-sm border border-[var(--app-border-strong)]" style:background={recent} aria-label={recent} onclick={() => commit(recent)}></button>{/each}</div></div>
     {/if}
     {#if documentColors.length}
-      <div><p class="mb-1 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.document_colors']()}</p><div class="flex flex-wrap gap-1">{#each documentColors.slice(0, 24) as documentColor}<button class="size-5 rounded-sm border border-[var(--app-border-strong)]" style:background={documentColor} aria-label={documentColor} onclick={() => commit(documentColor)}></button>{/each}</div></div>
+      <div><p class="mb-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.document_colors']()}</p><div class="flex flex-wrap gap-1">{#each documentColors.slice(0, 24) as documentColor}<button class="size-5 rounded-sm border border-[var(--app-border-strong)]" style:background={documentColor} aria-label={documentColor} onclick={() => commit(documentColor)}></button>{/each}</div></div>
     {/if}
     {#if variables.length && onBindVariable}
-      <div><p class="mb-1 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.color_variables']()}</p><div class="max-h-28 space-y-0.5 overflow-y-auto">{#each variables as variable}<button class="flex h-7 w-full items-center gap-2 rounded px-1.5 text-left hover:bg-[var(--app-surface-raised)]" aria-label={m['design.bind_color_variable']({ name: variable.name })} onclick={() => onBindVariable?.(variable.id)}><span class="size-4 rounded-sm border border-[var(--app-border-strong)]" style:background={variable.color}></span><span class="min-w-0 flex-1 truncate text-[10px]">{variable.name}</span><Variable size={11} class="text-[var(--app-text-muted)]" /></button>{/each}</div></div>
+      <div><p class="mb-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.color_variables']()}</p><div class="max-h-28 space-y-0.5 overflow-y-auto">{#each variables as variable}<button class="flex h-7 w-full items-center gap-2 rounded px-1.5 text-left hover:bg-[var(--app-surface-raised)]" aria-label={m['design.bind_color_variable']({ name: variable.name })} onclick={() => onBindVariable?.(variable.id)}><span class="size-4 rounded-sm border border-[var(--app-border-strong)]" style:background={variable.color}></span><span class="min-w-0 flex-1 truncate text-ui-xs">{variable.name}</span><Variable size={11} class="text-[var(--app-text-muted)]" /></button>{/each}</div></div>
     {/if}
   </Popover.Content>
 </Popover.Root>

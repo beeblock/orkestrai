@@ -54,7 +54,7 @@
   <Activity size={12} class="mr-2 shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
   <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
     {#if usageStore.loading && !usageStore.values.length}
-      <span class="text-[10px] text-[var(--app-text-muted)]">{m['workbench.usage_loading']()}</span>
+      <span class="text-ui-xs text-[var(--app-text-muted)]">{m['workbench.usage_loading']()}</span>
     {:else}
       {#each usageStore.values.filter((usage) => usage.windows.length > 0 || usage.error) as usage (usageRoutingId(usage))}
         {@const meta = usageProviderDefinition(usage.provider)}
@@ -64,7 +64,7 @@
               <button
                 {...props}
                 type="button"
-                class="flex h-5 shrink-0 items-center gap-1 rounded-[4px] px-1.5 text-[9px] text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--app-accent)]"
+                class="flex h-5 shrink-0 items-center gap-1 rounded-[4px] px-1.5 text-ui-xs text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--app-accent)]"
                 aria-label={summary(usage)}
                 onclick={openUsage}
               >
@@ -75,7 +75,7 @@
                 {:else}
                   {#each usage.windows as window (window.kind)}
                     <span class="flex items-center gap-0.5 tabular-nums">
-                      <span class="text-[8px] text-[var(--app-text-muted)]">{windowLabel(window)}</span>
+                      <span class="text-ui-xs text-[var(--app-text-muted)]">{windowLabel(window)}</span>
                       <span class="font-semibold" style:color={color(window.usedPercent)}>{window.usedPercent}%</span>
                     </span>
                   {/each}
@@ -90,7 +90,7 @@
   </div>
   <button
     type="button"
-    class="ml-2 shrink-0 text-[9px] text-[var(--app-text-muted)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--app-accent)]"
+    class="ml-2 shrink-0 text-ui-xs text-[var(--app-text-muted)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--app-accent)]"
     onclick={openUsage}
   >{m['workbench.usage_open']()}</button>
 </footer>

@@ -82,7 +82,7 @@
               />
               <Button type="submit" disabled={$updatingTeam}>{$updatingTeam ? 'Saving...' : 'Save'}</Button>
             </div>
-            {#if $teamErrors.name}<p class="mt-1 text-xs text-red-600">{$teamErrors.name[0]}</p>{/if}
+            {#if $teamErrors.name}<p class="mt-1 text-xs text-destructive">{$teamErrors.name[0]}</p>{/if}
           </div>
         </form>
       </CardContent>
@@ -109,7 +109,7 @@
                 disabled={$inviting}
                 class="mt-2"
               />
-              {#if $inviteErrors.email}<p class="mt-1 text-xs text-red-600">{$inviteErrors.email[0]}</p>{/if}
+              {#if $inviteErrors.email}<p class="mt-1 text-xs text-destructive">{$inviteErrors.email[0]}</p>{/if}
             </div>
             <div>
               <Label for="role">Role</Label>

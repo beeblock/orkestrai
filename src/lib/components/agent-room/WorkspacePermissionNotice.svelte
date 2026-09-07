@@ -63,10 +63,10 @@
     </span>
     <div class="min-w-0 flex-1">
       <h2 class="text-xs font-semibold">{m['workspace_access.title']()}</h2>
-      <p class="mt-1 text-[11px] leading-5 text-[var(--app-text-muted)]">
+      <p class="mt-1 text-ui-sm leading-5 text-[var(--app-text-muted)]">
         {canAuthorize ? m['workspace_access.body_macos']() : m['workspace_access.body_other']()}
       </p>
-      <code class="mt-2 block break-all rounded-[4px] border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 py-1.5 text-[10px] text-[var(--app-text-soft)]">{workingDir}</code>
+      <code class="mt-2 block break-all rounded-[4px] border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 py-1.5 text-ui-xs text-[var(--app-text-soft)]">{workingDir}</code>
       <div class="mt-3 flex flex-wrap gap-2">
         {#if canAuthorize}
           <Button size="sm" disabled={busy} onclick={() => void authorize()}>

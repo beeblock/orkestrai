@@ -69,12 +69,12 @@
     <Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.open_variables']()} title={m['design.open_variables']()} onclick={onOpenVariables}><ExternalLink size={11} /></Button>
   </div>
   {#if !document.variables.length}
-    <button class="w-full border border-dashed border-[var(--app-border)] px-2 py-2 text-left text-[10px] leading-4 text-[var(--app-text-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]" onclick={onOpenVariables}>{m['design.bindings_empty']()}</button>
+    <button class="w-full border border-dashed border-[var(--app-border)] px-2 py-2 text-left text-ui-xs leading-4 text-[var(--app-text-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]" onclick={onOpenVariables}>{m['design.bindings_empty']()}</button>
   {:else}
     <div class="space-y-1.5">
       {#each specs as spec (spec.property)}
         <label class="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2">
-          <span class="truncate text-[9px] text-[var(--app-text-muted)]" title={spec.label}>{spec.label}</span>
+          <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={spec.label}>{spec.label}</span>
           <DesignVariableCombobox
             value={element.variableBindings[spec.property] ?? ''}
             options={options(spec.types)}

@@ -845,6 +845,22 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: '7 de septiembre de 2026 · 0.27.0',
+      title: 'Orkestrai 0.27.0: el editor de Diseño empieza a sentirse como una herramienta de diseño',
+      summary: 'La mesa de trabajo se distingue del vacío, el chrome de selección sale de dentro del arte y la base visual gana escalas de elevación y tipografía.',
+      items: [
+        'El lienzo de Diseño ahora tiene suelo: una cuadrícula de puntos que acompaña al contenido, una mesa de trabajo con elevación real y sin las barras de desplazamiento nativas cruzando la superficie de dibujo.',
+        'Seleccionar varias capas dibuja un único cuadro envolvente, y redimensionar muestra la lectura viva de ancho por alto mientras que rotar muestra el ángulo.',
+        'Corregido: los templates integrados de marketing y mobile ya no empiezan con titulares recortados, y todos los templates oficiales ahora se prueban contra recortes de texto.',
+        'Corregido: los cambios rápidos en la configuración de nodos en Canvas y Workbench se aplican de forma optimista y se guardan en orden por nodo, evitando que el remontaje del componente o una respuesta anterior restaure valores obsoletos sobre un campo que todavía se está editando.',
+        'Corregido: los comandos del encabezado de los nodos mantienen sus clics aislados del Canvas tras migrar al botón de icono compartido, evitando que ejecutar una acción también active una interacción debajo.',
+        'Corregido: el contorno de hover de la capa bajo el cursor se filtraba a todo SVG, PNG, JPEG, WebP y PDF exportado, a la miniatura del documento y a la imagen de referencia que controla la aprobación visual. El chrome del editor ahora se elimina mediante una lista única, cubierta por una prueba que falla cuando un marcador nuevo queda sin clasificar.',
+        'Corregido: mover, crear o borrar una guía invalidaba silenciosamente una aprobación visual humana; y los contornos de selección y hover heredaban opacidad, modo de fusión, filtro y recorte de la propia capa — seleccionar algo al 20 por ciento de opacidad daba un contorno al 20 por ciento.',
+        'El inspector sigue el orden que el trabajo pide (Posición, Tamaño, Auto layout, Constraints, Apariencia, Relleno, Trazo, Efectos), adopta 11px como base, sus selectores llenan toda la columna y las secciones plegadas ya no parpadean abiertas al montar.',
+        'Base: el tema claro ahora existe en CSS y el tema elegido se restaura antes del primer pintado; se definieron diez tokens que la interfaz usaba sin existir, además de escalas de elevación y tipografía; unas quinientas etiquetas de 8 y 9 píxeles subieron a un tamaño legible; y se corrigió el radio de esquina que recortaba el borde en todos los nodos del Canvas.',
+      ],
+    },
+    {
       date: '7 de septiembre de 2026 · 0.26.1',
       title: 'Orkestrai 0.26.1: Pisos Git confiables en WSL',
       summary: 'Los workspaces Windows respaldados por WSL ahora mantienen todas las operaciones de Pisos dentro de la distribución Linux seleccionada.',

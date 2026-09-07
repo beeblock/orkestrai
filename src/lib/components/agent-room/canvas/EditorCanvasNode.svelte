@@ -7,7 +7,7 @@
   import { languages } from '@codemirror/language-data';
   import { FileCode2, MessageSquareQuote, RefreshCw, Save, X } from '@lucide/svelte';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -176,12 +176,12 @@
     {/if}
   {/snippet}
   {#snippet actions()}
-    <IconAction label={m['editor.cite_tooltip']()} onclick={citeSelection}>
+    <HeaderIconButton class="node-action-btn" label={m['editor.cite_tooltip']()} onclick={citeSelection}>
       <MessageSquareQuote size={13} />
-    </IconAction>
-    <IconAction label={m['editor.save']()} disabled={saving || !dirty} onclick={save}><Save size={13} /></IconAction>
-    <IconAction label={m['editor.reload']()} onclick={loadFile}><RefreshCw size={13} /></IconAction>
-    <IconAction label={m['editor.close']()} danger onclick={() => data.onDelete(id)}><X size={13} /></IconAction>
+    </HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['editor.save']()} disabled={saving || !dirty} onclick={save}><Save size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['editor.reload']()} onclick={loadFile}><RefreshCw size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['editor.close']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   <div role="presentation" onkeydown={handleKeydown} class="editor-wrap">
@@ -210,7 +210,7 @@
   .trunc-badge {
     font-size: 10px;
     color: var(--app-warning);
-    background: rgba(226, 185, 61, 0.12);
+    background: color-mix(in srgb, var(--app-warning) 12%, transparent);
     padding: 1px 6px;
     border-radius: 8px;
     margin-left: 6px;

@@ -568,7 +568,7 @@
         ><img src="/brand/icon.svg" class="size-4" alt="" /></span
       >
       <strong class="text-sm font-semibold tracking-[0]">Orkestrai</strong>
-      <Badge variant="outline" class="ml-auto h-5 px-1.5 text-[8px] uppercase"
+      <Badge variant="outline" class="ml-auto h-5 px-1.5 text-ui-xs uppercase"
         >{m["remote.companion_badge"]()}</Badge
       >
     </div>
@@ -576,7 +576,7 @@
       {#each tabs as tab}
         <button
           type="button"
-          class={`group flex h-9 w-full items-center gap-2 rounded-[5px] px-2.5 text-left text-[11px] font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${activeTab === tab.id ? "bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`}
+          class={`group flex h-9 w-full items-center gap-2 rounded-[5px] px-2.5 text-left text-ui-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${activeTab === tab.id ? "bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`}
           aria-current={activeTab === tab.id ? "page" : undefined}
           onclick={() => (activeTab = tab.id)}
         >
@@ -588,7 +588,7 @@
           />
           <span class="min-w-0 flex-1 truncate">{tab.label}</span>
           {#if tab.count}<span
-              class="grid min-w-5 place-items-center rounded-full bg-[var(--app-surface)] px-1 text-[9px] tabular-nums text-[var(--app-text-muted)]"
+              class="grid min-w-5 place-items-center rounded-full bg-[var(--app-surface)] px-1 text-ui-xs tabular-nums text-[var(--app-text-muted)]"
               >{tab.count}</span
             >{/if}
         </button>
@@ -596,17 +596,17 @@
     </nav>
     <div class="mt-auto border-t border-[var(--app-border)] p-3">
       <div
-        class="flex items-center gap-2 text-[10px] text-[var(--app-text-muted)]"
+        class="flex items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"
       >
         <ShieldCheck size={13} class="text-[var(--app-success)]" />
         <span class="truncate">{m["remote.encrypted_connection"]()}</span>
       </div>
       <p
-        class="mt-1.5 truncate text-[10px] font-medium text-[var(--app-text-soft)]"
+        class="mt-1.5 truncate text-ui-xs font-medium text-[var(--app-text-soft)]"
       >
         {roleLabel(role)}
       </p>
-      <p class="mt-0.5 text-[9px] text-[var(--app-text-muted)]">
+      <p class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]">
         {m["remote.revision"]({ revision })}
       </p>
     </div>
@@ -623,7 +623,7 @@
       <h1 class="truncate text-xs font-semibold sm:text-sm">
         {snapshot.workspace.name}
       </h1>
-      <p class="truncate text-[9px] text-[var(--app-text-muted)] md:hidden">
+      <p class="truncate text-ui-xs text-[var(--app-text-muted)] md:hidden">
         {roleLabel(role)} · {m["remote.revision"]({ revision })}
       </p>
     </div>
@@ -634,7 +634,7 @@
     ></div>
     <Badge
       variant="outline"
-      class="hidden h-6 gap-1 border-[var(--app-border)] text-[9px] sm:inline-flex"
+      class="hidden h-6 gap-1 border-[var(--app-border)] text-ui-xs sm:inline-flex"
       ><span class="size-1.5 rounded-full bg-[var(--app-success)]"></span>{m[
         "remote.live"
       ]()}</Badge
@@ -701,7 +701,7 @@
               ><strong class="block text-xs"
                 >{m["remote.attention_title"]()}</strong
               ><span
-                class="mt-0.5 block truncate text-[10px] text-[var(--app-text-muted)]"
+                class="mt-0.5 block truncate text-ui-xs text-[var(--app-text-muted)]"
                 >{m["remote.attention_body"]({
                   agents: attentionAgents.length,
                   reviews: pendingReviews.length,
@@ -725,7 +725,7 @@
             >
               <div class="flex items-center gap-2">
                 <metric.icon size={14} class={metric.tone} /><span
-                  class="text-[9px] font-semibold uppercase text-[var(--app-text-muted)]"
+                  class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"
                   >{metric.label}</span
                 >
               </div>
@@ -746,10 +746,10 @@
                   {m["remote.active_work"]()}
                 </h3>
                 <span
-                  class="text-[9px] tabular-nums text-[var(--app-text-muted)]"
+                  class="text-ui-xs tabular-nums text-[var(--app-text-muted)]"
                   >{workingAgents.length}</span
                 ><button
-                  class="ml-auto text-[10px] font-medium text-[var(--app-accent)] hover:underline"
+                  class="ml-auto text-ui-xs font-medium text-[var(--app-accent)] hover:underline"
                   onclick={() => (activeTab = "team")}
                   >{m["remote.view_all"]()}</button
                 >
@@ -778,7 +778,7 @@
                     <div class="min-w-0">
                       <p class="truncate text-xs font-medium">{agent.title}</p>
                       <p
-                        class="mt-0.5 truncate text-[10px] text-[var(--app-text-muted)]"
+                        class="mt-0.5 truncate text-ui-xs text-[var(--app-text-muted)]"
                       >
                         {agent.currentTask?.title ??
                           agent.role ??
@@ -786,7 +786,7 @@
                           m["remote.no_current_task"]()}
                       </p>
                     </div>
-                    <span class="text-[9px] text-[var(--app-text-muted)]"
+                    <span class="text-ui-xs text-[var(--app-text-muted)]"
                       >{relativeTime(agent.stateSince)}</span
                     >
                   </div>
@@ -805,7 +805,7 @@
                 <h3 class="text-xs font-semibold">
                   {m["remote.canvas_map"]()}
                 </h3>
-                <span class="text-[9px] text-[var(--app-text-muted)]"
+                <span class="text-ui-xs text-[var(--app-text-muted)]"
                   >{snapshot.nodes.length}</span
                 >
               </div>
@@ -814,7 +814,7 @@
               >
                 {#each snapshot.nodes as node (node.id)}
                   <div
-                    class={`absolute flex min-h-7 items-center overflow-hidden rounded-[4px] border px-2 text-[8px] shadow-sm ${node.type === "agent" ? "border-[var(--app-accent)]/50 bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "border-[var(--app-border)] bg-[var(--app-surface-raised)] text-[var(--app-text-soft)]"}`}
+                    class={`absolute flex min-h-7 items-center overflow-hidden rounded-[4px] border px-2 text-ui-xs shadow-sm ${node.type === "agent" ? "border-[var(--app-accent)]/50 bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "border-[var(--app-border)] bg-[var(--app-surface-raised)] text-[var(--app-text-soft)]"}`}
                     style={nodeStyle(node)}
                     title={node.title ?? node.type}
                   >
@@ -848,7 +848,7 @@
                   <div
                     class="mt-2 flex items-center justify-between border-t border-[var(--app-border)] pt-2"
                   >
-                    <span class="text-[9px] text-[var(--app-text-muted)]"
+                    <span class="text-ui-xs text-[var(--app-text-muted)]"
                       >{m["remote.message_traceable"]()}</span
                     ><Button
                       size="sm"
@@ -880,17 +880,17 @@
                         {#if providerIcon(usage.provider)}<span
                             class="size-4"
                             style={providerMask(usage.provider)}
-                          ></span>{/if}<strong class="text-[11px] capitalize"
+                          ></span>{/if}<strong class="text-ui-sm capitalize"
                           >{usage.provider}</strong
                         >{#if usage.plan}<span
-                            class="text-[9px] text-[var(--app-text-muted)]"
+                            class="text-ui-xs text-[var(--app-text-muted)]"
                             >{usage.plan}</span
                           >{/if}
                       </div>
                       {#if usage.available}<div class="mt-2 grid gap-2">
                           {#each usage.windows as window}<div>
                               <div
-                                class="mb-1 flex text-[9px] text-[var(--app-text-muted)]"
+                                class="mb-1 flex text-ui-xs text-[var(--app-text-muted)]"
                               >
                                 <span>{windowLabel(window.kind)}</span><strong
                                   class="ml-auto tabular-nums text-[var(--app-text-soft)]"
@@ -910,7 +910,7 @@
                               </div>
                             </div>{/each}
                         </div>{:else}<p
-                          class="mt-1.5 text-[9px] leading-4 text-[var(--app-text-muted)]"
+                          class="mt-1.5 text-ui-xs leading-4 text-[var(--app-text-muted)]"
                         >
                           {usageDiagnostic(usage.diagnostic)}
                         </p>{/if}
@@ -919,7 +919,7 @@
                 </div>
               {:else}
                 <p
-                  class="border-y border-[var(--app-border)] py-5 text-center text-[10px] text-[var(--app-text-muted)]"
+                  class="border-y border-[var(--app-border)] py-5 text-center text-ui-xs text-[var(--app-text-muted)]"
                 >
                   {m["remote.usage_waiting"]()}
                 </p>
@@ -949,13 +949,13 @@
                       {agent.title}
                     </h3>
                     <p
-                      class="mt-0.5 truncate text-[10px] text-[var(--app-text-muted)]"
+                      class="mt-0.5 truncate text-ui-xs text-[var(--app-text-muted)]"
                     >
                       {agent.role ?? agent.provider ?? ""}
                     </p>
                   </div>
                   <span
-                    class="shrink-0 text-[9px] font-medium text-[var(--app-text-soft)]"
+                    class="shrink-0 text-ui-xs font-medium text-[var(--app-text-soft)]"
                     >{agentStateLabel(agent.state)}</span
                   >
                 </div>
@@ -966,10 +966,10 @@
                     size={12}
                     class="shrink-0 text-[var(--app-text-muted)]"
                   /><span
-                    class="min-w-0 flex-1 truncate text-[10px] text-[var(--app-text-soft)]"
+                    class="min-w-0 flex-1 truncate text-ui-xs text-[var(--app-text-soft)]"
                     >{agent.currentTask?.title ??
                       m["remote.no_current_task"]()}</span
-                  ><span class="text-[9px] text-[var(--app-text-muted)]"
+                  ><span class="text-ui-xs text-[var(--app-text-muted)]"
                     >{relativeTime(agent.stateSince)}</span
                   >
                 </div>
@@ -1002,11 +1002,11 @@
                   class="size-2 rounded-full"
                   style:background={column.color}
                 ></span>
-                <h3 class="truncate text-[11px] font-semibold">
+                <h3 class="truncate text-ui-sm font-semibold">
                   {column.name ?? column.key}
                 </h3>
                 <span
-                  class="ml-auto text-[9px] tabular-nums text-[var(--app-text-muted)]"
+                  class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]"
                   >{columnTasks.length}</span
                 >
               </header>
@@ -1017,7 +1017,7 @@
                   >
                     <h4 class="text-xs font-medium leading-5">{task.title}</h4>
                     {#if task.description}<p
-                        class="mt-1 line-clamp-3 text-[10px] leading-4 text-[var(--app-text-muted)]"
+                        class="mt-1 line-clamp-3 text-ui-xs leading-4 text-[var(--app-text-muted)]"
                       >
                         {task.description}
                       </p>{/if}
@@ -1025,7 +1025,7 @@
                       class="mt-3 flex items-center gap-2 border-t border-[var(--app-border)] pt-2"
                     >
                       <span
-                        class="min-w-0 flex-1 truncate text-[9px] text-[var(--app-text-soft)]"
+                        class="min-w-0 flex-1 truncate text-ui-xs text-[var(--app-text-soft)]"
                         >{task.assigneeTitle ?? m["remote.unassigned"]()}</span
                       >{#if canWriteTasks}<Select.Root
                           type="single"
@@ -1035,7 +1035,7 @@
                           disabled={busy}
                           ><Select.Trigger
                             size="sm"
-                            class="h-6 max-w-28 text-[9px]"
+                            class="h-6 max-w-28 text-ui-xs"
                             ><span class="truncate"
                               >{column.name ?? column.key}</span
                             ></Select.Trigger
@@ -1049,7 +1049,7 @@
                     </div>
                   </article>
                 {:else}<p
-                    class="py-8 text-center text-[10px] text-[var(--app-text-muted)]"
+                    class="py-8 text-center text-ui-xs text-[var(--app-text-muted)]"
                   >
                     {m["remote.column_empty"]()}
                   </p>{/each}
@@ -1070,18 +1070,18 @@
                 ><span class="flex items-center gap-2"
                   ><span
                     class={`size-2 rounded-full ${huddle.status === "active" ? "bg-[var(--app-success)]" : "bg-[var(--app-text-muted)]"}`}
-                  ></span><strong class="min-w-0 flex-1 truncate text-[11px]"
+                  ></span><strong class="min-w-0 flex-1 truncate text-ui-sm"
                     >{huddle.title}</strong
                   ></span
                 ><span
-                  class="mt-1.5 block text-[9px] text-[var(--app-text-muted)]"
+                  class="mt-1.5 block text-ui-xs text-[var(--app-text-muted)]"
                   >{huddle.participants.length}
                   {m["huddle.people"]()} · {huddle.turns.length}
                   {m["remote.huddle_turns"]()}</span
                 ></button
               >
             {:else}<p
-                class="p-3 text-[10px] leading-4 text-[var(--app-text-muted)]"
+                class="p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]"
               >
                 {m["huddle.history_empty"]()}
               </p>{/each}
@@ -1094,7 +1094,7 @@
                 <h3 class="text-sm font-semibold">
                   {m["huddle.start_title"]()}
                 </h3>
-                <p class="mt-1 text-[10px] text-[var(--app-text-muted)]">
+                <p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">
                   {m["remote.huddle_remote_hint"]()}
                 </p>
                 <div class="mt-4 grid gap-3">
@@ -1110,7 +1110,7 @@
                   />
                   <div class="grid gap-1 sm:grid-cols-2">
                     {#each snapshot.agents as agent (agent.id)}<label
-                        class="flex items-center gap-2 rounded border border-[var(--app-border)] px-2.5 py-2 text-[10px]"
+                        class="flex items-center gap-2 rounded border border-[var(--app-border)] px-2.5 py-2 text-ui-xs"
                         ><Checkbox
                           checked={huddleAgents.includes(agent.id)}
                           disabled={!huddleAgents.includes(agent.id) &&
@@ -1149,14 +1149,14 @@
                       <h3 class="truncate text-sm font-semibold">
                         {selectedHuddle.title}
                       </h3>
-                      <Badge variant="outline" class="text-[8px]"
+                      <Badge variant="outline" class="text-ui-xs"
                         >{selectedHuddle.status === "active"
                           ? m["huddle.live"]()
                           : m["huddle.finished"]()}</Badge
                       >
                     </div>
                     {#if selectedHuddle.agenda}<p
-                        class="mt-1 text-[10px] leading-4 text-[var(--app-text-muted)]"
+                        class="mt-1 text-ui-xs leading-4 text-[var(--app-text-muted)]"
                       >
                         {selectedHuddle.agenda}
                       </p>{/if}
@@ -1179,7 +1179,7 @@
                       class:border-[var(--app-border-strong)]={turn.speakerKind !==
                         "remote"}
                     >
-                      <div class="flex items-center gap-2 text-[9px]">
+                      <div class="flex items-center gap-2 text-ui-xs">
                         <strong>{turn.speakerName}</strong><span
                           class="text-[var(--app-text-muted)]"
                           >#{turn.sequence}</span
@@ -1206,7 +1206,7 @@
                   >
                     <div class="mb-2 flex flex-wrap gap-1.5">
                       {#each selectedHuddle.participants.filter((participant) => participant.kind === "agent") as participant (participant.participantId)}<label
-                          class="flex items-center gap-1.5 rounded border border-[var(--app-border)] px-2 py-1 text-[9px]"
+                          class="flex items-center gap-1.5 rounded border border-[var(--app-border)] px-2 py-1 text-ui-xs"
                           ><Checkbox
                             class="size-3"
                             checked={huddleTargets.includes(
@@ -1265,14 +1265,14 @@
                     >{design.name}</span
                   >
                   <span
-                    class="mt-1 block text-[9px] text-[var(--app-text-muted)]"
+                    class="mt-1 block text-ui-xs text-[var(--app-text-muted)]"
                     >{m["remote.design_pages_layers"]({
                       pages: String(design.pageCount),
                       layers: String(design.elementCount),
                     })}</span
                   >
                   {#if design.presences.length}<span
-                      class="mt-1.5 flex items-center gap-1 text-[9px] text-[var(--app-success)]"
+                      class="mt-1.5 flex items-center gap-1 text-ui-xs text-[var(--app-success)]"
                       ><span
                         class="size-1.5 rounded-full bg-[var(--app-success)]"
                       ></span>{m["remote.design_live_people"]({
@@ -1291,7 +1291,7 @@
                     <h3 class="truncate text-base font-semibold">
                       {selectedDesign.name}
                     </h3>
-                    <p class="mt-1 text-[10px] text-[var(--app-text-muted)]">
+                    <p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">
                       {m["remote.revision"]({
                         revision: selectedDesign.revision,
                       })} · {m["remote.design_pages_layers"]({
@@ -1302,7 +1302,7 @@
                   </div>
                   <div class="flex -space-x-1">
                     {#each selectedDesign.presences.slice(0, 6) as presence}<span
-                        class="grid size-7 place-items-center rounded-full border-2 border-[var(--app-canvas)] text-[9px] font-bold text-white"
+                        class="grid size-7 place-items-center rounded-full border-2 border-[var(--app-canvas)] text-ui-xs font-bold text-white"
                         style:background={presence.color}
                         title={presence.name}
                         >{presence.name.slice(0, 1).toUpperCase()}</span
@@ -1313,7 +1313,7 @@
                   class="grid gap-3 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface)] p-3"
                 >
                   <div class="grid gap-3 sm:grid-cols-2">
-                    <label class="grid gap-1.5 text-[10px] font-medium"
+                    <label class="grid gap-1.5 text-ui-xs font-medium"
                       >{m["remote.design_page"]()}<Select.Root
                         type="single"
                         value={selectedDesignPageId}
@@ -1332,7 +1332,7 @@
                         ></Select.Root
                       ></label
                     >
-                    <label class="grid gap-1.5 text-[10px] font-medium"
+                    <label class="grid gap-1.5 text-ui-xs font-medium"
                       >{m["remote.design_layer"]()}<Select.Root
                         type="single"
                         value={selectedDesignElement?.id ?? ""}
@@ -1356,27 +1356,27 @@
                     <div class="border-t border-[var(--app-border)] pt-3">
                       <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         <label
-                          class="grid gap-1 text-[9px] text-[var(--app-text-muted)]"
+                          class="grid gap-1 text-ui-xs text-[var(--app-text-muted)]"
                           >X<Input type="number" bind:value={designX} /></label
                         ><label
-                          class="grid gap-1 text-[9px] text-[var(--app-text-muted)]"
+                          class="grid gap-1 text-ui-xs text-[var(--app-text-muted)]"
                           >Y<Input type="number" bind:value={designY} /></label
                         ><label
-                          class="grid gap-1 text-[9px] text-[var(--app-text-muted)]"
+                          class="grid gap-1 text-ui-xs text-[var(--app-text-muted)]"
                           >W<Input
                             type="number"
                             min="1"
                             bind:value={designWidth}
                           /></label
                         ><label
-                          class="grid gap-1 text-[9px] text-[var(--app-text-muted)]"
+                          class="grid gap-1 text-ui-xs text-[var(--app-text-muted)]"
                           >H<Input
                             type="number"
                             min="1"
                             bind:value={designHeight}
                           /></label
                         ><label
-                          class="grid gap-1 text-[9px] text-[var(--app-text-muted)]"
+                          class="grid gap-1 text-ui-xs text-[var(--app-text-muted)]"
                           >{m["design.proposal_opacity"]()}<Input
                             type="number"
                             min="0"
@@ -1384,7 +1384,7 @@
                             bind:value={designOpacity}
                           /></label
                         ><label
-                          class="grid gap-1 text-[9px] text-[var(--app-text-muted)]"
+                          class="grid gap-1 text-ui-xs text-[var(--app-text-muted)]"
                           >{m["design.proposal_fill"]()}<Input
                             type="color"
                             bind:value={designFill}
@@ -1399,7 +1399,7 @@
                               "design.proposal_title_placeholder"
                             ]()}
                           /><Textarea
-                            class="min-h-16 resize-y text-[10px]"
+                            class="min-h-16 resize-y text-ui-xs"
                             bind:value={designProposalDescription}
                             maxlength="4000"
                             placeholder={m[
@@ -1442,7 +1442,7 @@
                       class="rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface)] p-2"
                     >
                       <p
-                        class="px-1 pt-1 text-[9px] text-[var(--app-text-muted)]"
+                        class="px-1 pt-1 text-ui-xs text-[var(--app-text-muted)]"
                       >
                         {selectedDesignElement
                           ? m["design.comment_layer"]({
@@ -1477,7 +1477,7 @@
                     <h4 class="text-xs font-semibold">
                       {m["remote.design_open_comments"]()}
                     </h4>
-                    <Badge variant="outline" class="h-5 text-[9px]"
+                    <Badge variant="outline" class="h-5 text-ui-xs"
                       >{selectedDesign.comments.filter(
                         (comment) => comment.status === "open",
                       ).length}</Badge
@@ -1488,7 +1488,7 @@
                         class={`rounded-[6px] border bg-[var(--app-surface)] p-3 ${comment.status === "resolved" ? "border-[var(--app-success)]/40 opacity-70" : "border-[var(--app-border)]"}`}
                       >
                         <div
-                          class="flex items-center gap-2 text-[9px] text-[var(--app-text-muted)]"
+                          class="flex items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"
                         >
                           <strong class="text-[var(--app-text-soft)]"
                             >{comment.authorName}</strong
@@ -1504,7 +1504,7 @@
                         </p>
                         {#if canCommentDesign}<div class="mt-3 flex gap-1.5">
                             <Input
-                              class="h-8 min-w-0 text-[10px]"
+                              class="h-8 min-w-0 text-ui-xs"
                               value={designReplies[comment.id] ?? ""}
                               placeholder={m[
                                 "design.comment_reply_placeholder"
@@ -1546,7 +1546,7 @@
                     <h4 class="text-xs font-semibold">
                       {m["remote.design_pending_proposals"]()}
                     </h4>
-                    <Badge variant="outline" class="h-5 text-[9px]"
+                    <Badge variant="outline" class="h-5 text-ui-xs"
                       >{selectedDesign.proposals.filter(
                         (proposal) => proposal.status === "pending",
                       ).length}</Badge
@@ -1562,14 +1562,14 @@
                               {proposal.title}
                             </h5>
                             <p
-                              class="mt-0.5 text-[9px] text-[var(--app-text-muted)]"
+                              class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]"
                             >
                               {proposal.authorName} · {m[
                                 "design.proposal_changes"
                               ]({ count: String(proposal.operationCount) })}
                             </p>
                           </div>
-                          <Badge variant="outline" class="h-5 text-[8px]"
+                          <Badge variant="outline" class="h-5 text-ui-xs"
                             >{proposal.status === "pending"
                               ? m["design.proposal_pending"]()
                               : proposal.status === "approved"
@@ -1578,7 +1578,7 @@
                           >
                         </div>
                         {#if proposal.description}<p
-                            class="mt-2 text-[10px] leading-4 text-[var(--app-text-soft)]"
+                            class="mt-2 text-ui-xs leading-4 text-[var(--app-text-soft)]"
                           >
                             {proposal.description}
                           </p>{/if}{#if canDecideDesign && proposal.status === "pending"}<div
@@ -1639,7 +1639,7 @@
                     <h3 class="min-w-0 flex-1 text-sm font-semibold">
                       {review.title}
                     </h3>
-                    <Badge variant="outline" class="text-[9px]"
+                    <Badge variant="outline" class="text-ui-xs"
                       >{reviewStatusLabel(review.status)}</Badge
                     >
                   </div>
@@ -1649,7 +1649,7 @@
                       {review.summary}
                     </p>{/if}
                   <div
-                    class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--app-border)] pt-2 text-[9px] text-[var(--app-text-soft)]"
+                    class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--app-border)] pt-2 text-ui-xs text-[var(--app-text-soft)]"
                   >
                     <span>{review.evidenceCount} {m["remote.evidence"]()}</span
                     ><span>{review.testCount} {m["remote.tests"]()}</span><span
@@ -1702,14 +1702,14 @@
                 <div class="flex min-w-0 items-start gap-3">
                   <div class="min-w-0 flex-1">
                     <p class="text-xs font-medium">{event.title}</p>
-                    <p class="mt-0.5 text-[10px] text-[var(--app-text-muted)]">
+                    <p class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]">
                       {event.kind === "agent"
                         ? agentStateLabel(event.state)
                         : (event.detail ?? event.state)}
                     </p>
                   </div>
                   <time
-                    class="shrink-0 text-[9px] text-[var(--app-text-muted)]"
+                    class="shrink-0 text-ui-xs text-[var(--app-text-muted)]"
                     datetime={event.occurredAt}
                     >{relativeTime(event.occurredAt)}</time
                   >
@@ -1733,13 +1733,13 @@
     {#each tabs as tab}
       <button
         type="button"
-        class={`relative grid min-w-0 place-items-center content-center gap-1 text-[8px] font-medium transition-colors ${activeTab === tab.id ? "text-[var(--app-accent)]" : "text-[var(--app-text-muted)]"}`}
+        class={`relative grid min-w-0 place-items-center content-center gap-1 text-ui-xs font-medium transition-colors ${activeTab === tab.id ? "text-[var(--app-accent)]" : "text-[var(--app-text-muted)]"}`}
         aria-current={activeTab === tab.id ? "page" : undefined}
         onclick={() => (activeTab = tab.id)}
         ><tab.icon size={17} /><span class="max-w-full truncate"
           >{tab.label}</span
         >{#if tab.count}<span
-            class="absolute right-[calc(50%-16px)] top-1.5 grid size-4 place-items-center rounded-full bg-[var(--app-warning)] text-[8px] font-bold text-black"
+            class="absolute right-[calc(50%-16px)] top-1.5 grid size-4 place-items-center rounded-full bg-[var(--app-warning)] text-ui-xs font-bold text-black"
             >{tab.count > 9 ? "9+" : tab.count}</span
           >{/if}</button
       >

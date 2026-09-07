@@ -165,7 +165,7 @@
       </span>
       <div class="min-w-0 flex-1">
         <h2 class="truncate text-sm font-semibold text-[var(--app-text)]">{m['control_center.title']()}</h2>
-        <p class="mt-0.5 truncate text-[11px] text-[var(--app-text-muted)]">{workspaceName} · {m['control_center.subtitle']()}</p>
+        <p class="mt-0.5 truncate text-ui-sm text-[var(--app-text-muted)]">{workspaceName} · {m['control_center.subtitle']()}</p>
       </div>
       <Tooltip.Root>
         <Tooltip.Trigger>
@@ -185,7 +185,7 @@
           <span style:color={metric.color}><metric.icon size={14} aria-hidden="true" /></span>
           <div class="min-w-0">
             <div class="text-sm font-semibold tabular-nums text-[var(--app-text)]">{metric.count}</div>
-            <div class="truncate text-[9px] font-medium uppercase text-[var(--app-text-muted)]">{metric.label}</div>
+            <div class="truncate text-ui-xs font-medium uppercase text-[var(--app-text-muted)]">{metric.label}</div>
           </div>
         </div>
       {/each}
@@ -206,8 +206,8 @@
       <section class="control-agents min-h-0 overflow-y-auto" aria-labelledby="control-center-agents">
         <div class="sticky top-0 z-10 flex h-9 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4">
           <Users size={13} class="text-[var(--app-text-muted)]" aria-hidden="true" />
-          <h3 id="control-center-agents" class="text-[10px] font-semibold uppercase text-[var(--app-text-muted)]">{m['control_center.agents']()}</h3>
-          <span class="ml-auto text-[10px] tabular-nums text-[var(--app-text-muted)]">{snapshot?.agents.length ?? 0}</span>
+          <h3 id="control-center-agents" class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['control_center.agents']()}</h3>
+          <span class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]">{snapshot?.agents.length ?? 0}</span>
         </div>
         {#if snapshot?.agents.length}
           <div class="divide-y divide-[var(--app-border)]">
@@ -219,19 +219,19 @@
                 <div class="min-w-0">
                   <div class="flex min-w-0 items-center gap-2">
                     <h4 class="truncate text-xs font-semibold text-[var(--app-text)]">{agent.title}</h4>
-                    <span class="shrink-0 rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-[9px] text-[var(--app-text-muted)]">{agent.provider ?? m['control_center.shell']()}</span>
-                    {#if agent.floorName}<span class="inline-flex min-w-0 items-center gap-1 rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-[9px] text-[var(--app-text-muted)]"><Layers size={9} class="shrink-0" /><span class="truncate">{agent.floorName}</span></span>{/if}
-                    {#if agent.role}<span class="min-w-0 truncate text-[9px] text-[var(--app-text-muted)]">{agent.role}</span>{/if}
+                    <span class="shrink-0 rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]">{agent.provider ?? m['control_center.shell']()}</span>
+                    {#if agent.floorName}<span class="inline-flex min-w-0 items-center gap-1 rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]"><Layers size={9} class="shrink-0" /><span class="truncate">{agent.floorName}</span></span>{/if}
+                    {#if agent.role}<span class="min-w-0 truncate text-ui-xs text-[var(--app-text-muted)]">{agent.role}</span>{/if}
                   </div>
-                  <p class="mt-1 truncate text-[11px] text-[var(--app-text-soft)]">{agent.currentTask?.title ?? actionLabel(agent)}</p>
-                  <div class="mt-1.5 flex min-w-0 items-center gap-2 text-[9px] text-[var(--app-text-muted)]">
+                  <p class="mt-1 truncate text-ui-sm text-[var(--app-text-soft)]">{agent.currentTask?.title ?? actionLabel(agent)}</p>
+                  <div class="mt-1.5 flex min-w-0 items-center gap-2 text-ui-xs text-[var(--app-text-muted)]">
                     <span class="font-medium" style:color={stateColor(agent.state)}>{stateLabel(agent.state)}</span>
                     <span>·</span>
                     <span>{elapsed(agent.stateSince)}</span>
                     {#if agent.currentTask}<span class="truncate">· #{agent.currentTask.id.slice(0, 8)} · {agent.currentTask.status}</span>{/if}
                   </div>
                 </div>
-                <div class="flex flex-col items-end gap-1 text-[9px] text-[var(--app-text-muted)]">
+                <div class="flex flex-col items-end gap-1 text-ui-xs text-[var(--app-text-muted)]">
                   {#if usageFor(agent)}<span class="font-semibold tabular-nums text-[var(--app-text-soft)]">{usageFor(agent)}</span>{/if}
                   <span>{m['control_center.provider_usage']()}</span>
                 </div>
@@ -250,7 +250,7 @@
           <h3 id="control-center-secondary" class="sr-only">{m['control_center.activity']()}</h3>
           <button
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-[9px] font-semibold uppercase transition-colors"
+            class="flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-ui-xs font-semibold uppercase transition-colors"
             class:bg-[var(--app-surface-raised)]={secondaryView === 'activity'}
             class:text-[var(--app-text)]={secondaryView === 'activity'}
             class:text-[var(--app-text-muted)]={secondaryView !== 'activity'}
@@ -262,7 +262,7 @@
           </button>
           <button
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-[9px] font-semibold uppercase transition-colors"
+            class="flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-ui-xs font-semibold uppercase transition-colors"
             class:bg-[var(--app-surface-raised)]={secondaryView === 'communications'}
             class:text-[var(--app-text)]={secondaryView === 'communications'}
             class:text-[var(--app-text-muted)]={secondaryView !== 'communications'}
@@ -285,19 +285,19 @@
                   </span>
                   <div class="min-w-0">
                     <div class="flex min-w-0 items-start gap-2">
-                      <strong class="min-w-0 flex-1 text-[10px] font-semibold leading-4 text-[var(--app-text)]">{activityTitle(event)}</strong>
-                      <span class="shrink-0 text-[8px] text-[var(--app-text-muted)]">{elapsed(event.createdAt)}</span>
+                      <strong class="min-w-0 flex-1 text-ui-xs font-semibold leading-4 text-[var(--app-text)]">{activityTitle(event)}</strong>
+                      <span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{elapsed(event.createdAt)}</span>
                     </div>
-                    {#if event.outcome}<p class="mt-1 text-[10px] leading-4 text-[var(--app-text-soft)]">{event.outcome}</p>{/if}
-                    <div class="mt-1.5 flex min-w-0 items-center gap-1.5 text-[8px] text-[var(--app-text-muted)]">
+                    {#if event.outcome}<p class="mt-1 text-ui-xs leading-4 text-[var(--app-text-soft)]">{event.outcome}</p>{/if}
+                    <div class="mt-1.5 flex min-w-0 items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
                       <span class="rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5">{event.category}</span>
                       <span>{stateLabel(event.state)}</span>
                       {#if event.objectType}<span>·</span><span class="truncate">{event.objectType}</span>{/if}
                     </div>
                     {#if Object.keys(event.metadata).length}
-                      <details class="mt-2 text-[9px] text-[var(--app-text-muted)]">
+                      <details class="mt-2 text-ui-xs text-[var(--app-text-muted)]">
                         <summary class="cursor-pointer select-none hover:text-[var(--app-text-soft)]">{m['control_center.raw_details']()}</summary>
-                        <pre class="mt-1 max-h-32 overflow-auto rounded-md bg-[var(--app-canvas)] p-2 font-mono text-[8px] leading-4 text-[var(--app-text-soft)]">{JSON.stringify(event.metadata, null, 2)}</pre>
+                        <pre class="mt-1 max-h-32 overflow-auto rounded-md bg-[var(--app-canvas)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-text-soft)]">{JSON.stringify(event.metadata, null, 2)}</pre>
                       </details>
                     {/if}
                   </div>
@@ -317,12 +317,12 @@
                   {#if thread.state === 'replied'}<Check size={13} class="shrink-0 text-[var(--app-success)]" />
                   {:else if thread.state === 'failed'}<AlertCircle size={13} class="shrink-0 text-[var(--app-danger)]" />
                   {:else}<MessageSquareMore size={13} class="shrink-0 text-[var(--app-accent)]" />{/if}
-                  <span class="truncate text-[10px] font-semibold text-[var(--app-text)]">{sender(thread)} → {thread.toTitle}</span>
-                  <span class={`ml-auto shrink-0 rounded-[3px] px-1.5 py-0.5 text-[8px] font-semibold uppercase ${thread.state === 'failed' ? 'bg-[color-mix(in_srgb,var(--app-danger)_14%,transparent)] text-[var(--app-danger)]' : 'bg-[var(--app-surface-raised)] text-[var(--app-text-muted)]'}`}>{deliveryLabel(thread.state)}</span>
+                  <span class="truncate text-ui-xs font-semibold text-[var(--app-text)]">{sender(thread)} → {thread.toTitle}</span>
+                  <span class={`ml-auto shrink-0 rounded-[3px] px-1.5 py-0.5 text-ui-xs font-semibold uppercase ${thread.state === 'failed' ? 'bg-[color-mix(in_srgb,var(--app-danger)_14%,transparent)] text-[var(--app-danger)]' : 'bg-[var(--app-surface-raised)] text-[var(--app-text-muted)]'}`}>{deliveryLabel(thread.state)}</span>
                 </div>
-                <p class="mt-2 line-clamp-2 text-[10px] leading-4 text-[var(--app-text-soft)]">{thread.content}</p>
-                {#if thread.reply}<p class="mt-2 border-l-2 border-[var(--app-success)] pl-2 text-[10px] leading-4 text-[var(--app-text-muted)]">{thread.reply}</p>{/if}
-                {#if thread.error}<p class="mt-2 text-[9px] text-[var(--app-danger)]">{thread.error}</p>{/if}
+                <p class="mt-2 line-clamp-2 text-ui-xs leading-4 text-[var(--app-text-soft)]">{thread.content}</p>
+                {#if thread.reply}<p class="mt-2 border-l-2 border-[var(--app-success)] pl-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{thread.reply}</p>{/if}
+                {#if thread.error}<p class="mt-2 text-ui-xs text-[var(--app-danger)]">{thread.error}</p>{/if}
                 <div class="mt-2 flex items-center gap-1" aria-label={m['control_center.delivery_history']()}>
                   {#each thread.events as deliveryEvent, index (deliveryEvent.id)}
                     <Tooltip.Root>
@@ -333,7 +333,7 @@
                     </Tooltip.Root>
                     {#if index < thread.events.length - 1}<span class="h-px w-3 bg-[var(--app-border-strong)]"></span>{/if}
                   {/each}
-                  <span class="ml-auto text-[8px] tabular-nums text-[var(--app-text-muted)]">#{thread.messageId.slice(0, 8)}</span>
+                  <span class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]">#{thread.messageId.slice(0, 8)}</span>
                 </div>
               </article>
             {/each}

@@ -173,9 +173,9 @@
 
 <div class="flex h-full min-h-0 flex-col overflow-hidden rounded border border-[var(--app-border)] bg-[var(--app-canvas)] shadow-sm transition-colors focus-within:border-[var(--app-accent)] focus-within:ring-1 focus-within:ring-[var(--app-accent)]/20">
   <div class="flex h-8 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
-    <span class="flex min-w-0 items-center gap-1.5 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]"><Braces size={11} /><span class="truncate">{label}</span><span class="rounded bg-[var(--app-surface-raised)] px-1.5 py-0.5 font-mono text-[8px]">{language}</span></span>
+    <span class="flex min-w-0 items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Braces size={11} /><span class="truncate">{label}</span><span class="rounded bg-[var(--app-surface-raised)] px-1.5 py-0.5 font-mono text-ui-xs">{language}</span></span>
     <div class="flex items-center gap-1">
-      {#if formatError}<span class="max-w-52 truncate text-[9px] text-[var(--app-danger)]" title={formatError}><AlertCircle size={11} class="inline" /> {formatError}</span>{/if}
+      {#if formatError}<span class="max-w-52 truncate text-ui-xs text-[var(--app-danger)]" title={formatError}><AlertCircle size={11} class="inline" /> {formatError}</span>{/if}
       <Button size="icon-sm" variant={wrap ? 'secondary' : 'ghost'} class="size-6" title={m['api_client.toggle_wrap']()} aria-label={m['api_client.toggle_wrap']()} onclick={toggleWrap}><WrapText size={12} /></Button>
       {#if language !== 'text'}<Button size="icon-sm" variant="ghost" class="size-6" disabled={formatting} title={m['api_client.format_code']()} aria-label={m['api_client.format_code']()} onclick={() => void formatCode()}>{#if formatted}<Check size={12} />{:else}<WandSparkles size={12} />{/if}</Button>{/if}
     </div>

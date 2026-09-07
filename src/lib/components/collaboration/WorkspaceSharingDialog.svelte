@@ -614,7 +614,7 @@
               >{m[
                 "collaboration.tab_access"
               ]()}{#if pendingDevices.length}<Badge
-                  class="h-4 min-w-4 px-1 text-[9px]"
+                  class="h-4 min-w-4 px-1 text-ui-xs"
                   >{pendingDevices.length}</Badge
                 >{/if}</Tabs.Trigger
             >
@@ -636,10 +636,10 @@
                   {m["collaboration.invite_help"]()}
                 </p>
                 <div class="mt-4 grid grid-cols-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-1" role="tablist" aria-label={m["collaboration.invite_target"]()}>
-                  <button type="button" role="tab" aria-selected={inviteTarget === "web"} class={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-[11px] font-medium transition-colors ${inviteTarget === "web" ? "bg-[var(--app-surface)] text-[var(--app-text)] shadow-sm" : "text-[var(--app-text-muted)] hover:text-[var(--app-text)]"}`} onclick={() => { inviteTarget = "web"; copied = false; void renderQr(); }}><MonitorSmartphone size={14} />{m["collaboration.invite_web"]()}</button>
-                  <button type="button" role="tab" aria-selected={inviteTarget === "app"} class={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-[11px] font-medium transition-colors ${inviteTarget === "app" ? "bg-[var(--app-surface)] text-[var(--app-text)] shadow-sm" : "text-[var(--app-text-muted)] hover:text-[var(--app-text)]"}`} onclick={() => { inviteTarget = "app"; copied = false; void renderQr(); }}><AppWindow size={14} />{m["collaboration.invite_app"]()}</button>
+                  <button type="button" role="tab" aria-selected={inviteTarget === "web"} class={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-ui-sm font-medium transition-colors ${inviteTarget === "web" ? "bg-[var(--app-surface)] text-[var(--app-text)] shadow-sm" : "text-[var(--app-text-muted)] hover:text-[var(--app-text)]"}`} onclick={() => { inviteTarget = "web"; copied = false; void renderQr(); }}><MonitorSmartphone size={14} />{m["collaboration.invite_web"]()}</button>
+                  <button type="button" role="tab" aria-selected={inviteTarget === "app"} class={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-ui-sm font-medium transition-colors ${inviteTarget === "app" ? "bg-[var(--app-surface)] text-[var(--app-text)] shadow-sm" : "text-[var(--app-text-muted)] hover:text-[var(--app-text)]"}`} onclick={() => { inviteTarget = "app"; copied = false; void renderQr(); }}><AppWindow size={14} />{m["collaboration.invite_app"]()}</button>
                 </div>
-                <p class="mt-2 text-[10px] leading-4 text-[var(--app-text-muted)]">{inviteTarget === "web" ? m["collaboration.invite_web_help"]() : m["collaboration.invite_app_help"]()}</p>
+                <p class="mt-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{inviteTarget === "web" ? m["collaboration.invite_web_help"]() : m["collaboration.invite_app_help"]()}</p>
                 <div
                   class="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-3 text-xs"
                 >
@@ -662,7 +662,7 @@
                     <Input
                       readonly
                       value={selectedInviteUri}
-                      class="min-w-0 font-mono text-[11px]"
+                      class="min-w-0 font-mono text-ui-sm"
                     /><Button
                       variant="outline"
                       size="icon"
@@ -726,7 +726,7 @@
                     <div class="min-w-32 flex-1">
                       <p class="text-sm font-medium">{device.displayName}</p>
                       <p
-                        class="mt-0.5 font-mono text-[10px] text-[var(--app-text-muted)]"
+                        class="mt-0.5 font-mono text-ui-xs text-[var(--app-text-muted)]"
                       >
                         {device.fingerprint}
                       </p>
@@ -759,7 +759,7 @@
                           >{/each}</Select.Content
                       >
                     </Select.Root>
-                    <label class="grid min-w-40 gap-1 text-[9px] text-[var(--app-text-muted)]">
+                    <label class="grid min-w-40 gap-1 text-ui-xs text-[var(--app-text-muted)]">
                       <span>{m["collaboration.design_access"]()}</span>
                       <Select.Root type="single" value={designDrafts[device.id] ?? "inherited"} onValueChange={(value: string) => designDrafts = { ...designDrafts, [device.id]: value as DesignAccess }}>
                         <Select.Trigger size="sm"><span>{designAccessLabel(designDrafts[device.id] ?? "inherited")}</span></Select.Trigger>
@@ -767,7 +767,7 @@
                       </Select.Root>
                     </label>
                     <label
-                      class="flex min-w-40 items-center gap-2 text-[10px] text-[var(--app-text-muted)]"
+                      class="flex min-w-40 items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"
                       title={m["collaboration.terminal_access_help"]()}
                     >
                       <Switch
@@ -818,7 +818,7 @@
                         {device.displayName}
                       </p>
                       <p
-                        class="mt-0.5 text-[10px] text-[var(--app-text-muted)]"
+                        class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]"
                       >
                         {device.fingerprint}
                       </p>
@@ -849,7 +849,7 @@
                           >{/each}</Select.Content
                       ></Select.Root>
                     <label
-                      class="flex min-w-40 items-center gap-2 text-[10px] text-[var(--app-text-muted)]"
+                      class="flex min-w-40 items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"
                       title={m["collaboration.terminal_access_help"]()}
                     >
                       <Switch
@@ -898,7 +898,7 @@
                     <p class="text-xs font-medium">
                       {eventLabel(event.eventType)}
                     </p>
-                    <p class="mt-1 text-[10px] text-[var(--app-text-muted)]">
+                    <p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">
                       {new Date(event.createdAt).toLocaleString(
                         localeState.current,
                       )}

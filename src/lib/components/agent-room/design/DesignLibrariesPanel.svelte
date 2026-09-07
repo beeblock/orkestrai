@@ -160,14 +160,14 @@
   onMount(() => void load());
 </script>
 
-<div class="flex h-full min-h-0 flex-col text-[11px]">
+<div class="flex h-full min-h-0 flex-col text-ui-sm">
   <div class="space-y-2 border-b border-[var(--app-border)] p-2">
-    <div class="flex items-center justify-between"><span class="text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.publish_library']()}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.refresh_libraries']()} onclick={() => void load()}><RefreshCw size={12} class={loading ? 'animate-spin' : ''} /></Button></div>
+    <div class="flex items-center justify-between"><span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.publish_library']()}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.refresh_libraries']()} onclick={() => void load()}><RefreshCw size={12} class={loading ? 'animate-spin' : ''} /></Button></div>
     <Input bind:value={libraryName} aria-label={m['design.library_name']()} placeholder={m['design.library_name']()} />
     {#if workspaces.length > 1}
       <div class="max-h-24 space-y-1 overflow-y-auto border border-[var(--app-border)] p-1.5">
         {#each workspaces.filter((workspace) => workspace.id !== document.workspaceId) as workspace (workspace.id)}
-          <label class="flex h-6 items-center gap-2 px-1 text-[10px]"><Checkbox checked={allowedWorkspaceIds.includes(workspace.id)} onCheckedChange={(checked: boolean | 'indeterminate') => toggleWorkspace(workspace.id, checked === true)} /><span class="truncate">{workspace.name}</span></label>
+          <label class="flex h-6 items-center gap-2 px-1 text-ui-xs"><Checkbox checked={allowedWorkspaceIds.includes(workspace.id)} onCheckedChange={(checked: boolean | 'indeterminate') => toggleWorkspace(workspace.id, checked === true)} /><span class="truncate">{workspace.name}</span></label>
         {/each}
       </div>
     {/if}
@@ -175,14 +175,14 @@
   </div>
 
   <div class="min-h-0 flex-1 overflow-y-auto p-2">
-    <div class="mb-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['design.available_libraries']()}</div>
+    <div class="mb-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.available_libraries']()}</div>
     {#if loading}<div class="grid h-24 place-items-center"><LoaderCircle size={16} class="animate-spin text-[var(--app-accent)]" /></div>
-    {:else if !libraries.length}<div class="border border-dashed border-[var(--app-border)] p-3 text-[10px] leading-4 text-[var(--app-text-muted)]"><BookOpen size={17} class="mb-2 text-[var(--app-accent)]" />{m['design.libraries_empty']()}</div>
+    {:else if !libraries.length}<div class="border border-dashed border-[var(--app-border)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]"><BookOpen size={17} class="mb-2 text-[var(--app-accent)]" />{m['design.libraries_empty']()}</div>
     {:else}<div class="space-y-1.5">
       {#each libraries as library (library.id)}
         {@const link = document.libraryLinks.find((candidate) => candidate.id === library.id)}
         <div class="border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-2">
-          <div class="flex items-start gap-2"><BookOpen size={13} class="mt-0.5 shrink-0 text-[var(--app-accent)]" /><div class="min-w-0 flex-1"><p class="truncate font-medium text-[var(--app-text)]">{library.name}</p><p class="truncate text-[9px] text-[var(--app-text-muted)]">{library.sourceWorkspaceName} · {library.components} {m['design.components']()} · {library.variables} {m['design.tokens']()}</p></div>{#if link}<Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.detach_library']()} title={m['design.detach_library']()} onclick={() => void detachLibrary(library)}><Unlink2 size={11} /></Button>{/if}{#if library.sourceWorkspaceId === document.workspaceId && library.sourceNodeId === document.nodeId}<Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.remove_library']()} onclick={() => void removeLibrary(library)}><Trash2 size={11} /></Button>{/if}</div>
+          <div class="flex items-start gap-2"><BookOpen size={13} class="mt-0.5 shrink-0 text-[var(--app-accent)]" /><div class="min-w-0 flex-1"><p class="truncate font-medium text-[var(--app-text)]">{library.name}</p><p class="truncate text-ui-xs text-[var(--app-text-muted)]">{library.sourceWorkspaceName} · {library.components} {m['design.components']()} · {library.variables} {m['design.tokens']()}</p></div>{#if link}<Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.detach_library']()} title={m['design.detach_library']()} onclick={() => void detachLibrary(library)}><Unlink2 size={11} /></Button>{/if}{#if library.sourceWorkspaceId === document.workspaceId && library.sourceNodeId === document.nodeId}<Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.remove_library']()} onclick={() => void removeLibrary(library)}><Trash2 size={11} /></Button>{/if}</div>
           {#if library.sourceNodeId !== document.nodeId}<Button class="mt-2 w-full" variant={link ? 'outline' : 'secondary'} size="sm" disabled={busyId === library.id || Boolean(link && link.sourceRevision >= library.sourceRevision)} onclick={() => void importLibrary(library)}>{#if busyId === library.id}<LoaderCircle size={12} class="animate-spin" />{:else if link}<RefreshCw size={12} />{:else}<Download size={12} />{/if}{link ? (link.sourceRevision >= library.sourceRevision ? m['design.library_current']() : m['design.sync_library']()) : m['design.import_library']()}</Button>{/if}
         </div>
       {/each}

@@ -125,6 +125,50 @@ describe('DesignReviewService', () => {
     expect((await workspaceRepository.getNode(node.id))?.payload).toMatchObject({
       visualReview: { status: 'approved', revision: commented.revision },
     });
+
+    const guideId = uuidv7();
+    const guided = await designDocumentService.apply(new ApplyDesignOperationsDto(
+      workspace.id,
+      node.id,
+      commented.revision,
+      [
+        designOperationSchema.parse({ kind: 'add-guide', guide: { id: guideId, axis: 'x', position: 120 } }),
+        designOperationSchema.parse({ kind: 'update-guide', guideId, position: 180 }),
+        designOperationSchema.parse({ kind: 'delete-guide', guideId }),
+      ],
+      { kind: 'agent', id: 'designer', name: 'Designer', taskId: null },
+      'Adjust ruler guides',
+    ));
+    expect((await workspaceRepository.getNode(node.id))?.payload).toMatchObject({
+      visualReview: { status: 'approved', revision: guided.revision },
+    });
+
+    const repositioned = await designDocumentService.apply(new ApplyDesignOperationsDto(
+      workspace.id,
+      node.id,
+      guided.revision,
+      [designOperationSchema.parse({
+        kind: 'create',
+        element: {
+          pageId: initial.activePageId,
+          parentId: null,
+          type: 'rectangle',
+          name: 'Post approval block',
+          x: 400,
+          y: 400,
+          width: 120,
+          height: 60,
+        },
+      })],
+      { kind: 'agent', id: 'designer', name: 'Designer', taskId: null },
+      'Change the concept after approval',
+    ));
+    // Uma operacao visual nao avanca a revisao aprovada: a aprovacao fica presa
+    // na revisao anterior e deixa de valer para o documento atual.
+    expect(repositioned.revision).toBeGreaterThan(guided.revision);
+    expect((await workspaceRepository.getNode(node.id))?.payload).toMatchObject({
+      visualReview: { status: 'approved', revision: guided.revision },
+    });
   });
 
   it('preserves review metadata written while a design revision is being persisted', async () => {

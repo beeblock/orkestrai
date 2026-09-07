@@ -5,6 +5,76 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.27.0 - 2026-09-07
+
+### Added
+
+- The Design canvas now reads as a canvas: the ground carries a dot grid that
+  scrolls with the content, the artboard sits on it with real elevation instead
+  of lying flat, and the native scrollbars no longer cross the drawing surface.
+- Selecting several layers now draws a single bounding box around the whole
+  selection instead of leaving loose outlines with nothing tying them together.
+- Resizing a layer shows a live width by height readout and rotating one shows a
+  live angle, both following the pointer.
+- The light theme now has a real definition in CSS, and the app restores the
+  chosen theme before the first paint, so pages that render on the server no
+  longer flash the default palette on their way in.
+- The design system gained an elevation scale, a dense UI type scale, and ten
+  colour tokens that the interface referenced but nobody had ever defined.
+
+### Fixed
+
+- The built-in marketing and mobile Design templates no longer start with
+  headline text clipped by undersized text boxes; template tests now audit all
+  official presets for text clipping.
+- Rapid Canvas and Workbench node setting changes are now applied optimistically
+  and persisted in order per node, so a component remount or an earlier save
+  response cannot restore stale values over a field that is still being edited.
+- The hover outline of the layer under the cursor leaked into every exported
+  SVG, PNG, JPEG, WebP and PDF, into the document thumbnail, and into the
+  reference image that visual comparison uses to gate design approval. Editor
+  chrome is now removed through a single shared list covered by a test that
+  fails when a new marker is left unclassified.
+- Moving, adding or deleting a ruler guide silently invalidated a human visual
+  design approval. Guides are editor aids and are now review-neutral.
+- Selection and hover outlines were drawn inside the layer's own group, so they
+  inherited its opacity, blend mode, filter and clipping: selecting a layer at
+  20 percent opacity produced an outline at 20 percent, and a clipped child had
+  its outline cut off at the frame edge. Editor chrome now lives in its own
+  layer above the artwork.
+- Frame names were drawn in document units, so they shrank to a few pixels when
+  zoomed out and grew oversized when zoomed in. They now keep a constant size.
+- Twelve inspector dropdowns sized themselves to their longest option, leaving
+  ragged two-column grids across Size, Typography, Auto layout and Constraints.
+- Inspector sections that start collapsed no longer flash open on every mount.
+- Every canvas node had its body corners rounded more than the frame around it,
+  clipping the border hairline at the bottom of all seventeen node types.
+- Node header commands keep their clicks isolated from the canvas after their
+  shared button migration, so running an action cannot also interact with the
+  canvas underneath it.
+- The shape node resized in the flow library's default blue instead of the theme
+  accent, its selected state was styled by a rule that matched nothing, and its
+  arrow anchors resolved to a near-black colour that made them invisible.
+- Provider marks kept a fixed dark plate that made white logos disappear, or a
+  light plate that did the same to them, depending on the theme. They now share
+  one plate that works in both.
+- Around five hundred interface labels were set at eight or nine pixels,
+  including the terminal attention badge.
+
+### Changed
+
+- The Design inspector now follows the order the work actually needs: Position,
+  Size, Auto layout, Constraints, Appearance, Fill, Stroke, Effects. Auto layout
+  and Constraints used to sit below Typography, at the very bottom.
+- The Design editor sets an eleven-pixel base, so panels no longer mix six text
+  sizes in one column.
+- The canvas minimap now carries each node type's accent colour instead of one
+  flat grey, and can be panned and zoomed.
+- Node header buttons come from a single component, so icon size and tooltip
+  placement stay consistent across every node.
+- Removed 1038 lines of dead stylesheet left over from the retired chat layout,
+  about 80 percent of the global CSS file.
+
 ## 0.26.1 - 2026-09-07
 
 ### Fixed

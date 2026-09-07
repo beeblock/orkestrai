@@ -416,9 +416,9 @@
     </span>
     <span class="min-w-0 flex-1">
       <span class="block truncate text-xs font-medium text-[var(--app-text)]">{item.title}</span>
-      <span class="block truncate text-[10px] text-[var(--app-text-muted)]">{item.subtitle}</span>
+      <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{item.subtitle}</span>
     </span>
-    <span class="shrink-0 text-[9px] text-[var(--app-text-muted)]">{kindLabel(item.kind)}</span>
+    <span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{kindLabel(item.kind)}</span>
   </Command.Item>
 {/snippet}
 
@@ -492,7 +492,7 @@
           </span>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold text-[var(--app-text)]">{selectedItem.title}</p>
-            <p class="mt-0.5 truncate text-[10px] text-[var(--app-text-muted)]">{selectedItem.subtitle}</p>
+            <p class="mt-0.5 truncate text-ui-xs text-[var(--app-text-muted)]">{selectedItem.subtitle}</p>
           </div>
           <Tooltip.Root>
             <Tooltip.Trigger>
@@ -540,7 +540,7 @@
           </div>
         </div>
       {/if}
-      <p class="mt-3 border-t border-[var(--app-border)] pt-3 text-[9px] leading-4 text-[var(--app-text-muted)]">
+      <p class="mt-3 border-t border-[var(--app-border)] pt-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">
         {m['global_search.hint']()}
       </p>
     </aside>

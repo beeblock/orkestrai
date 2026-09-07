@@ -7,7 +7,7 @@
   <title>{page.status} — Error</title>
 </svelte:head>
 
-<div class="flex items-center justify-center min-h-[calc(100vh-200px)] px-4">
+<div class="flex items-center justify-center min-h-screen px-4">
   <div class="text-center max-w-md">
     <h1 class="text-7xl font-bold text-muted mb-4">{page.status}</h1>
     <p class="text-xl font-semibold text-foreground mb-2">

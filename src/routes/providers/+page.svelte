@@ -261,7 +261,7 @@
         {@const command = installCommand(provider)}
         <article class="provider-row" class:available={provider.installed}>
           <div class="provider-main">
-            <span class="provider-icon">
+            <span class="provider-icon app-logo-plate">
               {#if providerIcons[provider.id]}
                 <img src={providerIcons[provider.id]} width="20" height="20" alt="" />
               {:else}
@@ -461,7 +461,7 @@
     min-height: 100dvh;
     padding: 20px clamp(20px, 4vw, 64px) 64px;
     background: var(--app-page);
-    color: var(--copy);
+    color: var(--app-text);
   }
 
   .page-header {
@@ -471,12 +471,12 @@
     display: flex;
     align-items: center;
     gap: 18px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--app-border);
   }
 
   .header-titles { min-width: 0; }
   .header-titles h1 { margin: 0; font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif; font-size: 22px; font-weight: 650; }
-  .header-titles p { margin: 5px 0 0; color: var(--copy-muted); font-size: 13px; line-height: 1.5; }
+  .header-titles p { margin: 5px 0 0; color: var(--app-text-muted); font-size: 13px; line-height: 1.5; }
   .header-spacer { flex: 1; }
 
   .overview {
@@ -487,9 +487,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 18px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--app-border);
     border-radius: 8px;
-    background: var(--surface-subtle);
+    background: var(--app-surface-subtle);
   }
 
   .overview-copy { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -503,61 +503,61 @@
   }
   .overview-icon { width: 36px; height: 36px; border-radius: 7px; }
   .overview strong { font-size: 13px; }
-  .overview p { margin: 3px 0 0; color: var(--copy-muted); font-size: 11.5px; }
+  .overview p { margin: 3px 0 0; color: var(--app-text-muted); font-size: 12px; }
 
-  .filters { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: var(--app-surface-subtle); }
-  .filters button { min-height: 30px; padding: 0 11px; border: 0; border-radius: 5px; background: transparent; color: var(--copy-muted); font: inherit; font-size: 11.5px; cursor: pointer; }
-  .filters button:hover { color: var(--copy); }
+  .filters { display: inline-flex; padding: 3px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-subtle); }
+  .filters button { min-height: 30px; padding: 0 11px; border: 0; border-radius: 5px; background: transparent; color: var(--app-text-muted); font: inherit; font-size: 12px; cursor: pointer; }
+  .filters button:hover { color: var(--app-text); }
   .filters button.active { background: var(--app-accent-soft); color: var(--app-accent); }
 
   .provider-list { width: min(1100px, 100%); margin: 0 auto; display: grid; gap: 9px; }
-  .provider-row { border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 82%, transparent); overflow: hidden; transition: border-color 140ms ease, background-color 140ms ease; }
-  .provider-row:hover { border-color: var(--line-strong); background: var(--surface); }
-  .provider-row.available { border-color: color-mix(in srgb, var(--app-success) 36%, var(--line)); }
-  .provider-main { min-height: 126px; padding: 18px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 14px; }
-  .provider-icon { width: 38px; height: 38px; border-radius: 7px; background: #20242c; }
+  .provider-row { border: 1px solid var(--app-border); border-radius: 8px; background: color-mix(in srgb, var(--app-surface) 82%, transparent); overflow: hidden; transition: border-color 140ms ease, background-color 140ms ease; }
+  .provider-row:hover { border-color: var(--app-border-strong); background: var(--app-surface); }
+  .provider-row.available { border-color: color-mix(in srgb, var(--app-success) 36%, var(--app-border)); }
+  .provider-main { min-height: 108px; padding: 14px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 14px; }
+  .provider-icon { width: 38px; height: 38px; border-radius: 7px; background: var(--app-logo-plate); }
   .provider-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
   .provider-copy h2 { margin: 0; font-size: 15px; font-weight: 650; }
-  .provider-copy > p { max-width: 680px; margin: 7px 0 0; color: var(--copy-soft); font-size: 12.5px; line-height: 1.55; }
-  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--app-warning) 12%, transparent); color: var(--app-warning); font-size: 10.5px; font-weight: 600; }
+  .provider-copy > p { max-width: 680px; margin: 7px 0 0; color: var(--app-text-soft); font-size: 12px; line-height: 1.55; }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--app-warning) 12%, transparent); color: var(--app-warning); font-size: 10px; font-weight: 600; }
   .status-badge.ready { background: color-mix(in srgb, var(--app-success) 12%, transparent); color: var(--app-success); }
   .provider-status-line { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; color: var(--app-success); font-size: 11px; font-weight: 600; text-decoration: none; }
   .provider-status-line:hover { text-decoration: underline; }
   .provider-status-line.status-minor { color: var(--app-warning); }
   .provider-status-line.status-major, .provider-status-line.status-critical { color: var(--app-danger); }
-  .provider-status-line.status-unavailable { color: var(--copy-muted); }
+  .provider-status-line.status-unavailable { color: var(--app-text-muted); }
   .capabilities { min-height: 24px; margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .capabilities span { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 5px; background: var(--app-surface-raised); color: var(--copy-muted); font-size: 10.5px; }
+  .capabilities span { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 5px; background: var(--app-surface-raised); color: var(--app-text-muted); font-size: 10px; }
   .capabilities .version { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .provider-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 
-  .setup-panel { position: relative; padding: 18px 18px 18px 70px; border-top: 1px solid var(--line); background: var(--app-surface-subtle); display: grid; gap: 15px; }
+  .setup-panel { position: relative; padding: 18px 18px 18px 70px; border-top: 1px solid var(--app-border); background: var(--app-surface-subtle); display: grid; gap: 15px; }
   .setup-step { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
   .step-icon { width: 28px; height: 28px; border-radius: 6px; }
   .step-copy h3 { margin: 1px 0 3px; font-size: 12px; font-weight: 650; }
-  .step-copy p { margin: 0; color: var(--copy-muted); font-size: 11.5px; line-height: 1.55; }
+  .step-copy p { margin: 0; color: var(--app-text-muted); font-size: 12px; line-height: 1.55; }
   .setup-note { margin-top: 7px !important; color: var(--app-accent) !important; }
-  .command-row { max-width: 700px; margin-top: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--app-page); overflow: hidden; }
+  .command-row { max-width: 700px; margin-top: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 34px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-page); overflow: hidden; }
   .command-row code { padding: 9px 11px; overflow-x: auto; color: var(--app-text-soft); font-size: 11px; white-space: nowrap; }
-  .command-row button { border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--copy-muted); cursor: pointer; }
+  .command-row button { border: 0; border-left: 1px solid var(--app-border); background: transparent; color: var(--app-text-muted); cursor: pointer; }
   .command-row button:hover { color: var(--app-accent); background: var(--app-accent-soft); }
-  .guide-link { position: absolute; right: 18px; bottom: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--app-accent); font-size: 11.5px; font-weight: 600; text-decoration: none; }
+  .guide-link { position: absolute; right: 18px; bottom: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--app-accent); font-size: 12px; font-weight: 600; text-decoration: none; }
   .guide-link:hover { color: var(--app-accent); }
 
-  .profiles-step { padding-top: 3px; border-top: 1px dashed var(--line); }
+  .profiles-step { padding-top: 3px; border-top: 1px dashed var(--app-border); }
   .profile-list { display: grid; gap: 6px; margin: 9px 0; padding: 0; list-style: none; }
-  .profile-list li { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--app-page); }
-  .profile-list .profile-empty { color: var(--copy-muted); font-size: 11.5px; border-style: dashed; }
+  .profile-list li { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-page); }
+  .profile-list .profile-empty { color: var(--app-text-muted); font-size: 12px; border-style: dashed; }
   .profile-name { font-weight: 600; font-size: 12px; }
-  .profile-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--copy-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
-  .profile-remove { flex: 0 0 auto; border: 0; background: transparent; color: var(--copy-muted); cursor: pointer; }
+  .profile-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  .profile-remove { flex: 0 0 auto; border: 0; background: transparent; color: var(--app-text-muted); cursor: pointer; }
   .profile-remove:hover { color: var(--app-danger, #d94b4b); }
   .profile-form { display: grid; gap: 7px; max-width: 420px; margin-top: 8px; }
-  .profile-form input { min-height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--copy); font: inherit; font-size: 12px; }
-  .profile-form-error { margin: 0; color: var(--app-danger, #d94b4b); font-size: 11.5px; }
+  .profile-form input { min-height: 32px; padding: 0 9px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface); color: var(--app-text); font: inherit; font-size: 12px; }
+  .profile-form-error { margin: 0; color: var(--app-danger, #d94b4b); font-size: 12px; }
   .profile-form-actions { display: flex; gap: 8px; }
 
-  .empty-state { width: min(1100px, 100%); min-height: 180px; margin: 0 auto; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--line); border-radius: 8px; color: var(--copy-muted); }
+  .empty-state { width: min(1100px, 100%); min-height: 180px; margin: 0 auto; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--app-border); border-radius: 8px; color: var(--app-text-muted); }
   .empty-state p { margin: 0; font-size: 12px; }
   :global(.provider-refresh-spin) { animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }

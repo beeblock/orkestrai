@@ -130,9 +130,33 @@
     return updated;
   }
 
+  let payloadPatchQueue: Promise<void> = Promise.resolve();
+  let payloadPatchVersion = 0;
+
+  function stagePayload(targetId: string, partial: Record<string, unknown>): void {
+    const target = workspaceNodes.find((item) => item.id === targetId) ?? node;
+    onNodeUpdated({
+      ...target,
+      payload: { ...(target.payload as Record<string, unknown>), ...partial },
+    });
+  }
+
   async function patchPayload(targetId: string, partial: Record<string, unknown>) {
     const target = workspaceNodes.find((item) => item.id === targetId) ?? node;
-    await patchNode(targetId, { payload: { ...(target.payload as Record<string, unknown>), ...partial } });
+    const payload = { ...(target.payload as Record<string, unknown>), ...partial };
+    const version = ++payloadPatchVersion;
+    onNodeUpdated({ ...target, payload });
+    payloadPatchQueue = payloadPatchQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const updated = await api<CanvasNode>(`/api/agent-room/workspaces/${workspace.id}/nodes/${targetId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ payload }),
+        });
+        // Do not let an older response replace a newer optimistic edit.
+        if (version === payloadPatchVersion) onNodeUpdated(updated);
+      });
+    await payloadPatchQueue;
   }
 
   async function changeProvider(targetId: string, provider: string, profileId?: string | null, profileLabel?: string | null) {
@@ -240,6 +264,7 @@
         onOpenFile,
         onUrlChange: (id: string, url: string) => patchPayload(id, { url }),
         onRename: (id: string, title: string) => patchNode(id, { title }),
+        onPayloadDraftChange: (id: string, partial: Record<string, unknown>) => stagePayload(id, partial),
         onPayloadChange: (id: string, partial: Record<string, unknown>) => patchPayload(id, partial),
       },
     }];

@@ -253,10 +253,10 @@
             <legend class="text-sm font-medium">{m['design.exploration_execution']()}</legend>
             <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={m['design.exploration_execution']()}>
               <button type="button" role="radio" aria-checked={$formData.executionMode === 'manual'} class={$formData.executionMode === 'manual' ? 'flex min-h-20 items-start gap-3 rounded-md border border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : 'flex min-h-20 items-start gap-3 rounded-md border border-border bg-transparent p-3 text-left transition-[background-color,border-color] hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'} onclick={() => selectExecution('manual')}>
-                <UserRound size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><span><strong class="block text-xs">{m['design.exploration_manual']()}</strong><span class="mt-1 block text-[11px] leading-4 text-muted-foreground">{m['design.exploration_manual_hint']()}</span></span>
+                <UserRound size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><span><strong class="block text-xs">{m['design.exploration_manual']()}</strong><span class="mt-1 block text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_manual_hint']()}</span></span>
               </button>
               <button type="button" role="radio" aria-checked={$formData.executionMode === 'leader'} disabled={!leader} class={$formData.executionMode === 'leader' ? 'flex min-h-20 items-start gap-3 rounded-md border border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : 'flex min-h-20 items-start gap-3 rounded-md border border-border bg-transparent p-3 text-left transition-[background-color,border-color] hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45'} onclick={() => selectExecution('leader')}>
-                <Users size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><span><strong class="block text-xs">{m['design.exploration_leader']()}</strong><span class="mt-1 block text-[11px] leading-4 text-muted-foreground">{leader ? m['design.exploration_leader_hint']({ leader: leader.title, provider: leader.provider }) : m['design.exploration_no_leader']()}</span></span>
+                <Users size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><span><strong class="block text-xs">{m['design.exploration_leader']()}</strong><span class="mt-1 block text-ui-sm leading-4 text-muted-foreground">{leader ? m['design.exploration_leader_hint']({ leader: leader.title, provider: leader.provider }) : m['design.exploration_no_leader']()}</span></span>
               </button>
             </div>
           </fieldset>
@@ -268,15 +268,15 @@
           <section>
             <h3 class="text-xs font-semibold uppercase text-muted-foreground">{m['design.exploration_directions']()}</h3>
             <div class="mt-3 divide-y divide-border/70 border-y border-border/70">
-              <div class="flex gap-3 py-3"><ScanLine size={16} class="mt-0.5 shrink-0 text-[var(--app-info)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_clarity']()}</strong><p class="mt-1 text-[11px] leading-4 text-muted-foreground">{m['design.exploration_direction_clarity_hint']()}</p></div></div>
-              <div class="flex gap-3 py-3"><Sparkles size={16} class="mt-0.5 shrink-0 text-[var(--app-accent)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_expressive']()}</strong><p class="mt-1 text-[11px] leading-4 text-muted-foreground">{m['design.exploration_direction_expressive_hint']()}</p></div></div>
-              <div class="flex gap-3 py-3"><Gauge size={16} class="mt-0.5 shrink-0 text-[var(--app-success)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_efficient']()}</strong><p class="mt-1 text-[11px] leading-4 text-muted-foreground">{m['design.exploration_direction_efficient_hint']()}</p></div></div>
+              <div class="flex gap-3 py-3"><ScanLine size={16} class="mt-0.5 shrink-0 text-[var(--app-info)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_clarity']()}</strong><p class="mt-1 text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_direction_clarity_hint']()}</p></div></div>
+              <div class="flex gap-3 py-3"><Sparkles size={16} class="mt-0.5 shrink-0 text-[var(--app-accent)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_expressive']()}</strong><p class="mt-1 text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_direction_expressive_hint']()}</p></div></div>
+              <div class="flex gap-3 py-3"><Gauge size={16} class="mt-0.5 shrink-0 text-[var(--app-success)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_efficient']()}</strong><p class="mt-1 text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_direction_efficient_hint']()}</p></div></div>
             </div>
           </section>
 
           <section class="mt-5">
             <h3 class="text-xs font-semibold uppercase text-muted-foreground">{m['design.exploration_every_direction_delivers']()}</h3>
-            <ul class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[11px]">
+            <ul class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-ui-sm">
               <li class="flex items-center gap-2"><Palette size={14} aria-hidden="true" />{m['design.exploration_output_brand']()}</li>
               <li class="flex items-center gap-2"><Palette size={14} aria-hidden="true" />{m['design.exploration_output_design']()}</li>
               <li class="flex items-center gap-2"><SwatchBook size={14} aria-hidden="true" />{m['design.exploration_output_tokens']()}</li>
@@ -288,7 +288,7 @@
           </section>
 
           <section class="mt-5 border-l-2 border-[var(--app-warning)] bg-[var(--app-warning)]/6 px-3 py-2.5">
-            <div class="flex items-start gap-2"><Check size={14} class="mt-0.5 shrink-0 text-[var(--app-warning)]" aria-hidden="true" /><p class="text-[11px] leading-5">{m['design.exploration_human_gate']()}</p></div>
+            <div class="flex items-start gap-2"><Check size={14} class="mt-0.5 shrink-0 text-[var(--app-warning)]" aria-hidden="true" /><p class="text-ui-sm leading-5">{m['design.exploration_human_gate']()}</p></div>
           </section>
         </aside>
       </div>

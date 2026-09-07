@@ -8,7 +8,7 @@
   import DOMPurify from 'dompurify';
   import NodeShell from './NodeShell.svelte';
   import type { NodeConnection } from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import PortalViewportToolbar from './PortalViewportToolbar.svelte';
   import { portalScriptExpression, unwrapPortalScriptResult } from './portal-script.js';
   import * as Dialog from '$lib/components/ui/dialog';
@@ -546,7 +546,7 @@
   {id}
   {selected}
   class="canvas-portal"
-  accent="#c084fc"
+  accent="var(--app-secondary)"
   minWidth={360}
   minHeight={260}
   onResize={data.onResize}
@@ -575,18 +575,20 @@
     {/if}
   {/snippet}
   {#snippet actions()}
-    <IconAction label={m['portal.rename']()} disabled={editingName} onclick={startNameEdit}><Pencil size={13} /></IconAction>
-    <IconAction
+    <HeaderIconButton class="node-action-btn" label={m['portal.rename']()} disabled={editingName} onclick={startNameEdit}><Pencil size={13} /></HeaderIconButton>
+    <HeaderIconButton
+      class="node-action-btn"
       label={deviceToolbarOpen ? m['portal.device_toolbar_hide']() : m['portal.device_toolbar_show']()}
       active={deviceToolbarOpen || viewport !== null}
       onclick={() => (deviceToolbarOpen = !deviceToolbarOpen)}
-    ><Smartphone size={13} /></IconAction>
-    <IconAction
+    ><Smartphone size={13} /></HeaderIconButton>
+    <HeaderIconButton
+      class="node-action-btn"
       label={isDesktop ? (inspecting ? m['portal.design_cancel']() : m['portal.design_inspect']()) : m['portal.design_desktop_only']()}
       active={inspecting}
       onclick={() => void startInspection()}
-    ><MousePointer2 size={13} /></IconAction>
-    <IconAction label={m['portal.close']()} danger onclick={() => void closePortal()}><X size={13} /></IconAction>
+    ><MousePointer2 size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['portal.close']()} danger onclick={() => void closePortal()}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   <div class="portal-body nodrag nowheel" class:inspecting>
@@ -599,7 +601,7 @@
         spellcheck="false"
         aria-label={m['portal.address']()}
       />
-      <IconAction label={m['portal.navigate']()} disabled={inspecting} onclick={() => void navigate()}><ArrowRight size={14} /></IconAction>
+      <HeaderIconButton class="node-action-btn" label={m['portal.navigate']()} disabled={inspecting} onclick={() => void navigate()}><ArrowRight size={14} /></HeaderIconButton>
     </div>
     {#if deviceToolbarOpen}
       <PortalViewportToolbar {viewport} onchange={setViewport} />
@@ -668,13 +670,13 @@
           <div class="flex h-full min-h-0 flex-col">
             <div class="mb-3 flex min-w-0 items-center gap-2">
               <Badge variant="secondary">&lt;{capture.tagName}&gt;</Badge>
-              <code class="min-w-0 flex-1 truncate text-[11px] text-[var(--app-text-muted)]" title={capture.selector}>{capture.selector}</code>
-              <span class="shrink-0 text-[10px] tabular-nums text-[var(--app-text-muted)]">{Math.round(capture.rect.width)} × {Math.round(capture.rect.height)}</span>
+              <code class="min-w-0 flex-1 truncate text-ui-sm text-[var(--app-text-muted)]" title={capture.selector}>{capture.selector}</code>
+              <span class="shrink-0 text-ui-xs tabular-nums text-[var(--app-text-muted)]">{Math.round(capture.rect.width)} × {Math.round(capture.rect.height)}</span>
             </div>
             <div class="flex min-h-[220px] flex-1 items-center justify-center overflow-hidden border border-[var(--app-border)] bg-[linear-gradient(45deg,var(--app-surface)_25%,transparent_25%),linear-gradient(-45deg,var(--app-surface)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,var(--app-surface)_75%),linear-gradient(-45deg,transparent_75%,var(--app-surface)_75%)] bg-[length:18px_18px] bg-[position:0_0,0_9px,9px_-9px,-9px_0] p-4">
               <img src={screenshotDataUrl} alt={m['portal.design_screenshot_alt']()} class="max-h-full max-w-full object-contain shadow-sm ring-1 ring-black/10" />
             </div>
-            <div class="mt-3 grid gap-2 text-[11px] text-[var(--app-text-muted)] sm:grid-cols-2">
+            <div class="mt-3 grid gap-2 text-ui-sm text-[var(--app-text-muted)] sm:grid-cols-2">
               <div><span class="font-medium text-[var(--app-text)]">{m['portal.design_page']()}</span><br />{capture.page.title || capture.page.origin}<br /><code>{capture.page.origin}{capture.page.path}</code></div>
               <div><span class="font-medium text-[var(--app-text)]">{m['portal.design_viewport']()}</span><br />{capture.viewport.width} × {capture.viewport.height} @ {capture.viewport.deviceScaleFactor}x<br />{capture.styles.fontSize} · {capture.styles.fontWeight}</div>
             </div>
@@ -690,7 +692,7 @@
                 {@html sanitizedElementHtml}
               </div>
               {#if capture.text}
-                <p class="mt-2 line-clamp-4 whitespace-pre-wrap text-[11px] leading-4 text-[var(--app-text-muted)]">{capture.text}</p>
+                <p class="mt-2 line-clamp-4 whitespace-pre-wrap text-ui-sm leading-4 text-[var(--app-text-muted)]">{capture.text}</p>
               {/if}
             </div>
 
@@ -724,13 +726,13 @@
                 {/if}
               </NativeSelect.Root>
               {#if destinationKind === 'agent'}
-                <p class="mt-1.5 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['portal.design_agent_traceability']()}</p>
+                <p class="mt-1.5 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['portal.design_agent_traceability']()}</p>
               {:else if destinationId === NEW_TASK_DESTINATION}
-                <p class="mt-1.5 text-[10px] leading-4 text-[var(--app-text-muted)]">{m['portal.design_triage_hint']()}</p>
+                <p class="mt-1.5 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['portal.design_triage_hint']()}</p>
               {/if}
             </fieldset>
 
-            <div class="border-l-2 border-[var(--app-border-strong)] pl-3 text-[10px] leading-4 text-[var(--app-text-muted)]">
+            <div class="border-l-2 border-[var(--app-border-strong)] pl-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">
               {m['portal.design_privacy_note']()}
             </div>
 

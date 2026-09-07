@@ -274,7 +274,7 @@
         {@const meta = usageProviderDefinition(provider.provider)}
         <section class="provider-row">
           <div class="provider-head">
-            {#if meta.icon}<img src={meta.icon} width="18" height="18" alt="" />{:else}<Bot size={18} aria-hidden="true" />{/if}
+            {#if meta.icon}<img class="app-logo-plate" src={meta.icon} width="18" height="18" alt="" />{:else}<Bot size={18} aria-hidden="true" />{/if}
             <strong>{meta.name}{#if provider.profileName} · {provider.profileName}{/if}</strong>
             {#if provider.plan}<span class="plan">{provider.plan}</span>{/if}
             <span class="status" style:color={statusColor(provider.status)}>{statusLabel(provider.status)}</span>
@@ -392,7 +392,10 @@
     box-sizing: content-box;
     padding: 3px;
     border-radius: 4px;
-    background: #20242c;
+    /* Placa fixa escura de proposito: os SVGs em /images sao preenchidos com
+       branco, entao um token de superficie apagaria a marca no tema claro.
+       Mesmo valor da Central de Providers (.provider-icon) e do no Terminal. */
+    background: var(--app-logo-plate);
   }
 
   .provider-head strong {

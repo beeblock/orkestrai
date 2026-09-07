@@ -34,7 +34,7 @@
   }
 </script>
 
-<div class="flex min-h-[calc(100vh-130px)]">
+<div class="flex min-h-screen">
   <aside class="w-64 border-r border-border bg-muted/50 hidden md:block">
     <div class="p-4 border-b border-border">
       <p class="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">Administration</p>

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { superForm } from 'sveltekit-superforms';
-  import { Button, Badge, Card, CardHeader, CardTitle, CardDescription, CardContent, Alert, Input, Label } from '@beeblock/svelar/ui';
+  import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent, Alert, Input, Label } from '@beeblock/svelar/ui';
+  // Badge do app (shadcn gerado): o Badge do svelar so tem pastel de tema claro.
+  import { Badge } from '$lib/components/ui/badge';
 
   let { data, form: actionData }: { data: any; form?: any } = $props();
   let users = $state<any[]>([]);
@@ -338,7 +340,7 @@
           <CardContent class="pt-6">
             <div>
               <p class="text-sm text-muted-foreground">Failed Jobs</p>
-              <p class="text-3xl font-bold text-red-600 mt-2">{queueCounts.failed}</p>
+              <p class="text-3xl font-bold text-destructive mt-2">{queueCounts.failed}</p>
             </div>
           </CardContent>
         </Card>
@@ -420,14 +422,14 @@
                   <td class="py-3 px-4">
                     <div class="flex flex-wrap gap-1">
                       {#each (userRolesMap[user.id] ?? []) as role (role.id)}
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800">
+                        <Badge variant="secondary">
                           {role.name}
                           <button
                             type="button"
-                            class="hover:text-red-600 font-bold"
+                            class="hover:text-destructive font-bold"
                             onclick={() => removeRoleFromUser(user.id, role.id)}
                           >&times;</button>
-                        </span>
+                        </Badge>
                       {/each}
                       {#if roles.length > 0}
                         <select
@@ -448,14 +450,14 @@
                   <td class="py-3 px-4">
                     <div class="flex flex-wrap gap-1">
                       {#each (userDirectPermsMap[user.id] ?? []) as perm (perm.id)}
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-800">
+                        <Badge variant="outline">
                           {perm.name}
                           <button
                             type="button"
-                            class="hover:text-red-600 font-bold"
+                            class="hover:text-destructive font-bold"
                             onclick={() => revokePermFromUser(user.id, perm.id)}
                           >&times;</button>
-                        </span>
+                        </Badge>
                       {/each}
                       {#if permissions.length > 0}
                         <select
@@ -534,7 +536,7 @@
                   aria-invalid={$createRoleErrors.name ? 'true' : undefined}
                   disabled={$creatingRole}
                 />
-                {#if $createRoleErrors.name}<p class="mt-1 text-xs text-red-600">{$createRoleErrors.name[0]}</p>{/if}
+                {#if $createRoleErrors.name}<p class="mt-1 text-xs text-destructive">{$createRoleErrors.name[0]}</p>{/if}
               </div>
               <div class="flex-1 min-w-[140px]">
                 <Label for="role-guard">Guard</Label>
@@ -556,7 +558,7 @@
                   aria-invalid={$createRoleErrors.description ? 'true' : undefined}
                   disabled={$creatingRole}
                 />
-                {#if $createRoleErrors.description}<p class="mt-1 text-xs text-red-600">{$createRoleErrors.description[0]}</p>{/if}
+                {#if $createRoleErrors.description}<p class="mt-1 text-xs text-destructive">{$createRoleErrors.description[0]}</p>{/if}
               </div>
               <Button type="submit" size="sm" disabled={$creatingRole}>{$creatingRole ? 'Creating...' : 'Create'}</Button>
             </form>
@@ -644,7 +646,7 @@
                   aria-invalid={$createPermissionErrors.name ? 'true' : undefined}
                   disabled={$creatingPermission}
                 />
-                {#if $createPermissionErrors.name}<p class="mt-1 text-xs text-red-600">{$createPermissionErrors.name[0]}</p>{/if}
+                {#if $createPermissionErrors.name}<p class="mt-1 text-xs text-destructive">{$createPermissionErrors.name[0]}</p>{/if}
               </div>
               <div class="flex-1 min-w-[140px]">
                 <Label for="perm-guard">Guard</Label>
@@ -666,7 +668,7 @@
                   aria-invalid={$createPermissionErrors.description ? 'true' : undefined}
                   disabled={$creatingPermission}
                 />
-                {#if $createPermissionErrors.description}<p class="mt-1 text-xs text-red-600">{$createPermissionErrors.description[0]}</p>{/if}
+                {#if $createPermissionErrors.description}<p class="mt-1 text-xs text-destructive">{$createPermissionErrors.description[0]}</p>{/if}
               </div>
               <Button type="submit" size="sm" disabled={$creatingPermission}>{$creatingPermission ? 'Creating...' : 'Create'}</Button>
             </form>
@@ -746,7 +748,7 @@
           <CardContent class="pt-6">
             <div>
               <p class="text-sm text-muted-foreground">Failed</p>
-              <p class="text-3xl font-bold text-red-600 mt-2">{queueCounts.failed}</p>
+              <p class="text-3xl font-bold text-destructive mt-2">{queueCounts.failed}</p>
             </div>
           </CardContent>
         </Card>

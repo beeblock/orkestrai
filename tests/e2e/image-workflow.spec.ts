@@ -54,11 +54,36 @@ test.describe('native image workflows', () => {
       await expect(node).toContainText('1 referências');
       await expect(node.getByRole('button', { name: 'Conexões' })).toContainText('2');
 
+      // Keep the first save in flight while the user edits the next field.
+      // This proves that an older payload response cannot rehydrate stale
+      // values over a newer local edit.
+      let delayedFirstSave = false;
+      await page.route(`**/api/agent-room/workspaces/${workspace.id}/nodes/${workflow.id}`, async (route) => {
+        if (!delayedFirstSave && route.request().method() === 'PATCH') {
+          delayedFirstSave = true;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        await route.continue();
+      });
+      const countPersisted = page.waitForResponse((response) => {
+        if (response.request().method() !== 'PATCH' || !response.url().endsWith(`/nodes/${workflow.id}`)) return false;
+        const body = response.request().postDataJSON() as { payload?: { count?: number } } | null;
+        return body?.payload?.count === 10;
+      });
       await node.getByRole('combobox', { name: 'Resultados' }).selectOption('10');
       await node.getByRole('switch').click();
       await expect(node.getByRole('switch')).not.toBeChecked();
-      await node.getByRole('textbox', { name: 'Pasta do workspace' }).fill('assets/generated');
-      await node.getByRole('textbox', { name: 'Pasta do workspace' }).blur();
+      const outputDirectory = node.getByRole('textbox', { name: 'Pasta do workspace' });
+      await outputDirectory.fill('assets/generated');
+      expect((await countPersisted).ok()).toBeTruthy();
+      await expect(outputDirectory).toHaveValue('assets/generated');
+      const outputDirectoryPersisted = page.waitForResponse((response) => {
+        if (response.request().method() !== 'PATCH' || !response.url().endsWith(`/nodes/${workflow.id}`)) return false;
+        const body = response.request().postDataJSON() as { payload?: { outputDirectory?: string } } | null;
+        return body?.payload?.outputDirectory === 'assets/generated';
+      });
+      await outputDirectory.blur();
+      expect((await outputDirectoryPersisted).ok()).toBeTruthy();
 
       await page.reload();
       const restored = page.locator('.canvas-image-workflow');

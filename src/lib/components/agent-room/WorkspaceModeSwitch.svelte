@@ -26,7 +26,7 @@
   }
 
   const itemClass = (selected: boolean) =>
-    `inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[11px] font-medium transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${
+    `inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-ui-sm font-medium transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${
       selected
         ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent)] shadow-sm'
         : 'text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'

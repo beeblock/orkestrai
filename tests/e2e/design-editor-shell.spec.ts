@@ -199,7 +199,10 @@ test.describe('Design editor shell', () => {
       const designViewport = page.getByTestId('design-viewport');
       const firstLayer = designViewport.locator(`[data-design-element="${elementIds[0]}"]`);
       await firstLayer.hover();
-      await expect(firstLayer.locator('[data-design-hover]')).toBeVisible();
+      // O contorno de hover vive na camada de chrome (data-design-ui), irma da
+      // arte, e nao mais dentro do <g> do elemento: dentro dele ele herdava
+      // opacity, blend, filter e clip-path da propria camada.
+      await expect(designViewport.locator(`[data-design-hover="${elementIds[0]}"]`)).toBeVisible();
       await firstLayer.click();
       await expect(page.getByRole('button', { name: /Rotate selection/ })).toBeVisible();
 

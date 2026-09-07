@@ -174,7 +174,7 @@
         >
           {#if actionable.length}<BellRing size={15} />{:else}<Bell size={15} />{/if}
           {#if actionable.length}
-            <span class="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-[color-mix(in_srgb,var(--app-danger)_75%,black)] px-1 text-[9px] font-bold leading-4 text-white">
+            <span class="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-[color-mix(in_srgb,var(--app-danger)_75%,black)] px-1 text-ui-xs font-bold leading-4 text-white">
               {actionable.length > 99 ? '99+' : actionable.length}
             </span>
           {/if}
@@ -192,7 +192,7 @@
             <BellRing size={17} class="text-[var(--app-accent)]" />
             {m['attention.title']()}
           </Sheet.Title>
-          <Sheet.Description class="mt-1 text-[11px] leading-4 text-[var(--app-text-muted)]">
+          <Sheet.Description class="mt-1 text-ui-sm leading-4 text-[var(--app-text-muted)]">
             {m['attention.description']()}
           </Sheet.Description>
         </div>
@@ -208,7 +208,7 @@
         ] as option}
           <button
             type="button"
-            class="h-7 rounded-[5px] px-2.5 text-[10px] font-medium transition-colors"
+            class="h-7 rounded-[5px] px-2.5 text-ui-xs font-medium transition-colors"
             class:bg-[var(--app-surface-raised)]={filter === option.id}
             class:text-[var(--app-text)]={filter === option.id}
             class:text-[var(--app-text-muted)]={filter !== option.id}
@@ -221,13 +221,13 @@
 
     <div class="min-h-0 flex-1 overflow-y-auto p-3">
       {#if loading && !items.length}
-        <div class="grid h-40 place-items-center text-[11px] text-[var(--app-text-muted)]">{m['attention.loading']()}</div>
+        <div class="grid h-40 place-items-center text-ui-sm text-[var(--app-text-muted)]">{m['attention.loading']()}</div>
       {:else if !visibleItems.length}
         <div class="grid h-52 place-items-center px-8 text-center">
           <div>
             <Check size={24} class="mx-auto text-[var(--app-success)]" />
-            <p class="mt-3 text-[12px] font-medium text-[var(--app-text)]">{m['attention.empty_title']()}</p>
-            <p class="mt-1 text-[11px] leading-4 text-[var(--app-text-muted)]">{m['attention.empty_body']()}</p>
+            <p class="mt-3 text-ui-md font-medium text-[var(--app-text)]">{m['attention.empty_title']()}</p>
+            <p class="mt-1 text-ui-sm leading-4 text-[var(--app-text-muted)]">{m['attention.empty_body']()}</p>
           </div>
         </div>
       {:else}
@@ -253,13 +253,13 @@
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="flex items-center gap-2">
-                    <strong class:text-clip={expanded} class:line-clamp-2={!expanded} class="min-w-0 whitespace-pre-wrap break-words text-[11px] font-semibold leading-4 text-[var(--app-text)]">{item.title}</strong>
+                    <strong class:text-clip={expanded} class:line-clamp-2={!expanded} class="min-w-0 whitespace-pre-wrap break-words text-ui-sm font-semibold leading-4 text-[var(--app-text)]">{item.title}</strong>
                     {#if item.status === 'open'}<span class="size-1.5 shrink-0 rounded-full bg-[var(--app-accent)]"></span>{/if}
                   </span>
                   {#if item.body}
-                    <span class:line-clamp-2={!expanded} class="mt-1 block whitespace-pre-wrap break-words text-[10px] leading-4 text-[var(--app-text-soft)]">{item.body}</span>
+                    <span class:line-clamp-2={!expanded} class="mt-1 block whitespace-pre-wrap break-words text-ui-xs leading-4 text-[var(--app-text-soft)]">{item.body}</span>
                   {/if}
-                  <span class="mt-2 flex min-w-0 items-center gap-1.5 text-[9px] text-[var(--app-text-muted)]">
+                  <span class="mt-2 flex min-w-0 items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
                     <span class="truncate">{item.workspaceName ?? item.workspaceId}</span>
                     {#if item.nodeTitle}<span>·</span><span class="truncate">{item.nodeTitle}</span>{/if}
                     <span>·</span><time title={dateLabel(item.updatedAt)}>{dateLabel(item.updatedAt)}</time>
@@ -269,21 +269,21 @@
               </button>
               {#if expanded && item.sourceContent && item.sourceContent.trim() !== item.title.trim()}
                 <div class="mx-3 mb-3 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2.5">
-                  <span class="text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{m['attention.original_message']()}</span>
-                  <p class="mt-1 whitespace-pre-wrap break-words text-[10px] leading-4 text-[var(--app-text-soft)]">{item.sourceContent}</p>
+                  <span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['attention.original_message']()}</span>
+                  <p class="mt-1 whitespace-pre-wrap break-words text-ui-xs leading-4 text-[var(--app-text-soft)]">{item.sourceContent}</p>
                 </div>
               {/if}
               <div class="flex items-center justify-end gap-1 border-t border-[var(--app-border)] px-2 py-1.5">
                 {#if item.actionAvailable}
-                  <Button variant="ghost" size="sm" class="mr-auto h-7 gap-1.5 px-2 text-[10px]" onclick={() => void openItem(item)}>
+                  <Button variant="ghost" size="sm" class="mr-auto h-7 gap-1.5 px-2 text-ui-xs" onclick={() => void openItem(item)}>
                     <ExternalLink size={12} />
                     {m['attention.open_source']()}
                   </Button>
                 {:else}
-                  <span class="mr-auto px-1 text-[9px] text-[var(--app-text-muted)]">{m['attention.source_unavailable']()}</span>
+                  <span class="mr-auto px-1 text-ui-xs text-[var(--app-text-muted)]">{m['attention.source_unavailable']()}</span>
                 {/if}
                 {#if item.status === 'open'}
-                  <Button variant="ghost" size="sm" class="h-7 px-2 text-[10px]" onclick={() => void act(item, 'read')}>{m['attention.mark_read']()}</Button>
+                  <Button variant="ghost" size="sm" class="h-7 px-2 text-ui-xs" onclick={() => void act(item, 'read')}>{m['attention.mark_read']()}</Button>
                 {/if}
                 <Button variant="ghost" size="icon" class="size-7" aria-label={m['attention.snooze']()} onclick={() => void act(item, 'snoozed', new Date(Date.now() + 60 * 60 * 1000).toISOString())}>
                   <Clock3 size={13} />

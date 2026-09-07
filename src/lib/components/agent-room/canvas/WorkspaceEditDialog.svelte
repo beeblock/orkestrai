@@ -495,7 +495,7 @@
             {/each}
           </div>
           {#if isLegacyEmojiIcon(typeof $formData.icon === 'string' ? $formData.icon : null)}
-            <p class="m-0 text-[11px] text-[var(--app-text-muted)]">{m['dlg.icon_legacy_hint']({ icon: $formData.icon ?? '' })}</p>
+            <p class="m-0 text-ui-sm text-[var(--app-text-muted)]">{m['dlg.icon_legacy_hint']({ icon: $formData.icon ?? '' })}</p>
           {/if}
         </div>
 
@@ -538,7 +538,7 @@
                   <span class="shrink-0 font-medium">{server.name}</span>
                   <span class="min-w-0 flex-1 truncate text-muted-foreground">{server.command} {server.args.join(' ')}</span>
                   {#if server.builtin}
-                    <span class="shrink-0 text-[10px] text-emerald-500">{m['dlg.mcp_builtin']()}</span>
+                    <span class="shrink-0 text-ui-xs text-emerald-500">{m['dlg.mcp_builtin']()}</span>
                   {:else}
                     <button type="button" class="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" aria-label={m['dlg.mcp_remove']({ name: server.name })} onclick={() => removeMcp(server.name)}>
                       <Trash2 size={12} aria-hidden="true" />

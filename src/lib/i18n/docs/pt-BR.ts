@@ -849,6 +849,22 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: '7 de setembro de 2026 · 0.27.0',
+      title: 'Orkestrai 0.27.0: o editor de Design ganha cara de ferramenta de design',
+      summary: 'A prancheta passa a se distinguir do vazio, o chrome de seleção sai de dentro da arte e a fundação visual do app ganha escalas de elevação e tipografia.',
+      items: [
+        'O canvas de Design agora tem chão: grid de pontos que acompanha o conteúdo, prancheta com elevação real e sem as barras de rolagem nativas cruzando a superfície de desenho.',
+        'Selecionar várias camadas desenha uma caixa envolvente única, e redimensionar mostra a leitura viva de largura por altura enquanto girar mostra o ângulo.',
+        'Corrigido: os templates nativos de marketing e mobile não começam mais com títulos cortados, e todos os templates oficiais agora são testados contra corte de texto.',
+        'Corrigido: alterações rápidas nas configurações dos nós no Canvas e Workbench são aplicadas de forma otimista e persistidas em ordem por nó, impedindo que a remontagem do componente ou uma resposta anterior restaure valores obsoletos sobre um campo que ainda está sendo editado.',
+        'Corrigido: comandos no cabeçalho dos nós mantêm seus cliques isolados do Canvas após a migração para o botão de ícone compartilhado, evitando que executar uma ação também acione uma interação por baixo.',
+        'Corrigido: o contorno de hover da camada sob o cursor vazava para todo SVG, PNG, JPEG, WebP e PDF exportado, para a miniatura do documento e para a imagem de referência que controla a aprovação visual. O chrome do editor agora é removido por uma lista única, coberta por um teste que falha quando um marcador novo fica sem classificação.',
+        'Corrigido: mover, criar ou apagar uma guia invalidava silenciosamente uma aprovação visual humana; e os contornos de seleção e hover herdavam opacidade, modo de mesclagem, filtro e recorte da própria camada — selecionar algo a 20% de opacidade dava um contorno a 20%.',
+        'O inspector segue a ordem que o trabalho pede (Posição, Tamanho, Auto layout, Constraints, Aparência, Preenchimento, Traço, Efeitos), adota 11px como base, os seletores preenchem a coluna inteira e as seções recolhidas não piscam abertas ao montar.',
+        'Fundação: o tema claro passou a existir em CSS e o tema escolhido é restaurado antes da primeira pintura; foram definidos dez tokens que a interface usava sem existirem, mais escalas de elevação e de tipografia; cerca de quinhentos rótulos de 8 e 9px subiram para um tamanho legível; e o raio de canto que recortava a borda em todos os nós do Canvas foi corrigido.',
+      ],
+    },
+    {
       date: '7 de setembro de 2026 · 0.26.1',
       title: 'Orkestrai 0.26.1: Andares Git confiáveis no WSL',
       summary: 'Workspaces Windows apoiados pelo WSL agora mantêm todas as operações de Andares dentro da distribuição Linux selecionada.',

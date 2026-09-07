@@ -280,10 +280,10 @@
   <header class="flex min-w-0 items-center gap-1 border-b border-white/10 bg-[#17171a] px-2 shadow-lg">
     <div class="flex min-w-0 items-center gap-2 px-1">
       <span class="grid size-7 shrink-0 place-items-center rounded-md bg-white/10 text-[#a991ff]"><Play size={14} fill="currentColor" /></span>
-      <div class="hidden min-w-0 sm:block"><p class="truncate text-[11px] font-semibold">{document.name}</p><p class="text-[9px] text-white/45">{m['design.prototype_presenting']()}</p></div>
+      <div class="hidden min-w-0 sm:block"><p class="truncate text-ui-sm font-semibold">{document.name}</p><p class="text-ui-xs text-white/45">{m['design.prototype_presenting']()}</p></div>
     </div>
     <span class="mx-1 h-5 w-px bg-white/10"></span>
-    <NativeSelect.Root class="h-8 w-[min(210px,32vw)] border-white/10 bg-white/5 text-[11px] text-white" value={activeFlowId} onchange={(event: Event) => startFlow((event.currentTarget as HTMLSelectElement).value)} aria-label={m['design.prototype_flow']()}>
+    <NativeSelect.Root class="h-8 w-[min(210px,32vw)] border-white/10 bg-white/5 text-ui-sm text-white" value={activeFlowId} onchange={(event: Event) => startFlow((event.currentTarget as HTMLSelectElement).value)} aria-label={m['design.prototype_flow']()}>
       {#each flows as flow}<NativeSelect.Option value={flow.id}>{flow.name}</NativeSelect.Option>{/each}
     </NativeSelect.Root>
     <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" disabled={!history.length && !overlays.length} aria-label={m['design.prototype_back']()} title={m['design.prototype_back']()} onclick={goBack}><ArrowLeft size={14} /></Button>

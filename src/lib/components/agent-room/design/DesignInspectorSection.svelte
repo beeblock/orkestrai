@@ -17,12 +17,25 @@
     defaultOpen?: boolean;
   } = $props();
 
-  let open = $state(true);
+  /**
+   * Lido na inicializacao, nao no onMount: comecar sempre aberto e corrigir
+   * depois fazia toda secao com defaultOpen={false} piscar aberta a cada
+   * montagem do inspector.
+   */
+  function storedOpen(): boolean {
+    if (typeof localStorage === 'undefined') return defaultOpen;
+    try {
+      const saved = localStorage.getItem(`orkestrai:design-inspector:${id}`);
+      return saved === null ? defaultOpen : saved === '1';
+    } catch {
+      return defaultOpen;
+    }
+  }
+
+  let open = $state(storedOpen());
   let restored = $state(false);
 
   onMount(() => {
-    const saved = localStorage.getItem(`orkestrai:design-inspector:${id}`);
-    open = saved === null ? defaultOpen : saved === '1';
     restored = true;
   });
 
@@ -32,8 +45,8 @@
 </script>
 
 <Collapsible.Root bind:open class="border-b border-[var(--app-border)]">
-  <div class="flex h-9 items-center gap-1 px-2.5">
-    <Collapsible.Trigger class="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] font-semibold text-[var(--app-text-soft)]">
+  <div class="flex h-8 items-center gap-1 px-3">
+    <Collapsible.Trigger class="flex min-w-0 flex-1 items-center gap-1.5 text-left text-ui-sm font-semibold text-[var(--app-text-soft)]">
       <ChevronDown size={12} class={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
       <span class="truncate">{title}</span>
     </Collapsible.Trigger>

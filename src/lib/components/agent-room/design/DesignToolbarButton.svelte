@@ -43,6 +43,6 @@
   </Tooltip.Trigger>
   <Tooltip.Content class="z-[120] max-w-64 flex-col items-start" {side} sideOffset={6}>
     <span>{label}</span>
-    {#if hint}<span class="text-[10px] opacity-75">{hint}</span>{/if}
+    {#if hint}<span class="text-ui-xs opacity-75">{hint}</span>{/if}
   </Tooltip.Content>
 </Tooltip.Root>

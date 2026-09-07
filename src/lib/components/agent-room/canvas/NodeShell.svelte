@@ -172,9 +172,7 @@
     border-radius: 8px;
     border: 1px solid var(--app-border);
     background: var(--app-surface);
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.28),
-      0 10px 28px rgba(0, 0, 0, 0.24);
+    box-shadow: var(--app-shadow-card);
     /* overflow visivel: os handles ficam a cavalo da borda (estilo Maestri)
        e precisam ser clicaveis fora da caixa; o recorte dos cantos fica a
        cargo do header/body. */
@@ -185,7 +183,7 @@
 
   .node-shell.selected {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 34px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent), var(--app-shadow-overlay);
   }
 
   .node-header {
@@ -320,7 +318,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-radius: 0 0 13px 13px;
+    border-radius: 0 0 7px 7px;
   }
 
   .node-shell :global(.node-action-btn) {
@@ -356,14 +354,16 @@
     z-index: 20;
     background: var(--accent);
     border: 2.5px solid var(--app-accent-contrast);
-    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 0 8px var(--accent);
+    /* O anel nao e elevacao: e um recorte na cor do fundo para a bolinha
+       nao encostar nas cordas que passam por baixo. */
+    box-shadow: 0 0 0 3px var(--app-canvas), 0 0 8px var(--accent);
     opacity: 0.95;
     transition: transform 130ms ease, box-shadow 130ms ease;
   }
 
   .node-shell :global(.node-handle:hover) {
     transform: scale(1.45);
-    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.35), 0 0 14px var(--accent);
+    box-shadow: 0 0 0 4px var(--app-canvas), 0 0 14px var(--accent);
   }
 
   /* area de clique um pouco maior que a bolinha para iniciar conexoes —

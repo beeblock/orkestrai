@@ -146,6 +146,34 @@
     design: DesignCanvasNode,
   };
 
+  // Mesmo destaque que cada no passa para o NodeShell — o minimapa vira uma
+  // legenda de cores em vez de 19 retangulos cinzas iguais.
+  const nodeAccents: Record<string, string> = {
+    terminal: 'var(--app-accent)',
+    note: 'var(--app-warning)',
+    fileTree: 'var(--app-success)',
+    git: 'var(--app-success)',
+    editor: 'var(--app-secondary)',
+    diff: 'var(--app-secondary)',
+    portal: 'var(--app-secondary)',
+    apiClient: 'var(--app-secondary)',
+    loop: 'var(--app-success)',
+    group: 'var(--app-secondary)',
+    shape: 'var(--app-accent)',
+    tasks: 'var(--app-success)',
+    flow: 'var(--app-accent)',
+    image: 'var(--app-secondary)',
+    imageWorkflow: 'var(--app-secondary)',
+    usage: 'var(--app-warning)',
+    codeGraph: 'var(--app-secondary)',
+    device: 'var(--app-secondary)',
+    design: 'var(--app-secondary)',
+  };
+
+  function minimapNodeColor(node: Node): string {
+    return nodeAccents[node.type ?? ''] ?? 'var(--app-border-strong)';
+  }
+
   let workspaces = $state<Workspace[]>([]);
   let workspaceQuery = $state('');
 
@@ -916,6 +944,7 @@
   let graphRefreshRequestId = 0;
   const draggingNodeIds = new Set<string>();
   const localPositionOverrides = new Map<string, { x: number; y: number; confirmedAt: number | null }>();
+  const localPayloadOverrides = new Map<string, { payload: Record<string, unknown>; confirmedAt: number | null }>();
 
   async function refreshCanvasGraph(workspaceId: string): Promise<boolean> {
     const requestId = ++graphRefreshRequestId;
@@ -933,6 +962,14 @@
       .map((node) => {
         const refreshed = toFlowNode(node);
         const previous = previousById.get(node.id);
+        const payloadOverride = localPayloadOverrides.get(node.id);
+        if (payloadOverride) {
+          if (payloadOverride.confirmedAt !== null && payloadOverride.confirmedAt <= refreshStartedAt) {
+            localPayloadOverrides.delete(node.id);
+          } else {
+            refreshed.data = { ...refreshed.data, payload: payloadOverride.payload };
+          }
+        }
         const override = localPositionOverrides.get(node.id);
         if (override) {
           const serverMatches = node.x === override.x && node.y === override.y;
@@ -1178,6 +1215,7 @@
           }).catch(() => {});
         },
         onUngroup: (id: string) => ungroup(id),
+        onPayloadDraftChange: (id: string, partial: Record<string, unknown>) => stageNodePayload(id, partial),
         onPayloadChange: (id: string, partial: Record<string, unknown>) => updateNodePayload(id, partial),
         onTalking: handleTalking,
       },
@@ -1955,17 +1993,58 @@
     }
   }
 
+  const nodePayloadUpdateQueues = new Map<string, Promise<void>>();
+
+  function stageNodePayload(id: string, partial: Record<string, unknown>): void {
+    const flowNode = nodes.find((node) => node.id === id);
+    if (!flowNode) return;
+    const current = (flowNode.data?.payload ?? {}) as Record<string, unknown>;
+    const payload = { ...current, ...partial };
+    localPayloadOverrides.set(id, { payload, confirmedAt: null });
+    nodes = nodes.map((node) =>
+      node.id === id ? { ...node, data: { ...node.data, payload } } : node
+    );
+  }
+
   async function updateNodePayload(id: string, partial: Record<string, unknown>) {
     if (!activeWorkspace) return;
+    const workspaceId = activeWorkspace.id;
     const flowNode = nodes.find((node) => node.id === id);
     const current = (flowNode?.data?.payload ?? {}) as Record<string, unknown>;
-    await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ payload: { ...current, ...partial } }),
-    });
+    const optimisticPayload = { ...current, ...partial };
+    const payloadOverride = { payload: optimisticPayload, confirmedAt: null as number | null };
+    localPayloadOverrides.set(id, payloadOverride);
     nodes = nodes.map((node) =>
-      node.id === id ? { ...node, data: { ...node.data, payload: { ...current, ...partial } } } : node
+      node.id === id ? { ...node, data: { ...node.data, payload: optimisticPayload } } : node
     );
+
+    const queueKey = `${workspaceId}:${id}`;
+    const previous = nodePayloadUpdateQueues.get(queueKey) ?? Promise.resolve();
+    const queued = previous
+      .catch(() => undefined)
+      .then(() => api(`/api/agent-room/workspaces/${workspaceId}/nodes/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ payload: optimisticPayload }),
+      }).then(() => undefined));
+    nodePayloadUpdateQueues.set(queueKey, queued);
+    try {
+      await queued;
+      if (localPayloadOverrides.get(id) === payloadOverride) payloadOverride.confirmedAt = performance.now();
+    } catch (error) {
+      // Roll back only when this is still the latest local update. A newer
+      // edit already includes this payload and will retry it in its own save.
+      if (nodePayloadUpdateQueues.get(queueKey) === queued && activeWorkspace?.id === workspaceId) {
+        nodes = nodes.map((node) =>
+          node.id === id && node.data?.payload === optimisticPayload
+            ? { ...node, data: { ...node.data, payload: current } }
+            : node
+        );
+        if (localPayloadOverrides.get(id) === payloadOverride) localPayloadOverrides.delete(id);
+      }
+      throw error;
+    } finally {
+      if (nodePayloadUpdateQueues.get(queueKey) === queued) nodePayloadUpdateQueues.delete(queueKey);
+    }
   }
 
   function shapeClipboardEntries(ids?: string[]): ShapeClipboardEntry<ShapeStyle>[] {
@@ -2473,10 +2552,10 @@
         {/if}
         <div class="sidebar-header-actions">
           {#if !sidebarCollapsed}
-          <HeaderIconButton label={m['tool.presets']()} onclick={() => toggleSidePanel('presets')}>
+          <HeaderIconButton label={m['tool.presets']()} side="bottom" onclick={() => toggleSidePanel('presets')}>
             <LayoutTemplate size={14} />
           </HeaderIconButton>
-          <HeaderIconButton class="icon-btn !bg-[var(--app-accent)] !text-[var(--app-accent-contrast)] hover:!brightness-110" label={m['canvas.new_ws']()} onclick={() => { initialPresetId = ''; showWorkspaceForm = !showWorkspaceForm; }}>
+          <HeaderIconButton class="icon-btn !bg-[var(--app-accent)] !text-[var(--app-accent-contrast)] hover:!brightness-110" label={m['canvas.new_ws']()} side="bottom" onclick={() => { initialPresetId = ''; showWorkspaceForm = !showWorkspaceForm; }}>
             <Plus size={15} />
           </HeaderIconButton>
           <DropdownMenu.Root>
@@ -2592,7 +2671,7 @@
           spellcheck="false"
           onkeydown={(event) => event.key === 'Enter' && createWorkspaceGroup()}
         />
-        <HeaderIconButton label={m['canvas.new_folder']()} onclick={createWorkspaceGroup}>
+        <HeaderIconButton label={m['canvas.new_folder']()} side="bottom" onclick={createWorkspaceGroup}>
           <Plus size={13} />
         </HeaderIconButton>
       </div>
@@ -2724,8 +2803,8 @@
           <header class="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 shadow-sm">
             <Palette size={15} class="text-[var(--app-secondary)]" />
             <strong class="min-w-0 flex-1 truncate text-xs">{String(nodes.find((item) => item.id === designModeNodeId)?.data?.title ?? m['design.title']())}</strong>
-            <span class="hidden text-[10px] text-[var(--app-text-muted)] sm:inline">{m['design.focus_mode']()}</span>
-            <HeaderIconButton label={m['design.back_to_canvas']()} onclick={closeDesignMode}><X size={14} /></HeaderIconButton>
+            <span class="hidden text-ui-xs text-[var(--app-text-muted)] sm:inline">{m['design.focus_mode']()}</span>
+            <HeaderIconButton label={m['design.back_to_canvas']()} side="bottom" onclick={closeDesignMode}><X size={14} /></HeaderIconButton>
           </header>
           <div class="min-h-0 flex-1">
             <DesignEditor workspaceId={activeWorkspace.id} nodeId={designModeNodeId} externalRevision={designRevisions[designModeNodeId] ?? 0} />
@@ -2772,12 +2851,12 @@
           <Controls />
         {/if}
         {#if appSettings.showMinimap !== 'false'}
-          <MiniMap bgColor="var(--app-surface)" maskColor="color-mix(in srgb, var(--app-canvas) 72%, transparent)" nodeColor="var(--app-border-strong)" />
+          <MiniMap bgColor="var(--app-surface)" maskColor="color-mix(in srgb, var(--app-canvas) 72%, transparent)" nodeColor={minimapNodeColor} pannable zoomable />
         {/if}
         {#if selectedTransferNodeIds.length > 0}
           <Panel position="top-center">
             <div class="flex h-9 items-center gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] px-2 shadow-lg">
-              <span class="whitespace-nowrap text-[11px] font-medium text-[var(--app-text-muted)]">{m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}</span>
+              <span class="whitespace-nowrap text-ui-sm font-medium text-[var(--app-text-muted)]">{m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}</span>
               <Button size="sm" class="h-7 gap-1.5 px-2 text-xs" onclick={() => (transferOpen = true)}>
                 <Copy size={13} />{m['canvas.transfer_open']()}
               </Button>
@@ -3514,7 +3593,7 @@
     border: 1px solid var(--app-border);
     border-radius: 7px;
     overflow: hidden;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    box-shadow: var(--app-shadow-panel);
   }
 
   .canvas-area :global(.svelte-flow__controls-button) {
@@ -3601,7 +3680,7 @@
     color: var(--app-text-soft);
     cursor: pointer;
     backdrop-filter: blur(12px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+    box-shadow: var(--app-shadow-panel);
     transition: color 120ms ease, background 120ms ease;
   }
 
@@ -3617,7 +3696,7 @@
     border-radius: 8px;
     background: color-mix(in srgb, var(--app-surface) 94%, transparent);
     border: 1px solid var(--app-border);
-    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--app-shadow-overlay);
     backdrop-filter: blur(12px);
     /* Muitos botoes (providers + paineis): rola em vez de cortar fora da tela.
        O painel do xyflow nao tem largura propria — limita pelo viewport

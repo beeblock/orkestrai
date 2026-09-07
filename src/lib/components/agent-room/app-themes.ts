@@ -142,9 +142,48 @@ export function duplicateAppTheme(theme: AppTheme, id = `custom-${crypto.randomU
   return { id, name: `${theme.name} Copy`, dark: theme.dark, tokens: { ...theme.tokens } };
 }
 
+/**
+ * Tokens derivados: sao usados pela UI mas nunca foram autorais.
+ *
+ * Ficam FORA de APP_THEME_TOKEN_KEYS de proposito. Aquela lista define o que o
+ * editor de temas mostra e o que `validTokenSet` exige em um tema customizado —
+ * incluir chaves novas invalidaria todos os temas que o usuario ja salvou.
+ */
+function derivedThemeVariables(theme: AppTheme): Record<string, string> {
+  const token = theme.tokens;
+  const ink = theme.dark ? '#000000' : token.text;
+  return {
+    '--app-hover': `color-mix(in srgb, ${token.text} 8%, transparent)`,
+    '--app-info': token.secondary,
+    '--app-info-soft': `color-mix(in srgb, ${token.secondary} 16%, transparent)`,
+    '--app-danger-soft': `color-mix(in srgb, ${token.danger} 16%, transparent)`,
+    '--app-warning-soft': `color-mix(in srgb, ${token.warning} 16%, transparent)`,
+    '--app-success-soft': `color-mix(in srgb, ${token.success} 16%, transparent)`,
+    '--app-surface-muted': token.surfaceSubtle,
+    '--app-code-bg': token.surfaceSubtle,
+    '--app-code-text': token.textSoft,
+    '--app-ring': token.accent,
+    // Escura nos dois temas: os SVGs de provedor sao brancos e sumiriam sobre
+    // uma superficie clara. Ver .app-logo-plate em app.css.
+    '--app-logo-plate': '#20242c',
+    // Elevacao: preta no escuro, tingida com a cor de texto no claro (sombra
+    // preta pura vira borrao cinza sobre fundo claro).
+    '--app-shadow-card': theme.dark
+      ? `0 1px 2px color-mix(in srgb, ${ink} 28%, transparent), 0 10px 28px color-mix(in srgb, ${ink} 24%, transparent)`
+      : `0 1px 2px color-mix(in srgb, ${ink} 6%, transparent), 0 8px 24px color-mix(in srgb, ${ink} 7%, transparent)`,
+    '--app-shadow-panel': theme.dark
+      ? `0 8px 24px color-mix(in srgb, ${ink} 24%, transparent)`
+      : `0 8px 24px color-mix(in srgb, ${ink} 9%, transparent)`,
+    '--app-shadow-overlay': theme.dark
+      ? `0 14px 38px color-mix(in srgb, ${ink} 30%, transparent)`
+      : `0 14px 38px color-mix(in srgb, ${ink} 12%, transparent)`,
+  };
+}
+
 export function appThemeCssVariables(theme: AppTheme): Record<string, string> {
   const token = theme.tokens;
   return {
+    ...derivedThemeVariables(theme),
     '--page': token.page,
     '--surface': token.surface,
     '--surface-raised': token.surfaceRaised,
@@ -208,15 +247,39 @@ export function appThemeCssVariables(theme: AppTheme): Record<string, string> {
   };
 }
 
+/**
+ * Chave do cache lido pelo script inline de `src/app.html`.
+ *
+ * As settings chegam por fetch, entao a primeira pintura acontece antes de
+ * sabermos o tema. Sem esse cache as rotas com SSR piscam o tema padrao.
+ * Se mudar o formato, suba a versao aqui E no script do app.html.
+ */
+export const APP_THEME_CACHE_KEY = 'orkestrai.theme.v1';
+
 export function applyAppTheme(settings: Record<string, string>, root?: HTMLElement): AppTheme {
   const theme = resolveAppTheme(settings);
   const target = root ?? (typeof document !== 'undefined' ? document.documentElement : undefined);
   if (!target) return theme;
+  const variables = appThemeCssVariables(theme);
   target.dataset.appTheme = theme.id;
+  // `dark` e o gatilho da variante dark: do Tailwind; `light` da ao tema claro
+  // uma casa em CSS (:root.light em app.css) para antes da hidratacao.
   target.classList.toggle('dark', theme.dark);
+  target.classList.toggle('light', !theme.dark);
   target.style.colorScheme = theme.dark ? 'dark' : 'light';
-  for (const [key, value] of Object.entries(appThemeCssVariables(theme))) target.style.setProperty(key, value);
+  for (const [key, value] of Object.entries(variables)) target.style.setProperty(key, value);
   const themeColor = typeof document !== 'undefined' ? document.querySelector<HTMLMetaElement>('meta[name="theme-color"]') : null;
   if (themeColor) themeColor.content = theme.tokens.page;
+  if (!root) cacheAppTheme(theme, variables);
   return theme;
+}
+
+/** Guarda o tema resolvido para o bootstrap sincrono da proxima carga. */
+function cacheAppTheme(theme: AppTheme, variables: Record<string, string>): void {
+  try {
+    localStorage.setItem(APP_THEME_CACHE_KEY, JSON.stringify({ id: theme.id, dark: theme.dark, vars: variables }));
+  } catch {
+    // Storage indisponivel (modo privado, storage bloqueado): so perdemos o
+    // anti-flash, o tema continua sendo aplicado na hidratacao.
+  }
 }

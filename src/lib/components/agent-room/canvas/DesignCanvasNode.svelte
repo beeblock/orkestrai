@@ -170,7 +170,7 @@
       {#if explorationStatus}
         {@const StatusIcon = explorationStatus.icon}
         <span
-          class="absolute top-2 left-2 inline-flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded border px-2 py-1 text-[9px] font-medium shadow-sm backdrop-blur-sm"
+          class="absolute top-2 left-2 inline-flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded border px-2 py-1 text-ui-xs font-medium shadow-sm backdrop-blur-sm"
           class:border-[color-mix(in_srgb,var(--app-success)_45%,var(--app-border))]={explorationStatus.tone === 'success'}
           class:bg-[color-mix(in_srgb,var(--app-success)_14%,var(--app-surface))]={explorationStatus.tone === 'success'}
           class:text-[var(--app-success)]={explorationStatus.tone === 'success'}
@@ -196,7 +196,7 @@
       {/if}
       {#if delivery}
         <span
-          class="absolute right-2 bottom-8 left-2 flex items-center gap-2 rounded border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-2 py-1 text-[9px] shadow-sm backdrop-blur-sm"
+          class="absolute right-2 bottom-8 left-2 flex items-center gap-2 rounded border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-2 py-1 text-ui-xs shadow-sm backdrop-blur-sm"
           title={delivery.missing.length ? m['design.delivery_missing']({ items: delivery.missing.map(deliveryRequirementLabel).join(', ') }) : m['design.delivery_complete']()}
         >
           <span class="shrink-0 font-medium text-[var(--app-text)]">{m['design.delivery_progress']({ completed: String(delivery.completed.length), total: String(delivery.total) })}</span>
@@ -204,7 +204,7 @@
           {#if delivery.missing.length}<span class="min-w-0 truncate text-[var(--app-text-muted)]">{deliveryRequirementLabel(delivery.missing[0])}</span>{:else}<CheckCircle2 size={11} class="shrink-0 text-[var(--app-success)]" />{/if}
         </span>
       {/if}
-      <span class="absolute right-2 bottom-2 left-2 truncate rounded bg-[var(--app-surface)]/90 px-1.5 py-1 text-[9px] text-[var(--app-text-muted)] shadow-sm">
+      <span class="absolute right-2 bottom-2 left-2 truncate rounded bg-[var(--app-surface)]/90 px-1.5 py-1 text-ui-xs text-[var(--app-text-muted)] shadow-sm">
         {m['design.layers_count']({ count: elements.length })} · {document.components.length} {m['design.components']()} · {document.variables.length} {m['design.tokens']()} · {document.codeArtifacts.length} {m['design.delivery_artifacts']()} · {m['design.revision']({ revision: document.revision })}
       </span>
     {/if}

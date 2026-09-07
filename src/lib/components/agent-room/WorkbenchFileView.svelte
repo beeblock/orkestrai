@@ -467,7 +467,7 @@
 
 <div class="grid h-full min-h-0 grid-rows-[38px_minmax(0,1fr)_24px] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="workbench-file-view">
   <header class="flex min-w-0 items-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
-    <div class="flex min-w-0 flex-1 items-center overflow-hidden text-[11px] text-[var(--app-text-muted)]" aria-label={m['workbench_editor.breadcrumbs']()}>
+    <div class="flex min-w-0 flex-1 items-center overflow-hidden text-ui-sm text-[var(--app-text-muted)]" aria-label={m['workbench_editor.breadcrumbs']()}>
       {#each breadcrumbs as crumb, index (index)}
         {#if index > 0}<ChevronRight size={11} class="mx-0.5 shrink-0 opacity-50" aria-hidden="true" />{/if}
         <span class={index === breadcrumbs.length - 1 ? 'truncate font-medium text-[var(--app-text)]' : 'max-w-32 truncate'}>{crumb}</span>
@@ -522,7 +522,7 @@
         />
         <div class="absolute right-3 top-3 flex items-center gap-1 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
           <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_out']()} onclick={() => (imageZoom = Math.max(0.25, imageZoom - 0.25))}><Minus size={13} /></Button>
-          <span class="w-11 text-center text-[10px] tabular-nums">{Math.round(imageZoom * 100)}%</span>
+          <span class="w-11 text-center text-ui-xs tabular-nums">{Math.round(imageZoom * 100)}%</span>
           <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_in']()} onclick={() => (imageZoom = Math.min(4, imageZoom + 0.25))}><Plus size={13} /></Button>
           <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.reset_view']()} onclick={resetImage}><Maximize2 size={13} /></Button>
         </div>
@@ -531,11 +531,11 @@
       <div class="flex h-full min-h-0 flex-col bg-[var(--app-surface-subtle)]">
         <div class="flex h-9 shrink-0 items-center justify-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface)]">
           <Button variant="ghost" size="icon-xs" disabled={pdfPage <= 1} aria-label={m['workbench_editor.previous_page']()} onclick={() => changePdfPage(-1)}><ChevronLeft size={13} /></Button>
-          <span class="min-w-20 text-center text-[10px] tabular-nums">{m['workbench_editor.page_count']({ current: pdfPage, total: pdfPages })}</span>
+          <span class="min-w-20 text-center text-ui-xs tabular-nums">{m['workbench_editor.page_count']({ current: pdfPage, total: pdfPages })}</span>
           <Button variant="ghost" size="icon-xs" disabled={pdfPage >= pdfPages} aria-label={m['workbench_editor.next_page']()} onclick={() => changePdfPage(1)}><ChevronRight size={13} /></Button>
           <span class="mx-1 h-4 w-px bg-[var(--app-border)]"></span>
           <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_out']()} onclick={() => changePdfZoom(-0.15)}><Minus size={13} /></Button>
-          <span class="w-11 text-center text-[10px] tabular-nums">{Math.round(pdfZoom * 100)}%</span>
+          <span class="w-11 text-center text-ui-xs tabular-nums">{Math.round(pdfZoom * 100)}%</span>
           <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_in']()} onclick={() => changePdfZoom(0.15)}><Plus size={13} /></Button>
         </div>
         <div class="min-h-0 flex-1 overflow-auto p-5 text-center"><canvas bind:this={pdfCanvas} class="mx-auto bg-white shadow-[0_10px_34px_rgba(0,0,0,.2)]"></canvas></div>
@@ -554,7 +554,7 @@
     {/if}
   </section>
 
-  <footer class="flex min-w-0 items-center gap-3 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2.5 text-[10px] text-[var(--app-text-muted)]">
+  <footer class="flex min-w-0 items-center gap-3 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2.5 text-ui-xs text-[var(--app-text-muted)]">
     {#if inspection}
       <span class="truncate">{inspection.contentType}</span>
       <span>{formatBytes(inspection.size)}</span>

@@ -100,7 +100,7 @@
 </script>
 
 <section class="pb-1" data-testid="workbench-file-explorer">
-  <header class="group flex h-7 items-center gap-1 pr-1 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">
+  <header class="group flex h-7 items-center gap-1 pr-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
     <button
       class="flex h-full min-w-0 flex-1 items-center gap-1 px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
       aria-expanded={sectionExpanded}
@@ -139,7 +139,7 @@
 
   {#if sectionExpanded}
     {#if errorMessage}
-      <p class="px-3 py-2 text-[10px] leading-4 text-[var(--app-danger)]">{errorMessage}</p>
+      <p class="px-3 py-2 text-ui-xs leading-4 text-[var(--app-danger)]">{errorMessage}</p>
     {:else if loadingPaths.includes(rootPath) && !childrenByPath[rootPath]}
       <div class="space-y-1 px-2 py-1" role="status" aria-label={m['workbench_files.loading']()}>
         {#each [0, 1, 2, 3] as row (row)}
@@ -147,13 +147,13 @@
         {/each}
       </div>
     {:else if childrenByPath[rootPath]?.length === 0}
-      <p class="px-3 py-2 text-[10px] text-[var(--app-text-muted)]">{m['workbench_files.empty']()}</p>
+      <p class="px-3 py-2 text-ui-xs text-[var(--app-text-muted)]">{m['workbench_files.empty']()}</p>
     {:else}
       <div role="tree" aria-label={m['workbench_files.aria']()}>
       {#each rows as entry (entry.path)}
         {@const expanded = entry.type === 'directory' && expandedPaths.includes(entry.path)}
         <div
-          class={`group flex h-7 min-w-0 items-center text-[11px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${activePath === entry.path ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}
+          class={`group flex h-7 min-w-0 items-center text-ui-sm transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${activePath === entry.path ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}
           role="treeitem"
           aria-level={entry.depth + 1}
           aria-expanded={entry.type === 'directory' ? expanded : undefined}

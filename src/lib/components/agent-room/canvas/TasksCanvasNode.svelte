@@ -540,7 +540,7 @@
   {:else}
   {#if columnsOpen}
     <div class="nodrag border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2.5 py-2">
-      <div class="mb-2 flex justify-end text-[10px] tabular-nums text-muted-foreground">{COLUMNS.length}/10</div>
+      <div class="mb-2 flex justify-end text-ui-xs tabular-nums text-muted-foreground">{COLUMNS.length}/10</div>
       <div class="space-y-1.5">
         {#each COLUMNS as column, index (column.id)}
           <div class="grid grid-cols-[24px_minmax(0,1fr)_24px_24px_24px] items-center gap-1">
@@ -579,8 +579,8 @@
         />
         <button class="inline-flex h-7 w-7 items-center justify-center rounded bg-primary text-primary-foreground disabled:opacity-30" aria-label={m['tasks.column_add']()} disabled={!newColumnName.trim() || COLUMNS.length >= 10} onclick={addColumn}><Plus size={14} /></button>
       </div>
-      {#if COLUMNS.length >= 10}<p class="mt-1.5 text-[10px] text-muted-foreground">{m['tasks.column_limit']()}</p>{/if}
-      {#if columnError}<p class="mt-1.5 text-[10px] text-destructive" role="alert">{columnError}</p>{/if}
+      {#if COLUMNS.length >= 10}<p class="mt-1.5 text-ui-xs text-muted-foreground">{m['tasks.column_limit']()}</p>{/if}
+      {#if columnError}<p class="mt-1.5 text-ui-xs text-destructive" role="alert">{columnError}</p>{/if}
     </div>
   {/if}
   <div class="tb-add nodrag">
@@ -1153,7 +1153,7 @@
 
   .tb-card:hover {
     border-color: var(--app-border-strong);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--app-shadow-card);
   }
 
   .tb-card.dragging {
@@ -1243,8 +1243,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid rgba(229, 72, 77, 0.4);
-    background: rgba(229, 72, 77, 0.12);
+    border: 1px solid color-mix(in srgb, var(--app-danger) 40%, transparent);
+    background: color-mix(in srgb, var(--app-danger) 12%, transparent);
     color: var(--app-danger);
     font-size: 12px;
     border-radius: 8px;
@@ -1253,7 +1253,7 @@
   }
 
   .tb-viewer-delete:hover {
-    background: rgba(229, 72, 77, 0.22);
+    background: color-mix(in srgb, var(--app-danger) 22%, transparent);
   }
 
   .tb-card-top {

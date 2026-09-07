@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Maximize2, MonitorSmartphone, Ruler, RotateCw } from '@lucide/svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import {
     clampPortalViewportDimension,
     findPortalDevicePreset,
@@ -93,7 +93,7 @@
 >
   <Select.Root type="single" value={selectedPresetId} onValueChange={applyPreset}>
     <Select.Trigger
-      class="h-7 min-w-0 flex-1 border-[var(--app-border)] bg-[var(--app-canvas)] px-2 text-[11px] shadow-none"
+      class="h-7 min-w-0 flex-1 border-[var(--app-border)] bg-[var(--app-canvas)] px-2 text-ui-sm shadow-none"
       size="sm"
       aria-label={m['portal.device_preset']()}
     >
@@ -106,7 +106,7 @@
       <Select.Item value="off" class="py-1.5">
         <div class="flex min-w-0 flex-1 items-center justify-between gap-5">
           <span>{m['portal.device_off']()}</span>
-          <span class="text-[10px] text-[var(--app-text-muted)]">{m['portal.device_fill']()}</span>
+          <span class="text-ui-xs text-[var(--app-text-muted)]">{m['portal.device_fill']()}</span>
         </div>
       </Select.Item>
       <Select.Separator />
@@ -114,7 +114,7 @@
         <Select.Item value={preset.id} class="py-1.5">
           <div class="flex min-w-0 flex-1 items-center justify-between gap-5">
             <span>{preset.label}</span>
-            <span class="text-[10px] tabular-nums text-[var(--app-text-muted)]">{preset.width} × {preset.height}</span>
+            <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{preset.width} × {preset.height}</span>
           </div>
         </Select.Item>
       {/each}
@@ -126,7 +126,7 @@
   {#if viewport}
     <Popover.Root>
       <Popover.Trigger
-        class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 text-[10px] tabular-nums text-[var(--app-text)] transition-[background-color,border-color,box-shadow] hover:bg-[var(--app-surface-subtle)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/25"
+        class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 text-ui-xs tabular-nums text-[var(--app-text)] transition-[background-color,border-color,box-shadow] hover:bg-[var(--app-surface-subtle)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/25"
         aria-label={m['portal.device_dimensions']({ width: viewport.width, height: viewport.height })}
       >
         <Ruler class="size-3 text-[var(--app-text-muted)]" />
@@ -137,7 +137,7 @@
           <Popover.Title class="text-xs">{m['portal.device_custom']()}</Popover.Title>
         </Popover.Header>
         <div class="grid grid-cols-2 gap-2">
-          <label class="grid gap-1 text-[10px] font-medium text-[var(--app-text-muted)]">
+          <label class="grid gap-1 text-ui-xs font-medium text-[var(--app-text-muted)]">
             <span>{m['portal.device_width']()}</span>
             <div class="relative">
               <Input
@@ -149,10 +149,10 @@
                 onblur={() => commitDimension('width')}
                 onkeydown={(event: KeyboardEvent) => commitOnEnter(event, 'width')}
               />
-              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[9px] text-[var(--app-text-muted)]">px</span>
+              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-ui-xs text-[var(--app-text-muted)]">px</span>
             </div>
           </label>
-          <label class="grid gap-1 text-[10px] font-medium text-[var(--app-text-muted)]">
+          <label class="grid gap-1 text-ui-xs font-medium text-[var(--app-text-muted)]">
             <span>{m['portal.device_height']()}</span>
             <div class="relative">
               <Input
@@ -164,18 +164,18 @@
                 onblur={() => commitDimension('height')}
                 onkeydown={(event: KeyboardEvent) => commitOnEnter(event, 'height')}
               />
-              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[9px] text-[var(--app-text-muted)]">px</span>
+              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-ui-xs text-[var(--app-text-muted)]">px</span>
             </div>
           </label>
         </div>
       </Popover.Content>
     </Popover.Root>
 
-    <IconAction label={m['portal.device_rotate']()} onclick={() => onchange(swapPortalViewportOrientation(viewport!))}>
+    <HeaderIconButton class="node-action-btn" label={m['portal.device_rotate']()} onclick={() => onchange(swapPortalViewportOrientation(viewport!))}>
       <RotateCw size={13} />
-    </IconAction>
-    <IconAction label={m['portal.device_off']()} onclick={() => onchange(null)}>
+    </HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['portal.device_off']()} onclick={() => onchange(null)}>
       <Maximize2 size={13} />
-    </IconAction>
+    </HeaderIconButton>
   {/if}
 </div>

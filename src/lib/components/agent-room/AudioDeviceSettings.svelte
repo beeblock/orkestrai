@@ -167,7 +167,7 @@
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
       <h3 id="audio-devices-heading" class="text-xs font-semibold text-[var(--copy)]">{m['settings.audio_devices']()}</h3>
-      <p class="mt-1 text-[11px] leading-4 text-[var(--copy-muted)]">{m['settings.audio_devices_desc']()}</p>
+      <p class="mt-1 text-ui-sm leading-4 text-[var(--copy-muted)]">{m['settings.audio_devices_desc']()}</p>
     </div>
     <Button variant="ghost" size="icon-sm" disabled={loading} title={m['settings.audio_refresh']()} aria-label={m['settings.audio_refresh']()} onclick={() => void refreshDevices(true)}>
       <RefreshCw size={13} class={loading ? 'animate-spin' : ''} />
@@ -208,8 +208,8 @@
       <Button variant="outline" size="sm" class="mt-2 w-full" disabled={speakerTesting} onclick={() => void testSpeaker()}>
         <Volume2 size={13} />{m['settings.audio_test_speaker']()}
       </Button>
-      {#if !outputSelectionSupported}<p class="mt-2 text-[10px] leading-4 text-[var(--copy-muted)]">{m['settings.audio_output_unsupported']()}</p>{/if}
+      {#if !outputSelectionSupported}<p class="mt-2 text-ui-xs leading-4 text-[var(--copy-muted)]">{m['settings.audio_output_unsupported']()}</p>{/if}
     </div>
   </div>
-  <p class="text-[10px] leading-4 text-[var(--copy-muted)]">{m['settings.audio_permission_hint']()}</p>
+  <p class="text-ui-xs leading-4 text-[var(--copy-muted)]">{m['settings.audio_permission_hint']()}</p>
 </section>

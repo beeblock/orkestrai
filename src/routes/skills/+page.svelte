@@ -9,6 +9,7 @@
   import { Spinner } from '$lib/components/ui/spinner';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Tabs from '$lib/components/ui/tabs';
   import * as m from '$lib/paraglide/messages.js';
 
   type Workspace = { id: string; name: string };
@@ -234,16 +235,32 @@
     </div>
   </header>
 
-  <div class="tab-bar" role="tablist">
-    <button class="tab-btn" class:active={tab === 'skills'} role="tab" aria-selected={tab === 'skills'} onclick={() => (tab = 'skills')}>
-      <Blocks size={14} aria-hidden="true" /> {m['skills.tab_skills']()}
-    </button>
-    <button class="tab-btn" class:active={tab === 'mcps'} role="tab" aria-selected={tab === 'mcps'} onclick={() => (tab = 'mcps')}>
-      <McpIcon size={14} aria-hidden="true" /> {m['skills.tab_mcps']()}
-    </button>
-  </div>
+  <Tabs.Root
+    value={tab}
+    onValueChange={(value: string) => (tab = value === 'mcps' ? 'mcps' : 'skills')}
+    class="flex flex-col gap-3.5"
+  >
+    <Tabs.List class="w-fit self-start gap-1 rounded-full border border-app-border bg-app-surface p-[3px]">
+      <Tabs.Trigger
+        value="skills"
+        class="flex-none gap-1.5 rounded-full px-3.5 text-ui-md font-medium text-app-text-soft data-active:bg-app-accent-soft data-active:text-app-text dark:data-active:border-transparent dark:data-active:bg-app-accent-soft dark:data-active:text-app-text"
+      >
+        <Blocks size={14} aria-hidden="true" /> {m['skills.tab_skills']()}
+      </Tabs.Trigger>
+      <Tabs.Trigger
+        value="mcps"
+        class="flex-none gap-1.5 rounded-full px-3.5 text-ui-md font-medium text-app-text-soft data-active:bg-app-accent-soft data-active:text-app-text dark:data-active:border-transparent dark:data-active:bg-app-accent-soft dark:data-active:text-app-text"
+      >
+        <McpIcon size={14} aria-hidden="true" /> {m['skills.tab_mcps']()}
+      </Tabs.Trigger>
+    </Tabs.List>
 
-  {#if tab === 'skills'}
+    <Tabs.Content value="skills" class="m-0 flex flex-col gap-3.5 text-[length:inherit]">
+      <!-- Guarda explicita: o Tabs.Content do bits-ui mantem o painel inativo no
+           DOM (so marca hidden), e os dois paineis usam as mesmas classes
+           .item-row/.installed-row/.result-row. Sem isto uma contagem de linhas
+           somaria as duas abas. -->
+      {#if tab === 'skills'}
     <section class="page-section">
       <header class="section-head">
         <span class="icon-chip"><Blocks size={15} aria-hidden="true" /></span>
@@ -326,7 +343,15 @@
         </ul>
       {/if}
     </section>
-  {:else}
+      {/if}
+    </Tabs.Content>
+
+    <Tabs.Content value="mcps" class="m-0 flex flex-col gap-3.5 text-[length:inherit]">
+      <!-- Guarda explicita: o Tabs.Content do bits-ui mantem o painel inativo no
+           DOM (so marca hidden), e os dois paineis usam as mesmas classes
+           .item-row/.installed-row/.result-row. Sem isto uma contagem de linhas
+           somaria as duas abas. -->
+      {#if tab === 'mcps'}
     <section class="page-section">
       <header class="section-head">
         <span class="icon-chip"><McpIcon size={15} aria-hidden="true" /></span>
@@ -416,7 +441,9 @@
         </ul>
       {/if}
     </section>
-  {/if}
+      {/if}
+    </Tabs.Content>
+  </Tabs.Root>
 </main>
 
 {#if mcpInstallEntry}
@@ -515,42 +542,6 @@
     font-size: 12px;
     color: var(--app-text-muted);
     white-space: nowrap;
-  }
-
-  /* ---- Abas segmentadas ---------------------------------------------------- */
-  .tab-bar {
-    display: inline-flex;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 999px;
-    border: 1px solid var(--app-border);
-    background: color-mix(in srgb, var(--app-surface) 88%, transparent);
-    width: auto;
-    align-self: flex-start;
-  }
-
-  .tab-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 14px;
-    border-radius: 999px;
-    border: none;
-    background: transparent;
-    color: var(--app-text-soft);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 120ms ease, background 120ms ease;
-  }
-
-  .tab-btn:hover {
-    color: var(--app-text);
-  }
-
-  .tab-btn.active {
-    background: var(--app-accent-soft);
-    color: var(--app-text);
   }
 
   /* ---- Secoes (mesmo shell das Configuracoes) ------------------------------ */
@@ -746,8 +737,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .page-section,
-    .tab-btn {
+    .page-section {
       transition: none;
     }
   }

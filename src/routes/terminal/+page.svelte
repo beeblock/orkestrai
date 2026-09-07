@@ -1126,7 +1126,7 @@
 
     {#if tabPlacement === 'vertical' && selectedLayout && selectedWorkspaceId}
       <div class="max-h-[38%] shrink-0 overflow-y-auto border-b border-[var(--app-border)] pb-1" data-testid="workbench-vertical-tabs">
-        <div class="flex h-7 items-center px-3 text-[10px] font-semibold uppercase text-[var(--app-text-muted)]">
+        <div class="flex h-7 items-center px-3 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
           {m['workbench.open_items']()}
         </div>
         {#each visiblePanes as pane (pane.id)}
@@ -1175,12 +1175,12 @@
               {#if workspace.suspendedAt}
                 <Power size={11} class="text-[var(--app-text-muted)]" aria-label={m['canvas.ws_suspended']({ name: workspace.name })} />
               {:else if workspaceAttention(workspace.id)}
-                <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-[8px] font-semibold tabular-nums text-[var(--app-warning)]" title={m['control_center.summary_attention']()}>{workspaceAttention(workspace.id)}</span>
+                <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-ui-xs font-semibold tabular-nums text-[var(--app-warning)]" title={m['control_center.summary_attention']()}>{workspaceAttention(workspace.id)}</span>
               {:else if controlCenters[workspace.id]?.counts.working}
                 <span class="h-1.5 w-1.5 rounded-full bg-[var(--app-success)]" role="status" aria-label={m['control_center.summary_working']()}></span>
               {/if}
               {#if loadedWorkspaceIds.includes(workspace.id)}
-                <span class="min-w-5 text-right text-[10px] tabular-nums text-[var(--app-text-muted)]">{workspaceNodes.length}</span>
+                <span class="min-w-5 text-right text-ui-xs tabular-nums text-[var(--app-text-muted)]">{workspaceNodes.length}</span>
               {/if}
             </button>
 
@@ -1188,22 +1188,22 @@
               <div class="ml-3 border-l border-[var(--app-border)] py-0.5 pl-1.5">
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchControlCenterItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
                     aria-current={selectedNodeId === workbenchControlCenterItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchControlCenterItemId(workspace.id))}
                   >
                     <Activity size={13} class={selectedNodeId === workbenchControlCenterItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['control_center.title']()}</span>
                     {#if workspaceAttention(workspace.id)}
-                      <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-[8px] font-semibold tabular-nums text-[var(--app-warning)]">{workspaceAttention(workspace.id)}</span>
+                      <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-ui-xs font-semibold tabular-nums text-[var(--app-warning)]">{workspaceAttention(workspace.id)}</span>
                     {:else}
-                      <span class="text-[9px] tabular-nums text-[var(--app-text-muted)]">{controlCenters[workspace.id]?.counts.working ?? 0}</span>
+                      <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{controlCenters[workspace.id]?.counts.working ?? 0}</span>
                     {/if}
                   </button>
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchWorkstreamsItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
                     aria-current={selectedNodeId === workbenchWorkstreamsItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchWorkstreamsItemId(workspace.id))}
                   >
@@ -1213,7 +1213,7 @@
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchReviewCenterItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
                     aria-current={selectedNodeId === workbenchReviewCenterItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchReviewCenterItemId(workspace.id))}
                   >
@@ -1223,7 +1223,7 @@
                 </div>
                 <div class="group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] text-[var(--app-text-soft)] transition-[background-color,color] hover:bg-[var(--app-surface-raised)]">
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
                     aria-haspopup="dialog"
                     onclick={() => {
                       selectedWorkspaceId = workspace.id;
@@ -1233,12 +1233,12 @@
                   >
                     <Scale size={13} class="text-[var(--app-text-muted)]" aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['council.title']()}</span>
-                    <span class="text-[9px] text-[var(--app-text-muted)]">{m['council.new']()}</span>
+                    <span class="text-ui-xs text-[var(--app-text-muted)]">{m['council.new']()}</span>
                   </button>
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchAutomationsItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
                     aria-current={selectedNodeId === workbenchAutomationsItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchAutomationsItemId(workspace.id))}
                   >
@@ -1247,19 +1247,19 @@
                   </button>
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
-                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchMemoryItemId(workspace.id))}>
+                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchMemoryItemId(workspace.id))}>
                     <BookMarked size={13} class={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['memory.title']()}</span>
                   </button>
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
-                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchHuddlesItemId(workspace.id))}>
+                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchHuddlesItemId(workspace.id))}>
                     <MessageCircleMore size={13} class={selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['huddle.title']()}</span>
                   </button>
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
-                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchAnnotationsItemId(workspace.id))}>
+                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchAnnotationsItemId(workspace.id))}>
                     <MessageSquareText size={13} class={selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['annotations.title']()}</span>
                   </button>
@@ -1273,14 +1273,14 @@
                 {#each EXPLORER_GROUPS as group (group.id)}
                   {@const groupedItems = workspaceNodes.filter((item) => group.types.includes(item.type))}
                   {#if groupedItems.length}
-                    <div class="flex h-6 items-center gap-2 px-2 text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">
+                    <div class="flex h-6 items-center gap-2 px-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
                       <span>{explorerGroupLabel(group.id)}</span>
                       <span class="ml-auto tabular-nums">{groupedItems.length}</span>
                     </div>
                     {#each groupedItems as item (item.id)}
                       <div data-testid={item.type === 'terminal' ? 'workbench-agent-item' : undefined} class={`group flex ${item.type === 'terminal' ? 'min-h-16 items-stretch' : 'h-8 items-center'} w-full min-w-0 rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === item.id ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
                         <button
-                          class="flex min-w-0 flex-1 items-start gap-2 px-2 text-left text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                          class="flex min-w-0 flex-1 items-start gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
                           aria-current={selectedNodeId === item.id ? 'page' : undefined}
                           onclick={() => selectNode(workspace.id, item.id)}
                         >
@@ -1288,16 +1288,16 @@
                             <span class="mt-2.5 size-2 shrink-0 rounded-full" style:background={agentStateColor(workspace.id, item.id)}></span>
                             <span class="min-w-0 flex-1 py-1.5">
                               <span data-testid="workbench-agent-name" class="block break-words font-medium leading-[14px]">{item.title || nodeTypeLabel(item)}</span>
-                              <span data-testid="workbench-agent-role" class="mt-0.5 block break-words text-[9px] leading-[13px] text-[var(--app-text-muted)]">{(item.payload as TerminalNodePayload).role ?? nodeTypeLabel(item)}</span>
-                              {#if agentFloorLabel(workspace.id, item)}<span class="mt-0.5 block truncate text-[9px] leading-[13px] text-[var(--app-accent)]">{agentFloorLabel(workspace.id, item)}</span>{/if}
-                              <span class="mt-1 block truncate text-[9px] text-[var(--app-text-soft)]">{agentActivityLabel(workspace.id, item.id) ?? nodeTypeLabel(item)}</span>
+                              <span data-testid="workbench-agent-role" class="mt-0.5 block break-words text-ui-xs leading-[13px] text-[var(--app-text-muted)]">{(item.payload as TerminalNodePayload).role ?? nodeTypeLabel(item)}</span>
+                              {#if agentFloorLabel(workspace.id, item)}<span class="mt-0.5 block truncate text-ui-xs leading-[13px] text-[var(--app-accent)]">{agentFloorLabel(workspace.id, item)}</span>{/if}
+                              <span class="mt-1 block truncate text-ui-xs text-[var(--app-text-soft)]">{agentActivityLabel(workspace.id, item.id) ?? nodeTypeLabel(item)}</span>
                             </span>
                           {:else}
                             <span class={`shrink-0 ${selectedNodeId === item.id ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'}`}>
                               <WorkbenchNodeIcon type={item.type} size={13} />
                             </span>
                             <span class="min-w-0 flex-1 truncate">{item.title || nodeTypeLabel(item)}</span>
-                            <span class="max-w-20 truncate text-[9px] text-[var(--app-text-soft)]">{nodeTypeLabel(item)}</span>
+                            <span class="max-w-20 truncate text-ui-xs text-[var(--app-text-soft)]">{nodeTypeLabel(item)}</span>
                           {/if}
                         </button>
                         <Tooltip.Root>
@@ -1335,7 +1335,7 @@
                   {/if}
                 {/each}
                 {#if workspaceNodes.length === 0}
-                  <p class="px-2 py-2 text-[10px] text-[var(--app-text-muted)]">{m['terminal_browser.workspace_empty']()}</p>
+                  <p class="px-2 py-2 text-ui-xs text-[var(--app-text-muted)]">{m['terminal_browser.workspace_empty']()}</p>
                 {/if}
               </div>
             {/if}
@@ -1355,7 +1355,7 @@
         {#if selectedNode}
           <ChevronRight size={13} class="shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
           <span class="min-w-0 truncate text-xs text-[var(--app-text-soft)]">{selectedNode.title || nodeTypeLabel(selectedNode)}</span>
-          <span class="ml-auto shrink-0 text-[10px] text-[var(--app-text-muted)]">
+          <span class="ml-auto shrink-0 text-ui-xs text-[var(--app-text-muted)]">
             {isWorkbenchFileItemId(selectedNode.id) ? m['workbench_files.file']() : nodeTypeLabel(selectedNode)}
           </span>
         {:else}
@@ -1363,7 +1363,7 @@
         {/if}
         <div class="flex shrink-0 items-center gap-0.5 rounded-md border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-0.5">
           <span
-            class="px-1.5 text-[9px] tabular-nums text-[var(--app-text-muted)]"
+            class="px-1.5 text-ui-xs tabular-nums text-[var(--app-text-muted)]"
             aria-label={m['workbench.pane_count']({ current: visiblePanes.length, max: MAX_WORKBENCH_PANES })}
             title={visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : undefined}
             data-testid="workbench-pane-count"

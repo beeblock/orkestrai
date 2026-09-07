@@ -140,10 +140,10 @@
   });
 </script>
 
-<aside class="flex h-full w-[380px] shrink-0 flex-col border-l border-[var(--app-border)] bg-[var(--app-sidebar)] text-[var(--app-text)] shadow-[-18px_0_50px_rgba(3,2,18,0.22)]" data-tour="preset-library">
+<aside class="flex h-full w-[380px] shrink-0 flex-col border-l border-[var(--app-border)] bg-[var(--app-sidebar)] text-[var(--app-text)] shadow-panel" data-tour="preset-library">
   <header class="flex items-start justify-between gap-4 border-b border-[var(--app-border)] px-4 py-4">
     <div class="min-w-0">
-      <div class="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--app-secondary)]">
+      <div class="mb-1 flex items-center gap-2 text-ui-xs font-semibold uppercase tracking-wider text-[var(--app-secondary)]">
         <Sparkles size={12} />
         {m['preset.eyebrow']()}
       </div>
@@ -188,13 +188,13 @@
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <h4 class="m-0 text-sm font-semibold text-[var(--app-text)]">{preset.name}</h4>
-              <Badge variant={preset.builtin ? 'secondary' : 'outline'} class="h-5 rounded px-1.5 text-[9px] uppercase tracking-normal">
+              <Badge variant={preset.builtin ? 'secondary' : 'outline'} class="h-5 rounded px-1.5 text-ui-xs uppercase tracking-normal">
                 {preset.builtin ? m['preset.builtin']() : m['preset.custom']()}
               </Badge>
-              <Badge variant="outline" class="h-5 rounded px-1.5 text-[9px]">v{preset.version}</Badge>
+              <Badge variant="outline" class="h-5 rounded px-1.5 text-ui-xs">v{preset.version}</Badge>
             </div>
-            <p class="mt-1 text-[11px] leading-4 text-[var(--app-text-muted)]">{preset.description ?? m['preset.no_description']()}</p>
-            <p class="mt-2 text-[10px] font-medium text-[var(--app-text-muted)]">{m['preset.agent_count']({ count: preset.agents })} · {categoryLabel(preset.category)}</p>
+            <p class="mt-1 text-ui-sm leading-4 text-[var(--app-text-muted)]">{preset.description ?? m['preset.no_description']()}</p>
+            <p class="mt-2 text-ui-xs font-medium text-[var(--app-text-muted)]">{m['preset.agent_count']({ count: preset.agents })} · {categoryLabel(preset.category)}</p>
           </div>
         </div>
         <div class="mt-3 flex gap-2">
@@ -237,7 +237,7 @@
 <Dialog.Root open={detailPreset !== null} onOpenChange={(open) => !open && (detailPreset = null)}>
   <Dialog.Content class="max-h-[82vh] max-w-lg overflow-y-auto">
     <Dialog.Header><Dialog.Title class="flex items-center gap-2"><PackageOpen size={16} />{detailPreset?.name}</Dialog.Title><Dialog.Description>{m['team_pack.description']()}</Dialog.Description></Dialog.Header>
-    <div class="space-y-2">{#each revisions as revision (revision.id)}<article class="rounded-md border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3"><div class="flex items-center gap-2"><strong class="text-[11px]">v{revision.version}</strong><time class="ml-auto text-[8px] text-[var(--app-text-muted)]">{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(revision.createdAt))}</time></div><p class="mt-1 text-[9px] leading-4 text-[var(--app-text-muted)]">{revision.releaseNotes ?? m['team_pack.no_notes']()}</p><code class="mt-2 block truncate text-[7px] text-[var(--app-text-muted)]">sha256:{revision.checksum}</code></article>{/each}</div>
-    {#if detailPreset && !detailPreset.builtin}<div class="grid gap-3 border-t border-[var(--app-border)] pt-4"><h3 class="text-[11px] font-semibold">{m['team_pack.publish_title']()}</h3><label class="grid gap-1 text-[9px]">{m['team_pack.version']()}<Input bind:value={releaseVersion} placeholder={m['team_pack.version_placeholder']()} /></label><label class="grid gap-1 text-[9px]">{m['team_pack.release_notes']()}<Textarea bind:value={releaseNotes} class="min-h-20 resize-y text-[10px]" /></label><Button disabled={packBusy || !releaseVersion.trim()} onclick={() => void publishVersion()}>{packBusy ? m['team_pack.publishing']() : m['team_pack.publish']()}</Button></div>{/if}
+    <div class="space-y-2">{#each revisions as revision (revision.id)}<article class="rounded-md border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3"><div class="flex items-center gap-2"><strong class="text-ui-sm">v{revision.version}</strong><time class="ml-auto text-ui-xs text-[var(--app-text-muted)]">{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(revision.createdAt))}</time></div><p class="mt-1 text-ui-xs leading-4 text-[var(--app-text-muted)]">{revision.releaseNotes ?? m['team_pack.no_notes']()}</p><code class="mt-2 block truncate text-ui-xs text-[var(--app-text-muted)]">sha256:{revision.checksum}</code></article>{/each}</div>
+    {#if detailPreset && !detailPreset.builtin}<div class="grid gap-3 border-t border-[var(--app-border)] pt-4"><h3 class="text-ui-sm font-semibold">{m['team_pack.publish_title']()}</h3><label class="grid gap-1 text-ui-xs">{m['team_pack.version']()}<Input bind:value={releaseVersion} placeholder={m['team_pack.version_placeholder']()} /></label><label class="grid gap-1 text-ui-xs">{m['team_pack.release_notes']()}<Textarea bind:value={releaseNotes} class="min-h-20 resize-y text-ui-xs" /></label><Button disabled={packBusy || !releaseVersion.trim()} onclick={() => void publishVersion()}>{packBusy ? m['team_pack.publishing']() : m['team_pack.publish']()}</Button></div>{/if}
   </Dialog.Content>
 </Dialog.Root>

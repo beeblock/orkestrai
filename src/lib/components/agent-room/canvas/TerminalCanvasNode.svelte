@@ -552,7 +552,7 @@
 >
   {#snippet icon()}
     {#if currentProvider && providerIcons[currentProvider]}
-      <span class="terminal-provider-mark"><img src={providerIcons[currentProvider]} width="13" height="13" alt="" /></span>
+      <span class="terminal-provider-mark app-logo-plate"><img src={providerIcons[currentProvider]} width="13" height="13" alt="" /></span>
     {:else}
       <SquareTerminal size={13} />
     {/if}
@@ -602,7 +602,7 @@
               >
                 <span class="provider-state" class:available={provider.installed}></span>
                 <span class="min-w-0 flex-1 truncate">{provider.displayName}</span>
-                {#if provider.id === currentProvider}<span class="text-[9px] text-[var(--app-text-muted)]">{m['term.provider_current']()}</span>{/if}
+                {#if provider.id === currentProvider}<span class="text-ui-xs text-[var(--app-text-muted)]">{m['term.provider_current']()}</span>{/if}
               </DropdownMenu.Item>
             {/each}
           </DropdownMenu.SubContent>
@@ -687,14 +687,14 @@
           <DropdownMenu.SubTrigger>
             <ListRestart size={14} />
             <span class="min-w-0 flex-1">{m['term.commands']()}</span>
-            <span class="text-[9px] tabular-nums text-[var(--app-text-muted)]">{terminalCommands().length + globalCommands().length}</span>
+            <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{terminalCommands().length + globalCommands().length}</span>
           </DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent sideOffset={6} class="max-h-80 w-64 overflow-y-auto">
             <DropdownMenu.Label>{m['term.commands_scope_terminal']()}</DropdownMenu.Label>
             {#each terminalCommands() as command (command.id)}
               <DropdownMenu.Item onclick={() => runSavedCommand(command)}>
                 <SquareTerminal size={13} />
-                <span class="min-w-0 flex-1"><span class="block truncate">{command.name}</span><code class="block truncate text-[9px] text-[var(--app-text-muted)]">{command.command}</code></span>
+                <span class="min-w-0 flex-1"><span class="block truncate">{command.name}</span><code class="block truncate text-ui-xs text-[var(--app-text-muted)]">{command.command}</code></span>
                 {#if command.runOnResume}<History size={12} aria-label={m['term.commands_resume']()} />{/if}
               </DropdownMenu.Item>
             {:else}
@@ -705,7 +705,7 @@
             {#each globalCommands() as command (command.id)}
               <DropdownMenu.Item onclick={() => runSavedCommand(command)}>
                 <Globe2 size={13} />
-                <span class="min-w-0 flex-1"><span class="block truncate">{command.name}</span><code class="block truncate text-[9px] text-[var(--app-text-muted)]">{command.command}</code></span>
+                <span class="min-w-0 flex-1"><span class="block truncate">{command.name}</span><code class="block truncate text-ui-xs text-[var(--app-text-muted)]">{command.command}</code></span>
                 {#if command.runOnResume}<History size={12} aria-label={m['term.commands_resume']()} />{/if}
               </DropdownMenu.Item>
             {:else}
@@ -808,7 +808,7 @@
         />
       {/key}
     {:else if data.payload.command}
-      <div class="grid h-full place-items-center text-[11px] text-[var(--app-text-muted)]" role="status">
+      <div class="grid h-full place-items-center text-ui-sm text-[var(--app-text-muted)]" role="status">
         <span class="inline-flex items-center gap-2">
           <LoaderCircle size={14} class="animate-spin" />
           {m['term.preparing_agent']()}
@@ -1001,7 +1001,7 @@
     border: 1px solid var(--app-border);
     border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--app-shadow-overlay);
   }
 
   .mention-item {
@@ -1053,7 +1053,10 @@
     width: 19px;
     height: 19px;
     border-radius: 5px;
-    background: #20242c;
+    /* Placa fixa escura de proposito: os SVGs em /images sao preenchidos com
+       branco, entao um token de superficie apagaria a marca no tema claro.
+       Mesmo valor da Central de Providers (.provider-icon) e do no Usage. */
+    background: var(--app-logo-plate);
   }
 
   .terminal-status-chip span {

@@ -114,7 +114,7 @@
 
 <div class="min-h-36 overflow-hidden rounded border border-[var(--app-border)] bg-[var(--app-canvas)]">
   <div class="flex h-8 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
-    <span class="text-[9px] font-semibold uppercase text-[var(--app-text-muted)]">{parsed.kind === 'json' ? 'JSON' : parsed.kind === 'xml' ? 'XML' : m['api_client.response_text']()}</span>
+    <span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{parsed.kind === 'json' ? 'JSON' : parsed.kind === 'xml' ? 'XML' : m['api_client.response_text']()}</span>
     <div class="flex items-center gap-1">
       {#if parsed.kind === 'json' || parsed.kind === 'xml'}
         <Button size="icon-sm" variant="ghost" class="size-6" title={m['api_client.expand_all']()} aria-label={m['api_client.expand_all']()} onclick={expandAll}><ChevronsUpDown size={12} /></Button>
@@ -124,7 +124,7 @@
     </div>
   </div>
   {#if parsed.kind === 'json' || parsed.kind === 'xml'}
-    <div class="max-h-[420px] overflow-auto py-1 font-mono text-[10px] leading-5" role="tree" aria-label={m['api_client.structured_response']()}>
+    <div class="max-h-[420px] overflow-auto py-1 font-mono text-ui-xs leading-5" role="tree" aria-label={m['api_client.structured_response']()}>
       {#each rows as row (row.path)}
         <div class="flex min-w-max items-start pr-3 hover:bg-[var(--app-surface-raised)]" style={`padding-left:${6 + row.depth * 16}px`} role="treeitem" aria-selected="false" aria-expanded={row.kind === 'value' ? undefined : expanded.has(row.path)}>
           {#if row.kind !== 'value' && row.kind !== 'close'}
@@ -140,6 +140,6 @@
       {/each}
     </div>
   {:else}
-    <pre class="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[10px] leading-5 text-[var(--app-text)]">{parsed.value}</pre>
+    <pre class="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-ui-xs leading-5 text-[var(--app-text)]">{parsed.value}</pre>
   {/if}
 </div>

@@ -3,7 +3,7 @@
   import type { NodeProps } from '@xyflow/svelte';
   import { GitCompareArrows, RefreshCw, X } from '@lucide/svelte';
   import NodeShell from './NodeShell.svelte';
-  import IconAction from './IconAction.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   export type DiffNodeData = {
@@ -127,8 +127,8 @@
     {/if}
   {/snippet}
   {#snippet actions()}
-    <IconAction label={m['diff.reload']()} onclick={refresh}><RefreshCw size={13} /></IconAction>
-    <IconAction label={m['diff.remove']()} danger onclick={() => data.onDelete(id)}><X size={13} /></IconAction>
+    <HeaderIconButton class="node-action-btn" label={m['diff.reload']()} onclick={refresh}><RefreshCw size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['diff.remove']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   {#if !isRepo}
@@ -178,7 +178,7 @@
   .branch-badge {
     font-size: 11px;
     color: var(--app-success);
-    background: rgba(142, 201, 142, 0.12);
+    background: color-mix(in srgb, var(--app-success) 12%, transparent);
     padding: 1px 7px;
     border-radius: 8px;
   }
@@ -271,13 +271,13 @@
 
   .diff-add {
     color: var(--app-success);
-    background: rgba(142, 201, 142, 0.08);
+    background: color-mix(in srgb, var(--app-success) 8%, transparent);
     display: block;
   }
 
   .diff-del {
     color: var(--app-danger);
-    background: rgba(229, 72, 77, 0.08);
+    background: color-mix(in srgb, var(--app-danger) 8%, transparent);
     display: block;
   }
 

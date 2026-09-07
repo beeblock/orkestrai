@@ -66,7 +66,7 @@
         type="button"
         disabled={!workspaceId}
         class={variant === "toolbar"
-          ? `relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] transition-[color,background-color,border-color] ${active ? "border-[var(--app-accent)]/45 bg-[var(--app-accent-soft)] text-[var(--app-accent)]" : "border-transparent text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`
+          ? `relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-ui-sm transition-[color,background-color,border-color] ${active ? "border-[var(--app-accent)]/45 bg-[var(--app-accent-soft)] text-[var(--app-accent)]" : "border-transparent text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`
           : `relative grid size-8 shrink-0 place-items-center rounded-md border transition-[color,background-color,border-color] ${active ? "border-[var(--app-accent)]/45 bg-[var(--app-accent-soft)] text-[var(--app-accent)]" : "border-[var(--app-border)] text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`}
         aria-label={m["collaboration.share_workspace"]()}
         data-tour="workspace-sharing"
@@ -81,13 +81,13 @@
             class={`absolute right-0.5 top-0.5 size-1.5 rounded-full ring-2 ring-[var(--app-canvas)] ${pending > 0 || !online ? "bg-[var(--app-warning)]" : "bg-[var(--app-success)]"}`}
           ></span>
           {#if peers > 0 && variant === "toolbar"}<span
-              class="ml-0.5 text-[9px] tabular-nums">{peers}</span
+              class="ml-0.5 text-ui-xs tabular-nums">{peers}</span
             >{/if}
         {/if}
         {#if pending > 0}<span
             class={variant === "toolbar"
-              ? "ml-0.5 rounded bg-[var(--app-warning)] px-1 text-[9px] font-semibold text-black"
-              : "absolute -right-1.5 -bottom-1 grid size-4 place-items-center rounded-full bg-[var(--app-warning)] text-[8px] font-bold text-black"}
+              ? "ml-0.5 rounded bg-[var(--app-warning)] px-1 text-ui-xs font-semibold text-black"
+              : "absolute -right-1.5 -bottom-1 grid size-4 place-items-center rounded-full bg-[var(--app-warning)] text-ui-xs font-bold text-black"}
             >{pending}</span
           >{/if}
       </button>

@@ -27,7 +27,7 @@
 {#if attachments.length}
   <div class={`flex min-w-0 flex-wrap gap-1 ${compact ? '' : 'px-2 py-1.5'}`} aria-label={m['attachment.list_label']()}>
     {#each attachments as attachment (attachment.id)}
-      <span class="group inline-flex h-6 min-w-0 max-w-48 items-center gap-1 rounded-[4px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-1.5 text-[10px] text-[var(--app-text-soft)]">
+      <span class="group inline-flex h-6 min-w-0 max-w-48 items-center gap-1 rounded-[4px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-1.5 text-ui-xs text-[var(--app-text-soft)]">
         {#if iconKind(attachment) === 'link'}<Link size={11} aria-hidden="true" />
         {:else if iconKind(attachment) === 'image'}<FileImage size={11} aria-hidden="true" />
         {:else if iconKind(attachment) === 'pdf'}<FileText size={11} aria-hidden="true" />

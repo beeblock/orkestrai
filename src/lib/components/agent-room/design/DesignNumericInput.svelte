@@ -95,13 +95,13 @@
   <button
     type="button"
     tabindex="-1"
-    class="absolute inset-y-0 left-0 z-10 flex w-11 cursor-ew-resize select-none items-center justify-center px-1 text-[9px] font-medium text-[var(--app-text-muted)]"
+    class="absolute inset-y-0 left-0 z-10 flex w-11 cursor-ew-resize select-none items-center justify-center px-1 text-ui-xs font-medium text-[var(--app-text-muted)]"
     aria-label={label}
     {disabled}
     onpointerdown={startScrub}
   >{label}</button>
   <Input
-    class="h-8 pl-11 text-[11px] tabular-nums"
+    class="h-8 pl-11 text-ui-sm tabular-nums"
     value={draft}
     {disabled}
     aria-label={label}

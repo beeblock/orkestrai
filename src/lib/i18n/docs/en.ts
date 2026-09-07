@@ -845,6 +845,22 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: 'September 7, 2026 · 0.27.0',
+      title: 'Orkestrai 0.27.0: the Design editor starts to feel like a design tool',
+      summary: 'The artboard now stands apart from the void, selection chrome moved out of the artwork, and the app gained elevation and type scales.',
+      items: [
+        'The Design canvas now has a ground: a dot grid that scrolls with the content, an artboard with real elevation, and no native scrollbars crossing the drawing surface.',
+        'Selecting several layers draws a single bounding box, and resizing shows a live width by height readout while rotating shows a live angle.',
+        'Fixed: the built-in marketing and mobile templates no longer start with clipped headlines, and every official template is now tested for text clipping.',
+        'Fixed: rapid Canvas and Workbench node setting changes are applied optimistically and persisted in order per node, so a component remount or an earlier save response cannot restore stale values over a field that is still being edited.',
+        'Fixed: node header commands keep their clicks isolated from the Canvas after moving to the shared icon button, so running an action cannot trigger an interaction underneath it.',
+        'Fixed: the hover outline of the layer under the cursor leaked into every exported SVG, PNG, JPEG, WebP and PDF, into the document thumbnail, and into the reference image that gates visual approval. Editor chrome is now stripped through one shared list, covered by a test that fails when a new marker is left unclassified.',
+        'Fixed: moving, adding or deleting a guide silently invalidated a human visual approval; and selection and hover outlines inherited the layer own opacity, blend mode, filter and clipping — selecting something at 20 percent opacity produced an outline at 20 percent.',
+        'The inspector follows the order the work needs (Position, Size, Auto layout, Constraints, Appearance, Fill, Stroke, Effects), sets an 11px base, its dropdowns fill their column, and collapsed sections no longer flash open on mount.',
+        'Foundation: the light theme now exists in CSS and the chosen theme is restored before the first paint; ten tokens the interface referenced but nobody had defined are now defined, along with elevation and type scales; around five hundred labels at 8 and 9 pixels moved up to a legible size; and the corner radius that clipped the border on every Canvas node was fixed.',
+      ],
+    },
+    {
       date: 'September 7, 2026 · 0.26.1',
       title: 'Orkestrai 0.26.1: reliable Git Floors on WSL',
       summary: 'Windows workspaces backed by WSL now keep every Floor operation inside the selected Linux distribution.',

@@ -470,11 +470,11 @@
       </Tooltip.Trigger>
       <Tooltip.Content side="left" sideOffset={10} class="flex w-60 flex-col items-stretch gap-1.5 p-2.5">
         <span class="font-medium">{label()}</span>
-        <span class="flex items-center gap-1.5 text-[11px] opacity-75">
+        <span class="flex items-center gap-1.5 text-ui-sm opacity-75">
           {#if placement.pinned}<Pin size={12} fill="currentColor" />{:else}<Move size={12} />{/if}
           {placementStatus()}
         </span>
-        <span class="flex items-center gap-1.5 border-t border-background/15 pt-1.5 text-[11px] opacity-80">
+        <span class="flex items-center gap-1.5 border-t border-background/15 pt-1.5 text-ui-sm opacity-80">
           <Kbd.Root>{placementModifier}</Kbd.Root>
           <span>+ {m['dictation.position_controls_hint']()}</span>
         </span>
