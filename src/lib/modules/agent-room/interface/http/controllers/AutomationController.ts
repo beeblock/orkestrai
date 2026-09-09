@@ -90,6 +90,17 @@ export class AutomationController extends Controller {
     }
   }
 
+  async cancel(event: any) {
+    try {
+      const run = await routineService.getRun(event.params.runId);
+      const automation = run ? await routineService.get(run.routineId) : null;
+      if (!run || !automation || automation.workspaceId !== event.params.id) return this.json({ error: 'Execution not found.' }, 404);
+      return this.json({ data: await routineService.cancel(run.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to cancel automation execution.');
+    }
+  }
+
   async recipes() {
     return this.json({ data: automationRecipes });
   }

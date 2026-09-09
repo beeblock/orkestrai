@@ -1060,7 +1060,7 @@ export type AutomationTriggerType =
   | 'usage_threshold';
 
 export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify';
-export type AutomationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+export type AutomationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';
 
 export type Routine = {
   id: string;
@@ -1105,6 +1105,11 @@ export type AutomationRun = {
   attempt: number;
   retryOfId: string | null;
   recoverable: boolean;
+  checkpoint: Record<string, unknown> | null;
+  cancelRequestedAt: string | null;
+  nextAttemptAt: string | null;
+  maxAttempts: number;
+  deadLetteredAt: string | null;
 };
 
 export type AutomationIntegration = {

@@ -1419,6 +1419,11 @@ export const TOURS_ES: Tour[] = [
         body: 'Elige el evento y la acción exactos. Los disparadores de tarea, mensaje, Git, GitHub, webhook, archivo, uso, agenda y manual pueden enviar un prompt, crear una tarea Kanban o notificar el escritorio.',
       },
       {
+        id: 'verify-durable-execution',
+        title: 'Deja que el Core recupere el trabajo',
+        body: 'Después de guardar, la ejecución queda durable antes de empezar. Los agentes cerrados se inician o reanudan, los leases abandonados vuelven a la cola, los reintentos usan backoff limitado y los fallos finales siguen visibles como Requiere intervención. El historial también permite cancelar trabajo activo o repetir un fallo final.',
+      },
+      {
         id: 'inspect-history',
         title: 'Sigue cada ejecución',
         body: 'Usa el Historial de ejecuciones para revisar entrada, agente y provider destino, confirmación de salida, duración, intento y fallo. Las ejecuciones fallidas ofrecen un reintento limitado en lugar de desaparecer.',

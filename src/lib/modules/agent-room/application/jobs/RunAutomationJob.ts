@@ -13,7 +13,7 @@ export class RunAutomationJob extends Job {
 
   async handle(): Promise<void> {
     if (!this.runId) throw new Error('Automation run id is required.');
-    await routineService.executeRun(this.runId, true);
+    await routineService.executeRun(this.runId, false);
   }
 
   async failed(error: Error): Promise<void> {

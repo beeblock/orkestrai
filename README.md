@@ -254,8 +254,10 @@ common credentials redacted; normal agent output is not persisted.
 - **Traceable automations:** trigger work manually, on a schedule, from task or
   message events, Git commits, GitHub pull requests, webhooks, file changes, or
   provider usage thresholds. Actions can prompt an agent, create a Kanban task,
-  or notify the desktop. Ready recipes, idempotent queued jobs, bounded retries,
-  and execution history keep every run visible; GitHub credentials remain
+  or notify the desktop. Database-backed runs use renewable leases and
+  checkpoints, recover after a stopped worker or sleeping computer, start or
+  resume closed agents, and expose cancellation, bounded backoff, dead-letter
+  state, and replay in execution history. GitHub credentials remain
   encrypted in Electron secure storage instead of the workspace database.
 - **Git Review Center:** inspect staged and unstaged changes, compare files in a
   Monaco diff, create reviews linked to tasks and assignees, leave persistent

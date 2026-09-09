@@ -1,5 +1,5 @@
 import { readdir, stat } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { Queue } from '@beeblock/svelar/queue';
 import { uuidv7 } from '@beeblock/svelar/support';
@@ -15,7 +15,6 @@ import type { AutomationTriggerReceived } from '../../domain/events/AutomationTr
 import { AgentRoutine } from '../../domain/models/AgentRoutine.js';
 import { AgentRoutineRun } from '../../domain/models/AgentRoutineRun.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { githubAutomationAdapter } from '../../infrastructure/integrations/GitHubAutomationAdapter.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { nativeNotificationService } from './NativeNotificationService.js';
@@ -24,8 +23,14 @@ import { gitService } from './GitService.js';
 import { automationIntegrationService } from './AutomationIntegrationService.js';
 import { RunAutomationJob } from '../jobs/RunAutomationJob.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { agentSessionService } from './AgentSessionService.js';
 
 const TICK_MS = 15_000;
+const RUN_LEASE_MS = 2 * 60_000;
+const RUN_TIMEOUT_MS = 10 * 60_000;
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 20_000;
+const QUEUED_RUN_BATCH = 10;
 const POLL_INTERVALS: Partial<Record<AutomationTriggerType, number>> = {
   file_change: 30_000,
   git_commit: 30_000,
@@ -111,7 +116,12 @@ function mapRun(model: AgentRoutineRun): AutomationRun {
     durationMs: model.getAttribute('duration_ms') === null ? null : Number(model.getAttribute('duration_ms')),
     attempt: Number(model.getAttribute('attempt') ?? 1),
     retryOfId: model.getAttribute('retry_of_id') ? String(model.getAttribute('retry_of_id')) : null,
-    recoverable: status === 'failed',
+    recoverable: status === 'failed' || status === 'dead_letter',
+    checkpoint: jsonObject(model.getAttribute('checkpoint_json')),
+    cancelRequestedAt: model.getAttribute('cancel_requested_at') ? toIso(model.getAttribute('cancel_requested_at')) : null,
+    nextAttemptAt: model.getAttribute('next_attempt_at') ? toIso(model.getAttribute('next_attempt_at')) : null,
+    maxAttempts: Number(model.getAttribute('max_attempts') ?? MAX_ATTEMPTS),
+    deadLetteredAt: model.getAttribute('dead_lettered_at') ? toIso(model.getAttribute('dead_lettered_at')) : null,
   };
 }
 
@@ -142,6 +152,9 @@ function actionConfig(input: AutomationFormInput): Record<string, unknown> {
 export class RoutineService {
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly lastPolledAt = new Map<string, number>();
+  private readonly workerId = `core:${process.pid}:${randomUUID()}`;
+  private readonly activeRuns = new Map<string, AbortController>();
+  private schedulerTickRunning = false;
 
   async list(workspaceId: string): Promise<Routine[]> {
     const rows = await AgentRoutine.query().where('workspace_id', workspaceId).orderBy('created_at', 'asc').get();
@@ -272,16 +285,36 @@ export class RoutineService {
   async retry(runId: string): Promise<AutomationRun> {
     const original = await AgentRoutineRun.find(runId);
     if (!original) throw new Error('Execution not found.');
+    if (!['failed', 'dead_letter'].includes(String(original.getAttribute('status') ?? ''))) {
+      throw new Error('Only a final failed execution can be replayed.');
+    }
     const routine = await AgentRoutine.find(original.getAttribute('routine_id'));
     if (!routine) throw new Error('Automation not found.');
-    const nextAttempt = Number(original.getAttribute('attempt') ?? 1) + 1;
-    if (nextAttempt > 3) throw new Error('This execution reached the retry limit.');
     const run = await this.createRun(
-      mapRoutine(routine), 'manual', `retry:${runId}:${nextAttempt}`, jsonObject(original.getAttribute('input_json')), runId, nextAttempt - 1,
+      mapRoutine(routine), 'manual', `retry:${runId}:${uuidv7()}`, jsonObject(original.getAttribute('input_json')), runId, 0,
     );
-    await Queue.dispatch(new RunAutomationJob(run.id)).catch(() => undefined);
+    await this.dispatchRun(run.id);
     const updated = await AgentRoutineRun.find(run.id);
     return updated ? mapRun(updated) : run;
+  }
+
+  async cancel(runId: string): Promise<AutomationRun | null> {
+    const run = await AgentRoutineRun.find(runId);
+    if (!run) return null;
+    const status = String(run.getAttribute('status') ?? 'queued') as AutomationRunStatus;
+    if (['succeeded', 'failed', 'cancelled', 'dead_letter'].includes(status)) return mapRun(run);
+    const now = new Date();
+    if (status === 'queued') {
+      await AgentRoutineRun.query().where('id', runId).where('status', 'queued').update({
+        status: 'cancelled', ok: false, detail: 'Execution cancelled.', error: null,
+        cancel_requested_at: now, finished_at: now, next_attempt_at: null,
+      });
+    } else {
+      await AgentRoutineRun.query().where('id', runId).where('status', 'running').update({ cancel_requested_at: now });
+      this.activeRuns.get(runId)?.abort(new Error('Execution cancelled.'));
+    }
+    const updated = await AgentRoutineRun.find(runId);
+    return updated ? mapRun(updated) : null;
   }
 
   async dispatchEvent(event: AutomationTriggerReceived): Promise<number> {
@@ -311,6 +344,7 @@ export class RoutineService {
 
   async tick(): Promise<number> {
     let count = 0;
+    count += await this.recoverInterruptedRuns();
     const due = await this.dueRoutines();
     for (const routine of due) {
       const interval = Number(routine.triggerConfig.intervalMinutes ?? routine.intervalMinutes ?? 1);
@@ -323,30 +357,70 @@ export class RoutineService {
       if (!POLL_INTERVALS[routine.triggerType] || !this.pollDue(routine)) continue;
       if (await this.poll(routine).catch(() => false)) count += 1;
     }
+    count += await this.processQueuedRuns();
     return count;
   }
 
   async executeRun(runId: string, rethrow = true): Promise<void> {
-    const run = await AgentRoutineRun.find(runId);
-    if (!run) throw new Error('Automation execution not found.');
+    const run = await this.claimRun(runId);
+    if (!run) return;
     const routineModel = await AgentRoutine.find(run.getAttribute('routine_id'));
-    if (!routineModel) throw new Error('Automation not found.');
+    if (!routineModel) {
+      await AgentRoutineRun.query().where('id', runId).update({
+        status: 'dead_letter', ok: false, detail: 'Automation no longer exists.',
+        error: 'Automation no longer exists.', dead_lettered_at: new Date(),
+        finished_at: new Date(), lease_owner: null, lease_expires_at: null,
+      });
+      return;
+    }
     const routine = mapRoutine(routineModel);
     const started = Date.now();
     const input = jsonObject(run.getAttribute('input_json'));
-    const attempt = Number(run.getAttribute('attempt') ?? 0) + 1;
+    const attempt = Number(run.getAttribute('attempt') ?? 1);
+    const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);
+    if (!workspace) {
+      await AgentRoutineRun.query().where('id', runId).where('status', 'running').update({
+        status: 'dead_letter', detail: 'Workspace no longer exists.', error: 'Workspace no longer exists.',
+        dead_lettered_at: new Date(), finished_at: new Date(), lease_owner: null, lease_expires_at: null,
+      });
+      return;
+    }
+    if (workspace.suspendedAt) {
+      await AgentRoutineRun.query().where('id', runId).where('status', 'running').update({
+        status: 'queued', detail: 'Waiting for the workspace to resume.',
+        attempt: Math.max(0, attempt - 1), lease_owner: null, lease_expires_at: null,
+        next_attempt_at: new Date(Date.now() + 60_000),
+      });
+      return;
+    }
     const agentNodeId = routine.actionType === 'prompt_agent' ? String(routine.actionConfig.targetNodeId ?? '') : null;
     const agent = agentNodeId ? await workspaceRepository.getNode(agentNodeId) : null;
     const provider = agent ? String((agent.payload as Record<string, unknown>).provider ?? '') || null : null;
     const usageBefore = provider && ['claude', 'codex', 'kimi'].includes(provider)
       ? await usageService.getUsage(provider, false).catch(() => null)
       : null;
+    const controller = new AbortController();
+    this.activeRuns.set(runId, controller);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error('Execution timed out.'));
+    }, RUN_TIMEOUT_MS);
+    timeout.unref?.();
+    const leasePulse = setInterval(() => {
+      void this.heartbeat(runId, { stage: 'running', attempt }).catch(() => undefined);
+    }, Math.floor(RUN_LEASE_MS / 3));
+    leasePulse.unref?.();
     await AgentRoutineRun.query().where('id', runId).update({
-      status: 'running', started_at: new Date(started), attempt, agent_node_id: agentNodeId, provider,
+      agent_node_id: agentNodeId,
+      provider,
       usage_before_json: usageBefore ? JSON.stringify(usageBefore) : null,
+      timeout_at: new Date(started + RUN_TIMEOUT_MS),
     });
     try {
-      const result = await this.executeAction(routine, input);
+      await this.heartbeat(runId, { stage: 'action', attempt });
+      const result = await this.executeAction(routine, input, runId, controller.signal);
+      if (controller.signal.aborted || await this.isCancellationRequested(runId)) throw controller.signal.reason ?? new Error('Execution cancelled.');
       const usageAfter = provider && ['claude', 'codex', 'kimi'].includes(provider)
         ? await usageService.getUsage(provider, false).catch(() => null)
         : null;
@@ -356,39 +430,174 @@ export class RoutineService {
         status: 'succeeded', ok: true, detail, output_json: JSON.stringify(result), error: null,
         usage_after_json: usageAfter ? JSON.stringify(usageAfter) : null,
         finished_at: new Date(finished), duration_ms: finished - started,
+        lease_owner: null, lease_expires_at: null, heartbeat_at: new Date(finished),
+        checkpoint_json: JSON.stringify({ stage: 'complete', attempt }), next_attempt_at: null,
       });
-      await AgentRoutine.query().where('id', routine.id).update({
-        last_run_at: new Date(finished), run_count: routine.runCount + 1, updated_at: new Date(finished),
-        ...(routine.triggerConfig.once === true ? { enabled: false } : {}),
-      });
+      await this.finishRoutine(routine, finished);
     } catch (error) {
       const finished = Date.now();
       const message = error instanceof Error ? error.message : String(error);
-      await AgentRoutineRun.query().where('id', runId).update({
-        status: 'failed', ok: false, detail: message, error: message,
-        finished_at: new Date(finished), duration_ms: finished - started,
-      });
-      await AgentRoutine.query().where('id', routine.id).update({
-        last_run_at: new Date(finished), run_count: routine.runCount + 1, updated_at: new Date(finished),
-        ...(routine.triggerConfig.once === true ? { enabled: false } : {}),
-      });
-      if (rethrow) throw error;
+      const cancelled = !timedOut && (controller.signal.aborted || await this.isCancellationRequested(runId));
+      const maxAttempts = Number(run.getAttribute('max_attempts') ?? MAX_ATTEMPTS);
+      if (cancelled) {
+        await AgentRoutineRun.query().where('id', runId).update({
+          status: 'cancelled', ok: false, detail: 'Execution cancelled.', error: null,
+          finished_at: new Date(finished), duration_ms: finished - started,
+          lease_owner: null, lease_expires_at: null, next_attempt_at: null,
+          checkpoint_json: JSON.stringify({ stage: 'cancelled', attempt }),
+        });
+      } else if (attempt < maxAttempts) {
+        const delay = RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1);
+        await AgentRoutineRun.query().where('id', runId).update({
+          status: 'queued', ok: false, detail: `Retry ${attempt + 1} scheduled.`, error: message,
+          finished_at: null, duration_ms: null, lease_owner: null, lease_expires_at: null,
+          next_attempt_at: new Date(finished + delay),
+          checkpoint_json: JSON.stringify({ stage: 'retry_wait', attempt, previousError: message }),
+        });
+      } else {
+        await AgentRoutineRun.query().where('id', runId).update({
+          status: 'dead_letter', ok: false, detail: message, error: message,
+          finished_at: new Date(finished), duration_ms: finished - started,
+          lease_owner: null, lease_expires_at: null, next_attempt_at: null,
+          dead_lettered_at: new Date(finished), checkpoint_json: JSON.stringify({ stage: 'dead_letter', attempt }),
+        });
+        await this.finishRoutine(routine, finished);
+      }
+      if (rethrow && !cancelled) throw error;
+    } finally {
+      clearTimeout(timeout);
+      clearInterval(leasePulse);
+      this.activeRuns.delete(runId);
     }
   }
 
   async markJobFailure(runId: string, error: Error): Promise<void> {
-    await AgentRoutineRun.query().where('id', runId).update({ status: 'failed', ok: false, error: error.message, detail: error.message });
+    const run = await AgentRoutineRun.find(runId);
+    if (!run || String(run.getAttribute('status')) !== 'running') return;
+    await AgentRoutineRun.query().where('id', runId).update({
+      status: 'queued', ok: false, error: error.message, detail: 'Execution returned to the durable queue.',
+      lease_owner: null, lease_expires_at: null, next_attempt_at: new Date(Date.now() + RETRY_BASE_MS),
+    });
   }
 
   startScheduler(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick().catch(() => undefined), TICK_MS);
+    void this.runSchedulerTick();
+    this.timer = setInterval(() => void this.runSchedulerTick(), TICK_MS);
     this.timer.unref?.();
   }
 
   stopScheduler(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+  }
+
+  async recoverInterruptedRuns(): Promise<number> {
+    const rows = await AgentRoutineRun.query().where('status', 'running').get();
+    const now = Date.now();
+    let recovered = 0;
+    for (const run of rows) {
+      const leaseExpiresAt = run.getAttribute('lease_expires_at');
+      if (leaseExpiresAt && new Date(leaseExpiresAt as Date).getTime() > now) continue;
+      const attempt = Number(run.getAttribute('attempt') ?? 0);
+      const maxAttempts = Number(run.getAttribute('max_attempts') ?? MAX_ATTEMPTS);
+      if (attempt >= maxAttempts) {
+        await AgentRoutineRun.query().where('id', run.getAttribute('id')).where('status', 'running').update({
+          status: 'dead_letter', ok: false,
+          detail: 'Execution stopped after its worker disappeared and no retries remained.',
+          error: String(run.getAttribute('error') ?? 'Worker lease expired.'),
+          dead_lettered_at: new Date(now), finished_at: new Date(now),
+          lease_owner: null, lease_expires_at: null,
+          checkpoint_json: JSON.stringify({ stage: 'dead_letter', attempt, reason: 'lease_expired' }),
+        });
+      } else {
+        await AgentRoutineRun.query().where('id', run.getAttribute('id')).where('status', 'running').update({
+          status: 'queued', detail: 'Recovered after the previous worker stopped.',
+          lease_owner: null, lease_expires_at: null, next_attempt_at: new Date(now),
+          checkpoint_json: JSON.stringify({ stage: 'recovered', attempt, reason: 'lease_expired' }),
+        });
+      }
+      recovered += 1;
+    }
+    return recovered;
+  }
+
+  async processQueuedRuns(limit = QUEUED_RUN_BATCH): Promise<number> {
+    const rows = await AgentRoutineRun.query().where('status', 'queued').orderBy('ran_at', 'asc').limit(limit).get();
+    const now = Date.now();
+    let processed = 0;
+    for (const run of rows) {
+      const nextAttemptAt = run.getAttribute('next_attempt_at');
+      if (nextAttemptAt && new Date(nextAttemptAt as Date).getTime() > now) continue;
+      await this.executeRun(String(run.getAttribute('id')), false);
+      processed += 1;
+    }
+    return processed;
+  }
+
+  private async claimRun(runId: string): Promise<AgentRoutineRun | null> {
+    const run = await AgentRoutineRun.find(runId);
+    if (!run || String(run.getAttribute('status') ?? 'queued') !== 'queued') return null;
+    const nextAttemptAt = run.getAttribute('next_attempt_at');
+    if (nextAttemptAt && new Date(nextAttemptAt as Date).getTime() > Date.now()) return null;
+    if (run.getAttribute('cancel_requested_at')) {
+      await this.cancel(runId);
+      return null;
+    }
+    const now = new Date();
+    const attempt = Number(run.getAttribute('attempt') ?? 0) + 1;
+    const claimed = await AgentRoutineRun.query().where('id', runId).where('status', 'queued').update({
+      status: 'running', started_at: now, finished_at: null, attempt,
+      lease_owner: this.workerId, lease_expires_at: new Date(now.getTime() + RUN_LEASE_MS),
+      heartbeat_at: now, next_attempt_at: null,
+      checkpoint_json: JSON.stringify({ stage: 'claimed', attempt }),
+    });
+    return claimed > 0 ? AgentRoutineRun.find(runId) : null;
+  }
+
+  private async heartbeat(runId: string, checkpoint: Record<string, unknown>): Promise<void> {
+    const now = new Date();
+    await AgentRoutineRun.query().where('id', runId).where('status', 'running').where('lease_owner', this.workerId).update({
+      heartbeat_at: now,
+      lease_expires_at: new Date(now.getTime() + RUN_LEASE_MS),
+      checkpoint_json: JSON.stringify(checkpoint),
+    });
+  }
+
+  private async isCancellationRequested(runId: string): Promise<boolean> {
+    const run = await AgentRoutineRun.find(runId);
+    return Boolean(run?.getAttribute('cancel_requested_at'));
+  }
+
+  private async finishRoutine(routine: Routine, finished: number): Promise<void> {
+    const model = await AgentRoutine.find(routine.id);
+    if (!model) return;
+    await AgentRoutine.query().where('id', routine.id).update({
+      last_run_at: new Date(finished),
+      run_count: Number(model.getAttribute('run_count') ?? 0) + 1,
+      updated_at: new Date(finished),
+      ...(routine.triggerConfig.once === true ? { enabled: false } : {}),
+    });
+  }
+
+  private async runSchedulerTick(): Promise<void> {
+    if (this.schedulerTickRunning) return;
+    this.schedulerTickRunning = true;
+    try {
+      await this.tick();
+    } finally {
+      this.schedulerTickRunning = false;
+    }
+  }
+
+  private async dispatchRun(runId: string): Promise<void> {
+    try {
+      await Queue.dispatch(new RunAutomationJob(runId));
+    } catch {
+      await AgentRoutineRun.query().where('id', runId).where('status', 'queued').update({
+        detail: 'Queued durably; the Core will retry delivery.',
+      });
+    }
   }
 
   private async validateAction(workspaceId: string, type: AutomationActionType, config: Record<string, unknown>): Promise<void> {
@@ -413,15 +622,24 @@ export class RoutineService {
     const idempotencyKey = `${routine.id}:${triggerKey}`;
     const existing = await AgentRoutineRun.query().where('idempotency_key', idempotencyKey).first();
     if (existing) return mapRun(existing);
-    const model = await AgentRoutineRun.create({
-      id: uuidv7(), routine_id: routine.id, ran_at: new Date(), ok: false, detail: null,
-      status: 'queued', trigger_type: triggerType, trigger_key: triggerKey,
-      idempotency_key: idempotencyKey, input_json: JSON.stringify(input), output_json: null,
-      error: null, agent_node_id: null, provider: null, usage_before_json: null,
-      usage_after_json: null, started_at: null, finished_at: null, duration_ms: null,
-      attempt, retry_of_id: retryOfId,
-    });
-    return mapRun(model);
+    try {
+      const model = await AgentRoutineRun.create({
+        id: uuidv7(), routine_id: routine.id, ran_at: new Date(), ok: false, detail: null,
+        status: 'queued', trigger_type: triggerType, trigger_key: triggerKey,
+        idempotency_key: idempotencyKey, input_json: JSON.stringify(input), output_json: null,
+        error: null, agent_node_id: null, provider: null, usage_before_json: null,
+        usage_after_json: null, started_at: null, finished_at: null, duration_ms: null,
+        attempt, retry_of_id: retryOfId, lease_owner: null, lease_expires_at: null,
+        heartbeat_at: null, checkpoint_json: JSON.stringify({ stage: 'queued', attempt }),
+        cancel_requested_at: null, timeout_at: null, max_attempts: MAX_ATTEMPTS,
+        next_attempt_at: null, dead_lettered_at: null,
+      });
+      return mapRun(model);
+    } catch (error) {
+      const raced = await AgentRoutineRun.query().where('idempotency_key', idempotencyKey).first();
+      if (raced) return mapRun(raced);
+      throw error;
+    }
   }
 
   private async enqueue(routine: Routine, triggerType: AutomationTriggerType, triggerKey: string, input: Record<string, unknown>): Promise<boolean> {
@@ -430,7 +648,7 @@ export class RoutineService {
     const idempotencyKey = `${routine.id}:${triggerKey}`;
     if (await AgentRoutineRun.query().where('idempotency_key', idempotencyKey).first()) return false;
     const run = await this.createRun(routine, triggerType, triggerKey, input);
-    await Queue.dispatch(new RunAutomationJob(run.id)).catch(() => undefined);
+    await this.dispatchRun(run.id);
     return true;
   }
 
@@ -539,25 +757,31 @@ export class RoutineService {
     return `file:${newest}:${size}:${count}`;
   }
 
-  private async executeAction(routine: Routine, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async executeAction(
+    routine: Routine,
+    input: Record<string, unknown>,
+    runId: string,
+    signal: AbortSignal,
+  ): Promise<Record<string, unknown>> {
     if (routine.actionType === 'prompt_agent') {
       const targetNodeId = String(routine.actionConfig.targetNodeId ?? routine.targetNodeId ?? '');
       const prompt = this.interpolate(String(routine.actionConfig.prompt ?? routine.prompt), input);
+      const ensured = await agentSessionService.ensure(routine.workspaceId, targetNodeId);
       const node = await workspaceRepository.getNode(targetNodeId);
-      const sessionId = String((node?.payload as Record<string, unknown> | undefined)?.sessionId ?? '');
-      const session = sessionId ? ptySessionManager.get(sessionId) : null;
-      if (!sessionId || !session || session.exited) throw new Error('O terminal alvo não tem sessão PTY ativa.');
       const steps = prompt.split('\n').map((line) => line.replace(/^&&\s*/, '').trim()).filter(Boolean);
-      for (const step of steps) {
+      for (const [index, step] of steps.entries()) {
+        if (signal.aborted || await this.isCancellationRequested(runId)) throw signal.reason ?? new Error('Execution cancelled.');
+        await this.heartbeat(runId, { stage: 'delivering', attempt: Number((await AgentRoutineRun.find(runId))?.getAttribute('attempt') ?? 1), step: index + 1, totalSteps: steps.length });
         await agentTerminalDeliveryService.deliver({
           workspaceId: routine.workspaceId,
           nodeId: targetNodeId,
-          sessionId,
+          sessionId: ensured.sessionId,
           message: step,
           submitDelayMs: 120,
+          signal,
         });
       }
-      return { detail: `${steps.length} etapa(s) enviadas para ${node?.title ?? 'terminal'}.`, steps: steps.length, target: node?.title };
+      return { detail: `${steps.length} step(s) delivered to ${node?.title ?? 'terminal'}.`, steps: steps.length, target: node?.title, sessionState: ensured.state };
     }
     if (routine.actionType === 'create_task') {
       const task = await taskBoardService.create(routine.workspaceId, {

@@ -10,6 +10,9 @@ export class AgentRoutineRun extends Model {
     'trigger_key', 'idempotency_key', 'input_json', 'output_json', 'error',
     'agent_node_id', 'provider', 'usage_before_json', 'usage_after_json',
     'started_at', 'finished_at', 'duration_ms', 'attempt', 'retry_of_id',
+    'lease_owner', 'lease_expires_at', 'heartbeat_at', 'checkpoint_json',
+    'cancel_requested_at', 'timeout_at', 'max_attempts', 'next_attempt_at',
+    'dead_lettered_at',
   ];
 
   static casts = {
@@ -19,6 +22,13 @@ export class AgentRoutineRun extends Model {
     finished_at: 'date' as const,
     duration_ms: 'number' as const,
     attempt: 'number' as const,
+    lease_expires_at: 'date' as const,
+    heartbeat_at: 'date' as const,
+    cancel_requested_at: 'date' as const,
+    timeout_at: 'date' as const,
+    max_attempts: 'number' as const,
+    next_attempt_at: 'date' as const,
+    dead_lettered_at: 'date' as const,
   };
 
   declare id: string;
@@ -42,4 +52,13 @@ export class AgentRoutineRun extends Model {
   declare duration_ms: number | null;
   declare attempt: number | null;
   declare retry_of_id: string | null;
+  declare lease_owner: string | null;
+  declare lease_expires_at: Date | null;
+  declare heartbeat_at: Date | null;
+  declare checkpoint_json: string | null;
+  declare cancel_requested_at: Date | null;
+  declare timeout_at: Date | null;
+  declare max_attempts: number | null;
+  declare next_attempt_at: Date | null;
+  declare dead_lettered_at: Date | null;
 }

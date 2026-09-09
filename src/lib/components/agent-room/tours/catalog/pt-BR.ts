@@ -1423,6 +1423,11 @@ export const TOURS_PT: Tour[] = [
         body: 'Escolha o evento e a ação exatos. Gatilhos de tarefa, mensagem, Git, GitHub, webhook, arquivo, uso, agenda e manual podem enviar prompt, criar tarefa no Kanban ou notificar o desktop.',
       },
       {
+        id: 'verify-durable-execution',
+        title: 'Deixe o Core recuperar o trabalho',
+        body: 'Depois de salvar, a execução fica durável antes de começar. Agentes fechados são iniciados ou retomados, leases abandonados voltam à fila, retries usam backoff limitado e falhas finais continuam visíveis como Requer intervenção. O histórico também permite cancelar trabalho ativo ou repetir uma falha final.',
+      },
+      {
         id: 'inspect-history',
         title: 'Acompanhe cada execução',
         body: 'Use o Histórico de execuções para inspecionar entrada, agente e provider de destino, confirmação da saída, duração, tentativa e falha. Execuções com erro oferecem retry limitado em vez de desaparecer.',

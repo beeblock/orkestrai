@@ -1419,6 +1419,11 @@ export const TOURS_EN: Tour[] = [
         body: 'Choose the exact event and action. Task, message, Git, GitHub, webhook, file, usage, schedule, and manual triggers can prompt an agent, create a Kanban task, or notify the desktop.',
       },
       {
+        id: 'verify-durable-execution',
+        title: 'Let the Core recover the work',
+        body: 'After saving, the run is durable before it starts. Closed agents are started or resumed, abandoned leases return to the queue, retries use bounded backoff, and final failures remain visible as Needs intervention. History also lets you cancel active work or replay a final failure.',
+      },
+      {
         id: 'inspect-history',
         title: 'Follow every execution',
         body: 'Use Execution history to inspect trigger input, target agent and provider, output acknowledgement, duration, attempt, and failure. Failed runs expose a bounded retry instead of disappearing.',

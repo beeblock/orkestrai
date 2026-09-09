@@ -12,6 +12,9 @@ pt-BR, English, and Spanish translations.
 - The local Orkestrai Core can now remain active in the system tray after every
   window closes, start silently when the user signs in, expose authenticated
   health metadata, and restart independently from the desktop window.
+- Automation runs are now durable database-backed jobs with renewable leases,
+  checkpoints, bounded exponential retries, cancellation, dead-letter state,
+  and replay. Prompt actions start or resume their target agent when needed.
 
 ### Fixed
 
@@ -21,6 +24,8 @@ pt-BR, English, and Spanish translations.
 - Core discovery metadata is restricted to the current operating-system user,
   and its health endpoint requires a per-process token that is never returned
   to the renderer.
+- An interrupted automation is reclaimed after its worker lease expires, while
+  atomic claiming prevents concurrent workers from delivering the same run.
 
 ## 0.28.0 - 2026-09-07
 

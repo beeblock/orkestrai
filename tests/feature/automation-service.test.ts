@@ -21,7 +21,7 @@ function form(input: Partial<AutomationFormInput>): AutomationFormInput {
 describe('workspace automations', () => {
   useSvelarTest({ refreshDatabase: true });
 
-  it('records agent, provider, output, duration, and a recoverable failure', async () => {
+  it('records agent, provider and output while restoring a stopped terminal', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'automations', workingDir: '/tmp' });
     const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
     const terminal = await workspaceRepository.createNode({
@@ -42,10 +42,11 @@ describe('workspace automations', () => {
     expect(result.run.output).toMatchObject({ steps: 1, target: 'Operator' });
 
     ptySessionManager.kill(session.id);
-    const failed = await routineService.runNow(automation.id);
-    expect(failed.ok).toBe(false);
-    expect(failed.run.recoverable).toBe(true);
-    expect(failed.run.error).toContain('sessão PTY');
+    const resumed = await routineService.runNow(automation.id);
+    expect(resumed.ok).toBe(true);
+    expect(resumed.run.output).toMatchObject({ sessionState: 'started' });
+    const refreshed = await workspaceRepository.getNode(terminal.id);
+    ptySessionManager.kill(String((refreshed?.payload as Record<string, unknown>).sessionId ?? ''));
   });
 
   it('dispatches a task event once and creates one traceable task', async () => {

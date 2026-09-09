@@ -36,7 +36,7 @@ describe('RoutineService', () => {
 
     const result = await routineService.runNow(routine.id);
     expect(result.ok).toBe(true);
-    expect(result.detail).toContain('2 etapa');
+    expect(result.detail).toContain('2 step');
 
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(output).toContain('primeira etapa');
@@ -68,13 +68,13 @@ describe('RoutineService', () => {
     ptySessionManager.kill(session.id);
   });
 
-  it('falha graciosamente sem sessao PTY ativa', async () => {
+  it('inicia uma nova sessao quando o agente nao tem PTY ativo', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'rotinas', workingDir: '/tmp' });
     const terminal = await workspaceRepository.createNode({
       workspaceId: workspace.id,
       type: 'terminal',
       title: 'Sem sessao',
-      payload: { command: 'claude' },
+      payload: { command: '/bin/cat' },
     });
     const routine = await routineService.create({
       workspaceId: workspace.id,
@@ -82,8 +82,12 @@ describe('RoutineService', () => {
       prompt: 'oi',
     });
     const result = await routineService.runNow(routine.id);
-    expect(result.ok).toBe(false);
-    expect(result.detail).toContain('sessão PTY');
+    expect(result.ok).toBe(true);
+    expect(result.run.output).toMatchObject({ sessionState: 'started' });
+    const node = await workspaceRepository.getNode(terminal.id);
+    const sessionId = String((node?.payload as Record<string, unknown>).sessionId ?? '');
+    expect(sessionId).not.toBe('');
+    ptySessionManager.kill(sessionId);
   });
 
   it('valida alvo e prompt', async () => {
