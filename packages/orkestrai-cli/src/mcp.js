@@ -289,6 +289,15 @@ const TOOLS = [
   { name: 'portal_eval', description: 'Executa JS no portal identificado por nome unico ou ID e retorna o resultado.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string', description: 'Nome unico ou ID do portal.' }, js: { type: 'string' } }, required: ['nodeId', 'js'] } },
   { name: 'portal_dom', description: 'Devolve o HTML atual do portal identificado por nome unico ou ID.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string', description: 'Nome unico ou ID do portal.' } }, required: ['nodeId'] } },
   { name: 'portal_screenshot', description: 'Captura a tela do portal identificado por nome unico ou ID (base64).', inputSchema: { type: 'object', properties: { nodeId: { type: 'string', description: 'Nome unico ou ID do portal.' } }, required: ['nodeId'] } },
+  { name: 'portal_tabs', description: 'Lista, cria, ativa ou fecha abas da sessao persistente do Portal.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, operation: { type: 'string', enum: ['list', 'new', 'activate', 'close'] }, url: { type: 'string' }, tabId: { type: 'string' } }, required: ['nodeId', 'operation'] } },
+  { name: 'portal_snapshot', description: 'Retorna a arvore semantica interativa do Portal com referencias estaveis e1, e2 etc. Use antes de click/type/select/upload/download.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, interactiveOnly: { type: 'boolean', default: true } }, required: ['nodeId'] } },
+  { name: 'portal_click', description: 'Clica em uma referencia semantica obtida por portal_snapshot.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, ref: { type: 'string', pattern: '^e\\d+$' }, button: { type: 'string', enum: ['left', 'middle', 'right'], default: 'left' } }, required: ['nodeId', 'ref'] } },
+  { name: 'portal_type', description: 'Digita em uma referencia semantica; pode limpar o valor e enviar Enter.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, ref: { type: 'string' }, text: { type: 'string' }, clear: { type: 'boolean', default: true }, submit: { type: 'boolean', default: false } }, required: ['nodeId', 'ref', 'text'] } },
+  { name: 'portal_select', description: 'Seleciona um ou mais valores em um campo do Portal.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, ref: { type: 'string' }, values: { type: 'array', items: { type: 'string' }, minItems: 1 } }, required: ['nodeId', 'ref', 'values'] } },
+  { name: 'portal_upload', description: 'Envia arquivos confinados ao workspace para um input file referenciado.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, ref: { type: 'string' }, paths: { type: 'array', items: { type: 'string' }, minItems: 1 } }, required: ['nodeId', 'ref', 'paths'] } },
+  { name: 'portal_download', description: 'Aciona um download e o confina a pasta configurada dentro do workspace.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, ref: { type: 'string' }, filename: { type: 'string' } }, required: ['nodeId', 'ref'] } },
+  { name: 'portal_wait', description: 'Aguarda elemento, texto, URL ou atraso limitado no Portal.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, ref: { type: 'string' }, text: { type: 'string' }, urlIncludes: { type: 'string' }, delayMs: { type: 'number' } }, required: ['nodeId'] } },
+  { name: 'portal_extract', description: 'Extrai texto, links, tabela ou atributo de forma limitada e estruturada.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, kind: { type: 'string', enum: ['text', 'links', 'table', 'attribute'], default: 'text' }, ref: { type: 'string' }, attribute: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'floor_list', description: 'Lista andares (worktrees git) do workspace.', inputSchema: { type: 'object', properties: {} } },
   { name: 'floor_create', description: 'Cria um andar (worktree isolada com branch propria).', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
   { name: 'floor_preview', description: 'Previa da aterrissagem (merge) com conflitos.', inputSchema: { type: 'object', properties: { floorId: { type: 'string' } }, required: ['floorId'] } },
@@ -825,13 +834,31 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('POST', '/api/agent-room/bridge/portal/create', { url: args.url, title: args.title, connect: args.connect, forceNew: args.forceNew === true, from: selfAgent });
     }
     case 'portal_navigate':
-      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'navigate', args: { url: args.url } });
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'navigate', args: { url: args.url }, from: selfAgent });
     case 'portal_eval':
       return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'eval', args: { js: args.js } });
     case 'portal_dom':
-      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'dom', args: {} });
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'dom', args: {}, from: selfAgent });
     case 'portal_screenshot':
-      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'screenshot', args: {} });
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'screenshot', args: {}, from: selfAgent });
+    case 'portal_tabs':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'tabs', args: { operation: args.operation, ...(args.url ? { url: args.url } : {}), ...(args.tabId ? { tabId: args.tabId } : {}) }, from: selfAgent });
+    case 'portal_snapshot':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'snapshot', args: { interactiveOnly: args.interactiveOnly !== false }, from: selfAgent });
+    case 'portal_click':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'click', args: { ref: args.ref, button: args.button ?? 'left' }, from: selfAgent });
+    case 'portal_type':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'type', args: { ref: args.ref, text: args.text, clear: args.clear !== false, submit: args.submit === true }, from: selfAgent });
+    case 'portal_select':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'select', args: { ref: args.ref, values: args.values }, from: selfAgent });
+    case 'portal_upload':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'upload', args: { ref: args.ref, paths: args.paths }, from: selfAgent });
+    case 'portal_download':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'download', args: { ref: args.ref, ...(args.filename ? { filename: args.filename } : {}) }, from: selfAgent });
+    case 'portal_wait':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'wait', args: { ...(args.ref ? { ref: args.ref } : {}), ...(args.text ? { text: args.text } : {}), ...(args.urlIncludes ? { urlIncludes: args.urlIncludes } : {}), ...(args.delayMs !== undefined ? { delayMs: args.delayMs } : {}) }, from: selfAgent });
+    case 'portal_extract':
+      return bridge('POST', '/api/agent-room/bridge/portal', { nodeId: args.nodeId, action: 'extract', args: { kind: args.kind ?? 'text', ...(args.ref ? { ref: args.ref } : {}), ...(args.attribute ? { attribute: args.attribute } : {}) }, from: selfAgent });
     case 'floor_list':
       return bridge('GET', '/api/agent-room/bridge/floors');
     case 'floor_create':

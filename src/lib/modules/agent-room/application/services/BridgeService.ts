@@ -1187,7 +1187,14 @@ export class BridgeService {
       y: portalPosition.y,
       width: 560,
       height: 400,
-      payload: { url },
+      payload: {
+        url,
+        portalProfileId: 'default',
+        portalProfileScope: 'workspace',
+        portalAllowedHosts: [new URL(url).hostname.toLowerCase()],
+        portalDownloadDirectory: '.orkestrai/downloads',
+        portalAllowScripts: false,
+      },
     });
     const connectedTo = await this.connectPortal(workspaceId, node.id, maestro, input.connect);
     this.notifyWorkspaceChanged(workspaceId);

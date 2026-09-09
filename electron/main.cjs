@@ -17,6 +17,7 @@ const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-pol
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
+const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const {
   BACKGROUND_CORE_ARGUMENT,
   isBackgroundCoreLaunch,
@@ -50,6 +51,7 @@ const expectedServerExits = new WeakSet();
 const coreId = crypto.randomUUID();
 const coreToken = crypto.randomBytes(32).toString('base64url');
 let coreStartedAt = new Date().toISOString();
+let managedPortalExecutor = null;
 
 function initializeDiagnostics() {
   app.setAppLogsPath();
@@ -560,18 +562,31 @@ async function startServer(port) {
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
 
+  const requestingServer = serverProcess;
   serverProcess.on('message', (message) => {
-    if (!message || !['orkestrai:secret:get', 'orkestrai:secret:set', 'orkestrai:secret:delete'].includes(message.type) || !message.requestId) return;
+    if (!message?.requestId) return;
+    if (message.type === 'orkestrai:portal:execute') {
+      void managedPortalExecutor?.execute(message).then((result) => {
+        requestingServer?.send?.({ type: 'orkestrai:portal:result', requestId: message.requestId, result });
+      }).catch((error) => {
+        requestingServer?.send?.({
+          type: 'orkestrai:portal:result', requestId: message.requestId,
+          result: { ok: false, error: String(error?.message ?? error).slice(0, 2_000) },
+        });
+      });
+      return;
+    }
+    if (!['orkestrai:secret:get', 'orkestrai:secret:set', 'orkestrai:secret:delete'].includes(message.type)) return;
     try {
       if (message.type === 'orkestrai:secret:set') saveAutomationSecret(message.key, message.value);
       if (message.type === 'orkestrai:secret:delete') deleteAutomationSecret(message.key);
-      serverProcess?.send?.({
+      requestingServer?.send?.({
         type: 'orkestrai:secret:result',
         requestId: message.requestId,
         value: message.type === 'orkestrai:secret:get' ? readAutomationSecret(message.key) : null,
       });
     } catch (error) {
-      serverProcess?.send?.({
+      requestingServer?.send?.({
         type: 'orkestrai:secret:result',
         requestId: message.requestId,
         error: error?.message ?? String(error),
@@ -1230,6 +1245,7 @@ if (!gotLock) {
       callback(own && permission === 'media');
     });
     configurePortalSession();
+    managedPortalExecutor = createManagedPortalExecutor({ BrowserWindow, session, diagnostics });
     buildApplicationMenu();
     createTray();
     const initialInvite = findCollaborationInvite(process.argv);
@@ -1268,6 +1284,7 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    managedPortalExecutor?.closeAll();
     flushPortalStorage();
     void stopServer();
   });

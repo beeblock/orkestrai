@@ -3,7 +3,7 @@ import { uuidv7 } from '@beeblock/svelar/support';
 export type PortalCommand = {
   id: string;
   nodeId: string;
-  action: 'navigate' | 'eval' | 'screenshot' | 'dom';
+  action: 'navigate' | 'eval' | 'screenshot' | 'dom' | 'tabs' | 'snapshot' | 'click' | 'type' | 'select' | 'upload' | 'download' | 'wait' | 'extract';
   args: Record<string, unknown>;
   createdAt: number;
 };

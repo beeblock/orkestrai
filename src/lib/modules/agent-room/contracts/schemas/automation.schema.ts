@@ -5,7 +5,7 @@ export const automationTriggerTypeSchema = z.enum([
   'webhook', 'file_change', 'usage_threshold',
 ]);
 
-export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify']);
+export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify', 'browser']);
 
 export const automationFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -28,6 +28,12 @@ export const automationFormSchema = z.object({
   taskDescription: z.string().trim().max(20_000).nullish(),
   notificationTitle: z.string().trim().max(180).nullish(),
   notificationMessage: z.string().trim().max(2_000).nullish(),
+  portalNodeId: z.string().trim().nullish(),
+  portalAction: z.enum(['navigate', 'snapshot', 'click', 'type', 'wait', 'extract', 'screenshot']).nullish(),
+  portalUrl: z.string().trim().max(4_096).nullish(),
+  portalRef: z.string().trim().regex(/^e\d{1,6}$/).nullish(),
+  portalText: z.string().max(100_000).nullish(),
+  portalSubmit: z.boolean().default(false),
   enabled: z.boolean().default(true),
   recipeId: z.string().trim().max(80).nullish(),
 }).superRefine((value, context) => {
@@ -57,6 +63,15 @@ export const automationFormSchema = z.object({
   }
   if (value.actionType === 'notify' && !value.notificationMessage) {
     context.addIssue({ code: 'custom', path: ['notificationMessage'], message: 'Notification message is required.' });
+  }
+  if (value.actionType === 'browser' && (!value.portalNodeId || !value.portalAction)) {
+    context.addIssue({ code: 'custom', path: ['portalNodeId'], message: 'Portal and browser action are required.' });
+  }
+  if (value.actionType === 'browser' && value.portalAction === 'navigate' && !value.portalUrl) {
+    context.addIssue({ code: 'custom', path: ['portalUrl'], message: 'Portal URL is required.' });
+  }
+  if (value.actionType === 'browser' && ['click', 'type'].includes(value.portalAction ?? '') && !value.portalRef) {
+    context.addIssue({ code: 'custom', path: ['portalRef'], message: 'A semantic element reference is required.' });
   }
 });
 

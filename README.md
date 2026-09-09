@@ -58,6 +58,10 @@ common credentials redacted; normal agent output is not persisted.
   people and agents can target the correct browser by name or node id. The
   bridge inventories all workspace Portals with explicit connection state,
   reuses matching URLs, and requires explicit intent before adding another.
+  The Core can operate the same protected profile with the Canvas closed through
+  semantic snapshots and typed browser actions. Per-Portal host allowlists and
+  workspace-confined files keep unattended runs bounded, Control Center records
+  each effect, and login remains a user-only handoff.
 - **Configurable Workbench:** keep open terminals, boards, notes, portals,
   files, flows, and usage in vertical tabs by default or optional horizontal
   tabs, then arrange up to eight live artifacts in resizable right/down splits.

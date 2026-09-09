@@ -1071,7 +1071,7 @@ export type AutomationTriggerType =
   | 'file_change'
   | 'usage_threshold';
 
-export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify';
+export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser';
 export type AutomationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';
 
 export type Routine = {

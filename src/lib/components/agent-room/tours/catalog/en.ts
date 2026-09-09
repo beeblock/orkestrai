@@ -98,6 +98,19 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'managed-browser-24-7',
+    icon: 'GlobeLock',
+    title: 'Managed browser worker',
+    tagline: 'Keep an authenticated Portal working after the Canvas closes.',
+    steps: [
+      { id: 'portal', title: 'Create the managed Portal', body: 'I add a named Portal. Its gear controls the persistent profile, allowed hosts, and workspace-confined downloads.', action: { kind: 'createPortal', title: 'Managed Operations', url: 'https://example.com' }, check: { kind: 'nodeExists', nodeType: 'portal', titleIncludes: 'Managed Operations' } },
+      { id: 'profile', title: 'Choose the standing boundary', body: 'Open the gear, choose whether the profile belongs to the workspace or only this Portal, allow the exact destination hosts, and keep downloads inside the workspace.' },
+      { id: 'login', title: 'Complete authentication yourself', body: 'Sign in in the visible Portal. Cookies and passwords stay in the protected Electron profile and are never sent to an agent.' },
+      { id: 'snapshot', title: 'Use semantic references', body: 'Connect an agent and ask it to call portal_snapshot before click, type, select, upload, download, wait, extract, or screenshot. References replace brittle coordinates and raw selectors.' },
+      { id: 'automation', title: 'Schedule it through the Core', body: 'Open Automations, choose Managed browser, this Portal, and a typed operation. The durable run continues with the Canvas closed and records its result in Control Center.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Two features in parallel, no conflicts',

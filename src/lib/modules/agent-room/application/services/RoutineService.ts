@@ -18,6 +18,8 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { githubAutomationAdapter } from '../../infrastructure/integrations/GitHubAutomationAdapter.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { nativeNotificationService } from './NativeNotificationService.js';
+import { managedPortalService } from './ManagedPortalService.js';
+import { managedPortalCommandSchema } from '../../contracts/schemas/managed-portal.schema.js';
 import { usageService } from './UsageService.js';
 import { gitService } from './GitService.js';
 import { automationIntegrationService } from './AutomationIntegrationService.js';
@@ -147,6 +149,14 @@ function triggerConfig(input: AutomationFormInput, existing: Record<string, unkn
 function actionConfig(input: AutomationFormInput): Record<string, unknown> {
   if (input.actionType === 'prompt_agent') return { targetNodeId: input.targetNodeId, prompt: input.prompt };
   if (input.actionType === 'create_task') return { title: input.taskTitle, description: input.taskDescription || null };
+  if (input.actionType === 'browser') return {
+    portalNodeId: input.portalNodeId,
+    action: input.portalAction,
+    url: input.portalUrl || null,
+    ref: input.portalRef || null,
+    text: input.portalText || null,
+    submit: input.portalSubmit,
+  };
   return { title: input.notificationTitle || null, message: input.notificationMessage };
 }
 
@@ -192,6 +202,7 @@ export class RoutineService {
       webhookSecret: null,
       usagePercent: null, taskTitle: null, taskDescription: null,
       notificationTitle: null, notificationMessage: null,
+      portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null, portalText: null, portalSubmit: false,
     });
   }
 
@@ -602,6 +613,11 @@ export class RoutineService {
   }
 
   private async validateAction(workspaceId: string, type: AutomationActionType, config: Record<string, unknown>): Promise<void> {
+    if (type === 'browser') {
+      const node = await workspaceRepository.getNode(String(config.portalNodeId ?? ''));
+      if (!node || node.workspaceId !== workspaceId || node.type !== 'portal') throw new Error('Browser action requires a Portal in this workspace.');
+      return;
+    }
     if (type !== 'prompt_agent') return;
     const targetNodeId = String(config.targetNodeId ?? '');
     const prompt = String(config.prompt ?? '').trim();
@@ -792,6 +808,25 @@ export class RoutineService {
         createdBy: 'automation',
       });
       return { detail: `Task created: ${task.title}`, taskId: task.id, title: task.title };
+    }
+    if (routine.actionType === 'browser') {
+      const portalNodeId = String(routine.actionConfig.portalNodeId ?? '');
+      const action = String(routine.actionConfig.action ?? 'snapshot');
+      const actionArgs = action === 'navigate'
+        ? { url: this.interpolate(String(routine.actionConfig.url ?? ''), input) }
+        : action === 'click'
+          ? { ref: routine.actionConfig.ref, button: 'left' }
+          : action === 'type'
+            ? { ref: routine.actionConfig.ref, text: this.interpolate(String(routine.actionConfig.text ?? ''), input), clear: true, submit: Boolean(routine.actionConfig.submit) }
+            : action === 'wait'
+              ? { text: this.interpolate(String(routine.actionConfig.text ?? ''), input) }
+              : action === 'extract'
+                ? { kind: 'text', ...(routine.actionConfig.ref ? { ref: routine.actionConfig.ref } : {}) }
+                : action === 'screenshot' ? { fullPage: false } : { interactiveOnly: true };
+      const command = managedPortalCommandSchema.parse({ nodeId: portalNodeId, action, args: actionArgs, timeoutMs: 30_000 });
+      const result = await managedPortalService.execute(routine.workspaceId, command);
+      if (!result.ok) throw new Error(result.error || 'Managed browser action failed.');
+      return { detail: `Portal ${action} completed.`, portalNodeId, action, result: result.result };
     }
     const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);
     if (!workspace) throw new Error('Workspace not found.');

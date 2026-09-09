@@ -7,11 +7,13 @@ const {
   isAllowedPortalUrl,
   portalWindowOpenResponse,
   shouldOpenPortalInCanvas,
+  managedPortalPartition,
 } = require('../../electron/portal-policy.cjs') as {
   PORTAL_PARTITION: string;
   isAllowedPortalUrl: (url: string) => boolean;
   portalWindowOpenResponse: (url: string, title?: string) => Record<string, unknown>;
   shouldOpenPortalInCanvas: (url: string, disposition: string) => boolean;
+  managedPortalPartition: (workspaceId: string, nodeId: string, profileId?: string, scope?: string) => string;
 };
 
 describe('Electron Portal popup policy', () => {
@@ -22,6 +24,7 @@ describe('Electron Portal popup policy', () => {
     expect(isAllowedPortalUrl('file:///etc/passwd')).toBe(false);
     expect(isAllowedPortalUrl('javascript:alert(1)')).toBe(false);
     expect(isAllowedPortalUrl('data:text/html,hello')).toBe(false);
+    expect(isAllowedPortalUrl('https://user:secret@example.com')).toBe(false);
   });
 
   it('keeps popup windows in the persistent sandboxed Portal session', () => {
@@ -52,5 +55,11 @@ describe('Electron Portal popup policy', () => {
   it('denies invalid popup destinations without creating a window', () => {
     expect(portalWindowOpenResponse('orkestrai://join/secret')).toEqual({ action: 'deny' });
     expect(isAllowedPortalUrl(`https://example.com/${'a'.repeat(4096)}`)).toBe(false);
+  });
+
+  it('isolates managed profiles by workspace or Portal', () => {
+    expect(managedPortalPartition('workspace-a', 'portal-a', 'signed-in', 'workspace')).toBe('persist:orkestrai-portal-workspace-a-signed-in');
+    expect(managedPortalPartition('workspace-a', 'portal-a', 'signed-in', 'private')).toBe('persist:orkestrai-portal-portal-a-signed-in');
+    expect(managedPortalPartition('../../bad', 'portal:a', 'x y', 'private')).toBe('persist:orkestrai-portal-portala-xy');
   });
 });

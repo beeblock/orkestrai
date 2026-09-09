@@ -8,7 +8,8 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { bridgeDesignApplySchema, bridgeFigmaSelectionSchema, bridgeReassignSchema, bridgeRoleEditSchema, bridgeRoleWriteSchema, bridgeFloorCreateSchema, bridgeFloorLandSchema, bridgeNoteCreateSchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 import { bridgeBoardTaskSchema, bridgeBoardTaskUpdateSchema } from '$lib/modules/agent-room/contracts/schemas/taskSchemas.js';
-import { portalService } from '$lib/modules/agent-room/application/services/PortalService.js';
+import { managedPortalService } from '$lib/modules/agent-room/application/services/ManagedPortalService.js';
+import { managedPortalCommandSchema } from '$lib/modules/agent-room/contracts/schemas/managed-portal.schema.js';
 import { usageService } from '$lib/modules/agent-room/application/services/UsageService.js';
 import { deviceService } from '$lib/modules/agent-room/application/services/DeviceService.js';
 import { ExecuteDeviceCommandAction } from '$lib/modules/agent-room/application/actions/ExecuteDeviceCommandAction.js';
@@ -1262,21 +1263,10 @@ export class BridgeController extends Controller {
 
   async portal(event: any) {
     try {
-      const common = {
-          token: z.string().trim().min(1).nullish(),
-          nodeId: z.string().trim().min(1).max(128),
-          timeoutMs: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
-      };
-      const input = z.discriminatedUnion('action', [
-        z.object({ ...common, action: z.literal('navigate'), args: z.object({ url: z.string().trim().min(1).max(4_096) }).strict() }),
-        z.object({ ...common, action: z.literal('eval'), args: z.object({ js: z.string().max(200_000) }).strict() }),
-        z.object({ ...common, action: z.literal('screenshot'), args: z.object({}).strict().default({}) }),
-        z.object({ ...common, action: z.literal('dom'), args: z.object({}).strict().default({}) }),
-      ]).parse(await event.request.json());
+      const input = managedPortalCommandSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       const portal = await bridgeService.resolvePortal(workspace.id, input.nodeId);
-      const command = portalService.enqueue(portal.id, input.action, input.args);
-      const result = await portalService.waitResult(command.id, input.timeoutMs);
+      const result = await managedPortalService.execute(workspace.id, { ...input, nodeId: portal.id });
       return this.json({ data: result }, result.ok ? 200 : 400);
     } catch (error) {
       return this.errorResponse(error, 'Falha na automacao do portal.');

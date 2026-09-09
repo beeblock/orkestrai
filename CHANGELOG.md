@@ -19,6 +19,9 @@ pt-BR, English, and Spanish translations.
   lifecycles. The background Core supervises persistent processes, on-demand
   agents sleep after true inactivity, and per-agent concurrency and provider
   usage caps guard unattended work without blocking a manual wake.
+- Portal is now a Core-managed browser with persistent workspace or private
+  profiles, host allowlists, confined files, semantic references, typed browser
+  operations, durable automation actions, and attributed Control Center evidence.
 
 ### Fixed
 

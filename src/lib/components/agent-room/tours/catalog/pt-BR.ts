@@ -102,6 +102,19 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'managed-browser-24-7',
+    icon: 'GlobeLock',
+    title: 'Trabalhador com navegador gerenciado',
+    tagline: 'Mantenha um Portal autenticado trabalhando depois que o Canvas fechar.',
+    steps: [
+      { id: 'portal', title: 'Crie o Portal gerenciado', body: 'Adiciono um Portal nomeado. A engrenagem controla perfil persistente, hosts permitidos e downloads confinados ao workspace.', action: { kind: 'createPortal', title: 'Operações gerenciadas', url: 'https://example.com' }, check: { kind: 'nodeExists', nodeType: 'portal', titleIncludes: 'Operações gerenciadas' } },
+      { id: 'profile', title: 'Escolha o perímetro permanente', body: 'Abra a engrenagem, escolha se o perfil pertence ao workspace ou somente a este Portal, permita os hosts exatos e mantenha downloads dentro do workspace.' },
+      { id: 'login', title: 'Conclua a autenticação pessoalmente', body: 'Faça login no Portal visível. Cookies e senhas permanecem no perfil protegido do Electron e nunca são enviados a um agente.' },
+      { id: 'snapshot', title: 'Use referências semânticas', body: 'Conecte um agente e peça portal_snapshot antes de clicar, digitar, selecionar, enviar ou baixar arquivo, esperar, extrair ou capturar. Referências substituem coordenadas e seletores frágeis.' },
+      { id: 'automation', title: 'Agende pelo Core', body: 'Abra Automações, escolha Navegador gerenciado, este Portal e uma operação tipada. A execução durável continua com o Canvas fechado e registra o resultado no Control Center.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Duas features em paralelo sem conflito',

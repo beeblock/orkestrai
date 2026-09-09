@@ -84,7 +84,7 @@ Uso:
   orkestrai design generate <nodeId> <elementIds-json> --framework svelar|svelte|react|next|vue|html --output <path> --name <nome> [--write --revision <n>]
   orkestrai role show [nome] | role write <nome> <prompt> | role edit <nome> <antigo> <novo>
   orkestrai portal create <url> [--title <titulo>] [--connect <agente|all>] [--force-new]
-  orkestrai portal <nodeId|nome> <navigate <url> | eval <js> | dom | screenshot>
+  orkestrai portal <nodeId|nome> <navigate|tabs|snapshot|click|type|select|upload|download|wait|extract|screenshot|dom|eval> [...]
   orkestrai notify <mensagem> [--kind info|attention|project|task] [--title <titulo>]
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome>] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
@@ -335,7 +335,7 @@ export async function run(argv, options = {}) {
           out(`Portal [${connection}]: ${portal.title} ${portal.url} (${portal.id})`);
         }
         if (data.portals?.length) {
-          out(`Controle o portal com: orkestrai portal <nodeId|nome> <navigate <url> | eval <js> | dom | screenshot>`);
+          out(`Controle o portal com: orkestrai portal <nodeId|nome> <navigate|tabs|snapshot|click|type|select|upload|download|wait|extract|screenshot>`);
         }
         for (const design of data.designs ?? []) {
           out(`Design conectado: ${design.title} (${design.id})`);
@@ -1379,9 +1379,20 @@ export async function run(argv, options = {}) {
         out(`Portal ${data.reused ? 'reutilizado' : 'criado'}: "${data.title}" (${data.nodeId}) — conectado a ${data.connectedTo}`);
         return 0;
       }
-      if (!nodeId || !action) throw new Error('Uso: orkestrai portal <nodeId|nome> <navigate <url> | eval <js> | dom | screenshot>');
-      const args = action === 'navigate' ? { url: values.join(' ') } : action === 'eval' ? { js: values.join(' ') } : {};
-      const data = await bridge(config, 'POST', '/api/agent-room/bridge/portal', { nodeId, action, args });
+      if (!nodeId || !action) throw new Error('Uso: orkestrai portal <nodeId|nome> <navigate|tabs|snapshot|click|type|select|upload|download|wait|extract|screenshot> [...]');
+      let args = {};
+      if (action === 'navigate') args = { url: values.join(' ') };
+      else if (action === 'eval') args = { js: values.join(' ') };
+      else if (action === 'tabs') args = { operation: values[0] ?? 'list', ...(values[1] ? (values[0] === 'new' ? { url: values.slice(1).join(' ') } : { tabId: values[1] }) : {}) };
+      else if (action === 'snapshot') args = { interactiveOnly: flags.all !== true };
+      else if (action === 'click') args = { ref: values[0], button: flags.button ?? 'left' };
+      else if (action === 'type') args = { ref: values[0], text: values.slice(1).join(' '), clear: flags.clear !== 'false', submit: flags.submit === true };
+      else if (action === 'select') args = { ref: values[0], values: values.slice(1) };
+      else if (action === 'upload') args = { ref: values[0], paths: values.slice(1) };
+      else if (action === 'download') args = { ref: values[0], ...(flags.filename ? { filename: flags.filename } : {}) };
+      else if (action === 'wait') args = { ...(values[0] ? { ref: values[0] } : {}), ...(flags.text ? { text: flags.text } : {}), ...(flags.url ? { urlIncludes: flags.url } : {}), ...(flags.delay ? { delayMs: Number(flags.delay) } : {}) };
+      else if (action === 'extract') args = { kind: values[0] ?? 'text', ...(values[1] ? { ref: values[1] } : {}), ...(flags.attribute ? { attribute: flags.attribute } : {}) };
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/portal', { nodeId, action, args, from: flags.from });
       if (flags.json) out(JSON.stringify(data, null, 2));
       else out(typeof data.result === 'string' ? data.result : JSON.stringify(data.result ?? data, null, 2));
       return 0;

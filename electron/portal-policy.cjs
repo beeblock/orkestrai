@@ -1,11 +1,17 @@
 const PORTAL_PARTITION = 'persist:orkestrai-portals';
 
+function managedPortalPartition(workspaceId, nodeId, profileId = 'default', profileScope = 'workspace') {
+  const clean = (value) => String(value ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'default';
+  const owner = profileScope === 'private' ? clean(nodeId) : clean(workspaceId);
+  return `persist:orkestrai-portal-${owner}-${clean(profileId)}`;
+}
+
 function isAllowedPortalUrl(candidate) {
   if (typeof candidate !== 'string' || candidate.length > 4096) return false;
   if (candidate === 'about:blank') return true;
   try {
-    const protocol = new URL(candidate).protocol;
-    return protocol === 'http:' || protocol === 'https:';
+    const url = new URL(candidate);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password;
   } catch {
     return false;
   }
@@ -42,4 +48,4 @@ function portalWindowOpenResponse(url, title = 'Orkestrai Portal') {
   };
 }
 
-module.exports = { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas };
+module.exports = { PORTAL_PARTITION, managedPortalPartition, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas };

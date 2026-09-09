@@ -1700,7 +1700,11 @@
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(720, 520);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
-      body: JSON.stringify({ type: 'portal', title: m['canvas.default_portal'](), ...position, ...nodeSize(rect, 360, 260, 720, 520), payload: {}, floorId: visibleFloorId }),
+      body: JSON.stringify({
+        type: 'portal', title: m['canvas.default_portal'](), ...position,
+        ...nodeSize(rect, 360, 260, 720, 520), floorId: visibleFloorId,
+        payload: { portalProfileId: 'default', portalProfileScope: 'workspace', portalAllowedHosts: [], portalDownloadDirectory: '.orkestrai/downloads', portalAllowScripts: false },
+      }),
     });
     nodes = [...nodes, toFlowNode(node)];
   }
@@ -1737,7 +1741,14 @@
         ...position,
         width,
         height,
-        payload: { url: parsed.href },
+        payload: {
+          url: parsed.href,
+          portalProfileId: 'default',
+          portalProfileScope: 'workspace',
+          portalAllowedHosts: [parsed.hostname.toLowerCase()],
+          portalDownloadDirectory: '.orkestrai/downloads',
+          portalAllowScripts: false,
+        },
         floorId: visibleFloorId,
       }),
     });

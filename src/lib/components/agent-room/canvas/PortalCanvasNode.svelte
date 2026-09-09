@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowRight, Globe, MousePointer2, Navigation, Pencil, RotateCcw, Send, Smartphone, X } from '@lucide/svelte';
+  import { ArrowRight, Globe, KeyRound, MousePointer2, Navigation, Pencil, RotateCcw, Send, Settings, ShieldCheck, Smartphone, X } from '@lucide/svelte';
   import type { PortalViewport } from './portal-device-presets.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -15,6 +15,7 @@
   import * as NativeSelect from '$lib/components/ui/native-select';
   import { Button } from '$lib/components/ui/button';
   import { Textarea } from '$lib/components/ui/textarea';
+  import { Switch } from '$lib/components/ui/switch';
   import { Badge } from '$lib/components/ui/badge';
   import {
     beginPortalInspection,
@@ -39,7 +40,15 @@
   export type PortalNodeData = {
     title: string;
     workspaceId: string;
-    payload: { url?: string; viewport?: PortalViewport | null };
+    payload: {
+      url?: string;
+      viewport?: PortalViewport | null;
+      portalProfileId?: string;
+      portalProfileScope?: 'private' | 'workspace';
+      portalAllowedHosts?: string[];
+      portalDownloadDirectory?: string;
+      portalAllowScripts?: boolean;
+    };
     connections?: NodeConnection[];
     onDelete: (id: string) => void;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
@@ -93,6 +102,12 @@
   let targetsLoading = $state(false);
   let sending = $state(false);
   let selectionDetached = $state(false);
+  let settingsOpen = $state(false);
+  let profileId = $state(data.payload.portalProfileId ?? 'default');
+  let profileScope = $state<'private' | 'workspace'>(data.payload.portalProfileScope ?? 'workspace');
+  let allowedHosts = $state((data.payload.portalAllowedHosts ?? []).join('\n'));
+  let downloadDirectory = $state(data.payload.portalDownloadDirectory ?? '.orkestrai/downloads');
+  let allowAgentScripts = $state(data.payload.portalAllowScripts ?? false);
   const readyWaiters = new Set<{ resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 
   const isDesktop = typeof window !== 'undefined' && 'orkestraiDesktop' in window;
@@ -107,6 +122,7 @@
     FORBID_ATTR: ['style'],
   }));
   const currentTargets = $derived(destinationKind === 'agent' ? agents : tasks);
+  const portalPartition = $derived(`persist:orkestrai-portal-${(profileScope === 'private' ? id : data.workspaceId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)}-${profileId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default'}`);
 
   function csrfHeaders(json = false): HeadersInit {
     const csrf = getCsrfToken();
@@ -334,6 +350,28 @@
   function setViewport(next: PortalViewport | null) {
     viewport = next;
     data.onPayloadChange?.(id, { viewport: next });
+  }
+
+  function savePortalSettings() {
+    const cleanProfile = profileId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
+    const hosts = [...new Set(allowedHosts.split(/[\s,]+/).map((host: string) => host.trim().toLowerCase()).filter((host: string) => /^[a-z0-9.-]+$/.test(host)))].slice(0, 64);
+    const cleanDirectory = downloadDirectory.trim() || '.orkestrai/downloads';
+    if (cleanDirectory.startsWith('/') || cleanDirectory.startsWith('\\') || /(^|[\\/])\.\.([\\/]|$)/.test(cleanDirectory)) {
+      toast.error(m['portal.managed_path_error']());
+      return;
+    }
+    profileId = cleanProfile;
+    allowedHosts = hosts.join('\n');
+    downloadDirectory = cleanDirectory;
+    data.onPayloadChange?.(id, {
+      portalProfileId: cleanProfile,
+      portalProfileScope: profileScope,
+      portalAllowedHosts: hosts,
+      portalDownloadDirectory: cleanDirectory,
+      portalAllowScripts: allowAgentScripts,
+    });
+    settingsOpen = false;
+    toast.success(m['portal.managed_saved']());
   }
 
   async function loadTargets() {
@@ -588,11 +626,13 @@
       active={inspecting}
       onclick={() => void startInspection()}
     ><MousePointer2 size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['portal.managed_settings']()} onclick={() => (settingsOpen = true)}><Settings size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={m['portal.close']()} danger onclick={() => void closePortal()}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   <div class="portal-body nodrag nowheel" class:inspecting>
     <div class="portal-navigation">
+      <span class="flex shrink-0 items-center gap-1 text-ui-xs font-medium text-[var(--app-success)]" title={m['portal.managed_status_detail']()}><ShieldCheck size={13} />{m['portal.managed_status']()}</span>
       <input
         class="portal-address nodrag"
         bind:value={address}
@@ -618,16 +658,18 @@
         <div class:portal-device-surface={viewport !== null} class:portal-fluid-surface={viewport === null}>
           {#if data.payload.url}
             {#if isDesktop}
-              <webview
-                bind:this={frame}
-                src={data.payload.url}
-                class="portal-frame"
-                class:portal-frame-hidden={reviewOpen}
-                class:portal-frame-device={viewport !== null}
-                style={viewport ? `width:${viewport.width}px;height:${viewport.height}px;` : ''}
-                partition="persist:orkestrai-portals"
-                webpreferences="contextIsolation=yes, sandbox=yes, nodeIntegration=no"
-              ></webview>
+              {#key portalPartition}
+                <webview
+                  bind:this={frame}
+                  src={data.payload.url}
+                  class="portal-frame"
+                  class:portal-frame-hidden={reviewOpen}
+                  class:portal-frame-device={viewport !== null}
+                  style={viewport ? `width:${viewport.width}px;height:${viewport.height}px;` : ''}
+                  partition={portalPartition}
+                  webpreferences="contextIsolation=yes, sandbox=yes, nodeIntegration=no"
+                ></webview>
+              {/key}
             {:else}
               <iframe
                 bind:this={frame}
@@ -656,6 +698,48 @@
     </div>
   </div>
 </NodeShell>
+
+<Dialog.Root bind:open={settingsOpen}>
+  <Dialog.Content class="max-w-lg!">
+    <Dialog.Header>
+      <Dialog.Title>{m['portal.managed_title']()}</Dialog.Title>
+      <Dialog.Description>{m['portal.managed_description']()}</Dialog.Description>
+    </Dialog.Header>
+    <div class="grid gap-4 py-2">
+      <label class="grid gap-1.5 text-ui-sm font-medium">
+        <span>{m['portal.managed_profile']()}</span>
+        <input class="h-9 border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" bind:value={profileId} maxlength="64" />
+      </label>
+      <fieldset class="grid gap-2">
+        <legend class="text-ui-sm font-medium">{m['portal.managed_scope']()}</legend>
+        <div class="grid grid-cols-2 gap-2">
+          <Button variant={profileScope === 'workspace' ? 'default' : 'outline'} onclick={() => (profileScope = 'workspace')}><ShieldCheck />{m['portal.managed_scope_workspace']()}</Button>
+          <Button variant={profileScope === 'private' ? 'default' : 'outline'} onclick={() => (profileScope = 'private')}><KeyRound />{m['portal.managed_scope_private']()}</Button>
+        </div>
+      </fieldset>
+      <label class="grid gap-1.5 text-ui-sm font-medium">
+        <span>{m['portal.managed_hosts']()}</span>
+        <Textarea bind:value={allowedHosts} rows={4} placeholder="app.example.com&#10;api.example.com" />
+      </label>
+      <label class="grid gap-1.5 text-ui-sm font-medium">
+        <span>{m['portal.managed_downloads']()}</span>
+        <input class="h-9 border border-input bg-background px-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" bind:value={downloadDirectory} />
+      </label>
+      <label class="flex items-center justify-between gap-4 border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3 text-ui-sm">
+        <span><strong class="block font-medium">{m['portal.managed_scripts']()}</strong><small class="mt-0.5 block text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['portal.managed_scripts_detail']()}</small></span>
+        <Switch checked={allowAgentScripts} onCheckedChange={(checked: boolean) => (allowAgentScripts = checked)} />
+      </label>
+      <div class="flex items-start gap-2 border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3 text-ui-xs leading-5 text-[var(--app-text-muted)]">
+        <KeyRound size={15} class="mt-0.5 shrink-0 text-[var(--app-accent)]" />
+        <span>{m['portal.managed_login_handoff']()}</span>
+      </div>
+    </div>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (settingsOpen = false)}>{m['settings.cancel']()}</Button>
+      <Button onclick={savePortalSettings}>{m['settings.save']()}</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={reviewOpen} onOpenChange={(open) => { if (!open) resetCapture(); }}>
   <Dialog.Content class="max-h-[min(92dvh,880px)] max-w-[calc(100%-1.5rem)]! grid-rows-[auto_minmax(0,1fr)_auto] gap-0! overflow-hidden p-0! sm:max-w-5xl!">

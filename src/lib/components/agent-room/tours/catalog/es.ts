@@ -98,6 +98,19 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'managed-browser-24-7',
+    icon: 'GlobeLock',
+    title: 'Trabajador con navegador administrado',
+    tagline: 'Mantén un Portal autenticado trabajando después de cerrar el Canvas.',
+    steps: [
+      { id: 'portal', title: 'Crea el Portal administrado', body: 'Agrego un Portal con nombre. El engranaje controla perfil persistente, hosts permitidos y descargas confinadas al workspace.', action: { kind: 'createPortal', title: 'Operaciones administradas', url: 'https://example.com' }, check: { kind: 'nodeExists', nodeType: 'portal', titleIncludes: 'Operaciones administradas' } },
+      { id: 'profile', title: 'Elige el perímetro permanente', body: 'Abre el engranaje, elige si el perfil pertenece al workspace o solo a este Portal, permite los hosts exactos y conserva las descargas dentro del workspace.' },
+      { id: 'login', title: 'Completa la autenticación tú mismo', body: 'Inicia sesión en el Portal visible. Cookies y contraseñas permanecen en el perfil protegido de Electron y nunca se envían a un agente.' },
+      { id: 'snapshot', title: 'Usa referencias semánticas', body: 'Conecta un agente y pídele portal_snapshot antes de hacer clic, escribir, seleccionar, enviar o descargar, esperar, extraer o capturar. Las referencias reemplazan coordenadas y selectores frágiles.' },
+      { id: 'automation', title: 'Prográmalo mediante el Core', body: 'Abre Automatizaciones, elige Navegador administrado, este Portal y una operación tipada. La ejecución duradera sigue con el Canvas cerrado y registra el resultado en Control Center.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Dos features en paralelo sin conflicto',
