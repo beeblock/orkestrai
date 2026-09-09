@@ -32,6 +32,14 @@ agentes não é persistida.
   iniciá-lo silenciosamente ao entrar no sistema. As Configurações mostram saúde
   e tempo online, permitem reinício protegido e mantêm **Sair do Orkestrai** como
   a parada explícita.
+- **Autonomia limitada e Cofre criptografado:** aprove uma vez o perímetro
+  rotineiro do workspace em vez de supervisionar cada comando. Capacidades,
+  raízes, hosts, horário silencioso e concorrência formam a autorização
+  permanente; ações destrutivas ou externas podem exigir o responsável, um
+  revisor ou o Council. Credenciais ficam no armazenamento criptografado do
+  sistema operacional e chegam aos conectores confiáveis somente por SecretRefs
+  vinculados ao destino. A parada de emergência aborta execuções ativas, e a
+  exportação encadeada separa ações mediadas exatas de efeitos inferidos do shell.
 - **Canvas de agentes ao vivo:** organize terminais PTY reais, notas, quadros de
   tarefas, portais de browser, árvores de arquivos, loops e formas. As conexões
   mostram a colaboração entre os agentes enquanto ela acontece. A física se

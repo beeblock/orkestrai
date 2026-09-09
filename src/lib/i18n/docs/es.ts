@@ -61,6 +61,11 @@ export const DOCS_ES: DocsCatalog = {
       body: `Abre el menú de una terminal de agente y elige Runtime del agente. Interactivo conserva el ciclo de vida actual del Canvas. Bajo demanda despierta con un mensaje humano o una automatización duradera, reanuda la conversación exacta del provider y duerme tras el período inactivo configurado cuando no hay ejecución ni tarea asignada activa. Persistente es supervisado por el Core en segundo plano y se reinicia tras una falla del proceso o suspensión del sistema sin exigir un Canvas renderizado. Los límites por agente controlan automatizaciones simultáneas y pausan inicios automáticos cuando una cuota conocida del provider alcanza el porcentaje elegido; el usuario siempre puede despertar manualmente. Runtime, último despertar/reposo, errores, ejecuciones, tarea y sesión usan el mismo nodo persistido y el historial del Centro de Control en Canvas, Workbench y Remote. Los agentes existentes siguen en modo Interactivo hasta un cambio explícito.`,
     },
     {
+      id: 'autonomy-security',
+      title: 'Política de autonomía, aprobaciones y credenciales cifradas',
+      body: `Abre Automatizaciones → Seguridad para definir una autorización permanente para trabajo desatendido. Observar registra actividad sin restringir el shell actual; Preparar y Preguntar antes de cambios pausan escrituras; Autónomo con límites mantiene el shell libre y permite acciones mediadas dentro de capacidades, raíces, hosts, horarios y concurrencia aprobados. Límites de alto riesgo como push forzado, despliegue en producción, compras, publicación externa, cambios de cuenta, eliminación masiva y acceso fuera de la autorización pueden preaprobarse o exigir al responsable, un revisor designado o consenso del Council. La Parada de emergencia desactiva todas las rutinas y aborta ejecuciones activas de inmediato. La Bóveda guarda valores en el almacén cifrado del sistema operativo y entrega a los agentes solo un SecretRef vinculado a integraciones, operaciones y destinos explícitos. OAuth o el login interactivo en Portal se completa una vez por el usuario; luego el ejecutor confiable del conector recibe la credencial solo durante la acción. Cada acción mediada es evidencia semántica exacta en una auditoría exportable encadenada por hash. Los efectos del shell libre quedan marcados como inferidos, pues Orkestrai no pretende ofrecer observación a nivel de syscall.`,
+    },
+    {
       id: 'council',
       title: 'Council: compara perspectivas independientes',
       body: `Abre Consejo directamente desde la barra del Canvas, en la parte superior del workspace en Workbench o mediante Command/Ctrl+K. Pedir perspectivas en una tarea lleva su briefing completo; el menú del líder lo preselecciona para la síntesis. Ejecuta entre dos y cinco agentes reales sobre el mismo objetivo, elige modo consultivo o implementación, asigna un enfoque distinto a cada agente, selecciona el criterio de decisión y define un límite estricto de ejecuciones. Cada perspectiva devuelve el mismo contrato estructurado de evidencias, riesgos, pruebas, divergencias, recomendación y confianza; el fallo de un provider no descarta las respuestas completadas. Una síntesis opcional del líder consume una ejecución adicional, pero la decisión final de seleccionar, pedir consenso o rechazar siempre es humana y persistente. Council es la capa de decisión; Pisos son la capa de aislamiento. Las implementaciones Git se ejecutan en pisos separados y solo el resultado seleccionado y confirmado en commit puede aterrizar después de una nueva vista previa de diff, cambios pendientes y conflictos. Nada hace merge ni push automáticamente.`,
@@ -504,6 +509,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Portal administrado', 'handoff de autenticación', 'navegador auditado'],
     },
     {
+      id: 'secure-autonomy-24-7',
+      title: 'Autoriza un agente autónomo sin aprobar cada paso',
+      body: 'Abre Automatizaciones → Seguridad, activa Autónomo con límites y concede solo raíces, capacidades, destinos y horario necesarios; conserva las acciones destructivas y externas detrás de gates explícitos. Agrega cuentas OAuth mediante su pantalla oficial de consentimiento o guarda una credencial de API en la Bóveda cifrada con vínculos exactos de conector, operación y destino. El agente podrá leer correos, preparar informes, generar PDFs en el workspace, operar un Portal autenticado y enviar notificaciones aprobadas por Slack, Telegram, WhatsApp o email sin ver el secreto bruto ni pedir permiso para el trabajo rutinario. Revisa gates pendientes y exporta la auditoría encadenada cuando quieras; la Parada de emergencia revoca ejecuciones futuras y aborta las actuales.',
+      tags: ['Política permanente', 'SecretRef', 'gates de aprobación'],
+    },
+    {
       id: 'parallel-features',
       title: 'Dos features en paralelo sin conflicto',
       body: 'Un piso (worktree) por feature: equipo A en la Planta Baja en main, equipo B en el piso "auth-refactor". Al terminar, floor preview muestra conflictos antes; el land mergea. El conflicto se vuelve tarea para que un agente la resuelva.',
@@ -877,6 +888,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Las ejecuciones de automatización se guardan antes de correr, se reclaman con leases renovables, registran checkpoints, reintentan con backoff limitado, se recuperan tras una interrupción y pasan a Requiere intervención después del último intento. Los agentes destino cerrados se inician o reanudan automáticamente.',
         'Cada terminal de provider admite ciclo de vida Interactivo, Bajo demanda o Persistente, con reposo por inactividad, reanudación de conversación exacta, concurrencia y límite de uso por agente, despertar/reposo manual y supervisión del Core sin Canvas renderizado.',
         'Portal ahora es un navegador administrado por el Core con perfiles persistentes compartidos o privados, hosts permitidos, archivos confinados, referencias semánticas, acciones tipadas, automatizaciones duraderas y evidencia atribuida sin exponer credenciales de login a los agentes.',
+        'Automatizaciones ahora incluye un plano de seguridad por workspace con autorizaciones permanentes, gates de alto riesgo, horario silencioso, límite de concurrencia, parada de emergencia inmediata, SecretRefs cifrados y vinculados y exportación de auditoría verificada y encadenada por hash. Los valores resueltos se ocultan antes de persistir cualquier metadato de salida.',
       ],
     },
     {

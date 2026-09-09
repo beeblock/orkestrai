@@ -32,6 +32,14 @@ normal de los agentes no se guarda.
   y, si quieres, iniciarlo silenciosamente al entrar al sistema. Configuración
   muestra el estado y tiempo activo, permite un reinicio protegido y conserva
   **Salir de Orkestrai** como la parada explícita.
+- **Autonomía limitada y Bóveda cifrada:** aprueba una vez el perímetro
+  rutinario del workspace en vez de supervisar cada comando. Capacidades,
+  raíces, hosts, horario silencioso y concurrencia forman la autorización
+  permanente; las acciones destructivas o externas pueden exigir al responsable,
+  un revisor o el Council. Las credenciales permanecen en el almacén cifrado del
+  sistema operativo y llegan a conectores confiables solo mediante SecretRefs
+  vinculados al destino. La parada de emergencia aborta ejecuciones activas y la
+  exportación encadenada separa acciones mediadas exactas de efectos inferidos del shell.
 - **Lienzo de agentes en vivo:** organiza terminales PTY reales, notas, tableros
   de tareas, portales de navegador, árboles de archivos, loops y formas. Las
   conexiones muestran la colaboración entre agentes mientras ocurre. La física

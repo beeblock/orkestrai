@@ -111,6 +111,19 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'secure-autonomy-24-7',
+    icon: 'ShieldCheck',
+    title: 'Secure autonomous worker',
+    tagline: 'Approve the normal perimeter once and gate only real risk.',
+    steps: [
+      { id: 'open', title: 'Open the security control plane', body: 'I open this workspace in Automations. Select Security to configure standing access, approvals, Vault, and audit.', action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'grant', title: 'Define the standing grant', body: 'Enable Bounded autonomous, keep only the required capabilities, roots, hosts, concurrent runs, and operating hours. Normal work then continues without repeated prompts.' },
+      { id: 'gates', title: 'Reserve approval for real risk', body: 'Choose who must approve force push, production deploy, purchases, public publishing, account changes, bulk deletion, and work outside the approved perimeter.' },
+      { id: 'vault', title: 'Bind credentials instead of revealing them', body: 'Complete OAuth yourself or add a credential to the encrypted Vault. Bind its SecretRef to exact integrations, operations, and destinations; the raw value exists only inside the trusted executor.' },
+      { id: 'audit', title: 'Verify and stop', body: 'Approvals shows paused operations. Audit distinguishes exact brokered actions from inferred shell effects and exports a hash-chained record. Emergency stop aborts active work and disables every routine.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Two features in parallel, no conflicts',

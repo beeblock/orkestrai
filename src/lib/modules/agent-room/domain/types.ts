@@ -1072,7 +1072,7 @@ export type AutomationTriggerType =
   | 'usage_threshold';
 
 export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser';
-export type AutomationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';
+export type AutomationRunStatus = 'queued' | 'running' | 'waiting_approval' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';
 
 export type Routine = {
   id: string;

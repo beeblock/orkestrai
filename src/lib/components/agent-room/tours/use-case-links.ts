@@ -4,6 +4,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'workspace-node-transfer': 'workspace-node-transfer',
   'watch-24-7': 'vigia-24-7',
   'managed-browser-24-7': 'managed-browser-24-7',
+  'secure-autonomy-24-7': 'secure-autonomy-24-7',
   'parallel-features': 'duas-features',
   'council-decision': 'council-perspectives',
   'api-client-workflow': 'api-client',

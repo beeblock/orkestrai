@@ -27,6 +27,7 @@ import { RunAutomationJob } from '../jobs/RunAutomationJob.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 import { agentSessionService } from './AgentSessionService.js';
 import { agentRuntimeService } from './AgentRuntimeService.js';
+import { autonomyPolicyService, AutonomyGatePendingError } from './AutonomyPolicyService.js';
 
 const TICK_MS = 15_000;
 const RUN_LEASE_MS = 2 * 60_000;
@@ -39,6 +40,10 @@ const POLL_INTERVALS: Partial<Record<AutomationTriggerType, number>> = {
   git_commit: 30_000,
   github_pull_request: 5 * 60_000,
   usage_threshold: 5 * 60_000,
+};
+
+const routineRuntime = globalThis as typeof globalThis & {
+  __orkestraiAbortWorkspaceRuns?: (workspaceId: string, reason: string) => Promise<number>;
 };
 
 function toIso(value: unknown): string {
@@ -316,8 +321,8 @@ export class RoutineService {
     const status = String(run.getAttribute('status') ?? 'queued') as AutomationRunStatus;
     if (['succeeded', 'failed', 'cancelled', 'dead_letter'].includes(status)) return mapRun(run);
     const now = new Date();
-    if (status === 'queued') {
-      await AgentRoutineRun.query().where('id', runId).where('status', 'queued').update({
+    if (status === 'queued' || status === 'waiting_approval') {
+      await AgentRoutineRun.query().where('id', runId).where('status', status).update({
         status: 'cancelled', ok: false, detail: 'Execution cancelled.', error: null,
         cancel_requested_at: now, finished_at: now, next_attempt_at: null,
       });
@@ -327,6 +332,19 @@ export class RoutineService {
     }
     const updated = await AgentRoutineRun.find(runId);
     return updated ? mapRun(updated) : null;
+  }
+
+  async abortWorkspace(workspaceId: string, reason: string): Promise<number> {
+    const routines = await AgentRoutine.query().where('workspace_id', workspaceId).get();
+    const routineIds = new Set(routines.map((routine) => String(routine.getAttribute('id'))));
+    let aborted = 0;
+    for (const [runId, controller] of this.activeRuns) {
+      const run = await AgentRoutineRun.find(runId);
+      if (!run || !routineIds.has(String(run.getAttribute('routine_id')))) continue;
+      controller.abort(new Error(reason));
+      aborted += 1;
+    }
+    return aborted;
   }
 
   async dispatchEvent(event: AutomationTriggerReceived): Promise<number> {
@@ -451,7 +469,20 @@ export class RoutineService {
       const message = error instanceof Error ? error.message : String(error);
       const cancelled = !timedOut && (controller.signal.aborted || await this.isCancellationRequested(runId));
       const maxAttempts = Number(run.getAttribute('max_attempts') ?? MAX_ATTEMPTS);
-      if (cancelled) {
+      if (error instanceof AutonomyGatePendingError) {
+        await AgentRoutineRun.query().where('id', runId).update({
+          status: 'waiting_approval',
+          ok: false,
+          detail: 'Waiting for approval: ' + error.gate.summary,
+          error: null,
+          finished_at: null,
+          duration_ms: null,
+          lease_owner: null,
+          lease_expires_at: null,
+          next_attempt_at: null,
+          checkpoint_json: JSON.stringify({ stage: 'waiting_approval', attempt, gateId: error.gate.id }),
+        });
+      } else if (cancelled) {
         await AgentRoutineRun.query().where('id', runId).update({
           status: 'cancelled', ok: false, detail: 'Execution cancelled.', error: null,
           finished_at: new Date(finished), duration_ms: finished - started,
@@ -475,7 +506,7 @@ export class RoutineService {
         });
         await this.finishRoutine(routine, finished);
       }
-      if (rethrow && !cancelled) throw error;
+      if (rethrow && !cancelled && !(error instanceof AutonomyGatePendingError)) throw error;
     } finally {
       clearTimeout(timeout);
       clearInterval(leasePulse);
@@ -554,6 +585,22 @@ export class RoutineService {
     if (nextAttemptAt && new Date(nextAttemptAt as Date).getTime() > Date.now()) return null;
     if (run.getAttribute('cancel_requested_at')) {
       await this.cancel(runId);
+      return null;
+    }
+    const routine = await AgentRoutine.find(run.getAttribute('routine_id'));
+    if (!routine) return null;
+    const window = await autonomyPolicyService.runWindow(
+      String(routine.getAttribute('workspace_id')),
+      String(run.getAttribute('trigger_type') ?? 'manual'),
+    );
+    if (!window.allowed) {
+      await AgentRoutineRun.query().where('id', runId).where('status', 'queued').update({
+        detail: window.reason === 'quiet_hours'
+          ? 'Waiting for the configured operating window.'
+          : 'Waiting for an available workspace execution slot.',
+        next_attempt_at: window.retryAt ?? new Date(Date.now() + TICK_MS),
+        checkpoint_json: JSON.stringify({ stage: window.reason, retryAt: window.retryAt?.toISOString() ?? null }),
+      });
       return null;
     }
     const now = new Date();
@@ -780,6 +827,38 @@ export class RoutineService {
     runId: string,
     signal: AbortSignal,
   ): Promise<Record<string, unknown>> {
+    // Browser commands enforce the same policy at the Portal service boundary so
+    // direct agent calls and durable automation cannot bypass one another.
+    if (routine.actionType === 'browser') {
+      return this.executeActionUnchecked(routine, input, runId, signal);
+    }
+    const target = routine.actionType === 'prompt_agent'
+      ? String(routine.actionConfig.targetNodeId ?? routine.targetNodeId ?? '')
+      : routine.name;
+    return autonomyPolicyService.execute({
+      workspaceId: routine.workspaceId,
+      runId,
+      capability: routine.actionType === 'prompt_agent'
+        ? 'agent'
+        : routine.actionType === 'create_task'
+            ? 'task'
+            : 'notification',
+      operation: 'automation:' + routine.actionType,
+      target,
+      mutation: true,
+      actorType: 'automation',
+      actorId: routine.id,
+      input,
+      certainty: 'semantic',
+    }, () => this.executeActionUnchecked(routine, input, runId, signal));
+  }
+
+  private async executeActionUnchecked(
+    routine: Routine,
+    input: Record<string, unknown>,
+    runId: string,
+    signal: AbortSignal,
+  ): Promise<Record<string, unknown>> {
     if (routine.actionType === 'prompt_agent') {
       const targetNodeId = String(routine.actionConfig.targetNodeId ?? routine.targetNodeId ?? '');
       const prompt = this.interpolate(String(routine.actionConfig.prompt ?? routine.prompt), input);
@@ -824,7 +903,9 @@ export class RoutineService {
                 ? { kind: 'text', ...(routine.actionConfig.ref ? { ref: routine.actionConfig.ref } : {}) }
                 : action === 'screenshot' ? { fullPage: false } : { interactiveOnly: true };
       const command = managedPortalCommandSchema.parse({ nodeId: portalNodeId, action, args: actionArgs, timeoutMs: 30_000 });
-      const result = await managedPortalService.execute(routine.workspaceId, command);
+      const result = await managedPortalService.execute(routine.workspaceId, command, {
+        actorType: 'automation', actorId: routine.id, runId,
+      });
       if (!result.ok) throw new Error(result.error || 'Managed browser action failed.');
       return { detail: `Portal ${action} completed.`, portalNodeId, action, result: result.result };
     }
@@ -846,3 +927,4 @@ export class RoutineService {
 }
 
 export const routineService = new RoutineService();
+routineRuntime.__orkestraiAbortWorkspaceRuns = (workspaceId, reason) => routineService.abortWorkspace(workspaceId, reason);

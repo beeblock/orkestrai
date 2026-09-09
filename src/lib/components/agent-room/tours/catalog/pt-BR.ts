@@ -115,6 +115,19 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'secure-autonomy-24-7',
+    icon: 'ShieldCheck',
+    title: 'Trabalhador autônomo seguro',
+    tagline: 'Aprove o perímetro normal uma vez e retenha somente o risco real.',
+    steps: [
+      { id: 'open', title: 'Abra o plano de controle de segurança', body: 'Abro este workspace em Automações. Selecione Segurança para configurar acesso permanente, aprovações, Cofre e auditoria.', action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'grant', title: 'Defina a autorização permanente', body: 'Ative Autônomo com limites e mantenha somente capacidades, raízes, hosts, execuções simultâneas e horários necessários. O trabalho normal continua sem pedidos repetidos.' },
+      { id: 'gates', title: 'Reserve aprovação para risco real', body: 'Escolha quem aprova push forçado, deploy em produção, compras, publicação pública, mudanças de conta, exclusão em massa e trabalho fora do perímetro aprovado.' },
+      { id: 'vault', title: 'Vincule credenciais sem revelá-las', body: 'Conclua OAuth pessoalmente ou adicione uma credencial ao Cofre criptografado. Vincule o SecretRef a integrações, operações e destinos exatos; o valor bruto só existe dentro do executor confiável.' },
+      { id: 'audit', title: 'Verifique e interrompa', body: 'Aprovações mostra operações pausadas. Auditoria separa ações mediadas exatas de efeitos inferidos do shell e exporta um registro encadeado por hash. A Parada de emergência aborta o trabalho ativo e desativa todas as rotinas.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Duas features em paralelo sem conflito',

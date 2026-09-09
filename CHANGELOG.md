@@ -22,6 +22,12 @@ pt-BR, English, and Spanish translations.
 - Portal is now a Core-managed browser with persistent workspace or private
   profiles, host allowlists, confined files, semantic references, typed browser
   operations, durable automation actions, and attributed Control Center evidence.
+- Workspaces now have an autonomy security plane with standing capability,
+  filesystem, network, schedule, and concurrency grants; explicit high-risk
+  approval gates; immediate emergency stop; encrypted OS-backed SecretRefs with
+  integration, operation, and destination bindings; and an exportable
+  hash-chained audit that distinguishes exact brokered actions from inferred
+  free-shell effects.
 
 ### Fixed
 
@@ -33,6 +39,8 @@ pt-BR, English, and Spanish translations.
   to the renderer.
 - An interrupted automation is reclaimed after its worker lease expires, while
   atomic claiming prevents concurrent workers from delivering the same run.
+- Sensitive executor values are redacted before audit traversal, so a resolved
+  SecretRef cannot leak through output metadata, persisted events, or exports.
 
 ## 0.28.0 - 2026-09-07
 

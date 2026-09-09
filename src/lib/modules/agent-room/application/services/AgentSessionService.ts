@@ -14,6 +14,7 @@ import {
   codexMcpOverrideArgs,
   codexWorkspaceTrustOverrideArgs,
 } from '../../infrastructure/codex-mcp-config.js';
+import { autonomyPolicyService } from './AutonomyPolicyService.js';
 
 type AgentNodePayload = {
   sessionId?: string;
@@ -151,6 +152,7 @@ export class AgentSessionService {
       ? posix.join(runtime.linuxWorkingDir, '.orkestrai', 'workspace.json')
       : join(workspace.workingDir, '.orkestrai', 'workspace.json');
     const bridgeAgentToken = randomUUID();
+    const autonomyPolicy = await autonomyPolicyService.get(workspaceId);
     const session = ptySessionManager.create({
       command: payload.command,
       args: [
@@ -173,8 +175,9 @@ export class AgentSessionService {
         ORKESTRAI_AGENT_TITLE: title,
         ORKESTRAI_AGENT_TOKEN: bridgeAgentToken,
         ORKESTRAI_WORKSPACE_CONFIG: workspaceConfig,
+        ORKESTRAI_POLICY_ENVELOPE: autonomyPolicyService.envelope(autonomyPolicy),
       },
-      forwardEnvToWsl: Object.keys(profileEnv),
+      forwardEnvToWsl: [...Object.keys(profileEnv), 'ORKESTRAI_POLICY_ENVELOPE'],
       runtime,
       workspaceRoot: workspace.workingDir,
       transcriptHome: wslContext?.homeHostPath,
@@ -182,6 +185,18 @@ export class AgentSessionService {
       agentSessionId: activeAgentSessionId ?? freshAgentSessionId ?? undefined,
       bridgeAgentToken,
     });
+    void autonomyPolicyService.recordObservedEffect({
+      workspaceId,
+      capability: 'agent',
+      operation: 'shell:started',
+      target: target.id,
+      actorType: 'system',
+      actorId: 'agent-session-service',
+      input: { provider: payload.provider ?? null, runtime: runtime.kind },
+    }, 'started', {
+      coverage: 'PTY lifecycle and effect correlation; shell syscalls are not intercepted.',
+      sessionId: session.id,
+    }).catch(() => undefined);
     if (activeAgentSessionId) tracker.bind(session.id, activeAgentSessionId);
     const nextPayload: AgentNodePayload = {
       ...payload,

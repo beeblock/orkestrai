@@ -34,6 +34,14 @@ common credentials redacted; normal agent output is not persisted.
   on-demand agents resume only for messages or durable automations, or ask the
   Core to supervise a persistent process. Each agent has idle, concurrency,
   and provider-usage safeguards plus explicit wake and sleep controls.
+- **Bounded autonomy and encrypted Vault:** approve the routine workspace
+  perimeter once instead of supervising every command. Capabilities, roots,
+  hosts, quiet hours, and concurrency form the standing grant; destructive or
+  external actions can require the owner, a reviewer, or Council. Credentials
+  remain in operating-system encrypted storage and reach trusted connectors only
+  through destination-bound SecretRefs. Emergency stop aborts active runs, while
+  a hash-chained export distinguishes exact brokered actions from inferred shell
+  effects.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or

@@ -11,6 +11,7 @@ import {
   type ManagedPortalExecutorResult,
   type PortalProfile,
 } from '../../contracts/schemas/managed-portal.schema.js';
+import { autonomyPolicyService } from './AutonomyPolicyService.js';
 
 type PendingPortalRequest = {
   resolve: (result: ManagedPortalExecutorResult) => void;
@@ -86,7 +87,11 @@ async function requestElectron(request: ManagedPortalExecutorRequest): Promise<M
 }
 
 export class ManagedPortalService {
-  async execute(workspaceId: string, command: ManagedPortalCommand): Promise<PortalCommandResult> {
+  async execute(
+    workspaceId: string,
+    command: ManagedPortalCommand,
+    context: { actorType?: 'agent' | 'automation' | 'user'; actorId?: string | null; runId?: string | null } = {},
+  ): Promise<PortalCommandResult> {
     const portal = await workspaceRepository.getNode(command.nodeId);
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!portal || portal.workspaceId !== workspaceId || portal.type !== 'portal') throw new Error('Portal not found in this workspace.');
@@ -126,28 +131,50 @@ export class ManagedPortalService {
       args,
       timeoutMs: command.timeoutMs,
     };
-    const managed = await requestElectron(request);
-    const result = managed ?? await this.executeVisible(portal.id, command);
-    if (managed?.state) {
-      await workspaceRepository.updateNode(portal.id, { payload: {
-        ...payload,
-        ...(managed.state.url ? { url: managed.state.url } : {}),
-        portalActiveTabId: managed.state.activeTabId,
-        portalTabs: managed.state.tabs,
-        portalProfileId: profile.profileId,
-        portalProfileScope: profile.profileScope,
-        portalAllowedHosts: profile.allowedHosts,
-        portalDownloadDirectory: profile.downloadDirectory,
-      } });
-    }
+    const navigationUrl = command.action === 'navigate'
+      ? String(command.args.url)
+      : command.action === 'tabs' && command.args.operation === 'new'
+        ? String(command.args.url)
+        : null;
+    const readOnly = ['snapshot', 'extract', 'screenshot', 'dom'].includes(command.action)
+      || (command.action === 'tabs' && command.args.operation === 'list');
+    const result = await autonomyPolicyService.execute({
+      workspaceId,
+      runId: context.runId ?? null,
+      capability: 'browser',
+      operation: 'portal:' + command.action,
+      target: portal.id,
+      mutation: !readOnly,
+      actorType: context.actorType ?? (command.from ? 'agent' : 'user'),
+      actorId: context.actorId ?? command.from ?? null,
+      input: command.args,
+      certainty: 'semantic',
+      ...(navigationUrl ? { network: { url: navigationUrl, method: 'GET' } } : {}),
+    }, async () => {
+      const managed = await requestElectron(request);
+      const commandResult = managed ?? await this.executeVisible(portal.id, command);
+      if (managed?.state) {
+        await workspaceRepository.updateNode(portal.id, { payload: {
+          ...payload,
+          ...(managed.state.url ? { url: managed.state.url } : {}),
+          portalActiveTabId: managed.state.activeTabId,
+          portalTabs: managed.state.tabs,
+          portalProfileId: profile.profileId,
+          portalProfileScope: profile.profileScope,
+          portalAllowedHosts: profile.allowedHosts,
+          portalDownloadDirectory: profile.downloadDirectory,
+        } });
+      }
+      return { id: request.requestId, ...commandResult };
+    });
     await controlCenterService.recordActivity({
       workspaceId, nodeId: portal.id, state: result.ok ? 'done' : 'error', action: `Portal ${command.action}`,
       category: 'portal', verb: command.action, objectType: 'portal', objectId: portal.id, objectTitle: portal.title,
       outcome: result.ok ? 'succeeded' : 'failed', severity: result.ok ? 'info' : 'error',
       sourceType: command.from ? 'agent' : 'automation', sourceId: command.from ?? null,
-      metadata: { managed: Boolean(managed), profileId: profile.profileId, action: command.action }, attentionRequired: false,
+      metadata: { managed: Boolean(runtime.__orkestraiExecutePortal || process.send), profileId: profile.profileId, action: command.action }, attentionRequired: false,
     });
-    return { id: request.requestId, ...result };
+    return result;
   }
 
   private async executeVisible(nodeId: string, command: ManagedPortalCommand): Promise<PortalCommandResult> {

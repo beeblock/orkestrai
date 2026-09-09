@@ -5,7 +5,7 @@
   import { zod } from 'sveltekit-superforms/adapters';
   import {
     Activity, CheckCircle2, GitPullRequestArrow, History, LoaderCircle,
-    Pencil, Play, Plus, RefreshCw, RotateCcw, Sparkles, Trash2,
+    Pencil, Play, Plus, RefreshCw, RotateCcw, ShieldCheck, Sparkles, Trash2,
     Workflow, X, XCircle,
   } from '@lucide/svelte';
   import * as Tabs from '$lib/components/ui/tabs';
@@ -16,6 +16,7 @@
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
   import { Switch } from '$lib/components/ui/switch';
+  import AutonomySecurityPanel from './AutonomySecurityPanel.svelte';
   import { automationFormSchema, type AutomationFormInput } from '$lib/modules/agent-room/contracts/schemas/automation.schema.js';
   import type { AutomationRecipe } from '$lib/modules/agent-room/application/catalogs/AutomationRecipeCatalog.js';
   import type { AutomationIntegration, AutomationRun, CanvasNode, Routine } from '$lib/modules/agent-room/domain/types.js';
@@ -304,6 +305,7 @@
     return ({
       queued: m['automation.status_queued'],
       running: m['automation.status_running'],
+      waiting_approval: m['automation.status_waiting_approval'],
       succeeded: m['automation.status_succeeded'],
       failed: m['automation.status_failed'],
       cancelled: m['automation.status_cancelled'],
@@ -337,6 +339,7 @@
       <Tabs.Trigger value="recipes" class="h-7 text-ui-xs"><Sparkles size={12} />{m['automation.recipes']()}</Tabs.Trigger>
       <Tabs.Trigger value="history" class="h-7 text-ui-xs"><History size={12} />{m['automation.history']()}</Tabs.Trigger>
       <Tabs.Trigger value="integrations" class="h-7 text-ui-xs"><GitPullRequestArrow size={12} />{m['automation.integrations']()}</Tabs.Trigger>
+      <Tabs.Trigger value="security" class="h-7 text-ui-xs"><ShieldCheck size={12} />{m['autonomy.title']()}</Tabs.Trigger>
     </Tabs.List>
 
     <Tabs.Content value="overview" class="m-0 min-h-0 overflow-y-auto p-4">
@@ -391,6 +394,7 @@
     <Tabs.Content value="history" class="m-0 min-h-0 overflow-y-auto p-4">{#if runs.length === 0}<div class="grid min-h-52 place-items-center text-center"><div><History class="mx-auto text-[var(--app-text-muted)]" size={24} /><p class="mt-2 text-xs">{m['automation.history_empty']()}</p></div></div>{:else}<div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">{#each runs as run (run.id)}<article class="flex items-start gap-3 bg-[var(--app-surface)] px-3 py-3">{#if run.status === 'succeeded'}<CheckCircle2 class="mt-0.5 shrink-0 text-[var(--app-success)]" size={15} />{:else if run.status === 'failed' || run.status === 'dead_letter'}<XCircle class="mt-0.5 shrink-0 text-[var(--app-danger)]" size={15} />{:else}<LoaderCircle class={`mt-0.5 shrink-0 text-[var(--app-accent)] ${run.status === 'running' ? 'animate-spin' : ''}`} size={15} />{/if}<div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><span class="text-xs font-medium">{automations.find((item) => item.id === run.routineId)?.name ?? run.routineId.slice(0, 8)}</span><Badge variant="outline">{statusLabel(run.status)}</Badge></div><p class="mt-1 break-words text-ui-xs leading-4 text-[var(--app-text-soft)]">{run.detail ?? run.error}</p><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{new Date(run.ranAt).toLocaleString()} · {m['automation.attempt']({ attempt: run.attempt })}/{run.maxAttempts}{run.durationMs !== null ? ` · ${m['automation.duration']({ duration: run.durationMs })}` : ''}{run.provider ? ` · ${run.provider}` : ''}{run.nextAttemptAt ? ` · ${m['automation.next_attempt']({ date: new Date(run.nextAttemptAt).toLocaleString() })}` : ''}</p></div><div class="flex shrink-0 items-center gap-1">{#if run.status === 'queued' || run.status === 'running'}<Button variant="ghost" size="sm" onclick={() => cancelRun(run)}><X size={13} />{m['automation.cancel_run']()}</Button>{:else if run.recoverable}<Button variant="ghost" size="sm" onclick={() => retry(run)}><RotateCcw size={13} />{m['automation.retry']()}</Button>{/if}</div></article>{/each}</div>{/if}</Tabs.Content>
 
     <Tabs.Content value="integrations" class="m-0 min-h-0 overflow-y-auto p-4"><section class="border-l-2 border-[var(--app-text)] bg-[var(--app-surface)] p-4"><div class="flex items-start gap-3"><GitPullRequestArrow size={20} /><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h2 class="text-sm font-semibold">{m['automation.github_title']()}</h2><Badge variant={githubIntegration?.status === 'connected' ? 'default' : 'outline'}>{githubIntegration?.status === 'connected' ? m['automation.github_connected']() : githubIntegration?.status === 'error' ? m['automation.github_error']() : m['automation.github_disconnected']()}</Badge></div><p class="mt-1 max-w-xl text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['automation.github_description']()}</p></div></div><div class={`mt-5 grid gap-3 ${compact ? 'grid-cols-1' : 'grid-cols-2'}`}><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.github_owner']()}</span><Input bind:value={githubOwner} autocomplete="off" /></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.github_repo']()}</span><Input bind:value={githubRepo} autocomplete="off" /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.github_token']()}</span><Input type="password" bind:value={githubToken} autocomplete="new-password" placeholder={githubSecretStored ? '••••••••••••' : ''} /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.github_token_hint']()}</span></label></div>{#if githubIntegration?.error}<p class="mt-3 text-ui-xs text-[var(--app-danger)]">{githubIntegration.error}</p>{/if}<div class="mt-4 flex flex-wrap gap-2"><Button size="sm" disabled={busy || !githubOwner.trim() || !githubRepo.trim()} onclick={connectGitHub}>{#if busy}<LoaderCircle class="animate-spin" />{:else}<GitPullRequestArrow />{/if}{m['automation.github_connect']()}</Button>{#if githubIntegration}<Button variant="outline" size="sm" onclick={checkGitHub}><RefreshCw />{m['automation.github_check']()}</Button><Button variant="ghost" size="sm" class="text-[var(--app-danger)]" onclick={() => (disconnectPending = true)}><Trash2 />{m['automation.github_disconnect']()}</Button>{/if}</div></section></Tabs.Content>
+    <Tabs.Content value="security" class="m-0 min-h-0 overflow-hidden"><AutonomySecurityPanel {workspaceId} {compact} /></Tabs.Content>
   </Tabs.Root>
 </section>
 

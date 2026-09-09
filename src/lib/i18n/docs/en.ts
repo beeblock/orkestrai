@@ -61,6 +61,11 @@ export const DOCS_EN: DocsCatalog = {
       body: `Open an agent terminal menu and choose Agent runtime. Interactive preserves the existing Canvas lifecycle. On demand wakes through a human message or durable automation, resumes the exact provider conversation, and sleeps after the configured idle period when it has no active run or assigned work. Persistent is supervised by the background Core and restarts after process failure or system sleep without requiring a rendered Canvas. Per-agent safeguards cap concurrent automation runs and pause automatic starts when a known provider quota reaches the chosen threshold; a manual wake always remains available. The runtime, last wake/sleep, errors, active run count, task, and session state use the same persisted node and Control Center history across Canvas, Workbench, and Remote. Existing agents remain Interactive until explicitly changed.`,
     },
     {
+      id: 'autonomy-security',
+      title: 'Autonomy policy, approvals, and encrypted credentials',
+      body: `Open Automations → Security to define one standing grant for unattended work. Observe records activity without restricting the current shell; Prepare and Ask before mutations pause writes; Bounded autonomous lets agents keep a free shell and execute brokered actions inside approved capabilities, workspace roots, hosts, operating hours, and concurrency limits. High-risk boundaries such as force push, production deploy, purchases, external publication, account changes, bulk deletion, and access outside the grant can be pre-approved or require the workspace owner, a named reviewer, or Council consensus. Emergency stop disables every routine and aborts active runs immediately. The Vault stores values through the operating-system encrypted store and gives agents only a SecretRef bound to explicit integrations, operations, and destinations. OAuth or an interactive Portal login is completed once by the user; later jobs receive a credential only inside the trusted connector executor. Every brokered action is exact semantic evidence in a hash-chained audit export. Free-shell effects remain labeled as inferred because Orkestrai does not pretend to provide syscall-level observation.`,
+    },
+    {
       id: 'council',
       title: 'Council: compare independent perspectives',
       body: `Open Council directly from the Canvas toolbar, at the top of the workspace in Workbench, or through Command/Ctrl+K. Ask perspectives on a task carries its full brief; the leader menu preselects that leader for synthesis. Run two to five real agents against the same objective, choose advisory or implementation mode, give each agent a distinct approach, select the decision criterion, and set a hard execution budget. Every perspective returns the same structured evidence, risks, tests, disagreements, recommendation, and confidence contract; one failed provider does not discard successful answers. An optional leader synthesis consumes one more execution, but the final select, request-consensus, or reject decision is always human and persisted. Council is the decision layer; Floors are the isolation layer. Git implementation perspectives run in separate floors, and only the selected committed result can be landed after a fresh diff, dirty-check, and conflict preview. Nothing merges or pushes automatically.`,
@@ -504,6 +509,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Managed Portal', 'authentication handoff', 'audited browser'],
     },
     {
+      id: 'secure-autonomy-24-7',
+      title: 'Authorize an autonomous agent without approving every step',
+      body: 'Open Automations → Security, enable Bounded autonomous, grant only the project roots, capabilities, destinations, and operating window this worker needs, then keep destructive and external actions behind explicit gates. Add OAuth accounts through their official consent screen or store an API credential in the encrypted Vault with exact connector, operation, and destination bindings. The agent can then read mail, prepare reports, generate workspace PDFs, operate an authenticated Portal, and send approved Slack, Telegram, WhatsApp, or email notifications without seeing raw credentials or requesting permission for routine work. Review pending gates and export the hash-chained audit at any time; Emergency stop revokes future execution and aborts current runs.',
+      tags: ['Standing policy', 'SecretRef', 'approval gates'],
+    },
+    {
       id: 'parallel-features',
       title: 'Two features in parallel with no conflicts',
       body: 'One floor (worktree) per feature: team A on the Ground floor on main, team B on the "auth-refactor" floor. When done, floor preview shows conflicts first; land merges. A conflict becomes a task for an agent to resolve.',
@@ -877,6 +888,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Automation runs are persisted before execution, claimed with renewable leases, checkpointed, retried with bounded backoff, recovered after interruption, and moved to Needs intervention after the final attempt. Closed target agents are started or resumed automatically.',
         'Each provider terminal supports Interactive, On demand, or Persistent lifecycle modes with idle sleep, exact conversation resume, per-agent concurrency and provider-usage safeguards, manual wake/sleep, and Core supervision without a rendered Canvas.',
         'Portal is now a Core-managed browser with persistent workspace/private profiles, host allowlists, workspace-confined files, semantic references, typed actions, durable automations, and attributable evidence without exposing login credentials to agents.',
+        'Automations now includes a workspace security plane with standing grants, high-risk approval gates, quiet hours, concurrency limits, immediate emergency stop, encrypted and bound SecretRefs, and a verified hash-chained audit export. Resolved values are redacted before any output metadata is persisted.',
       ],
     },
     {

@@ -65,6 +65,11 @@ export const DOCS_PT: DocsCatalog = {
       body: `Abra o menu de um terminal de agente e escolha Runtime do agente. Interativo preserva o ciclo de vida atual do Canvas. Sob demanda acorda por mensagem humana ou automação durável, retoma a conversa exata do provider e dorme após o período ocioso configurado quando não há execução nem tarefa atribuída ativa. Persistente é supervisionado pelo Core em segundo plano e reinicia após falha do processo ou suspensão do sistema sem exigir o Canvas renderizado. Limites por agente controlam automações simultâneas e pausam partidas automáticas quando uma cota conhecida do provider alcança o percentual escolhido; o usuário sempre pode acordar manualmente. Runtime, último despertar/repouso, erros, execuções, tarefa e sessão usam o mesmo node persistido e o histórico da Central de Controle no Canvas, Workbench e Remote. Agentes existentes continuam Interativos até uma alteração explícita.`,
     },
     {
+      id: 'autonomy-security',
+      title: 'Política de autonomia, aprovações e credenciais criptografadas',
+      body: `Abra Automações → Segurança para definir uma autorização permanente para trabalho sem supervisão. Observar registra atividade sem restringir o shell atual; Preparar e Perguntar antes de alterações pausam escritas; Autônomo com limites mantém o shell livre e permite ações mediadas dentro das capacidades, raízes, hosts, horários e concorrência aprovados. Limites de alto risco como push forçado, deploy em produção, compras, publicação externa, mudanças de conta, exclusão em massa e acesso fora da autorização podem ser pré-aprovados ou exigir o responsável, um revisor nomeado ou consenso do Council. A Parada de emergência desativa todas as rotinas e aborta execuções ativas imediatamente. O Cofre guarda valores no armazenamento criptografado do sistema operacional e entrega aos agentes somente um SecretRef vinculado a integrações, operações e destinos explícitos. OAuth ou login interativo em Portal é concluído uma vez pelo usuário; depois, o executor confiável do conector recebe a credencial apenas durante a ação. Cada ação mediada vira evidência semântica exata numa auditoria exportável encadeada por hash. Efeitos do shell livre ficam identificados como inferidos, pois o Orkestrai não finge oferecer observação no nível de syscall.`,
+    },
+    {
       id: 'council',
       title: 'Council: compare perspectivas independentes',
       body: `Abra Conselho diretamente na barra do Canvas, no topo do workspace no Workbench ou pelo Command/Ctrl+K. Pedir perspectivas em uma tarefa leva o briefing completo; no menu do líder, já o seleciona para a síntese. Execute de dois a cinco agentes reais sobre o mesmo objetivo, escolha modo consultivo ou implementação, dê uma abordagem diferente a cada agente, selecione o critério de decisão e defina um limite rígido de execuções. Toda perspectiva devolve o mesmo contrato estruturado de evidências, riscos, testes, divergências, recomendação e confiança; a falha de um provider não descarta as respostas concluídas. Uma síntese opcional do líder consome mais uma execução, mas a decisão final de selecionar, pedir consenso ou rejeitar é sempre humana e persistida. Council é a camada de decisão; Andares são a camada de isolamento. Implementações Git rodam em andares separados e somente o resultado selecionado e commitado pode ser aterrissado depois de nova prévia de diff, alterações pendentes e conflitos. Nada faz merge ou push automaticamente.`,
@@ -508,6 +513,12 @@ Header: Authorization = Bearer {{accessToken}}`,
       tags: ['Portal gerenciado', 'handoff de autenticação', 'navegador auditado'],
     },
     {
+      id: 'secure-autonomy-24-7',
+      title: 'Autorize um agente autônomo sem aprovar cada passo',
+      body: 'Abra Automações → Segurança, ative Autônomo com limites e conceda somente raízes, capacidades, destinos e horário necessários; mantenha ações destrutivas e externas atrás de gates explícitos. Adicione contas OAuth pela tela oficial de consentimento ou guarde uma credencial de API no Cofre criptografado com vínculos exatos de conector, operação e destino. O agente poderá ler e-mails, preparar relatórios, gerar PDFs no workspace, operar um Portal autenticado e enviar notificações aprovadas por Slack, Telegram, WhatsApp ou e-mail sem enxergar o segredo bruto nem pedir permissão para o trabalho rotineiro. Revise gates pendentes e exporte a auditoria encadeada quando quiser; a Parada de emergência revoga execuções futuras e aborta as atuais.',
+      tags: ['Política permanente', 'SecretRef', 'gates de aprovação'],
+    },
+    {
       id: 'parallel-features',
       title: 'Duas features em paralelo sem conflito',
       body: 'Um andar (worktree) por feature: time A no Térreo na main, time B no andar “auth-refactor”. Ao terminar, floor preview mostra conflitos antes; o land mergeia. Conflito vira tarefa para um agente resolver.',
@@ -881,6 +892,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'Execuções de automação são persistidas antes de rodar, assumidas com leases renováveis, registradas por checkpoints, repetidas com backoff limitado, recuperadas após interrupção e movidas para Requer intervenção depois da última tentativa. Agentes de destino fechados são iniciados ou retomados automaticamente.',
         'Cada terminal de provider aceita ciclo de vida Interativo, Sob demanda ou Persistente, com repouso por ociosidade, retomada da conversa exata, concorrência e limite de uso por agente, despertar/repouso manual e supervisão do Core sem o Canvas renderizado.',
         'O Portal agora é um navegador gerenciado pelo Core com perfis persistentes compartilhados ou privados, hosts permitidos, arquivos confinados, referências semânticas, ações tipadas, automações duráveis e evidência atribuída sem expor credenciais de login aos agentes.',
+        'Automações agora inclui um plano de segurança por workspace com autorizações permanentes, gates de alto risco, horário silencioso, limite de concorrência, parada de emergência imediata, SecretRefs criptografados e vinculados e exportação de auditoria verificada e encadeada por hash. Valores resolvidos são ocultados antes de qualquer metadado de saída ser persistido.',
       ],
     },
     {
