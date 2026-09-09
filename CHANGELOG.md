@@ -28,6 +28,12 @@ pt-BR, English, and Spanish translations.
   integration, operation, and destination bindings; and an exportable
   hash-chained audit that distinguishes exact brokered actions from inferred
   free-shell effects.
+- Automations now includes a native Integration Center for Gmail, Slack,
+  Telegram, WhatsApp, GitHub, and HTTPS webhooks. Accounts expose only
+  explicitly granted operations to agents; OAuth and API credentials remain
+  behind destination-bound SecretRefs, while idempotent executions and bounded
+  event history support unattended notifications, inbox work, and report
+  delivery without persisting message contents or resolved secrets.
 
 ### Fixed
 

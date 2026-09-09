@@ -124,6 +124,19 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'connected-reporting-agent',
+    icon: 'Cable',
+    title: 'Agente conectado de informes',
+    tagline: 'Entrega informes autorizados sin exponer credenciales de la cuenta.',
+    steps: [
+      { id: 'open', title: 'Abre el Centro de integraciones', body: 'Abro este workspace en Automatizaciones. Selecciona Integraciones para agregar Gmail, Slack, Telegram, WhatsApp, GitHub o un webhook HTTPS.', action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'account', title: 'Conecta una cuenta limitada', body: 'Completa OAuth de Gmail en el navegador del sistema o coloca un token revocable de app o bot directamente en la Bóveda cifrada. El workspace guarda un SecretRef, nunca el valor bruto.' },
+      { id: 'permissions', title: 'Concede operaciones exactas', body: 'Activa solamente las lecturas y envíos necesarios y define canal, chat, destinatario, repositorio o endpoint predeterminado. La política de autonomía del workspace sigue siendo el límite final.' },
+      { id: 'schedule', title: 'Programa la entrega', body: 'Usa un agente Persistente o Bajo demanda y una Automatización durable para reunir datos, escribir el informe o PDF en el workspace y llamar integration_execute con una clave de idempotencia estable.' },
+      { id: 'verify', title: 'Verifica sin filtrar contenido', body: 'Actividad de integraciones y Auditoría muestran actor, operación, destino, estado y metadatos seguros. Las credenciales resueltas y el contenido completo del mensaje nunca entran en esos registros.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Dos features en paralelo sin conflicto',

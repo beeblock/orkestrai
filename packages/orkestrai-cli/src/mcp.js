@@ -76,6 +76,11 @@ const DESIGN_PROTOTYPE_TRANSITION = { type: 'object', additionalProperties: fals
 const TOOLS = [
   { name: 'list', description: 'Lista agentes e todos os portais do workspace. Cada portal informa explicitamente se esta conectado a este agente.', inputSchema: { type: 'object', properties: {} } },
   { name: 'usage', description: 'Consulta cotas dos providers e a recomendacao de roteamento configurada no no Usage do canvas.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'integration_list', description: 'Lista contas conectadas, permissoes concedidas e manifests de operacoes. Credenciais nunca sao retornadas.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'integration_events', description: 'Lista atividade auditavel e limitada das integracoes, sem segredos.', inputSchema: { type: 'object', properties: { integrationId: { type: 'string', format: 'uuid' }, limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 } } } },
+  { name: 'integration_execute', description: 'Executa uma operacao concedida de uma conta conectada. Exige tarefa ativa atribuida, identidade do terminal e chave idempotente estavel. Nunca aceita credenciais.', inputSchema: { type: 'object', additionalProperties: false, properties: {
+    integrationId: { type: 'string', format: 'uuid' }, action: { type: 'string', minLength: 1, maxLength: 120 }, input: { type: 'object' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8, maxLength: 240, pattern: '^[a-zA-Z0-9._:@/-]+$' },
+  }, required: ['integrationId', 'action', 'input', 'taskId', 'idempotencyKey'] } },
   { name: 'git_status', description: 'Retorna status, commits, branches, tags, remotes, worktrees, stashes e operacao Git ativa do workspace, sem expor credenciais de remotes.', inputSchema: { type: 'object', properties: {} } },
   { name: 'git_preview', description: 'Prepara uma operacao Git allowlisted sem executa-la. Retorna comando resolvido, risco e revision obrigatoria para executar.', inputSchema: { type: 'object', additionalProperties: false, properties: {
     operation: { type: 'string', enum: ['fetch', 'pull', 'push', 'checkout', 'createBranch', 'renameBranch', 'deleteBranch', 'merge', 'rebase', 'cherryPick', 'revert', 'createTag', 'deleteTag', 'stash', 'stashPop', 'abortMerge', 'abortRebase'] },
@@ -333,6 +338,17 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     }
     case 'usage':
       return bridge('GET', '/api/agent-room/bridge/usage');
+    case 'integration_list':
+      return bridge('GET', '/api/agent-room/bridge/integrations');
+    case 'integration_events': {
+      const params = new URLSearchParams();
+      if (args.integrationId) params.set('integrationId', args.integrationId);
+      if (args.limit) params.set('limit', String(args.limit));
+      return bridge('GET', `/api/agent-room/bridge/integrations/events?${params}`);
+    }
+    case 'integration_execute':
+      if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+      return bridge('POST', '/api/agent-room/bridge/integrations', { ...args, from: selfAgent });
     case 'git_status':
       return bridge('GET', '/api/agent-room/bridge/git');
     case 'git_preview':

@@ -156,6 +156,16 @@ export class SecretRefService {
       return new SensitiveValue(value, reference);
     });
   }
+
+  /** Rotates an already-authorized credential without exposing it to the renderer or persistence payloads. */
+  async replaceValue(workspaceId: string, reference: string, value: string): Promise<void> {
+    const id = reference.replace(/^secretref:/i, '');
+    const model = await AgentSecretRef.query().where('workspace_id', workspaceId).where('id', id).first();
+    if (!model || !model.getAttribute('enabled')) throw new Error('SecretRef is unavailable.');
+    if (String(model.getAttribute('provider')) !== 'desktop') throw new Error('This SecretRef provider cannot be rotated locally.');
+    await desktopSecretService.set(String(model.getAttribute('secret_key')), value);
+    await AgentSecretRef.query().where('id', id).update({ last_used_at: new Date(), updated_at: new Date() });
+  }
 }
 
 export const secretRefService = new SecretRefService();

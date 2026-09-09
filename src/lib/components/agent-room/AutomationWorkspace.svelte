@@ -4,8 +4,8 @@
   import { defaults, superForm } from 'sveltekit-superforms';
   import { zod } from 'sveltekit-superforms/adapters';
   import {
-    Activity, CheckCircle2, GitPullRequestArrow, History, LoaderCircle,
-    Pencil, Play, Plus, RefreshCw, RotateCcw, ShieldCheck, Sparkles, Trash2,
+    Activity, CheckCircle2, History, LoaderCircle, PlugZap,
+    Pencil, Play, Plus, RotateCcw, ShieldCheck, Sparkles, Trash2,
     Workflow, X, XCircle,
   } from '@lucide/svelte';
   import * as Tabs from '$lib/components/ui/tabs';
@@ -17,16 +17,11 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import { Switch } from '$lib/components/ui/switch';
   import AutonomySecurityPanel from './AutonomySecurityPanel.svelte';
+  import IntegrationCenterPanel from './IntegrationCenterPanel.svelte';
   import { automationFormSchema, type AutomationFormInput } from '$lib/modules/agent-room/contracts/schemas/automation.schema.js';
   import type { AutomationRecipe } from '$lib/modules/agent-room/application/catalogs/AutomationRecipeCatalog.js';
   import type { AutomationIntegration, AutomationRun, CanvasNode, Routine } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
-
-  type DesktopBridge = {
-    automationSecretStatus?: (key: string) => Promise<{ available: boolean; stored: boolean }>;
-    saveAutomationSecret?: (key: string, value: string) => Promise<{ stored: boolean }>;
-    deleteAutomationSecret?: (key: string) => Promise<{ deleted: boolean }>;
-  };
 
   let {
     workspaceId,
@@ -49,6 +44,7 @@
     notificationMessage: null, enabled: true, recipeId: null,
     portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null,
     portalText: null, portalSubmit: false,
+    integrationId: null, integrationAction: null, integrationPayload: '{}',
   };
   const schema = automationFormSchema as unknown as Parameters<typeof zod>[0];
   const form = superForm<AutomationFormInput>(defaults(emptyForm, zod(schema)) as never, {
@@ -71,17 +67,7 @@
   let busy = $state(false);
   let editorOpen = $state(false);
   let editingId = $state<string | null>(null);
-  let githubOwner = $state('');
-  let githubRepo = $state('');
-  let githubToken = $state('');
-  let githubSecretStored = $state(false);
   let pendingDelete = $state<Routine | null>(null);
-  let disconnectPending = $state(false);
-
-  const githubIntegration = $derived(integrations.find((item) => item.type === 'github') ?? null);
-  const desktop = typeof window === 'undefined'
-    ? undefined
-    : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -105,18 +91,14 @@
         api<Routine[]>(`/api/agent-room/workspaces/${workspaceId}/automations`),
         api<AutomationRun[]>(`/api/agent-room/workspaces/${workspaceId}/automations/history`),
         api<AutomationRecipe[]>(`/api/agent-room/workspaces/${workspaceId}/automations/recipes`),
-        api<AutomationIntegration[]>(`/api/agent-room/workspaces/${workspaceId}/automations/integrations`),
+        api<{ integrations: AutomationIntegration[] }>(`/api/agent-room/workspaces/${workspaceId}/integrations`),
         api<CanvasNode[]>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
       ]);
-      [automations, runs, recipes, integrations] = loaded;
+      automations = loaded[0] as Routine[];
+      runs = loaded[1] as AutomationRun[];
+      recipes = loaded[2] as AutomationRecipe[];
+      integrations = (loaded[3] as { integrations: AutomationIntegration[] }).integrations;
       portals = (loaded[4] as CanvasNode[]).filter((node) => node.type === 'portal').map((node) => ({ id: node.id, title: node.title ?? m['portal.default_title']() }));
-      const github = integrations.find((item) => item.type === 'github');
-      if (github) {
-        githubOwner = github.config.owner;
-        githubRepo = github.config.repo;
-      }
-      const status = await desktop?.automationSecretStatus?.(`automation:github:${workspaceId}`).catch(() => null);
-      githubSecretStored = Boolean(status?.stored);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : m['automation.error_load']());
     } finally {
@@ -168,6 +150,9 @@
       portalRef: String(action.ref ?? '') || null,
       portalText: String(action.text ?? '') || null,
       portalSubmit: Boolean(action.submit),
+      integrationId: String(action.integrationId ?? '') || null,
+      integrationAction: String(action.integrationAction ?? '') || null,
+      integrationPayload: JSON.stringify(action.payload ?? {}, null, 2),
       enabled: automation.enabled,
       recipeId: automation.recipeId,
     };
@@ -244,41 +229,6 @@
     await refresh();
   }
 
-  async function connectGitHub(): Promise<void> {
-    busy = true;
-    const secretKey = `automation:github:${workspaceId}`;
-    try {
-      if (!desktop?.saveAutomationSecret) throw new Error(m['automation.desktop_required']());
-      if (githubToken.trim()) {
-        await desktop.saveAutomationSecret(secretKey, githubToken);
-        githubSecretStored = true;
-      }
-      if (!githubSecretStored && !githubToken.trim()) throw new Error(m['automation.github_token']());
-      await api(`/api/agent-room/workspaces/${workspaceId}/automations/integrations/github`, {
-        method: 'POST', body: JSON.stringify({ owner: githubOwner, repo: githubRepo }),
-      });
-      githubToken = '';
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : m['automation.github_error']());
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function checkGitHub(): Promise<void> {
-    await api(`/api/agent-room/workspaces/${workspaceId}/automations/integrations/github`, { method: 'PATCH' });
-    await refresh();
-  }
-
-  async function disconnectGitHub(): Promise<void> {
-    if (!githubIntegration) return;
-    await desktop?.deleteAutomationSecret?.(`automation:github:${workspaceId}`);
-    await api(`/api/agent-room/workspaces/${workspaceId}/automations/integrations/${githubIntegration.id}`, { method: 'DELETE' });
-    githubSecretStored = false;
-    integrations = [];
-  }
-
   function triggerLabel(type: Routine['triggerType']): string {
     return ({
       manual: m['automation.trigger_manual'], schedule: m['automation.trigger_schedule'],
@@ -290,7 +240,7 @@
   }
 
   function actionLabel(type: Routine['actionType']): string {
-    return ({ prompt_agent: m['automation.action_prompt'], create_task: m['automation.action_task'], notify: m['automation.action_notify'], browser: m['automation.action_browser'] }[type])();
+    return ({ prompt_agent: m['automation.action_prompt'], create_task: m['automation.action_task'], notify: m['automation.action_notify'], browser: m['automation.action_browser'], integration: m['automation.action_integration'] }[type])();
   }
 
   function browserActionLabel(type: NonNullable<AutomationFormInput['portalAction']>): string {
@@ -338,7 +288,7 @@
       <Tabs.Trigger value="overview" class="h-7 text-ui-xs"><Activity size={12} />{m['automation.overview']()}</Tabs.Trigger>
       <Tabs.Trigger value="recipes" class="h-7 text-ui-xs"><Sparkles size={12} />{m['automation.recipes']()}</Tabs.Trigger>
       <Tabs.Trigger value="history" class="h-7 text-ui-xs"><History size={12} />{m['automation.history']()}</Tabs.Trigger>
-      <Tabs.Trigger value="integrations" class="h-7 text-ui-xs"><GitPullRequestArrow size={12} />{m['automation.integrations']()}</Tabs.Trigger>
+      <Tabs.Trigger value="integrations" class="h-7 text-ui-xs"><PlugZap size={12} />{m['automation.integrations']()}</Tabs.Trigger>
       <Tabs.Trigger value="security" class="h-7 text-ui-xs"><ShieldCheck size={12} />{m['autonomy.title']()}</Tabs.Trigger>
     </Tabs.List>
 
@@ -362,7 +312,7 @@
             {#if $formData.triggerType === 'webhook'}<label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.webhook_secret']()}</span><Input bind:value={$formData.webhookSecret} autocomplete="off" /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.webhook_hint']()}</span>{#if editingId}<code class="mt-2 block overflow-x-auto border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-ui-xs">/api/agent-room/workspaces/{workspaceId}/automations/webhook/{editingId}</code>{/if}</label>{/if}
             {#if $formData.triggerType === 'file_change'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.file_path']()}</span><Input bind:value={$formData.filePath} placeholder="src" /></label>{/if}
             {#if $formData.triggerType === 'usage_threshold'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.provider']()}</span><Select.Root type="single" value={$formData.usageProvider ?? undefined} onValueChange={(value) => ($formData.usageProvider = value as AutomationFormInput['usageProvider'])}><Select.Trigger class="w-full">{$formData.usageProvider ?? m['automation.provider']()}</Select.Trigger><Select.Content><Select.Item value="claude">Claude</Select.Item><Select.Item value="codex">Codex</Select.Item><Select.Item value="kimi">Kimi</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.usage_window']()}</span><Select.Root type="single" value={$formData.usageWindow ?? undefined} onValueChange={(value) => ($formData.usageWindow = value as AutomationFormInput['usageWindow'])}><Select.Trigger class="w-full">{$formData.usageWindow ?? m['automation.usage_window']()}</Select.Trigger><Select.Content><Select.Item value="5h">5h</Select.Item><Select.Item value="weekly">Weekly</Select.Item><Select.Item value="monthly">Monthly</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.threshold']()}</span><Input type="number" min="1" max="100" bind:value={$formData.usagePercent} /></label>{/if}
-            <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.action']()}</span><Select.Root type="single" value={$formData.actionType} onValueChange={(value) => ($formData.actionType = value as AutomationFormInput['actionType'])}><Select.Trigger class="w-full">{actionLabel($formData.actionType)}</Select.Trigger><Select.Content><Select.Item value="prompt_agent">{m['automation.action_prompt']()}</Select.Item><Select.Item value="create_task">{m['automation.action_task']()}</Select.Item><Select.Item value="notify">{m['automation.action_notify']()}</Select.Item><Select.Item value="browser">{m['automation.action_browser']()}</Select.Item></Select.Content></Select.Root></label>
+            <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.action']()}</span><Select.Root type="single" value={$formData.actionType} onValueChange={(value) => ($formData.actionType = value as AutomationFormInput['actionType'])}><Select.Trigger class="w-full">{actionLabel($formData.actionType)}</Select.Trigger><Select.Content><Select.Item value="prompt_agent">{m['automation.action_prompt']()}</Select.Item><Select.Item value="create_task">{m['automation.action_task']()}</Select.Item><Select.Item value="notify">{m['automation.action_notify']()}</Select.Item><Select.Item value="browser">{m['automation.action_browser']()}</Select.Item><Select.Item value="integration">{m['automation.action_integration']()}</Select.Item></Select.Content></Select.Root></label>
             {#if $formData.actionType === 'prompt_agent'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.target']()}</span><Select.Root type="single" value={$formData.targetNodeId ?? undefined} onValueChange={(value) => ($formData.targetNodeId = value)}><Select.Trigger class="w-full">{terminals.find((item) => item.id === $formData.targetNodeId)?.title ?? m['automation.target']()}</Select.Trigger><Select.Content>{#each terminals as terminal}<Select.Item value={terminal.id}>{terminal.title}</Select.Item>{/each}</Select.Content></Select.Root></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.prompt']()}</span><Textarea class="min-h-24 resize-y" bind:value={$formData.prompt} /></label>{/if}
             {#if $formData.actionType === 'create_task'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.task_title']()}</span><Input bind:value={$formData.taskTitle} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.task_description']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.taskDescription} /></label>{/if}
             {#if $formData.actionType === 'notify'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.notification_title']()}</span><Input bind:value={$formData.notificationTitle} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.notification_message']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.notificationMessage} /></label>{/if}
@@ -373,6 +323,11 @@
               {#if $formData.portalAction === 'click' || $formData.portalAction === 'type'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.browser_ref']()}</span><Input bind:value={$formData.portalRef} placeholder="e1" /></label>{/if}
               {#if $formData.portalAction === 'type' || $formData.portalAction === 'wait'}<label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.browser_text']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.portalText} /></label>{/if}
               {#if $formData.portalAction === 'type'}<label class="flex items-center gap-2 text-ui-xs"><Switch checked={$formData.portalSubmit} onCheckedChange={(checked: boolean) => ($formData.portalSubmit = checked)} />{m['automation.browser_submit']()}</label>{/if}
+            {/if}
+            {#if $formData.actionType === 'integration'}
+              <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.integration_account']()}</span><Select.Root type="single" value={$formData.integrationId ?? undefined} onValueChange={(value) => { $formData.integrationId = value; $formData.integrationAction = null; }}><Select.Trigger class="w-full">{integrations.find((item) => item.id === $formData.integrationId)?.name ?? m['automation.integration_account']()}</Select.Trigger><Select.Content>{#each integrations.filter((item) => item.enabled && item.status === 'connected') as integration}<Select.Item value={integration.id}>{integration.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
+              <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.integration_operation']()}</span><Select.Root type="single" value={$formData.integrationAction ?? undefined} onValueChange={(value) => ($formData.integrationAction = value)}><Select.Trigger class="w-full">{$formData.integrationAction ?? m['automation.integration_operation']()}</Select.Trigger><Select.Content>{#each integrations.find((item) => item.id === $formData.integrationId)?.permissions ?? [] as permission}<Select.Item value={permission}>{permission}</Select.Item>{/each}</Select.Content></Select.Root></label>
+              <label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.integration_payload']()}</span><Textarea class="min-h-32 resize-y font-mono" spellcheck={false} bind:value={$formData.integrationPayload} /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.integration_payload_help']()}</span></label>
             {/if}
           </div>
           <div class="mt-4 flex items-center justify-between gap-3"><label class="flex items-center gap-2 text-ui-xs"><Switch checked={$formData.enabled} onCheckedChange={(checked: boolean) => ($formData.enabled = checked)} />{m['automation.enable']()}</label><div class="flex gap-2"><Button type="button" variant="ghost" size="sm" onclick={resetEditor}>{m['automation.cancel']()}</Button><Button type="submit" size="sm" disabled={busy}>{#if busy}<LoaderCircle class="animate-spin" />{/if}{m['automation.save']()}</Button></div></div>
@@ -391,9 +346,9 @@
 
     <Tabs.Content value="recipes" class="m-0 min-h-0 overflow-y-auto p-4"><div class={`grid gap-px bg-[var(--app-border)] ${compact ? 'grid-cols-1' : 'grid-cols-2'}`}>{#each recipes as recipe (recipe.id)}<article class="bg-[var(--app-surface)] p-4"><div class="flex items-center gap-2"><Sparkles size={14} class="text-[var(--app-accent)]" /><Badge variant="outline">{recipe.category}</Badge></div><h3 class="mt-3 text-xs font-semibold">{recipeName(recipe.id)}</h3><p class="mt-1 line-clamp-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{recipe.defaults.prompt ?? recipe.defaults.taskDescription ?? recipe.defaults.notificationMessage}</p><Button class="mt-4" variant="outline" size="sm" onclick={() => applyRecipe(recipe)}>{m['automation.recipe_apply']()}</Button></article>{/each}</div></Tabs.Content>
 
-    <Tabs.Content value="history" class="m-0 min-h-0 overflow-y-auto p-4">{#if runs.length === 0}<div class="grid min-h-52 place-items-center text-center"><div><History class="mx-auto text-[var(--app-text-muted)]" size={24} /><p class="mt-2 text-xs">{m['automation.history_empty']()}</p></div></div>{:else}<div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">{#each runs as run (run.id)}<article class="flex items-start gap-3 bg-[var(--app-surface)] px-3 py-3">{#if run.status === 'succeeded'}<CheckCircle2 class="mt-0.5 shrink-0 text-[var(--app-success)]" size={15} />{:else if run.status === 'failed' || run.status === 'dead_letter'}<XCircle class="mt-0.5 shrink-0 text-[var(--app-danger)]" size={15} />{:else}<LoaderCircle class={`mt-0.5 shrink-0 text-[var(--app-accent)] ${run.status === 'running' ? 'animate-spin' : ''}`} size={15} />{/if}<div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><span class="text-xs font-medium">{automations.find((item) => item.id === run.routineId)?.name ?? run.routineId.slice(0, 8)}</span><Badge variant="outline">{statusLabel(run.status)}</Badge></div><p class="mt-1 break-words text-ui-xs leading-4 text-[var(--app-text-soft)]">{run.detail ?? run.error}</p><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{new Date(run.ranAt).toLocaleString()} · {m['automation.attempt']({ attempt: run.attempt })}/{run.maxAttempts}{run.durationMs !== null ? ` · ${m['automation.duration']({ duration: run.durationMs })}` : ''}{run.provider ? ` · ${run.provider}` : ''}{run.nextAttemptAt ? ` · ${m['automation.next_attempt']({ date: new Date(run.nextAttemptAt).toLocaleString() })}` : ''}</p></div><div class="flex shrink-0 items-center gap-1">{#if run.status === 'queued' || run.status === 'running'}<Button variant="ghost" size="sm" onclick={() => cancelRun(run)}><X size={13} />{m['automation.cancel_run']()}</Button>{:else if run.recoverable}<Button variant="ghost" size="sm" onclick={() => retry(run)}><RotateCcw size={13} />{m['automation.retry']()}</Button>{/if}</div></article>{/each}</div>{/if}</Tabs.Content>
+    <Tabs.Content value="history" class="m-0 min-h-0 overflow-y-auto p-4">{#if runs.length === 0}<div class="grid min-h-52 place-items-center text-center"><div><History class="mx-auto text-[var(--app-text-muted)]" size={24} /><p class="mt-2 text-xs">{m['automation.history_empty']()}</p></div></div>{:else}<div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">{#each runs as run (run.id)}<article class="flex items-start gap-3 bg-[var(--app-surface)] px-3 py-3">{#if run.status === 'succeeded'}<CheckCircle2 class="mt-0.5 shrink-0 text-[var(--app-success)]" size={15} />{:else if run.status === 'failed' || run.status === 'dead_letter'}<XCircle class="mt-0.5 shrink-0 text-[var(--app-danger)]" size={15} />{:else}<LoaderCircle class={`mt-0.5 shrink-0 text-[var(--app-accent)] ${run.status === 'running' ? 'animate-spin' : ''}`} size={15} />{/if}<div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><span class="text-xs font-medium">{automations.find((item) => item.id === run.routineId)?.name ?? run.routineId.slice(0, 8)}</span><Badge variant="outline">{statusLabel(run.status)}</Badge></div><p class="mt-1 break-words text-ui-xs leading-4 text-[var(--app-text-soft)]">{run.detail ?? run.error}</p><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{new Date(run.ranAt).toLocaleString()} · {m['automation.attempt']({ attempt: run.attempt })}/{run.maxAttempts}{run.durationMs !== null ? ` · ${m['automation.duration']({ duration: run.durationMs })}` : ''}{run.provider ? ` · ${run.provider}` : ''}{run.nextAttemptAt ? ` · ${m['automation.next_attempt']({ date: new Date(run.nextAttemptAt).toLocaleString() })}` : ''}</p></div><div class="flex shrink-0 items-center gap-1">{#if run.status === 'queued' || run.status === 'running' || run.status === 'waiting_approval'}<Button variant="ghost" size="sm" onclick={() => cancelRun(run)}><X size={13} />{m['automation.cancel_run']()}</Button>{:else if run.recoverable}<Button variant="ghost" size="sm" onclick={() => retry(run)}><RotateCcw size={13} />{m['automation.retry']()}</Button>{/if}</div></article>{/each}</div>{/if}</Tabs.Content>
 
-    <Tabs.Content value="integrations" class="m-0 min-h-0 overflow-y-auto p-4"><section class="border-l-2 border-[var(--app-text)] bg-[var(--app-surface)] p-4"><div class="flex items-start gap-3"><GitPullRequestArrow size={20} /><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h2 class="text-sm font-semibold">{m['automation.github_title']()}</h2><Badge variant={githubIntegration?.status === 'connected' ? 'default' : 'outline'}>{githubIntegration?.status === 'connected' ? m['automation.github_connected']() : githubIntegration?.status === 'error' ? m['automation.github_error']() : m['automation.github_disconnected']()}</Badge></div><p class="mt-1 max-w-xl text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['automation.github_description']()}</p></div></div><div class={`mt-5 grid gap-3 ${compact ? 'grid-cols-1' : 'grid-cols-2'}`}><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.github_owner']()}</span><Input bind:value={githubOwner} autocomplete="off" /></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.github_repo']()}</span><Input bind:value={githubRepo} autocomplete="off" /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.github_token']()}</span><Input type="password" bind:value={githubToken} autocomplete="new-password" placeholder={githubSecretStored ? '••••••••••••' : ''} /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.github_token_hint']()}</span></label></div>{#if githubIntegration?.error}<p class="mt-3 text-ui-xs text-[var(--app-danger)]">{githubIntegration.error}</p>{/if}<div class="mt-4 flex flex-wrap gap-2"><Button size="sm" disabled={busy || !githubOwner.trim() || !githubRepo.trim()} onclick={connectGitHub}>{#if busy}<LoaderCircle class="animate-spin" />{:else}<GitPullRequestArrow />{/if}{m['automation.github_connect']()}</Button>{#if githubIntegration}<Button variant="outline" size="sm" onclick={checkGitHub}><RefreshCw />{m['automation.github_check']()}</Button><Button variant="ghost" size="sm" class="text-[var(--app-danger)]" onclick={() => (disconnectPending = true)}><Trash2 />{m['automation.github_disconnect']()}</Button>{/if}</div></section></Tabs.Content>
+    <Tabs.Content value="integrations" class="m-0 min-h-0 overflow-hidden"><IntegrationCenterPanel {workspaceId} {compact} onChanged={refresh} /></Tabs.Content>
     <Tabs.Content value="security" class="m-0 min-h-0 overflow-hidden"><AutonomySecurityPanel {workspaceId} {compact} /></Tabs.Content>
   </Tabs.Root>
 </section>
@@ -407,19 +362,6 @@
     <AlertDialog.Footer>
       <AlertDialog.Cancel>{m['automation.cancel']()}</AlertDialog.Cancel>
       <AlertDialog.Action class="bg-[var(--app-danger)] text-white hover:opacity-90" onclick={() => pendingDelete && void remove(pendingDelete)}>{m['automation.delete']()}</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
-
-<AlertDialog.Root bind:open={disconnectPending}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>{m['automation.github_disconnect_confirm_title']()}</AlertDialog.Title>
-      <AlertDialog.Description>{m['automation.github_disconnect_confirm_description']()}</AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>{m['automation.cancel']()}</AlertDialog.Cancel>
-      <AlertDialog.Action class="bg-[var(--app-danger)] text-white hover:opacity-90" onclick={() => void disconnectGitHub()}>{m['automation.github_disconnect']()}</AlertDialog.Action>
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>

@@ -5,7 +5,7 @@ export const automationTriggerTypeSchema = z.enum([
   'webhook', 'file_change', 'usage_threshold',
 ]);
 
-export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify', 'browser']);
+export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify', 'browser', 'integration']);
 
 export const automationFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -34,6 +34,9 @@ export const automationFormSchema = z.object({
   portalRef: z.string().trim().regex(/^e\d{1,6}$/).nullish(),
   portalText: z.string().max(100_000).nullish(),
   portalSubmit: z.boolean().default(false),
+  integrationId: z.string().uuid().nullish(),
+  integrationAction: z.string().trim().min(1).max(120).nullish(),
+  integrationPayload: z.string().max(1_000_000).default('{}'),
   enabled: z.boolean().default(true),
   recipeId: z.string().trim().max(80).nullish(),
 }).superRefine((value, context) => {
@@ -72,6 +75,17 @@ export const automationFormSchema = z.object({
   }
   if (value.actionType === 'browser' && ['click', 'type'].includes(value.portalAction ?? '') && !value.portalRef) {
     context.addIssue({ code: 'custom', path: ['portalRef'], message: 'A semantic element reference is required.' });
+  }
+  if (value.actionType === 'integration' && (!value.integrationId || !value.integrationAction)) {
+    context.addIssue({ code: 'custom', path: ['integrationId'], message: 'Integration and action are required.' });
+  }
+  if (value.actionType === 'integration') {
+    try {
+      const parsed = JSON.parse(value.integrationPayload);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('object required');
+    } catch {
+      context.addIssue({ code: 'custom', path: ['integrationPayload'], message: 'Integration payload must be a JSON object.' });
+    }
   }
 });
 

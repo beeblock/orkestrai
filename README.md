@@ -42,6 +42,11 @@ common credentials redacted; normal agent output is not persisted.
   through destination-bound SecretRefs. Emergency stop aborts active runs, while
   a hash-chained export distinguishes exact brokered actions from inferred shell
   effects.
+- **Native communication integrations:** connect Gmail through official OAuth,
+  or bind Slack, Telegram, WhatsApp, GitHub, and HTTPS webhook credentials to
+  explicit account permissions. Persistent agents can read approved inboxes,
+  classify work, send messages, and deliver workspace reports through typed,
+  idempotent connector actions without receiving the raw token or password.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or

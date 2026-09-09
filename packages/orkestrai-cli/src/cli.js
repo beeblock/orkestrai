@@ -55,6 +55,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
+  orkestrai integration list [--json] | integration events [integrationId] [--limit <n>] [--json] | integration execute <integrationId> <action> --input <json> --task <taskId> --idempotency <key> [--json]
   orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
   orkestrai graph status | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
   orkestrai memory list [consulta] [--history] [--json]
@@ -385,6 +386,40 @@ export async function run(argv, options = {}) {
         }
       }
       return 0;
+    }
+    case 'integration': {
+      const [action, integrationId, integrationAction] = rest;
+      if (!action || action === 'list') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/integrations');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else if (!data.integrations?.length) out('(no connected accounts)');
+        else for (const item of data.integrations) out(`- ${item.name} [${item.type}] ${item.status}${item.enabled ? '' : ' (disabled)'} · ${item.permissions.join(', ')}`);
+        return 0;
+      }
+      if (action === 'events') {
+        const params = new URLSearchParams();
+        if (integrationId) params.set('integrationId', integrationId);
+        if (flags.limit) params.set('limit', String(flags.limit));
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/integrations/events?${params}`);
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else if (!data.length) out('(no integration activity)');
+        else for (const item of data) out(`- ${item.status} ${item.kind} · ${item.createdAt}${item.error ? ` · ${item.error}` : ''}`);
+        return 0;
+      }
+      if (action === 'execute') {
+        if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
+        if (!integrationId || !integrationAction || !flags.task || !flags.idempotency) throw new Error('integration execute exige integrationId, action, --task e --idempotency.');
+        let input = {};
+        try { input = flags.input ? JSON.parse(String(flags.input)) : {}; } catch { throw new Error('--input deve ser um objeto JSON valido.'); }
+        if (!input || Array.isArray(input) || typeof input !== 'object') throw new Error('--input deve ser um objeto JSON.');
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/integrations', {
+          integrationId, action: integrationAction, input, taskId: flags.task,
+          idempotencyKey: flags.idempotency, from: selfAgent,
+        });
+        out(JSON.stringify(data, null, 2));
+        return 0;
+      }
+      throw new Error('Uso: orkestrai integration <list|events|execute> ...');
     }
     case 'git': {
       const [action, operation] = rest;

@@ -39,6 +39,8 @@ export type AutonomyOperation = {
   stepId?: string | null;
   correlationId?: string;
   input?: unknown;
+  /** Optional persisted projection; the full result is still returned and only contributes to the output digest. */
+  auditOutput?: (result: unknown) => unknown;
   certainty?: 'semantic' | 'inferred';
   network?: { url: string; method?: string };
   filesystem?: { path: string; permission: 'read' | 'write' | 'create' | 'delete'; size?: number };
@@ -343,7 +345,8 @@ export class AutonomyPolicyService {
     await this.appendAudit(operation, 'started', decision.policy.revision);
     try {
       const result = await callback();
-      await this.appendAudit(operation, 'completed', decision.policy.revision, { output: redactAutonomyValue(result) }, result);
+      const auditOutput = operation.auditOutput ? operation.auditOutput(result) : redactAutonomyValue(result);
+      await this.appendAudit(operation, 'completed', decision.policy.revision, { output: redactAutonomyValue(auditOutput) }, result);
       return result;
     } catch (error) {
       await this.appendAudit(operation, 'failed', decision.policy.revision, {

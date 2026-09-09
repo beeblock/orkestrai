@@ -69,6 +69,9 @@ import { executeGitOperationSchema, gitOperationInputSchema } from '$lib/modules
 import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
+import { automationIntegrationService } from '$lib/modules/agent-room/application/services/AutomationIntegrationService.js';
+import { integrationExecutionService } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
+import { integrationExecutionSchema, integrationEventsQuerySchema } from '$lib/modules/agent-room/contracts/schemas/integration.schema.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -122,6 +125,71 @@ export class BridgeController extends Controller {
       return this.json({ data: buildUsageRoutingReport(await usageService.getAll(false), policy) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao consultar uso dos providers.', 401);
+    }
+  }
+
+  async integrations(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: {
+        integrations: await automationIntegrationService.list(workspace.id),
+        catalog: automationIntegrationService.catalog(),
+      } });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to list connected accounts.', 401);
+    }
+  }
+
+  async integrationEvents(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const query = integrationEventsQuerySchema.parse(Object.fromEntries(event.url.searchParams));
+      return this.json({ data: await integrationExecutionService.listEvents(workspace.id, query.limit, query.integrationId) });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to list integration activity.', 401);
+    }
+  }
+
+  async executeIntegration(event: any) {
+    try {
+      const input = integrationExecutionSchema.parse(await event.request.json());
+      if (!input.from || !input.taskId || !input.idempotencyKey) {
+        throw new Error('Agent integration actions require identity, an active task, and an idempotency key.');
+      }
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveAgentActor(workspace.id, input.from);
+      const authenticatedActor = ptySessionManager.resolveBridgeAgent(
+        workspace.id,
+        String(event.request.headers.get('x-orkestrai-agent-token') ?? ''),
+      );
+      if (!authenticatedActor || authenticatedActor !== actor) {
+        throw new Error('Integration actions require the active terminal identity of the assigned agent.');
+      }
+      const task = (await taskBoardService.list(workspace.id)).find((candidate) => candidate.id === input.taskId);
+      if (!task || task.assigneeNodeId !== actor || task.status === 'done') {
+        throw new Error('Integration actions require an active task assigned to this agent.');
+      }
+      const result = await integrationExecutionService.execute(workspace.id, input, { actorType: 'agent', actorId: actor });
+      await controlCenterService.recordActivity({
+        workspaceId: workspace.id,
+        nodeId: actor,
+        state: 'working',
+        action: `integration:${input.action}`,
+        taskId: input.taskId,
+        metadata: { integrationId: input.integrationId, action: input.action, eventId: result.eventId },
+        category: 'workflow',
+        verb: 'executed',
+        objectType: 'integration',
+        objectId: input.integrationId,
+        objectTitle: input.action,
+        severity: 'info',
+        correlationId: input.idempotencyKey,
+        sourceType: 'integration-sdk',
+        sourceId: String(result.eventId ?? input.integrationId),
+      });
+      return this.json({ data: result });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to execute the integration action.');
     }
   }
 

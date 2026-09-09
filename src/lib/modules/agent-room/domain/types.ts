@@ -1071,7 +1071,7 @@ export type AutomationTriggerType =
   | 'file_change'
   | 'usage_threshold';
 
-export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser';
+export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser' | 'integration';
 export type AutomationRunStatus = 'queued' | 'running' | 'waiting_approval' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';
 
 export type Routine = {
@@ -1127,12 +1127,17 @@ export type AutomationRun = {
 export type AutomationIntegration = {
   id: string;
   workspaceId: string;
-  type: 'github';
+  type: 'github' | 'gmail' | 'slack' | 'telegram' | 'whatsapp' | 'webhook';
   name: string;
-  config: { owner: string; repo: string };
+  manifestVersion: string;
+  config: Record<string, unknown>;
+  secretRefs: string[];
+  permissions: string[];
   secretKey: string | null;
   status: 'connected' | 'disconnected' | 'error';
+  enabled: boolean;
   lastCheckedAt: string | null;
+  lastUsedAt: string | null;
   error: string | null;
   createdAt: string;
   updatedAt: string;

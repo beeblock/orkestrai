@@ -28,6 +28,7 @@ import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js'
 import { agentSessionService } from './AgentSessionService.js';
 import { agentRuntimeService } from './AgentRuntimeService.js';
 import { autonomyPolicyService, AutonomyGatePendingError } from './AutonomyPolicyService.js';
+import { integrationExecutionService } from './IntegrationExecutionService.js';
 
 const TICK_MS = 15_000;
 const RUN_LEASE_MS = 2 * 60_000;
@@ -162,6 +163,11 @@ function actionConfig(input: AutomationFormInput): Record<string, unknown> {
     text: input.portalText || null,
     submit: input.portalSubmit,
   };
+  if (input.actionType === 'integration') return {
+    integrationId: input.integrationId,
+    action: input.integrationAction,
+    payload: JSON.parse(input.integrationPayload),
+  };
   return { title: input.notificationTitle || null, message: input.notificationMessage };
 }
 
@@ -208,6 +214,7 @@ export class RoutineService {
       usagePercent: null, taskTitle: null, taskDescription: null,
       notificationTitle: null, notificationMessage: null,
       portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null, portalText: null, portalSubmit: false,
+      integrationId: null, integrationAction: null, integrationPayload: '{}',
     });
   }
 
@@ -665,6 +672,12 @@ export class RoutineService {
       if (!node || node.workspaceId !== workspaceId || node.type !== 'portal') throw new Error('Browser action requires a Portal in this workspace.');
       return;
     }
+    if (type === 'integration') {
+      const integration = await automationIntegrationService.get(workspaceId, String(config.integrationId ?? ''));
+      if (!integration || !integration.enabled) throw new Error('Integration action requires an enabled account in this workspace.');
+      if (!integration.permissions.includes(String(config.action ?? ''))) throw new Error('Integration action is outside the account grant.');
+      return;
+    }
     if (type !== 'prompt_agent') return;
     const targetNodeId = String(config.targetNodeId ?? '');
     const prompt = String(config.prompt ?? '').trim();
@@ -773,7 +786,11 @@ export class RoutineService {
     if (routine.triggerType === 'github_pull_request') {
       const integration = await automationIntegrationService.github(routine.workspaceId);
       if (!integration?.secretKey || integration.status !== 'connected') return false;
-      const latest = await githubAutomationAdapter.latestPullRequest({ ...integration.config, secretKey: integration.secretKey });
+      const latest = await githubAutomationAdapter.latestPullRequest({
+        owner: String(integration.config.owner ?? ''),
+        repo: String(integration.config.repo ?? ''),
+        secretKey: integration.secretKey,
+      });
       if (!latest || String(routine.triggerConfig.event ?? 'updated') !== latest.event) return false;
       return this.pollState(routine, `github:${latest.key}`, latest.data, 'github_pull_request');
     }
@@ -829,7 +846,7 @@ export class RoutineService {
   ): Promise<Record<string, unknown>> {
     // Browser commands enforce the same policy at the Portal service boundary so
     // direct agent calls and durable automation cannot bypass one another.
-    if (routine.actionType === 'browser') {
+    if (routine.actionType === 'browser' || routine.actionType === 'integration') {
       return this.executeActionUnchecked(routine, input, runId, signal);
     }
     const target = routine.actionType === 'prompt_agent'
@@ -908,6 +925,19 @@ export class RoutineService {
       });
       if (!result.ok) throw new Error(result.error || 'Managed browser action failed.');
       return { detail: `Portal ${action} completed.`, portalNodeId, action, result: result.result };
+    }
+    if (routine.actionType === 'integration') {
+      const integrationId = String(routine.actionConfig.integrationId ?? '');
+      const action = String(routine.actionConfig.action ?? '');
+      const serialized = this.interpolate(JSON.stringify(routine.actionConfig.payload ?? {}), input);
+      const payload = jsonObject(serialized);
+      const result = await integrationExecutionService.execute(routine.workspaceId, {
+        integrationId,
+        action,
+        input: payload,
+        idempotencyKey: `run:${runId}:${action}`,
+      }, { actorType: 'automation', actorId: routine.id, runId });
+      return { detail: `Integration action completed: ${action}.`, integrationId, action, result };
     }
     const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);
     if (!workspace) throw new Error('Workspace not found.');

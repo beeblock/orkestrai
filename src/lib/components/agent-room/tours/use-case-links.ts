@@ -5,6 +5,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'watch-24-7': 'vigia-24-7',
   'managed-browser-24-7': 'managed-browser-24-7',
   'secure-autonomy-24-7': 'secure-autonomy-24-7',
+  'connected-reporting-agent': 'connected-reporting-agent',
   'parallel-features': 'duas-features',
   'council-decision': 'council-perspectives',
   'api-client-workflow': 'api-client',

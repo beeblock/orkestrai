@@ -18,6 +18,7 @@ const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
+const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const {
   BACKGROUND_CORE_ARGUMENT,
   isBackgroundCoreLaunch,
@@ -1035,6 +1036,19 @@ ipcMain.handle('orkestrai:automation-secret-status', (_event, key) => {
 ipcMain.handle('orkestrai:automation-secret-save', (_event, key, value) => saveAutomationSecret(key, value));
 
 ipcMain.handle('orkestrai:automation-secret-delete', (_event, key) => deleteAutomationSecret(key));
+
+ipcMain.handle('orkestrai:oauth-google-connect', async (_event, input) => {
+  if (!input || typeof input !== 'object' || !validAutomationSecretKey(input.storageKey)) {
+    throw new Error('Invalid OAuth credential destination.');
+  }
+  return performGoogleDesktopOauth({
+    clientId: input.clientId,
+    permissions: input.permissions,
+    storageKey: input.storageKey,
+    openExternal: (url) => shell.openExternal(url),
+    saveSecret: (key, value) => saveAutomationSecret(key, value),
+  });
+});
 
 ipcMain.handle('orkestrai:figma-plugin-folder', async () => {
   const pluginPath = path.join(app.getAppPath(), 'packages', 'orkestrai-figma-plugin');

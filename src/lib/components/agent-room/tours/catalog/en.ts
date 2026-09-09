@@ -124,6 +124,19 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'connected-reporting-agent',
+    icon: 'Cable',
+    title: 'Connected reporting agent',
+    tagline: 'Deliver approved reports without exposing an account credential.',
+    steps: [
+      { id: 'open', title: 'Open the Integration Center', body: 'I open this workspace in Automations. Select Integrations to add Gmail, Slack, Telegram, WhatsApp, GitHub, or an HTTPS webhook.', action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'account', title: 'Connect one bounded account', body: 'Complete Gmail OAuth in the system browser or place a revocable app or bot token directly in the encrypted Vault. The workspace stores a SecretRef, never the raw value.' },
+      { id: 'permissions', title: 'Grant exact operations', body: 'Enable only the reads and sends this workflow needs, then set the default channel, chat, recipient, repository, or endpoint. The workspace autonomy policy remains the final boundary.' },
+      { id: 'schedule', title: 'Schedule the deliverable', body: 'Use a persistent or on-demand agent and a durable Automation to gather data, write the report or PDF inside the workspace, and call integration_execute with a stable idempotency key.' },
+      { id: 'verify', title: 'Verify without leaking content', body: 'Integration activity and Audit show actor, operation, destination, status, and safe metadata. Resolved credentials and full message content never enter those records.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Two features in parallel, no conflicts',
