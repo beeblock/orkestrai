@@ -70,6 +70,12 @@ export const TOURS_EN: Tour[] = [
         check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Vigia' },
       },
       {
+        id: 'runtime',
+        title: 'Keep the watcher persistent',
+        body: 'I will put this agent under Core supervision with one concurrent run and a 95% provider usage cap. You can change it later from the terminal menu under Agent runtime.',
+        action: { kind: 'configureAgentRuntime', targetTitle: 'Vigia', mode: 'persistent', concurrency: 1, usageLimit: 95 },
+      },
+      {
         id: 'board',
         title: 'The watched board',
         body: 'It needs a board to watch. I\'ll create the Tasks node for you.',

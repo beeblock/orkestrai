@@ -60,6 +60,11 @@ export const DOCS_PT: DocsCatalog = {
       body: `Todos os agentes rodam em paralelo (processos independentes). A coordenação é por conexões: agente pergunta a agente com orkestrai ask, ou o Líder (★ Maestro) distribui com task/ask e recruta/demite com recruit/dismiss. O nó Loop Ralph é o modo sequencial: líder planeja → engenheiro implementa → tester revisa, até N rodadas. Rotinas disparam prompts agendados em qualquer terminal.`,
     },
     {
+      id: 'agent-runtime',
+      title: 'Agentes interativos, sob demanda e persistentes',
+      body: `Abra o menu de um terminal de agente e escolha Runtime do agente. Interativo preserva o ciclo de vida atual do Canvas. Sob demanda acorda por mensagem humana ou automação durável, retoma a conversa exata do provider e dorme após o período ocioso configurado quando não há execução nem tarefa atribuída ativa. Persistente é supervisionado pelo Core em segundo plano e reinicia após falha do processo ou suspensão do sistema sem exigir o Canvas renderizado. Limites por agente controlam automações simultâneas e pausam partidas automáticas quando uma cota conhecida do provider alcança o percentual escolhido; o usuário sempre pode acordar manualmente. Runtime, último despertar/repouso, erros, execuções, tarefa e sessão usam o mesmo node persistido e o histórico da Central de Controle no Canvas, Workbench e Remote. Agentes existentes continuam Interativos até uma alteração explícita.`,
+    },
+    {
       id: 'council',
       title: 'Council: compare perspectivas independentes',
       body: `Abra Conselho diretamente na barra do Canvas, no topo do workspace no Workbench ou pelo Command/Ctrl+K. Pedir perspectivas em uma tarefa leva o briefing completo; no menu do líder, já o seleciona para a síntese. Execute de dois a cinco agentes reais sobre o mesmo objetivo, escolha modo consultivo ou implementação, dê uma abordagem diferente a cada agente, selecione o critério de decisão e defina um limite rígido de execuções. Toda perspectiva devolve o mesmo contrato estruturado de evidências, riscos, testes, divergências, recomendação e confiança; a falha de um provider não descarta as respostas concluídas. Uma síntese opcional do líder consome mais uma execução, mas a decisão final de selecionar, pedir consenso ou rejeitar é sempre humana e persistida. Council é a camada de decisão; Andares são a camada de isolamento. Implementações Git rodam em andares separados e somente o resultado selecionado e commitado pode ser aterrissado depois de nova prévia de diff, alterações pendentes e conflitos. Nada faz merge ou push automaticamente.`,
@@ -488,7 +493,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'watch-24-7',
       title: 'Funcionário 24/7 (vigia de tarefas)',
-      body: 'Ative Executar o Orkestrai em segundo plano em Configurações → Autonomia e Core 24/7, opcionalmente ative o início ao entrar no sistema e crie uma rotina a cada 1–5 minutos no líder: “verifique o quadro (orkestrai task list); atribua o que estiver sem dono; se faltar agente, recrute”. Fechar a janela mantém o Core e o trabalho ativo na bandeja; Sair do Orkestrai interrompe tudo explicitamente.',
+      body: 'Ative Executar o Orkestrai em segundo plano em Configurações → Autonomia e Core 24/7, configure o terminal vigia como Persistente em Runtime do agente e defina limites de concorrência e uso do provider. Depois crie uma rotina a cada 1–5 minutos no líder: “verifique o quadro (orkestrai task list); atribua o que estiver sem dono; se faltar agente, recrute”. Fechar a janela mantém o processo supervisionado e as execuções duráveis na bandeja; Sair do Orkestrai interrompe tudo explicitamente.',
       tags: ['Core 24/7', 'Rotinas', 'task assign'],
     },
     {
@@ -863,6 +868,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'O supervisor desktop se reconecta após uma saída inesperada do Core ou o retorno da suspensão sem criar um segundo escritor para o mesmo provider.',
         'Os metadados de descoberta do Core são privados do usuário do sistema operacional, e o endpoint de saúde exige um token por processo que nunca é exposto ao renderer.',
         'Execuções de automação são persistidas antes de rodar, assumidas com leases renováveis, registradas por checkpoints, repetidas com backoff limitado, recuperadas após interrupção e movidas para Requer intervenção depois da última tentativa. Agentes de destino fechados são iniciados ou retomados automaticamente.',
+        'Cada terminal de provider aceita ciclo de vida Interativo, Sob demanda ou Persistente, com repouso por ociosidade, retomada da conversa exata, concorrência e limite de uso por agente, despertar/repouso manual e supervisão do Core sem o Canvas renderizado.',
       ],
     },
     {

@@ -24,6 +24,7 @@ import { automationIntegrationService } from './AutomationIntegrationService.js'
 import { RunAutomationJob } from '../jobs/RunAutomationJob.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 import { agentSessionService } from './AgentSessionService.js';
+import { agentRuntimeService } from './AgentRuntimeService.js';
 
 const TICK_MS = 15_000;
 const RUN_LEASE_MS = 2 * 60_000;
@@ -766,6 +767,7 @@ export class RoutineService {
     if (routine.actionType === 'prompt_agent') {
       const targetNodeId = String(routine.actionConfig.targetNodeId ?? routine.targetNodeId ?? '');
       const prompt = this.interpolate(String(routine.actionConfig.prompt ?? routine.prompt), input);
+      await agentRuntimeService.assertAutomaticWorkAllowed(targetNodeId, runId);
       const ensured = await agentSessionService.ensure(routine.workspaceId, targetNodeId);
       const node = await workspaceRepository.getNode(targetNodeId);
       const steps = prompt.split('\n').map((line) => line.replace(/^&&\s*/, '').trim()).filter(Boolean);

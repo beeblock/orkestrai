@@ -517,6 +517,20 @@ async function runAction(action: TourAction): Promise<void> {
         });
         break;
       }
+      case 'configureAgentRuntime': {
+        const nodeId = await findNodeId(action.targetTitle);
+        if (!nodeId) throw new Error(`Agente "${action.targetTitle}" nao encontrado para configurar o runtime.`);
+        await api(`/api/agent-room/workspaces/${workspaceId}/nodes/${nodeId}/runtime`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            mode: action.mode,
+            idleMinutes: action.idleMinutes ?? 30,
+            concurrency: action.concurrency ?? 1,
+            usageLimit: action.usageLimit ?? 95,
+          }),
+        });
+        break;
+      }
       case 'createFloor': {
         await api(`/api/agent-room/workspaces/${workspaceId}/floors`, {
           method: 'POST',

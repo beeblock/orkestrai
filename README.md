@@ -30,6 +30,10 @@ common credentials redacted; normal agent output is not persisted.
   work available in the system tray after closing every window, and optionally
   start it silently when you sign in. Settings shows live health and uptime,
   supports a guarded restart, and keeps **Quit Orkestrai** as the explicit stop.
+- **Persistent agent runtimes:** leave existing agents interactive, let
+  on-demand agents resume only for messages or durable automations, or ask the
+  Core to supervise a persistent process. Each agent has idle, concurrency,
+  and provider-usage safeguards plus explicit wake and sleep controls.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or

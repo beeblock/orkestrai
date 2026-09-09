@@ -70,6 +70,12 @@ export const TOURS_ES: Tour[] = [
         check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Vigia' },
       },
       {
+        id: 'runtime',
+        title: 'Mantén persistente al vigilante',
+        body: 'Pondré este agente bajo supervisión del Core, con una ejecución simultánea y un límite del 95% de uso del provider. Puedes cambiarlo después en el menú del terminal, en Runtime del agente.',
+        action: { kind: 'configureAgentRuntime', targetTitle: 'Vigia', mode: 'persistent', concurrency: 1, usageLimit: 95 },
+      },
+      {
         id: 'board',
         title: 'El tablero vigilado',
         body: 'Necesita un tablero que vigilar. Creo el nodo Tareas por ti.',

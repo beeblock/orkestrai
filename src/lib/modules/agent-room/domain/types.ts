@@ -359,6 +359,7 @@ export type AgentActivitySnapshot = {
   lastActionData: Record<string, unknown>;
   currentTask: { id: string; title: string; status: string } | null;
   sessionAlive: boolean;
+  runtimeMode: 'interactive' | 'on_demand' | 'persistent';
 };
 
 export type AgentMessageThread = {
@@ -664,6 +665,17 @@ export type TerminalNodePayload = {
   theme?: string;
   /** Comandos salvos exclusivamente para este node terminal. */
   savedCommands?: SavedTerminalCommand[];
+  /** Controls whether the provider process follows the UI or the background Core. */
+  agentRuntimeMode?: 'interactive' | 'on_demand' | 'persistent';
+  /** Idle time before an on-demand process is suspended, in minutes. */
+  agentRuntimeIdleMinutes?: number;
+  /** Maximum simultaneous durable runs targeting this agent. */
+  agentRuntimeConcurrency?: number;
+  /** Automatic work pauses when any known provider quota reaches this percentage. */
+  agentRuntimeUsageLimit?: number;
+  agentRuntimeLastWakeAt?: string | null;
+  agentRuntimeLastSleepAt?: string | null;
+  agentRuntimeLastError?: string | null;
 };
 
 export type NoteNodePayload = {

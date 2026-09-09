@@ -56,6 +56,11 @@ export const DOCS_EN: DocsCatalog = {
       body: `All agents run in parallel (independent processes). Coordination happens through connections: agent asks agent with orkestrai ask, or the Leader (★ Maestro) distributes with task/ask and recruits/dismisses with recruit/dismiss. The Loop Ralph node is the sequential mode: leader plans → engineer implements → tester reviews, for up to N rounds. Routines fire scheduled prompts into any terminal.`,
     },
     {
+      id: 'agent-runtime',
+      title: 'Interactive, on-demand, and persistent agents',
+      body: `Open an agent terminal menu and choose Agent runtime. Interactive preserves the existing Canvas lifecycle. On demand wakes through a human message or durable automation, resumes the exact provider conversation, and sleeps after the configured idle period when it has no active run or assigned work. Persistent is supervised by the background Core and restarts after process failure or system sleep without requiring a rendered Canvas. Per-agent safeguards cap concurrent automation runs and pause automatic starts when a known provider quota reaches the chosen threshold; a manual wake always remains available. The runtime, last wake/sleep, errors, active run count, task, and session state use the same persisted node and Control Center history across Canvas, Workbench, and Remote. Existing agents remain Interactive until explicitly changed.`,
+    },
+    {
       id: 'council',
       title: 'Council: compare independent perspectives',
       body: `Open Council directly from the Canvas toolbar, at the top of the workspace in Workbench, or through Command/Ctrl+K. Ask perspectives on a task carries its full brief; the leader menu preselects that leader for synthesis. Run two to five real agents against the same objective, choose advisory or implementation mode, give each agent a distinct approach, select the decision criterion, and set a hard execution budget. Every perspective returns the same structured evidence, risks, tests, disagreements, recommendation, and confidence contract; one failed provider does not discard successful answers. An optional leader synthesis consumes one more execution, but the final select, request-consensus, or reject decision is always human and persisted. Council is the decision layer; Floors are the isolation layer. Git implementation perspectives run in separate floors, and only the selected committed result can be landed after a fresh diff, dirty-check, and conflict preview. Nothing merges or pushes automatically.`,
@@ -484,7 +489,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'watch-24-7',
       title: '24/7 employee (task watcher)',
-      body: 'Enable Run Orkestrai in the background under Settings → Autonomy & 24/7 Core, optionally enable start at sign-in, then create a routine every 1–5 minutes on the leader: "check the board (orkestrai task list); assign whatever is unassigned; if an agent is missing, recruit". Closing the window keeps the Core and active work available in the tray; Quit Orkestrai stops it explicitly.',
+      body: 'Enable Run Orkestrai in the background under Settings → Autonomy & 24/7 Core, set the watcher terminal to Persistent under Agent runtime, and define its concurrency and provider-usage safeguards. Then create a routine every 1–5 minutes on the leader: "check the board (orkestrai task list); assign whatever is unassigned; if an agent is missing, recruit". Closing the window keeps the supervised process and durable runs available in the tray; Quit Orkestrai stops them explicitly.',
       tags: ['24/7 Core', 'Routines', 'task assign'],
     },
     {
@@ -859,6 +864,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         'The desktop supervisor reconnects after an unexpected Core exit or system resume without creating a second provider writer.',
         'Core discovery metadata is private to the operating-system user, and the health endpoint requires a per-process token that is never exposed to the renderer.',
         'Automation runs are persisted before execution, claimed with renewable leases, checkpointed, retried with bounded backoff, recovered after interruption, and moved to Needs intervention after the final attempt. Closed target agents are started or resumed automatically.',
+        'Each provider terminal supports Interactive, On demand, or Persistent lifecycle modes with idle sleep, exact conversation resume, per-agent concurrency and provider-usage safeguards, manual wake/sleep, and Core supervision without a rendered Canvas.',
       ],
     },
     {

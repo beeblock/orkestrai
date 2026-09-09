@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Ellipsis, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
+  import { Button } from '$lib/components/ui/button';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { AgentRole } from '$lib/modules/agent-room/application/services/RoleService.js';
   import NodeShell from './NodeShell.svelte';
@@ -26,6 +27,8 @@
   import CouncilDialog from '../CouncilDialog.svelte';
   import TerminalRuntimeDialog from './TerminalRuntimeDialog.svelte';
   import TerminalCommandsDialog from './TerminalCommandsDialog.svelte';
+  import AgentRuntimeDialog from './AgentRuntimeDialog.svelte';
+  import type { AgentRuntimeData } from '$lib/modules/agent-room/contracts/schemas/agent-runtime.schema.js';
   import {
     normalizeSavedTerminalCommands,
     resumeTerminalCommandInput,
@@ -82,6 +85,8 @@
   let forceRespawn = $state(false);
   let councilOpen = $state(false);
   let runtimeOpen = $state(false);
+  let agentRuntimeOpen = $state(false);
+  let agentRuntimeBusy = $state(false);
   let commandsOpen = $state(false);
   let actionsOpen = $state(false);
   let runtimeProviders = $state<AgentProviderInfo[]>([]);
@@ -224,9 +229,11 @@
   /** Role exibida no header: curta (o nome completo fica no dropdown/aria). */
   const roleLabel = $derived(currentRole && currentRole.length > 24 ? `${currentRole.slice(0, 23).trimEnd()}…` : currentRole);
   const currentProvider = $derived((data.payload as TerminalNodePayload).provider ?? null);
+  const agentRuntimeMode = $derived((data.payload as TerminalNodePayload).agentRuntimeMode ?? 'interactive');
+  const agentRuntimeSleeping = $derived(Boolean(currentProvider && agentRuntimeMode === 'on_demand' && !data.payload.sessionId && !forceRespawn));
   const currentProfileId = $derived((data.payload as TerminalNodePayload).profileId ?? null);
   const availableProviders = $derived(runtimeProviders.length ? runtimeProviders : (data.providers ?? []));
-  const currentProviderStrategy = $derived(availableProviders.find((provider) => provider.id === currentProvider)?.profileStrategy ?? null);
+  const currentProviderStrategy = $derived(availableProviders.find((provider: AgentProviderInfo) => provider.id === currentProvider)?.profileStrategy ?? null);
   const runtimeOverride = $derived((data.payload as TerminalNodePayload).executionRuntime ?? null);
   const runtimeTitle = $derived(
     data.executionRuntime.kind === 'wsl'
@@ -287,6 +294,41 @@
   async function changeRuntime(selection: { mode: 'default' | 'native' | 'wsl'; wslDistribution: string | null; wslWorkingDir: string | null }) {
     forceRespawn = false;
     await data.onRuntimeChange?.(id, selection);
+  }
+
+  async function applyAgentRuntime(runtime: AgentRuntimeData) {
+    await data.onPayloadChange?.(id, {
+      sessionId: runtime.sessionId ?? undefined,
+      agentRuntimeMode: runtime.mode,
+      agentRuntimeIdleMinutes: runtime.idleMinutes,
+      agentRuntimeConcurrency: runtime.concurrency,
+      agentRuntimeUsageLimit: runtime.usageLimit,
+      agentRuntimeLastWakeAt: runtime.lastWakeAt,
+      agentRuntimeLastSleepAt: runtime.lastSleepAt,
+      agentRuntimeLastError: runtime.lastError,
+    });
+  }
+
+  async function wakeAgent(): Promise<string | null> {
+    if (agentRuntimeBusy) return null;
+    agentRuntimeBusy = true;
+    try {
+      const csrf = getCsrfToken();
+      const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/nodes/${id}/runtime`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+        body: JSON.stringify({ action: 'wake' }),
+      });
+      const body = await response.json();
+      if (!response.ok || body.error) throw new Error(body.error || m['agent_runtime.error']());
+      await applyAgentRuntime(body.data);
+      return body.data.sessionId ?? null;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m['agent_runtime.error']());
+      return null;
+    } finally {
+      agentRuntimeBusy = false;
+    }
   }
 
   async function loadRoles() {
@@ -368,7 +410,7 @@
   async function sendPrompt() {
     const text = prompt.trim();
     if (!text) return;
-    const sessionId = (data.payload as TerminalNodePayload).sessionId;
+    const sessionId = (data.payload as TerminalNodePayload).sessionId ?? (agentRuntimeSleeping ? await wakeAgent() : null);
     if (!sessionId) return;
     prompt = '';
     await fetch(`/api/agent-room/workspaces/${data.workspaceId}/terminals/${id}/write`, {
@@ -637,6 +679,12 @@
             {m['term.runtime_action']()}
           </DropdownMenu.Item>
         {/if}
+        {#if currentProvider}
+          <DropdownMenu.Item onclick={() => (agentRuntimeOpen = true)}>
+            <Bot size={14} />
+            {m['agent_runtime.menu']()}
+          </DropdownMenu.Item>
+        {/if}
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger>
             <BadgeCheck size={14} />
@@ -784,6 +832,17 @@
         {voiceOn}
         onToggleVoice={toggleVoice}
       />
+    {:else if agentRuntimeSleeping}
+      <div class="grid h-full place-items-center p-4 text-center text-ui-sm text-[var(--app-text-muted)]" role="status">
+        <div class="space-y-2">
+          <Bot size={22} class="mx-auto" />
+          <p>{m['agent_runtime.sleeping_hint']()}</p>
+          <Button type="button" size="sm" variant="outline" class="mx-auto" disabled={agentRuntimeBusy} onclick={wakeAgent}>
+            {#if agentRuntimeBusy}<LoaderCircle size={13} class="animate-spin" />{:else}<Play size={13} />{/if}
+            {m['agent_runtime.wake']()}
+          </Button>
+        </div>
+      </div>
     {:else if data.payload.command && providerMetadataReady}
       {#key createSessionKey}
         <TerminalNode
@@ -833,6 +892,13 @@
     override={runtimeOverride}
     onSave={changeRuntime}
     onClose={() => (runtimeOpen = false)}
+  />
+  <AgentRuntimeDialog
+    open={agentRuntimeOpen}
+    workspaceId={data.workspaceId}
+    nodeId={id}
+    onChanged={applyAgentRuntime}
+    onClose={() => (agentRuntimeOpen = false)}
   />
   <TerminalCommandsDialog
     open={commandsOpen}

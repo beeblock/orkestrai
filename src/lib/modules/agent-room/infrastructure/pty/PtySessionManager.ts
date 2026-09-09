@@ -21,6 +21,8 @@ export type PtySessionInfo = {
   cols: number;
   rows: number;
   createdAt: string;
+  /** Last PTY output or input observed by the process. */
+  lastActivityAt: string;
   exited: boolean;
   exitCode: number | null;
   /** true quando a sessão parou de produzir saída (estado neutro de ociosidade). */
@@ -272,6 +274,7 @@ export class PtySessionManager {
       cols,
       rows,
       createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
       exited: false,
       exitCode: null,
       waiting: false,
@@ -437,6 +440,7 @@ export class PtySessionManager {
     const session = this.requireSession(id);
     if (session.exited) throw new Error(`Sessão PTY ${id} já finalizada.`);
     this.setWaiting(session, false);
+    session.lastOutputAt = Date.now();
     session.pty.write(data);
   }
 
@@ -923,6 +927,7 @@ export class PtySessionManager {
       cols: session.cols,
       rows: session.rows,
       createdAt: session.createdAt,
+      lastActivityAt: new Date(session.lastOutputAt || Date.parse(session.createdAt)).toISOString(),
       exited: session.exited,
       exitCode: session.exitCode,
       waiting: session.waiting,

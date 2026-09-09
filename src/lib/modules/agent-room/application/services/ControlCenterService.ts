@@ -294,6 +294,7 @@ export class ControlCenterService {
         provider?: string;
         role?: string | null;
         sessionId?: string;
+        agentRuntimeMode?: 'interactive' | 'on_demand' | 'persistent';
       };
       const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
       const alive = Boolean(session && !session.exited);
@@ -316,6 +317,7 @@ export class ControlCenterService {
         lastActionData: latest?.metadata ?? {},
         currentTask: task ? { id: task.id, title: task.title, status: task.status } : null,
         sessionAlive: alive,
+        runtimeMode: payload.agentRuntimeMode ?? 'interactive',
       };
     });
 

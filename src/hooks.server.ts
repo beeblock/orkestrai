@@ -11,10 +11,12 @@ import { auth } from './app.js';
 import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
 import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
 const globalRef = globalThis as unknown as {
   __orkestraiRoutineScheduler?: boolean;
+  __orkestraiAgentRuntimeSupervisor?: boolean;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
 };
@@ -27,6 +29,10 @@ globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
 if (!globalRef.__orkestraiRoutineScheduler) {
   globalRef.__orkestraiRoutineScheduler = true;
   routineService.startScheduler();
+}
+if (!globalRef.__orkestraiAgentRuntimeSupervisor) {
+  globalRef.__orkestraiAgentRuntimeSupervisor = true;
+  agentRuntimeService.startSupervisor();
 }
 
 const svelar = createSvelarApp({

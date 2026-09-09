@@ -15,6 +15,10 @@ pt-BR, English, and Spanish translations.
 - Automation runs are now durable database-backed jobs with renewable leases,
   checkpoints, bounded exponential retries, cancellation, dead-letter state,
   and replay. Prompt actions start or resume their target agent when needed.
+- Provider terminals now support interactive, on-demand, and persistent
+  lifecycles. The background Core supervises persistent processes, on-demand
+  agents sleep after true inactivity, and per-agent concurrency and provider
+  usage caps guard unattended work without blocking a manual wake.
 
 ### Fixed
 
