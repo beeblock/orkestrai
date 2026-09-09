@@ -72,11 +72,19 @@ export function installOrkestraiShim() {
  * empacotado e LIVRE (muda a cada execucao), entao o apiUrl gravado no
  * workspace.json pode ficar obsoleto — a CLI le este arquivo primeiro.
  */
-export function writeOrkestraiRuntimeFile(apiUrl) {
+export function writeOrkestraiRuntimeFile(apiUrlOrMetadata) {
   try {
     const dir = resolve(homedir(), '.orkestrai');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(resolve(dir, 'runtime.json'), JSON.stringify({ apiUrl, updatedAt: new Date().toISOString() }, null, 2));
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const metadata = typeof apiUrlOrMetadata === 'string'
+      ? { apiUrl: apiUrlOrMetadata }
+      : { ...apiUrlOrMetadata };
+    writeFileSync(
+      resolve(dir, 'runtime.json'),
+      JSON.stringify({ ...metadata, updatedAt: new Date().toISOString() }, null, 2),
+      { mode: 0o600 },
+    );
+    chmodSync(resolve(dir, 'runtime.json'), 0o600);
   } catch (error) {
     console.warn('[orkestrai] falha ao gravar runtime.json:', error?.message ?? error);
   }

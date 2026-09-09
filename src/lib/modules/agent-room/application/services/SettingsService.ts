@@ -32,6 +32,8 @@ const DEFAULTS: Record<string, string> = {
   voiceSidecarTtsVoice: 'pf_dora',
   pinnedAgentProviders: '[]',
   terminalGlobalCommands: '[]',
+  coreRunInBackground: 'false',
+  coreLaunchAtLogin: 'false',
 };
 
 /** Configuracoes globais do app (chave/valor, com defaults). */

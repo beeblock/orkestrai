@@ -371,7 +371,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'rotinas',
       title: 'Automations',
-      body: `Open Automations from the Canvas toolbar, the Workbench explorer, or Command/Ctrl+K. A trigger can be manual, scheduled, a task change, a confirmed agent message, a Git commit, a GitHub pull request, a webhook, a file or folder change, or a provider usage threshold. Actions send a prompt to one agent, create a traceable Kanban task, or show an explicit desktop notification. Development, design, marketing, research, and operations recipes provide safe starting points. Every run records trigger input, target agent/provider, quota snapshots, output acknowledgement, duration, attempt, and recoverable failure; retries are bounded and duplicate event deliveries are idempotent. GitHub tokens are encrypted by Electron safeStorage and never stored in the workspace database. Legacy scheduled Routines remain compatible and appear here automatically.`,
+      body: `Open Automations from the Canvas toolbar, the Workbench explorer, or Command/Ctrl+K. A trigger can be manual, scheduled, a task change, a confirmed agent message, a Git commit, a GitHub pull request, a webhook, a file or folder change, or a provider usage threshold. Actions send a prompt to one agent, create a traceable Kanban task, or show an explicit desktop notification. Development, design, marketing, research, and operations recipes provide safe starting points. Every run records trigger input, target agent/provider, quota snapshots, output acknowledgement, duration, attempt, and recoverable failure; retries are bounded and duplicate event deliveries are idempotent. Settings → Autonomy & 24/7 Core can keep the local Core and active work in the system tray after every window closes, start it silently when you sign in, show its live uptime, and restart it without restarting the whole desktop app. Choosing Quit Orkestrai remains the explicit stop. GitHub tokens are encrypted by Electron safeStorage and never stored in the workspace database. Legacy scheduled Routines remain compatible and appear here automatically.`,
     },
     {
       id: 'portal',
@@ -479,8 +479,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'watch-24-7',
       title: '24/7 employee (task watcher)',
-      body: 'Routine every 1–5 min on the leader: "check the board (orkestrai task list); assign whatever is unassigned; if an agent is missing, recruit". The whole team works without you touching anything — assigning dispatches the task straight to the agent\'s terminal.',
-      tags: ['Routines', 'task assign', 'auto-dispatch'],
+      body: 'Enable Run Orkestrai in the background under Settings → Autonomy & 24/7 Core, optionally enable start at sign-in, then create a routine every 1–5 minutes on the leader: "check the board (orkestrai task list); assign whatever is unassigned; if an agent is missing, recruit". Closing the window keeps the Core and active work available in the tray; Quit Orkestrai stops it explicitly.',
+      tags: ['24/7 Core', 'Routines', 'task assign'],
     },
     {
       id: 'parallel-features',
@@ -844,6 +844,17 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'In development · Next minor release',
+      title: 'Orkestrai Core: the foundation for autonomous 24/7 work',
+      summary: 'The execution Core can outlive desktop windows, start at sign-in, report its health, and recover after failures or sleep.',
+      items: [
+        'Settings now includes Autonomy & 24/7 Core with background execution, optional start at sign-in, live uptime, process status, automatic recovery count, and a guarded restart command.',
+        'Closing every window keeps enabled active work in the system tray; Quit Orkestrai remains the explicit command that stops the Core and its child processes.',
+        'The desktop supervisor reconnects after an unexpected Core exit or system resume without creating a second provider writer.',
+        'Core discovery metadata is private to the operating-system user, and the health endpoint requires a per-process token that is never exposed to the renderer.',
+      ],
+    },
     {
       date: 'September 7, 2026 · 0.28.0',
       title: 'Orkestrai 0.28.0: exact social delivery without unsafe cropping',

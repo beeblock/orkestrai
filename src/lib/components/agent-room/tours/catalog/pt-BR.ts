@@ -61,6 +61,12 @@ export const TOURS_PT: Tour[] = [
     tagline: 'Um agente que trabalha sem parar, de minuto em minuto.',
     steps: [
       {
+        id: 'core',
+        title: 'Mantenha o Core disponível',
+        body: 'Vou ativar a execução em segundo plano. Fechar a janela manterá o Core e o trabalho ativo na bandeja; Sair do Orkestrai continua sendo a parada explícita. Iniciar com o sistema permanece opcional nas Configurações.',
+        action: { kind: 'configureCore', runInBackground: true },
+      },
+      {
         id: 'leader',
         title: 'O vigia',
         body: 'Um agente líder fica de plantão: a cada poucos minutos ele olha o quadro, atribui o que estiver sem dono e recruta se faltar gente.',

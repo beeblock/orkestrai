@@ -5,6 +5,23 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Added
+
+- The local Orkestrai Core can now remain active in the system tray after every
+  window closes, start silently when the user signs in, expose authenticated
+  health metadata, and restart independently from the desktop window.
+
+### Fixed
+
+- The desktop supervisor now reconnects to the Core after an unexpected server
+  exit or system resume without starting a second provider writer. Explicitly
+  quitting Orkestrai still stops the Core and its child processes.
+- Core discovery metadata is restricted to the current operating-system user,
+  and its health endpoint requires a per-process token that is never returned
+  to the renderer.
+
 ## 0.28.0 - 2026-09-07
 
 ### Added

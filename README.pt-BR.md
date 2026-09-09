@@ -27,6 +27,11 @@ agentes não é persistida.
 
 ## Destaques
 
+- **Base do Core 24/7:** ative para manter o Core de execução local e o trabalho
+  ativo disponíveis na bandeja depois de fechar todas as janelas e, se quiser,
+  iniciá-lo silenciosamente ao entrar no sistema. As Configurações mostram saúde
+  e tempo online, permitem reinício protegido e mantêm **Sair do Orkestrai** como
+  a parada explícita.
 - **Canvas de agentes ao vivo:** organize terminais PTY reais, notas, quadros de
   tarefas, portais de browser, árvores de arquivos, loops e formas. As conexões
   mostram a colaboração entre os agentes enquanto ela acontece. A física se

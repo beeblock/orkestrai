@@ -375,7 +375,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'rotinas',
       title: 'Automações',
-      body: `Abra Automações pela barra do Canvas, pelo explorer do Workbench ou por Command/Ctrl+K. O gatilho pode ser manual, agendado, uma mudança em tarefa, uma mensagem confirmada de agente, commit Git, pull request do GitHub, webhook, mudança em arquivo ou pasta ou limite de uso de provider. As ações enviam um prompt a um agente, criam uma tarefa rastreável no Kanban ou mostram uma notificação explícita no desktop. Receitas de desenvolvimento, design, marketing, pesquisa e operações oferecem pontos de partida seguros. Cada execução registra entrada do gatilho, agente/provider de destino, snapshots de cota, confirmação da saída, duração, tentativa e falha recuperável; retries são limitados e eventos duplicados são idempotentes. Tokens do GitHub ficam cifrados pelo safeStorage do Electron e nunca entram no banco do workspace. As Rotinas agendadas antigas continuam compatíveis e aparecem aqui automaticamente.`,
+      body: `Abra Automações pela barra do Canvas, pelo explorer do Workbench ou por Command/Ctrl+K. O gatilho pode ser manual, agendado, uma mudança em tarefa, uma mensagem confirmada de agente, commit Git, pull request do GitHub, webhook, mudança em arquivo ou pasta ou limite de uso de provider. As ações enviam um prompt a um agente, criam uma tarefa rastreável no Kanban ou mostram uma notificação explícita no desktop. Receitas de desenvolvimento, design, marketing, pesquisa e operações oferecem pontos de partida seguros. Cada execução registra entrada do gatilho, agente/provider de destino, snapshots de cota, confirmação da saída, duração, tentativa e falha recuperável; retries são limitados e eventos duplicados são idempotentes. Configurações → Autonomia e Core 24/7 pode manter o Core local e os trabalhos ativos na bandeja depois que todas as janelas forem fechadas, iniciá-lo silenciosamente ao entrar no sistema, mostrar seu tempo online e reiniciá-lo sem reiniciar todo o app desktop. Sair do Orkestrai continua sendo a parada explícita. Tokens do GitHub ficam cifrados pelo safeStorage do Electron e nunca entram no banco do workspace. As Rotinas agendadas antigas continuam compatíveis e aparecem aqui automaticamente.`,
     },
     {
       id: 'portal',
@@ -483,8 +483,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'watch-24-7',
       title: 'Funcionário 24/7 (vigia de tarefas)',
-      body: 'Rotina a cada 1–5 min no líder: “verifique o quadro (orkestrai task list); atribua o que estiver sem dono; se faltar agente, recrute”. O time inteiro trabalha sem você tocar em nada — atribuir despacha a tarefa direto pro terminal do agente.',
-      tags: ['Rotinas', 'task assign', 'auto-dispatch'],
+      body: 'Ative Executar o Orkestrai em segundo plano em Configurações → Autonomia e Core 24/7, opcionalmente ative o início ao entrar no sistema e crie uma rotina a cada 1–5 minutos no líder: “verifique o quadro (orkestrai task list); atribua o que estiver sem dono; se faltar agente, recrute”. Fechar a janela mantém o Core e o trabalho ativo na bandeja; Sair do Orkestrai interrompe tudo explicitamente.',
+      tags: ['Core 24/7', 'Rotinas', 'task assign'],
     },
     {
       id: 'parallel-features',
@@ -848,6 +848,17 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      date: 'Em desenvolvimento · Próxima versão minor',
+      title: 'Core do Orkestrai: a base do trabalho autônomo 24/7',
+      summary: 'O Core de execução pode continuar depois que as janelas fecham, iniciar com o sistema, informar sua saúde e se recuperar após falhas ou suspensão.',
+      items: [
+        'Configurações agora inclui Autonomia e Core 24/7 com execução em segundo plano, início opcional ao entrar no sistema, tempo online, estado do processo, contagem de recuperações automáticas e reinício protegido.',
+        'Fechar todas as janelas mantém o trabalho ativo habilitado na bandeja; Sair do Orkestrai continua sendo o comando explícito que encerra o Core e seus processos filhos.',
+        'O supervisor desktop se reconecta após uma saída inesperada do Core ou o retorno da suspensão sem criar um segundo escritor para o mesmo provider.',
+        'Os metadados de descoberta do Core são privados do usuário do sistema operacional, e o endpoint de saúde exige um token por processo que nunca é exposto ao renderer.',
+      ],
+    },
     {
       date: '7 de setembro de 2026 · 0.28.0',
       title: 'Orkestrai 0.28.0: entrega social exata sem recorte inseguro',

@@ -57,6 +57,12 @@ export const TOURS_EN: Tour[] = [
     tagline: 'An agent that works nonstop, minute after minute.',
     steps: [
       {
+        id: 'core',
+        title: 'Keep the Core available',
+        body: 'I will enable background execution. Closing the window will keep the Core and active work in the tray; Quit Orkestrai remains the explicit stop. Start at sign-in stays optional in Settings.',
+        action: { kind: 'configureCore', runInBackground: true },
+      },
+      {
         id: 'leader',
         title: 'The watcher',
         body: 'A leader agent stays on duty: every few minutes it checks the board, assigns whatever has no owner and recruits when people are missing.',

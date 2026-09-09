@@ -497,6 +497,26 @@ async function runAction(action: TourAction): Promise<void> {
         });
         break;
       }
+      case 'configureCore': {
+        const updated = await api<Record<string, string>>('/api/agent-room/settings', {
+          method: 'PUT',
+          body: JSON.stringify({
+            coreRunInBackground: String(action.runInBackground),
+            coreLaunchAtLogin: String(action.runInBackground && action.launchAtLogin === true),
+          }),
+        });
+        if (!updated) throw new Error(m['tour.action_failed']());
+        const desktop = (window as typeof window & {
+          orkestraiDesktop?: {
+            configureCore?: (preferences: { runInBackground: boolean; launchAtLogin: boolean }) => Promise<unknown>;
+          };
+        }).orkestraiDesktop;
+        await desktop?.configureCore?.({
+          runInBackground: action.runInBackground,
+          launchAtLogin: action.runInBackground && action.launchAtLogin === true,
+        });
+        break;
+      }
       case 'createFloor': {
         await api(`/api/agent-room/workspaces/${workspaceId}/floors`, {
           method: 'POST',

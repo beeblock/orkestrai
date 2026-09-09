@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   /** Executa uma acao validada da barra customizada do Windows. */
   runMenuCommand: (action) => ipcRenderer.invoke('orkestrai:menu-command', action),
   setTitlebarTheme: (theme) => ipcRenderer.invoke('orkestrai:titlebar-theme', theme),
+  /** Estado e ciclo de vida do Core local que sustenta o modo 24/7. */
+  coreStatus: () => ipcRenderer.invoke('orkestrai:core-status'),
+  configureCore: (preferences) => ipcRenderer.invoke('orkestrai:core-configure', preferences),
+  restartCore: () => ipcRenderer.invoke('orkestrai:core-restart'),
   /** Consome uma vez um convite E2EE recebido via orkestrai:// sem persisti-lo. */
   consumeCollaborationInvite: () => ipcRenderer.invoke('orkestrai:collaboration-invite-consume'),
   onCollaborationInvite: (callback) => {

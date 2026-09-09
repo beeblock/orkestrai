@@ -26,6 +26,10 @@ common credentials redacted; normal agent output is not persisted.
 
 ## Highlights
 
+- **24/7 Core foundation:** opt in to keep the local execution Core and active
+  work available in the system tray after closing every window, and optionally
+  start it silently when you sign in. Settings shows live health and uptime,
+  supports a guarded restart, and keeps **Quit Orkestrai** as the explicit stop.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or

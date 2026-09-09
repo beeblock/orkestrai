@@ -43,6 +43,7 @@ export type TourAction =
   | { kind: 'createPortal'; url: string; title?: string }
   | { kind: 'createFlow'; title: string; steps: Array<{ kind: 'agent' | 'approval'; target?: string; prompt?: string }> }
   | { kind: 'createRoutine'; targetTitle: string; prompt: string; intervalMinutes?: number | null }
+  | { kind: 'configureCore'; runInBackground: boolean; launchAtLogin?: boolean }
   | { kind: 'createFloor'; name: string }
   | { kind: 'installMcp'; key: string }
   | { kind: 'openCouncil' }

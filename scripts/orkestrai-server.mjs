@@ -206,7 +206,14 @@ server.on('upgrade', (request, socket, head) => {
 
 server.listen(port, host, () => {
   console.log(`Orkestrai ouvindo em http://${host}:${port}`);
-  writeOrkestraiRuntimeFile(`http://${host}:${port}`);
+  writeOrkestraiRuntimeFile({
+    apiUrl: `http://${host}:${port}`,
+    coreId: process.env.ORKESTRAI_CORE_ID ?? null,
+    coreToken: process.env.ORKESTRAI_CORE_TOKEN ?? null,
+    pid: process.pid,
+    startedAt: process.env.ORKESTRAI_CORE_STARTED_AT ?? new Date().toISOString(),
+    version: process.env.ORKESTRAI_CORE_VERSION ?? null,
+  });
 });
 
 let shuttingDown = false;

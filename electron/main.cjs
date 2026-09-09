@@ -7,7 +7,7 @@
  * node-pty) precisam estar rebuildados para o ABI do Electron
  * (npm run electron:rebuild).
  */
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, Tray, nativeImage, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerMonitor, safeStorage, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -17,6 +17,12 @@ const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-pol
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
+const {
+  BACKGROUND_CORE_ARGUMENT,
+  isBackgroundCoreLaunch,
+  normalizeCorePreferences,
+  shouldKeepCoreRunning,
+} = require('./core-runtime-policy.cjs');
 const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas } = require('./portal-policy.cjs');
 
 const isDev = !app.isPackaged;
@@ -35,8 +41,15 @@ let menuLocale = 'en';
 let pendingCollaborationInvite = null;
 let portalStorageFlushTimer = null;
 let diagnostics = null;
+let isQuitting = false;
+let serverRestartTimer = null;
+let corePreferences = normalizeCorePreferences();
+let serverRestartCount = 0;
 const configuredPortalContents = new WeakSet();
 const expectedServerExits = new WeakSet();
+const coreId = crypto.randomUUID();
+const coreToken = crypto.randomBytes(32).toString('base64url');
+let coreStartedAt = new Date().toISOString();
 
 function initializeDiagnostics() {
   app.setAppLogsPath();
@@ -216,15 +229,15 @@ function deleteAutomationSecret(key) {
 const MENU_COPY = {
   'pt-BR': {
     workspace: 'Workspace', canvas: 'Canvas', terminals: 'Workbench', providers: 'Central de Providers', remote: 'Entrar em workspace remoto', newWorkspace: 'Novo workspace', presets: 'Biblioteca de presets', floors: 'Andares', roles: 'Responsabilidades', huddles: 'Huddles', usage: 'Uso', ports: 'Portas',
-    settings: 'Configurações', checkUpdates: 'Verificar atualizações', edit: 'Editar', view: 'Visualizar', commandPalette: 'Paleta de comandos', reload: 'Recarregar', forceReload: 'Forçar recarga', developerTools: 'Ferramentas do desenvolvedor', fullscreen: 'Tela cheia', window: 'Janela', minimize: 'Minimizar', close: 'Fechar', help: 'Ajuda', docs: 'Documentação', changelog: 'Changelog', openLogs: 'Abrir pasta de logs', reportIssue: 'Reportar problema', open: 'Abrir Orkestrai', quit: 'Sair', pickDirectory: 'Escolher pasta do workspace', exportApiCollection: 'Escolher destino da coleção Bruno', portalWindow: 'Portal do Orkestrai', notifications: (count) => `${count} notificações`,
+    settings: 'Configurações', checkUpdates: 'Verificar atualizações', edit: 'Editar', view: 'Visualizar', commandPalette: 'Paleta de comandos', reload: 'Recarregar', forceReload: 'Forçar recarga', developerTools: 'Ferramentas do desenvolvedor', fullscreen: 'Tela cheia', window: 'Janela', minimize: 'Minimizar', close: 'Fechar', help: 'Ajuda', docs: 'Documentação', changelog: 'Changelog', openLogs: 'Abrir pasta de logs', reportIssue: 'Reportar problema', open: 'Abrir Orkestrai', quit: 'Sair', pickDirectory: 'Escolher pasta do workspace', exportApiCollection: 'Escolher destino da coleção Bruno', portalWindow: 'Portal do Orkestrai', coreActive: 'Core 24/7 ativo', coreWindowBound: 'Core encerra com o app', notifications: (count) => `${count} notificações`,
   },
   en: {
     workspace: 'Workspace', canvas: 'Canvas', terminals: 'Workbench', providers: 'Provider Center', remote: 'Join remote workspace', newWorkspace: 'New workspace', presets: 'Preset library', floors: 'Floors', roles: 'Roles', huddles: 'Huddles', usage: 'Usage', ports: 'Ports',
-    settings: 'Settings', checkUpdates: 'Check for updates', edit: 'Edit', view: 'View', commandPalette: 'Command palette', reload: 'Reload', forceReload: 'Force reload', developerTools: 'Developer tools', fullscreen: 'Full screen', window: 'Window', minimize: 'Minimize', close: 'Close', help: 'Help', docs: 'Documentation', changelog: 'Changelog', openLogs: 'Open logs folder', reportIssue: 'Report an issue', open: 'Open Orkestrai', quit: 'Quit', pickDirectory: 'Choose workspace folder', exportApiCollection: 'Choose Bruno collection destination', portalWindow: 'Orkestrai Portal', notifications: (count) => `${count} notifications`,
+    settings: 'Settings', checkUpdates: 'Check for updates', edit: 'Edit', view: 'View', commandPalette: 'Command palette', reload: 'Reload', forceReload: 'Force reload', developerTools: 'Developer tools', fullscreen: 'Full screen', window: 'Window', minimize: 'Minimize', close: 'Close', help: 'Help', docs: 'Documentation', changelog: 'Changelog', openLogs: 'Open logs folder', reportIssue: 'Report an issue', open: 'Open Orkestrai', quit: 'Quit', pickDirectory: 'Choose workspace folder', exportApiCollection: 'Choose Bruno collection destination', portalWindow: 'Orkestrai Portal', coreActive: '24/7 Core active', coreWindowBound: 'Core stops with the app', notifications: (count) => `${count} notifications`,
   },
   es: {
     workspace: 'Workspace', canvas: 'Canvas', terminals: 'Workbench', providers: 'Central de Providers', remote: 'Entrar a workspace remoto', newWorkspace: 'Nuevo workspace', presets: 'Biblioteca de presets', floors: 'Pisos', roles: 'Roles', huddles: 'Huddles', usage: 'Uso', ports: 'Puertos',
-    settings: 'Configuración', checkUpdates: 'Buscar actualizaciones', edit: 'Editar', view: 'Ver', commandPalette: 'Paleta de comandos', reload: 'Recargar', forceReload: 'Forzar recarga', developerTools: 'Herramientas de desarrollo', fullscreen: 'Pantalla completa', window: 'Ventana', minimize: 'Minimizar', close: 'Cerrar', help: 'Ayuda', docs: 'Documentación', changelog: 'Changelog', openLogs: 'Abrir carpeta de logs', reportIssue: 'Reportar un problema', open: 'Abrir Orkestrai', quit: 'Salir', pickDirectory: 'Elegir carpeta del workspace', exportApiCollection: 'Elegir destino de la colección Bruno', portalWindow: 'Portal de Orkestrai', notifications: (count) => `${count} notificaciones`,
+    settings: 'Configuración', checkUpdates: 'Buscar actualizaciones', edit: 'Editar', view: 'Ver', commandPalette: 'Paleta de comandos', reload: 'Recargar', forceReload: 'Forzar recarga', developerTools: 'Herramientas de desarrollo', fullscreen: 'Pantalla completa', window: 'Ventana', minimize: 'Minimizar', close: 'Cerrar', help: 'Ayuda', docs: 'Documentación', changelog: 'Changelog', openLogs: 'Abrir carpeta de logs', reportIssue: 'Reportar un problema', open: 'Abrir Orkestrai', quit: 'Salir', pickDirectory: 'Elegir carpeta del workspace', exportApiCollection: 'Elegir destino de la colección Bruno', portalWindow: 'Portal de Orkestrai', coreActive: 'Core 24/7 activo', coreWindowBound: 'El Core se detiene con la app', notifications: (count) => `${count} notificaciones`,
   },
 };
 
@@ -376,6 +389,10 @@ function privateChildEnvKeys(dotEnv) {
     'DB_PATH',
     'ORKESTRAI_DATA_DIR',
     'ORKESTRAI_PTY_MODULE',
+    'ORKESTRAI_CORE_ID',
+    'ORKESTRAI_CORE_TOKEN',
+    'ORKESTRAI_CORE_STARTED_AT',
+    'ORKESTRAI_CORE_VERSION',
   ])].join(',');
 }
 
@@ -412,18 +429,68 @@ function findFreePort(start = 4173, attempts = 20) {
   });
 }
 
-async function waitForServer(url, timeoutMs = 30_000) {
+async function waitForServer(url, timeoutMs = 30_000, headers = undefined) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
-      if (response.ok || response.status === 404) return;
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(1_000) });
+      if (response.ok) return;
     } catch {
       // ainda subindo
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`Servidor interno não respondeu em ${url}`);
+}
+
+function coreHealthUrl(port = serverPort) {
+  return port === null ? null : `http://127.0.0.1:${port}/api/agent-room/core/health`;
+}
+
+async function readCoreHealth() {
+  const url = coreHealthUrl();
+  if (!url) return null;
+  try {
+    const response = await fetch(url, {
+      headers: { 'x-orkestrai-core-token': coreToken },
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return payload?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function applyCorePreferences(input) {
+  corePreferences = normalizeCorePreferences(input);
+  if (app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: corePreferences.launchAtLogin,
+      openAsHidden: corePreferences.launchAtLogin,
+      args: corePreferences.launchAtLogin ? [BACKGROUND_CORE_ARGUMENT] : [],
+    });
+  }
+  rebuildTrayMenu();
+  return corePreferences;
+}
+
+async function refreshCorePreferences() {
+  if (serverPort === null) return corePreferences;
+  try {
+    const response = await fetch(`http://127.0.0.1:${serverPort}/api/agent-room/settings`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) return corePreferences;
+    const settings = (await response.json())?.data ?? {};
+    return applyCorePreferences({
+      runInBackground: settings.coreRunInBackground,
+      launchAtLogin: settings.coreLaunchAtLogin,
+    });
+  } catch {
+    return corePreferences;
+  }
 }
 
 /** Extrai o node-pty para o userData (macOS 15+ mata o spawn-helper dentro do bundle). */
@@ -464,6 +531,7 @@ async function startServer(port) {
     ? path.join(process.resourcesPath, 'orkestrai-cli-runtime', 'node.exe')
     : null;
   const privateEnvKeys = privateChildEnvKeys(dotEnv);
+  coreStartedAt = new Date().toISOString();
   serverProcess = spawn(process.execPath, [serverEntry], {
     cwd: runtimeRoot,
     env: {
@@ -476,6 +544,10 @@ async function startServer(port) {
       // A porta e livre (muda a cada execução): configs da ponte gravados em
       // workspaces precisam da URL atual (ver também ~/.orkestrai/runtime.json).
       ORKESTRAI_API_URL: `http://127.0.0.1:${port}`,
+      ORKESTRAI_CORE_ID: coreId,
+      ORKESTRAI_CORE_TOKEN: coreToken,
+      ORKESTRAI_CORE_STARTED_AT: coreStartedAt,
+      ORKESTRAI_CORE_VERSION: app.getVersion(),
       ORKESTRAI_PRIVATE_ENV_KEYS: privateEnvKeys,
       ...(bundledCliRuntime && fs.existsSync(bundledCliRuntime)
         ? { ORKESTRAI_CLI_CONSOLE_RUNTIME: bundledCliRuntime }
@@ -539,32 +611,117 @@ async function startServer(port) {
     }
     console.log(`[server] finalizado com código ${code}`);
     if (serverProcess === startedServerProcess) serverProcess = null;
+    if (!expected && !isQuitting && (mainWindow || corePreferences.runInBackground)) {
+      scheduleServerRecovery();
+    }
   });
 
-  await waitForServer(`http://127.0.0.1:${port}/`);
+  await waitForServer(
+    `http://127.0.0.1:${port}/api/agent-room/core/health`,
+    30_000,
+    { 'x-orkestrai-core-token': coreToken },
+  );
   return port;
 }
 
+function scheduleServerRecovery(delayMs = 1_000) {
+  if (serverRestartTimer || isQuitting) return;
+  serverRestartTimer = setTimeout(() => {
+    serverRestartTimer = null;
+    void recoverServer();
+  }, delayMs);
+}
+
+async function recoverServer() {
+  if (serverProcess || isQuitting) return;
+  try {
+    const previousPort = serverPort;
+    let port = previousPort;
+    if (port === null) port = await findFreePort();
+    try {
+      await startServer(port);
+    } catch {
+      port = await findFreePort();
+      serverPort = port;
+      await startServer(port);
+    }
+    serverPort = port;
+    serverRestartCount += 1;
+    await refreshCorePreferences();
+    if (mainWindow && !mainWindow.isDestroyed() && previousPort !== port) {
+      const current = new URL(mainWindow.webContents.getURL());
+      await mainWindow.loadURL(`http://127.0.0.1:${port}${current.pathname}${current.search}${current.hash}`);
+    }
+  } catch (error) {
+    diagnostics?.write('error', 'core', 'Core recovery failed', error);
+    scheduleServerRecovery(Math.min(30_000, 1_000 * 2 ** Math.min(serverRestartCount, 5)));
+  }
+}
+
+async function ensureServer() {
+  if (serverProcess && serverPort !== null && await readCoreHealth()) return serverPort;
+  if (serverProcess) await stopServer();
+  serverPort = await findFreePort();
+  await startServer(serverPort);
+  return serverPort;
+}
+
 function stopServer() {
-  if (!serverProcess) return;
+  if (serverRestartTimer) {
+    clearTimeout(serverRestartTimer);
+    serverRestartTimer = null;
+  }
+  if (!serverProcess) return Promise.resolve();
   const runningServerProcess = serverProcess;
   expectedServerExits.add(runningServerProcess);
-  try {
-    runningServerProcess.kill('SIGTERM');
-  } catch {
-    // processo já morreu
-  }
-  if (serverProcess === runningServerProcess) serverProcess = null;
+  return new Promise((resolveStop) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (serverProcess === runningServerProcess) serverProcess = null;
+      resolveStop();
+    };
+    runningServerProcess.once('exit', finish);
+    try {
+      runningServerProcess.kill('SIGTERM');
+    } catch {
+      finish();
+    }
+    setTimeout(finish, 5_000).unref();
+  });
+}
+
+async function restartCore() {
+  await stopServer();
+  await ensureServer();
+  await refreshCorePreferences();
+  return coreDesktopStatus();
+}
+
+async function coreDesktopStatus() {
+  const health = await readCoreHealth();
+  return {
+    running: Boolean(health),
+    coreId: health?.coreId ?? coreId,
+    pid: health?.pid ?? null,
+    startedAt: health?.startedAt ?? coreStartedAt,
+    uptimeSeconds: health?.uptimeSeconds ?? 0,
+    version: health?.version ?? app.getVersion(),
+    restartCount: serverRestartCount,
+    runInBackground: corePreferences.runInBackground,
+    launchAtLogin: corePreferences.launchAtLogin,
+    launchAtLoginSupported: app.isPackaged,
+  };
 }
 
 async function createWindow() {
   // Reaproveita o servidor se já estiver vivo (janela reaberta após fechar
   // no macOS mantem o app rodando sem janela).
-  if (!serverProcess || serverPort === null) {
-    serverPort = await findFreePort();
-    await startServer(serverPort);
-  }
+  await ensureServer();
   const port = serverPort;
+
+  if (process.platform === 'darwin') app.dock.show();
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -587,6 +744,13 @@ async function createWindow() {
     },
   });
   if (process.platform === 'win32') mainWindow.setMenuBarVisibility(false);
+
+  mainWindow.on('close', (event) => {
+    if (!shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) return;
+    event.preventDefault();
+    mainWindow?.hide();
+    if (process.platform === 'darwin') app.dock.hide();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -946,6 +1110,22 @@ ipcMain.handle('orkestrai:titlebar-theme', (_event, theme) => {
   return true;
 });
 
+ipcMain.handle('orkestrai:core-status', async (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+  return coreDesktopStatus();
+});
+
+ipcMain.handle('orkestrai:core-configure', async (event, preferences) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || !preferences || typeof preferences !== 'object') return null;
+  applyCorePreferences(preferences);
+  return coreDesktopStatus();
+});
+
+ipcMain.handle('orkestrai:core-restart', async (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+  return restartCore();
+});
+
 function showNativeNotification(title, body) {
   if (!Notification.isSupported()) return;
   pendingNotifications += 1;
@@ -977,6 +1157,8 @@ function rebuildTrayMenu() {
   if (!tray) return;
   const copy = MENU_COPY[menuLocale];
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: corePreferences.runInBackground ? copy.coreActive : copy.coreWindowBound, enabled: false },
+    { type: 'separator' },
     {
       label: copy.open,
       click: () => {
@@ -1048,12 +1230,25 @@ if (!gotLock) {
       callback(own && permission === 'media');
     });
     configurePortalSession();
-    createSplash();
     buildApplicationMenu();
     createTray();
-    await createWindow();
     const initialInvite = findCollaborationInvite(process.argv);
-    if (initialInvite) await receiveCollaborationInvite(initialInvite);
+    await ensureServer();
+    await refreshCorePreferences();
+    const loginLaunch = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
+    const hiddenCoreLaunch = (isBackgroundCoreLaunch(process.argv) || loginLaunch) && corePreferences.runInBackground && !initialInvite;
+    if (hiddenCoreLaunch) {
+      if (process.platform === 'darwin') app.dock.hide();
+    } else {
+      createSplash();
+      await createWindow();
+      if (initialInvite) await receiveCollaborationInvite(initialInvite);
+    }
+    powerMonitor.on('resume', () => {
+      void readCoreHealth().then((health) => {
+        if (!health) scheduleServerRecovery(0);
+      });
+    });
     setupAutoUpdater();
   }).catch((error) => {
     console.error('Falha ao iniciar o Orkestrai:', error);
@@ -1068,22 +1263,23 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    if (process.platform !== 'darwin' && !shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) app.quit();
   });
 
   app.on('before-quit', () => {
+    isQuitting = true;
     flushPortalStorage();
-    stopServer();
+    void stopServer();
   });
   app.on('quit', () => {
     closeSplash();
-    stopServer();
+    void stopServer();
   });
 }
 
 if (isDev) {
   process.on('SIGINT', () => {
-    stopServer();
+    void stopServer();
     process.exit(0);
   });
 }

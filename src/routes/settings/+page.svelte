@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, RefreshCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
+  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, RotateCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
   import { isMacPlatform } from '$lib/components/agent-room/platform.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -78,9 +78,12 @@
     await refreshModelStatus();
     await loadPresets();
     if (desktop?.appVersion) appVersion = await desktop.appVersion().catch(() => '');
+    await refreshCoreStatus();
+    if (desktop?.coreStatus) coreStatusTimer = window.setInterval(() => void refreshCoreStatus(), 10_000);
   });
 
   onDestroy(() => {
+    if (coreStatusTimer) window.clearInterval(coreStatusTimer);
     applyAppTheme(appSettingsStore.values);
   });
 
@@ -93,6 +96,12 @@
     // Invalida a store reativa: terminais aplicam o novo atalho na hora.
     invalidateAppSettings();
     await getAppSettings(true);
+    if (desktop?.configureCore) {
+      coreStatus = await desktop.configureCore({
+        runInBackground: settings.coreRunInBackground === 'true',
+        launchAtLogin: settings.coreLaunchAtLogin === 'true',
+      }).catch(() => coreStatus);
+    }
     saved = true;
     setTimeout(() => (saved = false), 2000);
   }
@@ -223,6 +232,19 @@
   type DesktopBridge = {
     appVersion?: () => Promise<string>;
     checkForUpdates?: () => Promise<{ status: string; message?: string; version?: string }>;
+    coreStatus?: () => Promise<CoreStatus | null>;
+    configureCore?: (preferences: { runInBackground: boolean; launchAtLogin: boolean }) => Promise<CoreStatus | null>;
+    restartCore?: () => Promise<CoreStatus | null>;
+  };
+  type CoreStatus = {
+    running: boolean;
+    pid: number | null;
+    uptimeSeconds: number;
+    version: string;
+    restartCount: number;
+    runInBackground: boolean;
+    launchAtLogin: boolean;
+    launchAtLoginSupported: boolean;
   };
   const desktop =
     typeof window !== 'undefined'
@@ -231,6 +253,41 @@
   let appVersion = $state('');
   let checkingUpdate = $state(false);
   let updateMessage = $state('');
+  let coreStatus = $state<CoreStatus | null>(null);
+  let restartingCore = $state(false);
+  let coreStatusTimer: number | null = null;
+
+  async function refreshCoreStatus() {
+    if (!desktop?.coreStatus) return;
+    coreStatus = await desktop.coreStatus().catch(() => null);
+  }
+
+  async function restartCoreRuntime() {
+    if (!desktop?.restartCore || restartingCore) return;
+    restartingCore = true;
+    try {
+      coreStatus = await desktop.restartCore();
+      toast.success(m['settings.core_restarted']());
+    } catch {
+      toast.error(m['settings.core_restart_failed']());
+    } finally {
+      restartingCore = false;
+    }
+  }
+
+  function setCoreBackground(enabled: boolean) {
+    settings = {
+      ...settings,
+      coreRunInBackground: String(enabled),
+      ...(!enabled ? { coreLaunchAtLogin: 'false' } : {}),
+    };
+  }
+
+  function formatCoreUptime(seconds: number): string {
+    if (seconds < 60) return m['settings.core_uptime_seconds']({ count: seconds });
+    if (seconds < 3_600) return m['settings.core_uptime_minutes']({ count: Math.floor(seconds / 60) });
+    return m['settings.core_uptime_hours']({ count: Math.floor(seconds / 3_600) });
+  }
 
   async function checkUpdates() {
     if (!desktop?.checkForUpdates) return;
@@ -347,6 +404,7 @@
   <div class="grid w-[min(1120px,100%)] grid-cols-[210px_minmax(0,1fr)] items-start gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-0">
     <aside class="sticky top-[82px] max-h-[calc(100vh-102px)] overflow-y-auto max-[900px]:top-[70px] max-[900px]:z-[9] max-[900px]:max-h-none max-[900px]:overflow-x-auto max-[900px]:overflow-y-hidden max-[900px]:bg-[color-mix(in_srgb,var(--app-page)_94%,transparent)] max-[900px]:backdrop-blur-xl max-[900px]:[scrollbar-width:none]" aria-label={m['settings.title']()}>
       <nav class="grid gap-0.5 border-l border-[var(--app-border)] py-1 max-[900px]:flex max-[900px]:w-max max-[900px]:min-w-full max-[900px]:border-l-0 max-[900px]:border-b">
+        <a class={settingsNavLinkClasses} href="#autonomy"><Power size={14} />{m['settings.section_autonomy']()}</a>
         <a class={settingsNavLinkClasses} href="#terminal"><SquareTerminal size={14} />{m['settings.section_terminal']()}</a>
         <a class={settingsNavLinkClasses} href="#appearance"><Palette size={14} />{m['settings.section_appearance']()}</a>
         <a class={settingsNavLinkClasses} href="#dictation"><Mic size={14} />{m['settings.section_dictation']()}</a>
@@ -376,6 +434,61 @@
       </section>
     {/each}
   {:else}
+  <section class={settingsSectionClasses} id="autonomy">
+    <header class="section-head">
+      <span class="icon-chip"><Power size={15} aria-hidden="true" /></span>
+      <div class="section-titles">
+        <h2>{m['settings.section_autonomy']()}</h2>
+        <p>{m['settings.section_autonomy_desc']()}</p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="flex min-h-14 items-center justify-between gap-4 border-t border-[var(--app-border)] py-3 first:border-t-0 first:pt-0">
+        <div class="flex min-w-0 flex-col gap-1">
+          <span class="field-label">{m['settings.core_background']()}</span>
+          <p class="field-hint">{m['settings.core_background_desc']()}</p>
+        </div>
+        <Switch
+          checked={settings.coreRunInBackground === 'true'}
+          aria-label={m['settings.core_background']()}
+          onCheckedChange={setCoreBackground}
+        />
+      </div>
+      <div class="flex min-h-14 items-center justify-between gap-4 border-t border-[var(--app-border)] py-3">
+        <div class="flex min-w-0 flex-col gap-1">
+          <span class="field-label">{m['settings.core_launch_login']()}</span>
+          <p class="field-hint">{m['settings.core_launch_login_desc']()}</p>
+        </div>
+        <Switch
+          checked={settings.coreLaunchAtLogin === 'true'}
+          disabled={settings.coreRunInBackground !== 'true' || coreStatus?.launchAtLoginSupported === false}
+          aria-label={m['settings.core_launch_login']()}
+          onCheckedChange={(checked: boolean) => (settings = { ...settings, coreLaunchAtLogin: String(checked) })}
+        />
+      </div>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--app-border)] pt-4">
+      <span class={`inline-flex items-center gap-2 text-xs font-medium ${coreStatus?.running ? 'text-[var(--app-success)]' : 'text-[var(--app-danger)]'}`}>
+        <Activity size={14} aria-hidden="true" />
+        {coreStatus?.running ? m['settings.core_running']() : m['settings.core_unavailable']()}
+      </span>
+      {#if coreStatus?.running}
+        <span class="text-xs text-[var(--app-text-muted)]">
+          {formatCoreUptime(coreStatus.uptimeSeconds)} · PID {coreStatus.pid ?? '—'}
+          {#if coreStatus.restartCount > 0} · {m['settings.core_recoveries']({ count: coreStatus.restartCount })}{/if}
+        </span>
+      {/if}
+      {#if desktop?.restartCore}
+        <Button variant="outline" size="sm" class="ml-auto" disabled={restartingCore} onclick={restartCoreRuntime}>
+          <RotateCw size={14} class={restartingCore ? 'animate-spin' : ''} aria-hidden="true" />
+          {restartingCore ? m['settings.core_restarting']() : m['settings.core_restart']()}
+        </Button>
+      {/if}
+    </div>
+  </section>
+
   <section class={settingsSectionClasses} id="terminal">
     <header class="section-head">
       <span class="icon-chip"><SquareTerminal size={15} aria-hidden="true" /></span>

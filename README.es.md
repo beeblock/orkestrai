@@ -27,6 +27,11 @@ normal de los agentes no se guarda.
 
 ## Características Principales
 
+- **Base del Core 24/7:** actívala para mantener el Core de ejecución local y el
+  trabajo activo disponibles en la bandeja después de cerrar todas las ventanas
+  y, si quieres, iniciarlo silenciosamente al entrar al sistema. Configuración
+  muestra el estado y tiempo activo, permite un reinicio protegido y conserva
+  **Salir de Orkestrai** como la parada explícita.
 - **Lienzo de agentes en vivo:** organiza terminales PTY reales, notas, tableros
   de tareas, portales de navegador, árboles de archivos, loops y formas. Las
   conexiones muestran la colaboración entre agentes mientras ocurre. La física
