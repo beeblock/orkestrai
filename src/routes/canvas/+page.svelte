@@ -82,6 +82,7 @@
   import UsageCanvasNode from '$lib/components/agent-room/canvas/UsageCanvasNode.svelte';
   import CodeGraphCanvasNode from '$lib/components/agent-room/canvas/CodeGraphCanvasNode.svelte';
   import DeviceCanvasNode from '$lib/components/agent-room/canvas/DeviceCanvasNode.svelte';
+  import ComputerCanvasNode from '$lib/components/agent-room/canvas/ComputerCanvasNode.svelte';
   import DesignCanvasNode from '$lib/components/agent-room/canvas/DesignCanvasNode.svelte';
   import DesignEditor from '$lib/components/agent-room/design/DesignEditor.svelte';
   import DesignExplorationDialog from '$lib/components/agent-room/canvas/DesignExplorationDialog.svelte';
@@ -107,7 +108,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -143,6 +144,7 @@
     usage: UsageCanvasNode,
     codeGraph: CodeGraphCanvasNode,
     device: DeviceCanvasNode,
+    computer: ComputerCanvasNode,
     design: DesignCanvasNode,
   };
 
@@ -167,6 +169,7 @@
     usage: 'var(--app-warning)',
     codeGraph: 'var(--app-secondary)',
     device: 'var(--app-secondary)',
+    computer: 'var(--app-secondary)',
     design: 'var(--app-secondary)',
   };
 
@@ -582,7 +585,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -611,6 +614,7 @@
     portal: async (rect) => { await addPortal(rect); },
     apiClient: async (rect) => { await addApiClient(rect); },
     device: async (rect) => { await addDevice(rect); },
+    computer: async (rect) => { await addComputer(rect); },
     loop: async (rect) => { await addLoop(rect); },
     shape: async (rect) => { await addShape(rect); },
     tasks: async (rect) => { await addTasksNode(rect); },
@@ -1259,7 +1263,7 @@
 
   async function changeNodeProvider(id: string, provider: string, profileId?: string | null, profileLabel?: string | null) {
     if (!activeWorkspace) return;
-    const previousProvider = (nodes.find((node) => node.id === id)?.payload as { provider?: string } | undefined)?.provider;
+    const previousProvider = (nodes.find((node) => node.id === id)?.data?.payload as { provider?: string } | undefined)?.provider;
     const updated = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}/provider`, {
       method: 'PUT',
       body: JSON.stringify({ provider, profileId: profileId ?? null }),
@@ -1803,6 +1807,35 @@
     toast.success(m['device.added_to_canvas']());
   }
 
+  async function addComputer(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const existing = nodes.find((node) => node.type === 'computer');
+    if (existing) {
+      jumpToNode(existing.id, 0.64, 26);
+      toast.info(m['computer.already_on_canvas']());
+      return;
+    }
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(640, 760);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'computer',
+        title: m['computer.title'](),
+        ...position,
+        ...nodeSize(rect, 520, 600, 640, 760),
+        payload: { computerConfig: { enabled: false, allowedApplications: [], allowedDisplays: [], evidenceRetentionDays: 14 } },
+      }),
+    });
+    if ((node.floorId ?? null) !== visibleFloorId) {
+      await selectFloor(node.floorId ?? null);
+      await tick();
+    } else if (!nodes.some((candidate) => candidate.id === node.id)) {
+      nodes = [...nodes, toFlowNode(node)];
+    }
+    jumpToNode(node.id, 0.64, 26);
+    toast.success(m['computer.added_to_canvas']());
+  }
+
   async function addLoop(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(560, 460);
@@ -1991,7 +2024,7 @@
     extra: Record<string, unknown> = {},
   ): Promise<void> {
     if (!activeWorkspace) return;
-    const override = { x: position.x, y: position.y, confirmedAt: null };
+    const override: { x: number; y: number; confirmedAt: number | null } = { x: position.x, y: position.y, confirmedAt: null };
     localPositionOverrides.set(id, override);
     try {
       await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${id}`, {
@@ -2265,6 +2298,7 @@
     { id: 'code-graph', label: m['code_graph.title'](), hint: m['canvas.hint_action'](), run: () => void addCodeGraphNode() },
     { id: 'share-workspace', label: m['collaboration.share_workspace'](), hint: m['canvas.hint_action'](), run: () => (sharingOpen = true) },
     { id: 'device', label: m['canvas.palette_new_device'](), hint: m['canvas.hint_action'](), run: () => void addDevice() },
+    { id: 'computer', label: m['computer.tool'](), hint: m['canvas.hint_action'](), run: () => void addComputer() },
     { id: 'council', label: m['council.open'](), hint: m['canvas.hint_action'](), run: () => (councilOpen = true) },
     { id: 'memory', label: m['memory.title'](), hint: m['canvas.hint_view'](), run: () => (memoryOpen = true) },
     { id: 'annotations', label: m['annotations.title'](), hint: m['canvas.hint_view'](), run: () => (annotationsOpen = true) },
@@ -2929,6 +2963,9 @@
             </ToolbarButton>
             <ToolbarButton label={m['tool.device']()} active={drawTool === 'device'} onclick={() => toggleDrawTool('device')}>
               <Smartphone size={15} class="tool-icon-svg" /> {m['device.title']()}
+            </ToolbarButton>
+            <ToolbarButton label={m['computer.tool']()} active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
+              <MonitorCog size={15} class="tool-icon-svg" /> {m['computer.title']()}
             </ToolbarButton>
             <ToolbarButton label={m['tool.loop']()} active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
               <img src="/images/loop.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.label_loop']()}

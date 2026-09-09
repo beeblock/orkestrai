@@ -34,6 +34,14 @@ pt-BR, English, and Spanish translations.
   behind destination-bound SecretRefs, while idempotent executions and bounded
   event history support unattended notifications, inbox work, and report
   delivery without persisting message contents or resolved secrets.
+- A native Computer node now inventories and controls explicitly approved
+  desktop applications on macOS, Windows, and supported Linux X11 sessions.
+  Agents use typed, task-bound, idempotent focus, click, type, shortcut, wait,
+  and screenshot operations with bounded evidence retention and audit records
+  that never persist typed content. A destination-bound SecretRef can be typed
+  directly on macOS and Windows through the trusted executor without exposing
+  its value to the agent or to process arguments. Linux X11 refuses secret
+  typing until an equivalent protected input channel is available.
 
 ### Fixed
 

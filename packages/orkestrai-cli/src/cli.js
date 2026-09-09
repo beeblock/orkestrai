@@ -111,6 +111,11 @@ Uso:
   orkestrai device type <texto> | button <back|home|lock|app-switcher> | rotate <orientacao>
   orkestrai device install <path> | launch <bundleId|package/activity> | logs | tree | screenshot | stop
   orkestrai device permissions <list|grant|revoke|reset> [permission] [bundleId] [--value <valor>]
+  orkestrai computer inspect [--json]
+  orkestrai computer focus <windowId> --task <id> --idempotency <key>
+  orkestrai computer click <x:0..1> <y:0..1> --target <windowId> --task <id> --idempotency <key>
+  orkestrai computer type <texto> --target <windowId> | secret <secretRef> --target <windowId> | shortcut <key...> --target <windowId>
+  orkestrai computer screenshot --target <windowId> | wait <exists|focused> <texto>
   orkestrai port [--check <porta>]  — devolve uma porta livre (ou testa uma)
   orkestrai fs read <path> | fs write <path> <conteudo> | fs search <termo> [--content]
   orkestrai say <texto>  — fala no desktop com a voz configurada
@@ -1667,6 +1672,51 @@ export async function run(argv, options = {}) {
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/devices', body);
       if (flags.json || data.result) out(JSON.stringify(data.result ?? data.snapshot, null, 2));
       else out(data.snapshot?.session ? `Dispositivo ativo: ${data.snapshot.session.deviceName}` : 'Dispositivo parado.');
+      return 0;
+    }
+    case 'computer': {
+      const [action, ...values] = rest;
+      if (action === 'inspect' || action === 'list') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/computers');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else {
+          out(`Computer: ${data.snapshot.platform} [${data.snapshot.available ? 'ready' : data.snapshot.reason}]`);
+          for (const window of data.snapshot.windows ?? []) out(`- ${window.appName}: ${window.title} (${window.id})${window.focused ? ' [focused]' : ''}`);
+        }
+        return 0;
+      }
+      if (!selfAgent) throw new Error('computer exige identidade de um terminal Orkestrai ativo.');
+      const taskId = flags.task;
+      const idempotencyKey = flags.idempotency;
+      if (!taskId || !idempotencyKey) throw new Error('Acoes de Computer exigem --task <id> e --idempotency <key>.');
+      let input;
+      if (action === 'focus') {
+        if (!values[0]) throw new Error('Uso: orkestrai computer focus <windowId> --task <id> --idempotency <key>');
+        input = { command: 'focus', windowId: values[0] };
+      } else if (action === 'click') {
+        if (values.length < 2 || !flags.target) throw new Error('Uso: orkestrai computer click <x:0..1> <y:0..1> --target <windowId>');
+        input = { command: 'click', x: Number(values[0]), y: Number(values[1]), space: 'window', targetId: flags.target, button: flags.button ?? 'left', count: Number(flags.count ?? 1) };
+      } else if (action === 'type') {
+        const text = values.join(' ');
+        if (!text || !flags.target) throw new Error('Uso: orkestrai computer type <texto> --target <windowId>');
+        input = { command: 'type', text, targetId: flags.target };
+      } else if (action === 'secret') {
+        if (!values[0] || !flags.target) throw new Error('Uso: orkestrai computer secret <secretRef> --target <windowId>');
+        input = { command: 'type_secret', secretRef: values[0], targetId: flags.target };
+      } else if (action === 'shortcut') {
+        if (!values.length || !flags.target) throw new Error('Uso: orkestrai computer shortcut <key...> --target <windowId>');
+        input = { command: 'shortcut', keys: values, targetId: flags.target };
+      } else if (action === 'screenshot') {
+        if (!flags.target) throw new Error('Uso: orkestrai computer screenshot --target <windowId>');
+        input = { command: 'screenshot', target: 'window', targetId: flags.target };
+      } else if (action === 'wait') {
+        const condition = values.shift();
+        const value = values.join(' ');
+        if (!condition || !value) throw new Error('Uso: orkestrai computer wait <exists|focused> <texto>');
+        input = { command: 'wait', condition: condition === 'focused' ? 'window_focused' : 'window_exists', value, timeoutMs: Number(flags.timeout ?? 10000), pollMs: Number(flags.poll ?? 300) };
+      } else throw new Error('Uso: orkestrai computer <inspect|focus|click|type|shortcut|screenshot|wait> ...');
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId, idempotencyKey, input });
+      out(JSON.stringify(data, null, 2));
       return 0;
     }
     case 'fs': {

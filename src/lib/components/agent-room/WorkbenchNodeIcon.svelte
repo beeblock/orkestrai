@@ -15,6 +15,7 @@
     Activity,
     GitPullRequestArrow,
     Smartphone,
+    MonitorCog,
     Palette,
     Workflow as AutomationIcon,
     Braces,
@@ -50,6 +51,7 @@
 {:else if type === 'memory'}<BookMarked {size} aria-hidden="true" />
 {:else if type === 'annotations'}<MessageSquareText {size} aria-hidden="true" />
 {:else if type === 'device'}<Smartphone {size} aria-hidden="true" />
+{:else if type === 'computer'}<MonitorCog {size} aria-hidden="true" />
 {:else if type === 'design'}<Palette {size} aria-hidden="true" />
 {:else if type === 'automation'}<AutomationIcon {size} aria-hidden="true" />
 {/if}

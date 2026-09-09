@@ -169,5 +169,12 @@ export function transferredNodePayload(
     }
   }
   if (type === 'device') return {};
+  if (type === 'computer') {
+    delete payload.computerLastEvidence;
+    const config = payload.computerConfig && typeof payload.computerConfig === 'object' && !Array.isArray(payload.computerConfig)
+      ? payload.computerConfig as Record<string, unknown>
+      : {};
+    payload.computerConfig = { ...config, enabled: false, allowedApplications: [], allowedDisplays: [] };
+  }
   return payload;
 }

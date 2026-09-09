@@ -72,6 +72,9 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 import { automationIntegrationService } from '$lib/modules/agent-room/application/services/AutomationIntegrationService.js';
 import { integrationExecutionService } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
 import { integrationExecutionSchema, integrationEventsQuerySchema } from '$lib/modules/agent-room/contracts/schemas/integration.schema.js';
+import { bridgeComputerCommandSchema } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
+import { computerService } from '$lib/modules/agent-room/application/services/ComputerService.js';
+import { secretRefService } from '$lib/modules/agent-room/application/services/SecretRefService.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -886,6 +889,69 @@ export class BridgeController extends Controller {
       }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao controlar dispositivo.');
+    }
+  }
+
+  async computerList(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const authenticatedActor = ptySessionManager.resolveBridgeAgent(
+        workspace.id,
+        String(event.request.headers.get('x-orkestrai-agent-token') ?? ''),
+      );
+      if (!authenticatedActor) throw new Error('Computer inspection requires an active Orkestrai terminal identity.');
+      const [computer, secretRefs] = await Promise.all([computerService.snapshotForAgent(workspace.id), secretRefService.list(workspace.id)]);
+      return this.json({ data: {
+        ...computer,
+        secretRefs: secretRefs.filter((secret) => secret.bindings.integrations.includes('computer') && secret.bindings.operations.includes('computer.type_secret')).map((secret) => ({
+          ref: secret.ref,
+          name: secret.name,
+          purpose: secret.purpose,
+          operations: secret.bindings.operations,
+          destinations: secret.bindings.destinations,
+        })),
+      } });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to inspect desktop control.', 401);
+    }
+  }
+
+  async computerCommand(event: any) {
+    try {
+      const request = bridgeComputerCommandSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveAgentActor(workspace.id, request.from);
+      const authenticatedActor = ptySessionManager.resolveBridgeAgent(
+        workspace.id,
+        String(event.request.headers.get('x-orkestrai-agent-token') ?? ''),
+      );
+      if (!authenticatedActor || authenticatedActor !== actor) {
+        throw new Error('Computer actions require the active terminal identity of the assigned agent.');
+      }
+      const task = (await taskBoardService.list(workspace.id)).find((candidate) => candidate.id === request.taskId);
+      if (!task || task.assigneeNodeId !== actor || task.status === 'done') {
+        throw new Error('Computer actions require an active task assigned to this agent.');
+      }
+      const result = await computerService.execute(workspace.id, request.input, {
+        actorType: 'agent', actorId: actor, idempotencyKey: request.idempotencyKey,
+      });
+      await controlCenterService.recordActivity({
+        workspaceId: workspace.id,
+        nodeId: actor,
+        state: 'working',
+        action: `computer:${request.input.command}`,
+        taskId: request.taskId,
+        metadata: { command: request.input.command, idempotencyKey: request.idempotencyKey, resultKind: result.kind },
+        category: 'workflow',
+        verb: 'controlled',
+        objectType: 'computer',
+        objectId: request.input.command,
+        objectTitle: request.input.command,
+        severity: 'info',
+      });
+      return this.json({ data: result });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to control the computer.');
     }
   }
 

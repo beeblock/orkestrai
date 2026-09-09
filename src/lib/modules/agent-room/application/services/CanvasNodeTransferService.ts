@@ -15,6 +15,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import type { TransferCanvasNodesDto } from '../dto/TransferCanvasNodesDto.js';
 import { designDocumentService } from './DesignDocumentService.js';
+import { computerService } from './ComputerService.js';
 import { filesystemService } from './FilesystemService.js';
 import { workspacePathService } from './WorkspacePathService.js';
 
@@ -71,7 +72,7 @@ export class CanvasNodeTransferService {
     if (selected.some((node) => node.type === 'device') && destinationNodes.some((node) => node.type === 'device')) {
       throw new CanvasNodeTransferError('canvas_transfer_singleton_exists');
     }
-    const singletonTypes = new Set(['usage', 'codeGraph']);
+    const singletonTypes = new Set(['usage', 'codeGraph', 'computer']);
     if (selected.some((node) => singletonTypes.has(node.type)) && destinationNodes.some((node) => singletonTypes.has(node.type) && selected.some((source) => source.type === node.type))) {
       throw new CanvasNodeTransferError('canvas_transfer_singleton_exists');
     }
@@ -258,6 +259,7 @@ export class CanvasNodeTransferService {
           __orkestraiStopWorkspaceDevice?: (targetWorkspaceId: string) => Promise<void>;
         }).__orkestraiStopWorkspaceDevice?.(workspaceId).catch(() => undefined);
       }
+      if (node.type === 'computer') await computerService.removeEvidence(workspaceId).catch(() => undefined);
       if (node.type === 'design') await designDocumentService.removeWorkspaceFiles(workspaceId, node.id).catch(() => undefined);
     }
   }

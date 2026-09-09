@@ -137,6 +137,19 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'desktop-app-automation',
+    icon: 'MonitorCog',
+    title: 'Agente con control del equipo',
+    tagline: 'Opera apps permitidas con evidencia y sin exponer credenciales.',
+    steps: [
+      { id: 'computer', title: 'Agrega el nodo Equipo', body: 'Agregaré el nodo Equipo desactivado. Identifica plataforma, pantallas, apps, ventanas visibles y permisos del sistema operativo.', action: { kind: 'createComputer', title: 'Equipo' }, check: { kind: 'nodeExists', nodeType: 'computer' } },
+      { id: 'permissions', title: 'Concede permisos del sistema', body: 'Usa los botones de permiso para abrir el ajuste exacto en macOS, Windows o Linux. Orkestrai muestra si accesibilidad y captura están listas en vez de fallar silenciosamente.' },
+      { id: 'scope', title: 'Define el límite por aplicación', body: 'Permite solo las apps y pantallas que este workspace puede controlar y luego activa el nodo. Para agentes autónomos, agrega los mismos ids de app a la política permanente de Seguridad.' },
+      { id: 'agent', title: 'Asigna trabajo trazable', body: 'Conecta un agente, asígnale una tarea Kanban activa y deja que use computer_inspect, focus, click, type, type_secret, shortcut, screenshot y wait con claves de idempotencia estables. Una SecretRef de login debe estar vinculada a computer.type_secret y al id exacto de la app.' },
+      { id: 'audit', title: 'Revisa evidencia y detén con seguridad', body: 'Las capturas quedan en .orkestrai/computer/evidence con retención limitada. Centro de Control y Auditoría registran actor, comando, destino, resultado y digest sin guardar el texto escrito.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Dos features en paralelo sin conflicto',

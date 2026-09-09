@@ -137,6 +137,19 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'desktop-app-automation',
+    icon: 'MonitorCog',
+    title: 'Controlled desktop worker',
+    tagline: 'Operate approved desktop apps with evidence and no credential exposure.',
+    steps: [
+      { id: 'computer', title: 'Add the Computer node', body: 'I add the disabled Computer node. It inventories the current platform, displays, visible apps, windows, and operating-system permissions.', action: { kind: 'createComputer', title: 'Computer' }, check: { kind: 'nodeExists', nodeType: 'computer' } },
+      { id: 'permissions', title: 'Grant operating-system permissions', body: 'Use the permission buttons to open the exact macOS, Windows, or Linux settings. Orkestrai reports accessibility and screen-capture readiness instead of silently failing.' },
+      { id: 'scope', title: 'Choose the application boundary', body: 'Enable only the apps and displays this workspace may control, then enable the node. Add the same app ids to the workspace Security standing grant for unattended agents.' },
+      { id: 'agent', title: 'Assign traceable work', body: 'Connect an agent, assign an active Kanban task, and let it use computer_inspect, focus, click, type, type_secret, shortcut, screenshot, and wait with stable idempotency keys. A login SecretRef must be bound to computer.type_secret and the exact app id.' },
+      { id: 'audit', title: 'Review evidence and stop safely', body: 'Screenshots stay under .orkestrai/computer/evidence with bounded retention. Control Center and Audit record the actor, command, target, result, and digest without storing typed text.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Two features in parallel, no conflicts',

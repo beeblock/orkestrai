@@ -6,6 +6,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'managed-browser-24-7': 'managed-browser-24-7',
   'secure-autonomy-24-7': 'secure-autonomy-24-7',
   'connected-reporting-agent': 'connected-reporting-agent',
+  'desktop-app-automation': 'desktop-app-automation',
   'parallel-features': 'duas-features',
   'council-decision': 'council-perspectives',
   'api-client-workflow': 'api-client',

@@ -322,6 +322,14 @@ const TOOLS = [
   { name: 'device_permissions', description: 'Lista ou altera explicitamente uma permissao do app no device ativo.', inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['list', 'grant', 'revoke', 'reset'] }, permission: { type: 'string', enum: ['notifications', 'location', 'camera', 'microphone', 'photos', 'photos-add', 'contacts', 'calendar', 'reminders', 'motion', 'media-library', 'siri', 'speech', 'faceid', 'user-tracking', 'homekit', 'all'] }, bundleId: { type: 'string' }, value: { type: 'string' } }, required: ['action'] } },
   { name: 'device_screenshot', description: 'Salva um screenshot no diretorio .orkestrai do workspace.', inputSchema: { type: 'object', properties: {} } },
   { name: 'device_stop', description: 'Desanexa e limpa o helper do device ativo.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'computer_inspect', description: 'Lista permissoes, displays, apps e janelas visiveis do Computer node.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'computer_focus', description: 'Foca uma janela permitida. Exige task ativa e chave idempotente.', inputSchema: { type: 'object', properties: { windowId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['windowId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_click', description: 'Clica em coordenadas normalizadas dentro de uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 }, targetId: { type: 'string' }, button: { type: 'string', enum: ['left', 'right', 'middle'], default: 'left' }, count: { type: 'integer', minimum: 1, maximum: 3, default: 1 }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['x', 'y', 'targetId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_type', description: 'Digita texto em uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { text: { type: 'string', maxLength: 20000 }, targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['text', 'targetId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_type_secret', description: 'Digita uma SecretRef ligada a computer.type_secret diretamente em uma janela permitida sem revelar seu valor.', inputSchema: { type: 'object', properties: { secretRef: { type: 'string', pattern: '^secretref:[0-9a-f-]{16,}$' }, targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['secretRef', 'targetId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_shortcut', description: 'Executa um atalho em uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { keys: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string' } }, targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['keys', 'targetId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_screenshot', description: 'Salva evidencia PNG confinada ao workspace de uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['targetId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_wait', description: 'Aguarda de forma limitada uma janela existir ou receber foco.', inputSchema: { type: 'object', properties: { condition: { type: 'string', enum: ['window_exists', 'window_focused'] }, value: { type: 'string' }, timeoutMs: { type: 'integer', minimum: 50, maximum: 30000 }, pollMs: { type: 'integer', minimum: 100, maximum: 2000 }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['condition', 'value', 'taskId', 'idempotencyKey'] } },
   { name: 'notify', description: 'Notificacao nativa de atencao ou conclusao do projeto. task_done ja notifica tarefas.', inputSchema: { type: 'object', properties: { message: { type: 'string' }, kind: { type: 'string', enum: ['info', 'attention', 'project', 'task'] }, title: { type: 'string' } }, required: ['message'] } },
   { name: 'status', description: 'Registra o estado semantico e a acao atual deste agente no Control Center.', inputSchema: { type: 'object', properties: { state: { type: 'string', enum: ['starting', 'working', 'waiting_input', 'waiting_permission', 'blocked', 'idle', 'done', 'error', 'disconnected'] }, action: { type: 'string' }, taskId: { type: 'string' } }, required: ['state'] } },
   { name: 'port', description: 'Devolve uma porta livre para subir servidores.', inputSchema: { type: 'object', properties: {} } },
@@ -913,6 +921,29 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('POST', '/api/agent-room/bridge/devices', { command: 'screenshot' });
     case 'device_stop':
       return bridge('POST', '/api/agent-room/bridge/devices', { command: 'stop' });
+    case 'computer_inspect':
+      return bridge('GET', '/api/agent-room/bridge/computers');
+    case 'computer_focus':
+      if (!selfAgent) throw new Error('computer_focus exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'focus', windowId: args.windowId } });
+    case 'computer_click':
+      if (!selfAgent) throw new Error('computer_click exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'click', x: args.x, y: args.y, space: 'window', targetId: args.targetId, button: args.button ?? 'left', count: args.count ?? 1 } });
+    case 'computer_type':
+      if (!selfAgent) throw new Error('computer_type exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'type', text: args.text, targetId: args.targetId } });
+    case 'computer_type_secret':
+      if (!selfAgent) throw new Error('computer_type_secret exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'type_secret', secretRef: args.secretRef, targetId: args.targetId } });
+    case 'computer_shortcut':
+      if (!selfAgent) throw new Error('computer_shortcut exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'shortcut', keys: args.keys, targetId: args.targetId } });
+    case 'computer_screenshot':
+      if (!selfAgent) throw new Error('computer_screenshot exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'screenshot', target: 'window', targetId: args.targetId } });
+    case 'computer_wait':
+      if (!selfAgent) throw new Error('computer_wait exige identidade de um terminal Orkestrai ativo.');
+      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'wait', condition: args.condition, value: args.value, timeoutMs: args.timeoutMs ?? 10000, pollMs: args.pollMs ?? 300 } });
     case 'notify':
       return bridge('POST', '/api/agent-room/bridge/notify', { message: args.message, kind: args.kind, title: args.title, from: selfAgent });
     case 'status': {

@@ -52,7 +52,7 @@ describe('servidor MCP (orkestrai mcp)', () => {
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const list = await waitFor(2);
     const names = list.result.tools.map((tool) => tool.name);
-    for (const expected of ['ask', 'usage', 'code_graph_status', 'code_graph_index', 'code_graph_search', 'code_graph_symbol', 'code_graph_neighbors', 'code_graph_changes', 'code_graph_contracts', 'code_graph_quality', 'code_graph_semantic_status', 'code_graph_semantic_build', 'code_graph_semantic_search', 'code_graph_evidence', 'code_graph_evidence_import', 'code_graph_context', 'code_graph_operations', 'code_graph_explain', 'code_graph_locate', 'code_graph_revisions', 'code_graph_compare', 'code_graph_investigation_list', 'code_graph_investigation_read', 'code_graph_investigation_save', 'code_graph_investigation_delete', 'code_graph_handoff', 'note_list', 'note_read', 'note_write', 'note_edit', 'note_create', 'memory_search', 'memory_add', 'memory_revise', 'memory_archive', 'api_client_list', 'api_client_reference', 'api_client_read', 'api_client_import', 'api_client_create', 'api_client_replace', 'api_client_sync_status', 'api_client_pull', 'api_client_push', 'api_client_export', 'api_client_run_runner', 'api_client_execute', 'image_workflow_list', 'image_workflow_read', 'image_workflow_create', 'image_workflow_update', 'image_workflow_connect', 'image_workflow_disconnect', 'image_workflow_add_reference', 'image_workflow_run', 'image_workflow_validate', 'image_workflow_complete', 'image_workflow_fail', 'image_workflow_cancel', 'image_workflow_delete', 'design_audit', 'design_apply_template', 'task_list', 'task_columns', 'task_move', 'task_done', 'portal_dom', 'floor_land', 'device_attach', 'device_screenshot', 'notify', 'port', 'recruit']) {
+    for (const expected of ['ask', 'usage', 'code_graph_status', 'code_graph_index', 'code_graph_search', 'code_graph_symbol', 'code_graph_neighbors', 'code_graph_changes', 'code_graph_contracts', 'code_graph_quality', 'code_graph_semantic_status', 'code_graph_semantic_build', 'code_graph_semantic_search', 'code_graph_evidence', 'code_graph_evidence_import', 'code_graph_context', 'code_graph_operations', 'code_graph_explain', 'code_graph_locate', 'code_graph_revisions', 'code_graph_compare', 'code_graph_investigation_list', 'code_graph_investigation_read', 'code_graph_investigation_save', 'code_graph_investigation_delete', 'code_graph_handoff', 'note_list', 'note_read', 'note_write', 'note_edit', 'note_create', 'memory_search', 'memory_add', 'memory_revise', 'memory_archive', 'api_client_list', 'api_client_reference', 'api_client_read', 'api_client_import', 'api_client_create', 'api_client_replace', 'api_client_sync_status', 'api_client_pull', 'api_client_push', 'api_client_export', 'api_client_run_runner', 'api_client_execute', 'image_workflow_list', 'image_workflow_read', 'image_workflow_create', 'image_workflow_update', 'image_workflow_connect', 'image_workflow_disconnect', 'image_workflow_add_reference', 'image_workflow_run', 'image_workflow_validate', 'image_workflow_complete', 'image_workflow_fail', 'image_workflow_cancel', 'image_workflow_delete', 'design_audit', 'design_apply_template', 'task_list', 'task_columns', 'task_move', 'task_done', 'portal_dom', 'floor_land', 'device_attach', 'device_screenshot', 'computer_inspect', 'computer_click', 'computer_type_secret', 'computer_screenshot', 'notify', 'port', 'recruit']) {
       expect(names).toContain(expected);
     }
     expect(names).toEqual(expect.arrayContaining(['integration_list', 'integration_events', 'integration_execute']));
@@ -140,6 +140,27 @@ describe('servidor MCP (orkestrai mcp)', () => {
       endDistance: 0.42,
       durationMs: 360,
     });
+    input.end();
+  });
+
+  it('confines computer tools to windows and forwards only SecretRefs', async () => {
+    const { send, waitFor, input } = startMcp();
+    const taskId = '00000000-0000-7000-8000-000000000001';
+    send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+      name: 'computer_click',
+      arguments: { x: 0.5, y: 0.25, targetId: 'window-1', taskId, idempotencyKey: 'task:click:1' },
+    } });
+    const click = JSON.parse((await waitFor(1)).result.content[0].text);
+    expect(click.path).toBe('/api/agent-room/bridge/computers');
+    expect(click.body.input).toEqual({ command: 'click', x: 0.5, y: 0.25, space: 'window', targetId: 'window-1', button: 'left', count: 1 });
+
+    send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: {
+      name: 'computer_type_secret',
+      arguments: { secretRef: 'secretref:0123456789abcdef', targetId: 'window-1', taskId, idempotencyKey: 'task:secret:1' },
+    } });
+    const secret = JSON.parse((await waitFor(2)).result.content[0].text);
+    expect(secret.body.input).toEqual({ command: 'type_secret', secretRef: 'secretref:0123456789abcdef', targetId: 'window-1' });
+    expect(JSON.stringify(secret)).not.toContain('password');
     input.end();
   });
 

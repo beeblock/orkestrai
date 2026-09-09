@@ -44,6 +44,7 @@ export type AutonomyOperation = {
   certainty?: 'semantic' | 'inferred';
   network?: { url: string; method?: string };
   filesystem?: { path: string; permission: 'read' | 'write' | 'create' | 'delete'; size?: number };
+  application?: { id: string };
 };
 
 export type AutonomyDecision = {
@@ -551,6 +552,11 @@ export class AutonomyPolicyService {
   }
 
   private async boundaryViolation(policy: AutonomyPolicyDocument, request: AutonomyOperation): Promise<string | null> {
+    if (request.application) {
+      const app = request.application.id.toLowerCase();
+      const allowed = policy.allowedApps.some((candidate) => candidate.toLowerCase() === app);
+      if (!allowed) return 'Application is outside the approved desktop-control scope.';
+    }
     if (request.filesystem) {
       const absolute = resolve(request.filesystem.path);
       const canonical = await existingRealpath(absolute, request.filesystem.permission).catch(() => absolute);

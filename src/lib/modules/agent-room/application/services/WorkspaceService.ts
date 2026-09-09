@@ -16,6 +16,7 @@ import { providerProfileService } from './ProviderProfileService.js';
 import { floorService } from './FloorService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { codeGraphIndexService } from './CodeGraphIndexService.js';
+import { computerService } from './ComputerService.js';
 import { workspaceGroupService } from './WorkspaceGroupService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
@@ -386,8 +387,8 @@ export class WorkspaceService {
   async createNode(dto: CreateCanvasNodeDto) {
     const workspace = await this.get(dto.workspaceId);
     const existingNodes = await workspaceRepository.listNodes(dto.workspaceId);
-    if (dto.type === 'device') {
-      const existing = existingNodes.find((node) => node.type === 'device');
+    if (dto.type === 'device' || dto.type === 'computer') {
+      const existing = existingNodes.find((node) => node.type === dto.type);
       if (existing) return existing;
     }
     const payload = dto.type === 'terminal'
@@ -580,6 +581,7 @@ export class WorkspaceService {
         __orkestraiStopWorkspaceDevice?: (targetWorkspaceId: string) => Promise<void>;
       }).__orkestraiStopWorkspaceDevice?.(workspaceId).catch(() => undefined);
     }
+    if (node.type === 'computer') await computerService.removeEvidence(workspaceId).catch(() => undefined);
     if (node.type === 'terminal') {
       this.killTerminalSessions(workspaceId, nodeId, { ...((node.payload ?? {}) as Record<string, unknown>) });
     }

@@ -47,6 +47,13 @@ common credentials redacted; normal agent output is not persisted.
   explicit account permissions. Persistent agents can read approved inboxes,
   classify work, send messages, and deliver workspace reports through typed,
   idempotent connector actions without receiving the raw token or password.
+- **Bounded desktop control:** add a Computer node to inspect and operate only
+  explicitly approved apps and displays on macOS, Windows, or supported Linux
+  X11 sessions. Task-bound agent commands are idempotent, screenshots remain
+  confined to the workspace, and audit records omit typed content. Login values
+  can flow from a destination-bound SecretRef directly into the permitted app
+  on macOS and Windows without being returned to the agent; the Linux X11
+  backend refuses secret typing until it has an equivalent protected channel.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or

@@ -41,6 +41,7 @@
   import AnnotationCenterView from '$lib/components/agent-room/AnnotationCenterView.svelte';
   import HuddleView from '$lib/components/agent-room/HuddleView.svelte';
   import DeviceWorkbenchPanel from '$lib/components/agent-room/DeviceWorkbenchPanel.svelte';
+  import ComputerWorkbenchPanel from '$lib/components/agent-room/ComputerWorkbenchPanel.svelte';
   import DesignEditor from '$lib/components/agent-room/design/DesignEditor.svelte';
   import CouncilDialog from '$lib/components/agent-room/CouncilDialog.svelte';
   import WorkspaceSharingButton from '$lib/components/collaboration/WorkspaceSharingButton.svelte';
@@ -169,6 +170,7 @@
     'controlCenter',
     'reviewCenter',
     'device',
+    'computer',
     'design',
   ]);
 
@@ -207,7 +209,7 @@
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
     { id: 'content', types: ['note', 'image', 'imageWorkflow', 'design'] },
-    { id: 'tools', types: ['portal', 'apiClient', 'device', 'git', 'diff', 'usage', 'codeGraph'] },
+    { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
   const selectedWorkspace = $derived(workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null);
@@ -634,6 +636,7 @@
     if (node.type === 'annotations') return m['annotations.title']();
     if (node.type === 'automation') return m['automation.title']();
     if (node.type === 'device') return m['device.title']();
+    if (node.type === 'computer') return m['computer.title']();
     if (node.type === 'design') return m['terminal_browser.kind_design']();
     return node.type;
   }
@@ -1038,6 +1041,10 @@
         {:else if paneNode.type === 'device'}
           {#key `${pane.id}:${paneNode.id}`}
             <DeviceWorkbenchPanel workspaceId={selectedWorkspace.id} />
+          {/key}
+        {:else if paneNode.type === 'computer'}
+          {#key `${pane.id}:${paneNode.id}`}
+            <ComputerWorkbenchPanel workspaceId={selectedWorkspace.id} />
           {/key}
         {:else if paneNode.type === 'design'}
           {#key `${pane.id}:${paneNode.id}`}

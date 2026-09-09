@@ -443,6 +443,23 @@ async function runAction(action: TourAction): Promise<void> {
         }
         break;
       }
+      case 'createComputer': {
+        const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
+        if (!nodes?.some((node) => node.type === 'computer')) {
+          await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+            method: 'POST',
+            body: JSON.stringify({
+              type: 'computer',
+              title: action.title,
+              ...nextPosition(),
+              width: 640,
+              height: 680,
+              payload: { computerConfig: { enabled: false, allowedApplications: [], allowedDisplays: [], evidenceRetentionDays: 14 } },
+            }),
+          });
+        }
+        break;
+      }
       case 'createDesign': {
         const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
         if (!nodes?.some((node) => node.type === 'design' && node.title === action.title)) {
