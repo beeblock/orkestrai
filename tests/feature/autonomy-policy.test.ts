@@ -7,6 +7,7 @@ import { autonomyPolicyService, AutonomyGatePendingError, redactAutonomyValue } 
 import { AgentAutonomyAuditEvent } from '$lib/modules/agent-room/domain/models/AgentAutonomyAuditEvent.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { secretRefService } from '$lib/modules/agent-room/application/services/SecretRefService.js';
+import { AgentSecretRef } from '$lib/modules/agent-room/domain/models/AgentSecretRef.js';
 
 describe('AutonomyPolicyService', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -131,5 +132,21 @@ describe('AutonomyPolicyService', () => {
     expect(exported.integrity).toMatchObject({ valid: true });
     expect(JSON.stringify(exported)).not.toContain('raw-secret-value');
     delete state.__orkestraiHostVaultResolve;
+  });
+
+  it('fails closed when persisted SecretRef bindings are malformed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orkestrai-autonomy-invalid-secret-'));
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Invalid vault binding', workingDir: root });
+    const ref = await secretRefService.create(workspace.id, {
+      name: 'Damaged credential',
+      provider: 'host_vault',
+      bindings: { integrations: ['slack'], operations: ['slack.send_message'], destinations: ['slack.com'] },
+    });
+    await AgentSecretRef.query().where('id', ref.id).update({ bindings_json: '{invalid-json' });
+
+    await expect(secretRefService.list(workspace.id)).rejects.toThrow(/bindings are invalid/);
+    await expect(secretRefService.resolve(workspace.id, ref.ref, {
+      integration: 'slack', operation: 'slack.send_message', destination: 'slack.com',
+    })).rejects.toThrow(/bindings are invalid/);
   });
 });

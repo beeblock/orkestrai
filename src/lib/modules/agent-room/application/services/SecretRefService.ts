@@ -32,8 +32,10 @@ function parseBindings(value: unknown): SecretRefInput['bindings'] {
   try {
     const parsed = typeof value === 'string' ? JSON.parse(value) : value;
     return secretRefInputSchema.shape.bindings.parse(parsed);
-  } catch {
-    return { integrations: [], operations: [], destinations: [] };
+  } catch (error) {
+    throw new Error('SecretRef bindings are invalid and must be repaired before this credential can be used.', {
+      cause: error,
+    });
   }
 }
 
