@@ -63,6 +63,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Updated the transitive Joi and js-yaml parsers to patched compatible versions
+  and verified a clean dependency security audit.
 - Tool Workshop forms keep independent identities when Canvas and side panels
   are open together, and browser executors display their correct label.
 - Portal surfaces follow Canvas geometry changes without 100 ms polling,

@@ -925,6 +925,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   "title": "Orkestrai 0.29.0: Persistent agents, visible browser workflows, and reusable tools",
   "summary": "Watch an agent work in your signed-in browser",
   "items": [
+    "Updated the transitive Joi and js-yaml parsers to patched compatible versions; the dependency security audit is clean.",
     "Settings now includes Autonomy & 24/7 Core with background execution, optional start at sign-in, live uptime, process status, automatic recovery count, and a guarded restart command.",
     "Closing every window keeps enabled active work in the system tray; Quit Orkestrai remains the explicit command that stops the Core and its child processes.",
     "The desktop supervisor reconnects after an unexpected Core exit or system resume without creating a second provider writer.",

@@ -929,6 +929,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   "title": "Orkestrai 0.29.0: Agentes persistentes, fluxos visíveis no navegador e ferramentas reutilizáveis",
   "summary": "Acompanhar um agente no navegador já autenticado",
   "items": [
+    "Os parsers transitivos Joi e js-yaml foram atualizados para versões compatíveis corrigidas; a auditoria de segurança das dependências não detecta vulnerabilidades.",
     "Configurações agora inclui Autonomia e Core 24/7 com execução em segundo plano, início opcional ao entrar no sistema, tempo online, estado do processo, contagem de recuperações automáticas e reinício protegido.",
     "Fechar todas as janelas mantém o trabalho ativo habilitado na bandeja; Sair do Orkestrai continua sendo o comando explícito que encerra o Core e seus processos filhos.",
     "O supervisor desktop se reconecta após uma saída inesperada do Core ou o retorno da suspensão sem criar um segundo escritor para o mesmo provider.",
