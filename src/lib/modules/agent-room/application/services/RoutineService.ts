@@ -654,6 +654,8 @@ export class RoutineService {
     this.schedulerTickRunning = true;
     try {
       await this.tick();
+    } catch {
+      console.error('[automation] Scheduler tick failed; the next scheduled tick will retry.');
     } finally {
       this.schedulerTickRunning = false;
     }

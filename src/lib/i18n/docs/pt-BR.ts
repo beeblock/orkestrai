@@ -929,6 +929,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   "title": "Orkestrai 0.29.0: Agentes persistentes, fluxos visíveis no navegador e ferramentas reutilizáveis",
   "summary": "Acompanhar um agente no navegador já autenticado",
   "items": [
+    "Os agendadores em segundo plano aguardam as migrações do banco na primeira inicialização e repetem falhas transitórias sem encerrar o Core.",
     "Os instaladores RPM não incluem mais caminhos build-id compartilhados que conflitam com outros aplicativos Electron. A validação Linux verifica o RPM gerado antes da publicação.",
     "Os parsers transitivos Joi e js-yaml foram atualizados para versões compatíveis corrigidas; a auditoria de segurança das dependências não detecta vulnerabilidades.",
     "Configurações agora inclui Autonomia e Core 24/7 com execução em segundo plano, início opcional ao entrar no sistema, tempo online, estado do processo, contagem de recuperações automáticas e reinício protegido.",

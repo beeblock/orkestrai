@@ -4,6 +4,7 @@ import { agentRuntimeService, AgentRuntimePolicyError } from '$lib/modules/agent
 import { usageService } from '$lib/modules/agent-room/application/services/UsageService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
 
 async function setup() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'agent runtime', workingDir: '/tmp' });
@@ -20,6 +21,9 @@ describe('AgentRuntimeService', () => {
   useSvelarTest({ refreshDatabase: true });
 
   afterEach(() => {
+    agentRuntimeService.stopSupervisor();
+    routineService.stopScheduler();
+    vi.useRealTimers();
     ptySessionManager.killAll();
     vi.restoreAllMocks();
   });
@@ -55,6 +59,34 @@ describe('AgentRuntimeService', () => {
     await expect(agentRuntimeService.status(workspace.id, node.id)).resolves.toMatchObject({
       mode: 'interactive', idleMinutes: 30, concurrency: 1, usageLimit: 95, state: 'sleeping',
     });
+  });
+
+  it('keeps the Core alive and retries after a transient supervisor database failure', async () => {
+    vi.useFakeTimers();
+    const list = vi.spyOn(workspaceRepository, 'listWorkspaces')
+      .mockRejectedValueOnce(new Error('database temporarily unavailable'))
+      .mockResolvedValue([]);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    agentRuntimeService.startSupervisor();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Supervisor tick failed'));
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the Core alive and retries after a transient automation scheduler failure', async () => {
+    vi.useFakeTimers();
+    const tick = vi.spyOn(routineService, 'tick')
+      .mockRejectedValueOnce(new Error('database temporarily unavailable'))
+      .mockResolvedValue(undefined);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    routineService.startScheduler();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Scheduler tick failed'));
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(tick).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledOnce();
   });
 
   it('blocks unattended work at the configured provider usage cap but permits a manual wake', async () => {

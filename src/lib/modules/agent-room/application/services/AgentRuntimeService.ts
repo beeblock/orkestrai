@@ -206,6 +206,8 @@ export class AgentRuntimeService {
           await this.sleep(workspace.id, node.id, 'idle').catch(() => undefined);
         }
       }
+    } catch {
+      console.error('[agent-runtime] Supervisor tick failed; the next scheduled tick will retry.');
     } finally {
       this.ticking = false;
     }

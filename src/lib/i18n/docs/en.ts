@@ -925,6 +925,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   "title": "Orkestrai 0.29.0: Persistent agents, visible browser workflows, and reusable tools",
   "summary": "Watch an agent work in your signed-in browser",
   "items": [
+    "Background schedulers wait for database migrations on first launch and retry transient database failures without crashing the Core.",
     "RPM installers no longer claim shared build-id paths that conflict with other Electron applications. Linux release validation checks the generated RPM before upload.",
     "Updated the transitive Joi and js-yaml parsers to patched compatible versions; the dependency security audit is clean.",
     "Settings now includes Autonomy & 24/7 Core with background execution, optional start at sign-in, live uptime, process status, automatic recovery count, and a guarded restart command.",

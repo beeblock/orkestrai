@@ -5,6 +5,7 @@
 import { createSvelarApp } from '@beeblock/svelar/hooks';
 import { DatabaseSessionStore } from '@beeblock/svelar/session';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
+import { building } from '$app/environment';
 
 // Import app.ts to trigger database + hashing + auth configuration
 import { auth } from './app.js';
@@ -12,6 +13,7 @@ import { routineService } from '$lib/modules/agent-room/application/services/Rou
 import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
+import { afterDatabaseReady } from '$lib/modules/agent-room/infrastructure/background-startup.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
 const globalRef = globalThis as unknown as {
@@ -26,13 +28,17 @@ globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
   const workspace = await workspaceRepository.getWorkspace(workspaceId);
   return Boolean(workspace && !workspace.suspendedAt);
 };
-if (!globalRef.__orkestraiRoutineScheduler) {
-  globalRef.__orkestraiRoutineScheduler = true;
-  routineService.startScheduler();
-}
-if (!globalRef.__orkestraiAgentRuntimeSupervisor) {
-  globalRef.__orkestraiAgentRuntimeSupervisor = true;
-  agentRuntimeService.startSupervisor();
+if (!building) {
+  void afterDatabaseReady(() => {
+    if (!globalRef.__orkestraiRoutineScheduler) {
+      routineService.startScheduler();
+      globalRef.__orkestraiRoutineScheduler = true;
+    }
+    if (!globalRef.__orkestraiAgentRuntimeSupervisor) {
+      agentRuntimeService.startSupervisor();
+      globalRef.__orkestraiAgentRuntimeSupervisor = true;
+    }
+  }).catch(() => console.error('[agent-runtime] Background services failed to start.'));
 }
 
 const svelar = createSvelarApp({

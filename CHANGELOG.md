@@ -63,6 +63,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Background schedulers wait for database migrations on first launch and retry
+  transient database failures without crashing the Core.
 - RPM packages no longer ship `/usr/lib/.build-id` symlinks that conflict with
   other Electron applications on Fedora/RHEL. Linux release validation checks
   the generated RPM file list before upload.

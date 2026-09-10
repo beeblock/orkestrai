@@ -212,6 +212,7 @@
       "src/lib/modules/agent-room/infrastructure/pty/**",
       "src/lib/modules/agent-room/infrastructure/voice/**",
       "src/lib/modules/agent-room/infrastructure/agent-path.ts",
+      "src/lib/modules/agent-room/infrastructure/background-startup.ts",
       "src/lib/modules/agent-room/infrastructure/codex-mcp-config.ts",
       "src/lib/modules/agent-room/infrastructure/WslRuntime.ts",
       "src/lib/modules/agent-room/domain/runtime.ts",

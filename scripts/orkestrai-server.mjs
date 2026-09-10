@@ -14,6 +14,7 @@ import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { installOrkestraiShim, writeOrkestraiRuntimeFile } from './install-orkestrai-shim.mjs';
+import { holdBackgroundStartup } from '../src/lib/modules/agent-room/infrastructure/background-startup.ts';
 
 // App Electron aberto pelo Finder recebe um PATH minimo do macOS; sem os
 // locais comuns de CLIs a deteccao e o spawn dos agentes falham com ENOENT.
@@ -156,6 +157,7 @@ markPrivateChildEnv(
   'ORKESTRAI_PTY_MODULE',
 );
 
+const releaseBackgroundStartup = holdBackgroundStartup();
 const { handler } = await import('../build/handler.js');
 
 // Migrações no boot: em userData novo (primeira execucao empacotada) o banco
@@ -173,6 +175,7 @@ const { handler } = await import('../build/handler.js');
   const { Migrator } = await import('@beeblock/svelar/database');
   await new Migrator().run(migrations);
 }
+releaseBackgroundStartup();
 
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
