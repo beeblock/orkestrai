@@ -14,3 +14,11 @@ description = "Historical documentation used an explicit placeholder API key."
 targetRules = ["curl-auth-header"]
 regexTarget = "line"
 regexes = ['''sk_your_key_here''']
+
+[[allowlists]]
+description = "Synthetic SecretRef handle in MCP contract tests, not a credential."
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^tests/unit/mcp-server\.test\.ts$''']
+regexTarget = "match"
+regexes = ['''secretref:0123456789abcdef''']
