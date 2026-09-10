@@ -293,6 +293,7 @@ export class AutonomyPolicyService {
 
   async decide(request: AutonomyOperation): Promise<AutonomyDecision> {
     const policy = await this.get(request.workspaceId);
+    if (policy.policy.halted) return { status: 'denied', reason: 'Workspace automation is halted by the user.', policy };
     if (!policy.enabled) {
       return { status: 'allowed', reason: 'Autonomy policy is disabled; existing interactive behavior is preserved.', policy };
     }
@@ -461,6 +462,7 @@ export class AutonomyPolicyService {
     retryAt: Date | null;
   }> {
     const policy = await this.get(workspaceId);
+    if (policy.policy.halted) return { allowed: false, reason: 'disabled', retryAt: null };
     if (!policy.enabled) return { allowed: true, reason: 'disabled', retryAt: null };
     if (triggerType === 'manual') return { allowed: true, reason: 'manual', retryAt: null };
 
@@ -488,6 +490,14 @@ export class AutonomyPolicyService {
     return this.appendAudit({ ...request, certainty: 'inferred' }, eventType, policy.revision, metadata);
   }
 
+  async recordSemanticEffect(
+    request: Omit<AutonomyOperation, 'certainty'>,
+    metadata: Record<string, unknown> = {},
+  ): Promise<AutonomyAuditRecord> {
+    const policy = await this.get(request.workspaceId);
+    return this.appendAudit({ ...request, certainty: 'semantic' }, 'completed', policy.revision, metadata);
+  }
+
   async verifyAudit(workspaceId: string): Promise<{ valid: boolean; checked: number; brokenAt: string | null }> {
     const rows = await AgentAutonomyAuditEvent.query().where('workspace_id', workspaceId).orderBy('created_at', 'asc').get();
     let previousHash: string | null = null;
@@ -507,7 +517,8 @@ export class AutonomyPolicyService {
   async emergencyStop(workspaceId: string, actorId = 'workspace-owner'): Promise<{ cancelled: number }> {
     const policy = await this.get(workspaceId);
     await AgentAutonomyPolicy.query().where('id', policy.id).update({
-      enabled: false,
+      enabled: true,
+      policy_json: JSON.stringify({ ...policy.policy, halted: true }),
       revision: policy.revision + 1,
       updated_at: new Date(),
     });
@@ -635,6 +646,10 @@ export class AutonomyPolicyService {
       target: request.target,
       input: request.input,
       risk,
+      actorType: request.actorType,
+      actorId: request.actorId ?? null,
+      runId: request.runId ?? null,
+      stepId: request.stepId ?? null,
       policyRevision: policy.revision,
     });
     const previous = await AgentApprovalGate.query()
@@ -642,7 +657,8 @@ export class AutonomyPolicyService {
       .where('request_digest', requestDigest)
       .orderBy('created_at', 'desc')
       .first();
-    if (previous && String(previous.getAttribute('status')) === 'approved') {
+    if (previous && String(previous.getAttribute('status')) === 'approved'
+      && new Date(previous.getAttribute('expires_at') as string).getTime() > Date.now()) {
       return { status: 'allowed', reason: 'The matching high-risk operation was approved.', policy };
     }
     if (previous && String(previous.getAttribute('status')) === 'pending') {
@@ -717,7 +733,8 @@ export class AutonomyPolicyService {
         policy_revision: policyRevision,
         input_digest: operation.input === undefined ? null : digest(operation.input),
         output_digest: output === undefined ? null : digest(output),
-        metadata_json: JSON.stringify(redactAutonomyValue(metadata)),
+        metadata_json: JSON.stringify(redactAutonomyValue({ operation: operation.operation, ...metadata,
+          ...(operation.operation.startsWith('portal:') ? { action: operation.input } : {}) })),
         previous_hash: previousHash,
         created_at: now,
       };

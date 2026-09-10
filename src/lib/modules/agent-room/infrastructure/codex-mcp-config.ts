@@ -87,6 +87,7 @@ export function codexMcpOverrideArgs(launch: CodexMcpLaunch): string[] {
   return [
     '-c', `mcp_servers.orkestrai.command=${JSON.stringify(launch.command)}`,
     '-c', `mcp_servers.orkestrai.args=[${args}]`,
+    '-c', 'mcp_servers.orkestrai.env_vars=["ORKESTRAI_NODE_ID", "ORKESTRAI_AGENT_TITLE", "ORKESTRAI_AGENT_TOKEN", "ORKESTRAI_WORKSPACE_CONFIG", "ORKESTRAI_API_URL", "ORKESTRAI_RUNTIME_FILE"]',
     ...(launch.electronRuntime
       ? ['-c', 'mcp_servers.orkestrai.env={ ELECTRON_RUN_AS_NODE = "1" }']
       : []),

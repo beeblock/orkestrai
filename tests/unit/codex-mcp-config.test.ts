@@ -66,6 +66,11 @@ describe('configuracao MCP do Codex', () => {
     expect(args).toContain('mcp_servers.orkestrai.command="C:\\\\Program Files\\\\Orkestrai\\\\Orkestrai.exe"');
     expect(args).toContain('mcp_servers.orkestrai.env={ ELECTRON_RUN_AS_NODE = "1" }');
     expect(args).toContain(`mcp_servers.figma.url="${FIGMA_MCP_URL}"`);
+    const forwarded = args.find((arg) => arg.startsWith('mcp_servers.orkestrai.env_vars='))!;
+    const config = parse(forwarded) as any;
+    expect(config.mcp_servers.orkestrai.env_vars).toContain('ORKESTRAI_AGENT_TOKEN');
+    expect(config.mcp_servers.orkestrai.env_vars).toContain('ORKESTRAI_NODE_ID');
+    expect(config.mcp_servers.orkestrai.env_vars).not.toContain('OPENAI_API_KEY');
   });
 
   it('resolve o launcher dentro da distribuicao WSL sem reutilizar caminhos Windows', () => {

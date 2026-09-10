@@ -111,7 +111,7 @@ export const TOURS_PT: Tour[] = [
       { id: 'profile', title: 'Escolha o perímetro permanente', body: 'Abra a engrenagem, escolha se o perfil pertence ao workspace ou somente a este Portal, permita os hosts exatos e mantenha downloads dentro do workspace.' },
       { id: 'login', title: 'Conclua a autenticação pessoalmente', body: 'Faça login no Portal visível. Cookies e senhas permanecem no perfil protegido do Electron e nunca são enviados a um agente.' },
       { id: 'snapshot', title: 'Use referências semânticas', body: 'Conecte um agente e peça portal_snapshot antes de clicar, digitar, selecionar, enviar ou baixar arquivo, esperar, extrair ou capturar. Referências substituem coordenadas e seletores frágeis.' },
-      { id: 'automation', title: 'Agende pelo Core', body: 'Abra Automações, escolha Navegador gerenciado, este Portal e uma operação tipada. A execução durável continua com o Canvas fechado e registra o resultado no Control Center.' },
+      { id: 'automation', title: 'Agende pelo Core', body: "Crie um Portal com nome, abra o site desejado e faça login manualmente. Na engrenagem conceda Ler e interagir a um agente e mantenha o segundo plano desabilitado. Em Automações > Segurança ative o modo Delimitado, autorize o host e as categorias de risco necessárias, mantendo envios e ações destrutivas sob gates. Atribua uma tarefa para ler a página, preencher um campo não sensível e preparar um relatório sem enviá-lo. Acompanhe as mudanças na mesma página. Confira o envio pendente em Segurança > Gates, aprove e retome a mesma execução da ferramenta ou aguarde a automação. Expanda Auditoria e Oficina > Execuções para conferir as etapas concluídas. Pause o Portal para testar a revogação. Habilite o segundo plano apenas quando desejar, usando auditoria e histórico para acompanhar." },
     ],
   },
   {
@@ -154,6 +154,18 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'visible-browser-worker',
+    icon: 'GlobeLock',
+    title: "Acompanhar um agente no navegador já autenticado",
+    tagline: "Um único Portal visível, com permissões e gates explícitos.",
+    steps: [
+      { id: 'portal', title: "Faça login dentro do Portal", body: "Use um Portal existente ou crie um aqui. Abra o site e faça login manualmente. O agente vai operar essa mesma página dentro do Canvas, não uma janela separada de navegador.", action: { kind: 'createPortal', title: "Teste de navegador visível", url: 'https://example.com' }, check: { kind: 'nodeExists', nodeType: 'portal', titleIncludes: "Teste de navegador visível" } },
+      { id: 'security', title: "Autorize um agente", body: "Nas configurações do Portal, escolha Ler e interagir e selecione o agente autorizado. Deixe o segundo plano desabilitado. Em Automações > Segurança, ative o modo Delimitado e permita o host e as capacidades necessárias. Mantenha envios sensíveis e ações destrutivas sob gates.", action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'task', title: "Atribua uma tarefa delimitada", body: "Crie uma tarefa no Kanban para ler a página, preencher um campo não sensível e preparar um relatório sem enviá-lo. Acompanhe as mudanças no Portal. Para reutilizar a sequência, crie uma ferramenta de navegador com alvos exatos e etapas delimitadas." },
+      { id: 'audit', title: "Revise e retome", body: "Revise ações pendentes em Segurança > Gates. Após aprovar, retome a mesma execução; etapas concluídas não são repetidas. Expanda Auditoria e Oficina > Execuções para conferir o registro. Pause o Portal para interromper o controle pelo agente." },
+    ],
+  },
+  {
     id: 'workspace-tool-workshop',
     icon: 'Wrench',
     title: 'Crie uma ferramenta reutilizável do workspace',
@@ -163,7 +175,7 @@ export const TOURS_PT: Tour[] = [
       { id: 'draft', title: 'Defina um contrato limitado', body: 'Crie um rascunho a partir de HTTP, uma integração conectada, uma transformação determinística ou um comando do workspace. Declare schemas JSON de entrada e saída, limites, fixtures e somente as capacidades necessárias.' },
       { id: 'secrets', title: 'Referencie credenciais com segurança', body: 'Crie uma SecretRef em Segurança e vincule-a ao Tool Workshop, à operação exata da ferramenta e ao destino. Coloque apenas essa referência opaca no manifesto; a credencial bruta nunca entra na ferramenta, no prompt, no histórico ou nos arquivos do workspace.' },
       { id: 'test', title: 'Valide antes de ativar', body: 'Carregue uma fixture e rode um teste seco sobre o rascunho atual. Revise manifesto, limite de saída, timeout e histórico de revisões antes de publicar.' },
-      { id: 'publish', title: 'Publique uma revisão imutável', body: 'Somente o dono do workspace publica. Agentes podem propor rascunhos posteriores, enquanto automações continuam usando a última revisão aprovada até uma nova publicação. Rollback cria outro rascunho revisável.' },
+      { id: 'publish', title: 'Publique uma revisão imutável', body: "Manifestos declaram schemaVersion, executor, inputSchema, outputSchema, capabilities, secretRefs, timeoutMs, maxOutputBytes e fixtures. Executores: browser, transform, http, integration e workspace_command. Etapas de navegador usam {action, target: {role, name}, args}; o alvo deve corresponder a exatamente um elemento de um snapshot novo. Templates resolvem campos de entrada e etapas anteriores. Dry run valida estrutura e entrada sem produzir efeitos externos; não é um teste real do endpoint. Execute fixtures controladas antes de habilitar efeitos autônomos. Revisões salvas são imutáveis, a revisão publicada continua ativa quando surgem rascunhos, e rollback cria outro rascunho. Publicação automática exige a concessão explícita descrita acima; comandos sempre exigem revisão pelo usuário. SecretRefs vinculam-se a tool:<slug>, integração tool e destino exato. Retome execuções pendentes com a mesma chave de idempotência; efeitos interrompidos de resultado desconhecido exigem inspeção antes de nova execução." },
       { id: 'automate', title: 'Use sem confirmações repetidas', body: 'Escolha Ferramenta como ação de Automação ou permita que um agente com tarefa atribuída chame tool_execute com chave de idempotência estável. A política permanente cobre o trabalho rotineiro; Central de Controle, histórico, gates e Auditoria preservam a rastreabilidade.' },
     ],
   },

@@ -1,5 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
-import { FormRequest } from '@beeblock/svelar/forms';
+import { FormRequest, FormValidationError } from '@beeblock/svelar/forms';
 import { z } from 'zod';
 import {
   autonomyAuditQuerySchema,
@@ -10,11 +10,16 @@ import {
 import { autonomyPolicyService } from '../../../application/services/AutonomyPolicyService.js';
 import { secretRefService, secretStorageKey } from '../../../application/services/SecretRefService.js';
 
-function requestOf(schema: z.ZodTypeAny) {
+function requestOf(schema: z.AnyZodObject, itemKey?: 'gateId') {
+  const route = { id: z.string().uuid(), ...(itemKey ? { [itemKey]: z.string().uuid() } : {}) };
   return class extends FormRequest {
-    rules() { return schema; }
+    rules() { return schema.extend(route); }
     authorize(): boolean { return true; }
-    passedValidation(data: unknown) { return schema.parse(data); }
+    passedValidation(data: Record<string, unknown>) {
+      const body = { ...data };
+      for (const key of Object.keys(route)) delete body[key];
+      return schema.parse(body);
+    }
   };
 }
 
@@ -50,7 +55,7 @@ export class AutonomyPolicyController extends Controller {
 
   async resolveGate(event: any) {
     try {
-      const input = await (requestOf(autonomyGateResolutionSchema)).validate(event);
+      const input = await (requestOf(autonomyGateResolutionSchema, 'gateId')).validate(event);
       return this.json({
         data: await autonomyPolicyService.resolveGate(
           event.params.id,
@@ -113,6 +118,7 @@ export class AutonomyPolicyController extends Controller {
   }
 
   private errorResponse(error: unknown) {
+    if (error instanceof FormValidationError) return error.toResponse();
     return this.json({ error: error instanceof Error ? error.message : 'Autonomy request failed.' }, 400);
   }
 }

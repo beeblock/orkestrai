@@ -7,7 +7,7 @@
  * node-pty) precisam estar rebuildados para o ABI do Electron
  * (npm run electron:rebuild).
  */
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerMonitor, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, View, clipboard, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerMonitor, safeStorage, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -25,7 +25,7 @@ const {
   normalizeCorePreferences,
   shouldKeepCoreRunning,
 } = require('./core-runtime-policy.cjs');
-const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse, shouldOpenPortalInCanvas } = require('./portal-policy.cjs');
+const { PORTAL_PARTITION, isAllowedPortalUrl, portalWindowOpenResponse } = require('./portal-policy.cjs');
 
 const isDev = !app.isPackaged;
 const appRoot = path.resolve(__dirname, '..');
@@ -103,24 +103,20 @@ function configurePortalSession() {
 function configurePortalContents(contents) {
   if (configuredPortalContents.has(contents)) return;
   configuredPortalContents.add(contents);
-  contents.setWindowOpenHandler(({ url, disposition }) => {
-    if (shouldOpenPortalInCanvas(url, disposition)) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedPortalUrl(url) && url !== 'about:blank') {
       mainWindow?.webContents.send('orkestrai:portal-open-request', {
         sourceWebContentsId: contents.id,
         url,
       });
       return { action: 'deny' };
     }
-    return portalWindowOpenResponse(url, MENU_COPY[menuLocale].portalWindow);
+    return portalWindowOpenResponse(url);
   });
   contents.on('will-navigate', (event, url) => {
     if (!isAllowedPortalUrl(url)) event.preventDefault();
   });
   contents.on('did-finish-load', schedulePortalStorageFlush);
-  contents.on('did-create-window', (childWindow) => {
-    childWindow.setTitle(MENU_COPY[menuLocale].portalWindow);
-    configurePortalContents(childWindow.webContents);
-  });
 }
 
 function parseCollaborationInvite(candidate) {
@@ -566,13 +562,16 @@ async function startServer(port) {
   const requestingServer = serverProcess;
   serverProcess.on('message', (message) => {
     if (!message?.requestId) return;
-    if (message.type === 'orkestrai:portal:execute') {
-      void managedPortalExecutor?.execute(message).then((result) => {
+    if (message.type === 'orkestrai:portal:execute' || message.type === 'orkestrai:portal:inspect') {
+      const operation = message.type === 'orkestrai:portal:inspect'
+        ? managedPortalExecutor.inspect(message).then((result) => ({ ok: true, result }))
+        : managedPortalExecutor.execute(message);
+      void operation.then((result) => {
         requestingServer?.send?.({ type: 'orkestrai:portal:result', requestId: message.requestId, result });
       }).catch((error) => {
         requestingServer?.send?.({
           type: 'orkestrai:portal:result', requestId: message.requestId,
-          result: { ok: false, error: String(error?.message ?? error).slice(0, 2_000) },
+          result: { ok: false, error: 'Portal page or element is unavailable. Take another snapshot.' },
         });
       });
       return;
@@ -1028,6 +1027,46 @@ ipcMain.handle('orkestrai:update-install', () => {
 
 ipcMain.handle('orkestrai:app-version', () => app.getVersion());
 
+async function portalSurfaceRequest(event, input) {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('Portal surface requires the trusted app window.');
+  for (const id of [input?.workspaceId, input?.nodeId]) if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid Portal identity.');
+  const root = `http://127.0.0.1:${serverPort}/api/agent-room/workspaces/${input.workspaceId}`;
+  const get = async (url) => { const response = await fetch(url); if (!response.ok) throw new Error('Portal workspace is unavailable.'); return (await response.json()).data; };
+  const workspace = await get(root);
+  const nodes = await get(root + '/nodes');
+  const node = nodes.find((candidate) => candidate.id === input.nodeId && candidate.type === 'portal');
+  if (!node) throw new Error('Portal does not belong to this workspace.');
+  const payload = node.payload || {};
+  return { workspaceId: input.workspaceId, nodeId: input.nodeId, workspaceRoot: workspace.workingDir,
+    requestId: crypto.randomUUID(), timeoutMs: 30000, action: 'snapshot', args: {},
+    initialUrl: payload.url || 'about:blank', initialTabs: payload.portalTabs, initialActiveTabId: payload.portalActiveTabId,
+    profile: { profileId: payload.portalProfileId || 'default', profileScope: payload.portalProfileScope || 'workspace',
+      allowedHosts: Array.isArray(payload.portalAllowedHosts) ? payload.portalAllowedHosts : [],
+      downloadDirectory: payload.portalDownloadDirectory || '.orkestrai/downloads',
+      paused: payload.portalPaused === true, allowBackground: payload.portalAllowBackground === true } };
+}
+
+ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
+  if (['attach', 'detach'].includes(input?.method) && (typeof input.lease !== 'string' || !/^[0-9a-f-]{36}$/i.test(input.lease))) throw new Error('Invalid Portal surface lease.');
+  const request = await portalSurfaceRequest(event, input);
+  if (input.method === 'attach') return managedPortalExecutor.surface(request, mainWindow, input.lease);
+  if (input.method === 'detach') return managedPortalExecutor.detach(request.workspaceId, request.nodeId, input.lease);
+  if (!['navigate', 'inspectScript', 'capture', 'state', 'close', 'activate', 'pause', 'resume'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
+  if (JSON.stringify(input.args || {}).length > 500000) throw new Error('Portal surface input is too large.');
+  return managedPortalExecutor.userCommand(request, input.method, input.args || {});
+});
+
+ipcMain.on('orkestrai:portal-layout', (event, input) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return;
+  const geometry = input?.geometry;
+  if (!geometry || typeof geometry.visible !== 'boolean' || !Number.isFinite(geometry.zoom) || geometry.zoom < 0.1 || geometry.zoom > 5) return;
+  for (const rect of [geometry.bounds, geometry.clip]) {
+    if (!rect || !['x', 'y', 'width', 'height'].every((key) => Number.isInteger(rect[key]) && Math.abs(rect[key]) < 100000)) return;
+    if (rect.width < 0 || rect.height < 0) return;
+  }
+  managedPortalExecutor?.setGeometry(input.workspaceId, input.nodeId, geometry, input.lease);
+});
+
 ipcMain.handle('orkestrai:automation-secret-status', (_event, key) => {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
   return { available: safeStorage.isEncryptionAvailable(), stored: Boolean(readAutomationSecret(key)) };
@@ -1259,7 +1298,12 @@ if (!gotLock) {
       callback(own && permission === 'media');
     });
     configurePortalSession();
-    managedPortalExecutor = createManagedPortalExecutor({ BrowserWindow, session, diagnostics });
+    managedPortalExecutor = createManagedPortalExecutor({ WebContentsView, View, session, diagnostics,
+      onOpenRequest: (request) => mainWindow?.webContents.send('orkestrai:portal-open-request', request),
+      onState: (workspaceId, nodeId, state) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('orkestrai:portal-state', { workspaceId, nodeId, state });
+      },
+    });
     buildApplicationMenu();
     createTray();
     const initialInvite = findCollaborationInvite(process.argv);

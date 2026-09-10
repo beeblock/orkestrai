@@ -1,21 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { managedPortalPartition, isAllowedPortalUrl } = require('./portal-policy.cjs');
+const { managedPortalPartition, isAllowedPortalUrl, shouldOpenPortalInCanvas, publicPortalUrl } = require('./portal-policy.cjs');
 
 const MAX_RESULT_CHARS = 500_000;
-const SNAPSHOT_SCRIPT = `(() => {
-  const interactive = new Set(['A','BUTTON','INPUT','SELECT','TEXTAREA','SUMMARY']);
-  const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
-  const candidates = [...document.querySelectorAll('a,button,input,select,textarea,summary,[role],[contenteditable="true"],[tabindex]')].filter(visible).slice(0, 5000);
-  return candidates.map((el, index) => {
-    const ref = 'e' + (index + 1); el.setAttribute('data-orkestrai-ref', ref);
-    const rect = el.getBoundingClientRect();
-    const role = el.getAttribute('role') || ({A:'link',BUTTON:'button',INPUT:'textbox',SELECT:'combobox',TEXTAREA:'textbox'}[el.tagName] || (interactive.has(el.tagName) ? el.tagName.toLowerCase() : 'generic'));
-    const name = (el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') || el.innerText || el.value || '').trim().replace(/\\s+/g,' ').slice(0,500);
-    return { ref, role, name, tag: el.tagName.toLowerCase(), disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true', value: String(el.value || '').slice(0,1000), rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } };
-  });
-})()`;
+const { INIT_SCRIPT, SNAPSHOT_SCRIPT } = require('./portal-dom.cjs');
+const WORLD = 734;
 
 function publicError(error) {
   return String(error?.message ?? error).replace(/[\r\n]+/g, ' ').slice(0, 2000) || 'Managed browser command failed.';
@@ -27,22 +17,75 @@ function bounded(value) {
   return { truncated: true, content: serialized.slice(0, MAX_RESULT_CHARS) };
 }
 
-function refSelector(ref) {
-  if (!/^e\d{1,6}$/.test(String(ref))) throw new Error('Invalid semantic element reference.');
-  return `[data-orkestrai-ref="${ref}"]`;
-}
-
-function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
+function createManagedPortalExecutor({ WebContentsView, View, session, diagnostics, onState, onOpenRequest }) {
   const sessions = new Map();
+  const queues = new Map();
+  const opening = new Map();
+
+  function dispose(managed) {
+    managed.visible = false;
+    managed.clip.setVisible(false);
+    if (managed.parent && !managed.parent.isDestroyed()) managed.parent.contentView.removeChildView(managed.clip);
+    managed.parent = null;
+    managed.cleanup?.();
+    for (const tab of [...managed.tabs.values()]) if (!tab.window.isDestroyed()) tab.window.destroy();
+    sessions.delete(managed.key);
+  }
+
+  function world(tab, expression) {
+    return tab.window.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: `${INIT_SCRIPT}; ${expression}` }], true);
+  }
+
+  function layout(managed) {
+    if (!managed.parent || !managed.geometry || !managed.visible) { managed.clip.setVisible(false); return; }
+    const { bounds, clip, zoom } = managed.geometry;
+    managed.clip.setBounds(clip);
+    const tab = managed.tabs.get(managed.activeTabId);
+    if (!tab) return;
+    const contentBounds = { x: bounds.x - clip.x, y: bounds.y - clip.y, width: bounds.width, height: bounds.height };
+    const boundsKey = JSON.stringify(contentBounds);
+    if (tab.boundsKey !== boundsKey) { tab.view.setBounds(contentBounds); tab.boundsKey = boundsKey; }
+    if (tab.zoomFactor !== zoom) { tab.window.webContents.setZoomFactor(zoom); tab.zoomFactor = zoom; }
+    for (const candidate of managed.tabs.values()) {
+      const visible = candidate === tab;
+      if (candidate.presented !== visible) { candidate.view.setVisible(visible); candidate.presented = visible; }
+    }
+    managed.clip.setVisible(true);
+  }
 
   function configureContents(contents, managed, tabId) {
-    contents.setWindowOpenHandler(({ url }) => {
-      if (isAllowedPortalUrl(url)) void createTab(managed, url, true);
-      return { action: 'deny' };
+    contents.setWindowOpenHandler(({ url, disposition, referrer, postBody }) => {
+      if (url !== 'about:blank' && !hostAllowed(url, managed.profile.allowedHosts, contents.getURL())) return { action: 'deny' };
+      if (onOpenRequest && managed.parent && managed.visible && shouldOpenPortalInCanvas(url, disposition)) {
+        onOpenRequest({ sourceWebContentsId:contents.id,url }); return { action:'deny' };
+      }
+      if (managed.tabs.size >= 20) return { action: 'deny' };
+      // Adopt Electron's guest: replacing it breaks window.opener and popup bootstrap.
+      return { action:'allow', createWindow:(options) => {
+        const tab = createNativeTab(managed, true, undefined, options.webPreferences, options.webContents);
+        setImmediate(() => {
+          if (tab.window.isDestroyed()) return;
+          // Link-driven opens may not supply a pre-created guest or initiate navigation.
+          if (!options.webContents && url !== 'about:blank') {
+            void tab.window.webContents.loadURL(url, {
+              httpReferrer: referrer,
+              ...(postBody ? { postData: postBody.data, extraHeaders: `content-type: ${postBody.contentType}${postBody.boundary ? `; boundary=${postBody.boundary}` : ''}` } : {}),
+            }).catch(() => undefined);
+          }
+          layout(managed); onState?.(managed.workspaceId, managed.nodeId, state(managed));
+        });
+        return tab.window.webContents;
+      } };
     });
     contents.on('will-navigate', (event, url) => {
       if (!isAllowedPortalUrl(url) || !hostAllowed(url, managed.profile.allowedHosts, contents.getURL())) event.preventDefault();
     });
+    contents.on('will-redirect', (event, url) => {
+      if (!hostAllowed(url, managed.profile.allowedHosts, contents.getURL())) event.preventDefault();
+    });
+    for (const event of ['did-navigate', 'did-navigate-in-page', 'did-finish-load', 'page-title-updated']) {
+      contents.on(event, () => onState?.(managed.workspaceId, managed.nodeId, state(managed)));
+    }
     contents.on('did-navigate', (_event, url) => {
       const tab = managed.tabs.get(tabId);
       if (tab) tab.url = url;
@@ -64,44 +107,72 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
 
   async function load(tab, url, timeoutMs) {
     if (!hostAllowed(url, tab.managed.profile.allowedHosts, tab.window.webContents.getURL())) throw new Error('Navigation host is not allowed by this Portal.');
-    await Promise.race([
+    let timer;
+    try { await Promise.race([
       tab.window.loadURL(url),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Portal navigation timed out.')), timeoutMs)),
-    ]);
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Portal navigation timed out.')), timeoutMs); }),
+    ]); } finally { clearTimeout(timer); }
     tab.url = tab.window.webContents.getURL();
     tab.title = tab.window.webContents.getTitle();
   }
 
-  async function createTab(managed, url, activate, persistedId) {
+  function createNativeTab(managed, activate, persistedId, preferences = {}, webContents) {
     const tabId = persistedId && !managed.tabs.has(persistedId) ? persistedId : crypto.randomUUID();
-    const window = new BrowserWindow({
-      show: false, width: 1440, height: 1000, backgroundColor: '#ffffff',
+    if (managed.tabs.size >= 20) throw new Error('Portal tab limit reached.');
+    const view = new WebContentsView({
+      ...(webContents ? { webContents } : {}),
       webPreferences: {
+        ...preferences,
         partition: managed.partition, nodeIntegration: false, nodeIntegrationInSubFrames: false,
         contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false,
+        backgroundThrottling: false,
       },
     });
-    const tab = { id: tabId, managed, window, url: 'about:blank', title: '' };
+    const contents = view.webContents;
+    const window = { webContents: contents, loadURL: (url) => contents.loadURL(url),
+      isDestroyed: () => contents.isDestroyed(), destroy: () => contents.close() };
+    view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
+    view.setVisible(false); managed.clip.addChildView(view);
+    const tab = { id: tabId, managed, window, view, url: 'about:blank', title: '' };
     managed.tabs.set(tabId, tab);
     configureContents(window.webContents, managed, tabId);
-    window.on('closed', () => managed.tabs.delete(tabId));
+    contents.on('destroyed', () => {
+      managed.tabs.delete(tabId);
+      managed.clip.removeChildView(view);
+      if (managed.activeTabId === tabId) managed.activeTabId = managed.tabs.keys().next().value;
+      if (managed.parent) { layout(managed); onState?.(managed.workspaceId,managed.nodeId,state(managed)); }
+    });
     if (activate || !managed.activeTabId) managed.activeTabId = tabId;
-    if (url && url !== 'about:blank') await load(tab, url, 30_000);
     return tab;
   }
 
-  async function getManaged(request) {
+  async function createTab(managed, url, activate, persistedId) {
+    const tab = createNativeTab(managed, activate, persistedId);
+    // A failed load still leaves an inspectable page that the user can retry.
+    if (url && url !== 'about:blank') await load(tab, url, 30_000).catch(() => { tab.url = url; });
+    return tab;
+  }
+
+  async function getManagedNow(request) {
     const key = `${request.workspaceId}:${request.nodeId}:${request.profile.profileScope}:${request.profile.profileId}`;
     let managed = sessions.get(key);
     if (!managed) {
+      for (const old of sessions.values()) {
+        if (old.workspaceId === request.workspaceId && old.nodeId === request.nodeId) dispose(old);
+      }
       const partition = managedPortalPartition(request.workspaceId, request.nodeId, request.profile.profileId, request.profile.profileScope);
-      managed = { key, partition, profile: request.profile, tabs: new Map(), activeTabId: null };
+      managed = { key, partition, workspaceId: request.workspaceId, nodeId: request.nodeId,
+        profile: request.profile, tabs: new Map(), activeTabId: null,
+        clip: new View(), parent: null, geometry: null, visible: false };
       sessions.set(key, managed);
       const portalSession = session.fromPartition(partition);
-      portalSession.cookies.on('changed', () => {
+      portalSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+      const flushCookies = () => {
         void portalSession.flushStorageData();
         void Promise.resolve(portalSession.cookies.flushStore()).catch(() => undefined);
-      });
+      };
+      portalSession.cookies.on('changed', flushCookies);
+      managed.cleanup = () => portalSession.cookies.removeListener('changed', flushCookies);
       const restorableTabs = Array.isArray(request.initialTabs)
         ? request.initialTabs
             .filter((tab) => tab && typeof tab.id === 'string' && isAllowedPortalUrl(tab.url))
@@ -115,7 +186,7 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
           diagnostics?.write?.('warn', 'managed-portal', 'Could not restore a Portal tab.', {
             nodeId: request.nodeId,
             tabId: persisted.id,
-            error: publicError(error),
+            error: 'Portal tab could not be restored.',
           });
         }
       }
@@ -127,6 +198,14 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
     return managed;
   }
 
+  async function getManaged(request) {
+    const key = `${request.workspaceId}:${request.nodeId}`;
+    if (opening.has(key)) await opening.get(key);
+    const promise = getManagedNow(request);
+    opening.set(key, promise);
+    try { return await promise; } finally { if (opening.get(key) === promise) opening.delete(key); }
+  }
+
   function activeTab(managed) {
     const tab = managed.tabs.get(managed.activeTabId);
     if (!tab || tab.window.isDestroyed()) throw new Error('The active Portal tab is unavailable.');
@@ -136,23 +215,24 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
   function state(managed) {
     const tab = managed.tabs.get(managed.activeTabId);
     return {
-      url: tab?.window.webContents.getURL() || tab?.url || 'about:blank',
+      url: publicPortalUrl(tab?.window.webContents.getURL() || tab?.url || 'about:blank'),
+      webContentsId: tab?.window.webContents.id,
+      visible: !!managed.parent?.isVisible() && managed.visible,
+      paused: managed.pauseLocked || managed.profile.paused,
       title: tab?.window.webContents.getTitle() || tab?.title || '',
       activeTabId: managed.activeTabId,
       tabs: [...managed.tabs.values()].filter((item) => !item.window.isDestroyed()).map((item) => ({
-        id: item.id, url: item.window.webContents.getURL() || item.url, title: item.window.webContents.getTitle() || item.title,
+        id: item.id, url: publicPortalUrl(item.window.webContents.getURL() || item.url), title: item.window.webContents.getTitle() || item.title,
       })),
     };
   }
 
   async function ensureSnapshot(tab) {
-    return tab.window.webContents.executeJavaScript(SNAPSHOT_SCRIPT, true);
+    return world(tab, 'globalThis.__orkestraiControlledPortal.snapshot()');
   }
 
   async function withRef(tab, ref, expression) {
-    await ensureSnapshot(tab);
-    const selector = JSON.stringify(refSelector(ref));
-    return tab.window.webContents.executeJavaScript(`(() => { const el = document.querySelector(${selector}); if (!el) throw new Error('Element reference is stale; take a new snapshot.'); ${expression} })()`, true);
+    return world(tab, `(() => { const el = globalThis.__orkestraiControlledPortal.resolve(${JSON.stringify(ref)}); ${expression} })()`);
   }
 
   async function waitFor(tab, args, timeoutMs) {
@@ -163,7 +243,7 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (args.urlIncludes && tab.window.webContents.getURL().includes(args.urlIncludes)) return { matched: 'url' };
-      const matched = await tab.window.webContents.executeJavaScript(`(() => ({ ref: ${args.ref ? `!!document.querySelector(${JSON.stringify(refSelector(args.ref))})` : 'false'}, text: ${args.text ? `document.body?.innerText?.includes(${JSON.stringify(args.text)})` : 'false'} }))()`, true);
+      const matched = await world(tab, `(() => ({ ref: ${args.ref ? `!!globalThis.__orkestraiControlledPortal.resolve(${JSON.stringify(args.ref)})` : 'false'}, text: ${args.text ? `globalThis.__orkestraiControlledPortal.extract({kind:'text'}).includes(${JSON.stringify(args.text)})` : 'false'} }))()`).catch(() => ({}));
       if ((args.ref && matched.ref) || (args.text && matched.text)) return { matched: args.ref ? 'ref' : 'text' };
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
@@ -173,12 +253,14 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
   async function execute(request) {
     try {
       const managed = await getManaged(request);
+      if (managed.profile.paused || managed.pauseLocked) throw new Error('Portal control is paused by the user.');
+      if (!managed.profile.allowBackground && (!managed.parent?.isVisible() || !managed.visible)) throw new Error('Open this Portal or explicitly enable background control.');
       let tab = activeTab(managed);
       let result;
       switch (request.action) {
         case 'navigate':
           await load(tab, String(request.args.url), request.timeoutMs);
-          result = { navigated: tab.window.webContents.getURL() };
+          result = { navigated: publicPortalUrl(tab.window.webContents.getURL()) };
           break;
         case 'tabs': {
           const operation = request.args.operation;
@@ -197,74 +279,159 @@ function createManagedPortalExecutor({ BrowserWindow, session, diagnostics }) {
           result = state(managed).tabs;
           break;
         }
-        case 'snapshot': result = { url: tab.window.webContents.getURL(), title: tab.window.webContents.getTitle(), elements: await ensureSnapshot(tab) }; break;
-        case 'click': result = await withRef(tab, request.args.ref, `el.scrollIntoView({block:'center',inline:'center'}); el.click(); return { clicked: true };`); break;
+        case 'snapshot': result = { url: publicPortalUrl(tab.window.webContents.getURL()), title: tab.window.webContents.getTitle(), elements: await ensureSnapshot(tab) }; break;
+        case 'click': result = await world(tab, `globalThis.__orkestraiControlledPortal.act(${JSON.stringify(request.args.ref)}, 'click', {})`); break;
         case 'type': {
-          result = await withRef(tab, request.args.ref, `el.focus(); if (${request.args.clear !== false}) el.value = ''; const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set; if (setter) setter.call(el, ${JSON.stringify(String(request.args.text))}); else el.textContent = ${JSON.stringify(String(request.args.text))}; el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:${JSON.stringify(String(request.args.text))}})); el.dispatchEvent(new Event('change',{bubbles:true})); return { typed: true };`);
+          result = await world(tab, `globalThis.__orkestraiControlledPortal.act(${JSON.stringify(request.args.ref)}, 'type', ${JSON.stringify(request.args)})`);
           if (request.args.submit) tab.window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'ENTER' }), tab.window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'ENTER' });
           break;
         }
-        case 'select': result = await withRef(tab, request.args.ref, `const values = ${JSON.stringify(request.args.values)}; for (const option of el.options || []) option.selected = values.includes(option.value); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return { selected: values };`); break;
+        case 'select': result = await world(tab, `globalThis.__orkestraiControlledPortal.act(${JSON.stringify(request.args.ref)}, 'select', ${JSON.stringify(request.args)})`); break;
         case 'upload': {
-          await ensureSnapshot(tab);
-          const selector = refSelector(request.args.ref);
+          const marker = crypto.randomUUID();
+          await withRef(tab, request.args.ref, `if (el.type !== 'file') throw new Error('Not a file input'); el.setAttribute('data-orkestrai-upload', ${JSON.stringify(marker)});`);
+          const selector = `[data-orkestrai-upload="${marker}"]`;
           const dbg = tab.window.webContents.debugger;
-          if (!dbg.isAttached()) dbg.attach('1.3');
+          const owned = !dbg.isAttached();
+          if (owned) dbg.attach('1.3');
+          try {
           const { root } = await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
           const { nodeId } = await dbg.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector });
           if (!nodeId) throw new Error('Upload element reference is stale.');
           await dbg.sendCommand('DOM.setFileInputFiles', { nodeId, files: request.args.paths });
+          } finally {
+            await world(tab, `document.querySelector(${JSON.stringify(selector)})?.removeAttribute('data-orkestrai-upload')`).catch(() => {});
+            if (owned && dbg.isAttached()) dbg.detach();
+          }
           result = { uploaded: request.args.paths.map((file) => path.basename(file)) };
           break;
         }
         case 'download': {
           const directory = String(request.args.downloadDirectory);
           fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-          result = await new Promise(async (resolve, reject) => {
+          result = await new Promise((resolve, reject) => {
             const portalSession = tab.window.webContents.session;
-            const timer = setTimeout(() => { portalSession.removeListener('will-download', listener); reject(new Error('Download did not start.')); }, request.timeoutMs);
-            const listener = (_event, item) => {
-              clearTimeout(timer);
+            let activeItem;
+            const timer = setTimeout(() => { portalSession.removeListener('will-download', listener); activeItem?.cancel(); reject(new Error('Portal download timed out.')); }, request.timeoutMs);
+            const listener = (_event, item, source) => {
+              if (source?.id !== tab.window.webContents.id) return;
+              if (activeItem) { item.cancel(); return; }
+              activeItem = item;
               const safeName = path.basename(String(request.args.filename || item.getFilename())).slice(0, 255);
               const savePath = path.join(directory, safeName);
+              if (!safeName || ['.', '..'].includes(safeName) || fs.existsSync(savePath)) {
+                item.cancel(); clearTimeout(timer); portalSession.removeListener('will-download', listener);
+                reject(new Error('Portal download cannot overwrite an existing file.')); return;
+              }
               item.setSavePath(savePath);
-              item.once('done', (_doneEvent, status) => status === 'completed' ? resolve({ path: savePath, status }) : reject(new Error(`Download ${status}.`)));
+              item.once('done', (_doneEvent, status) => {
+                clearTimeout(timer); portalSession.removeListener('will-download', listener);
+                status === 'completed' ? resolve({ path: savePath, status }) : reject(new Error(`Download ${status}.`));
+              });
             };
-            portalSession.once('will-download', listener);
-            try { await withRef(tab, request.args.ref, `el.click(); return true;`); } catch (error) { clearTimeout(timer); portalSession.removeListener('will-download', listener); reject(error); }
+            portalSession.on('will-download', listener);
+            void withRef(tab, request.args.ref, `el.click(); return true;`).catch((error) => { clearTimeout(timer); portalSession.removeListener('will-download', listener); activeItem?.cancel(); reject(error); });
           });
           break;
         }
         case 'wait': result = await waitFor(tab, request.args, request.timeoutMs); break;
         case 'screenshot': {
+          await world(tab, 'globalThis.__orkestraiControlledPortal.mask(true)');
+          try {
+          // Hidden pages need capture requests to advance the compositor. Discard these
+          // frames until the mask has painted; never return a pre-mask frame to an agent.
+          let painted = false;
+          let paintError;
+          void world(tab, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+            .then(() => { painted = true; }, (error) => { paintError = error; });
+          const deadline = Date.now() + Math.min(request.timeoutMs, 5000);
+          while (!painted && !paintError && Date.now() < deadline) {
+            // Newly hidden surfaces can report UnknownVizError until their first frame.
+            await tab.window.webContents.capturePage().catch(() => undefined);
+            await new Promise((resolve) => setTimeout(resolve, 16));
+          }
+          if (!painted) throw new Error('Portal protected capture could not confirm a rendered frame.');
           const image = await tab.window.webContents.capturePage();
           const dataUrl = image.toDataURL();
           if (dataUrl.length > 28_000_000) throw new Error('Portal screenshot exceeds the 20 MB capture limit.');
           result = { dataUrl, width: image.getSize().width, height: image.getSize().height };
+          } finally { await world(tab, 'globalThis.__orkestraiControlledPortal.mask(false)').catch(() => {}); }
           break;
         }
         case 'extract': {
-          await ensureSnapshot(tab);
-          const selector = request.args.ref ? JSON.stringify(refSelector(request.args.ref)) : 'null';
-          result = await tab.window.webContents.executeJavaScript(`(() => { const root = ${selector} ? document.querySelector(${selector}) : document; if (!root) throw new Error('Element reference is stale.'); const kind = ${JSON.stringify(request.args.kind)}; if (kind === 'links') return [...root.querySelectorAll('a[href]')].slice(0,2000).map(a => ({ text:(a.innerText||'').trim().slice(0,500), href:a.href })); if (kind === 'table') return [...root.querySelectorAll('tr')].slice(0,5000).map(row => [...row.querySelectorAll('th,td')].map(cell => (cell.innerText||'').trim().slice(0,2000))); if (kind === 'attribute') return root.getAttribute(${JSON.stringify(request.args.attribute || '')}); return (root.innerText || root.textContent || '').slice(0,500000); })()`, true);
+          result = await world(tab, `globalThis.__orkestraiControlledPortal.extract(${JSON.stringify(request.args)})`);
           break;
         }
-        case 'dom': result = String(await tab.window.webContents.executeJavaScript('document.documentElement.outerHTML', true)).slice(0, 500_000); break;
+        case 'dom': result = await world(tab, 'globalThis.__orkestraiControlledPortal.safeDom()'); break;
+        case 'eval': throw new Error('Arbitrary scripts are disabled for managed agent control. Use typed Portal tools.');
         default: throw new Error('Unsupported managed Portal action.');
       }
-      return { ok: true, result: bounded(result), state: state(managed) };
+      layout(managed);
+      onState?.(managed.workspaceId, managed.nodeId, state(managed));
+      return { ok: true, result: request.action === 'screenshot' ? result : bounded(result), state: state(managed) };
     } catch (error) {
-      diagnostics?.write?.('error', 'managed-portal', publicError(error), { action: request.action, nodeId: request.nodeId });
-      return { ok: false, error: publicError(error) };
+      return { ok: false, error: /^Portal |^Open this Portal|^Protected |^Navigation host|^Arbitrary /.test(error.message || '') ? publicError(error) : 'Portal action could not be confirmed.' };
     }
   }
 
-  function closeAll() {
-    for (const managed of sessions.values()) for (const tab of managed.tabs.values()) if (!tab.window.isDestroyed()) tab.window.destroy();
-    sessions.clear();
+  async function surface(request, parent, lease) {
+    const managed = await getManaged(request);
+    managed.lease = lease;
+    if (managed.parent !== parent) {
+      managed.parent?.contentView.removeChildView(managed.clip);
+      managed.parent = parent; parent.contentView.addChildView(managed.clip);
+      parent.once('closed', () => { if (managed.parent === parent) { managed.parent = null; managed.visible = false; } });
+    }
+    layout(managed); return state(managed);
   }
 
-  return { execute, closeAll };
+  function setGeometry(workspaceId, nodeId, geometry, lease) {
+    for (const managed of sessions.values()) if (managed.workspaceId === workspaceId && managed.nodeId === nodeId && managed.lease === lease) {
+      managed.geometry = geometry; managed.visible = geometry.visible; layout(managed);
+    }
+  }
+
+  function detach(workspaceId, nodeId, lease) {
+    for (const managed of sessions.values()) if (managed.workspaceId === workspaceId && managed.nodeId === nodeId && managed.lease === lease) {
+      managed.visible = false; layout(managed);
+      managed.parent?.contentView.removeChildView(managed.clip); managed.parent = null;
+    }
+  }
+
+  async function inspect(request) {
+    const managed = await getManaged(request); const tab = activeTab(managed);
+    return { ...state(managed), element: request.args.ref ? await world(tab, `globalThis.__orkestraiControlledPortal.inspect(${JSON.stringify(request.args.ref)})`) : null };
+  }
+
+  async function userCommand(request, method, args) {
+    const managed = await getManaged(request); const tab = activeTab(managed);
+    if (method === 'navigate') { await load(tab, args.url, 30000); return state(managed); }
+    if (method === 'inspectScript') return tab.window.webContents.executeJavaScript(String(args.code), true);
+    if (method === 'capture') return (await tab.window.webContents.capturePage(args.rect)).toDataURL();
+    if (method === 'state') return state(managed);
+    if (method === 'pause' || method === 'resume') { managed.pauseLocked = method === 'pause'; return state(managed); }
+    if (method === 'activate') {
+      if (!managed.tabs.has(args.tabId)) throw new Error('Portal tab not found.');
+      managed.activeTabId = args.tabId; layout(managed); return state(managed);
+    }
+    if (method === 'close') {
+      dispose(managed); return null;
+    }
+    throw new Error('Unsupported Portal surface operation.');
+  }
+
+  async function queuedExecute(request) {
+    const key = `${request.workspaceId}:${request.nodeId}`;
+    const next = (queues.get(key) || Promise.resolve()).catch(() => {}).then(() => execute(request));
+    queues.set(key, next);
+    try { return await next; } finally { if (queues.get(key) === next) queues.delete(key); }
+  }
+
+  function closeAll() {
+    for (const managed of [...sessions.values()]) dispose(managed);
+  }
+
+  return { execute: queuedExecute, inspect, surface, setGeometry, detach, userCommand, closeAll };
 }
 
 module.exports = { createManagedPortalExecutor, SNAPSHOT_SCRIPT };

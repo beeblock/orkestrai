@@ -107,7 +107,7 @@ export const TOURS_ES: Tour[] = [
       { id: 'profile', title: 'Elige el perímetro permanente', body: 'Abre el engranaje, elige si el perfil pertenece al workspace o solo a este Portal, permite los hosts exactos y conserva las descargas dentro del workspace.' },
       { id: 'login', title: 'Completa la autenticación tú mismo', body: 'Inicia sesión en el Portal visible. Cookies y contraseñas permanecen en el perfil protegido de Electron y nunca se envían a un agente.' },
       { id: 'snapshot', title: 'Usa referencias semánticas', body: 'Conecta un agente y pídele portal_snapshot antes de hacer clic, escribir, seleccionar, enviar o descargar, esperar, extraer o capturar. Las referencias reemplazan coordenadas y selectores frágiles.' },
-      { id: 'automation', title: 'Prográmalo mediante el Core', body: 'Abre Automatizaciones, elige Navegador administrado, este Portal y una operación tipada. La ejecución duradera sigue con el Canvas cerrado y registra el resultado en Control Center.' },
+      { id: 'automation', title: 'Prográmalo mediante el Core', body: "Crea un Portal con nombre, abre el sitio e inicia sesión manualmente. En el engranaje concede Leer e interactuar a un agente y mantén desactivado el segundo plano. En Automatizaciones > Seguridad activa Delimitado, autoriza el host y las categorías necesarias y conserva aprobación para envíos o acciones destructivas. Asigna una tarea para leer la página, rellenar un campo no sensible y preparar un informe sin enviarlo. Observa los cambios en la misma página. Revisa el envío pendiente en Seguridad > Controles, apruébalo y reanuda la misma ejecución o espera a la automatización. Expande Auditoría y Taller > Ejecuciones para consultar los pasos completados. Pausa el Portal para probar la revocación. Habilita el segundo plano solo cuando lo desees y sigue el historial y la auditoría." },
     ],
   },
   {
@@ -150,6 +150,18 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'visible-browser-worker',
+    icon: 'GlobeLock',
+    title: "Observar un agente en tu navegador autenticado",
+    tagline: "Un único Portal visible, con permisos y controles explícitos.",
+    steps: [
+      { id: 'portal', title: "Inicia sesión dentro del Portal", body: "Usa un Portal existente o crea uno aquí. Abre el sitio e inicia sesión manualmente. El agente operará esta misma página dentro del Canvas, no una ventana separada del navegador.", action: { kind: 'createPortal', title: "Prueba de navegador visible", url: 'https://example.com' }, check: { kind: 'nodeExists', nodeType: 'portal', titleIncludes: "Prueba de navegador visible" } },
+      { id: 'security', title: "Autoriza a un agente", body: "En la configuración del Portal, elige Leer e interactuar y selecciona al agente autorizado. Mantén desactivado el segundo plano. En Automatizaciones > Seguridad, activa Delimitado y permite el host y las capacidades necesarias. Conserva controles para envíos sensibles y acciones destructivas.", action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'task', title: "Asigna una tarea delimitada", body: "Crea una tarea Kanban para leer la página, rellenar un campo no sensible y preparar un informe sin enviarlo. Observa los cambios en el Portal. Para reutilizar la secuencia, crea una herramienta de navegador con destinos exactos y pasos delimitados." },
+      { id: 'audit', title: "Revisa y reanuda", body: "Revisa acciones pendientes en Seguridad > Controles. Tras aprobar, reanuda la misma ejecución; los pasos completados no se repiten. Expande Auditoría y Taller > Ejecuciones para consultar el registro. Pausa el Portal para detener el control del agente." },
+    ],
+  },
+  {
     id: 'workspace-tool-workshop',
     icon: 'Wrench',
     title: 'Crea una herramienta reutilizable del workspace',
@@ -159,7 +171,7 @@ export const TOURS_ES: Tour[] = [
       { id: 'draft', title: 'Define un contrato limitado', body: 'Crea un borrador desde HTTP, una integración conectada, una transformación determinista o un comando del workspace. Declara schemas JSON de entrada y salida, límites, fixtures y solo las capacidades necesarias.' },
       { id: 'secrets', title: 'Referencia credenciales con seguridad', body: 'Crea una SecretRef en Seguridad y vincúlala a Tool Workshop, a la operación exacta de la herramienta y al destino. Coloca solo esa referencia opaca en el manifiesto; la credencial nunca entra en la herramienta, el prompt, el historial ni los archivos del workspace.' },
       { id: 'test', title: 'Valida antes de activar', body: 'Carga una fixture y ejecuta una prueba seca sobre el borrador actual. Revisa manifiesto, límite de salida, timeout e historial de revisiones antes de publicar.' },
-      { id: 'publish', title: 'Publica una revisión inmutable', body: 'Solo el dueño del workspace publica. Los agentes pueden proponer borradores posteriores mientras las automatizaciones continúan usando la última revisión aprobada hasta una nueva publicación. Rollback crea otro borrador revisable.' },
+      { id: 'publish', title: 'Publica una revisión inmutable', body: "Los manifiestos declaran schemaVersion, executor, inputSchema, outputSchema, capabilities, secretRefs, timeoutMs, maxOutputBytes y fixtures. Ejecutores: browser, transform, http, integration y workspace_command. Los pasos de navegador usan {action, target: {role, name}, args}; el destino debe coincidir exactamente con un elemento de un snapshot nuevo. Las plantillas resuelven entradas y pasos anteriores. Dry run valida estructura y entrada sin efectos externos; no es una prueba real del endpoint. Ejecuta fixtures controlados antes de habilitar efectos autónomos. Las revisiones guardadas son inmutables, la publicada sigue activa al proponer borradores y rollback crea otro borrador. La publicación automática exige el permiso explícito descrito arriba; los comandos siempre requieren revisión del usuario. Las SecretRefs se vinculan a tool:<slug>, integración tool y destino exacto. Reanuda ejecuciones pendientes con la misma clave de idempotencia; un efecto interrumpido de resultado desconocido exige inspección antes de otra ejecución." },
       { id: 'automate', title: 'Úsala sin confirmaciones repetidas', body: 'Elige Herramienta como acción de Automatización o permite que un agente con tarea asignada llame tool_execute con una clave de idempotencia estable. La política permanente cubre el trabajo rutinario; Centro de Control, historial, gates y Auditoría conservan la trazabilidad.' },
     ],
   },

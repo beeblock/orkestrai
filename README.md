@@ -30,6 +30,9 @@ common credentials redacted; normal agent output is not persisted.
   work available in the system tray after closing every window, and optionally
   start it silently when you sign in. Settings shows live health and uptime,
   supports a guarded restart, and keeps **Quit Orkestrai** as the explicit stop.
+  Recurring schedules start new runs after earlier runs finish; the model does
+  not need to think continuously. Local work pauses during sleep or shutdown
+  and remains subject to valid logins, provider quotas, and pending approvals.
 - **Persistent agent runtimes:** leave existing agents interactive, let
   on-demand agents resume only for messages or durable automations, or ask the
   Core to supervise a persistent process. Each agent has idle, concurrency,
@@ -58,8 +61,10 @@ common credentials redacted; normal agent output is not persisted.
   without editing Orkestrai source. Compose approved Gmail, Slack, Telegram,
   WhatsApp, GitHub, webhook, HTTP, deterministic transform, or confined command
   operations; validate JSON contracts and fixtures, dry-run the draft, then
-  publish an immutable revision. Agents may propose later drafts but cannot
-  activate them. Automations and task-assigned agents execute only the approved
+  publish an immutable revision. Agents can activate bounded tools only through
+  an explicit standing publication grant; commands always require owner review.
+  Browser tools operate the same visible Portal, with background access opt-in.
+  Automations and task-assigned agents execute only the approved
   revision with idempotency, bounded runtime/output, destination-bound
   SecretRefs, redacted history, and the same security gates and audit trail.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser

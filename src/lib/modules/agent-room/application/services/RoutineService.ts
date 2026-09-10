@@ -954,6 +954,7 @@ export class RoutineService {
         input: jsonObject(serialized), idempotencyKey: `automation:${runId}:${toolId}`,
         dryRun: false, actor: { type: 'automation', id: routine.id }, automationRunId: runId,
       });
+      if (result.status !== 'succeeded') throw new Error(result.error || 'Workspace tool did not complete; inspect its run history before retrying.');
       return { detail: `Workspace tool completed: ${toolId}.`, toolId, toolRunId: result.id, result: result.output };
     }
     const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);

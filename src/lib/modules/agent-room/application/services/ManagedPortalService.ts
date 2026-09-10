@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { realpath, mkdir } from 'node:fs/promises';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { CanvasNodePayload } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { controlCenterService } from './ControlCenterService.js';
-import { portalService, type PortalCommandResult } from './PortalService.js';
+import type { PortalCommandResult } from './PortalService.js';
 import {
   portalProfileSchema,
   type ManagedPortalCommand,
@@ -11,7 +12,7 @@ import {
   type ManagedPortalExecutorResult,
   type PortalProfile,
 } from '../../contracts/schemas/managed-portal.schema.js';
-import { autonomyPolicyService } from './AutonomyPolicyService.js';
+import { autonomyPolicyService, type AutonomyOperation } from './AutonomyPolicyService.js';
 
 type PendingPortalRequest = {
   resolve: (result: ManagedPortalExecutorResult) => void;
@@ -45,6 +46,10 @@ export function portalProfileFromPayload(payload: CanvasNodePayload): PortalProf
     profileScope: values.portalProfileScope ?? 'workspace',
     allowedHosts: Array.isArray(values.portalAllowedHosts) ? values.portalAllowedHosts : [],
     downloadDirectory: values.portalDownloadDirectory ?? '.orkestrai/downloads',
+    control: values.portalControl ?? 'disabled',
+    agentIds: values.portalAgentIds ?? [],
+    paused: values.portalPaused ?? false,
+    allowBackground: values.portalAllowBackground ?? false,
   });
 }
 
@@ -72,8 +77,24 @@ export function confinePortalPath(workspaceRoot: string, candidate: string): str
   return absolute;
 }
 
-async function requestElectron(request: ManagedPortalExecutorRequest): Promise<ManagedPortalExecutorResult | null> {
-  if (runtime.__orkestraiExecutePortal) return runtime.__orkestraiExecutePortal(request);
+export async function preparePortalDirectory(root: string, candidate: string): Promise<string> {
+  const requested = confinePortalPath(root, candidate);
+  let ancestor = requested;
+  while (true) {
+    try { confinePortalPath(root, await realpath(ancestor)); break; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const parent = dirname(ancestor);
+      if (parent === ancestor) throw error;
+      ancestor = parent;
+    }
+  }
+  await mkdir(requested, { recursive: true });
+  return confinePortalPath(root, await realpath(requested));
+}
+
+async function requestElectron(request: ManagedPortalExecutorRequest, inspect = false): Promise<ManagedPortalExecutorResult | null> {
+  if (runtime.__orkestraiExecutePortal) return runtime.__orkestraiExecutePortal({ ...request, ...(inspect ? { inspect: true } : {}) } as ManagedPortalExecutorRequest);
   if (typeof process.send !== 'function') return null;
   return new Promise((resolveResult) => {
     const timer = setTimeout(() => {
@@ -82,7 +103,7 @@ async function requestElectron(request: ManagedPortalExecutorRequest): Promise<M
     }, request.timeoutMs + 2_000);
     timer.unref?.();
     pending.set(request.requestId, { resolve: resolveResult, timer });
-    process.send?.({ type: 'orkestrai:portal:execute', ...request });
+    process.send?.({ type: inspect ? 'orkestrai:portal:inspect' : 'orkestrai:portal:execute', ...request });
   });
 }
 
@@ -90,7 +111,7 @@ export class ManagedPortalService {
   async execute(
     workspaceId: string,
     command: ManagedPortalCommand,
-    context: { actorType?: 'agent' | 'automation' | 'user'; actorId?: string | null; runId?: string | null } = {},
+    context: { actorType?: 'agent' | 'automation' | 'user'; actorId?: string | null; runId?: string | null; stepId?: string | null } = {},
   ): Promise<PortalCommandResult> {
     const portal = await workspaceRepository.getNode(command.nodeId);
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
@@ -103,16 +124,15 @@ export class ManagedPortalService {
     const profile = portalProfileFromPayload(payload);
     if (command.action === 'navigate') assertAllowedPortalUrl(String(command.args.url), profile.allowedHosts, initialUrl);
     if (command.action === 'tabs' && command.args.operation === 'new') assertAllowedPortalUrl(String(command.args.url), profile.allowedHosts, initialUrl);
-    if (command.action === 'eval') {
-      if (payloadValues.portalAllowScripts !== true) throw new Error('Arbitrary Portal scripts are disabled. Enable the privileged setting on this Portal first.');
-      return this.executeVisible(portal.id, command);
+    const args: Record<string, unknown> = { ...command.args };
+    const root = await realpath(workspace.workingDir);
+    if (command.action === 'upload') args.paths = await Promise.all(command.args.paths.map(async (path) => {
+      const actual = await realpath(confinePortalPath(root, path)); confinePortalPath(root, actual); return actual;
+    }));
+    if (command.action === 'download') {
+      const directory = confinePortalPath(root, profile.downloadDirectory);
+      args.downloadDirectory = directory;
     }
-
-    const args = command.action === 'upload'
-      ? { ...command.args, paths: command.args.paths.map((path) => confinePortalPath(workspace.workingDir, path)) }
-      : command.action === 'download'
-        ? { ...command.args, downloadDirectory: confinePortalPath(workspace.workingDir, profile.downloadDirectory) }
-        : command.args;
     const request: ManagedPortalExecutorRequest = {
       requestId: randomUUID(), workspaceId, workspaceRoot: workspace.workingDir, nodeId: portal.id,
       profile,
@@ -137,35 +157,71 @@ export class ManagedPortalService {
         ? String(command.args.url)
         : null;
     const readOnly = ['snapshot', 'extract', 'screenshot', 'dom'].includes(command.action)
-      || (command.action === 'tabs' && command.args.operation === 'list');
-    const result = await autonomyPolicyService.execute({
+      || command.action === 'wait' || (command.action === 'tabs' && command.args.operation === 'list');
+    const actorId = context.actorId ?? command.from ?? null;
+    const { ref: _ref, ...semanticArgs } = command.args as Record<string, unknown>;
+    const requestDigest = createHash('sha256').update(JSON.stringify(semanticArgs)).digest('hex');
+    const operation: AutonomyOperation = {
       workspaceId,
       runId: context.runId ?? null,
+      stepId: context.stepId ?? null,
       capability: 'browser',
-      operation: 'portal:' + command.action,
+      operation: 'portal:authorize:' + command.action,
       target: portal.id,
-      mutation: !readOnly,
+      mutation: false,
       actorType: context.actorType ?? (command.from ? 'agent' : 'user'),
-      actorId: context.actorId ?? command.from ?? null,
-      input: command.args,
+      actorId,
+      input: { action: command.action, requestDigest, taskId: command.taskId ?? null },
+      auditOutput: (value) => ({ confirmed: (value as PortalCommandResult)?.ok === true, action: command.action }),
       certainty: 'semantic',
-      ...(navigationUrl ? { network: { url: navigationUrl, method: 'GET' } } : {}),
-    }, async () => {
+      ...(navigationUrl || /^https?:/.test(initialUrl) ? { network: { url: navigationUrl || initialUrl, method: 'GET' } } : {}),
+    };
+    const result = await autonomyPolicyService.execute(operation, async () => {
+      if (command.action === 'eval') throw new Error('Arbitrary agent scripts cannot operate authenticated Portals. Use typed Portal tools.');
+      if (profile.paused) throw new Error('Portal control is paused by the user.');
+      if (profile.control === 'disabled' || (!readOnly && profile.control !== 'interact')) throw new Error('This action is outside the Portal control grant.');
+      if (context.actorType === 'agent' && (!actorId || !profile.agentIds.includes(actorId))) throw new Error('This agent has not been granted access to the Portal.');
+      const policy = await autonomyPolicyService.get(workspaceId);
+      if (!readOnly && (!policy.enabled || policy.mode === 'observe')) throw new Error('Enable an enforcing autonomy policy before granting browser mutations.');
+      const inspection = await requestElectron(request, true);
+      const observed = inspection?.ok ? inspection.result as { url?: string; element?: { name?: string; tag?: string; href?: string; protected?: boolean } } : null;
+      const element = observed?.element;
+      if (element?.protected) throw new Error('Protected fields require the user to authenticate in the Portal.');
+      if (!inspection?.ok || !observed) throw new Error('Portal page is unavailable. Open the Portal and take another snapshot.');
+      const submits = command.action === 'type' && command.args.submit;
+      // A generic click cannot prove that the destination is non-destructive.
+      const risk = command.action === 'upload' ? 'external_publication'
+        : command.action === 'click' || submits ? (/send|publish|post|enviar|publicar/i.test(element?.name ?? '') ? 'external_publication'
+          : /delete|remove|excluir|apagar|eliminar/i.test(element?.name ?? '') ? 'bulk_destructive'
+            : /buy|pay|purchase|comprar|pagar/i.test(element?.name ?? '') ? 'purchase' : 'irreversible') : null;
+      return autonomyPolicyService.execute({ ...operation, operation: 'portal:' + command.action,
+        mutation: !readOnly, risk, input: { action: command.action, requestDigest, taskId: command.taskId ?? null,
+          element: element ? { name: element.name, tag: element.tag } : null,
+          pageDigest: createHash('sha256').update(JSON.stringify({ url: observed.url, element: observed.element })).digest('hex') },
+      }, async () => {
+      const latest = await workspaceRepository.getNode(portal.id);
+      const liveProfile = latest ? portalProfileFromPayload(latest.payload as CanvasNodePayload) : null;
+      if (!liveProfile || liveProfile.paused || liveProfile.control === 'disabled'
+        || (!readOnly && liveProfile.control !== 'interact')
+        || (context.actorType === 'agent' && !liveProfile.agentIds.includes(actorId!))) throw new Error('Portal access was revoked.');
+      request.profile = liveProfile;
+      if (command.action === 'download') {
+        args.downloadDirectory = await preparePortalDirectory(root, String(args.downloadDirectory));
+      }
       const managed = await requestElectron(request);
-      const commandResult = managed ?? await this.executeVisible(portal.id, command);
+      if (!managed) throw new Error('Managed Portal control requires the desktop Core.');
+      const commandResult = managed;
+      if (!commandResult.ok) throw new Error(commandResult.error || 'Portal action could not be confirmed.');
       if (managed?.state) {
         await workspaceRepository.updateNode(portal.id, { payload: {
-          ...payload,
+          ...(await workspaceRepository.getNode(portal.id))?.payload,
           ...(managed.state.url ? { url: managed.state.url } : {}),
           portalActiveTabId: managed.state.activeTabId,
           portalTabs: managed.state.tabs,
-          portalProfileId: profile.profileId,
-          portalProfileScope: profile.profileScope,
-          portalAllowedHosts: profile.allowedHosts,
-          portalDownloadDirectory: profile.downloadDirectory,
         } });
       }
       return { id: request.requestId, ...commandResult };
+      });
     });
     await controlCenterService.recordActivity({
       workspaceId, nodeId: portal.id, state: result.ok ? 'done' : 'error', action: `Portal ${command.action}`,
@@ -177,10 +233,6 @@ export class ManagedPortalService {
     return result;
   }
 
-  private async executeVisible(nodeId: string, command: ManagedPortalCommand): Promise<PortalCommandResult> {
-    const queued = portalService.enqueue(nodeId, command.action as 'navigate' | 'eval' | 'screenshot' | 'dom', command.args);
-    return portalService.waitResult(queued.id, command.timeoutMs);
-  }
 }
 
 export const managedPortalService = new ManagedPortalService();

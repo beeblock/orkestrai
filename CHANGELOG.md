@@ -5,10 +5,20 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.29.0 - 2026-09-10
 
 ### Added
 
+- The visible Portal and agent executor now share one native page, including
+  browser tabs and authenticated state. Per-agent read/interact grants, a
+  visible-first default, explicit background opt-in, and immediate pause are
+  available in the Portal settings.
+- Preauthorized agents can publish bounded browser, transform, HTTP, and
+  integration tools after fixture, capability, destination, and limit checks.
+  Workspace commands still require owner publication. Browser tool sequences
+  persist completed steps and resume gated runs with the same revision and key.
+- Security exposes expandable, live audit details and a latched emergency stop.
+  Webhook editors display the full local endpoint and its ingress boundary.
 - The local Orkestrai Core can now remain active in the system tray after every
   window closes, start silently when the user signs in, expose authenticated
   health metadata, and restart independently from the desktop window.
@@ -48,11 +58,29 @@ pt-BR, English, and Spanish translations.
   JSON input/output contracts, fixtures, dry runs, immutable publication,
   revision history, rollback, idempotent execution, durable Automation actions,
   Canvas and Workbench access, and MCP/CLI control. SecretRefs must be bound to
-  the exact tool operation and destination before publication; agents can
-  propose drafts but only the workspace owner can activate them.
+  the exact tool operation and destination before publication. The owner can
+  publish tools or explicitly authorize bounded automatic publication.
 
 ### Fixed
 
+- Tool Workshop forms keep independent identities when Canvas and side panels
+  are open together, and browser executors display their correct label.
+- Portal surfaces follow Canvas geometry changes without 100 ms polling,
+  repeated tab hiding, or unnecessary page zoom resets during movement.
+- Codex forwards the ephemeral terminal identity to its MCP process without
+  persisting credential values. Quick prompts use the confirmed-submit queue.
+- Corrected HTTP validation for saving autonomy policies, approving gates, and
+  creating SecretRefs when Svelar includes workspace and gate route parameters.
+- Portal popups adopt Electron's existing guest inside the Portal, preserving
+  their opener without creating a separate browser window. Unhosted popups
+  cannot fall back to an external window.
+- Protected browser fields are removed from semantic/DOM responses and masked
+  before capturing a newly rendered frame. Page scripts cannot replace the
+  isolated reference registry; stale references and arbitrary agent scripts
+  are rejected. Failed native operations produce failed audit events.
+- Approval matching includes the actor, run, step, and policy revision, and
+  secret echoes are redacted before inner executor audit events are recorded.
+- Disabling an autonomy policy no longer bypasses an active emergency stop.
 - The desktop supervisor now reconnects to the Core after an unexpected server
   exit or system resume without starting a second provider writer. Explicitly
   quitting Orkestrai still stops the Core and its child processes.

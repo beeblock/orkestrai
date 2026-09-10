@@ -42,6 +42,13 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   setTitlebarTheme: (theme) => ipcRenderer.invoke('orkestrai:titlebar-theme', theme),
   /** Estado e ciclo de vida do Core local que sustenta o modo 24/7. */
   coreStatus: () => ipcRenderer.invoke('orkestrai:core-status'),
+  portalSurface: (input) => ipcRenderer.invoke('orkestrai:portal-surface', input),
+  portalLayout: (input) => ipcRenderer.send('orkestrai:portal-layout', input),
+  onPortalState: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('orkestrai:portal-state', listener);
+    return () => ipcRenderer.removeListener('orkestrai:portal-state', listener);
+  },
   configureCore: (preferences) => ipcRenderer.invoke('orkestrai:core-configure', preferences),
   restartCore: () => ipcRenderer.invoke('orkestrai:core-restart'),
   /** Consome uma vez um convite E2EE recebido via orkestrai:// sem persisti-lo. */

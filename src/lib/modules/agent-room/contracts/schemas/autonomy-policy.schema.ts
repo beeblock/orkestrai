@@ -32,6 +32,14 @@ export const networkGrantSchema = z.object({
 }).strict();
 
 export const autonomyPolicyDocumentSchema = z.object({
+  halted: z.boolean().default(false),
+  toolPublication: z.object({
+    enabled: z.boolean().default(false),
+    agentIds: z.array(z.string().uuid()).max(100).default([]),
+    kinds: z.array(z.enum(['transform', 'browser', 'http', 'integration'])).max(4).default(['transform']),
+    maxTimeoutMs: z.number().int().min(100).max(300000).default(30000),
+    maxOutputBytes: z.number().int().min(1024).max(10485760).default(1048576),
+  }).strict().default({}),
   capabilities: z.array(autonomyCapabilitySchema).max(10).default(['agent', 'browser', 'filesystem', 'git', 'notification', 'task']),
   filesystem: z.array(filesystemGrantSchema).max(32).default([]),
   network: z.array(networkGrantSchema).max(32).default([]),

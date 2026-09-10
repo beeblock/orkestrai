@@ -1453,7 +1453,15 @@ export class BridgeController extends Controller {
       const input = managedPortalCommandSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       const portal = await bridgeService.resolvePortal(workspace.id, input.nodeId);
-      const result = await managedPortalService.execute(workspace.id, { ...input, nodeId: portal.id });
+      const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!actor) throw new Error('Portal control requires an authenticated active agent terminal.');
+      const readOnly = ['snapshot', 'extract', 'screenshot', 'dom', 'wait'].includes(input.action) || (input.action === 'tabs' && input.args.operation === 'list');
+      if (!readOnly) {
+        const tasks = (await taskBoardService.list(workspace.id)).filter((task) => task.assigneeNodeId === actor && task.status !== 'done' && (!input.taskId || task.id === input.taskId));
+        if (tasks.length !== 1) throw new Error('Portal mutations require an active assigned task; pass taskId when several are active.');
+        input.taskId = tasks[0].id;
+      }
+      const result = await managedPortalService.execute(workspace.id, { ...input, from: actor, nodeId: portal.id }, { actorType: 'agent', actorId: actor });
       return this.json({ data: result }, result.ok ? 200 : 400);
     } catch (error) {
       return this.errorResponse(error, 'Falha na automacao do portal.');

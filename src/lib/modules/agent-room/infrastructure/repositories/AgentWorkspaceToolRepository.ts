@@ -41,7 +41,8 @@ export type WorkspaceToolRunRecord = {
   automationRunId: string | null;
   idempotencyKey: string;
   requestDigest: string;
-  status: 'running' | 'succeeded' | 'failed' | 'dry_run';
+  status: 'running' | 'succeeded' | 'failed' | 'dry_run' | 'waiting_approval';
+  checkpoint?: { steps: unknown[] };
   input: Record<string, unknown>;
   output: unknown;
   outputDigest: string | null;
@@ -95,6 +96,7 @@ function mapRun(model: AgentWorkspaceToolRun): WorkspaceToolRunRecord {
     idempotencyKey: String(model.getAttribute('idempotency_key')),
     requestDigest: String(model.getAttribute('request_digest')),
     status: String(model.getAttribute('status')) as WorkspaceToolRunRecord['status'],
+    checkpoint: model.getAttribute('checkpoint_json') ? json(model.getAttribute('checkpoint_json')) as { steps: unknown[] } : { steps: [] },
     input: json(model.getAttribute('input_json')) as Record<string, unknown>,
     output: model.getAttribute('output_json') ? json(model.getAttribute('output_json')) : null,
     outputDigest: model.getAttribute('output_digest') ? String(model.getAttribute('output_digest')) : null,
@@ -161,10 +163,11 @@ export class AgentWorkspaceToolRepository {
     });
   }
 
-  async setStatus(workspaceId: string, id: string, status: WorkspaceToolRecord['status']): Promise<WorkspaceToolRecord> {
+  async setStatus(workspaceId: string, id: string, status: WorkspaceToolRecord['status'], expectedRevision?: number): Promise<WorkspaceToolRecord> {
     const current = await this.find(workspaceId, id);
     if (!current) throw new Error('Tool not found.');
-    const changed = await AgentWorkspaceTool.query().where('workspace_id', workspaceId).where('id', id).update({
+    if (expectedRevision !== undefined && current.currentRevision !== expectedRevision) throw new Error('Tool revision changed during publication.');
+    const changed = await AgentWorkspaceTool.query().where('workspace_id', workspaceId).where('id', id).where('current_revision', current.currentRevision).update({
       status,
       ...(status === 'published' ? { published_revision: current.currentRevision } : {}),
       updated_at: new Date(),
@@ -223,12 +226,20 @@ export class AgentWorkspaceToolRepository {
     }
   }
 
-  async finishRun(id: string, input: { status: 'succeeded' | 'failed' | 'dry_run'; output?: unknown; outputDigest?: string | null; error?: string | null; durationMs: number }): Promise<WorkspaceToolRunRecord> {
+  async checkpoint(id: string, steps: unknown[]): Promise<void> {
+    await AgentWorkspaceToolRun.query().where('id', id).where('status', 'running').update({ checkpoint_json: JSON.stringify({ steps }), updated_at: new Date() });
+  }
+
+  async claimWaitingRun(id: string): Promise<boolean> {
+    return Boolean(await AgentWorkspaceToolRun.query().where('id', id).where('status', 'waiting_approval').update({ status: 'running', error: null, finished_at: null, updated_at: new Date() }));
+  }
+
+  async finishRun(id: string, input: { status: 'succeeded' | 'failed' | 'dry_run' | 'waiting_approval'; output?: unknown; outputDigest?: string | null; error?: string | null; durationMs: number }): Promise<WorkspaceToolRunRecord> {
     const now = new Date();
     await AgentWorkspaceToolRun.query().where('id', id).update({
       status: input.status, output_json: input.output === undefined ? null : JSON.stringify(input.output),
       output_digest: input.outputDigest ?? null, error: input.error ?? null,
-      finished_at: now, duration_ms: input.durationMs, updated_at: now,
+      finished_at: input.status === 'waiting_approval' ? null : now, duration_ms: input.durationMs, updated_at: now,
     });
     const row = await AgentWorkspaceToolRun.find(id);
     if (!row) throw new Error('Tool run disappeared while completing.');

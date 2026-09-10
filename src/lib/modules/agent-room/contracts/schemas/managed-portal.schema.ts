@@ -11,12 +11,17 @@ export const portalProfileSchema = z.object({
   profileScope: z.enum(['private', 'workspace']).default('workspace'),
   allowedHosts: z.array(z.string().trim().min(1).max(253).toLowerCase()).max(64).default([]),
   downloadDirectory: safeRelativePathSchema.default('.orkestrai/downloads'),
+  control: z.enum(['disabled', 'read', 'interact']).default('disabled'),
+  agentIds: z.array(z.string().uuid()).max(100).default([]),
+  paused: z.boolean().default(false),
+  allowBackground: z.boolean().default(false),
 }).strict();
 
 const common = {
   token: z.string().trim().min(1).nullish(),
   nodeId: z.string().trim().min(1).max(128),
   from: z.string().trim().min(1).max(128).nullish(),
+  taskId: z.string().uuid().optional(),
   timeoutMs: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
 };
 
@@ -56,7 +61,7 @@ export type ManagedPortalExecutorRequest = {
   initialUrl: string;
   initialTabs?: Array<{ id: string; url: string; title?: string }>;
   initialActiveTabId?: string;
-  action: Exclude<ManagedPortalAction, 'eval'>;
+  action: ManagedPortalAction;
   args: Record<string, unknown>;
   timeoutMs: number;
 };

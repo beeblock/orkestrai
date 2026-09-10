@@ -17,6 +17,8 @@ import { floorService } from './FloorService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { codeGraphIndexService } from './CodeGraphIndexService.js';
 import { computerService } from './ComputerService.js';
+import { autonomyPolicyService } from './AutonomyPolicyService.js';
+import { portalProfileFromPayload } from './ManagedPortalService.js';
 import { workspaceGroupService } from './WorkspaceGroupService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
@@ -435,6 +437,8 @@ export class WorkspaceService {
     const existing = await workspaceRepository.getNode(dto.nodeId);
     if (!existing) throw new Error('No nao encontrado.');
     let changes = dto.changes;
+    const portalBefore = existing.type === 'portal' ? portalProfileFromPayload(existing.payload) : null;
+    const portalAfter = portalBefore && changes.payload ? portalProfileFromPayload(changes.payload) : null;
     if (existing.type === 'terminal' && changes.payload) {
       const payload = { ...(changes.payload as Record<string, unknown>) };
       const currentRuntime = (existing.payload as { executionRuntime?: unknown } | null)?.executionRuntime;
@@ -449,6 +453,10 @@ export class WorkspaceService {
     }
     const node = await workspaceRepository.updateNode(dto.nodeId, changes);
     if (!node) throw new Error('No nao encontrado.');
+    if (portalAfter && JSON.stringify(portalBefore) !== JSON.stringify(portalAfter)) {
+      await autonomyPolicyService.recordSemanticEffect({ workspaceId:node.workspaceId, capability:'browser', operation:'portal:grant_changed',
+        actorType:'user', target:node.id, input:{ before:portalBefore, after:portalAfter } }, { grant:portalAfter });
+    }
     if (existing.type === 'design' && typeof changes.title === 'string' && node.title !== existing.title) {
       await designDocumentService.renameDocument(node.workspaceId, node.id, changes.title);
     }

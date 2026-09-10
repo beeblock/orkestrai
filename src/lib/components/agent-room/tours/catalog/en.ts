@@ -107,7 +107,7 @@ export const TOURS_EN: Tour[] = [
       { id: 'profile', title: 'Choose the standing boundary', body: 'Open the gear, choose whether the profile belongs to the workspace or only this Portal, allow the exact destination hosts, and keep downloads inside the workspace.' },
       { id: 'login', title: 'Complete authentication yourself', body: 'Sign in in the visible Portal. Cookies and passwords stay in the protected Electron profile and are never sent to an agent.' },
       { id: 'snapshot', title: 'Use semantic references', body: 'Connect an agent and ask it to call portal_snapshot before click, type, select, upload, download, wait, extract, or screenshot. References replace brittle coordinates and raw selectors.' },
-      { id: 'automation', title: 'Schedule it through the Core', body: 'Open Automations, choose Managed browser, this Portal, and a typed operation. The durable run continues with the Canvas closed and records its result in Control Center.' },
+      { id: 'automation', title: 'Schedule it through the Core', body: "Create a named Portal, open the desired site, and log in manually. In the gear grant one agent Read and interact; keep background disabled. In Automations > Security enable Bounded mode, approve the needed host and risk categories, and keep sends or destructive operations gated. Assign a task asking the agent to read the page, fill a non-sensitive field, and prepare a report without sending it. Watch the same page change live. Inspect the pending send in Security > Gates, approve it, then retry the same tool run or let the waiting automation resume. Expand Audit and Tool Workshop > Runs to see the completed steps. Pause the Portal to test revocation. Enable background only when desired, with audit/history as the observable record." },
     ],
   },
   {
@@ -150,6 +150,18 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'visible-browser-worker',
+    icon: 'GlobeLock',
+    title: "Watch an agent work in your signed-in browser",
+    tagline: "One visible Portal, with explicit access and review gates.",
+    steps: [
+      { id: 'portal', title: "Sign in inside the Portal", body: "Use an existing Portal or create one here. Open your site and log in manually. The agent will operate this same page inside the Canvas, not a separate browser window.", action: { kind: 'createPortal', title: "Visible browser QA", url: 'https://example.com' }, check: { kind: 'nodeExists', nodeType: 'portal', titleIncludes: "Visible browser QA" } },
+      { id: 'security', title: "Grant one agent access", body: "In the Portal settings, choose Read and interact and select the authorized agent. Leave background control disabled. In Automations > Security, enable Bounded mode and allow the required host and capabilities. Keep sensitive sends and destructive actions gated.", action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' } },
+      { id: 'task', title: "Give the agent a bounded task", body: "Assign a Kanban task to read the page, fill a non-sensitive field, and prepare a report without sending it. Watch the changes in the Portal. To reuse this sequence, create a browser tool with exact targets and bounded steps." },
+      { id: 'audit', title: "Review and resume", body: "Review pending actions under Security > Gates. After approval, resume the same tool run; completed steps are not repeated. Expand Audit and Tool Workshop > Runs to inspect the record. Pause the Portal to stop its agent control." },
+    ],
+  },
+  {
     id: 'workspace-tool-workshop',
     icon: 'Wrench',
     title: 'Build a reusable workspace tool',
@@ -159,7 +171,7 @@ export const TOURS_EN: Tour[] = [
       { id: 'draft', title: 'Define a bounded contract', body: 'Create a draft from an HTTP request, a connected integration, a deterministic transform, or a workspace command. Declare JSON input/output schemas, limits, fixtures, and only the capabilities it needs.' },
       { id: 'secrets', title: 'Reference credentials safely', body: 'Create a SecretRef in Security and bind it to Tool Workshop, the exact tool operation, and its destination. Put only that opaque reference in the manifest; raw credentials never enter the tool, agent prompt, run record, or workspace files.' },
       { id: 'test', title: 'Validate before activation', body: 'Load a fixture and run a dry test against the current draft. Review the manifest, output limit, timeout, and revision history before publishing.' },
-      { id: 'publish', title: 'Publish an immutable revision', body: 'Only the workspace owner can publish. Agents may propose later drafts, while automations keep using the last approved revision until you publish again. Rollback creates a new reviewable draft.' },
+      { id: 'publish', title: 'Publish an immutable revision', body: "Tool manifests declare schemaVersion, executor, inputSchema, outputSchema, capabilities, secretRefs, timeoutMs, maxOutputBytes and fixtures. Executors are browser, transform, http, integration, and workspace_command. Browser steps use {action, target: {role, name}, args}; targets must match exactly one element in a fresh snapshot. Templates resolve declared input fields and previous steps. Dry run validates structure and input without performing external effects; it is not a live endpoint test. Run controlled fixtures before enabling unattended effects. A saved revision is immutable, the published revision stays active across later drafts, and rollback creates a new draft. Automatic publication requires the explicit standing grant described above; workspace commands always require owner review. SecretRefs bind to tool:<slug>, tool integration, and the exact destination. Resume waiting runs with the same idempotency key; unknown interrupted effects require inspection before a new run." },
       { id: 'automate', title: 'Use it without repeated prompts', body: 'Choose Tool as an Automation action or let a task-assigned agent call tool_execute with a stable idempotency key. Standing policy handles routine work; Control Center, run history, gates, and Audit retain traceability.' },
     ],
   },

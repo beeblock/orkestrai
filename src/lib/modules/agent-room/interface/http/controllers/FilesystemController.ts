@@ -278,7 +278,8 @@ export class FilesystemController extends Controller {
       }
       const sessionId = (node.payload as { sessionId?: string }).sessionId;
       if (!sessionId) throw new Error('O terminal não tem sessão PTY ativa.');
-      ptySessionManager.writeHumanInput(sessionId, String(body.data ?? ''));
+      if (body.submit === true) await ptySessionManager.writeWithConfirmedSubmit(sessionId, String(body.data ?? ''));
+      else ptySessionManager.writeHumanInput(sessionId, String(body.data ?? ''));
       return this.json({ data: { written: true } });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao escrever no terminal.');

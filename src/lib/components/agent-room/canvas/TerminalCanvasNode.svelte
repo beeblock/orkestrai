@@ -419,7 +419,7 @@
         'content-type': 'application/json',
         ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}),
       },
-      body: JSON.stringify({ data: `${text}\r` }),
+      body: JSON.stringify({ data: text, submit: true }),
     }).catch(() => {});
   }
 

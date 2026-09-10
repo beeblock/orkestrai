@@ -15,9 +15,11 @@ import {
 } from '../../infrastructure/repositories/AgentWorkspaceToolRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { TrustedIntegrationHttpClient } from '../../infrastructure/integrations/TrustedIntegrationHttpClient.js';
-import { autonomyPolicyService, redactAutonomyValue } from './AutonomyPolicyService.js';
+import { AutonomyGatePendingError, autonomyPolicyService, redactAutonomyValue } from './AutonomyPolicyService.js';
 import { integrationExecutionService } from './IntegrationExecutionService.js';
 import { secretRefService } from './SecretRefService.js';
+import { managedPortalService, portalProfileFromPayload } from './ManagedPortalService.js';
+import { managedPortalCommandSchema } from '../../contracts/schemas/managed-portal.schema.js';
 
 const SECRET_KEY = /(?:password|passwd|secret|token|authorization|cookie|api[-_]?key|credential)/i;
 
@@ -45,7 +47,7 @@ export function redactResolvedSecrets(value: unknown, secrets: string[], depth =
   if (Array.isArray(value)) return value.map((entry) => redactResolvedSecrets(entry, secrets, depth + 1));
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-    key,
+    redactString(key, secrets),
     redactResolvedSecrets(entry, secrets, depth + 1),
   ]));
 }
@@ -146,29 +148,85 @@ export class AgentWorkspaceToolService {
     const input = createWorkspaceToolSchema.parse(raw);
     assertNoEmbeddedSecrets(input.manifest);
     if (input.actor.type === 'agent' && input.nodeId && input.actor.id !== input.nodeId) throw new Error('Agents can only propose tools from their own node.');
-    return agentWorkspaceToolRepository.create({
+    const tool = await autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:create',
+      actorType: input.actor.type, actorId: input.actor.id, mutation: true, input: { manifestDigest: digest(input.manifest) },
+      auditOutput: (result) => ({ id: (result as WorkspaceToolRecord).id, revision: (result as WorkspaceToolRecord).currentRevision }),
+    }, () => agentWorkspaceToolRepository.create({
       workspaceId, nodeId: input.nodeId ?? null, name: input.name, slug: input.slug,
       description: input.description, manifest: input.manifest, createdBy: input.actor,
       changeSummary: input.changeSummary,
-    });
+    }));
+    return input.actor.type === 'agent' ? this.tryAutoPublish(tool, input.actor) : tool;
   }
 
   async update(workspaceId: string, id: string, raw: UpdateWorkspaceToolInput) {
     const input = updateWorkspaceToolSchema.parse(raw);
     assertNoEmbeddedSecrets(input.manifest);
-    return agentWorkspaceToolRepository.update({ workspaceId, id, name: input.name, description: input.description, manifest: input.manifest, actor: input.actor, changeSummary: input.changeSummary });
+    const tool = await autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:update', target: id,
+      actorType: input.actor.type, actorId: input.actor.id, mutation: true, input: { manifestDigest: digest(input.manifest) },
+      auditOutput: (result) => ({ revision: (result as WorkspaceToolRecord).currentRevision }),
+    }, () => agentWorkspaceToolRepository.update({ workspaceId, id, name: input.name, description: input.description, manifest: input.manifest, actor: input.actor, changeSummary: input.changeSummary }));
+    return input.actor.type === 'agent' ? this.tryAutoPublish(tool, input.actor) : tool;
   }
 
   async publish(workspaceId: string, id: string, actor: WorkspaceToolActor) {
     if (actor.type !== 'user') throw new Error('Only the workspace owner can publish a tool revision.');
     const tool = await this.find(workspaceId, id);
     await this.assertDependenciesReady(tool);
-    return agentWorkspaceToolRepository.setStatus(workspaceId, id, 'published');
+    return autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:publish', target: id,
+      actorType: 'user', actorId: actor.id, input: { revision: tool.currentRevision },
+    }, () => agentWorkspaceToolRepository.setStatus(workspaceId, id, 'published', tool.currentRevision));
+  }
+
+  private async tryAutoPublish(tool: WorkspaceToolRecord, actor: WorkspaceToolActor): Promise<WorkspaceToolRecord> {
+    const policy = await autonomyPolicyService.get(tool.workspaceId);
+    const grant = policy.policy.toolPublication;
+    if (!grant.enabled) return tool;
+    try {
+      return await autonomyPolicyService.execute({ workspaceId: tool.workspaceId, capability: 'tool', operation: 'tool:auto_publish', target: tool.id,
+        actorType: 'agent', actorId: actor.id, mutation: true, input: { revision: tool.currentRevision, kind: tool.manifest.executor.kind },
+        auditOutput: () => ({ publishedRevision: tool.currentRevision }),
+      }, async () => {
+        if (!policy.enabled || policy.mode !== 'bounded' || policy.policy.halted || !actor.id || !grant.agentIds.includes(actor.id)) throw new Error('Automatic publication is outside the standing grant.');
+        const executor = tool.manifest.executor;
+        if (executor.kind === 'workspace_command' || !grant.kinds.includes(executor.kind)) throw new Error('This executor requires owner publication.');
+        if (tool.manifest.timeoutMs > grant.maxTimeoutMs || tool.manifest.maxOutputBytes > grant.maxOutputBytes) throw new Error('Tool exceeds the automatic publication limits.');
+        if (tool.manifest.capabilities.some((capability) => !policy.policy.capabilities.includes(capability))) throw new Error('Tool expands the workspace capability grant.');
+        if (!tool.manifest.fixtures.length) throw new Error('Automatic publication requires fixtures.');
+        await this.assertDependenciesReady(tool);
+        if (executor.kind === 'browser') {
+          const node = await workspaceRepository.getNode(executor.nodeId);
+          const profile = node ? portalProfileFromPayload(node.payload as never) : null;
+          if (!profile || node?.workspaceId !== tool.workspaceId || !profile.agentIds.includes(actor.id) || profile.control === 'disabled' || profile.paused) throw new Error('Browser tool is outside the Portal grant.');
+          if (profile.control !== 'interact' && executor.steps.some((step) => !['snapshot', 'extract', 'screenshot', 'wait'].includes(step.action))) throw new Error('Browser mutations exceed the Portal grant.');
+        }
+        if (executor.kind === 'http') {
+          const url = new URL(executor.urlTemplate.replace(/\{\{[^}]+\}\}/g, 'fixture'));
+          if (/[{}]/.test(new URL(executor.urlTemplate).host)) throw new Error('The tool destination must be literal.');
+          const decision = await autonomyPolicyService.decide({ workspaceId: tool.workspaceId, capability: 'network', operation: `tool:${tool.slug}`,
+            actorType: 'agent', actorId: actor.id, network: { url: url.toString(), method: executor.method }, mutation: !['GET', 'HEAD'].includes(executor.method),
+            risk: ['GET', 'HEAD'].includes(executor.method) ? null : 'external_publication' });
+          if (decision.status !== 'allowed') throw new Error('The endpoint or operation requires approval.');
+        }
+        for (const fixture of tool.manifest.fixtures) {
+          validateValue(tool.manifest.inputSchema, fixture.input);
+          if (executor.kind === 'transform') validateValue(tool.manifest.outputSchema, new ToolExecutionService().transform(fixture.input, executor.operations));
+        }
+        const currentPolicy = await autonomyPolicyService.get(tool.workspaceId);
+        if (currentPolicy.revision !== policy.revision) throw new Error('Publication policy changed during validation.');
+        return agentWorkspaceToolRepository.setStatus(tool.workspaceId, tool.id, 'published', tool.currentRevision);
+      });
+    } catch {
+      // The draft remains available for owner review; the failed decision is audited.
+      return tool;
+    }
   }
 
   async archive(workspaceId: string, id: string, actor: WorkspaceToolActor) {
     if (actor.type !== 'user') throw new Error('Only the workspace owner can archive a tool.');
-    return agentWorkspaceToolRepository.setStatus(workspaceId, id, 'archived');
+    return autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:archive', target: id,
+      actorType: 'user', actorId: actor.id, mutation: true, auditOutput: () => ({ archived: true }),
+    }, () => agentWorkspaceToolRepository.setStatus(workspaceId, id, 'archived'));
   }
 
   async revisions(workspaceId: string, id: string) { return agentWorkspaceToolRepository.revisions(workspaceId, id); }
@@ -177,12 +235,21 @@ export class AgentWorkspaceToolService {
     if (actor.type !== 'user') throw new Error('Only the workspace owner can roll back a tool.');
     const previous = await agentWorkspaceToolRepository.revision(workspaceId, id, revision);
     if (!previous) throw new Error('Tool revision not found.');
-    return agentWorkspaceToolRepository.update({ workspaceId, id, manifest: previous.manifest, actor, changeSummary: `Rollback to revision ${revision}` });
+    return autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:rollback', target: id,
+      actorType: 'user', actorId: actor.id, mutation: true, input: { sourceRevision: revision },
+      auditOutput: (result) => ({ revision: (result as WorkspaceToolRecord).currentRevision }),
+    }, () => agentWorkspaceToolRepository.update({ workspaceId, id, manifest: previous.manifest, actor, changeSummary: `Rollback to revision ${revision}` }));
   }
 
   private async assertDependenciesReady(tool: WorkspaceToolRecord): Promise<void> {
     const secrets = new Map((await secretRefService.list(tool.workspaceId)).map((secret) => [secret.ref, secret]));
     const executor = tool.manifest.executor;
+    if (executor.kind === 'browser') {
+      const node = await workspaceRepository.getNode(executor.nodeId);
+      if (!node || node.workspaceId !== tool.workspaceId || node.type !== 'portal') throw new Error('Browser tool requires a Portal in this workspace.');
+      for (const step of executor.steps) managedPortalCommandSchema.parse({ nodeId: executor.nodeId, action: step.action,
+        args: { ...step.args, ...(step.target ? { ref: 'e1' } : {}) } });
+    }
     const usedReferences = executor.kind === 'http'
       ? executor.headers.flatMap((header) => header.secretRef ? [header.secretRef] : [])
       : executor.kind === 'workspace_command' && executor.stdinSecretRef ? [executor.stdinSecretRef] : [];
@@ -225,21 +292,22 @@ export class ToolExecutionService {
     const tool = await agentWorkspaceToolRepository.find(workspaceId, toolId);
     if (!tool || tool.status === 'archived') throw new Error('Archived workspace tools cannot run.');
     let executableTool = tool;
+    const previous = await agentWorkspaceToolRepository.findRun(workspaceId, request.idempotencyKey);
     if (!request.dryRun) {
       if (tool.publishedRevision == null) throw new Error('Only a published workspace tool can perform effects.');
-      const published = await agentWorkspaceToolRepository.revision(workspaceId, toolId, tool.publishedRevision);
+      const published = await agentWorkspaceToolRepository.revision(workspaceId, toolId, previous?.revision ?? tool.publishedRevision);
       if (!published) throw new Error('Published tool revision is unavailable.');
       executableTool = { ...tool, currentRevision: published.revision, manifest: published.manifest };
     }
     validateValue(executableTool.manifest.inputSchema, request.input);
     const requestDigest = digest({ toolId, revision: executableTool.currentRevision, dryRun: request.dryRun, input: request.input });
-    const previous = await agentWorkspaceToolRepository.findRun(workspaceId, request.idempotencyKey);
     if (previous) {
       if (previous.requestDigest !== requestDigest) throw new Error('Idempotency key was already used with different input.');
-      return previous;
+      if (previous.actor.type !== request.actor.type || previous.actor.id !== (request.actor.id ?? null)) throw new Error('Tool run belongs to another actor.');
+      if (previous.status !== 'waiting_approval' || !await agentWorkspaceToolRepository.claimWaitingRun(previous.id)) return previous;
     }
     const now = new Date();
-    const reservation = await agentWorkspaceToolRepository.reserveRun({
+    const reservation = previous ? { run: previous, created: true } : await agentWorkspaceToolRepository.reserveRun({
       workspaceId, toolId, revision: executableTool.currentRevision, actor: request.actor,
       automationRunId: request.automationRunId ?? null, idempotencyKey: request.idempotencyKey,
       requestDigest, input: record(redactAutonomyValue(request.input)), startedAt: now.toISOString(),
@@ -247,6 +315,7 @@ export class ToolExecutionService {
     const run = reservation.run;
     if (!reservation.created) {
       if (run.requestDigest !== requestDigest) throw new Error('Idempotency key was already used with different input.');
+      if (run.actor.type !== request.actor.type || run.actor.id !== (request.actor.id ?? null)) throw new Error('Tool run belongs to another actor.');
       return run;
     }
     try {
@@ -254,8 +323,8 @@ export class ToolExecutionService {
         workspaceId, runId: request.automationRunId ?? null, capability: 'tool',
         operation: `tool:${executableTool.slug}`, target: executableTool.name,
         mutation: executableTool.manifest.executor.kind !== 'transform', actorType: request.actor.type,
-        actorId: request.actor.id ?? null, input: { toolId, revision: executableTool.currentRevision }, certainty: 'semantic',
-      }, () => this.run(executableTool, request.input, request));
+        actorId: request.actor.id ?? null, input: { toolId, toolRunId: run.id, revision: executableTool.currentRevision }, certainty: 'semantic',
+      }, () => this.run(executableTool, request.input, request, run));
       if (!request.dryRun) validateValue(executableTool.manifest.outputSchema, output);
       const serialized = JSON.stringify(redactAutonomyValue(output));
       if (Buffer.byteLength(serialized) > executableTool.manifest.maxOutputBytes) throw new Error('Tool output exceeded its published limit.');
@@ -267,7 +336,7 @@ export class ToolExecutionService {
     } catch (error) {
       const finished = new Date();
       await agentWorkspaceToolRepository.finishRun(run.id, {
-        status: 'failed', output: null, outputDigest: null,
+        status: error instanceof AutonomyGatePendingError ? 'waiting_approval' : 'failed', output: null, outputDigest: null,
         error: String(error instanceof Error ? error.message : error).slice(0, 2_000),
         durationMs: finished.getTime() - now.getTime(),
       });
@@ -281,7 +350,7 @@ export class ToolExecutionService {
     return { valid: true, executor: tool.manifest.executor.kind, revision: tool.currentRevision, requestDigest: digest({ toolId: tool.id, input }) };
   }
 
-  private async run(tool: WorkspaceToolRecord, input: Record<string, unknown>, request: ExecuteWorkspaceToolInput): Promise<unknown> {
+  private async run(tool: WorkspaceToolRecord, input: Record<string, unknown>, request: ExecuteWorkspaceToolInput, run: WorkspaceToolRunRecord): Promise<unknown> {
     const executor = tool.manifest.executor;
     if (executor.kind === 'transform') return this.transform(input, executor.operations);
     if (executor.kind === 'integration') {
@@ -291,10 +360,31 @@ export class ToolExecutionService {
       }, { actorType: request.actor.type === 'automation' ? 'automation' : request.actor.type === 'agent' ? 'agent' : 'user', actorId: request.actor.id, runId: request.automationRunId });
     }
     if (executor.kind === 'http') return this.httpRequest(tool, input);
+    if (executor.kind === 'browser') {
+      const outputs: unknown[] = [...(run.checkpoint?.steps ?? [])];
+      const deadline = Date.now() + tool.manifest.timeoutMs;
+      for (let index = outputs.length; index < executor.steps.length; index++) {
+        if (Date.now() >= deadline) throw new Error('Browser tool timed out.');
+        const step = executor.steps[index];
+        const args = record(renderValue(step.args, { ...input, steps: outputs }));
+        const context = { actorType: request.actor.type === 'agent' ? 'agent' as const : request.actor.type === 'automation' ? 'automation' as const : 'user' as const, actorId: request.actor.id, runId: request.automationRunId, stepId: run.id + ':' + index };
+        if (step.target) {
+          const snapshot = await managedPortalService.execute(tool.workspaceId, managedPortalCommandSchema.parse({ nodeId: executor.nodeId, action: 'snapshot', args: {} }), context);
+          const matches = (snapshot.result as { elements?: Array<{ ref: string; role: string; name: string }> })?.elements?.filter((element) => element.role === step.target!.role && element.name === render(step.target!.name, input)) ?? [];
+          if (matches.length !== 1) throw new Error('Browser target must match exactly one visible element.');
+          args.ref = matches[0].ref;
+        }
+        const result = await managedPortalService.execute(tool.workspaceId, managedPortalCommandSchema.parse({ nodeId: executor.nodeId, action: step.action, args, timeoutMs: Math.max(1000, deadline - Date.now()) }), context);
+        outputs.push(redactAutonomyValue(result.result));
+        if (Buffer.byteLength(JSON.stringify(outputs)) > tool.manifest.maxOutputBytes) throw new Error('Tool output exceeded its published limit.');
+        await agentWorkspaceToolRepository.checkpoint(run.id, outputs);
+      }
+      return { steps: outputs };
+    }
     return this.command(tool, input, executor);
   }
 
-  private transform(input: Record<string, unknown>, operations: Extract<WorkspaceToolManifest['executor'], { kind: 'transform' }>['operations']): Record<string, unknown> {
+  transform(input: Record<string, unknown>, operations: Extract<WorkspaceToolManifest['executor'], { kind: 'transform' }>['operations']): Record<string, unknown> {
     let output: Record<string, unknown> = structuredClone(input);
     for (const operation of operations) {
       if (operation.kind === 'pick') {
@@ -336,6 +426,7 @@ export class ToolExecutionService {
         mutation, actorType: 'integration', actorId: tool.id, input: { url: url.toString(), method: executor.method },
         network: { url: url.toString(), method: executor.method }, certainty: 'semantic',
       }, async () => {
+        try {
         const response = await this.http.request(url.toString(), {
           method: executor.method, headers,
           ...(executor.bodyTemplate && mutation ? { body: render(executor.bodyTemplate, input) } : {}),
@@ -343,8 +434,10 @@ export class ToolExecutionService {
         });
         if (!response.ok) throw new Error(`Tool endpoint returned HTTP ${response.status}.`);
         return redactResolvedSecrets(response.json, resolvedSecrets);
+        } catch (error) { throw new Error(redactString(error instanceof Error ? error.message : String(error), resolvedSecrets)); }
       });
     } catch (error) {
+      if (error instanceof AutonomyGatePendingError) throw error;
       throw new Error(redactString(error instanceof Error ? error.message : String(error), resolvedSecrets));
     }
   }
@@ -366,9 +459,13 @@ export class ToolExecutionService {
         workspaceId: tool.workspaceId, capability: 'filesystem', operation: `tool:${tool.slug}`, target: command,
         mutation: true, actorType: 'system', actorId: tool.id, input: { executable: command, args, cwd },
         filesystem: { path: cwd, permission: 'write' }, certainty: 'inferred',
-      }, () => this.spawnCommand(workspace, command, args, cwd, tool.manifest.timeoutMs, tool.manifest.maxOutputBytes, stdin));
+      }, async () => {
+        try { return redactResolvedSecrets(await this.spawnCommand(workspace, command, args, cwd, tool.manifest.timeoutMs, tool.manifest.maxOutputBytes, stdin), [stdin]); }
+        catch (error) { throw new Error(redactString(error instanceof Error ? error.message : String(error), [stdin])); }
+      });
       return redactResolvedSecrets(result, [stdin]);
     } catch (error) {
+      if (error instanceof AutonomyGatePendingError) throw error;
       throw new Error(redactString(error instanceof Error ? error.message : String(error), [stdin]));
     }
   }

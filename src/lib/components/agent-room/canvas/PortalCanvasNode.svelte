@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowRight, Globe, KeyRound, MousePointer2, Navigation, Pencil, RotateCcw, Send, Settings, ShieldCheck, Smartphone, X } from '@lucide/svelte';
+  import { ArrowRight, Globe, KeyRound, MousePointer2, Navigation, Pause, Play, Pencil, RotateCcw, Send, Settings, ShieldCheck, Smartphone, X } from '@lucide/svelte';
   import type { PortalViewport } from './portal-device-presets.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -11,12 +11,16 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
   import PortalViewportToolbar from './PortalViewportToolbar.svelte';
   import { portalScriptExpression, unwrapPortalScriptResult } from './portal-script.js';
+  import { managedPortalSurface } from '../managed-portal-surface.js';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import { Button } from '$lib/components/ui/button';
   import { Textarea } from '$lib/components/ui/textarea';
   import { Switch } from '$lib/components/ui/switch';
   import { Badge } from '$lib/components/ui/badge';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
   import {
     beginPortalInspection,
     cancelPortalInspection,
@@ -48,6 +52,10 @@
       portalAllowedHosts?: string[];
       portalDownloadDirectory?: string;
       portalAllowScripts?: boolean;
+      portalControl?: 'disabled' | 'read' | 'interact';
+      portalAgentIds?: string[];
+      portalPaused?: boolean;
+      portalAllowBackground?: boolean;
     };
     connections?: NodeConnection[];
     onDelete: (id: string) => void;
@@ -107,13 +115,33 @@
   let profileScope = $state<'private' | 'workspace'>(data.payload.portalProfileScope ?? 'workspace');
   let allowedHosts = $state((data.payload.portalAllowedHosts ?? []).join('\n'));
   let downloadDirectory = $state(data.payload.portalDownloadDirectory ?? '.orkestrai/downloads');
-  let allowAgentScripts = $state(data.payload.portalAllowScripts ?? false);
+  let control = $state<'disabled' | 'read' | 'interact'>(data.payload.portalControl ?? 'disabled');
+  let agentIds = $state<string[]>(data.payload.portalAgentIds ?? []);
+  let paused = $state(data.payload.portalPaused ?? false);
+  let allowBackground = $state(data.payload.portalAllowBackground ?? false);
+  let browserTabs = $state<Array<{ id: string; title: string; url: string }>>([]);
+  let activeBrowserTab = $state('');
+  let browserStateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function persistBrowserTabs() {
+    browserStateTimer = null;
+    if (!browserTabs.length || (JSON.stringify(data.payload.portalTabs) === JSON.stringify(browserTabs) && data.payload.portalActiveTabId === activeBrowserTab)) return;
+    data.onPayloadChange?.(id, { portalTabs: browserTabs, portalActiveTabId: activeBrowserTab });
+  }
+
+  function updateBrowserState(value: { tabs: Array<{ id: string; title: string; url: string }>; activeTabId: string }) {
+    browserTabs = value.tabs;
+    activeBrowserTab = value.activeTabId;
+    if (browserStateTimer) clearTimeout(browserStateTimer);
+    browserStateTimer = setTimeout(persistBrowserTabs, 250);
+  }
   const readyWaiters = new Set<{ resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 
   const isDesktop = typeof window !== 'undefined' && 'orkestraiDesktop' in window;
   const desktop = typeof window === 'undefined' ? undefined : (window as unknown as {
     orkestraiDesktop?: {
       onPortalOpenRequest: (callback: (payload: { sourceWebContentsId: number; url: string }) => void) => () => void;
+      portalSurface: (input: Record<string, unknown>) => Promise<any>;
     };
   }).orkestraiDesktop;
   const sanitizedElementHtml = $derived(DOMPurify.sanitize(capture?.html ?? '', {
@@ -368,7 +396,8 @@
       portalProfileScope: profileScope,
       portalAllowedHosts: hosts,
       portalDownloadDirectory: cleanDirectory,
-      portalAllowScripts: allowAgentScripts,
+      portalAllowScripts: false,
+      portalControl: control, portalAgentIds: agentIds, portalPaused: paused, portalAllowBackground: allowBackground,
     });
     settingsOpen = false;
     toast.success(m['portal.managed_saved']());
@@ -530,7 +559,15 @@
 
   async function closePortal() {
     if (inspecting) await cancelInspection();
+    await desktop?.portalSurface({ workspaceId: data.workspaceId, nodeId: id, method: 'close' });
     data.onDelete(id);
+  }
+
+  async function togglePause() {
+    const next = !paused;
+    await desktop?.portalSurface({ workspaceId: data.workspaceId, nodeId: id, method: next ? 'pause' : 'resume' });
+    paused = next;
+    data.onPayloadChange?.(id, { portalPaused: next });
   }
 
   $effect(() => {
@@ -566,6 +603,7 @@
     });
     return () => {
       unsubscribePortalOpen?.();
+      if (browserStateTimer) { clearTimeout(browserStateTimer); persistBrowserTabs(); }
       stopPolling();
       clearRetry();
       if (urlPersistTimer) clearTimeout(urlPersistTimer);
@@ -626,13 +664,14 @@
       active={inspecting}
       onclick={() => void startInspection()}
     ><MousePointer2 size={13} /></HeaderIconButton>
-    <HeaderIconButton class="node-action-btn" label={m['portal.managed_settings']()} onclick={() => (settingsOpen = true)}><Settings size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={paused ? m['portal.control_resume']() : m['portal.control_pause']()} onclick={togglePause}>{#if paused}<Play size={13} />{:else}<Pause size={13} />{/if}</HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['portal.managed_settings']()} onclick={() => { settingsOpen = true; void loadTargets(); }}><Settings size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={m['portal.close']()} danger onclick={() => void closePortal()}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   <div class="portal-body nodrag nowheel" class:inspecting>
     <div class="portal-navigation">
-      <span class="flex shrink-0 items-center gap-1 text-ui-xs font-medium text-[var(--app-success)]" title={m['portal.managed_status_detail']()}><ShieldCheck size={13} />{m['portal.managed_status']()}</span>
+      <span class="flex shrink-0 items-center gap-1 text-ui-xs font-medium text-[var(--app-text-muted)]"><ShieldCheck size={13} />{paused ? m['portal.control_paused']() : control === 'disabled' ? m['portal.control_disabled']() : allowBackground ? m['portal.control_background']() : m['portal.control_visible']()}</span>
       <input
         class="portal-address nodrag"
         bind:value={address}
@@ -645,6 +684,15 @@
     </div>
     {#if deviceToolbarOpen}
       <PortalViewportToolbar {viewport} onchange={setViewport} />
+    {/if}
+    {#if browserTabs.length > 1}
+      <div class="nodrag nowheel border-b border-[var(--app-border)] px-2 py-1">
+        <Select.Root type="single" value={activeBrowserTab} onValueChange={(tabId) => {
+          void desktop?.portalSurface({ workspaceId: data.workspaceId, nodeId: id, method: 'activate', args: { tabId } }).then((state) => {
+            browserTabs = state.tabs; activeBrowserTab = state.activeTabId;
+          }).catch((error) => toast.error(publicPortalError(error)));
+        }}><Select.Trigger class="h-7 w-full min-w-0 text-ui-xs" aria-label={m['portal.browser_tabs']()}><span class="truncate">{browserTabs.find((tab) => tab.id === activeBrowserTab)?.title || address}</span></Select.Trigger><Select.Content>{#each browserTabs as tab (tab.id)}<Select.Item value={tab.id}>{tab.title || tab.url}</Select.Item>{/each}</Select.Content></Select.Root>
+      </div>
     {/if}
     {#if inspecting}
       <div class="inspection-bar" role="status">
@@ -659,16 +707,13 @@
           {#if data.payload.url}
             {#if isDesktop}
               {#key portalPartition}
-                <webview
-                  bind:this={frame}
-                  src={data.payload.url}
+                <div
+                  use:managedPortalSurface={{ workspaceId: data.workspaceId, nodeId: id, ready: (value) => (frame = value), state: updateBrowserState }}
                   class="portal-frame"
                   class:portal-frame-hidden={reviewOpen}
                   class:portal-frame-device={viewport !== null}
                   style={viewport ? `width:${viewport.width}px;height:${viewport.height}px;` : ''}
-                  partition={portalPartition}
-                  webpreferences="contextIsolation=yes, sandbox=yes, nodeIntegration=no"
-                ></webview>
+                ></div>
               {/key}
             {:else}
               <iframe
@@ -700,15 +745,24 @@
 </NodeShell>
 
 <Dialog.Root bind:open={settingsOpen}>
-  <Dialog.Content class="max-w-lg!">
+  <Dialog.Content class="max-w-lg! max-h-[85dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
     <Dialog.Header>
       <Dialog.Title>{m['portal.managed_title']()}</Dialog.Title>
       <Dialog.Description>{m['portal.managed_description']()}</Dialog.Description>
     </Dialog.Header>
-    <div class="grid gap-4 py-2">
+    <div class="grid min-h-0 gap-4 overflow-y-auto py-2">
+      <label class="grid gap-1.5 text-ui-sm font-medium">
+        <span>{m['portal.control_title']()}</span>
+        <Select.Root type="single" bind:value={control}><Select.Trigger class="w-full">{control === 'disabled' ? m['portal.control_disabled']() : control === 'read' ? m['portal.control_read']() : m['portal.control_interact']()}</Select.Trigger><Select.Content><Select.Item value="disabled">{m['portal.control_disabled']()}</Select.Item><Select.Item value="read">{m['portal.control_read']()}</Select.Item><Select.Item value="interact">{m['portal.control_interact']()}</Select.Item></Select.Content></Select.Root>
+        <span class="text-ui-xs font-normal leading-5 text-[var(--app-text-muted)]">{m['portal.control_policy_help']()}</span>
+      </label>
+      <fieldset class="grid gap-2"><legend class="text-ui-sm font-medium">{m['portal.control_agents']()}</legend>
+        {#each agents as agent (agent.id)}<label class="flex items-center gap-2 text-ui-sm"><Checkbox checked={agentIds.includes(agent.id)} onCheckedChange={(checked: boolean) => (agentIds = checked ? [...new Set([...agentIds, agent.id])] : agentIds.filter((value) => value !== agent.id))} />{agent.title}</label>{/each}
+      </fieldset>
+      <label class="flex items-center justify-between gap-4 text-ui-sm"><span>{m['portal.control_background']()}</span><Switch checked={allowBackground} onCheckedChange={(value: boolean) => (allowBackground = value)} /></label>
       <label class="grid gap-1.5 text-ui-sm font-medium">
         <span>{m['portal.managed_profile']()}</span>
-        <input class="h-9 border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" bind:value={profileId} maxlength="64" />
+        <Input bind:value={profileId} maxlength={64} />
       </label>
       <fieldset class="grid gap-2">
         <legend class="text-ui-sm font-medium">{m['portal.managed_scope']()}</legend>
@@ -723,11 +777,7 @@
       </label>
       <label class="grid gap-1.5 text-ui-sm font-medium">
         <span>{m['portal.managed_downloads']()}</span>
-        <input class="h-9 border border-input bg-background px-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" bind:value={downloadDirectory} />
-      </label>
-      <label class="flex items-center justify-between gap-4 border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3 text-ui-sm">
-        <span><strong class="block font-medium">{m['portal.managed_scripts']()}</strong><small class="mt-0.5 block text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['portal.managed_scripts_detail']()}</small></span>
-        <Switch checked={allowAgentScripts} onCheckedChange={(checked: boolean) => (allowAgentScripts = checked)} />
+        <Input class="font-mono" bind:value={downloadDirectory} />
       </label>
       <div class="flex items-start gap-2 border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-3 text-ui-xs leading-5 text-[var(--app-text-muted)]">
         <KeyRound size={15} class="mt-0.5 shrink-0 text-[var(--app-accent)]" />

@@ -51,6 +51,15 @@ const headerSchema = z.object({
 
 const executorSchema = z.discriminatedUnion('kind', [
   z.object({
+    kind: z.literal('browser'),
+    nodeId: z.string().uuid(),
+    steps: z.array(z.object({
+      action: z.enum(['navigate', 'snapshot', 'click', 'type', 'select', 'extract', 'screenshot', 'wait']),
+      target: z.object({ role: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(500) }).strict().optional(),
+      args: z.record(z.string().max(120), z.unknown()).default({}),
+    }).strict()).min(1).max(30),
+  }).strict(),
+  z.object({
     kind: z.literal('http'),
     method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']),
     urlTemplate: z.string().trim().min(1).max(4_096),
@@ -105,6 +114,7 @@ export const workspaceToolManifestSchema = z.object({
     context.addIssue({ code: 'custom', path: ['secretRefs'], message: 'The protected stdin SecretRef must be declared.' });
   }
   const required = manifest.executor.kind === 'http' ? ['network', 'tool']
+    : manifest.executor.kind === 'browser' ? ['browser', 'tool']
     : manifest.executor.kind === 'integration' ? ['integration', 'tool']
       : manifest.executor.kind === 'workspace_command' ? ['filesystem', 'tool'] : ['tool'];
   for (const capability of required) {
@@ -152,7 +162,7 @@ export const workspaceToolEditorSchema = z.object({
   name: z.string().trim().min(1).max(120),
   slug: z.string().trim().min(1).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   description: z.string().trim().max(2_000).default(''),
-  executorKind: z.enum(['http', 'integration', 'transform', 'workspace_command']),
+  executorKind: z.enum(['http', 'integration', 'transform', 'workspace_command', 'browser']),
   executorConfig: z.string().max(1_000_000).refine(editorJsonObject, 'Executor configuration must be a JSON object.'),
   inputSchema: z.string().max(100_000).refine(editorJsonObject, 'Input schema must be a JSON object.'),
   outputSchema: z.string().max(100_000).refine(editorJsonObject, 'Output schema must be a JSON object.'),
@@ -164,6 +174,7 @@ export const workspaceToolEditorSchema = z.object({
   try {
     const executor = { kind: value.executorKind, ...JSON.parse(value.executorConfig) };
     const capabilities = value.executorKind === 'http' ? ['tool', 'network']
+      : value.executorKind === 'browser' ? ['tool', 'browser']
       : value.executorKind === 'integration' ? ['tool', 'integration']
         : value.executorKind === 'workspace_command' ? ['tool', 'filesystem'] : ['tool'];
     workspaceToolManifestSchema.parse({

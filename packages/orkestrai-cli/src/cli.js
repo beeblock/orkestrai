@@ -1465,7 +1465,7 @@ export async function run(argv, options = {}) {
       else if (action === 'download') args = { ref: values[0], ...(flags.filename ? { filename: flags.filename } : {}) };
       else if (action === 'wait') args = { ...(values[0] ? { ref: values[0] } : {}), ...(flags.text ? { text: flags.text } : {}), ...(flags.url ? { urlIncludes: flags.url } : {}), ...(flags.delay ? { delayMs: Number(flags.delay) } : {}) };
       else if (action === 'extract') args = { kind: values[0] ?? 'text', ...(values[1] ? { ref: values[1] } : {}), ...(flags.attribute ? { attribute: flags.attribute } : {}) };
-      const data = await bridge(config, 'POST', '/api/agent-room/bridge/portal', { nodeId, action, args, from: flags.from });
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/portal', { nodeId, action, args, from: flags.from, taskId: flags.task });
       if (flags.json) out(JSON.stringify(data, null, 2));
       else out(typeof data.result === 'string' ? data.result : JSON.stringify(data.result ?? data, null, 2));
       return 0;
