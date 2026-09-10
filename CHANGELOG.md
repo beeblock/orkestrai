@@ -27,6 +27,13 @@ pt-BR, English, and Spanish translations.
   capabilities and consume their own wheel events, restoring terminal history
   scrolling without zooming the Canvas underneath.
 
+## Unreleased
+
+### Fixed
+
+- RPM packages no longer ship `/usr/lib/.build-id` symlinks that conflict with
+  other Electron apps (opencode, Slack, VS Code, etc.) on Fedora/RHEL.
+
 ## 0.27.0 - 2026-09-07
 
 ### Added
