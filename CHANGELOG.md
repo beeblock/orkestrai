@@ -63,6 +63,9 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- RPM packages no longer ship `/usr/lib/.build-id` symlinks that conflict with
+  other Electron applications on Fedora/RHEL. Linux release validation checks
+  the generated RPM file list before upload.
 - Updated the transitive Joi and js-yaml parsers to patched compatible versions
   and verified a clean dependency security audit.
 - Tool Workshop forms keep independent identities when Canvas and side panels
@@ -115,13 +118,6 @@ pt-BR, English, and Spanish translations.
 - Native Windows PowerShell agent terminals now advertise complete xterm mouse
   capabilities and consume their own wheel events, restoring terminal history
   scrolling without zooming the Canvas underneath.
-
-## Unreleased
-
-### Fixed
-
-- RPM packages no longer ship `/usr/lib/.build-id` symlinks that conflict with
-  other Electron apps (opencode, Slack, VS Code, etc.) on Fedora/RHEL.
 
 ## 0.27.0 - 2026-09-07
 

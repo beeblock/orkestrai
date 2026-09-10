@@ -80,6 +80,8 @@ describe('release artifact validation', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
     expect(packageJson.build?.linux?.maintainer).toMatch(/^[^<>]+ <[^<>\s]+@[^<>\s]+>$/);
     expect(packageJson.build?.rpm?.artifactName).toBe('${productName}-${version}.${arch}.${ext}');
+    expect(packageJson.build?.rpm?.fpm).toEqual(['--rpm-rpmbuild-define', '_build_id_links none']);
+    expect(readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8')).toContain('Verify RPM does not claim shared build-id paths');
   });
 
   it('accepts complete cross-platform artifacts with valid manifests', () => {

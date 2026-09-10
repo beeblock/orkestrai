@@ -278,6 +278,16 @@ jobs:
       - name: Verify updater is packaged
         run: test -f release/linux-unpacked/resources/app/node_modules/electron-updater/package.json
 
+      - name: Verify RPM does not claim shared build-id paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          rpm -qlp "release/Orkestrai-${{ needs.validate.outputs.version }}.x86_64.rpm" > "$RUNNER_TEMP/orkestrai-rpm-files.txt"
+          if grep -Eq '^/usr/lib/\.build-id(/|$)' "$RUNNER_TEMP/orkestrai-rpm-files.txt"; then
+            echo '::error::RPM contains shared build-id paths that can conflict with other Electron applications.'
+            exit 1
+          fi
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
         with:
