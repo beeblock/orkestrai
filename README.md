@@ -54,6 +54,14 @@ common credentials redacted; normal agent output is not persisted.
   can flow from a destination-bound SecretRef directly into the permitted app
   on macOS and Windows without being returned to the agent; the Linux X11
   backend refuses secret typing until it has an equivalent protected channel.
+- **Tool Workshop:** turn repeated work into a native, versioned workspace tool
+  without editing Orkestrai source. Compose approved Gmail, Slack, Telegram,
+  WhatsApp, GitHub, webhook, HTTP, deterministic transform, or confined command
+  operations; validate JSON contracts and fixtures, dry-run the draft, then
+  publish an immutable revision. Agents may propose later drafts but cannot
+  activate them. Automations and task-assigned agents execute only the approved
+  revision with idempotency, bounded runtime/output, destination-bound
+  SecretRefs, redacted history, and the same security gates and audit trail.
 - **Live agent canvas:** arrange real PTY terminals, notes, task boards, browser
   portals, file trees, loops, and shapes. Connections show collaboration between
   agents as it happens. Rope physics automatically scales down in dense or

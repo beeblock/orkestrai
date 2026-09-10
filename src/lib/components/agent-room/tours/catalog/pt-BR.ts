@@ -154,6 +154,20 @@ export const TOURS_PT: Tour[] = [
     ],
   },
   {
+    id: 'workspace-tool-workshop',
+    icon: 'Wrench',
+    title: 'Crie uma ferramenta reutilizável do workspace',
+    tagline: 'Transforme uma operação repetida numa capacidade revisada e versionada.',
+    steps: [
+      { id: 'workshop', title: 'Adicione o Tool Workshop', body: 'Vou adicionar o node nativo Tool Workshop. As mesmas ferramentas também abrem em tela cheia pelo Workbench e dentro de Automações.', action: { kind: 'createToolWorkshop', title: 'Tool Workshop' }, check: { kind: 'nodeExists', nodeType: 'toolWorkshop' } },
+      { id: 'draft', title: 'Defina um contrato limitado', body: 'Crie um rascunho a partir de HTTP, uma integração conectada, uma transformação determinística ou um comando do workspace. Declare schemas JSON de entrada e saída, limites, fixtures e somente as capacidades necessárias.' },
+      { id: 'secrets', title: 'Referencie credenciais com segurança', body: 'Crie uma SecretRef em Segurança e vincule-a ao Tool Workshop, à operação exata da ferramenta e ao destino. Coloque apenas essa referência opaca no manifesto; a credencial bruta nunca entra na ferramenta, no prompt, no histórico ou nos arquivos do workspace.' },
+      { id: 'test', title: 'Valide antes de ativar', body: 'Carregue uma fixture e rode um teste seco sobre o rascunho atual. Revise manifesto, limite de saída, timeout e histórico de revisões antes de publicar.' },
+      { id: 'publish', title: 'Publique uma revisão imutável', body: 'Somente o dono do workspace publica. Agentes podem propor rascunhos posteriores, enquanto automações continuam usando a última revisão aprovada até uma nova publicação. Rollback cria outro rascunho revisável.' },
+      { id: 'automate', title: 'Use sem confirmações repetidas', body: 'Escolha Ferramenta como ação de Automação ou permita que um agente com tarefa atribuída chame tool_execute com chave de idempotência estável. A política permanente cobre o trabalho rotineiro; Central de Controle, histórico, gates e Auditoria preservam a rastreabilidade.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Duas features em paralelo sem conflito',

@@ -7,7 +7,7 @@ import { transferCanvasNodesSchema } from '$lib/modules/agent-room/contracts/sch
 
 describe('workspaceSchemas — tipos de nó do canvas', () => {
   it('aceita todos os tipos suportados, incluindo image, device e design', () => {
-    const types = ['terminal', 'note', 'fileTree', 'editor', 'diff', 'portal', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'usage', 'device', 'design'];
+    const types = ['terminal', 'note', 'fileTree', 'editor', 'diff', 'portal', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'usage', 'toolWorkshop', 'device', 'design'];
     for (const type of types) {
       expect(canvasNodeTypeSchema.safeParse(type).success).toBe(true);
     }

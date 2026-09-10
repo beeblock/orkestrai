@@ -40,6 +40,20 @@ normal de los agentes no se guarda.
   sistema operativo y llegan a conectores confiables solo mediante SecretRefs
   vinculados al destino. La parada de emergencia aborta ejecuciones activas y la
   exportación encadenada separa acciones mediadas exactas de efectos inferidos del shell.
+- **Agentes persistentes e integraciones nativas:** elige runtimes Interactivo,
+  Bajo demanda o Persistente y conecta Gmail, Slack, Telegram, WhatsApp, GitHub
+  o webhooks con permisos por operación. Los agentes pueden leer buzones
+  autorizados, clasificar trabajo y entregar informes o PDFs sin recibir el token.
+- **Control limitado del escritorio:** el nodo Equipo opera solo aplicaciones y
+  pantallas aprobadas en macOS, Windows y Linux X11 compatible, con comandos
+  tipados, idempotencia, evidencia confinada y auditoría sin contenido escrito.
+- **Tool Workshop:** convierte trabajo repetido en una herramienta nativa y
+  versionada del workspace sin editar Orkestrai. Compone integraciones, HTTP,
+  transformaciones deterministas o comandos confinados; valida contratos JSON y
+  fixtures, ejecuta una prueba seca y publica una revisión inmutable. Los agentes
+  pueden proponer borradores, pero solo el dueño activa una versión. Las
+  automatizaciones ejecutan la revisión aprobada con idempotencia, límites,
+  SecretRefs vinculadas al destino, historial saneado y los mismos gates y auditoría.
 - **Lienzo de agentes en vivo:** organiza terminales PTY reales, notas, tableros
   de tareas, portales de navegador, árboles de archivos, loops y formas. Las
   conexiones muestran la colaboración entre agentes mientras ocurre. La física

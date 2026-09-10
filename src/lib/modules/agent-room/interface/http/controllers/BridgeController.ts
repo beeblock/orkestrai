@@ -75,6 +75,8 @@ import { integrationExecutionSchema, integrationEventsQuerySchema } from '$lib/m
 import { bridgeComputerCommandSchema } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
 import { computerService } from '$lib/modules/agent-room/application/services/ComputerService.js';
 import { secretRefService } from '$lib/modules/agent-room/application/services/SecretRefService.js';
+import { agentWorkspaceToolService, toolExecutionService } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
+import { createWorkspaceToolSchema, executeWorkspaceToolSchema, updateWorkspaceToolSchema } from '$lib/modules/agent-room/contracts/schemas/agent-workspace-tool.schema.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -193,6 +195,57 @@ export class BridgeController extends Controller {
       return this.json({ data: result });
     } catch (error) {
       return this.errorResponse(error, 'Failed to execute the integration action.');
+    }
+  }
+
+  async tools(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: { tools: await agentWorkspaceToolService.list(workspace.id), runs: await toolExecutionService.listRuns(workspace.id) } });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to list workspace tools.', 401);
+    }
+  }
+
+  async toolAction(event: any) {
+    try {
+      const body = z.object({
+        operation: z.enum(['propose', 'update', 'execute']),
+        from: z.string().trim().min(1).max(120),
+        taskId: z.string().uuid(),
+        toolId: z.string().uuid().optional(),
+        input: z.unknown(),
+      }).strict().parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveAgentActor(workspace.id, body.from);
+      const authenticatedActor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!authenticatedActor || authenticatedActor !== actor) throw new Error('Tool actions require the active terminal identity of the assigned agent.');
+      const task = (await taskBoardService.list(workspace.id)).find((candidate) => candidate.id === body.taskId);
+      if (!task || task.assigneeNodeId !== actor || task.status === 'done') throw new Error('Tool actions require an active task assigned to this agent.');
+      let result: unknown;
+      if (body.operation === 'propose') {
+        const input = createWorkspaceToolSchema.omit({ actor: true }).parse(body.input);
+        result = await agentWorkspaceToolService.create(workspace.id, { ...input, nodeId: actor, actor: { type: 'agent', id: actor } });
+      } else if (body.operation === 'update') {
+        if (!body.toolId) throw new Error('Tool id is required.');
+        const input = updateWorkspaceToolSchema.omit({ actor: true }).parse(body.input);
+        result = await agentWorkspaceToolService.update(workspace.id, body.toolId, { ...input, actor: { type: 'agent', id: actor } });
+      } else {
+        if (!body.toolId) throw new Error('Tool id is required.');
+        const input = executeWorkspaceToolSchema.omit({ actor: true, automationRunId: true }).parse(body.input);
+        result = await toolExecutionService.execute(workspace.id, body.toolId, { ...input, actor: { type: 'agent', id: actor }, automationRunId: null });
+      }
+      await controlCenterService.recordActivity({
+        workspaceId: workspace.id, nodeId: actor, state: 'working', action: `tool:${body.operation}`,
+        taskId: body.taskId, metadata: { toolId: body.toolId ?? (result as { id?: string })?.id ?? null },
+        category: 'workflow', verb: body.operation === 'execute' ? 'executed' : 'proposed',
+        objectType: 'workspace-tool', objectId: body.toolId ?? (result as { id?: string })?.id ?? null,
+        objectTitle: body.operation, severity: 'info', correlationId: body.operation === 'execute' ? String((body.input as { idempotencyKey?: string })?.idempotencyKey ?? '') : undefined,
+        sourceType: 'tool-workshop', sourceId: body.toolId ?? (result as { id?: string })?.id ?? body.taskId,
+      });
+      return this.json({ data: result });
+    } catch (error) {
+      return this.errorResponse(error, 'Failed to use the workspace tool.');
     }
   }
 

@@ -14,7 +14,7 @@ import { MAX_PLAINTEXT_BYTES } from '@orkestrai/collaboration-protocol';
 import { collaborationRepository } from '../../infrastructure/repositories/CollaborationRepository.js';
 import { assertSharedProjectionSafe, sanitizeSharedText } from '../projections/sanitize-shared-data.js';
 
-const SHARED_NODE_TYPES = new Set(['terminal', 'tasks', 'group', 'shape', 'controlCenter', 'reviewCenter', 'automation', 'design']);
+const SHARED_NODE_TYPES = new Set(['terminal', 'tasks', 'group', 'shape', 'controlCenter', 'reviewCenter', 'automation', 'toolWorkshop', 'design']);
 export const MAX_SHARED_SNAPSHOT_BYTES = MAX_PLAINTEXT_BYTES - 16 * 1024;
 
 export function scopeSharedWorkspaceSnapshot(
@@ -99,7 +99,7 @@ export function fitSharedWorkspaceSnapshot(snapshot: SharedWorkspaceDto): Shared
 function sharedNodeType(type: CanvasNode['type']): SharedCanvasNodeDto['type'] | null {
   return ({
     terminal: 'agent', tasks: 'tasks', group: 'group', shape: 'shape',
-    controlCenter: 'control', reviewCenter: 'review', automation: 'automation',
+    controlCenter: 'control', reviewCenter: 'review', automation: 'automation', toolWorkshop: 'automation',
     design: 'design',
   } as Partial<Record<CanvasNode['type'], SharedCanvasNodeDto['type']>>)[type] ?? null;
 }

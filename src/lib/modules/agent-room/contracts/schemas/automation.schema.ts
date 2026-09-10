@@ -5,7 +5,7 @@ export const automationTriggerTypeSchema = z.enum([
   'webhook', 'file_change', 'usage_threshold',
 ]);
 
-export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify', 'browser', 'integration']);
+export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify', 'browser', 'integration', 'tool']);
 
 export const automationFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -37,6 +37,8 @@ export const automationFormSchema = z.object({
   integrationId: z.string().uuid().nullish(),
   integrationAction: z.string().trim().min(1).max(120).nullish(),
   integrationPayload: z.string().max(1_000_000).default('{}'),
+  toolId: z.string().uuid().nullish(),
+  toolInput: z.string().max(1_000_000).default('{}'),
   enabled: z.boolean().default(true),
   recipeId: z.string().trim().max(80).nullish(),
 }).superRefine((value, context) => {
@@ -85,6 +87,17 @@ export const automationFormSchema = z.object({
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('object required');
     } catch {
       context.addIssue({ code: 'custom', path: ['integrationPayload'], message: 'Integration payload must be a JSON object.' });
+    }
+  }
+  if (value.actionType === 'tool' && !value.toolId) {
+    context.addIssue({ code: 'custom', path: ['toolId'], message: 'A published workspace tool is required.' });
+  }
+  if (value.actionType === 'tool') {
+    try {
+      const parsed = JSON.parse(value.toolInput);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('object required');
+    } catch {
+      context.addIssue({ code: 'custom', path: ['toolInput'], message: 'Tool input must be a JSON object.' });
     }
   }
 });

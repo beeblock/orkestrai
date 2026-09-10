@@ -3,7 +3,10 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import type { AutomationFormInput } from '$lib/modules/agent-room/contracts/schemas/automation.schema.js';
 import { AutomationTriggerReceived } from '$lib/modules/agent-room/domain/events/AutomationTriggerReceived.js';
 import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
+import { AgentWorkspaceToolService } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
+import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { workspaceToolManifestSchema } from '$lib/modules/agent-room/contracts/schemas/agent-workspace-tool.schema.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 
@@ -14,7 +17,10 @@ function form(input: Partial<AutomationFormInput>): AutomationFormInput {
     webhookSecret: null, filePath: null, usageProvider: null, usageWindow: null,
     usagePercent: null, actionType: 'notify', targetNodeId: null, prompt: null,
     taskTitle: null, taskDescription: null, notificationTitle: null,
-    notificationMessage: 'Done', enabled: true, recipeId: null, ...input,
+    notificationMessage: 'Done', enabled: true, recipeId: null,
+    portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null,
+    portalText: null, portalSubmit: false, integrationId: null, integrationAction: null,
+    integrationPayload: '{}', toolId: null, toolInput: '{}', ...input,
   };
 }
 
@@ -84,5 +90,36 @@ describe('workspace automations', () => {
 
     expect(dispatched).toBe(0);
     expect(await routineService.history(automation.id)).toHaveLength(0);
+  });
+
+  it('executes a published workspace tool as a durable automation action', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'tool automation', workingDir: '/tmp' });
+    const policy = await autonomyPolicyService.get(workspace.id);
+    await autonomyPolicyService.update(workspace.id, {
+      enabled: true, mode: 'bounded',
+      policy: { ...policy.policy, capabilities: [...new Set([...policy.policy.capabilities, 'tool' as const])] },
+    });
+    const tools = new AgentWorkspaceToolService();
+    const tool = await tools.create(workspace.id, {
+      name: 'Build report', slug: 'build-report', description: 'Build a traceable report.',
+      manifest: workspaceToolManifestSchema.parse({
+        schemaVersion: 1,
+        executor: { kind: 'transform', operations: [{ kind: 'set', path: 'report.status', value: 'ready' }] },
+        inputSchema: { type: 'object', properties: {}, additionalProperties: true },
+        outputSchema: { type: 'object', properties: {}, additionalProperties: true },
+        capabilities: ['tool'], secretRefs: [], timeoutMs: 5_000, maxOutputBytes: 65_536, fixtures: [],
+      }),
+      actor: { type: 'user', id: 'workspace-owner' },
+    });
+    await tools.publish(workspace.id, tool.id, { type: 'user', id: 'workspace-owner' });
+    const automation = await routineService.createAutomation(workspace.id, form({
+      name: 'Daily report', actionType: 'tool', toolId: tool.id, toolInput: '{}', notificationMessage: null,
+    }));
+
+    const result = await routineService.runNow(automation.id);
+
+    expect(result.ok).toBe(true);
+    expect(result.run.output).toMatchObject({ toolId: tool.id, result: { report: { status: 'ready' } } });
+    expect(result.run.output?.toolRunId).toEqual(expect.any(String));
   });
 });

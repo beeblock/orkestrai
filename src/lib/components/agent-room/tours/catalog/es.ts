@@ -150,6 +150,20 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    id: 'workspace-tool-workshop',
+    icon: 'Wrench',
+    title: 'Crea una herramienta reutilizable del workspace',
+    tagline: 'Convierte una operación repetida en una capacidad revisada y versionada.',
+    steps: [
+      { id: 'workshop', title: 'Agrega Tool Workshop', body: 'Agregaré el nodo nativo Tool Workshop. Las mismas herramientas también se abren a pantalla completa desde Workbench y dentro de Automatizaciones.', action: { kind: 'createToolWorkshop', title: 'Tool Workshop' }, check: { kind: 'nodeExists', nodeType: 'toolWorkshop' } },
+      { id: 'draft', title: 'Define un contrato limitado', body: 'Crea un borrador desde HTTP, una integración conectada, una transformación determinista o un comando del workspace. Declara schemas JSON de entrada y salida, límites, fixtures y solo las capacidades necesarias.' },
+      { id: 'secrets', title: 'Referencia credenciales con seguridad', body: 'Crea una SecretRef en Seguridad y vincúlala a Tool Workshop, a la operación exacta de la herramienta y al destino. Coloca solo esa referencia opaca en el manifiesto; la credencial nunca entra en la herramienta, el prompt, el historial ni los archivos del workspace.' },
+      { id: 'test', title: 'Valida antes de activar', body: 'Carga una fixture y ejecuta una prueba seca sobre el borrador actual. Revisa manifiesto, límite de salida, timeout e historial de revisiones antes de publicar.' },
+      { id: 'publish', title: 'Publica una revisión inmutable', body: 'Solo el dueño del workspace publica. Los agentes pueden proponer borradores posteriores mientras las automatizaciones continúan usando la última revisión aprobada hasta una nueva publicación. Rollback crea otro borrador revisable.' },
+      { id: 'automate', title: 'Úsala sin confirmaciones repetidas', body: 'Elige Herramienta como acción de Automatización o permite que un agente con tarea asignada llame tool_execute con una clave de idempotencia estable. La política permanente cubre el trabajo rutinario; Centro de Control, historial, gates y Auditoría conservan la trazabilidad.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Dos features en paralelo sin conflicto',

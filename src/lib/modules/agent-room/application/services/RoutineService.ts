@@ -29,6 +29,7 @@ import { agentSessionService } from './AgentSessionService.js';
 import { agentRuntimeService } from './AgentRuntimeService.js';
 import { autonomyPolicyService, AutonomyGatePendingError } from './AutonomyPolicyService.js';
 import { integrationExecutionService } from './IntegrationExecutionService.js';
+import { agentWorkspaceToolService, toolExecutionService } from './AgentWorkspaceToolService.js';
 
 const TICK_MS = 15_000;
 const RUN_LEASE_MS = 2 * 60_000;
@@ -168,6 +169,7 @@ function actionConfig(input: AutomationFormInput): Record<string, unknown> {
     action: input.integrationAction,
     payload: JSON.parse(input.integrationPayload),
   };
+  if (input.actionType === 'tool') return { toolId: input.toolId, input: JSON.parse(input.toolInput) };
   return { title: input.notificationTitle || null, message: input.notificationMessage };
 }
 
@@ -215,6 +217,7 @@ export class RoutineService {
       notificationTitle: null, notificationMessage: null,
       portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null, portalText: null, portalSubmit: false,
       integrationId: null, integrationAction: null, integrationPayload: '{}',
+      toolId: null, toolInput: '{}',
     });
   }
 
@@ -678,6 +681,11 @@ export class RoutineService {
       if (!integration.permissions.includes(String(config.action ?? ''))) throw new Error('Integration action is outside the account grant.');
       return;
     }
+    if (type === 'tool') {
+      const tool = await agentWorkspaceToolService.find(workspaceId, String(config.toolId ?? ''));
+      if (tool.status === 'archived' || tool.publishedRevision == null) throw new Error('Automation requires a published workspace tool.');
+      return;
+    }
     if (type !== 'prompt_agent') return;
     const targetNodeId = String(config.targetNodeId ?? '');
     const prompt = String(config.prompt ?? '').trim();
@@ -846,7 +854,7 @@ export class RoutineService {
   ): Promise<Record<string, unknown>> {
     // Browser commands enforce the same policy at the Portal service boundary so
     // direct agent calls and durable automation cannot bypass one another.
-    if (routine.actionType === 'browser' || routine.actionType === 'integration') {
+    if (routine.actionType === 'browser' || routine.actionType === 'integration' || routine.actionType === 'tool') {
       return this.executeActionUnchecked(routine, input, runId, signal);
     }
     const target = routine.actionType === 'prompt_agent'
@@ -938,6 +946,15 @@ export class RoutineService {
         idempotencyKey: `run:${runId}:${action}`,
       }, { actorType: 'automation', actorId: routine.id, runId });
       return { detail: `Integration action completed: ${action}.`, integrationId, action, result };
+    }
+    if (routine.actionType === 'tool') {
+      const toolId = String(routine.actionConfig.toolId ?? '');
+      const serialized = this.interpolate(JSON.stringify(routine.actionConfig.input ?? {}), input);
+      const result = await toolExecutionService.execute(routine.workspaceId, toolId, {
+        input: jsonObject(serialized), idempotencyKey: `automation:${runId}:${toolId}`,
+        dryRun: false, actor: { type: 'automation', id: routine.id }, automationRunId: runId,
+      });
+      return { detail: `Workspace tool completed: ${toolId}.`, toolId, toolRunId: result.id, result: result.output };
     }
     const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);
     if (!workspace) throw new Error('Workspace not found.');

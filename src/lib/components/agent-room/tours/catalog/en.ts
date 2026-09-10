@@ -150,6 +150,20 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    id: 'workspace-tool-workshop',
+    icon: 'Wrench',
+    title: 'Build a reusable workspace tool',
+    tagline: 'Turn a repeated operation into a reviewed, versioned capability.',
+    steps: [
+      { id: 'workshop', title: 'Add the Tool Workshop', body: 'I add the native Tool Workshop node. The same workspace tools also open full-screen from Workbench and inside Automations.', action: { kind: 'createToolWorkshop', title: 'Tool Workshop' }, check: { kind: 'nodeExists', nodeType: 'toolWorkshop' } },
+      { id: 'draft', title: 'Define a bounded contract', body: 'Create a draft from an HTTP request, a connected integration, a deterministic transform, or a workspace command. Declare JSON input/output schemas, limits, fixtures, and only the capabilities it needs.' },
+      { id: 'secrets', title: 'Reference credentials safely', body: 'Create a SecretRef in Security and bind it to Tool Workshop, the exact tool operation, and its destination. Put only that opaque reference in the manifest; raw credentials never enter the tool, agent prompt, run record, or workspace files.' },
+      { id: 'test', title: 'Validate before activation', body: 'Load a fixture and run a dry test against the current draft. Review the manifest, output limit, timeout, and revision history before publishing.' },
+      { id: 'publish', title: 'Publish an immutable revision', body: 'Only the workspace owner can publish. Agents may propose later drafts, while automations keep using the last approved revision until you publish again. Rollback creates a new reviewable draft.' },
+      { id: 'automate', title: 'Use it without repeated prompts', body: 'Choose Tool as an Automation action or let a task-assigned agent call tool_execute with a stable idempotency key. Standing policy handles routine work; Control Center, run history, gates, and Audit retain traceability.' },
+    ],
+  },
+  {
     id: 'duas-features',
     icon: 'GitBranch',
     title: 'Two features in parallel, no conflicts',

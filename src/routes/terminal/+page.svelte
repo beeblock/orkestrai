@@ -47,6 +47,7 @@
   import WorkspaceSharingButton from '$lib/components/collaboration/WorkspaceSharingButton.svelte';
   import WorkspaceSharingDialog from '$lib/components/collaboration/WorkspaceSharingDialog.svelte';
   import AutomationWorkspace from '$lib/components/agent-room/AutomationWorkspace.svelte';
+  import ToolWorkshopPanel from '$lib/components/agent-room/ToolWorkshopPanel.svelte';
   import {
     WORKBENCH_EDITOR_STATE_EVENT,
     dirtyWorkbenchEditorKeys,
@@ -171,6 +172,7 @@
     'reviewCenter',
     'device',
     'computer',
+    'toolWorkshop',
     'design',
   ]);
 
@@ -209,7 +211,7 @@
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
     { id: 'content', types: ['note', 'image', 'imageWorkflow', 'design'] },
-    { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'git', 'diff', 'usage', 'codeGraph'] },
+    { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'toolWorkshop', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
   const selectedWorkspace = $derived(workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null);
@@ -637,6 +639,7 @@
     if (node.type === 'automation') return m['automation.title']();
     if (node.type === 'device') return m['device.title']();
     if (node.type === 'computer') return m['computer.title']();
+    if (node.type === 'toolWorkshop') return m['tool_workshop.title']();
     if (node.type === 'design') return m['terminal_browser.kind_design']();
     return node.type;
   }
@@ -1045,6 +1048,10 @@
         {:else if paneNode.type === 'computer'}
           {#key `${pane.id}:${paneNode.id}`}
             <ComputerWorkbenchPanel workspaceId={selectedWorkspace.id} />
+          {/key}
+        {:else if paneNode.type === 'toolWorkshop'}
+          {#key `${pane.id}:${paneNode.id}`}
+            <ToolWorkshopPanel workspaceId={selectedWorkspace.id} />
           {/key}
         {:else if paneNode.type === 'design'}
           {#key `${pane.id}:${paneNode.id}`}

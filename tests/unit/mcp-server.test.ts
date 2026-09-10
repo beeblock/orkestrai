@@ -56,6 +56,7 @@ describe('servidor MCP (orkestrai mcp)', () => {
       expect(names).toContain(expected);
     }
     expect(names).toEqual(expect.arrayContaining(['integration_list', 'integration_events', 'integration_execute']));
+    expect(names).toEqual(expect.arrayContaining(['tool_list', 'tool_propose', 'tool_update', 'tool_execute']));
     input.end();
   });
 
@@ -161,6 +162,32 @@ describe('servidor MCP (orkestrai mcp)', () => {
     const secret = JSON.parse((await waitFor(2)).result.content[0].text);
     expect(secret.body.input).toEqual({ command: 'type_secret', secretRef: 'secretref:0123456789abcdef', targetId: 'window-1' });
     expect(JSON.stringify(secret)).not.toContain('password');
+    input.end();
+  });
+
+  it('routes versioned tool proposals and executions without accepting raw credentials', async () => {
+    const { send, waitFor, input } = startMcp();
+    const taskId = '00000000-0000-7000-8000-000000000001';
+    const manifest = {
+      schemaVersion: 1,
+      executor: { kind: 'transform', operations: [{ kind: 'set', path: 'ok', value: true }] },
+      inputSchema: { type: 'object', properties: {}, additionalProperties: true },
+      outputSchema: { type: 'object', properties: {}, additionalProperties: true },
+      capabilities: ['tool'], secretRefs: [], timeoutMs: 5_000, maxOutputBytes: 65_536, fixtures: [],
+    };
+    send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'tool_propose', arguments: {
+      name: 'Report formatter', slug: 'report-formatter', manifest, taskId,
+    } } });
+    const proposal = JSON.parse((await waitFor(1)).result.content[0].text);
+    expect(proposal).toMatchObject({ path: '/api/agent-room/bridge/tools', method: 'POST', body: { operation: 'propose', from: 'n1', taskId } });
+    expect(JSON.stringify(proposal)).not.toMatch(/password|bearer/i);
+
+    send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'tool_execute', arguments: {
+      toolId: '00000000-0000-7000-8000-000000000002', input: { reportId: 'weekly' }, taskId, idempotencyKey: 'task:report:weekly',
+    } } });
+    const execution = JSON.parse((await waitFor(2)).result.content[0].text);
+    expect(execution.body).toMatchObject({ operation: 'execute', from: 'n1', taskId, toolId: '00000000-0000-7000-8000-000000000002' });
+    expect(execution.body.input).toMatchObject({ input: { reportId: 'weekly' }, idempotencyKey: 'task:report:weekly' });
     input.end();
   });
 

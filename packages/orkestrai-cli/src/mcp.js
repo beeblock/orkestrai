@@ -81,6 +81,16 @@ const TOOLS = [
   { name: 'integration_execute', description: 'Executa uma operacao concedida de uma conta conectada. Exige tarefa ativa atribuida, identidade do terminal e chave idempotente estavel. Nunca aceita credenciais.', inputSchema: { type: 'object', additionalProperties: false, properties: {
     integrationId: { type: 'string', format: 'uuid' }, action: { type: 'string', minLength: 1, maxLength: 120 }, input: { type: 'object' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8, maxLength: 240, pattern: '^[a-zA-Z0-9._:@/-]+$' },
   }, required: ['integrationId', 'action', 'input', 'taskId', 'idempotencyKey'] } },
+  { name: 'tool_list', description: 'Lista ferramentas versionadas do workspace e suas execucoes recentes. Manifestos contem apenas SecretRefs, nunca credenciais.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'tool_propose', description: 'Propoe uma ferramenta como rascunho versionado. Agentes nao podem publica-la; o dono revisa e publica pela Oficina de Ferramentas.', inputSchema: { type: 'object', additionalProperties: false, properties: {
+    name: { type: 'string', minLength: 1, maxLength: 120 }, slug: { type: 'string', pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }, description: { type: 'string', maxLength: 2000 }, manifest: { type: 'object' }, changeSummary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['name', 'slug', 'manifest', 'taskId'] } },
+  { name: 'tool_update', description: 'Cria uma nova revisao em rascunho para uma ferramenta existente. Exige tarefa ativa atribuida.', inputSchema: { type: 'object', additionalProperties: false, properties: {
+    toolId: { type: 'string', format: 'uuid' }, name: { type: 'string', minLength: 1, maxLength: 120 }, description: { type: 'string', maxLength: 2000 }, manifest: { type: 'object' }, changeSummary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
+  }, required: ['toolId', 'manifest', 'taskId'] } },
+  { name: 'tool_execute', description: 'Executa uma revisao publicada pelo executor confiavel. Exige tarefa ativa, identidade autenticada e chave idempotente; valores secretos nunca entram nos argumentos.', inputSchema: { type: 'object', additionalProperties: false, properties: {
+    toolId: { type: 'string', format: 'uuid' }, input: { type: 'object' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8, maxLength: 255 }, dryRun: { type: 'boolean', default: false },
+  }, required: ['toolId', 'input', 'taskId', 'idempotencyKey'] } },
   { name: 'git_status', description: 'Retorna status, commits, branches, tags, remotes, worktrees, stashes e operacao Git ativa do workspace, sem expor credenciais de remotes.', inputSchema: { type: 'object', properties: {} } },
   { name: 'git_preview', description: 'Prepara uma operacao Git allowlisted sem executa-la. Retorna comando resolvido, risco e revision obrigatoria para executar.', inputSchema: { type: 'object', additionalProperties: false, properties: {
     operation: { type: 'string', enum: ['fetch', 'pull', 'push', 'checkout', 'createBranch', 'renameBranch', 'deleteBranch', 'merge', 'rebase', 'cherryPick', 'revert', 'createTag', 'deleteTag', 'stash', 'stashPop', 'abortMerge', 'abortRebase'] },
@@ -357,6 +367,23 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'integration_execute':
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       return bridge('POST', '/api/agent-room/bridge/integrations', { ...args, from: selfAgent });
+    case 'tool_list':
+      return bridge('GET', '/api/agent-room/bridge/tools');
+    case 'tool_propose': {
+      if (!selfAgent) throw new Error('tool_propose exige identidade de um terminal Orkestrai ativo.');
+      const { taskId, ...input } = args;
+      return bridge('POST', '/api/agent-room/bridge/tools', { operation: 'propose', from: selfAgent, taskId, input });
+    }
+    case 'tool_update': {
+      if (!selfAgent) throw new Error('tool_update exige identidade de um terminal Orkestrai ativo.');
+      const { toolId, taskId, ...input } = args;
+      return bridge('POST', '/api/agent-room/bridge/tools', { operation: 'update', from: selfAgent, taskId, toolId, input });
+    }
+    case 'tool_execute': {
+      if (!selfAgent) throw new Error('tool_execute exige identidade de um terminal Orkestrai ativo.');
+      const { toolId, taskId, ...input } = args;
+      return bridge('POST', '/api/agent-room/bridge/tools', { operation: 'execute', from: selfAgent, taskId, toolId, input });
+    }
     case 'git_status':
       return bridge('GET', '/api/agent-room/bridge/git');
     case 'git_preview':

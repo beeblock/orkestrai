@@ -56,6 +56,7 @@ Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
   orkestrai integration list [--json] | integration events [integrationId] [--limit <n>] [--json] | integration execute <integrationId> <action> --input <json> --task <taskId> --idempotency <key> [--json]
+  orkestrai tool list [--json] | tool propose --name <nome> --slug <slug> --manifest <json> --task <taskId> | tool update <toolId> --manifest <json> --task <taskId> | tool execute <toolId> --input <json> --task <taskId> --idempotency <key> [--dry-run]
   orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
   orkestrai graph status | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
   orkestrai memory list [consulta] [--history] [--json]
@@ -425,6 +426,38 @@ export async function run(argv, options = {}) {
         return 0;
       }
       throw new Error('Uso: orkestrai integration <list|events|execute> ...');
+    }
+    case 'tool': {
+      const [action, toolId] = rest;
+      if (!action || action === 'list') {
+        const data = await bridge(config, 'GET', '/api/agent-room/bridge/tools');
+        if (flags.json) out(JSON.stringify(data, null, 2));
+        else if (!data.tools?.length) out('(no workspace tools)');
+        else for (const item of data.tools) out(`- ${item.name} [${item.status}] r${item.currentRevision} · ${item.manifest.executor.kind}`);
+        return 0;
+      }
+      if (!selfAgent) throw new Error('tool exige identidade de um terminal Orkestrai ativo.');
+      if (!flags.task) throw new Error('tool exige --task <taskId>.');
+      const parseObject = (raw, label) => {
+        try { const value = JSON.parse(String(raw ?? '{}')); if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error(); return value; }
+        catch { throw new Error(`${label} deve ser um objeto JSON valido.`); }
+      };
+      if (action === 'propose') {
+        if (!flags.name || !flags.slug || !flags.manifest) throw new Error('tool propose exige --name, --slug, --manifest e --task.');
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/tools', { operation: 'propose', from: selfAgent, taskId: flags.task, input: { name: flags.name, slug: flags.slug, description: flags.description ?? '', manifest: parseObject(flags.manifest, '--manifest'), changeSummary: flags.summary ?? null } });
+        out(JSON.stringify(data, null, 2)); return 0;
+      }
+      if (action === 'update') {
+        if (!toolId || !flags.manifest) throw new Error('tool update exige toolId, --manifest e --task.');
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/tools', { operation: 'update', from: selfAgent, taskId: flags.task, toolId, input: { ...(flags.name ? { name: flags.name } : {}), ...(flags.description ? { description: flags.description } : {}), manifest: parseObject(flags.manifest, '--manifest'), changeSummary: flags.summary ?? null } });
+        out(JSON.stringify(data, null, 2)); return 0;
+      }
+      if (action === 'execute') {
+        if (!toolId || !flags.idempotency) throw new Error('tool execute exige toolId, --task e --idempotency.');
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/tools', { operation: 'execute', from: selfAgent, taskId: flags.task, toolId, input: { input: parseObject(flags.input, '--input'), idempotencyKey: flags.idempotency, dryRun: Boolean(flags['dry-run']) } });
+        out(JSON.stringify(data, null, 2)); return 0;
+      }
+      throw new Error('Uso: orkestrai tool <list|propose|update|execute> ...');
     }
     case 'git': {
       const [action, operation] = rest;

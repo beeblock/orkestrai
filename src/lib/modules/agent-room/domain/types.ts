@@ -216,7 +216,7 @@ export type AgentModelOption = {
 // Canvas / Workspaces
 // ---------------------------------------------------------------------------
 
-export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'git' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'device' | 'computer' | 'design';
+export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'git' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'toolWorkshop' | 'device' | 'computer' | 'design';
 export type CanvasEdgeStyle = 'cord' | 'circuit';
 export type WorkspaceRuntimeKind = 'native' | 'wsl';
 export type WorkspaceExecutionRuntime =
@@ -1071,7 +1071,7 @@ export type AutomationTriggerType =
   | 'file_change'
   | 'usage_threshold';
 
-export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser' | 'integration';
+export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser' | 'integration' | 'tool';
 export type AutomationRunStatus = 'queued' | 'running' | 'waiting_approval' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';
 
 export type Routine = {

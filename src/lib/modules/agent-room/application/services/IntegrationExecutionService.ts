@@ -64,6 +64,10 @@ function quoteFilename(value: string): string {
 export class IntegrationExecutionService {
   constructor(private readonly http = new TrustedIntegrationHttpClient()) {}
 
+  async get(workspaceId: string, id: string): Promise<AutomationIntegration> {
+    return this.requireIntegration(workspaceId, id);
+  }
+
   async execute(
     workspaceId: string,
     rawInput: IntegrationExecutionInput,

@@ -42,6 +42,14 @@ pt-BR, English, and Spanish translations.
   directly on macOS and Windows through the trusted executor without exposing
   its value to the agent or to process arguments. Linux X11 refuses secret
   typing until an equivalent protected input channel is available.
+- Tool Workshop now lets users and task-assigned agents create versioned
+  workspace tools from connected integrations, bounded HTTP requests,
+  deterministic transforms, and confined workspace commands. Drafts support
+  JSON input/output contracts, fixtures, dry runs, immutable publication,
+  revision history, rollback, idempotent execution, durable Automation actions,
+  Canvas and Workbench access, and MCP/CLI control. SecretRefs must be bound to
+  the exact tool operation and destination before publication; agents can
+  propose drafts but only the workspace owner can activate them.
 
 ### Fixed
 

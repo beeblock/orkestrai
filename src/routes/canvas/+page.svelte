@@ -83,6 +83,7 @@
   import CodeGraphCanvasNode from '$lib/components/agent-room/canvas/CodeGraphCanvasNode.svelte';
   import DeviceCanvasNode from '$lib/components/agent-room/canvas/DeviceCanvasNode.svelte';
   import ComputerCanvasNode from '$lib/components/agent-room/canvas/ComputerCanvasNode.svelte';
+  import ToolWorkshopCanvasNode from '$lib/components/agent-room/canvas/ToolWorkshopCanvasNode.svelte';
   import DesignCanvasNode from '$lib/components/agent-room/canvas/DesignCanvasNode.svelte';
   import DesignEditor from '$lib/components/agent-room/design/DesignEditor.svelte';
   import DesignExplorationDialog from '$lib/components/agent-room/canvas/DesignExplorationDialog.svelte';
@@ -108,7 +109,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -145,6 +146,7 @@
     codeGraph: CodeGraphCanvasNode,
     device: DeviceCanvasNode,
     computer: ComputerCanvasNode,
+    toolWorkshop: ToolWorkshopCanvasNode,
     design: DesignCanvasNode,
   };
 
@@ -170,6 +172,7 @@
     codeGraph: 'var(--app-secondary)',
     device: 'var(--app-secondary)',
     computer: 'var(--app-secondary)',
+    toolWorkshop: 'var(--app-secondary)',
     design: 'var(--app-secondary)',
   };
 
@@ -585,7 +588,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -615,6 +618,7 @@
     apiClient: async (rect) => { await addApiClient(rect); },
     device: async (rect) => { await addDevice(rect); },
     computer: async (rect) => { await addComputer(rect); },
+    toolWorkshop: async (rect) => { await addToolWorkshop(rect); },
     loop: async (rect) => { await addLoop(rect); },
     shape: async (rect) => { await addShape(rect); },
     tasks: async (rect) => { await addTasksNode(rect); },
@@ -1836,6 +1840,30 @@
     toast.success(m['computer.added_to_canvas']());
   }
 
+  async function addToolWorkshop(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const existing = nodes.find((node) => node.type === 'toolWorkshop');
+    if (existing) {
+      jumpToNode(existing.id, 0.72, 26);
+      toast.info(m['tool_workshop.already_on_canvas']());
+      return;
+    }
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(760, 620);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'toolWorkshop',
+        title: m['tool_workshop.title'](),
+        ...position,
+        ...nodeSize(rect, 600, 480, 760, 620),
+        payload: {},
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    toast.success(m['tool_workshop.added_to_canvas']());
+  }
+
   async function addLoop(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(560, 460);
@@ -2966,6 +2994,9 @@
             </ToolbarButton>
             <ToolbarButton label={m['computer.tool']()} active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
               <MonitorCog size={15} class="tool-icon-svg" /> {m['computer.title']()}
+            </ToolbarButton>
+            <ToolbarButton label={m['tool_workshop.title']()} active={drawTool === 'toolWorkshop'} onclick={() => toggleDrawTool('toolWorkshop')}>
+              <Wrench size={15} class="tool-icon-svg" /> {m['tool_workshop.title']()}
             </ToolbarButton>
             <ToolbarButton label={m['tool.loop']()} active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
               <img src="/images/loop.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.label_loop']()}

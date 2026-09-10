@@ -6,7 +6,7 @@
   import {
     Activity, CheckCircle2, History, LoaderCircle, PlugZap,
     Pencil, Play, Plus, RotateCcw, ShieldCheck, Sparkles, Trash2,
-    Workflow, X, XCircle,
+    Workflow, Wrench, X, XCircle,
   } from '@lucide/svelte';
   import * as Tabs from '$lib/components/ui/tabs';
   import * as Select from '$lib/components/ui/select';
@@ -18,9 +18,11 @@
   import { Switch } from '$lib/components/ui/switch';
   import AutonomySecurityPanel from './AutonomySecurityPanel.svelte';
   import IntegrationCenterPanel from './IntegrationCenterPanel.svelte';
+  import ToolWorkshopPanel from './ToolWorkshopPanel.svelte';
   import { automationFormSchema, type AutomationFormInput } from '$lib/modules/agent-room/contracts/schemas/automation.schema.js';
   import type { AutomationRecipe } from '$lib/modules/agent-room/application/catalogs/AutomationRecipeCatalog.js';
   import type { AutomationIntegration, AutomationRun, CanvasNode, Routine } from '$lib/modules/agent-room/domain/types.js';
+  import type { WorkspaceToolRecord } from '$lib/modules/agent-room/infrastructure/repositories/AgentWorkspaceToolRepository.js';
   import * as m from '$lib/paraglide/messages.js';
 
   let {
@@ -45,6 +47,7 @@
     portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null,
     portalText: null, portalSubmit: false,
     integrationId: null, integrationAction: null, integrationPayload: '{}',
+    toolId: null, toolInput: '{}',
   };
   const schema = automationFormSchema as unknown as Parameters<typeof zod>[0];
   const form = superForm<AutomationFormInput>(defaults(emptyForm, zod(schema)) as never, {
@@ -62,6 +65,7 @@
   let runs = $state<AutomationRun[]>([]);
   let recipes = $state<AutomationRecipe[]>([]);
   let integrations = $state<AutomationIntegration[]>([]);
+  let tools = $state<WorkspaceToolRecord[]>([]);
   let portals = $state<Array<{ id: string; title: string }>>([]);
   let loading = $state(true);
   let busy = $state(false);
@@ -93,12 +97,14 @@
         api<AutomationRecipe[]>(`/api/agent-room/workspaces/${workspaceId}/automations/recipes`),
         api<{ integrations: AutomationIntegration[] }>(`/api/agent-room/workspaces/${workspaceId}/integrations`),
         api<CanvasNode[]>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
+        api<WorkspaceToolRecord[]>(`/api/agent-room/workspaces/${workspaceId}/tools`),
       ]);
       automations = loaded[0] as Routine[];
       runs = loaded[1] as AutomationRun[];
       recipes = loaded[2] as AutomationRecipe[];
       integrations = (loaded[3] as { integrations: AutomationIntegration[] }).integrations;
       portals = (loaded[4] as CanvasNode[]).filter((node) => node.type === 'portal').map((node) => ({ id: node.id, title: node.title ?? m['portal.default_title']() }));
+      tools = loaded[5] as WorkspaceToolRecord[];
     } catch (error) {
       toast.error(error instanceof Error ? error.message : m['automation.error_load']());
     } finally {
@@ -153,6 +159,8 @@
       integrationId: String(action.integrationId ?? '') || null,
       integrationAction: String(action.integrationAction ?? '') || null,
       integrationPayload: JSON.stringify(action.payload ?? {}, null, 2),
+      toolId: String(action.toolId ?? '') || null,
+      toolInput: JSON.stringify(action.input ?? {}, null, 2),
       enabled: automation.enabled,
       recipeId: automation.recipeId,
     };
@@ -240,7 +248,7 @@
   }
 
   function actionLabel(type: Routine['actionType']): string {
-    return ({ prompt_agent: m['automation.action_prompt'], create_task: m['automation.action_task'], notify: m['automation.action_notify'], browser: m['automation.action_browser'], integration: m['automation.action_integration'] }[type])();
+    return ({ prompt_agent: m['automation.action_prompt'], create_task: m['automation.action_task'], notify: m['automation.action_notify'], browser: m['automation.action_browser'], integration: m['automation.action_integration'], tool: m['automation.action_tool'] }[type])();
   }
 
   function browserActionLabel(type: NonNullable<AutomationFormInput['portalAction']>): string {
@@ -289,6 +297,7 @@
       <Tabs.Trigger value="recipes" class="h-7 text-ui-xs"><Sparkles size={12} />{m['automation.recipes']()}</Tabs.Trigger>
       <Tabs.Trigger value="history" class="h-7 text-ui-xs"><History size={12} />{m['automation.history']()}</Tabs.Trigger>
       <Tabs.Trigger value="integrations" class="h-7 text-ui-xs"><PlugZap size={12} />{m['automation.integrations']()}</Tabs.Trigger>
+      <Tabs.Trigger value="tools" class="h-7 text-ui-xs"><Wrench size={12} />{m['automation.tools']()}</Tabs.Trigger>
       <Tabs.Trigger value="security" class="h-7 text-ui-xs"><ShieldCheck size={12} />{m['autonomy.title']()}</Tabs.Trigger>
     </Tabs.List>
 
@@ -312,7 +321,7 @@
             {#if $formData.triggerType === 'webhook'}<label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.webhook_secret']()}</span><Input bind:value={$formData.webhookSecret} autocomplete="off" /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.webhook_hint']()}</span>{#if editingId}<code class="mt-2 block overflow-x-auto border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-ui-xs">/api/agent-room/workspaces/{workspaceId}/automations/webhook/{editingId}</code>{/if}</label>{/if}
             {#if $formData.triggerType === 'file_change'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.file_path']()}</span><Input bind:value={$formData.filePath} placeholder="src" /></label>{/if}
             {#if $formData.triggerType === 'usage_threshold'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.provider']()}</span><Select.Root type="single" value={$formData.usageProvider ?? undefined} onValueChange={(value) => ($formData.usageProvider = value as AutomationFormInput['usageProvider'])}><Select.Trigger class="w-full">{$formData.usageProvider ?? m['automation.provider']()}</Select.Trigger><Select.Content><Select.Item value="claude">Claude</Select.Item><Select.Item value="codex">Codex</Select.Item><Select.Item value="kimi">Kimi</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.usage_window']()}</span><Select.Root type="single" value={$formData.usageWindow ?? undefined} onValueChange={(value) => ($formData.usageWindow = value as AutomationFormInput['usageWindow'])}><Select.Trigger class="w-full">{$formData.usageWindow ?? m['automation.usage_window']()}</Select.Trigger><Select.Content><Select.Item value="5h">5h</Select.Item><Select.Item value="weekly">Weekly</Select.Item><Select.Item value="monthly">Monthly</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.threshold']()}</span><Input type="number" min="1" max="100" bind:value={$formData.usagePercent} /></label>{/if}
-            <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.action']()}</span><Select.Root type="single" value={$formData.actionType} onValueChange={(value) => ($formData.actionType = value as AutomationFormInput['actionType'])}><Select.Trigger class="w-full">{actionLabel($formData.actionType)}</Select.Trigger><Select.Content><Select.Item value="prompt_agent">{m['automation.action_prompt']()}</Select.Item><Select.Item value="create_task">{m['automation.action_task']()}</Select.Item><Select.Item value="notify">{m['automation.action_notify']()}</Select.Item><Select.Item value="browser">{m['automation.action_browser']()}</Select.Item><Select.Item value="integration">{m['automation.action_integration']()}</Select.Item></Select.Content></Select.Root></label>
+            <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.action']()}</span><Select.Root type="single" value={$formData.actionType} onValueChange={(value) => ($formData.actionType = value as AutomationFormInput['actionType'])}><Select.Trigger class="w-full">{actionLabel($formData.actionType)}</Select.Trigger><Select.Content><Select.Item value="prompt_agent">{m['automation.action_prompt']()}</Select.Item><Select.Item value="create_task">{m['automation.action_task']()}</Select.Item><Select.Item value="notify">{m['automation.action_notify']()}</Select.Item><Select.Item value="browser">{m['automation.action_browser']()}</Select.Item><Select.Item value="integration">{m['automation.action_integration']()}</Select.Item><Select.Item value="tool">{m['automation.action_tool']()}</Select.Item></Select.Content></Select.Root></label>
             {#if $formData.actionType === 'prompt_agent'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.target']()}</span><Select.Root type="single" value={$formData.targetNodeId ?? undefined} onValueChange={(value) => ($formData.targetNodeId = value)}><Select.Trigger class="w-full">{terminals.find((item) => item.id === $formData.targetNodeId)?.title ?? m['automation.target']()}</Select.Trigger><Select.Content>{#each terminals as terminal}<Select.Item value={terminal.id}>{terminal.title}</Select.Item>{/each}</Select.Content></Select.Root></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.prompt']()}</span><Textarea class="min-h-24 resize-y" bind:value={$formData.prompt} /></label>{/if}
             {#if $formData.actionType === 'create_task'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.task_title']()}</span><Input bind:value={$formData.taskTitle} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.task_description']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.taskDescription} /></label>{/if}
             {#if $formData.actionType === 'notify'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.notification_title']()}</span><Input bind:value={$formData.notificationTitle} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.notification_message']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.notificationMessage} /></label>{/if}
@@ -328,6 +337,10 @@
               <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.integration_account']()}</span><Select.Root type="single" value={$formData.integrationId ?? undefined} onValueChange={(value) => { $formData.integrationId = value; $formData.integrationAction = null; }}><Select.Trigger class="w-full">{integrations.find((item) => item.id === $formData.integrationId)?.name ?? m['automation.integration_account']()}</Select.Trigger><Select.Content>{#each integrations.filter((item) => item.enabled && item.status === 'connected') as integration}<Select.Item value={integration.id}>{integration.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
               <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.integration_operation']()}</span><Select.Root type="single" value={$formData.integrationAction ?? undefined} onValueChange={(value) => ($formData.integrationAction = value)}><Select.Trigger class="w-full">{$formData.integrationAction ?? m['automation.integration_operation']()}</Select.Trigger><Select.Content>{#each integrations.find((item) => item.id === $formData.integrationId)?.permissions ?? [] as permission}<Select.Item value={permission}>{permission}</Select.Item>{/each}</Select.Content></Select.Root></label>
               <label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.integration_payload']()}</span><Textarea class="min-h-32 resize-y font-mono" spellcheck={false} bind:value={$formData.integrationPayload} /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.integration_payload_help']()}</span></label>
+            {/if}
+            {#if $formData.actionType === 'tool'}
+              <label><span class="mb-1 block text-ui-xs font-medium">{m['automation.tool']()}</span><Select.Root type="single" value={$formData.toolId ?? undefined} onValueChange={(value) => ($formData.toolId = value)}><Select.Trigger class="w-full">{tools.find((item) => item.id === $formData.toolId)?.name ?? m['automation.tool']()}</Select.Trigger><Select.Content>{#each tools.filter((item) => item.status !== 'archived' && item.publishedRevision != null) as tool}<Select.Item value={tool.id}>{tool.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
+              <label class={compact ? '' : 'col-span-2'}><span class="mb-1 block text-ui-xs font-medium">{m['automation.tool_input']()}</span><Textarea class="min-h-32 resize-y font-mono" spellcheck={false} bind:value={$formData.toolInput} /><span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['automation.tool_input_help']()}</span></label>
             {/if}
           </div>
           <div class="mt-4 flex items-center justify-between gap-3"><label class="flex items-center gap-2 text-ui-xs"><Switch checked={$formData.enabled} onCheckedChange={(checked: boolean) => ($formData.enabled = checked)} />{m['automation.enable']()}</label><div class="flex gap-2"><Button type="button" variant="ghost" size="sm" onclick={resetEditor}>{m['automation.cancel']()}</Button><Button type="submit" size="sm" disabled={busy}>{#if busy}<LoaderCircle class="animate-spin" />{/if}{m['automation.save']()}</Button></div></div>
@@ -349,6 +362,7 @@
     <Tabs.Content value="history" class="m-0 min-h-0 overflow-y-auto p-4">{#if runs.length === 0}<div class="grid min-h-52 place-items-center text-center"><div><History class="mx-auto text-[var(--app-text-muted)]" size={24} /><p class="mt-2 text-xs">{m['automation.history_empty']()}</p></div></div>{:else}<div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">{#each runs as run (run.id)}<article class="flex items-start gap-3 bg-[var(--app-surface)] px-3 py-3">{#if run.status === 'succeeded'}<CheckCircle2 class="mt-0.5 shrink-0 text-[var(--app-success)]" size={15} />{:else if run.status === 'failed' || run.status === 'dead_letter'}<XCircle class="mt-0.5 shrink-0 text-[var(--app-danger)]" size={15} />{:else}<LoaderCircle class={`mt-0.5 shrink-0 text-[var(--app-accent)] ${run.status === 'running' ? 'animate-spin' : ''}`} size={15} />{/if}<div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><span class="text-xs font-medium">{automations.find((item) => item.id === run.routineId)?.name ?? run.routineId.slice(0, 8)}</span><Badge variant="outline">{statusLabel(run.status)}</Badge></div><p class="mt-1 break-words text-ui-xs leading-4 text-[var(--app-text-soft)]">{run.detail ?? run.error}</p><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{new Date(run.ranAt).toLocaleString()} · {m['automation.attempt']({ attempt: run.attempt })}/{run.maxAttempts}{run.durationMs !== null ? ` · ${m['automation.duration']({ duration: run.durationMs })}` : ''}{run.provider ? ` · ${run.provider}` : ''}{run.nextAttemptAt ? ` · ${m['automation.next_attempt']({ date: new Date(run.nextAttemptAt).toLocaleString() })}` : ''}</p></div><div class="flex shrink-0 items-center gap-1">{#if run.status === 'queued' || run.status === 'running' || run.status === 'waiting_approval'}<Button variant="ghost" size="sm" onclick={() => cancelRun(run)}><X size={13} />{m['automation.cancel_run']()}</Button>{:else if run.recoverable}<Button variant="ghost" size="sm" onclick={() => retry(run)}><RotateCcw size={13} />{m['automation.retry']()}</Button>{/if}</div></article>{/each}</div>{/if}</Tabs.Content>
 
     <Tabs.Content value="integrations" class="m-0 min-h-0 overflow-hidden"><IntegrationCenterPanel {workspaceId} {compact} onChanged={refresh} /></Tabs.Content>
+    <Tabs.Content value="tools" class="m-0 min-h-0 overflow-hidden"><ToolWorkshopPanel {workspaceId} {compact} /></Tabs.Content>
     <Tabs.Content value="security" class="m-0 min-h-0 overflow-hidden"><AutonomySecurityPanel {workspaceId} {compact} /></Tabs.Content>
   </Tabs.Root>
 </section>

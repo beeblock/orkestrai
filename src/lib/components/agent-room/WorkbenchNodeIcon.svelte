@@ -24,6 +24,7 @@
     MessageSquareText,
     Waypoints,
     GitFork,
+    Wrench,
   } from '@lucide/svelte';
   import type { CanvasNodeType } from '$lib/modules/agent-room/domain/types.js';
 
@@ -54,4 +55,5 @@
 {:else if type === 'computer'}<MonitorCog {size} aria-hidden="true" />
 {:else if type === 'design'}<Palette {size} aria-hidden="true" />
 {:else if type === 'automation'}<AutomationIcon {size} aria-hidden="true" />
+{:else if type === 'toolWorkshop'}<Wrench {size} aria-hidden="true" />
 {/if}

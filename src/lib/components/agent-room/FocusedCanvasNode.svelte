@@ -20,6 +20,7 @@
   import CodeGraphCanvasNode from './canvas/CodeGraphCanvasNode.svelte';
   import DesignCanvasNode from './canvas/DesignCanvasNode.svelte';
   import ComputerCanvasNode from './canvas/ComputerCanvasNode.svelte';
+  import ToolWorkshopCanvasNode from './canvas/ToolWorkshopCanvasNode.svelte';
   import WorkbenchFileView from './WorkbenchFileView.svelte';
   import type { TerminalThemeName } from './terminal-themes.js';
   import type {
@@ -76,6 +77,7 @@
     usage: UsageCanvasNode,
     codeGraph: CodeGraphCanvasNode,
     computer: ComputerCanvasNode,
+    toolWorkshop: ToolWorkshopCanvasNode,
     design: DesignCanvasNode,
   };
 

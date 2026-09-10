@@ -38,6 +38,7 @@ export type TourAction =
   | { kind: 'createShape'; title: string; shape?: 'rectangle' | 'rounded' | 'ellipse' | 'diamond' | 'arrow' }
   | { kind: 'createDevice'; title: string }
   | { kind: 'createComputer'; title: string }
+  | { kind: 'createToolWorkshop'; title: string }
   | { kind: 'createDesign'; title: string }
   | { kind: 'createTask'; title: string; assigneeTitle?: string }
   | { kind: 'connect'; fromTitle: string; toTitle: string }
