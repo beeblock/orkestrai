@@ -303,6 +303,7 @@
     },
     "rpm": {
       "artifactName": "${productName}-${version}.${arch}.${ext}",
+      "fpm": ["--rpm-rpmbuild-define", "_build_id_links none"],
       "depends": [
         "gtk3",
         "libnotify",
