@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [[ -n "${ORKESTRAI_MAC_LOCAL_SIGNING_IDENTITY:-}" && "${ORKESTRAI_REQUIRE_MAC_SIGNING:-false}" != "true" && "${ORKESTRAI_MAC_ALLOW_KEYCHAIN_PROMPTS:-false}" != "true" ]]; then
+  printf 'ERROR: Local certificate signing can prompt repeatedly for Keychain access. Obtain explicit owner approval before setting ORKESTRAI_MAC_ALLOW_KEYCHAIN_PROMPTS=true, or unset ORKESTRAI_MAC_LOCAL_SIGNING_IDENTITY for an ad-hoc local build.\n' >&2
+  exit 1
+fi
+
 # electron-builder cannot reliably collect transitive production dependencies
 # when the project-level node_modules is a symlink to another checkout. Package
 # from a clean temporary install in that case so local test builds match CI.
@@ -72,7 +77,17 @@ if [[ "${ORKESTRAI_REQUIRE_MAC_SIGNING:-false}" == "true" ]]; then
   done
 fi
 
-if [[ -z "${CSC_LINK:-}" ]]; then
+if [[ -n "${ORKESTRAI_MAC_LOCAL_SIGNING_IDENTITY:-}" && "${ORKESTRAI_REQUIRE_MAC_SIGNING:-false}" != "true" ]]; then
+  # Local hardware QA must exercise Hardened Runtime, not only the ad-hoc path.
+  # This mode never publishes and does not claim Apple notarization.
+  unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+  export CSC_IDENTITY_AUTO_DISCOVERY=true
+  local_signing_identity="${ORKESTRAI_MAC_LOCAL_SIGNING_IDENTITY#Developer ID Application: }"
+  npx electron-builder "${builder_args[@]}" -c.mac.identity="$local_signing_identity" -c.mac.hardenedRuntime=true -c.mac.notarize=false
+  if [[ -f release/latest-mac.yml ]]; then
+    node scripts/set-mac-update-policy.mjs release/latest-mac.yml
+  fi
+elif [[ -z "${CSC_LINK:-}" ]]; then
   unset CSC_LINK CSC_NAME CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
   export CSC_IDENTITY_AUTO_DISCOVERY=false
   npx electron-builder "${builder_args[@]}" -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false
@@ -82,3 +97,9 @@ if [[ -z "${CSC_LINK:-}" ]]; then
 else
   npx electron-builder "${builder_args[@]}"
 fi
+
+for app_path in release/mac/Orkestrai.app release/mac-arm64/Orkestrai.app; do
+  if [[ -d "$app_path" ]]; then
+    node scripts/validate-macos-permissions.mjs "$app_path"
+  fi
+done

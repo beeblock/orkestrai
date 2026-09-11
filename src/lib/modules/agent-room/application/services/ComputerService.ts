@@ -18,14 +18,21 @@ import {
 } from '../../contracts/schemas/computer.schema.js';
 import { AgentComputerAction } from '../../domain/models/AgentComputerAction.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { autonomyPolicyService } from './AutonomyPolicyService.js';
+import { AutonomyGatePendingError, autonomyPolicyService } from './AutonomyPolicyService.js';
 import { secretRefService } from './SecretRefService.js';
+import { CreateCanvasNodeDto, CreateCanvasEdgeDto } from '../dto/WorkspaceDtos.js';
+import type { AutonomyRisk } from '../../contracts/schemas/autonomy-policy.schema.js';
+import { workspacePathService } from './WorkspacePathService.js';
+
+// Input focus belongs to the host, not a workspace or service instance.
+const desktop = globalThis as typeof globalThis & { __orkestraiComputerBusy?: boolean };
 
 export type ComputerExecutionContext = {
   actorType: 'agent' | 'automation' | 'user';
   actorId?: string | null;
   runId?: string | null;
   idempotencyKey?: string | null;
+  risk?: AutonomyRisk;
 };
 
 function metadata(result: ComputerCommandResult): Record<string, unknown> {
@@ -33,8 +40,8 @@ function metadata(result: ComputerCommandResult): Record<string, unknown> {
   return { kind: result.kind, completed: result.kind === 'action' ? result.completed : true };
 }
 
-function requestDigest(input: ComputerCommandInput): string {
-  return createHash('sha256').update(JSON.stringify(input)).digest('hex');
+function requestDigest(input: ComputerCommandInput, risk?: AutonomyRisk): string {
+  return createHash('sha256').update(JSON.stringify(risk ? { input, risk } : input)).digest('hex');
 }
 
 export class ComputerService {
@@ -70,8 +77,19 @@ export class ComputerService {
 
   async execute(workspaceId: string, rawInput: ComputerCommandInput, context: ComputerExecutionContext): Promise<ComputerCommandResult> {
     const input = computerCommandSchema.parse(rawInput);
+    if (desktop.__orkestraiComputerBusy) throw new Error('Another desktop action is running. Retry with the same idempotency key after it finishes.');
+    desktop.__orkestraiComputerBusy = true;
+    try {
+      return await this.executeExclusive(workspaceId, input, context);
+    } finally {
+      desktop.__orkestraiComputerBusy = false;
+    }
+  }
+
+  private async executeExclusive(workspaceId: string, input: ComputerCommandInput, context: ComputerExecutionContext): Promise<ComputerCommandResult> {
+    if (input.command === 'prepare') return this.prepare(workspaceId, context);
     const current = await this.snapshot(workspaceId);
-    if (!current.nodeId) throw new Error('Add a Computer node to this workspace first.');
+    if (!current.nodeId) throw new Error('Call computer_prepare to create the Computer node first.');
     if (input.command === 'inspect') return { kind: 'snapshot', snapshot: context.actorType === 'user' ? current.snapshot : this.scopedSnapshot(current.snapshot, current.config) };
     if (input.command === 'open_settings') {
       if (context.actorType !== 'user') throw new Error('Only the workspace owner can open operating-system permission settings.');
@@ -80,6 +98,10 @@ export class ComputerService {
     }
     if (!current.config.enabled) throw new Error('Desktop control is disabled on this Computer node.');
     if (!current.snapshot.available) throw new Error(current.snapshot.detail ?? 'Desktop control is unavailable on this system.');
+    if (context.actorType !== 'user' && context.risk) {
+      const policy = await autonomyPolicyService.get(workspaceId);
+      if (!policy.enabled || policy.mode === 'observe') throw new Error('Risk-bearing agent actions require an active enforcing Security policy.');
+    }
     if (context.actorType !== 'user' && input.command === 'click' && input.space !== 'window') {
       throw new Error('Agents may click only inside an explicitly allowed window.');
     }
@@ -91,7 +113,10 @@ export class ComputerService {
     }
 
     const scopedWindow = this.scopedWindow(input, current.snapshot);
-    const appId = scopedWindow?.appId ?? this.focusedApp(current.snapshot);
+    const targetId = input.command === 'focus' ? input.windowId : 'targetId' in input ? input.targetId : null;
+    const requiresWindow = input.command === 'focus' || (input.command === 'click' && input.space === 'window') || (input.command === 'screenshot' && input.target === 'window') || ['type', 'type_secret', 'shortcut'].includes(input.command) && Boolean(targetId);
+    if (requiresWindow && !scopedWindow) throw new Error('The target window is no longer available. Inspect again before acting.');
+    const appId = input.command === 'launch' ? input.applicationId : scopedWindow?.appId ?? this.focusedApp(current.snapshot);
     if ((input.command === 'type' || input.command === 'type_secret' || input.command === 'shortcut') && !appId) {
       throw new Error('The focused application could not be identified.');
     }
@@ -101,14 +126,18 @@ export class ComputerService {
     this.assertDisplayScope(input, current.snapshot, current.config);
 
     const key = context.idempotencyKey ?? `user:${uuidv7()}`;
-    const inputDigest = requestDigest(input);
+    const inputDigest = requestDigest(input, context.risk);
     const previous = await AgentComputerAction.query().where('workspace_id', workspaceId).where('idempotency_key', key).first();
     if (previous && (String(previous.getAttribute('command')) !== input.command || String(previous.getAttribute('request_digest')) !== inputDigest)) {
       throw new Error('This idempotency key is already bound to a different computer request.');
     }
+    if (previous && (previous.getAttribute('actor_id') ?? null) !== (context.actorId ?? null)) throw new Error('This idempotency key belongs to another actor.');
     if (previous && String(previous.getAttribute('status')) === 'succeeded') {
       const stored = JSON.parse(String(previous.getAttribute('result_json') ?? '{}')) as Record<string, unknown>;
       return this.scopeResult({ kind: 'action', completed: true, snapshot: await this.adapterSnapshot(), ...stored } as ComputerCommandResult, current.config, context.actorType);
+    }
+    if (previous && ['running', 'failed'].includes(String(previous.getAttribute('status')))) {
+      throw new Error('The earlier action may have partially executed. Inspect the desktop before issuing a new action; automatic replay is blocked.');
     }
     const actionId = previous ? String(previous.getAttribute('id')) : uuidv7();
     const now = new Date();
@@ -125,24 +154,52 @@ export class ComputerService {
         mutation: input.command !== 'screenshot' && input.command !== 'wait',
         actorType: context.actorType,
         actorId: context.actorId ?? null,
-        input: input.command === 'type' ? { command: 'type', characters: input.text.length } : input,
+        input: { ...(input.command === 'type' ? { command: 'type', characters: input.text.length } : input), requestDigest: inputDigest, idempotencyKey: key },
         auditOutput: (result) => metadata(result as ComputerCommandResult),
         certainty: 'semantic',
+        risk: context.risk,
         ...(appId ? { application: { id: appId } } : {}),
       }, () => this.executeUnchecked(workspaceId, current.nodeId!, current.config, input, current.snapshot, appId));
       await AgentComputerAction.query().where('id', actionId).update({ status: 'succeeded', result_json: JSON.stringify(metadata(result)), error: null, updated_at: new Date() });
       return this.scopeResult(result, current.config, context.actorType);
     } catch (error) {
-      await AgentComputerAction.query().where('id', actionId).update({ status: 'failed', error: String(error instanceof Error ? error.message : error).slice(0, 2_000), updated_at: new Date() });
+      await AgentComputerAction.query().where('id', actionId).update({ status: error instanceof AutonomyGatePendingError ? 'gated' : 'failed', error: input.command === 'type_secret' ? 'Secure input delivery failed.' : String(error instanceof Error ? error.message : error).slice(0, 2_000), updated_at: new Date() });
       throw error;
     }
+  }
+
+  private async prepare(workspaceId: string, context: ComputerExecutionContext): Promise<ComputerCommandResult> {
+    const { workspaceService } = await import('./WorkspaceService.js');
+    const existing = (await workspaceRepository.listNodes(workspaceId)).find((node) => node.type === 'computer');
+    const policy = await autonomyPolicyService.get(workspaceId);
+    const inherited = policy.enabled && policy.mode === 'bounded' && !policy.policy.halted && policy.policy.capabilities.includes('computer');
+    const applications = inherited ? policy.policy.allowedApps.filter((id) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(id)) : [];
+    const config = computerNodeConfigSchema.parse({
+      enabled: applications.length > 0,
+      allowedApplications: applications,
+    });
+    const node = existing ?? await workspaceService.createNode(CreateCanvasNodeDto.from(workspaceId, {
+      type: 'computer', title: 'Computer', width: 620, height: 820, payload: { computerConfig: config },
+    }));
+    if (context.actorId) {
+      const actor = await workspaceRepository.getNode(context.actorId);
+      if (actor?.workspaceId === workspaceId && actor.type === 'terminal') {
+        const edges = await workspaceRepository.listEdges(workspaceId);
+        if (!edges.some((edge) => edge.sourceNodeId === actor.id && edge.targetNodeId === node.id)) {
+          await workspaceService.createEdge(CreateCanvasEdgeDto.from(workspaceId, { sourceNodeId: actor.id, targetNodeId: node.id, style: 'cord' }));
+        }
+      }
+    }
+    await autonomyPolicyService.recordSemanticEffect({ workspaceId, capability: 'computer', operation: 'computer.prepare', actorType: context.actorType, actorId: context.actorId, mutation: true }, { nodeId: node.id, reused: Boolean(existing), inheritedStandingGrant: !existing && inherited });
+    const current = await this.snapshot(workspaceId);
+    return this.scopeResult({ kind: 'action', completed: true, snapshot: current.snapshot }, current.config, context.actorType);
   }
 
   async evidence(workspaceId: string, evidenceId: string): Promise<string> {
     if (!/^[0-9a-f-]{36}$/i.test(evidenceId)) throw new Error('Invalid computer evidence reference.');
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('Workspace not found.');
-    const path = join(workspace.workingDir, '.orkestrai', 'computer', 'evidence', `${evidenceId}.png`);
+    const path = await workspacePathService.resolveExisting(workspace, `.orkestrai/computer/evidence/${evidenceId}.png`);
     await stat(path);
     return path;
   }
@@ -150,14 +207,22 @@ export class ComputerService {
   async removeEvidence(workspaceId: string): Promise<void> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) return;
-    await rm(join(workspace.workingDir, '.orkestrai', 'computer', 'evidence'), { recursive: true, force: true });
+    await rm(await workspacePathService.resolveWritable(workspace, '.orkestrai/computer/evidence'), { recursive: true, force: true });
   }
 
-  private async executeUnchecked(workspaceId: string, nodeId: string, config: ComputerNodeConfig, input: Exclude<ComputerCommandInput, { command: 'inspect' | 'open_settings' }>, snapshot: ComputerSnapshot, appId: string | null): Promise<ComputerCommandResult> {
-    if (input.command === 'focus') await this.adapter.focus(input.windowId);
-    else if (input.command === 'click') await this.adapter.click(resolveComputerPoint(input, snapshot));
+  private async executeUnchecked(workspaceId: string, nodeId: string, config: ComputerNodeConfig, input: Exclude<ComputerCommandInput, { command: 'inspect' | 'open_settings' | 'prepare' }>, snapshot: ComputerSnapshot, appId: string | null): Promise<ComputerCommandResult> {
+    if (input.command === 'launch') {
+      const existing = snapshot.windows.find((window) => window.appId.toLowerCase() === input.applicationId.toLowerCase());
+      if (existing) await this.adapter.focus(existing.id);
+      else await this.adapter.launch(input.applicationId);
+    }
+    else if (input.command === 'focus') await this.adapter.focus(input.windowId);
+    else if (input.command === 'click') {
+      const current = input.space === 'window' ? await this.focusVerified(input.targetId!, appId!) : snapshot;
+      await this.adapter.click(resolveComputerPoint(input, current));
+    }
     else if (input.command === 'type') {
-      if (input.targetId) await this.adapter.focus(input.targetId);
+      if (input.targetId) await this.focusVerified(input.targetId, appId!);
       await this.adapter.type(input.text);
     }
     else if (input.command === 'type_secret') {
@@ -171,11 +236,12 @@ export class ComputerService {
         throw new Error('SecretRef must be explicitly bound to the target application.');
       }
       const secret = await secretRefService.resolve(workspaceId, input.secretRef, { integration: 'computer', operation: 'computer.type_secret', destination: appId });
-      if (input.targetId) await this.adapter.focus(input.targetId);
-      await this.adapter.typeSensitive(secret.revealInsideTrustedExecutor());
+      if (input.targetId) await this.focusVerified(input.targetId, appId!);
+      try { await this.adapter.typeSensitive(secret.revealInsideTrustedExecutor()); }
+      catch { throw new Error('Secure input delivery failed. Inspect the target before retrying.'); }
     }
     else if (input.command === 'shortcut') {
-      if (input.targetId) await this.adapter.focus(input.targetId);
+      if (input.targetId) await this.focusVerified(input.targetId, appId!);
       await this.adapter.shortcut(input.keys);
     }
     else if (input.command === 'wait') await this.wait(input, config);
@@ -183,7 +249,7 @@ export class ComputerService {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       if (!workspace) throw new Error('Workspace not found.');
       const evidenceId = uuidv7();
-      const directory = join(workspace.workingDir, '.orkestrai', 'computer', 'evidence');
+      const directory = await workspacePathService.resolveWritable(workspace, '.orkestrai/computer/evidence');
       await mkdir(directory, { recursive: true });
       await this.cleanupEvidence(directory, config.evidenceRetentionDays);
       const absolute = join(directory, `${evidenceId}.png`);
@@ -194,6 +260,14 @@ export class ComputerService {
       return { kind: 'screenshot', path, evidenceId, ...dimensions, snapshot: await this.adapterSnapshot() };
     }
     return { kind: 'action', completed: true, snapshot: await this.adapterSnapshot() };
+  }
+
+  private async focusVerified(windowId: string, appId: string): Promise<ComputerSnapshot> {
+    await this.adapter.focus(windowId);
+    const snapshot = await this.adapterSnapshot();
+    const target = snapshot.windows.find((window) => window.id === windowId);
+    if (!target || target.appId !== appId || !target.focused) throw new Error('The target window did not retain focus. No input was sent.');
+    return snapshot;
   }
 
   private scopedWindow(input: ComputerCommandInput, snapshot: ComputerSnapshot) {

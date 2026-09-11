@@ -44,9 +44,14 @@ normal de los agentes no se guarda.
   Bajo demanda o Persistente y conecta Gmail, Slack, Telegram, WhatsApp, GitHub
   o webhooks con permisos por operación. Los agentes pueden leer buzones
   autorizados, clasificar trabajo y entregar informes o PDFs sin recibir el token.
-- **Control limitado del escritorio:** el nodo Equipo opera solo aplicaciones y
+- **Control limitado del escritorio:** pide al agente que abra Calculadora o
+  use el navegador con sesión iniciada en el escritorio, localmente o por Remote.
+  Crea la nota, la tarea y el nodo Equipo; tú autorizas las aplicaciones y los
+  permisos del sistema, sin montar el flujo manualmente. El nodo opera solo aplicaciones y
   pantallas aprobadas en macOS, Windows y Linux X11 compatible, con comandos
   tipados, idempotencia, evidencia confinada y auditoría sin contenido escrito.
+  Consulta la [guía de Computer Control](docs/computer-control.md) para comandos,
+  gates, credenciales protegidas y limitaciones por plataforma.
 - **Tool Workshop:** convierte trabajo repetido en una herramienta nativa y
   versionada del workspace sin editar Orkestrai. Compone integraciones, HTTP,
   transformaciones deterministas o comandos confinados; valida contratos JSON y

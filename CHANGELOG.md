@@ -5,6 +5,28 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.30.0 - 2026-09-11
+
+### Added And Fixed
+
+- Signed macOS apps and helpers now include microphone and Apple Events entitlements. Local packaging and release CI verify the actual signed permissions, not only signature validity and notarization. The STT model is unchanged.
+
+- Agents can prepare and connect the workspace Computer node, create their own assigned task without self-dispatch, and open or reuse an approved native application through CLI and MCP. Existing browser windows keep their signed-in session.
+
+- Preparation inherits only an existing bounded Computer/app grant and never reactivates an owner-paused node. Application identifiers can be authorized before an app opens, and closed authorized apps remain visible and revocable.
+
+- Computer Control uses stable native macOS window IDs, rejects stale or ambiguous windows, verifies focus before input, serializes host input across workspaces, and blocks automatic replay after a possibly partial failure.
+
+- Declared email/publication, purchase, credential, or destructive risks use the existing Security gates before native input. Approval is bound to the exact request and attempt. Pixel-only actions still require correct risk classification by the agent.
+
+- Native SecretRef delivery suppresses echoed process output and errors; screenshot storage and reads reject paths that escape the workspace through symlinks. Typed content stays out of audit metadata.
+
+- Computer state and agent captures refresh in Canvas and Workbench without manual reload. Readiness reflects activation and OS permission. Manual typing stays bound to the selected allowed window; stored captures are read-only evidence, not stale click maps.
+
+- Native desktop adapters correct Linux window/PID discovery, Windows PowerShell argument handling, literal text and shortcuts, and macOS display coordinates and capture bounds. Launch uses registered applications; unsupported targets fail explicitly.
+
+- Microphone access is limited to the real app renderer and exact local origin, and the Settings input meter resumes a suspended audio context. Documentation and the guided desktop use case now start from a natural-language agent request, including Remote.
+
 ## 0.29.0 - 2026-09-10
 
 ### Added

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { stringify } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { createRequire } from 'node:module';
 import { versionChangelogSection } from '../../scripts/release-notes.mjs';
 import { disableMacAutomaticRollout } from '../../scripts/set-mac-update-policy.mjs';
@@ -76,6 +77,35 @@ function fixture() {
 }
 
 describe('release artifact validation', () => {
+  it('builds QA from an immutable tested SHA without enabling release publication', () => {
+    const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
+    expect(workflow.on.workflow_dispatch.inputs.build_only).toMatchObject({ type: 'boolean', default: false });
+    for (const name of ['build-macos', 'build-windows', 'build-linux', 'publish']) {
+      expect(workflow.jobs[name].steps[0].with.ref).toBe('${{ needs.validate.outputs.source_sha }}');
+    }
+    for (const name of ['build-windows', 'build-linux', 'publish']) {
+      expect(workflow.jobs[name].if).toBe("github.event_name != 'workflow_dispatch' || !inputs.build_only");
+    }
+    const script = workflow.jobs.validate.steps.find((step: { id?: string }) => step.id === 'release').run;
+    const directory = mkdtempSync(path.join(tmpdir(), 'orkestrai-release-source-'));
+    temporaryDirectories.push(directory);
+    const output = path.join(directory, 'output.txt');
+    const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+    const invoke = (source: string, buildOnly: string) => {
+      writeFileSync(output, '');
+      return spawnSync('bash', ['-c', script], {
+        encoding: 'utf8', timeout: 10_000,
+        env: { ...process.env, RELEASE_TAG: source, BUILD_ONLY: buildOnly, GITHUB_OUTPUT: output },
+      });
+    };
+    expect(invoke('main', 'true').status).toBe(0);
+    expect(readFileSync(output, 'utf8')).toContain(`version=${version}`);
+    expect(readFileSync(output, 'utf8')).toMatch(/source_sha=[0-9a-f]{40}/);
+    expect(invoke('main', 'false').status).toBe(1);
+    expect(invoke('v0.0.0', 'false').status).toBe(1);
+    expect(invoke(`v${version}`, 'false').status).toBe(0);
+  });
+
   it('declares the maintainer metadata required by native Linux packages', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
     expect(packageJson.build?.linux?.maintainer).toMatch(/^[^<>]+ <[^<>\s]+@[^<>\s]+>$/);

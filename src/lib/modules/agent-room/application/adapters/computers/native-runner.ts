@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 const MAX_OUTPUT = 2 * 1024 * 1024;
 
 function nativeEnvironment(): NodeJS.ProcessEnv {
-  const names = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'XDG_SESSION_TYPE', 'WAYLAND_DISPLAY', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE'];
+  const names = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'XDG_SESSION_TYPE', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_DATA_DIRS', 'DBUS_SESSION_BUS_ADDRESS', 'WAYLAND_DISPLAY', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'ProgramData', 'COMSPEC'];
   return Object.fromEntries(names.flatMap((name) => process.env[name] === undefined ? [] : [[name, process.env[name]]])) as NodeJS.ProcessEnv;
 }
 
@@ -37,11 +37,16 @@ export async function runNative(
         finish(new Error('Native computer output exceeded the safe limit.'));
         return;
       }
-      bucket.push(chunk);
+      // Typed content, including SecretRefs, must never be echoed in errors.
+      if (options.input === undefined) bucket.push(chunk);
     };
     child.stdout.on('data', (chunk: Buffer) => collect(stdout, chunk));
     child.stderr.on('data', (chunk: Buffer) => collect(stderr, chunk));
     child.on('error', (error) => finish(error));
+    child.stdin.on('error', () => {
+      child.kill('SIGKILL');
+      finish(new Error('Native input delivery failed.'));
+    });
     child.on('close', (code) => {
       const result = { stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8'), code: code ?? -1 };
       if (result.code !== 0 && !options.allowFailure) finish(new Error(result.stderr.trim().slice(0, 2_000) || `Native operation exited with code ${result.code}.`));

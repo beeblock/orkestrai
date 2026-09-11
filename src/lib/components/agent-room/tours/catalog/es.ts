@@ -142,11 +142,11 @@ export const TOURS_ES: Tour[] = [
     title: 'Agente con control del equipo',
     tagline: 'Opera apps permitidas con evidencia y sin exponer credenciales.',
     steps: [
-      { id: 'computer', title: 'Agrega el nodo Equipo', body: 'Agregaré el nodo Equipo desactivado. Identifica plataforma, pantallas, apps, ventanas visibles y permisos del sistema operativo.', action: { kind: 'createComputer', title: 'Equipo' }, check: { kind: 'nodeExists', nodeType: 'computer' } },
-      { id: 'permissions', title: 'Concede permisos del sistema', body: 'Usa los botones de permiso para abrir el ajuste exacto en macOS, Windows o Linux. Orkestrai muestra si accesibilidad y captura están listas en vez de fallar silenciosamente.' },
-      { id: 'scope', title: 'Define el límite por aplicación', body: 'Permite solo las apps y pantallas que este workspace puede controlar y luego activa el nodo. Para agentes autónomos, agrega los mismos ids de app a la política permanente de Seguridad.' },
-      { id: 'agent', title: 'Asigna trabajo trazable', body: 'Conecta un agente, asígnale una tarea Kanban activa y deja que use computer_inspect, focus, click, type, type_secret, shortcut, screenshot y wait con claves de idempotencia estables. Una SecretRef de login debe estar vinculada a computer.type_secret y al id exacto de la app.' },
-      { id: 'audit', title: 'Revisa evidencia y detén con seguridad', body: 'Las capturas quedan en .orkestrai/computer/evidence con retención limitada. Centro de Control y Auditoría registran actor, comando, destino, resultado y digest sin guardar el texto escrito.' },
+      {"id":"computer","title":"Pide al agente","body":"Usa un agente existente y dile: Abre Calculadora y calcula 73 por 19; verifica y registra el resultado. El agente crea nota, tarea asignada y nodo Computadora. No necesitas despachar la tarea manualmente."},
+      {"id":"permissions","title":"Concede acceso del sistema","body":"Concede Accesibilidad, Grabación de Pantalla y Automatización a Orkestrai en macOS cuando se solicite. Windows requiere escritorio interactivo; Linux requiere X11 y helpers nativos. El agente no puede aprobar permisos del sistema por ti."},
+      {"id":"scope","title":"Autoriza el límite","body":"Una concesión Limitada activa para computer y aplicaciones puede inicializar un nodo nuevo. Sin ella, autoriza el ID y activa el nodo. Los nodos pausados siguen pausados. Calculadora: com.apple.calculator en macOS, CalculatorApp en Windows."},
+      {"id":"agent","title":"Observa al agente","body":"El agente abre o enfoca la app permitida, observa, actúa y captura de nuevo. Remote usa este mismo escritorio host y la sesión existente del navegador. Enviar correo requiere el riesgo declarado external_publication y su gate de Seguridad."},
+      {"id":"audit","title":"Comprueba la entrega","body":"Confirma 1387 en la captura real de Calculadora, la nota y la tarea completada. El nodo actualiza la evidencia del agente. Auditoría registra operaciones de la puente; omite el texto escrito y las capturas nativas pueden mostrar contenido privado visible."},
     ],
   },
   {

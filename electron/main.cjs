@@ -1292,10 +1292,21 @@ if (!gotLock) {
       app.dock.setIcon(path.join(appRoot, 'electron', 'resources', 'icon.png'));
     }
     // Ditado por voz: permite microfone só para o proprio app (localhost).
-    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-      const url = webContents?.getURL?.() ?? '';
-      const own = url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file://');
-      callback(own && permission === 'media');
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      const { canUseAppMicrophone } = require('./media-permissions.cjs');
+      callback(canUseAppMicrophone({
+        contentsId: webContents?.id, mainContentsId: mainWindow?.webContents.id,
+        url: webContents?.getURL?.() ?? '', requestingUrl: details.requestingUrl,
+        permission, mediaTypes: details.mediaTypes, serverPort,
+      }));
+    });
+    session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+      const { canUseAppMicrophone } = require('./media-permissions.cjs');
+      return canUseAppMicrophone({
+        contentsId: webContents?.id, mainContentsId: mainWindow?.webContents.id,
+        url: webContents?.getURL?.() ?? '', requestingUrl: details.securityOrigin || requestingOrigin,
+        permission, mediaTypes: details.mediaType ? [details.mediaType] : undefined, serverPort,
+      });
     });
     configurePortalSession();
     managedPortalExecutor = createManagedPortalExecutor({ WebContentsView, View, session, diagnostics,

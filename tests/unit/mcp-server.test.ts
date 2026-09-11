@@ -165,6 +165,21 @@ describe('servidor MCP (orkestrai mcp)', () => {
     input.end();
   });
 
+  it('allows an authenticated agent to prepare and launch through the same computer boundary', async () => {
+    const { send, waitFor, input } = startMcp();
+    const taskId = '00000000-0000-7000-8000-000000000001';
+    for (const [id, name, arguments_, command] of [
+      [1, 'computer_prepare', {}, { command: 'prepare' }],
+      [2, 'computer_launch', { applicationId: 'com.apple.calculator' }, { command: 'launch', applicationId: 'com.apple.calculator' }],
+    ] as const) {
+      send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: { ...arguments_, taskId, idempotencyKey: `desktop:${id}` } } });
+      const response = JSON.parse((await waitFor(id)).result.content[0].text);
+      expect(response.path).toBe('/api/agent-room/bridge/computers');
+      expect(response.body).toMatchObject({ taskId, input: command });
+    }
+    input.end();
+  });
+
   it('routes versioned tool proposals and executions without accepting raw credentials', async () => {
     const { send, waitFor, input } = startMcp();
     const taskId = '00000000-0000-7000-8000-000000000001';

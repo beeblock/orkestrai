@@ -1,4 +1,5 @@
 import { z } from '@beeblock/svelar/validation';
+import { autonomyRiskSchema } from './autonomy-policy.schema.js';
 
 export const computerPlatformSchema = z.enum(['macos', 'windows', 'linux']);
 export const computerPermissionStateSchema = z.enum(['granted', 'denied', 'prompt', 'unavailable', 'unknown']);
@@ -45,6 +46,8 @@ const durationMs = z.number().int().min(50).max(30_000);
 const key = z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9+_.-]+$/);
 
 export const computerCommandSchema = z.discriminatedUnion('command', [
+  z.object({ command: z.literal('prepare') }).strict(),
+  z.object({ command: z.literal('launch'), applicationId: z.string().min(1).max(255).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/) }).strict(),
   z.object({ command: z.literal('inspect') }).strict(),
   z.object({ command: z.literal('open_settings'), permission: z.enum(['accessibility', 'screenRecording']) }).strict(),
   z.object({ command: z.literal('focus'), windowId: z.string().min(1).max(160) }).strict(),
@@ -90,6 +93,7 @@ export const bridgeComputerCommandSchema = z.object({
   taskId: z.string().uuid(),
   idempotencyKey: z.string().trim().min(8).max(240).regex(/^[a-zA-Z0-9._:@/-]+$/),
   input: computerCommandSchema,
+  risk: autonomyRiskSchema.optional(),
 }).strict();
 
 export type ComputerPlatform = z.infer<typeof computerPlatformSchema>;

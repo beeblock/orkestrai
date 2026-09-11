@@ -7,9 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag (for example, v0.1.0)
+        description: Existing release tag, or main/commit SHA for a build-only run
         required: true
         type: string
+      build_only:
+        description: Build a signed Apple Silicon QA installer without creating a release or update feed
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -24,6 +29,7 @@ env:
   NPM_VERSION: '11.6.2'
   NODE_OPTIONS: '--max-old-space-size=6144'
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only && 'true' || 'false' }}
 
 jobs:
   validate:
@@ -32,6 +38,7 @@ jobs:
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
+      source_sha: ${{ steps.release.outputs.source_sha }}
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
@@ -43,13 +50,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$BUILD_ONLY" == "true" ]]; then
+            if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Package version must use MAJOR.MINOR.PATCH"
+              exit 1
+            fi
+            VERSION="$PACKAGE_VERSION"
+            RELEASE_TAG="v$VERSION"
+          elif [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Release tag must use vMAJOR.MINOR.PATCH"
             exit 1
+          else
+            VERSION="${RELEASE_TAG#v}"
           fi
 
-          VERSION="${RELEASE_TAG#v}"
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
           if [[ "$VERSION" != "$PACKAGE_VERSION" ]]; then
             echo "::error::Tag $RELEASE_TAG does not match package version $PACKAGE_VERSION"
             exit 1
@@ -57,6 +72,7 @@ jobs:
 
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Require successful CI for tagged commit
         env:
@@ -103,7 +119,7 @@ jobs:
       - name: Checkout tagged source
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.source_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -136,7 +152,12 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           ORKESTRAI_REQUIRE_MAC_SIGNING: 'true'
-        run: scripts/package-macos.sh --arm64 --x64
+        run: |
+          if [[ "$BUILD_ONLY" == "true" ]]; then
+            scripts/package-macos.sh --arm64
+          else
+            scripts/package-macos.sh --arm64 --x64
+          fi
 
       - name: Verify macOS packages
         env:
@@ -151,18 +172,21 @@ jobs:
             grep -Fq 'Authority=Developer ID Application:' <<<"$signature"
             grep -Fq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$signature"
             grep -Eq 'flags=.*\(runtime\)' <<<"$signature"
+            node scripts/validate-macos-permissions.mjs "$app"
             spctl --assess --type execute --verbose=4 "$app"
             xcrun stapler validate "$app"
           }
 
           test -f release/mac-arm64/Orkestrai.app/Contents/Resources/app/node_modules/electron-updater/package.json
-          test -f release/mac/Orkestrai.app/Contents/Resources/app/node_modules/electron-updater/package.json
           verify_trusted_app release/mac-arm64/Orkestrai.app
-          verify_trusted_app release/mac/Orkestrai.app
           hdiutil verify release/Orkestrai-${{ needs.validate.outputs.version }}-arm64.dmg
-          hdiutil verify release/Orkestrai-${{ needs.validate.outputs.version }}.dmg
           unzip -tq release/Orkestrai-${{ needs.validate.outputs.version }}-arm64-mac.zip
-          unzip -tq release/Orkestrai-${{ needs.validate.outputs.version }}-mac.zip
+          if [[ "$BUILD_ONLY" != "true" ]]; then
+            test -f release/mac/Orkestrai.app/Contents/Resources/app/node_modules/electron-updater/package.json
+            verify_trusted_app release/mac/Orkestrai.app
+            hdiutil verify release/Orkestrai-${{ needs.validate.outputs.version }}.dmg
+            unzip -tq release/Orkestrai-${{ needs.validate.outputs.version }}-mac.zip
+          fi
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
@@ -179,13 +203,14 @@ jobs:
 
   build-windows:
     name: Build Windows (x64)
+    if: github.event_name != 'workflow_dispatch' || !inputs.build_only
     needs: validate
     runs-on: windows-latest
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.source_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -207,6 +232,9 @@ jobs:
         run: |
           npm install --global npm@$env:NPM_VERSION
           npm ci --no-audit --no-fund
+
+      - name: Verify native desktop command transport
+        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts
 
       - name: Build application
         run: npm run build
@@ -238,13 +266,14 @@ jobs:
 
   build-linux:
     name: Build Linux (x64)
+    if: github.event_name != 'workflow_dispatch' || !inputs.build_only
     needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.source_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -301,13 +330,14 @@ jobs:
 
   publish:
     name: Publish verified release
+    if: github.event_name != 'workflow_dispatch' || !inputs.build_only
     needs: [validate, build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.source_sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7

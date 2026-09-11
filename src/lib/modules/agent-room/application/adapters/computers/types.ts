@@ -12,6 +12,7 @@ export type ComputerAdapterContext = {
 export interface ComputerAdapter {
   readonly platform: ComputerPlatform;
   snapshot(): Promise<ComputerSnapshot>;
+  launch(applicationId: string): Promise<void>;
   focus(windowId: string): Promise<void>;
   click(point: { x: number; y: number; button: 'left' | 'right' | 'middle'; count: number }): Promise<void>;
   type(text: string): Promise<void>;

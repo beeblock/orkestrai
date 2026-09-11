@@ -99,6 +99,38 @@ autoridade Developer ID, Team ID, flag de Hardened Runtime, aceitação pelo
 Gatekeeper e ticket com `stapler`. DMG e ZIP também continuam passando por
 verificação de integridade.
 
+Também execute `node scripts/validate-macos-permissions.mjs <Orkestrai.app>`:
+o app e cada helper precisam de `com.apple.security.device.audio-input` e
+`com.apple.security.automation.apple-events`. Uma assinatura válida sem esses
+entitlements não comprova que o microfone ou a automação funcionam.
+Para QA local com a identidade já presente no Keychain, peça autorização
+explícita ao proprietário antes de iniciar. O macOS pode pedir a senha várias
+vezes porque o bundle contém muitos binários; cancelar um pedido não cancela
+o empacotamento inteiro. Nunca altere permissões do Keychain automaticamente.
+Somente após essa autorização, use
+`ORKESTRAI_MAC_ALLOW_KEYCHAIN_PROMPTS=true ORKESTRAI_MAC_LOCAL_SIGNING_IDENTITY="Developer ID Application: ..." npm run package:mac -- --arm64`.
+Sem a autorização explícita, o wrapper recusa esse modo antes de assinar.
+O build local padrão continua ad-hoc, sem consultar uma identidade do Keychain.
+Esse modo habilita Hardened Runtime, não publica e não declara notarização.
+O workflow oficial continua exigindo todos os secrets e a notarização da Apple.
+
+### Pacote assinado de QA sem publicar
+
+Prefira a CI quando a chave local exigir interação com o Keychain. Depois de
+commitar, enviar `main` e passar a CI nesse SHA, execute:
+
+```sh
+gh workflow run release.yml --repo beeblock/orkestrai --ref main -f tag="$(git rev-parse HEAD)" -f build_only=true
+```
+
+Esse modo gera apenas o instalador Apple Silicon assinado e notarizado, verifica
+as permissões reais do app e helpers e disponibiliza o artifact `release-macos`
+no run. Não cria tag, release pública nem altera feeds de atualização. Baixe o
+artifact desse run, instale o DMG exato e valide hardware/interação. As etapas
+seguintes fazem checkout do SHA resolvido na validação, nunca de uma referência
+que possa avançar durante o build. O fluxo normal por tag mantém as cinco etapas
+e só publica depois de validar os artefatos de todas as plataformas.
+
 ## Recuperação
 
 Se um build ou upload falhar, a release permanece ausente ou como draft e não é

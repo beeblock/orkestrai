@@ -142,11 +142,11 @@ export const TOURS_EN: Tour[] = [
     title: 'Controlled desktop worker',
     tagline: 'Operate approved desktop apps with evidence and no credential exposure.',
     steps: [
-      { id: 'computer', title: 'Add the Computer node', body: 'I add the disabled Computer node. It inventories the current platform, displays, visible apps, windows, and operating-system permissions.', action: { kind: 'createComputer', title: 'Computer' }, check: { kind: 'nodeExists', nodeType: 'computer' } },
-      { id: 'permissions', title: 'Grant operating-system permissions', body: 'Use the permission buttons to open the exact macOS, Windows, or Linux settings. Orkestrai reports accessibility and screen-capture readiness instead of silently failing.' },
-      { id: 'scope', title: 'Choose the application boundary', body: 'Enable only the apps and displays this workspace may control, then enable the node. Add the same app ids to the workspace Security standing grant for unattended agents.' },
-      { id: 'agent', title: 'Assign traceable work', body: 'Connect an agent, assign an active Kanban task, and let it use computer_inspect, focus, click, type, type_secret, shortcut, screenshot, and wait with stable idempotency keys. A login SecretRef must be bound to computer.type_secret and the exact app id.' },
-      { id: 'audit', title: 'Review evidence and stop safely', body: 'Screenshots stay under .orkestrai/computer/evidence with bounded retention. Control Center and Audit record the actor, command, target, result, and digest without storing typed text.' },
+      {"id":"computer","title":"Ask the agent","body":"Use an existing agent and say: Open Calculator and calculate 73 times 19; verify and record the result. The agent creates its note, assigned task and Computer node. No manual task dispatch is needed."},
+      {"id":"permissions","title":"Grant OS access","body":"Grant Orkestrai Accessibility, Screen Recording and Automation on macOS when requested. Windows needs an interactive desktop; Linux currently needs X11 and its native helpers. The agent cannot approve OS permissions for you."},
+      {"id":"scope","title":"Approve the boundary","body":"An enabled Bounded computer/app grant can initialize a new node. Otherwise authorize the app ID and enable the node. Existing paused nodes stay paused. Calculator: com.apple.calculator on macOS, CalculatorApp on Windows."},
+      {"id":"agent","title":"Watch the agent work","body":"The agent opens or focuses the authorized app, observes, acts and captures again. Remote requests operate this same host desktop and existing browser session. Sending email requires the declared external_publication risk and its Security gate."},
+      {"id":"audit","title":"Check the deliverable","body":"Confirm 1387 in the real Calculator capture, the result note and completed task. The node refreshes agent evidence. Review Audit for exact brokered operations; typed text is omitted and native captures may include visible private content."},
     ],
   },
   {

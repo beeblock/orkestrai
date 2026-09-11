@@ -332,7 +332,9 @@ const TOOLS = [
   { name: 'device_permissions', description: 'Lista ou altera explicitamente uma permissao do app no device ativo.', inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['list', 'grant', 'revoke', 'reset'] }, permission: { type: 'string', enum: ['notifications', 'location', 'camera', 'microphone', 'photos', 'photos-add', 'contacts', 'calendar', 'reminders', 'motion', 'media-library', 'siri', 'speech', 'faceid', 'user-tracking', 'homekit', 'all'] }, bundleId: { type: 'string' }, value: { type: 'string' } }, required: ['action'] } },
   { name: 'device_screenshot', description: 'Salva um screenshot no diretorio .orkestrai do workspace.', inputSchema: { type: 'object', properties: {} } },
   { name: 'device_stop', description: 'Desanexa e limpa o helper do device ativo.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'computer_inspect', description: 'Lista permissoes, displays, apps e janelas visiveis do Computer node.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'computer_prepare', description: 'Create or reuse the workspace Computer node and connect it to this agent. First create a note and an active task assigned to yourself. Inherits only the owner\'s existing bounded computer/app grant; never enables a paused node or grants permissions. Inspect next. Use for natural-language desktop requests, including remote chat.', inputSchema: { type: 'object', properties: { taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['taskId', 'idempotencyKey'] } },
+  { name: 'computer_launch', description: 'Focus an already open authorized application, preserving its login/session; otherwise launch its registered native app without extra arguments. Use the host platform appId, then wait and inspect for its window. macOS bundle ID, Windows process name/App Paths, Linux WM_CLASS/desktop entry. Never substitute a new Portal for a user\'s already logged-in desktop browser.', inputSchema: { type: 'object', properties: { applicationId: { type: 'string', maxLength: 255 }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['applicationId', 'taskId', 'idempotencyKey'] } },
+  { name: 'computer_inspect', description: 'List authorized windows and app IDs, node enabled state and OS permissions on the HOST computer, not the remote phone. Missing node: call computer_prepare. Permissions are owner-controlled; do not bypass via shell.', inputSchema: { type: 'object', properties: {} } },
   { name: 'computer_focus', description: 'Foca uma janela permitida. Exige task ativa e chave idempotente.', inputSchema: { type: 'object', properties: { windowId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['windowId', 'taskId', 'idempotencyKey'] } },
   { name: 'computer_click', description: 'Clica em coordenadas normalizadas dentro de uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 }, targetId: { type: 'string' }, button: { type: 'string', enum: ['left', 'right', 'middle'], default: 'left' }, count: { type: 'integer', minimum: 1, maximum: 3, default: 1 }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['x', 'y', 'targetId', 'taskId', 'idempotencyKey'] } },
   { name: 'computer_type', description: 'Digita texto em uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { text: { type: 'string', maxLength: 20000 }, targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['text', 'targetId', 'taskId', 'idempotencyKey'] } },
@@ -347,8 +349,19 @@ const TOOLS = [
   { name: 'dismiss', description: '(maestro) Dispensa um agente.', inputSchema: { type: 'object', properties: { agent: { type: 'string' } }, required: ['agent'] } },
 ];
 
+for (const tool of TOOLS.filter((tool) => tool.name.startsWith('computer_') && tool.inputSchema.properties.idempotencyKey)) {
+  Object.assign(tool.inputSchema.properties, { risk: { type: 'string', enum: ['outside_boundary', 'secret_export', 'bulk_destructive', 'force_push', 'production_deploy', 'purchase', 'external_publication', 'account_permission', 'irreversible'], description: 'Declare external_publication before sending email/posting, purchase before buying, or the matching destructive/credential risk. This invokes the owner-configured gate BEFORE input. Never omit a real risk to bypass approval.' } });
+}
+
 /** Mapeia tool -> chamada da bridge (mesmos endpoints da CLI). */
 async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
+  /** @type {{ taskId?: string, idempotencyKey?: string, risk?: string, applicationId?: string }} */
+  const computerArgs = args;
+  /** @param {Record<string, unknown>} input */
+  const computerCommand = (input) => {
+    if (!selfAgent) throw new Error('Computer actions require an active Orkestrai terminal identity.');
+    return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: computerArgs.taskId, idempotencyKey: computerArgs.idempotencyKey, ...(computerArgs.risk ? { risk: computerArgs.risk } : {}), input });
+  };
   switch (name) {
     case 'list': {
       const query = selfAgent ? `?agentNodeId=${encodeURIComponent(selfAgent)}` : '';
@@ -950,27 +963,24 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('POST', '/api/agent-room/bridge/devices', { command: 'stop' });
     case 'computer_inspect':
       return bridge('GET', '/api/agent-room/bridge/computers');
+    case 'computer_prepare':
+      return computerCommand({ command: 'prepare' });
+    case 'computer_launch':
+      return computerCommand({ command: 'launch', applicationId: computerArgs.applicationId });
     case 'computer_focus':
-      if (!selfAgent) throw new Error('computer_focus exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'focus', windowId: args.windowId } });
+      return computerCommand({ command: 'focus', windowId: args.windowId });
     case 'computer_click':
-      if (!selfAgent) throw new Error('computer_click exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'click', x: args.x, y: args.y, space: 'window', targetId: args.targetId, button: args.button ?? 'left', count: args.count ?? 1 } });
+      return computerCommand({ command: 'click', x: args.x, y: args.y, space: 'window', targetId: args.targetId, button: args.button ?? 'left', count: args.count ?? 1 });
     case 'computer_type':
-      if (!selfAgent) throw new Error('computer_type exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'type', text: args.text, targetId: args.targetId } });
+      return computerCommand({ command: 'type', text: args.text, targetId: args.targetId });
     case 'computer_type_secret':
-      if (!selfAgent) throw new Error('computer_type_secret exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'type_secret', secretRef: args.secretRef, targetId: args.targetId } });
+      return computerCommand({ command: 'type_secret', secretRef: args.secretRef, targetId: args.targetId });
     case 'computer_shortcut':
-      if (!selfAgent) throw new Error('computer_shortcut exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'shortcut', keys: args.keys, targetId: args.targetId } });
+      return computerCommand({ command: 'shortcut', keys: args.keys, targetId: args.targetId });
     case 'computer_screenshot':
-      if (!selfAgent) throw new Error('computer_screenshot exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'screenshot', target: 'window', targetId: args.targetId } });
+      return computerCommand({ command: 'screenshot', target: 'window', targetId: args.targetId });
     case 'computer_wait':
-      if (!selfAgent) throw new Error('computer_wait exige identidade de um terminal Orkestrai ativo.');
-      return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'wait', condition: args.condition, value: args.value, timeoutMs: args.timeoutMs ?? 10000, pollMs: args.pollMs ?? 300 } });
+      return computerCommand({ command: 'wait', condition: args.condition, value: args.value, timeoutMs: args.timeoutMs ?? 10000, pollMs: args.pollMs ?? 300 });
     case 'notify':
       return bridge('POST', '/api/agent-room/bridge/notify', { message: args.message, kind: args.kind, title: args.title, from: selfAgent });
     case 'status': {

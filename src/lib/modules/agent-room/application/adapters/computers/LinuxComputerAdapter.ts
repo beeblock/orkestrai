@@ -1,5 +1,6 @@
-import { access, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { access, mkdir, readdir, readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import type { ComputerAdapter } from './types.js';
 import type { ComputerCommandInput, ComputerSnapshot } from '../../../contracts/schemas/computer.schema.js';
 import { runNative } from './native-runner.js';
@@ -8,8 +9,40 @@ async function available(command: string): Promise<boolean> {
   return (await runNative('/usr/bin/env', ['which', command], { allowFailure: true })).code === 0;
 }
 
+export function parseWmctrlWindows(output: string, active: string): ComputerSnapshot['windows'] {
+  return output.split('\n').flatMap((line) => {
+    // -lGpx: window, desktop, PID, x, y, width, height, WM_CLASS, host, title.
+    const match = line.match(/^(0x[0-9a-f]+)\s+-?\d+\s+\d+\s+(-?\d+)\s+(-?\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s*(.*)$/i);
+    if (!match) return [];
+    const id = String(parseInt(match[1], 16));
+    const appId = match[6];
+    return [{ id, appId, appName: appId.split('.').filter(Boolean).pop() ?? appId, title: match[8].slice(0, 1_000), bounds: { x: Number(match[2]), y: Number(match[3]), width: Math.max(1, Number(match[4])), height: Math.max(1, Number(match[5])) }, focused: id === active }];
+  });
+}
+
 export class LinuxComputerAdapter implements ComputerAdapter {
   readonly platform = 'linux' as const;
+
+  async launch(applicationId: string): Promise<void> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(applicationId)) throw new Error('Invalid application identifier.');
+    const wmClass = applicationId.split('.').at(-1)!.toLowerCase();
+    for (const root of [join(homedir(), '.local/share/applications'), '/usr/local/share/applications', '/usr/share/applications']) {
+      const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries.slice(0, 2_000)) {
+        if (!entry.isFile() || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.desktop$/.test(entry.name)) continue;
+        const content = await readFile(join(root, entry.name), 'utf8');
+        if (content.length > 64_000) continue;
+        const main = content.split(/^\[Desktop Entry\]\s*$/m)[1]?.split(/^\[/m)[0] ?? '';
+        if (/^Hidden=true\s*$/m.test(main) || !/^Type=Application\s*$/m.test(main)) continue;
+        const declaredClass = main.match(/^StartupWMClass=(.+)$/m)?.[1].trim().toLowerCase();
+        if (declaredClass !== wmClass && entry.name.toLowerCase() !== `${applicationId.toLowerCase()}.desktop`) continue;
+        // gio interprets the registered desktop entry; never execute its Exec text ourselves.
+        await runNative('gio', ['launch', join(root, entry.name)]);
+        return;
+      }
+    }
+    throw new Error('No registered desktop application matches this identifier. Open it once and authorize its window.');
+  }
 
   async snapshot(): Promise<ComputerSnapshot> {
     if (process.platform !== 'linux') return this.unavailable('unsupported_os');
@@ -25,13 +58,7 @@ export class LinuxComputerAdapter implements ComputerAdapter {
       return match ? [{ id: String(index), name: match[5].trim(), bounds: { x: Number(match[3]), y: Number(match[4]), width: Number(match[1]), height: Number(match[2]) }, scaleFactor: 1, primary: index === 0 }] : [];
     });
     const active = String(Number(activeOutput.stdout.trim()));
-    const windows = windowOutput.stdout.split('\n').flatMap((line) => {
-      const match = line.match(/^(0x[0-9a-f]+)\s+\d+\s+(-?\d+)\s+(-?\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.+)$/i);
-      if (!match) return [];
-      const id = String(parseInt(match[1], 16));
-      const app = match[7].split('.').filter(Boolean).pop() ?? match[7];
-      return [{ id, appId: match[7], appName: app, title: match[9].slice(0, 1_000), bounds: { x: Number(match[2]), y: Number(match[3]), width: Number(match[4]), height: Number(match[5]) }, focused: id === active }];
-    });
+    const windows = parseWmctrlWindows(windowOutput.stdout, active);
     return { platform: this.platform, available: true, reason: 'ready', detail: null, permissions: { accessibility: 'granted', screenRecording: 'granted' }, displays, windows, focusedWindowId: windows.find((window) => window.focused)?.id ?? null };
   }
 

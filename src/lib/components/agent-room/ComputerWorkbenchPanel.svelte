@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
-  import { Camera, CheckCircle2, CircleAlert, Keyboard, LoaderCircle, Monitor, MousePointer2, RefreshCw, Settings2, ShieldCheck } from '@lucide/svelte';
+  import { Camera, CheckCircle2, CircleAlert, Keyboard, LoaderCircle, Monitor, MousePointer2, Plus, Play, RefreshCw, Settings2, ShieldCheck } from '@lucide/svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
@@ -17,18 +18,25 @@
   let loading = $state(true);
   let busy = $state<string | null>(null);
   let inputText = $state('');
+  let applicationId = $state('');
+  let inputWindowId = $state('');
+  let panel: HTMLDivElement | undefined = $state();
   let screenshotTarget = $state<'all' | 'display' | 'window'>('all');
   let screenshotTargetId = $state('');
   const messages = m as unknown as Record<string, () => string>;
+  let loadRequest = 0;
+  let pendingLoads = 0;
 
   const applications = $derived.by(() => {
-    const seen = new Map<string, string>();
-    for (const window of computerState?.snapshot.windows ?? []) if (!seen.has(window.appId)) seen.set(window.appId, window.appName);
-    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const id of computerState?.config.allowedApplications ?? []) seen.set(id.toLowerCase(), { id, name: id });
+    for (const window of computerState?.snapshot.windows ?? []) seen.set(window.appId.toLowerCase(), { id: window.appId, name: window.appName });
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
   const evidenceId = $derived(computerState?.lastEvidence?.match(/([0-9a-f-]{36})\.png$/i)?.[1] ?? null);
   const evidenceUrl = $derived(evidenceId ? `/api/agent-room/workspaces/${workspaceId}/computers/evidence/${evidenceId}` : null);
-  const focusedWindow = $derived(computerState?.snapshot.windows.find((window) => window.id === computerState?.snapshot.focusedWindowId) ?? null);
+  const inputWindow = $derived(computerState?.snapshot.windows.find((window) => window.id === inputWindowId && applicationAllowed(window.appId)) ?? null);
+  const ready = $derived(Boolean(computerState?.config.enabled && computerState.snapshot.available && computerState.snapshot.permissions.accessibility === 'granted'));
   const selectedTargets = $derived<(ComputerDisplay | ComputerWindow)[]>(screenshotTarget === 'display' ? computerState?.snapshot.displays ?? [] : screenshotTarget === 'window' ? computerState?.snapshot.windows ?? [] : []);
   const captureAllowed = $derived.by(() => {
     if (!computerState?.config.enabled) return false;
@@ -36,8 +44,12 @@
     if (!screenshotTargetId) return false;
     if (screenshotTarget === 'display') return computerState.config.allowedDisplays.includes(screenshotTargetId);
     const window = computerState.snapshot.windows.find((candidate) => candidate.id === screenshotTargetId);
-    return Boolean(window && computerState.config.allowedApplications.includes(window.appId));
+    return Boolean(window && applicationAllowed(window.appId));
   });
+
+  function applicationAllowed(id: string): boolean {
+    return computerState?.config.allowedApplications.some((allowed) => allowed.toLowerCase() === id.toLowerCase()) ?? false;
+  }
 
   function targetLabel(target: ComputerDisplay | ComputerWindow | undefined): string {
     if (!target) return m['computer.choose_target']();
@@ -52,19 +64,28 @@
     return payload.data as T;
   }
 
-  async function load(): Promise<void> {
-    loading = true;
-    try { computerState = await api<State>(`/api/agent-room/workspaces/${workspaceId}/computers`); }
-    catch (error) { toast.error(error instanceof Error ? error.message : m['computer.load_failed']()); }
-    finally { loading = false; }
+  async function load(quiet = false): Promise<void> {
+    if (quiet && pendingLoads > 0) return;
+    pendingLoads++;
+    const request = ++loadRequest;
+    const targetWorkspace = workspaceId;
+    if (!quiet) loading = true;
+    try {
+      const result = await api<State>(`/api/agent-room/workspaces/${targetWorkspace}/computers`, { signal: AbortSignal.timeout(20_000) });
+      if (request === loadRequest && targetWorkspace === workspaceId) computerState = result;
+    }
+    catch (error) { if (!quiet && request === loadRequest) toast.error(error instanceof Error ? error.message : m['computer.load_failed']()); }
+    finally { pendingLoads--; if (request === loadRequest) loading = false; }
   }
 
   async function saveConfig(config: ComputerNodeConfig): Promise<void> {
     if (!computerState?.nodeId) return;
+    const request = ++loadRequest;
+    const targetWorkspace = workspaceId;
     busy = 'config';
     try {
       const saved = await api<ComputerNodeConfig>(`/api/agent-room/workspaces/${workspaceId}/computers/${computerState.nodeId}`, { method: 'PATCH', body: JSON.stringify(config) });
-      computerState = { ...computerState, config: saved };
+      if (request === loadRequest && targetWorkspace === workspaceId) computerState = { ...computerState, config: saved };
     } catch (error) { toast.error(error instanceof Error ? error.message : m['computer.command_failed']()); }
     finally { busy = null; }
   }
@@ -73,14 +94,18 @@
     if (!computerState) return;
     const key = kind === 'application' ? 'allowedApplications' : 'allowedDisplays';
     const values = computerState.config[key];
-    void saveConfig({ ...computerState.config, [key]: checked ? [...new Set([...values, id])] : values.filter((value: string) => value !== id) });
+    const remaining = values.filter((value: string) => kind === 'application' ? value.toLowerCase() !== id.toLowerCase() : value !== id);
+    void saveConfig({ ...computerState.config, [key]: checked ? [...remaining, id] : remaining });
   }
 
   async function command(input: ComputerCommandInput): Promise<ComputerCommandResult | null> {
+    if (busy !== null) return null;
+    const request = ++loadRequest;
+    const targetWorkspace = workspaceId;
     busy = input.command;
     try {
       const result = await api<ComputerCommandResult>(`/api/agent-room/workspaces/${workspaceId}/computers`, { method: 'POST', body: JSON.stringify(input) });
-      computerState = { ...(computerState as State), snapshot: result.snapshot, ...(result.kind === 'screenshot' ? { lastEvidence: result.path } : {}) };
+      if (request === loadRequest && targetWorkspace === workspaceId) computerState = { ...(computerState as State), snapshot: result.snapshot, ...(result.kind === 'screenshot' ? { lastEvidence: result.path } : {}) };
       return result;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : m['computer.command_failed']());
@@ -89,33 +114,27 @@
   }
 
   async function sendText(): Promise<void> {
-    if (!inputText.trim()) return;
-    if (await command({ command: 'type', text: inputText, ...(focusedWindow ? { targetId: focusedWindow.id } : {}) })) inputText = '';
+    if (!inputText.trim() || !inputWindow || busy !== null) return;
+    if (await command({ command: 'type', text: inputText, targetId: inputWindow.id })) inputText = '';
   }
 
-  async function clickEvidence(event: MouseEvent): Promise<void> {
-    if (!computerState?.config.enabled || screenshotTarget !== 'all') return;
-    const image = event.currentTarget as HTMLImageElement;
-    const rect = image.getBoundingClientRect();
-    const displays = computerState.snapshot.displays;
-    if (!displays.length) return;
-    const minX = Math.min(...displays.map((display) => display.bounds.x));
-    const minY = Math.min(...displays.map((display) => display.bounds.y));
-    const maxX = Math.max(...displays.map((display) => display.bounds.x + display.bounds.width));
-    const maxY = Math.max(...displays.map((display) => display.bounds.y + display.bounds.height));
-    await command({ command: 'click', space: 'screen', x: minX + ((event.clientX - rect.left) / rect.width) * (maxX - minX), y: minY + ((event.clientY - rect.top) / rect.height) * (maxY - minY), button: 'left', count: 1 });
-  }
-
-  $effect(() => { workspaceId; void load(); });
+  $effect(() => {
+    workspaceId;
+    untrack(() => { inputWindowId = ''; inputText = ''; void load(); });
+    const timer = setInterval(() => {
+      if (!document.hidden && panel?.getClientRects().length && busy === null && !loading) void load(true);
+    }, 3_000);
+    return () => { clearInterval(timer); ++loadRequest; };
+  });
 </script>
 
 {#if loading}
   <div class="grid h-full min-h-56 place-items-center"><LoaderCircle class="animate-spin text-[var(--app-accent)]" size={20} /></div>
 {:else if computerState}
-  <div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-[var(--app-canvas)]" data-testid="computer-workbench">
+  <div bind:this={panel} class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-[var(--app-canvas)]" data-testid="computer-workbench">
     <header class="flex flex-wrap items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2">
       <span class="grid size-8 place-items-center rounded-md bg-[var(--app-secondary-soft)] text-[var(--app-secondary)]"><Monitor size={16} /></span>
-      <div class="min-w-0 flex-1"><div class="flex items-center gap-2"><h2 class="text-xs font-semibold">{m['computer.title']()}</h2><Badge variant={computerState.snapshot.available ? 'default' : 'outline'}>{computerState.snapshot.available ? m['computer.ready']() : m['computer.unavailable']()}</Badge></div><p class="text-ui-xs text-[var(--app-text-muted)]">{messages[`computer.platform_${computerState.snapshot.platform}`]()}</p></div>
+      <div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h2 class="text-xs font-semibold">{m['computer.title']()}</h2><Badge variant={ready ? 'default' : 'outline'}>{!computerState.snapshot.available ? m['computer.unavailable']() : !computerState.config.enabled ? m['computer.disabled']() : !ready ? m['computer.permission_denied']() : m['computer.ready']()}</Badge></div><p class="text-ui-xs text-[var(--app-text-muted)]">{messages[`computer.platform_${computerState.snapshot.platform}`]()}</p></div>
       <Button size="icon-sm" variant="ghost" aria-label={m['computer.refresh']()} disabled={busy !== null} onclick={() => load()}><RefreshCw size={14} /></Button>
       <label class="flex items-center gap-2 text-ui-xs font-medium"><span>{m['computer.enable']()}</span><Switch checked={computerState.config.enabled} disabled={!computerState.snapshot.available || busy !== null} onCheckedChange={(checked: boolean) => saveConfig({ ...computerState!.config, enabled: checked })} /></label>
     </header>
@@ -140,8 +159,17 @@
         <div class="mb-2 flex items-center gap-2"><ShieldCheck size={14} class="text-[var(--app-text-muted)]" /><h3 class="text-xs font-semibold">{m['computer.allowed_apps']()}</h3></div>
         <p class="mb-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['computer.allowed_apps_help']()}</p>
         <div class="grid max-h-36 gap-1 overflow-y-auto border-y border-[var(--app-border)] py-1 sm:grid-cols-2">
-          {#each applications as app (app.id)}<label class="flex items-center gap-2 px-2 py-1.5 text-ui-xs hover:bg-[var(--app-surface-hover)]"><Checkbox checked={computerState.config.allowedApplications.includes(app.id)} disabled={busy !== null} onCheckedChange={(checked: boolean) => toggleAllowed('application', app.id, checked)} /><span class="min-w-0 truncate">{app.name}</span><span class="ml-auto truncate text-[var(--app-text-muted)]">{app.id}</span></label>{/each}
+          {#each applications as app (app.id)}
+            <div class="flex min-w-0 items-center gap-1 px-2 py-1 text-ui-xs hover:bg-[var(--app-surface-hover)]">
+              <label class="flex min-w-0 flex-1 items-center gap-2"><Checkbox checked={applicationAllowed(app.id)} disabled={busy !== null} onCheckedChange={(checked: boolean) => toggleAllowed('application', app.id, checked)} /><span class="min-w-0 break-words" title={app.id}>{app.name}</span></label>
+              <Button size="icon-sm" variant="ghost" title={m['computer.launch']()} aria-label={`${m['computer.launch']()} ${app.name}`} disabled={!computerState.config.enabled || !applicationAllowed(app.id) || busy !== null} onclick={() => command({ command: 'launch', applicationId: app.id })}><Play size={12} /></Button>
+            </div>
+          {/each}
           {#if applications.length === 0}<p class="px-2 py-4 text-center text-ui-xs text-[var(--app-text-muted)] sm:col-span-2">{m['computer.no_windows']()}</p>{/if}
+        </div>
+        <div class="mt-2 flex gap-2">
+          <Input bind:value={applicationId} aria-label={m['computer.application_id']()} placeholder={m['computer.application_id']()} spellcheck={false} autocomplete="off" disabled={busy !== null} />
+          <Button size="icon-sm" variant="outline" aria-label={m['computer.authorize_app']()} title={m['computer.authorize_app']()} disabled={busy !== null || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(applicationId.trim())} onclick={() => { toggleAllowed('application', applicationId.trim(), true); applicationId = ''; }}><Plus size={14} /></Button>
         </div>
       </section>
 
@@ -157,7 +185,7 @@
         <div class="mb-2 flex items-center gap-2"><Monitor size={14} class="text-[var(--app-text-muted)]" /><h3 class="text-xs font-semibold">{m['computer.windows']()}</h3></div>
         <div class="grid max-h-44 gap-1 overflow-y-auto">
           {#each computerState.snapshot.windows as window (window.id)}
-            <button type="button" class="flex items-center gap-2 border border-transparent px-2 py-1.5 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-surface-hover)] disabled:opacity-50" disabled={!computerState.config.enabled || !computerState.config.allowedApplications.includes(window.appId) || busy !== null} onclick={() => command({ command: 'focus', windowId: window.id })}>
+            <button type="button" aria-pressed={inputWindow?.id === window.id} class="flex items-center gap-2 border border-transparent px-2 py-1.5 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-surface-hover)] aria-pressed:border-[var(--app-accent)] aria-pressed:bg-[var(--app-accent-soft)] disabled:opacity-50" disabled={!computerState.config.enabled || !applicationAllowed(window.appId) || busy !== null} onclick={() => { inputWindowId = window.id; void command({ command: 'focus', windowId: window.id }); }}>
               <span class={`size-2 shrink-0 rounded-full ${window.focused ? 'bg-[var(--app-success)]' : 'bg-[var(--app-border-strong)]'}`}></span><span class="min-w-0 flex-1 truncate text-ui-xs"><strong>{window.appName}</strong>{window.title ? ` · ${window.title}` : ''}</span>
             </button>
           {/each}
@@ -170,13 +198,13 @@
           {#if screenshotTarget !== 'all'}<label class="min-w-48 flex-[2]"><span class="mb-1 block text-ui-xs font-medium">{m['computer.capture_target']()}</span><Select.Root type="single" value={screenshotTargetId} onValueChange={(value: string) => (screenshotTargetId = value)}><Select.Trigger class="w-full">{targetLabel(selectedTargets.find((target: ComputerDisplay | ComputerWindow) => target.id === screenshotTargetId))}</Select.Trigger><Select.Content>{#each selectedTargets as target (target.id)}<Select.Item value={target.id}>{targetLabel(target)}</Select.Item>{/each}</Select.Content></Select.Root></label>{/if}
           <Button size="sm" disabled={!captureAllowed || busy !== null} onclick={() => command({ command: 'screenshot', target: screenshotTarget, ...(screenshotTargetId ? { targetId: screenshotTargetId } : {}) })}>{#if busy === 'screenshot'}<LoaderCircle class="animate-spin" size={13} />{:else}<Camera size={13} />{/if}{m['computer.capture']()}</Button>
         </div>
-        {#if evidenceUrl}<button type="button" class="mt-3 block w-full cursor-crosshair overflow-hidden border border-[var(--app-border)] bg-black" aria-label={m['computer.click_preview']()} disabled={!computerState.config.enabled || screenshotTarget !== 'all' || !captureAllowed} onclick={clickEvidence}><img class="max-h-80 w-full object-contain" src={evidenceUrl} alt={m['computer.evidence_alt']()} /></button>{/if}
+        {#if evidenceUrl}<div class="mt-3 overflow-hidden border border-[var(--app-border)] bg-black"><img class="max-h-80 w-full object-contain" src={evidenceUrl} alt={m['computer.evidence_alt']()} /></div>{/if}
       </section>
 
       <section class="mt-3 flex gap-2 border-t border-[var(--app-border)] pt-3">
-        <Input bind:value={inputText} disabled={!computerState.config.enabled || !focusedWindow || busy !== null} placeholder={m['computer.type_placeholder']()} onkeydown={(event: KeyboardEvent) => { if (event.key === 'Enter') void sendText(); }} />
-        <Button size="icon-sm" aria-label={m['computer.type']()} disabled={!computerState.config.enabled || !focusedWindow || !inputText.trim() || busy !== null} onclick={sendText}><Keyboard size={14} /></Button>
-        <Button size="icon-sm" variant="outline" aria-label={m['computer.press_enter']()} disabled={!computerState.config.enabled || !focusedWindow || busy !== null} onclick={() => focusedWindow && command({ command: 'shortcut', keys: ['enter'], targetId: focusedWindow.id })}><MousePointer2 size={14} /></Button>
+        <Input bind:value={inputText} disabled={!computerState.config.enabled || !inputWindow || busy !== null} aria-label={m['computer.type_placeholder']()} placeholder={inputWindow ? `${inputWindow.appName} · ${inputWindow.title}` : m['computer.type_placeholder']()} onkeydown={(event: KeyboardEvent) => { if (event.key === 'Enter') void sendText(); }} />
+        <Button size="icon-sm" aria-label={m['computer.type']()} disabled={!computerState.config.enabled || !inputWindow || !inputText.trim() || busy !== null} onclick={sendText}><Keyboard size={14} /></Button>
+        <Button size="icon-sm" variant="outline" aria-label={m['computer.press_enter']()} disabled={!computerState.config.enabled || !inputWindow || busy !== null} onclick={() => inputWindow && command({ command: 'shortcut', keys: ['enter'], targetId: inputWindow.id })}><MousePointer2 size={14} /></Button>
       </section>
     </div>
   </div>

@@ -6,13 +6,28 @@ import { runNative } from './native-runner.js';
 
 const WIN32 = `using System;using System.Text;using System.Collections.Generic;using System.Runtime.InteropServices;public class O{public delegate bool E(IntPtr h,IntPtr l);[DllImport("user32.dll")]public static extern bool EnumWindows(E e,IntPtr l);[DllImport("user32.dll")]public static extern bool IsWindowVisible(IntPtr h);[DllImport("user32.dll")]public static extern int GetWindowTextLength(IntPtr h);[DllImport("user32.dll")]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out R r);[DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);[DllImport("user32.dll")]public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern void mouse_event(uint f,uint x,uint y,uint d,UIntPtr i);[StructLayout(LayoutKind.Sequential)]public struct R{public int Left,Top,Right,Bottom;}}`;
 const POWERSHELL = 'powershell.exe';
+const SEND_TEXT = String.raw`$escaped=[regex]::Replace($t,'([+^%~(){}\[\]])','{$1}');[Windows.Forms.SendKeys]::SendWait($escaped)`;
+
+export function computerPowerShellArgs(script: string, args: string[] = []): string[] {
+  // -Command consumes trailing argv as code, not as the script's $args.
+  const values = Buffer.from(JSON.stringify(args), 'utf8').toString('base64');
+  const invocation = `$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$values=@(ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${values}'))));& {${script}} @values`;
+  return ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(invocation, 'utf16le').toString('base64')];
+}
 
 function ps(script: string, args: string[] = [], allowFailure = false) {
-  return runNative(POWERSHELL, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script, ...args], { timeoutMs: 20_000, allowFailure });
+  return runNative(POWERSHELL, computerPowerShellArgs(script, args), { timeoutMs: 20_000, allowFailure });
 }
 
 export class WindowsComputerAdapter implements ComputerAdapter {
   readonly platform = 'windows' as const;
+
+  async launch(applicationId: string): Promise<void> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(applicationId)) throw new Error('Invalid application identifier.');
+    // Resolve registered executables, never commands supplied by the agent or PATH.
+    const script = `$ErrorActionPreference='Stop';$id=$args[0];$path=$null;if($id -in @('CalculatorApp','Calculator','calc')){$path=Join-Path $env:SystemRoot 'System32\\calc.exe'}elseif($id -eq 'notepad'){$path=Join-Path $env:SystemRoot 'System32\\notepad.exe'}else{foreach($root in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths')){$key=Join-Path $root ($id+'.exe');if(Test-Path -LiteralPath $key){$path=(Get-Item -LiteralPath $key).GetValue('');break}}};if(-not $path -or -not [IO.Path]::IsPathRooted($path) -or [IO.Path]::GetExtension($path) -ne '.exe' -or -not (Test-Path -LiteralPath $path -PathType Leaf)){throw 'Application is not registered for desktop launch.'};Start-Process -FilePath $path`;
+    await ps(script, [applicationId]);
+  }
 
   async snapshot(): Promise<ComputerSnapshot> {
     if (process.platform !== 'win32') return this.unavailable();
@@ -35,23 +50,25 @@ export class WindowsComputerAdapter implements ComputerAdapter {
   }
 
   async type(text: string): Promise<void> {
-    const encoded = Buffer.from(text, 'utf8').toString('base64');
-    const script = `Add-Type -AssemblyName System.Windows.Forms;$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($args[0]));[Windows.Forms.SendKeys]::SendWait(($t -replace '([+^%~(){}\[\]])','{$1}'))`;
-    await ps(script, [encoded]);
+    // Stdin also avoids Windows' command-line length limit for long messages.
+    await this.typeSensitive(text);
   }
 
   async typeSensitive(text: string): Promise<void> {
-    const script = "Add-Type -AssemblyName System.Windows.Forms;$t=[Console]::In.ReadToEnd();[Windows.Forms.SendKeys]::SendWait(($t -replace '([+^%~(){}\\[\\]])','{$1}'))";
+    const script = `$ErrorActionPreference='Stop';[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);Add-Type -AssemblyName System.Windows.Forms;$t=[Console]::In.ReadToEnd();${SEND_TEXT}`;
     await runNative(POWERSHELL, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { timeoutMs: 20_000, input: text });
   }
 
   async shortcut(keys: string[]): Promise<void> {
     const modifiers: Record<string, string> = { ctrl: '^', control: '^', alt: '%', shift: '+', win: '^{ESC}' };
     const normalized = keys.map((key) => key.toLowerCase());
+    if (normalized.includes('win')) throw new Error('The Windows key is not supported by this desktop input backend.');
     const main = normalized.find((key) => !modifiers[key]);
-    if (!main) throw new Error('A non-modifier key is required.');
+    if (!main || normalized.filter((key) => !modifiers[key]).length !== 1) throw new Error('Exactly one non-modifier key is required.');
     const special: Record<string, string> = { enter: '{ENTER}', return: '{ENTER}', tab: '{TAB}', escape: '{ESC}', esc: '{ESC}', space: ' ', delete: '{DELETE}', backspace: '{BACKSPACE}', left: '{LEFT}', right: '{RIGHT}', up: '{UP}', down: '{DOWN}', home: '{HOME}', end: '{END}', pageup: '{PGUP}', pagedown: '{PGDN}' };
-    const sequence = normalized.filter((key) => modifiers[key] && key !== 'win').map((key) => modifiers[key]).join('') + (special[main] ?? main);
+    const mainKey = special[main] ?? (/^f([1-9]|1[0-9]|2[0-4])$/.test(main) ? `{${main.toUpperCase()}}` : /^[a-z0-9]$/.test(main) ? main : null);
+    if (!mainKey) throw new Error('Unsupported Windows shortcut key.');
+    const sequence = normalized.filter((key) => modifiers[key]).map((key) => modifiers[key]).join('') + mainKey;
     await ps('Add-Type -AssemblyName System.Windows.Forms;[Windows.Forms.SendKeys]::SendWait($args[0])', [sequence]);
   }
 

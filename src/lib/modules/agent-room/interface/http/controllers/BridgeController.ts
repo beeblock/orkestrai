@@ -986,7 +986,7 @@ export class BridgeController extends Controller {
         throw new Error('Computer actions require an active task assigned to this agent.');
       }
       const result = await computerService.execute(workspace.id, request.input, {
-        actorType: 'agent', actorId: actor, idempotencyKey: request.idempotencyKey,
+        actorType: 'agent', actorId: actor, idempotencyKey: request.idempotencyKey, risk: request.risk,
       });
       await controlCenterService.recordActivity({
         workspaceId: workspace.id,
@@ -1560,10 +1560,14 @@ export class BridgeController extends Controller {
     try {
       const input = bridgeBoardTaskSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const assigneeNodeId = await this.assigneeNodeId(workspace.id, input.assignee);
+      const caller = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
       const task = await taskBoardService.create(workspace.id, {
         title: input.title,
         description: input.description ?? null,
-        assigneeNodeId: await this.assigneeNodeId(workspace.id, input.assignee),
+        assigneeNodeId,
+        // Self-authored work is already in progress in this terminal.
+        dispatch: !caller || caller !== assigneeNodeId,
         noteId: (await this.noteNodeId(workspace.id, input.note)) ?? null,
         createdBy: input.from ?? 'agente',
         status: input.status,

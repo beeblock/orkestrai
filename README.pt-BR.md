@@ -44,9 +44,14 @@ agentes não é persistida.
   Sob demanda ou Persistente e conecte Gmail, Slack, Telegram, WhatsApp, GitHub
   ou webhooks com permissões por operação. Agentes podem ler caixas autorizadas,
   classificar trabalho e entregar relatórios ou PDFs sem receber o token bruto.
-- **Controle limitado do desktop:** o nó Computador opera somente aplicativos e
+- **Controle limitado do desktop:** peça ao agente para abrir a Calculadora ou
+  usar o navegador já autenticado no desktop, localmente ou pelo Remote. Ele
+  cria a nota, a tarefa e o nó Computador; você autoriza os aplicativos e as
+  permissões do sistema, sem montar o fluxo manualmente. O nó opera somente aplicativos e
   monitores aprovados no macOS, Windows e Linux X11 compatível, com comandos
   tipados, idempotência, evidências confinadas e auditoria sem conteúdo digitado.
+  Consulte o [guia de Computer Control](docs/computer-control.md) para comandos,
+  gates, credenciais protegidas e limitações por plataforma.
 - **Tool Workshop:** transforme trabalho repetido numa ferramenta nativa e
   versionada do workspace sem editar o Orkestrai. Componha integrações, HTTP,
   transformações determinísticas ou comandos confinados; valide contratos JSON

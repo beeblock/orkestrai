@@ -113,10 +113,13 @@ Uso:
   orkestrai device install <path> | launch <bundleId|package/activity> | logs | tree | screenshot | stop
   orkestrai device permissions <list|grant|revoke|reset> [permission] [bundleId] [--value <valor>]
   orkestrai computer inspect [--json]
+  orkestrai computer prepare --task <id> --idempotency <key>
+  orkestrai computer launch <applicationId> --task <id> --idempotency <key>
   orkestrai computer focus <windowId> --task <id> --idempotency <key>
   orkestrai computer click <x:0..1> <y:0..1> --target <windowId> --task <id> --idempotency <key>
   orkestrai computer type <texto> --target <windowId> | secret <secretRef> --target <windowId> | shortcut <key...> --target <windowId>
   orkestrai computer screenshot --target <windowId> | wait <exists|focused> <texto>
+  Computer effects require --task and --idempotency; declare --risk external_publication before sending or publishing.
   orkestrai port [--check <porta>]  — devolve uma porta livre (ou testa uma)
   orkestrai fs read <path> | fs write <path> <conteudo> | fs search <termo> [--content]
   orkestrai say <texto>  — fala no desktop com a voz configurada
@@ -1723,7 +1726,11 @@ export async function run(argv, options = {}) {
       const idempotencyKey = flags.idempotency;
       if (!taskId || !idempotencyKey) throw new Error('Acoes de Computer exigem --task <id> e --idempotency <key>.');
       let input;
-      if (action === 'focus') {
+      if (action === 'prepare') input = { command: 'prepare' };
+      else if (action === 'launch') {
+        if (!values[0]) throw new Error('Usage: orkestrai computer launch <applicationId> --task <id> --idempotency <key>');
+        input = { command: 'launch', applicationId: values[0] };
+      } else if (action === 'focus') {
         if (!values[0]) throw new Error('Uso: orkestrai computer focus <windowId> --task <id> --idempotency <key>');
         input = { command: 'focus', windowId: values[0] };
       } else if (action === 'click') {
@@ -1747,8 +1754,8 @@ export async function run(argv, options = {}) {
         const value = values.join(' ');
         if (!condition || !value) throw new Error('Uso: orkestrai computer wait <exists|focused> <texto>');
         input = { command: 'wait', condition: condition === 'focused' ? 'window_focused' : 'window_exists', value, timeoutMs: Number(flags.timeout ?? 10000), pollMs: Number(flags.poll ?? 300) };
-      } else throw new Error('Uso: orkestrai computer <inspect|focus|click|type|shortcut|screenshot|wait> ...');
-      const data = await bridge(config, 'POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId, idempotencyKey, input });
+      } else throw new Error('Uso: orkestrai computer <prepare|inspect|launch|focus|click|type|secret|shortcut|screenshot|wait> ...');
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId, idempotencyKey, ...('risk' in flags && flags.risk ? { risk: flags.risk } : {}), input });
       out(JSON.stringify(data, null, 2));
       return 0;
     }

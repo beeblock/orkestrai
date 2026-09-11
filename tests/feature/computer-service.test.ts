@@ -21,10 +21,11 @@ const snapshot: ComputerSnapshot = {
 
 class FakeAdapter implements ComputerAdapter {
   readonly platform = platform;
-  type = vi.fn(async () => undefined);
+  type = vi.fn(async (): Promise<void> => undefined);
   typeSensitive = vi.fn(async () => undefined);
   snapshot = vi.fn(async () => structuredClone(snapshot));
   focus = vi.fn(async () => undefined);
+  launch = vi.fn(async () => undefined);
   click = vi.fn(async () => undefined);
   shortcut = vi.fn(async () => undefined);
   screenshot = vi.fn(async (_input: Extract<ComputerCommandInput, { command: 'screenshot' }>) => ({ width: 1920, height: 1080 }));
@@ -64,6 +65,85 @@ describe('ComputerService', () => {
       windows: Array.from({ length: 501 }, (_, index) => ({ ...snapshot.windows[0], id: `window-${index}` })),
     });
     await expect(new ComputerService([adapter]).snapshot(workspace.id)).rejects.toThrow();
+  });
+
+  it('does not retarget a stale window to the focused application', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Stale window', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor'] } } });
+    const adapter = new FakeAdapter();
+    const service = new ComputerService([adapter]);
+    for (const input of [
+      { command: 'type', text: 'private', targetId: 'missing' },
+      { command: 'focus', windowId: 'missing' },
+      { command: 'shortcut', keys: ['enter'], targetId: 'missing' },
+    ] as ComputerCommandInput[]) {
+      await expect(service.execute(workspace.id, input, { actorType: 'agent', actorId: 'agent' })).rejects.toThrow('no longer available');
+    }
+    expect(adapter.type).not.toHaveBeenCalled();
+    expect(adapter.focus).not.toHaveBeenCalled();
+    expect(adapter.shortcut).not.toHaveBeenCalled();
+  });
+
+  it('reuses the existing browser session and never launches an unauthorized app', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Reuse desktop', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor', 'com.example.calculator'] } } });
+    const adapter = new FakeAdapter();
+    const service = new ComputerService([adapter]);
+    await service.execute(workspace.id, { command: 'launch', applicationId: 'com.example.editor' }, { actorType: 'user' });
+    expect(adapter.focus).toHaveBeenCalledWith('editor:1');
+    expect(adapter.launch).not.toHaveBeenCalled();
+    await service.execute(workspace.id, { command: 'launch', applicationId: 'com.example.calculator' }, { actorType: 'user' });
+    expect(adapter.launch).toHaveBeenCalledWith('com.example.calculator');
+    await expect(service.execute(workspace.id, { command: 'launch', applicationId: 'com.example.denied' }, { actorType: 'user' })).rejects.toThrow('not enabled');
+    expect(adapter.launch).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks focus theft and never automatically replays a possibly partial failed action', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Focus theft', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor'] } } });
+    const adapter = new FakeAdapter();
+    const service = new ComputerService([adapter]);
+    adapter.snapshot.mockResolvedValueOnce(structuredClone(snapshot)).mockResolvedValueOnce({ ...structuredClone(snapshot), focusedWindowId: null, windows: [{ ...snapshot.windows[0], focused: false }] });
+    const input: ComputerCommandInput = { command: 'type', text: 'private', targetId: 'editor:1' };
+    const context = { actorType: 'agent' as const, actorId: 'agent', idempotencyKey: 'focus-test:1' };
+    await expect(service.execute(workspace.id, input, context)).rejects.toThrow('No input was sent');
+    expect(adapter.type).not.toHaveBeenCalled();
+    await expect(service.execute(workspace.id, input, context)).rejects.toThrow('automatic replay is blocked');
+  });
+
+  it('holds the host input lock across different service instances', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Host lock', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor'] } } });
+    const adapter = new FakeAdapter();
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => { started = resolve; });
+    adapter.type.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; started(); }));
+    const first = new ComputerService([adapter]).execute(workspace.id, { command: 'type', text: 'first', targetId: 'editor:1' }, { actorType: 'user' });
+    try {
+      await entered;
+      await expect(new ComputerService([adapter]).execute(workspace.id, { command: 'type', text: 'second', targetId: 'editor:1' }, { actorType: 'user' })).rejects.toThrow('Another desktop action');
+    } finally { release(); await first; }
+    expect(adapter.type).toHaveBeenCalledTimes(1);
+  });
+
+  it('gates publication before input and binds approval to the exact content and attempt', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Publication gate', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor'] } } });
+    const policy = await autonomyPolicyService.get(workspace.id);
+    await autonomyPolicyService.update(workspace.id, { enabled: true, mode: 'bounded', policy: { ...policy.policy, capabilities: ['computer'], allowedApps: ['com.example.editor'] } });
+    const adapter = new FakeAdapter();
+    const service = new ComputerService([adapter]);
+    const context = { actorType: 'agent' as const, actorId: 'agent', idempotencyKey: 'send-email:1', risk: 'external_publication' as const };
+    const input: ComputerCommandInput = { command: 'type', text: 'message A', targetId: 'editor:1' };
+    await expect(service.execute(workspace.id, input, context)).rejects.toThrow('approval gate');
+    expect(adapter.type).not.toHaveBeenCalled();
+    const gate = (await autonomyPolicyService.listGates(workspace.id))[0];
+    await autonomyPolicyService.resolveGate(workspace.id, gate.id, 'approved', 'workspace-owner');
+    await service.execute(workspace.id, input, context);
+    expect(adapter.type).toHaveBeenCalledTimes(1);
+    await expect(service.execute(workspace.id, { ...input, text: 'message B' }, { ...context, idempotencyKey: 'send-email:2' })).rejects.toThrow('approval gate');
+    expect(adapter.type).toHaveBeenCalledTimes(1);
   });
 
   it('applies app policy, redacts typed content, and deduplicates agent actions', async () => {

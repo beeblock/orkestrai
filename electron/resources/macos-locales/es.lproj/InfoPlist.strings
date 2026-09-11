@@ -1,4 +1,5 @@
 "NSMicrophoneUsageDescription" = "Orkestrai usa el micrófono solo cuando inicias el dictado por voz.";
+"NSAppleEventsUsageDescription" = "Orkestrai controla solo las aplicaciones que autorizas para el Control del Computador.";
 "NSDownloadsFolderUsageDescription" = "Orkestrai necesita acceso a los proyectos que elijas dentro de Descargas.";
 "NSDocumentsFolderUsageDescription" = "Orkestrai necesita acceso a los proyectos que elijas dentro de Documentos.";
 "NSDesktopFolderUsageDescription" = "Orkestrai necesita acceso a los proyectos que elijas en el Escritorio.";

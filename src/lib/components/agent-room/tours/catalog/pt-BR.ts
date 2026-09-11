@@ -146,11 +146,11 @@ export const TOURS_PT: Tour[] = [
     title: 'Agente com controle do computador',
     tagline: 'Opere apps permitidos com evidências e sem expor credenciais.',
     steps: [
-      { id: 'computer', title: 'Adicione o nó Computador', body: 'Vou adicionar o nó Computador desativado. Ele identifica plataforma, monitores, apps, janelas visíveis e permissões do sistema operacional.', action: { kind: 'createComputer', title: 'Computador' }, check: { kind: 'nodeExists', nodeType: 'computer' } },
-      { id: 'permissions', title: 'Conceda permissões do sistema', body: 'Use os botões de permissão para abrir o ajuste exato no macOS, Windows ou Linux. O Orkestrai mostra se acessibilidade e captura estão prontas em vez de falhar silenciosamente.' },
-      { id: 'scope', title: 'Defina o limite por aplicativo', body: 'Permita somente os apps e monitores que este workspace pode controlar e então ative o nó. Para agentes autônomos, adicione os mesmos ids de app à política permanente em Segurança.' },
-      { id: 'agent', title: 'Atribua trabalho rastreável', body: 'Conecte um agente, atribua uma tarefa Kanban ativa e deixe-o usar computer_inspect, focus, click, type, type_secret, shortcut, screenshot e wait com chaves de idempotência estáveis. Uma SecretRef de login precisa estar vinculada a computer.type_secret e ao id exato do app.' },
-      { id: 'audit', title: 'Revise evidências e interrompa com segurança', body: 'Capturas ficam em .orkestrai/computer/evidence com retenção limitada. Central de Controle e Auditoria registram ator, comando, alvo, resultado e digest sem guardar o texto digitado.' },
+      {"id":"computer","title":"Peça ao agente","body":"Use um agente existente e diga: Abra a Calculadora e calcule 73 vezes 19; verifique e registre o resultado. O agente cria nota, tarefa atribuída e nó Computador. Não é necessário despachar a tarefa manualmente."},
+      {"id":"permissions","title":"Conceda acesso do sistema","body":"Quando solicitado, conceda Acessibilidade, Gravação de Tela e Automação ao Orkestrai no macOS. Windows exige desktop interativo; Linux atualmente exige X11 e helpers nativos. O agente não pode aprovar permissões do sistema por você."},
+      {"id":"scope","title":"Autorize o limite","body":"Uma concessão Limitada ativa para computer e aplicativos pode inicializar um novo nó. Sem ela, autorize o ID do aplicativo e ative o nó. Nós pausados continuam pausados. Calculadora: com.apple.calculator no macOS, CalculatorApp no Windows."},
+      {"id":"agent","title":"Acompanhe o agente","body":"O agente abre ou foca o app permitido, observa, age e captura novamente. Pedidos do Remote usam esse mesmo desktop host e a sessão existente do navegador. Enviar e-mail exige risco declarado external_publication e seu gate de Segurança."},
+      {"id":"audit","title":"Confira a entrega","body":"Confirme 1387 na captura real da Calculadora, na nota de resultado e na tarefa concluída. O nó atualiza as evidências do agente. A Auditoria registra operações da ponte; o texto digitado é omitido e capturas nativas podem mostrar conteúdo privado visível."},
     ],
   },
   {

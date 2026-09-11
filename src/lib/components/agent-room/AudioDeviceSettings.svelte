@@ -113,6 +113,7 @@
       inventory = await audioDeviceInventory();
       const context = new AudioContext();
       audioContext = context;
+      if (context.state === 'suspended') await context.resume();
       const source = context.createMediaStreamSource(testStream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 256;
