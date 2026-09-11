@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/** @param {{ entitlements: Record<string, unknown>, info?: Record<string, unknown>, label?: string }} input */
 export function validateMacPermissionContract({ entitlements, info, label = 'application' }) {
   for (const key of ['com.apple.security.device.audio-input', 'com.apple.security.automation.apple-events']) {
     if (entitlements[key] !== true) throw new Error(`${label}: missing signed entitlement ${key}`);
@@ -14,10 +15,12 @@ export function validateMacPermissionContract({ entitlements, info, label = 'app
   }
 }
 
+/** @param {string | Buffer} input */
 function parsePlist(input) {
   return JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], { input, encoding: 'utf8' }));
 }
 
+/** @param {string} appPath */
 export function validateSignedMacPermissions(appPath) {
   const app = resolve(appPath);
   const frameworks = join(app, 'Contents', 'Frameworks');
