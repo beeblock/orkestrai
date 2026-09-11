@@ -25,6 +25,8 @@ pt-BR, English, and Spanish translations.
 
 - Computer inventory collapses identical native window/display records and excludes conflicting identities. Duplicate macOS Finder records no longer crash rendering or leave the loading indicator stuck; failed loads offer retry, and refresh keeps the existing panel visible.
 
+- Flow execution waits for pending step edits to be saved in Canvas and Workbench. Failed saves prevent execution instead of starting with stale or missing steps.
+
 - Native desktop adapters correct Linux window/PID discovery, Windows PowerShell argument handling, literal text and shortcuts, and macOS display coordinates and capture bounds. Windows desktop commands load only built-in PowerShell modules and preserve argument boundaries. Launch uses registered applications; unsupported targets fail explicitly.
 
 - Microphone access is limited to the real app renderer and exact local origin, and the Settings input meter resumes a suspended audio context. Documentation and the guided desktop use case now start from a natural-language agent request, including Remote.

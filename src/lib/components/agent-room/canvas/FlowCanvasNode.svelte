@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { getCsrfToken } from '@beeblock/svelar/http';
   import type { NodeProps } from '@xyflow/svelte';
   import { Check, CircleCheck, CircleDashed, CircleX, Clock, Loader2, Play, Plus, RefreshCw, Square, Trash2, UserCheck, Workflow } from '@lucide/svelte';
   import * as Select from '$lib/components/ui/select';
@@ -23,7 +25,7 @@
     workspaceId: string;
     payload: FlowPayload;
     onDelete: (id: string) => void;
-    onPayloadChange: (id: string, partial: Record<string, unknown>) => void;
+    onPayloadChange: (id: string, partial: Record<string, unknown>) => Promise<void> | void;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
     connections?: import('./NodeShell.svelte').NodeConnection[];
     onJumpToNode?: (nodeId: string) => void;
@@ -41,9 +43,12 @@
   let agents = $state<Array<{ id: string; title: string }>>([]);
   let flowInput = $state('');
   let busy = $state(false);
+  let pendingPayload: Promise<void> = Promise.resolve();
+  let disposed = false;
   /** Erro visivel no topo do no — nada de falhar em silencio. */
   let errorMsg = $state('');
   let errorTimer: ReturnType<typeof setTimeout> | null = null;
+  onDestroy(() => { disposed = true; if (errorTimer) clearTimeout(errorTimer); });
 
   function showError(message: string) {
     errorMsg = message;
@@ -56,9 +61,10 @@
 
   async function api<T>(path: string, init?: RequestInit): Promise<T | null> {
     try {
+      const csrf = getCsrfToken();
       const response = await fetch(path, {
         ...init,
-        headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+        headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...(init?.headers ?? {}) },
       });
       const payload = await response.json();
       if (!response.ok || payload.error) {
@@ -83,7 +89,8 @@
   });
 
   function patchPayload(partial: Record<string, unknown>) {
-    data.onPayloadChange(id, partial);
+    pendingPayload = Promise.resolve(data.onPayloadChange(id, partial));
+    void pendingPayload.catch(() => { if (!disposed) showError(m['flow.error_api']()); });
   }
 
   function addStep(kind: 'agent' | 'approval') {
@@ -138,18 +145,27 @@
     patchPayload({ steps: [...steps, ...missing.map((title) => ({ kind: 'agent' as const, target: title, prompt: '{{input}}' }))] });
   }
 
-  async function startRun() {    if (!steps.length) {
+  async function startRun() {
+    if (busy) return;
+    if (!steps.length) {
       showError(m['flow.no_steps_hint']());
       return;
     }
     busy = true;
     errorMsg = '';
-    const started = await api(`/api/agent-room/workspaces/${data.workspaceId}/flows/run`, {
-      method: 'POST',
-      body: JSON.stringify({ nodeId: id, input: flowInput }),
-    });
-    if (started) flowInput = '';
-    busy = false;
+    const workspaceId = data.workspaceId;
+    try {
+      // Steps render optimistically; execution must wait for their persisted version.
+      let saved: Promise<void>;
+      do { saved = pendingPayload; await saved; } while (saved !== pendingPayload);
+      if (disposed || workspaceId !== data.workspaceId) return;
+      const started = await api(`/api/agent-room/workspaces/${workspaceId}/flows/run`, {
+        method: 'POST',
+        body: JSON.stringify({ nodeId: id, input: flowInput }),
+      });
+      if (started) flowInput = '';
+    } catch { if (!disposed) showError(m['flow.error_api']()); }
+    finally { busy = false; }
   }
 
   async function approveStep() {

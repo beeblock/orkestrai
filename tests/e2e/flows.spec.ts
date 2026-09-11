@@ -1,5 +1,62 @@
 import { expect, test } from '@playwright/test';
 import { createNodeOnCanvas } from './helpers';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+for (const mode of ['canvas', 'terminal']) {
+  test(`flow waits for saved steps and rejects a failed save in ${mode}`, async ({ page, request }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-flow-save-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `Flow save ${mode} ${Date.now()}`, workingDir: dir } })).json()).data;
+    const root = `/api/agent-room/workspaces/${workspace.id}`;
+    const node = (await (await request.post(`${root}/nodes`, { data: { type: 'flow', title: 'Flow save', width: 640, height: 600, payload: { steps: [], iterations: 1 } } })).json()).data;
+    let release = () => {};
+    let waiting = false;
+    let fail = true;
+    let runs = 0;
+    page.on('request', (req) => { if (req.method() === 'POST' && req.url().endsWith(`${root}/flows/run`)) runs++; });
+    await page.route(`**${root}/nodes/${node.id}`, async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      await new Promise<void>((resolve) => { release = resolve; waiting = true; });
+      if (fail) return route.fulfill({ status: 503, json: { error: 'Fixture save failure' } });
+      await route.continue();
+    });
+    try {
+      await page.goto(`/${mode}?workspace=${workspace.id}&node=${node.id}`);
+      const flow = page.locator('.canvas-flow').filter({ visible: true }).first();
+      await expect(flow).toBeVisible();
+      for (const reject of [true, false]) {
+        fail = reject;
+        waiting = false;
+        await flow.getByRole('button', { name: 'Aprovação', exact: true }).click();
+        await expect.poll(() => waiting).toBe(true);
+        await flow.getByRole('button', { name: 'Rodar', exact: true }).click();
+        await expect(flow.locator('.flow-run-btn')).toBeDisabled();
+        expect(runs).toBe(0);
+        release();
+        if (reject) {
+          await expect(flow.locator('.flow-banner')).toBeVisible();
+          await expect(flow.locator('.flow-run-btn')).toBeEnabled();
+          expect(runs).toBe(0);
+          const stored = (await (await request.get(`${root}/nodes/${node.id}`)).json()).data;
+          expect(stored.payload.steps).toEqual([]);
+          await page.reload();
+          await expect(flow.locator('.flow-step')).toHaveCount(0);
+        } else {
+          await expect(flow.getByRole('button', { name: 'Aprovar e continuar' })).toBeVisible();
+          expect(runs).toBe(1);
+          await flow.getByRole('button', { name: 'Aprovar e continuar' }).click();
+          await expect(flow.locator('.flow-history-row')).toHaveCount(1);
+        }
+      }
+    } finally {
+      release();
+      await page.goto('about:blank');
+      await request.delete(root);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
 
 test.describe('nó de fluxo (pipeline)', () => {
   test('monta passos, roda com aprovação e registra histórico', async ({ page, request }) => {
@@ -10,7 +67,7 @@ test.describe('nó de fluxo (pipeline)', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await expect(page.locator('.workspace-list li.active .workspace-item', { hasText: workspaceName })).toBeVisible();
 
     await createNodeOnCanvas(page, 'Fluxo');
     const flow = page.locator('.canvas-flow');
@@ -47,7 +104,7 @@ test.describe('nó de fluxo (pipeline)', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await expect(page.locator('.workspace-list li.active .workspace-item', { hasText: workspaceName })).toBeVisible();
 
     // Terminal shell (sem esperar spawn) + fluxo com passo de agente, tudo via API
     const list = await request.get('/api/agent-room/workspaces');
