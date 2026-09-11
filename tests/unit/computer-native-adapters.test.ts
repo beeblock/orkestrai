@@ -38,9 +38,10 @@ describe('native desktop adapters', () => {
   it.skipIf(process.platform !== 'win32')('round-trips native PowerShell arguments without interpreting their contents', async () => {
     const { runNative: realRunNative } = await vi.importActual<typeof import('$lib/modules/agent-room/application/adapters/computers/native-runner.js')>('$lib/modules/agent-room/application/adapters/computers/native-runner.js');
     const values = ['C:\\Program Files\\Desktop App', 'a; throw "must not execute"', 'a\'b"c', 'a+b[]{}', 'a\u00e7\u00e3o'];
-    const result = await realRunNative('powershell.exe', computerPowerShellArgs('ConvertTo-Json -Compress -InputObject @($args)', values));
+    const result = await realRunNative('powershell.exe', computerPowerShellArgs('ConvertTo-Json -Compress -InputObject @($args)', values), { timeoutMs: 20_000 });
     expect(JSON.parse(result.stdout)).toEqual(values);
-  });
+    // Allow the bounded native timeout to finish even on a cold Windows runner.
+  }, 30_000);
 
   it('preserves SendKeys metacharacters as literal text and keeps secrets off argv', async () => {
     const adapter = new WindowsComputerAdapter();

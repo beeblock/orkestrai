@@ -230,6 +230,9 @@ describe('packaged updater', () => {
     expect(workflow).toContain('if [[ "$CONCLUSION" == "success" ]]');
     expect(ciWorkflow).toContain('npx playwright install --with-deps chromium');
     expect(ciWorkflow).toContain('npm run test:e2e');
+    expect(ciWorkflow).toContain('name: Verify Windows desktop transport');
+    expect(ciWorkflow).toContain('runs-on: windows-latest');
+    expect(ciWorkflow).toContain('npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts');
     expect(preflight).toContain('--commit "$SOURCE_SHA"');
     expect(preflight).toContain('[[ "$CI_CONCLUSION" == "success" ]]');
     for (const secret of [

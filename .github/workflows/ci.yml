@@ -20,6 +20,28 @@ env:
   NODE_OPTIONS: '--max-old-space-size=6144'
 
 jobs:
+  windows-native:
+    name: Verify Windows desktop transport
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install --global "npm@${{ env.NPM_VERSION }}"
+          npm ci --no-audit --no-fund
+
+      - name: Verify native desktop command transport
+        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts
+
   verify:
     name: Test and build
     runs-on: ubuntu-latest

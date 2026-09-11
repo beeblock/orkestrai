@@ -41,7 +41,10 @@ instalação antiga pode permanecer offline por meses antes de fazer a migraçã
    traduzidos em `src/lib/i18n/docs/`. O workflow usa o `CHANGELOG.md` como
    fonte exclusiva das notas públicas da release.
 3. Rode os testes e faça o commit. A CI executa auditoria de dependências,
-   testes unitários, build de produção e toda a suíte E2E do Playwright. Aguarde
+   testes unitários, transporte nativo do Computer no Windows, build de produção
+   e toda a suíte E2E do Playwright. O teste nativo mantém prazo de 20 segundos
+   para o processo e 30 segundos para a asserção, incluindo a inicialização fria
+   do PowerShell. Aguarde
    a CI de `main` terminar com sucesso nesse mesmo SHA; tanto o preflight local
    quanto o workflow de release bloqueiam a tag/publicação se a CI estiver
    ausente, pendente, cancelada ou falhar.
