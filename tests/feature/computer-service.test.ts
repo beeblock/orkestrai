@@ -67,6 +67,26 @@ describe('ComputerService', () => {
     await expect(new ComputerService([adapter]).snapshot(workspace.id)).rejects.toThrow();
   });
 
+  it('collapses repeated native window and display records without changing their identities', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Repeated native inventory', workingDir: '/tmp' });
+    const adapter = new FakeAdapter();
+    adapter.snapshot.mockResolvedValue({ ...snapshot, windows: [snapshot.windows[0], { ...snapshot.windows[0] }], displays: [snapshot.displays[0], { ...snapshot.displays[0] }] });
+    const current = await new ComputerService([adapter]).snapshot(workspace.id);
+    expect(current.snapshot.windows).toEqual(snapshot.windows);
+    expect(current.snapshot.displays).toEqual(snapshot.displays);
+  });
+
+  it('never chooses a target when duplicate native IDs disagree about its application', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Conflicting native inventory', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor'] } } });
+    const adapter = new FakeAdapter();
+    adapter.snapshot.mockResolvedValue({ ...snapshot, windows: [snapshot.windows[0], { ...snapshot.windows[0], appId: 'com.example.other' }] });
+    const service = new ComputerService([adapter]);
+    expect((await service.snapshot(workspace.id)).snapshot.windows).toEqual([]);
+    await expect(service.execute(workspace.id, { command: 'type', text: 'private', targetId: 'editor:1' }, { actorType: 'user' })).rejects.toThrow('no longer available');
+    expect(adapter.type).not.toHaveBeenCalled();
+  });
+
   it('does not retarget a stale window to the focused application', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Stale window', workingDir: '/tmp' });
     await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'computer', payload: { computerConfig: { enabled: true, allowedApplications: ['com.example.editor'] } } });

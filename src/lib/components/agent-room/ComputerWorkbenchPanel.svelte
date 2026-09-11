@@ -10,12 +10,14 @@
   import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
   import type { ComputerCommandInput, ComputerCommandResult, ComputerDisplay, ComputerNodeConfig, ComputerSnapshot, ComputerWindow } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
+  import { computerSnapshotSchema } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
   import * as m from '$lib/paraglide/messages.js';
 
   type State = { nodeId: string | null; config: ComputerNodeConfig; snapshot: ComputerSnapshot; lastEvidence: string | null };
   let { workspaceId }: { workspaceId: string } = $props();
   let computerState = $state<State | null>(null);
   let loading = $state(true);
+  let loadError = $state(false);
   let busy = $state<string | null>(null);
   let inputText = $state('');
   let applicationId = $state('');
@@ -26,6 +28,7 @@
   const messages = m as unknown as Record<string, () => string>;
   let loadRequest = 0;
   let pendingLoads = 0;
+  let loadAbort: AbortController | null = null;
 
   const applications = $derived.by(() => {
     const seen = new Map<string, { id: string; name: string }>();
@@ -69,13 +72,19 @@
     pendingLoads++;
     const request = ++loadRequest;
     const targetWorkspace = workspaceId;
+    loadAbort?.abort();
+    const controller = new AbortController();
+    loadAbort = controller;
     if (!quiet) loading = true;
     try {
-      const result = await api<State>(`/api/agent-room/workspaces/${targetWorkspace}/computers`, { signal: AbortSignal.timeout(20_000) });
-      if (request === loadRequest && targetWorkspace === workspaceId) computerState = result;
+      const result = await api<State>(`/api/agent-room/workspaces/${targetWorkspace}/computers`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) });
+      if (request === loadRequest && targetWorkspace === workspaceId) {
+        computerState = { ...result, snapshot: computerSnapshotSchema.parse(result.snapshot) };
+        loadError = false;
+      }
     }
-    catch (error) { if (!quiet && request === loadRequest) toast.error(error instanceof Error ? error.message : m['computer.load_failed']()); }
-    finally { pendingLoads--; if (request === loadRequest) loading = false; }
+    catch { if (!controller.signal.aborted && request === loadRequest && targetWorkspace === workspaceId) loadError = true; }
+    finally { pendingLoads--; if (controller === loadAbort) loading = false; }
   }
 
   async function saveConfig(config: ComputerNodeConfig): Promise<void> {
@@ -105,7 +114,7 @@
     busy = input.command;
     try {
       const result = await api<ComputerCommandResult>(`/api/agent-room/workspaces/${workspaceId}/computers`, { method: 'POST', body: JSON.stringify(input) });
-      if (request === loadRequest && targetWorkspace === workspaceId) computerState = { ...(computerState as State), snapshot: result.snapshot, ...(result.kind === 'screenshot' ? { lastEvidence: result.path } : {}) };
+      if (request === loadRequest && targetWorkspace === workspaceId) computerState = { ...(computerState as State), snapshot: computerSnapshotSchema.parse(result.snapshot), ...(result.kind === 'screenshot' ? { lastEvidence: result.path } : {}) };
       return result;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : m['computer.command_failed']());
@@ -120,26 +129,27 @@
 
   $effect(() => {
     workspaceId;
-    untrack(() => { inputWindowId = ''; inputText = ''; void load(); });
+    untrack(() => { inputWindowId = ''; inputText = ''; computerState = null; loadError = false; void load(); });
     const timer = setInterval(() => {
       if (!document.hidden && panel?.getClientRects().length && busy === null && !loading) void load(true);
     }, 3_000);
-    return () => { clearInterval(timer); ++loadRequest; };
+    return () => { clearInterval(timer); ++loadRequest; loadAbort?.abort(); };
   });
 </script>
 
-{#if loading}
-  <div class="grid h-full min-h-56 place-items-center"><LoaderCircle class="animate-spin text-[var(--app-accent)]" size={20} /></div>
+{#if loading && !computerState}
+  <div class="grid h-full min-h-56 place-items-center" data-testid="computer-loading" role="status" aria-label={m['computer.refresh']()}><LoaderCircle class="animate-spin text-[var(--app-accent)]" size={20} /></div>
 {:else if computerState}
   <div bind:this={panel} class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-[var(--app-canvas)]" data-testid="computer-workbench">
     <header class="flex flex-wrap items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2">
       <span class="grid size-8 place-items-center rounded-md bg-[var(--app-secondary-soft)] text-[var(--app-secondary)]"><Monitor size={16} /></span>
       <div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h2 class="text-xs font-semibold">{m['computer.title']()}</h2><Badge variant={ready ? 'default' : 'outline'}>{!computerState.snapshot.available ? m['computer.unavailable']() : !computerState.config.enabled ? m['computer.disabled']() : !ready ? m['computer.permission_denied']() : m['computer.ready']()}</Badge></div><p class="text-ui-xs text-[var(--app-text-muted)]">{messages[`computer.platform_${computerState.snapshot.platform}`]()}</p></div>
-      <Button size="icon-sm" variant="ghost" aria-label={m['computer.refresh']()} disabled={busy !== null} onclick={() => load()}><RefreshCw size={14} /></Button>
+      <Button size="icon-sm" variant="ghost" aria-label={m['computer.refresh']()} disabled={busy !== null || loading} onclick={() => load()}><RefreshCw size={14} class={loading ? 'animate-spin' : ''} /></Button>
       <label class="flex items-center gap-2 text-ui-xs font-medium"><span>{m['computer.enable']()}</span><Switch checked={computerState.config.enabled} disabled={!computerState.snapshot.available || busy !== null} onCheckedChange={(checked: boolean) => saveConfig({ ...computerState!.config, enabled: checked })} /></label>
     </header>
 
     <div class="min-h-0 overflow-y-auto p-3">
+      {#if loadError}<div role="alert" class="mb-3 flex items-center gap-2 border-l-2 border-[var(--app-warning)] bg-[var(--app-warning-soft)] p-3 text-xs text-[var(--app-warning)]"><CircleAlert size={14} class="shrink-0" /><span>{m['computer.load_failed']()}</span></div>{/if}
       {#if !computerState.snapshot.available}
         <div class="flex gap-2 border-l-2 border-[var(--app-warning)] bg-[var(--app-warning-soft)] px-3 py-2 text-ui-xs text-[var(--app-warning)]"><CircleAlert size={14} class="shrink-0" /><span>{computerState.snapshot.detail ?? m['computer.unavailable_help']()}</span></div>
       {/if}
@@ -207,5 +217,11 @@
         <Button size="icon-sm" variant="outline" aria-label={m['computer.press_enter']()} disabled={!computerState.config.enabled || !inputWindow || busy !== null} onclick={() => inputWindow && command({ command: 'shortcut', keys: ['enter'], targetId: inputWindow.id })}><MousePointer2 size={14} /></Button>
       </section>
     </div>
+  </div>
+{:else}
+  <div class="flex h-full min-h-56 flex-col items-center justify-center gap-3 p-4 text-center" data-testid="computer-load-error">
+    <CircleAlert size={20} class="text-[var(--app-warning)]" />
+    <p role="alert" class="text-xs text-[var(--app-text-secondary)]">{m['computer.load_failed']()}</p>
+    <Button size="sm" variant="outline" onclick={() => load()}><RefreshCw size={14} />{m['computer.refresh']()}</Button>
   </div>
 {/if}

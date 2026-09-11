@@ -1,6 +1,18 @@
 import { z } from '@beeblock/svelar/validation';
 import { autonomyRiskSchema } from './autonomy-policy.schema.js';
 
+function uniqueNativeTargets<T extends { id: string }>(targets: T[]): T[] {
+  const unique = new Map<string, T>();
+  const ambiguous = new Set<string>();
+  for (const target of targets) {
+    const previous = unique.get(target.id);
+    if (previous && JSON.stringify(previous) !== JSON.stringify(target)) ambiguous.add(target.id);
+    else if (!previous) unique.set(target.id, target);
+  }
+  // Repeated native records are harmless; conflicting identities are not targets.
+  return [...unique.values()].filter((target) => !ambiguous.has(target.id));
+}
+
 export const computerPlatformSchema = z.enum(['macos', 'windows', 'linux']);
 export const computerPermissionStateSchema = z.enum(['granted', 'denied', 'prompt', 'unavailable', 'unknown']);
 export const computerBoundsSchema = z.object({
@@ -36,8 +48,8 @@ export const computerSnapshotSchema = z.object({
     accessibility: computerPermissionStateSchema,
     screenRecording: computerPermissionStateSchema,
   }).strict(),
-  displays: z.array(computerDisplaySchema).max(32),
-  windows: z.array(computerWindowSchema).max(500),
+  displays: z.array(computerDisplaySchema).max(32).transform(uniqueNativeTargets),
+  windows: z.array(computerWindowSchema).max(500).transform(uniqueNativeTargets),
   focusedWindowId: z.string().max(160).nullable(),
 });
 

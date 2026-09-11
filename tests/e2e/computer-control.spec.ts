@@ -18,6 +18,8 @@ test('Computer remains usable in Canvas and Workbench, with honest permissions a
   let evidence: string | null = null;
   let polls = 0;
   const commands: unknown[] = [];
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
   const snapshot = () => ({ platform: 'macos', available: true, reason: 'ready', detail: null, permissions: { accessibility: permitted ? 'granted' : 'denied', screenRecording: 'unknown' }, displays: [], windows: permitted ? [{ id: '123:0', appId: 'com.apple.calculator', appName: 'Calculator', title: windowTitle, bounds: { x: 10, y: 10, width: 300, height: 500 }, focused }] : [], focusedWindowId: permitted && focused ? '123:0' : null });
   await page.route(`**${root}/computers/evidence/*`, (route) => route.fulfill({ contentType: 'image/png', body: readFileSync('electron/resources/icon.png') }));
   // Only the native OS boundary is simulated; node/config persistence uses the real server.
@@ -30,7 +32,10 @@ test('Computer remains usable in Canvas and Workbench, with honest permissions a
     polls++;
     const nodes = (await (await request.get(`${root}/nodes`)).json()).data;
     const config = nodes.find((item: { id: string }) => item.id === node.id).payload.computerConfig;
-    await route.fulfill({ json: { data: { nodeId: node.id, config, snapshot: snapshot(), lastEvidence: evidence } } });
+    const state = snapshot();
+    // macOS can repeat an Accessibility record for the same native Finder window.
+    state.windows = [...state.windows, ...state.windows];
+    await route.fulfill({ json: { data: { nodeId: node.id, config, snapshot: state, lastEvidence: evidence } } });
   });
   try {
     for (const [theme, path] of [['orkestrai-light', '/terminal'], ['orkestrai-dark', '/canvas']]) {
@@ -80,10 +85,57 @@ test('Computer remains usable in Canvas and Workbench, with honest permissions a
       evidence = null;
       windowTitle = 'Calculator';
     }
+    expect(errors).toEqual([]);
   } finally {
     await page.goto('about:blank');
     await request.put('/api/agent-room/settings', { data: settings });
     await request.delete(`${root}`);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Computer recovers from failed initial loads and keeps its content during refresh', async ({ page, request }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'orkestrai-computer-recovery-'));
+  const settings = (await (await request.get('/api/agent-room/settings')).json()).data;
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `Computer recovery ${Date.now()}`, workingDir: dir } })).json()).data;
+  const root = `/api/agent-room/workspaces/${workspace.id}`;
+  const node = (await (await request.post(`${root}/nodes`, { data: { type: 'computer', title: 'Computer recovery' } })).json()).data;
+  let fail = true;
+  let release = () => {};
+  let waiting = false;
+  let delay = false;
+  await page.route(`**${root}/computers`, async (route) => {
+    if (delay) await new Promise<void>((resolve) => { release = resolve; waiting = true; });
+    if (fail) return route.fulfill({ status: 503, json: { error: 'Fixture unavailable' } });
+    await route.fulfill({ json: { data: { nodeId: node.id, config: { enabled: false, allowedApplications: [], allowedDisplays: [], evidenceRetentionDays: 14 }, snapshot: { platform: 'macos', available: true, reason: 'ready', detail: null, permissions: { accessibility: 'granted', screenRecording: 'unknown' }, displays: [], windows: [], focusedWindowId: null }, lastEvidence: null } } });
+  });
+  try {
+    await request.put('/api/agent-room/settings', { data: { ...settings, uiLanguage: 'en' } });
+    await page.goto(`/terminal?workspace=${workspace.id}&node=${node.id}`);
+    await expect(page.getByTestId('computer-load-error')).toBeVisible();
+    await expect(page.getByTestId('computer-loading')).toHaveCount(0);
+    fail = false;
+    await page.getByTestId('computer-load-error').getByRole('button', { name: 'Refresh desktop state' }).click();
+    const panel = page.getByTestId('computer-workbench').filter({ visible: true }).first();
+    await expect(panel).toBeVisible();
+    delay = true;
+    await panel.getByRole('button', { name: 'Refresh desktop state' }).click();
+    await expect.poll(() => waiting).toBe(true);
+    await expect(panel).toBeVisible();
+    await expect(page.getByTestId('computer-loading')).toHaveCount(0);
+    fail = true;
+    delay = false;
+    release();
+    await expect(panel.getByRole('alert')).toBeVisible();
+    await expect(panel).toBeVisible();
+    fail = false;
+    await panel.getByRole('button', { name: 'Refresh desktop state' }).click();
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+  } finally {
+    release();
+    await page.goto('about:blank');
+    await request.put('/api/agent-room/settings', { data: settings });
+    await request.delete(root);
     rmSync(dir, { recursive: true, force: true });
   }
 });
