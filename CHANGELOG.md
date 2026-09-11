@@ -23,7 +23,7 @@ pt-BR, English, and Spanish translations.
 
 - Computer state and agent captures refresh in Canvas and Workbench without manual reload. Readiness reflects activation and OS permission. Manual typing stays bound to the selected allowed window; stored captures are read-only evidence, not stale click maps.
 
-- Native desktop adapters correct Linux window/PID discovery, Windows PowerShell argument handling, literal text and shortcuts, and macOS display coordinates and capture bounds. Launch uses registered applications; unsupported targets fail explicitly.
+- Native desktop adapters correct Linux window/PID discovery, Windows PowerShell argument handling, literal text and shortcuts, and macOS display coordinates and capture bounds. Windows desktop commands load only built-in PowerShell modules and preserve argument boundaries. Launch uses registered applications; unsupported targets fail explicitly.
 
 - Microphone access is limited to the real app renderer and exact local origin, and the Settings input meter resumes a suspended audio context. Documentation and the guided desktop use case now start from a natural-language agent request, including Remote.
 

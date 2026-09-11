@@ -936,7 +936,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     "Riscos declarados de envio de e-mail, publicação, compra, credenciais ou ação destrutiva passam pelos gates de Segurança antes da entrada nativa. A aprovação fica vinculada à requisição e tentativa exatas. Ações por pixels ainda dependem da classificação correta do agente.",
     "A entrega nativa de SecretRefs suprime saídas e erros que possam repetir o segredo; gravação e leitura de capturas recusam caminhos que escapem do workspace por links simbólicos. O texto digitado não entra nos metadados de auditoria.",
     "Estado e capturas dos agentes atualizam no Canvas e Workbench sem recarregar manualmente. O indicador respeita ativação e permissão do sistema. A digitação manual fica vinculada à janela permitida selecionada; capturas são evidências, não mapas de cliques desatualizados.",
-    "Os adaptadores corrigem a descoberta de janelas/PID no Linux, os argumentos PowerShell, textos e atalhos no Windows, e as coordenadas de monitores e capturas no macOS. A abertura usa aplicativos registrados; destinos não suportados retornam erro explícito.",
+    "Os adaptadores corrigem a descoberta de janelas/PID no Linux, os argumentos PowerShell, textos e atalhos no Windows, e as coordenadas de monitores e capturas no macOS. Comandos de desktop do Windows carregam apenas módulos nativos do PowerShell e preservam a separação dos argumentos. A abertura usa aplicativos registrados; destinos não suportados retornam erro explícito.",
     "O microfone fica restrito ao renderer real do app e à origem local exata; o medidor em Configurações retoma contextos de áudio suspensos. A documentação e o caso de uso guiado agora começam com um pedido em linguagem natural ao agente, inclusive pelo Remote."
   ]
 },

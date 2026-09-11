@@ -30,6 +30,9 @@ describe('native desktop adapters', () => {
     expect(script).toContain('App Paths');
     expect(script).toContain('Start-Process -FilePath $path');
     expect(script).toContain('} @values');
+    expect(script).toContain("$env:PSModulePath=[IO.Path]::Combine($PSHOME,'Modules')");
+    expect(script).toContain('$values=ConvertFrom-Json');
+    expect(script).not.toContain('$values=@(');
     await expect(adapter.launch('chrome; calc')).rejects.toThrow('Invalid application');
     await expect(adapter.launch('C:\\Windows\\cmd.exe')).rejects.toThrow('Invalid application');
     expect(native).toHaveBeenCalledTimes(1);
@@ -43,6 +46,12 @@ describe('native desktop adapters', () => {
     // Allow the bounded native timeout to finish even on a cold Windows runner.
   }, 30_000);
 
+  it.skipIf(process.platform !== 'win32').each([{ values: [] }, { values: [''] }, { values: ['single'] }])('preserves PowerShell argument cardinality for $values', async ({ values }) => {
+    const { runNative: realRunNative } = await vi.importActual<typeof import('$lib/modules/agent-room/application/adapters/computers/native-runner.js')>('$lib/modules/agent-room/application/adapters/computers/native-runner.js');
+    const result = await realRunNative('powershell.exe', computerPowerShellArgs('ConvertTo-Json -Compress -InputObject @($args)', values), { timeoutMs: 20_000 });
+    expect(JSON.parse(result.stdout)).toEqual(values);
+  }, 30_000);
+
   it('preserves SendKeys metacharacters as literal text and keeps secrets off argv', async () => {
     const adapter = new WindowsComputerAdapter();
     const text = 'A+[B] {C} $(calc); "D"';
@@ -54,6 +63,7 @@ describe('native desktop adapters', () => {
     expect(args.join(' ')).not.toContain(text);
     expect(options?.input).toBe(text);
     expect(args.join(' ')).toContain(String.raw`([+^%~(){}\[\]])`);
+    expect(args.join(' ')).toContain("$env:PSModulePath=[IO.Path]::Combine($PSHOME,'Modules')");
     await adapter.type('x'.repeat(20_000));
     expect(native.mock.calls.at(-1)?.[1].join(' ').length).toBeLessThan(1000);
     expect(native.mock.calls.at(-1)?.[2]?.input?.length).toBe(20_000);

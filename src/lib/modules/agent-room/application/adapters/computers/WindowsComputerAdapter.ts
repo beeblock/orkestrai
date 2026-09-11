@@ -6,12 +6,14 @@ import { runNative } from './native-runner.js';
 
 const WIN32 = `using System;using System.Text;using System.Collections.Generic;using System.Runtime.InteropServices;public class O{public delegate bool E(IntPtr h,IntPtr l);[DllImport("user32.dll")]public static extern bool EnumWindows(E e,IntPtr l);[DllImport("user32.dll")]public static extern bool IsWindowVisible(IntPtr h);[DllImport("user32.dll")]public static extern int GetWindowTextLength(IntPtr h);[DllImport("user32.dll")]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out R r);[DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);[DllImport("user32.dll")]public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern void mouse_event(uint f,uint x,uint y,uint d,UIntPtr i);[StructLayout(LayoutKind.Sequential)]public struct R{public int Left,Top,Right,Bottom;}}`;
 const POWERSHELL = 'powershell.exe';
+// Use only built-in modules; sanitized hosts must not discover user modules.
+const POWERSHELL_PREFIX = `$ErrorActionPreference='Stop';$env:PSModulePath=[IO.Path]::Combine($PSHOME,'Modules');`;
 const SEND_TEXT = String.raw`$escaped=[regex]::Replace($t,'([+^%~(){}\[\]])','{$1}');[Windows.Forms.SendKeys]::SendWait($escaped)`;
 
 export function computerPowerShellArgs(script: string, args: string[] = []): string[] {
   // -Command consumes trailing argv as code, not as the script's $args.
   const values = Buffer.from(JSON.stringify(args), 'utf8').toString('base64');
-  const invocation = `$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$values=@(ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${values}'))));& {${script}} @values`;
+  const invocation = `${POWERSHELL_PREFIX}[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$values=ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${values}')));& {${script}} @values`;
   return ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(invocation, 'utf16le').toString('base64')];
 }
 
@@ -55,7 +57,7 @@ export class WindowsComputerAdapter implements ComputerAdapter {
   }
 
   async typeSensitive(text: string): Promise<void> {
-    const script = `$ErrorActionPreference='Stop';[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);Add-Type -AssemblyName System.Windows.Forms;$t=[Console]::In.ReadToEnd();${SEND_TEXT}`;
+    const script = `${POWERSHELL_PREFIX}[Console]::InputEncoding=[Text.UTF8Encoding]::new($false);Add-Type -AssemblyName System.Windows.Forms;$t=[Console]::In.ReadToEnd();${SEND_TEXT}`;
     await runNative(POWERSHELL, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { timeoutMs: 20_000, input: text });
   }
 
