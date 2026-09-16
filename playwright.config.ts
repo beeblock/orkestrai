@@ -1,15 +1,14 @@
 import { defineConfig } from '@playwright/test';
-import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const e2eDataDir = resolve('test-results/runtime');
+const e2eDataDir = resolve('test-runtime');
 const e2eNodeOptions = process.env.NODE_OPTIONS?.includes('--max-old-space-size')
   ? process.env.NODE_OPTIONS
   : [process.env.NODE_OPTIONS, '--max-old-space-size=8192'].filter(Boolean).join(' ');
 const e2eServerCommand = process.env.CI
-  ? 'PORT=5199 node scripts/orkestrai-server.mjs'
-  : 'npm run build && PORT=5199 node scripts/orkestrai-server.mjs';
-rmSync(e2eDataDir, { recursive: true, force: true });
+  ? 'node scripts/prepare-e2e-runtime.mjs && PORT=5199 node scripts/orkestrai-server.mjs'
+  : 'node scripts/prepare-e2e-runtime.mjs && npm run build && PORT=5199 node scripts/orkestrai-server.mjs';
+const e2eHome = resolve(e2eDataDir, 'home');
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -35,9 +34,17 @@ export default defineConfig({
   webServer: {
     command: e2eServerCommand,
     env: {
-      APP_KEY: process.env.APP_KEY ?? 'orkestrai-e2e-test-key',
+      APP_KEY: 'orkestrai-e2e-test-key',
+      DB_PATH: resolve(e2eDataDir, 'database.db'),
       NODE_OPTIONS: e2eNodeOptions,
       ORKESTRAI_DATA_DIR: e2eDataDir,
+      // Bridge provisioning and provider discovery also write/read user-level files.
+      HOME: e2eHome,
+      USERPROFILE: e2eHome,
+      APPDATA: resolve(e2eHome, 'AppData', 'Roaming'),
+      LOCALAPPDATA: resolve(e2eHome, 'AppData', 'Local'),
+      XDG_CONFIG_HOME: resolve(e2eHome, '.config'),
+      CODEX_HOME: resolve(e2eHome, '.codex'),
     },
     url: 'http://127.0.0.1:5199',
     timeout: 180_000,

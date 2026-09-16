@@ -27,6 +27,7 @@ infra/droplet.env
 
 # Testing
 test-results/
+test-runtime/
 playwright-report/
 coverage/
 .DS_Store
