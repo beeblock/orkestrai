@@ -219,6 +219,13 @@ describe('orkestrai CLI', () => {
     return { lines, out: (line) => lines.push(String(line)) };
   }
 
+  it('opens an output folder through the authenticated bridge, not Computer', async () => {
+    const { out } = capture();
+    expect(await run(['fs', 'open-folder', 'generated/images/my campaign'], { cwd, out, env: { ORKESTRAI_AGENT_TOKEN: 'terminal-token' } })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/fs/open-folder', body: { path: 'generated/images/my campaign' }, agentToken: 'terminal-token' });
+    await expect(run(['fs', 'open-folder'], { cwd, out, env: {} })).rejects.toThrow('Usage:');
+  });
+
   it('list mostra agentes do workspace', async () => {
     const { lines, out } = capture();
     const code = await run(['list'], { cwd, out, env: {} });

@@ -76,6 +76,7 @@ const DESIGN_PROTOTYPE_TRANSITION = { type: 'object', additionalProperties: fals
 /** Tools expostas (inputSchema JSON Schema). args -> bridge no callTool(). */
 /** @type {Array<{name: string, description: string, inputSchema: Record<string, any>}>} */
 const TOOLS = [
+  { name: 'fs_open_folder', description: 'Open an existing workspace folder in the HOST system file manager (Finder, Explorer or Linux file manager) when the user asks to see it. Use this instead of Computer, screenshots, shell automation or asking for Accessibility/Screen Recording. Accepts only workspace-relative and registered @alias paths; no files, URLs or executable bundles. Existing filesystem restrictions and emergency stop still apply; the agent cannot change grants. opened=true means the OS accepted opening, not a screenshot verification. No automatic retry on an unconfirmed result.', inputSchema: { type: 'object', additionalProperties: false, properties: { path: { type: 'string', minLength: 1, maxLength: 4000 } }, required: ['path'] } },
   { name: 'list', description: 'Lista agentes e todos os portais do workspace. Cada portal informa explicitamente se esta conectado a este agente.', inputSchema: { type: 'object', properties: {} } },
   { name: 'usage', description: 'Consulta cotas dos providers e a recomendacao de roteamento configurada no no Usage do canvas.', inputSchema: { type: 'object', properties: {} } },
   { name: 'integration_list', description: 'Lista contas conectadas, permissoes concedidas e manifests de operacoes. Credenciais nunca sao retornadas.', inputSchema: { type: 'object', properties: {} } },
@@ -437,6 +438,8 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: computerArgs.taskId, idempotencyKey: computerArgs.idempotencyKey, ...(computerArgs.risk ? { risk: computerArgs.risk } : {}), input });
   };
   switch (name) {
+    case 'fs_open_folder':
+      return bridge('POST', '/api/agent-room/bridge/fs/open-folder', { path: args.path });
     case 'list': {
       const query = selfAgent ? `?agentNodeId=${encodeURIComponent(selfAgent)}` : '';
       return bridge('GET', `/api/agent-room/bridge/agents${query}`);

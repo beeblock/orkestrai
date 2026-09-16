@@ -7,6 +7,14 @@ export const fsWriteSchema = z.object({
   content: z.string(),
 });
 
+export const openWorkspaceFolderSchema = z.object({
+  path: z.string().trim().min(1).max(4000)
+    .refine(value => !/[\x00-\x1f\x7f]/.test(value), 'Invalid folder path.')
+    .refine(value => !/^(?:[\\/]|[a-z][a-z0-9+.-]*:)/i.test(value), 'Use a workspace-relative or @alias path.'),
+}).strict();
+
+export type OpenWorkspaceFolderInput = z.infer<typeof openWorkspaceFolderSchema>;
+
 export const gitPathSchema = z.object({
   path: z.string().trim().min(1).max(4_000),
 });

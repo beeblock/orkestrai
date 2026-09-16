@@ -1824,7 +1824,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'generate-carousel',
         title: 'Generate and inspect the complete delivery',
-        body: 'Do it for me runs the final stage. The use case finishes only after three slides are persisted and visible on the Canvas. The final graph preserves every prompt, reference, file, connection, run, and source.',
+        body: "Do it for me runs the final stage. The use case finishes only after three slides are persisted and visible on the Canvas. The final graph preserves every prompt, reference, file, connection, run, and source. After generation, ask the Creative Director to open generated/images/xyz-carousel. It opens that folder in the host file manager through fs_open_folder, without enabling Computer or screen permissions. Existing filesystem restrictions still apply.",
         action: { kind: 'runImageWorkflow', title: '03 — XYZ Carousel' },
         check: { kind: 'imageWorkflowSucceeded', title: '03 — XYZ Carousel', minOutputs: 3 },
       },

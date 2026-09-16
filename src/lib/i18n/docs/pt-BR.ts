@@ -330,6 +330,11 @@ Header: Authorization = Bearer {{accessToken}}`,
       ],
     },
     {
+      id: 'workspace-folder',
+      title: "Abra a pasta da entrega",
+      body: "Peça ao agente para abrir generated/images/xyz-carousel. Ele usa fs_open_folder, ou orkestrai fs open-folder \"generated/images/xyz-carousel\", para abrir a pasta existente no Finder, Explorer ou gerenciador de arquivos Linux da máquina host. Não exige Computer Control, Acessibilidade nem Gravação de Tela. Aceita pastas de @alias registrados; não aceita arquivos, URLs, bundles executáveis, saídas do diretório permitido nem novas permissões. Restrições explícitas de arquivos e parada de emergência continuam valendo. A operação é auditada e confirma que o sistema operacional aceitou a solicitação, sem afirmar inspeção visual. Se a sessão do agente for anterior à tool MCP, ele pode usar a CLI.",
+    },
+    {
       id: 'visual-annotations',
       title: 'Formas e anotações visuais',
       body: `Use Formas na barra do Canvas para desenhar retângulos, caixas arredondadas, elipses, losangos e setas curvas editáveis ao redor do trabalho. Dê duplo-clique para editar o texto; o controle de estilo altera fundo, opacidade, borda, tracejado, tipografia e âncoras da seta. Selecione uma forma e use a ação de duplicar ou Cmd/Ctrl+D para preservar exatamente tamanho, texto, estilo e geometria da seta com um pequeno deslocamento. Cmd/Ctrl+C e Cmd/Ctrl+V copiam e colam uma ou várias formas selecionadas mantendo o espaçamento relativo; cada cópia é um node persistente separado e pode ser editada de forma independente.`,
@@ -939,6 +944,14 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      "date": "16 de setembro de 2026 · 0.31.3",
+      "title": "Orkestrai 0.31.3: abertura de pastas do projeto",
+      "summary": "Abra pastas de resultados sem habilitar o controle do computador.",
+      "items": [
+        "Restaura a abertura de pastas do projeto e de imagens geradas a pedido do agente no gerenciador de arquivos, sem exigir Computer Control nem permissões de captura. A ação dedicada da ponte limita caminhos ao workspace ou repositórios aprovados, autentica o agente, registra auditoria e preserva restrições explícitas de segurança."
+      ]
+    },
     {
       "date": "16 de setembro de 2026 · 0.31.2",
       "title": "Orkestrai 0.31.2: transferência de seleções do Canvas",

@@ -8,6 +8,8 @@ import { boardColumnService } from '$lib/modules/agent-room/application/services
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
+import { OpenWorkspaceFolderRequest } from '$lib/modules/agent-room/interface/http/requests/OpenWorkspaceFolderRequest.js';
+import { OpenWorkspaceFolderDto } from '$lib/modules/agent-room/application/dto/OpenWorkspaceFolderDto.js';
 import { bridgeDesignApplySchema, bridgeFigmaSelectionSchema, bridgeReassignSchema, bridgeRoleEditSchema, bridgeRoleWriteSchema, bridgeFloorCreateSchema, bridgeFloorLandSchema, bridgeNoteCreateSchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 import { bridgeBoardTaskSchema, bridgeBoardTaskUpdateSchema } from '$lib/modules/agent-room/contracts/schemas/taskSchemas.js';
 import { managedPortalService } from '$lib/modules/agent-room/application/services/ManagedPortalService.js';
@@ -1637,6 +1639,18 @@ export class BridgeController extends Controller {
   }
 
   // -- FS via bridge (orkestrai fs) --------------------------------------------
+
+  async fsOpenFolder(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!actor) return this.json({ error: 'Opening a folder requires an authenticated workspace agent.' }, 403);
+      const input = await OpenWorkspaceFolderRequest.validate(event);
+      return this.json({ data: await filesystemService.openFolder(OpenWorkspaceFolderDto.from(workspace.id, actor, input)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Could not open the workspace folder.');
+    }
+  }
 
   async fsRead(event: any) {
     try {

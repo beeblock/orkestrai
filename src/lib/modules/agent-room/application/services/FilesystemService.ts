@@ -4,6 +4,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, resolve, sep } from 'node:path';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { workspacePathService } from './WorkspacePathService.js';
+import { autonomyPolicyService } from './AutonomyPolicyService.js';
+import { openDesktopFolder } from '../../infrastructure/DesktopFolderClient.js';
+import type { OpenWorkspaceFolderDto } from '../dto/OpenWorkspaceFolderDto.js';
 
 export type FsEntry = {
   name: string;
@@ -30,6 +34,23 @@ const execFileAsync = promisify(execFile);
  * Acesso ao filesystem confinado ao working_dir do workspace.
  */
 export class FilesystemService {
+  async openFolder(dto: OpenWorkspaceFolderDto): Promise<{ opened: true; path: string }> {
+    const workspace = await workspaceRepository.getWorkspace(dto.workspaceId);
+    if (!workspace) throw new Error('Workspace not found.');
+    const candidate = await workspacePathService.resolveExisting(workspace, dto.path);
+    if (!(await stat(candidate)).isDirectory()) throw new Error('The requested path is not a folder.');
+    const alias = dto.path.match(/^@([a-z0-9][a-z0-9_-]*)/i)?.[1];
+    const root = await workspacePathService.resolveExisting(workspace, alias ? `@${alias}` : '.');
+    return autonomyPolicyService.execute({
+      workspaceId: workspace.id, capability: 'filesystem', operation: 'filesystem.open_folder',
+      actorType: 'agent', actorId: dto.actorId, mutation: false,
+      filesystem: { path: candidate, permission: 'read' }, input: { path: dto.path },
+    }, async () => {
+      await openDesktopFolder(root, candidate);
+      return { opened: true as const, path: dto.path };
+    });
+  }
+
   private async root(workspaceId: string): Promise<string> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('Workspace nao encontrado.');

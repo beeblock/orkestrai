@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.31.3 - 2026-09-16
+
+### Fixed
+
+- Restore agent-requested opening of project and generated-image folders in the system file manager without requiring Computer Control or screen permissions. The dedicated bridge action confines paths to the workspace or approved repositories, authenticates the agent, records an audit trail, and preserves explicit security restrictions.
+
 ## 0.31.2 - 2026-09-16
 
 ### Fixed

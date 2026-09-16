@@ -326,6 +326,11 @@ Header: Authorization = Bearer {{accessToken}}`,
       ],
     },
     {
+      id: 'workspace-folder',
+      title: "Open a delivery folder",
+      body: "Ask the agent to open generated/images/xyz-carousel. It uses fs_open_folder, or orkestrai fs open-folder \"generated/images/xyz-carousel\", to open the existing folder in Finder, Explorer, or the Linux file manager on the host. Computer Control, Accessibility and Screen Recording are not required. Registered @alias folders are supported; files, URLs, executable bundles, path escapes and new grants are not. Explicit filesystem restrictions and emergency stop remain effective. The operation is audited and confirms the operating system accepted the request; it does not claim visual inspection. If the agent session predates the MCP tool, it can use the CLI.",
+    },
+    {
       id: 'visual-annotations',
       title: 'Shapes and visual annotations',
       body: `Use Shapes in the Canvas toolbar to draw rectangles, rounded boxes, ellipses, diamonds, and editable curved arrows around the work. Double-click to edit the text; the style control changes fill, opacity, border, dash, typography, and arrow anchors. Select a shape and use its duplicate action or Cmd/Ctrl+D to preserve its exact size, text, style, and arrow geometry with a small offset. Cmd/Ctrl+C and Cmd/Ctrl+V copy and paste one or several selected shapes while keeping their relative spacing; every copy is a separate persistent node that remains independently editable.`,
@@ -935,6 +940,14 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      "date": "September 16, 2026 · 0.31.3",
+      "title": "Orkestrai 0.31.3: opening project folders",
+      "summary": "Open output folders without enabling Computer Control.",
+      "items": [
+        "Restore agent-requested opening of project and generated-image folders in the system file manager without requiring Computer Control or screen permissions. The dedicated bridge action confines paths to the workspace or approved repositories, authenticates the agent, records an audit trail, and preserves explicit security restrictions."
+      ]
+    },
     {
       "date": "September 16, 2026 · 0.31.2",
       "title": "Orkestrai 0.31.2: Canvas selection transfers",

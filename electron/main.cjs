@@ -21,6 +21,7 @@ const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
+const { openWorkspaceFolder } = require('./workspace-folder.cjs');
 const decodeAudio = createAudioDecoder();
 const { createDesktopCapture } = require('./computer-capture.cjs');
 const captureComputerDesktop = createDesktopCapture({ screen: electronScreen, desktopCapturer });
@@ -611,6 +612,16 @@ async function startServer(port) {
   });
   serverProcess.on('message', (message) => {
     if (!message?.requestId) return;
+    if (message.type === 'orkestrai:folder:open') {
+      if (typeof message.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(message.requestId)
+        || requestingServer !== serverProcess || isQuitting) return;
+      void openWorkspaceFolder(shell, message).then(result => {
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:folder:result', requestId: message.requestId, ...result }, () => {});
+      }).catch(() => {
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:folder:result', requestId: message.requestId, error: 'The system file manager could not open the approved folder.' }, () => {});
+      });
+      return;
+    }
     if (message.type === 'orkestrai:computer:execute') {
       if (process.platform !== 'darwin' || typeof message.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(message.requestId)) return;
       let requestHost;

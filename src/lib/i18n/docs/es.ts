@@ -326,6 +326,11 @@ Header: Authorization = Bearer {{accessToken}}`,
       ],
     },
     {
+      id: 'workspace-folder',
+      title: "Abre la carpeta de entrega",
+      body: "Pide al agente que abra generated/images/xyz-carousel. Usa fs_open_folder, u orkestrai fs open-folder \"generated/images/xyz-carousel\", para abrir la carpeta existente en Finder, Explorer o el gestor de archivos Linux del host. No requiere Computer Control, Accesibilidad ni Grabación de Pantalla. Admite carpetas de @alias registrados; no admite archivos, URLs, bundles ejecutables, rutas fuera del directorio permitido ni permisos nuevos. Las restricciones explícitas de archivos y la parada de emergencia siguen vigentes. La operación se audita y confirma que el sistema operativo aceptó la solicitud, sin afirmar inspección visual. Si la sesión es anterior a la tool MCP, el agente puede usar la CLI.",
+    },
+    {
       id: 'visual-annotations',
       title: 'Formas y anotaciones visuales',
       body: `Usa Formas en la barra del Canvas para dibujar rectángulos, cajas redondeadas, elipses, rombos y flechas curvas editables alrededor del trabajo. Haz doble clic para editar el texto; el control de estilo cambia fondo, opacidad, borde, trazo, tipografía y anclas de la flecha. Selecciona una forma y usa la acción de duplicar o Cmd/Ctrl+D para conservar exactamente tamaño, texto, estilo y geometría de la flecha con un pequeño desplazamiento. Cmd/Ctrl+C y Cmd/Ctrl+V copian y pegan una o varias formas seleccionadas manteniendo el espaciado relativo; cada copia es un nodo persistente separado y se puede editar de forma independiente.`,
@@ -935,6 +940,14 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {
+      "date": "16 de septiembre de 2026 · 0.31.3",
+      "title": "Orkestrai 0.31.3: apertura de carpetas del proyecto",
+      "summary": "Abre carpetas de resultados sin habilitar el control del ordenador.",
+      "items": [
+        "Restaura la apertura de carpetas del proyecto y de imágenes generadas a petición del agente en el gestor de archivos, sin exigir Computer Control ni permisos de captura. La acción dedicada limita las rutas al workspace o repositorios aprobados, autentica al agente, registra auditoría y conserva las restricciones explícitas de seguridad."
+      ]
+    },
     {
       "date": "16 de septiembre de 2026 · 0.31.2",
       "title": "Orkestrai 0.31.2: transferencia de selecciones del Canvas",

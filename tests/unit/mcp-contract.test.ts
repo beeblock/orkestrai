@@ -19,7 +19,7 @@ import { createAgentApiClientSchema, executeAgentApiClientRunnerSchema, exportAg
 import { z } from 'zod';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
-import { executeGitOperationSchema, gitOperationInputSchema } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
+import { executeGitOperationSchema, gitOperationInputSchema, openWorkspaceFolderSchema } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
 import { addImageWorkflowReferenceSchema, bridgeRunImageWorkflowSchema, completeImageWorkflowSchema, connectImageWorkflowNodeSchema, createImageWorkflowSchema, failImageWorkflowSchema, imageWorkflowActorSchema, updateImageWorkflowSchema, validateImageWorkflowOutputSchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
 import {
   codeGraphContextSchema,
@@ -65,6 +65,7 @@ const bridgeGitExecuteSchema = executeGitOperationSchema.extend({ from: z.string
 type Expectation = { method: string; path: RegExp; schema?: z.ZodTypeAny };
 
 const EXPECTED: Record<string, Expectation> = {
+  fs_open_folder: { method: 'POST', path: /\/bridge\/fs\/open-folder$/, schema: openWorkspaceFolderSchema },
   list: { method: 'GET', path: /\/bridge\/agents\?/ },
   usage: { method: 'GET', path: /\/bridge\/usage$/ },
   git_status: { method: 'GET', path: /\/bridge\/git$/ },
@@ -173,6 +174,7 @@ const EXPECTED: Record<string, Expectation> = {
 };
 
 const TOOL_ARGS: Record<string, Record<string, unknown>> = {
+  fs_open_folder: { path: 'generated/images/my campaign' },
   git_preview: { operation: 'checkout', ref: 'review' },
   git_execute: { operation: 'checkout', ref: 'review', expectedRevision: 'a'.repeat(64), taskId: '00000000-0000-7000-8000-000000000099' },
   code_graph_index: { projectIds: ['00000000-0000-7000-8000-000000000020'], force: true },
