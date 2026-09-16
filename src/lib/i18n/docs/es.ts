@@ -944,7 +944,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       date: 'Aún no publicado',
       title: 'Aislamiento de conversaciones de terminales',
       summary: 'Restaura cada agente con su propia conversación.',
-      items: ['Conserva el ID exacto de la conversación al restaurar terminales, sin redescubrir otro transcript modificado. La recuperación, recarga, transferencia y eliminación no pueden adoptar ni detener el terminal de otro agente. La detección de sesiones nuevas de Codex rechaza conversaciones creadas antes del nuevo terminal.'],
+      items: ['Conserva el ID exacto de la conversación al restaurar terminales, sin redescubrir otro transcript modificado. La recuperación, recarga, transferencia y eliminación no pueden adoptar ni detener el terminal de otro agente. La detección de sesiones nuevas de Codex rechaza conversaciones creadas antes del nuevo terminal.', 'Comprueba de nuevo a quién pertenece el terminal después de preparar el inicio asíncrono para evitar que solicitudes simultáneas abran procesos duplicados para la misma conversación.'],
     },
     {
       "date": "16 de septiembre de 2026 · 0.31.3",

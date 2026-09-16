@@ -10,6 +10,7 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Preserve exact agent conversation identities when restoring terminals instead of rediscovering another modified transcript. Recovery, reload, transfer and dismissal cannot adopt or stop a PTY owned by a different agent; fresh Codex discovery rejects conversations created before the new terminal.
+- Recheck terminal ownership after asynchronous launch preparation so simultaneous wake requests cannot start duplicate writers for the same conversation.
 
 ## 0.31.3 - 2026-09-16
 

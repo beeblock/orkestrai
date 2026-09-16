@@ -114,7 +114,6 @@ export class AgentSessionService {
     }
 
     const adapter = payload.provider && hasAgentAdapter(payload.provider) ? getAgentAdapter(payload.provider) : null;
-    const trackingStartedAt = Date.now();
     const wslContext = runtime.kind === 'wsl'
       ? await preflightWslLaunch({ runtime, command: payload.command, hostCwd: cwd, workspaceRoot: workspace.workingDir })
       : null;
@@ -159,6 +158,23 @@ export class AgentSessionService {
       : join(workspace.workingDir, '.orkestrai', 'workspace.json');
     const bridgeAgentToken = randomUUID();
     const autonomyPolicy = await autonomyPolicyService.get(workspaceId);
+    // Preflight/profile/policy I/O yields to other wake requests and the WS
+    // launcher. Check ownership again with no await before the actual spawn.
+    const appearedConversations = payload.provider && activeAgentSessionId
+      ? ptySessionManager.listLiveForAgentSession(payload.provider, activeAgentSessionId)
+          .filter(session => session.runtimeKey === executionRuntimeKey(runtime))
+      : [];
+    if (appearedConversations.some(session => (session.workspaceId && session.workspaceId !== workspaceId)
+      || (session.nodeId && session.nodeId !== target.id))) {
+      throw new Error('AGENT_SESSION_IN_USE');
+    }
+    const appearedNodeSession = ptySessionManager.listLiveForNode(workspaceId, target.id).some(session =>
+      session.command === payload.command && (session.provider ?? null) === (payload.provider ?? null)
+      && session.runtimeKey === executionRuntimeKey(runtime));
+    if (appearedNodeSession || appearedConversations.some(session => session.command === payload.command)) {
+      return this.ensure(workspaceId, nodeId);
+    }
+    const trackingStartedAt = Date.now();
     const session = ptySessionManager.create({
       command: payload.command,
       args: [

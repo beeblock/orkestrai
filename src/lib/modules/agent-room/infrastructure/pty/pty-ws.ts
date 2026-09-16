@@ -199,7 +199,6 @@ export function handlePtyConnection(socket: WebSocket): void {
           // owned by this node instead of starting the same conversation twice.
           if (reuseLiveNodeSession()) break;
 
-          const trackingStartedAt = Date.now();
           const resolvedCwd = resolveCwd(message.cwd);
           const wslContext: WslTrackingContext | null = message.runtime?.kind === 'wsl'
             ? await preflightWslLaunch({
@@ -250,6 +249,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             : [];
           if (freshSessionId) tracker.claim(freshSessionId);
           const bridgeAgentToken = message.provider && message.workspaceId && message.nodeId ? randomUUID() : null;
+          const trackingStartedAt = Date.now();
           const session = ptySessionManager.create({
             command: message.command.trim(),
             args: [

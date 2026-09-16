@@ -6,6 +6,7 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { agentSessionService } from '$lib/modules/agent-room/application/services/AgentSessionService.js';
+import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 import { agentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/AgentSessionTracker.js';
 
@@ -23,7 +24,10 @@ describe('Terminal conversation ownership during recovery', () => {
     });
   });
   afterEach(async () => {
-    for (const id of sessions.splice(0)) ptySessionManager.kill(id);
+    for (const id of sessions.splice(0)) {
+      ptySessionManager.kill(id);
+      agentSessionTracker.forget(id);
+    }
     vi.restoreAllMocks();
     await rm(root, { recursive: true, force: true });
   });
@@ -54,5 +58,45 @@ describe('Terminal conversation ownership during recovery', () => {
     await workspaceService.reloadNode(other.id, stale.id);
     expect(ptySessionManager.get(original.id)).toMatchObject({ nodeId: owner.id, workspaceId: workspace.id, exited: false });
     expect(ptySessionManager.listLiveForNode(other.id, stale.id)).toHaveLength(0);
+  });
+
+  it.each([false, true])('does not start duplicate writers after concurrent runtime preflight (same node: %s)', async sameNode => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Concurrent wake', workingDir: root });
+    const payload = { command: '/bin/sh', args: ['-c', 'cat'], provider: 'codex', agentSessionId: '55555555-5555-4555-8555-555555555555' };
+    const first = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'First', payload });
+    const second = sameNode ? first : await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Second', payload });
+    const policy = await autonomyPolicyService.get(workspace.id);
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    let arrivals = 0;
+    vi.spyOn(autonomyPolicyService, 'get').mockImplementation(async () => {
+      if (arrivals < 2 && ++arrivals === 2) release();
+      await barrier;
+      return policy;
+    });
+    const audits: Array<Promise<unknown>> = [];
+    const observe = autonomyPolicyService.recordObservedEffect.bind(autonomyPolicyService);
+    vi.spyOn(autonomyPolicyService, 'recordObservedEffect').mockImplementation((...args) => {
+      const audit = observe(...args);
+      audits.push(audit);
+      return audit;
+    });
+    const create = ptySessionManager.create.bind(ptySessionManager);
+    const spawn = vi.spyOn(ptySessionManager, 'create').mockImplementation(input => {
+      const session = create(input);
+      sessions.push(session.id);
+      return session;
+    });
+    const outcomes = await Promise.allSettled([
+      agentSessionService.ensure(workspace.id, first.id),
+      agentSessionService.ensure(workspace.id, second.id),
+    ]);
+    await Promise.all(audits);
+    expect(arrivals).toBe(2);
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const successes = outcomes.filter(result => result.status === 'fulfilled');
+    expect(successes).toHaveLength(sameNode ? 2 : 1);
+    if (sameNode) expect(new Set(successes.map(result => result.value.sessionId)).size).toBe(1);
+    else expect(outcomes.find(result => result.status === 'rejected')?.reason.message).toBe('AGENT_SESSION_IN_USE');
   });
 });
