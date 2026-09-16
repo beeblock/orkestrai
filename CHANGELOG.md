@@ -25,7 +25,7 @@ pt-BR, English, and Spanish translations.
 
 - Improve Computer panel reliability, permission feedback and observation controls across Canvas and Workbench.
 
-- Harden integration delivery against duplicate retries and improve the contracts and validation for agent-created tools.
+- Update runtime and UI dependencies, harden integration delivery against duplicate retries, and improve the contracts and validation for agent-created tools.
 
 ## 0.30.0 - 2026-09-11
 
