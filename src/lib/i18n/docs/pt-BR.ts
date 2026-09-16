@@ -949,7 +949,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         "Permita que agentes criem e gerenciem agendamentos de calendário vinculados a tarefas para lembretes e relatórios, com fusos, recorrência e tratamento de execuções atrasadas.",
         "Configure o envio nativo de fotos e arquivos, a transcrição autorizada de áudios recebidos, 30 vozes locais de TTS e a reprodução de áudio no Workbench. Os controles de mídia dependem do aplicativo compatível; áudio sintetizado é um anexo, não uma mensagem de voz nativa.",
         "Mantenha o acesso ao desktop restrito aos aplicativos e contatos aprovados, com proteções de publicação, ações auditáveis e limpeza automática de capturas e anexos temporários.",
-        "Melhorias na estabilidade do painel Computer, nos avisos de permissão e nos controles de observação do Canvas e Workbench.",
+        "Melhorias na estabilidade do painel Computer, nos avisos de permissão e nos controles de observação do Canvas e Workbench. Empacotamento do runtime nativo de desktop para a arquitetura de cada instalador.",
         "Atualização das dependências de execução e UI, maior proteção contra envios duplicados nas integrações e melhorias nos contratos e na validação das ferramentas criadas por agentes."
       ]
     },

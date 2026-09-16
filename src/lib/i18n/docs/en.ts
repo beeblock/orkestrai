@@ -945,7 +945,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         "Let agents create and manage task-linked calendar schedules for reminders and reports, with timezones, recurrence and missed-run handling.",
         "Configure native photo and file delivery, authorized incoming audio transcription, 30 local TTS voice presets and audio playback in the Workbench. Media controls depend on the supported application; synthesized audio is an attachment, not a native voice note.",
         "Keep desktop access scoped to approved applications and contacts, with publication safeguards, auditable actions and automatic cleanup of temporary captures and attachments.",
-        "Improve Computer panel reliability, permission feedback and observation controls across Canvas and Workbench.",
+        "Improve Computer panel reliability, permission feedback and observation controls across Canvas and Workbench. Package the native desktop runtime for each installer architecture.",
         "Update runtime and UI dependencies, harden integration delivery against duplicate retries, and improve the contracts and validation for agent-created tools."
       ]
     },

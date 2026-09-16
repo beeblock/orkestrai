@@ -10,6 +10,15 @@ Agentes responsáveis por uma release devem usar a skill
 `.claude/skills/orkestrai-release`). Ela cobre preflight, publicação, recuperação
 de falhas e auditoria do feed público.
 
+## Runtime nativo do Computer
+
+O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema
+e à arquitetura do instalador, não à máquina de build. Isso também cobre um
+instalador Intel gerado em Apple Silicon. O pacote vem do endereço exato fixado
+no `package-lock.json`, com verificação SHA-512 antes da extração, sem executar
+scripts do pacote. Binários, metadados e aviso de licença são incluídos antes da
+assinatura; pacote ausente, incompatível ou adulterado interrompe o build.
+
 ## Credenciais
 
 O workflow usa o `GITHUB_TOKEN` automático do próprio repositório, com

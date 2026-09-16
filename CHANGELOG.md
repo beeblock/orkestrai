@@ -23,7 +23,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
-- Improve Computer panel reliability, permission feedback and observation controls across Canvas and Workbench.
+- Improve Computer panel reliability, permission feedback and observation controls across Canvas and Workbench. Package the native desktop runtime for each installer architecture.
 
 - Update runtime and UI dependencies, harden integration delivery against duplicate retries, and improve the contracts and validation for agent-created tools.
 

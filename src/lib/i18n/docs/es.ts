@@ -945,7 +945,7 @@ Header: Authorization = Bearer {{accessToken}}`,
         "Permite que los agentes creen y gestionen calendarios vinculados a tareas para recordatorios e informes, con zonas horarias, recurrencia y gestión de ejecuciones atrasadas.",
         "Configura el envío nativo de fotos y archivos, la transcripción autorizada de audios recibidos, 30 voces locales de TTS y la reproducción de audio en Workbench. Los controles multimedia dependen de la aplicación compatible; el audio sintetizado es un adjunto, no una nota de voz nativa.",
         "Limita el acceso al escritorio a las aplicaciones y contactos aprobados, con protecciones de publicación, acciones auditables y limpieza automática de capturas y adjuntos temporales.",
-        "Mejoras en la estabilidad del panel Computer, los avisos de permisos y los controles de observación de Canvas y Workbench.",
+        "Mejoras en la estabilidad del panel Computer, los avisos de permisos y los controles de observación de Canvas y Workbench. Empaquetado del runtime nativo de escritorio para la arquitectura de cada instalador.",
         "Actualización de las dependencias de ejecución e interfaz, mayor protección contra envíos duplicados en las integraciones y mejoras en los contratos y la validación de herramientas creadas por agentes."
       ]
     },
