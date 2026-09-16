@@ -3,6 +3,11 @@ import { rmSync } from 'node:fs';
 import { mockInstalledProvider, selectAgentTool } from './helpers.js';
 
 test.describe('terminais PTY', () => {
+  test.afterEach(async ({ page }) => {
+    // Finish provider status requests before Playwright disposes the context.
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('salva comandos locais e globais e autoexecuta apenas uma vez ao retomar o shell', async ({ page, request }) => {
     test.setTimeout(90_000);
     test.skip(process.platform === 'win32', 'A prova de autoexec usa sintaxe POSIX; PowerShell e WSL são cobertos no domínio');

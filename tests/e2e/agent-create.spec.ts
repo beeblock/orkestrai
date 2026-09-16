@@ -2,6 +2,11 @@ import { expect, test } from '@playwright/test';
 import { mockInstalledProvider, selectAgentTool, selectCanvasTool } from './helpers.js';
 
 test.describe('dialogo de criacao de agente', () => {
+  test.afterEach(async ({ page }) => {
+    // Finish provider status requests before Playwright disposes the context.
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('desenhar terminal abre dialogo com nome/modelo/esforco/lider', async ({ page, request }) => {
     const workspaceName = `E2E dialog ${Date.now()}`;
 

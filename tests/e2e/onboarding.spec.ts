@@ -53,7 +53,7 @@ test.describe('onboarding guiado', () => {
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     await dialog.getByRole('button', { name: 'Português (Brasil)' }).click();
     await dialog.getByRole('button', { name: 'Já tenho workspace — pular' }).click();
-    await dialog.locator('.tour-card').first().click();
+    await dialog.locator('.tour-card', { hasText: 'Time com líder (zero-config)' }).click();
     await dialog.getByRole('button', { name: 'Começar o tour guiado' }).click();
 
     // Painel do tour: "Fazer por mim" no passo 1 (cria o líder)
