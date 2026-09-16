@@ -939,6 +939,14 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      "date": "Ainda não publicado",
+      "title": "Pendente: transferência de seleções do Canvas",
+      "summary": "Copie e mova seleções entre workspaces novamente.",
+      "items": [
+        "Restaura a cópia e a movimentação de seleções do Canvas entre workspaces, incluindo seleções grandes de 59 nós, preservando conexões internas e posições relativas. Requisições inválidas são recusadas antes de alterar os nós, com uma mensagem de validação mais clara."
+      ]
+    },
+    {
       "date": "16 de setembro de 2026 · 0.31.1",
       "title": "Orkestrai 0.31.1: mensagens recebidas pelo companion",
       "summary": "Mensagens encaminhadas e legendas chegam ao companion autorizado.",

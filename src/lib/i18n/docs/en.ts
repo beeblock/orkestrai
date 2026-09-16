@@ -935,6 +935,14 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      "date": "Not yet released",
+      "title": "Pending: Canvas selection transfers",
+      "summary": "Copy and move selections between workspaces again.",
+      "items": [
+        "Restore copying and moving Canvas selections between workspaces, including large selections of 59 nodes, while preserving internal connections and relative positions. Invalid requests are rejected before changing nodes, with clearer validation feedback."
+      ]
+    },
+    {
       "date": "September 16, 2026 · 0.31.1",
       "title": "Orkestrai 0.31.1: incoming companion messages",
       "summary": "Forwarded messages and media captions reach the authorized companion.",

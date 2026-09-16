@@ -6,10 +6,12 @@ import { tmpdir } from 'node:os';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { TransferCanvasNodesDto } from '$lib/modules/agent-room/application/dto/TransferCanvasNodesDto.js';
 import { canvasNodeTransferService } from '$lib/modules/agent-room/application/services/CanvasNodeTransferService.js';
+import { CanvasNodeTransferController } from '$lib/modules/agent-room/interface/http/controllers/CanvasNodeTransferController.js';
+import { TransferCanvasNodesRequest } from '$lib/modules/agent-room/interface/http/requests/TransferCanvasNodesRequest.js';
 import { designDocumentService } from '$lib/modules/agent-room/application/services/DesignDocumentService.js';
 import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
 import { AgentRoutine } from '$lib/modules/agent-room/domain/models/AgentRoutine.js';
-import type { ApiClientNodePayload, ImageNodePayload, NoteNodePayload, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
+import type { ApiClientNodePayload, CanvasNodeTransferResult, ImageNodePayload, NoteNodePayload, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 
 describe('CanvasNodeTransfer', () => {
@@ -28,6 +30,82 @@ describe('CanvasNodeTransfer', () => {
     const destination = await workspaceRepository.createWorkspace({ name: 'Destination', workingDir: destinationRoot });
     return { source, destination, sourceRoot, destinationRoot };
   }
+
+  function transferEvent(sourceWorkspaceId: string, body: unknown) {
+    const url = new URL(`http://localhost/api/agent-room/workspaces/${sourceWorkspaceId}/nodes/transfer`);
+    return {
+      params: { id: sourceWorkspaceId }, url,
+      request: new Request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    } as never;
+  }
+
+  it('validates the actual HTTP request without treating the workspace route id as an extra transfer field', async () => {
+    const body = { destinationWorkspaceId: uuidv7(), nodeIds: Array.from({ length: 59 }, () => uuidv7()), mode: 'copy' };
+    await expect(TransferCanvasNodesRequest.validate(transferEvent(uuidv7(), body))).resolves.toEqual(body);
+    await expect(TransferCanvasNodesRequest.validate(transferEvent(uuidv7(), { ...body, unexpected: true }))).rejects.toThrow('invalid');
+    const maximum = { ...body, nodeIds: Array.from({ length: 100 }, () => uuidv7()) };
+    await expect(TransferCanvasNodesRequest.validate(transferEvent(uuidv7(), maximum))).resolves.toEqual(maximum);
+    await expect(TransferCanvasNodesRequest.validate(transferEvent(uuidv7(), { ...body, nodeIds: [body.nodeIds[0], body.nodeIds[0]] })))
+      .resolves.toMatchObject({ nodeIds: [body.nodeIds[0]] });
+  });
+
+  it('rejects invalid HTTP selections before writes and never lets a body id override the source workspace', async () => {
+    const { source, destination } = await workspacePair();
+    const node = await workspaceRepository.createNode({ workspaceId: source.id, type: 'note', payload: { content: 'Keep me' } });
+    const foreign = await workspaceRepository.createNode({ workspaceId: destination.id, type: 'note', payload: { content: 'Other workspace' } });
+    const controller = new CanvasNodeTransferController();
+    const body = { destinationWorkspaceId: destination.id, nodeIds: [node.id], mode: 'move' };
+    for (const invalid of [
+      { ...body, unexpected: true }, { ...body, nodeIds: [] }, { ...body, nodeIds: ['invalid'] },
+      { ...body, nodeIds: Array.from({ length: 101 }, () => uuidv7()) }, { ...body, mode: 'delete' },
+    ]) {
+      const response = await controller.store(transferEvent(source.id, invalid));
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: 'canvas_transfer_invalid_request' });
+    }
+    const spoofed = await controller.store(transferEvent(source.id, { ...body, id: destination.id, nodeIds: [foreign.id] }));
+    expect(spoofed.status).toBe(400);
+    expect(await spoofed.json()).toEqual({ error: 'canvas_transfer_node_not_found' });
+    expect(await workspaceRepository.listNodes(source.id)).toEqual([node]);
+    expect(await workspaceRepository.listNodes(destination.id)).toEqual([foreign]);
+  });
+
+  it.each(['copy', 'move'] as const)('%s transfers 59 nodes and their internal edges through HTTP validation and the real transaction', async (mode) => {
+    const { source, destination } = await workspacePair();
+    const nodes = [];
+    for (let index = 0; index < 59; index++) {
+      nodes.push(await workspaceRepository.createNode({
+        workspaceId: source.id, type: index % 2 ? 'shape' : 'note', title: `Item ${index}`,
+        x: index * 140, y: index % 3 * 120, payload: { content: `Content ${index}` },
+      }));
+      if (index) await workspaceRepository.createEdge({ workspaceId: source.id, sourceNodeId: nodes[index - 1].id, targetNodeId: nodes[index].id });
+    }
+    const outside = await workspaceRepository.createNode({ workspaceId: source.id, type: 'note', title: 'Not selected' });
+    await workspaceRepository.createEdge({ workspaceId: source.id, sourceNodeId: nodes[0].id, targetNodeId: outside.id });
+    const response = await new CanvasNodeTransferController().store(transferEvent(source.id, {
+      destinationWorkspaceId: destination.id, nodeIds: nodes.map(node => node.id), mode,
+    }));
+
+    expect(response.status).toBe(201);
+    const { data } = await response.json();
+    expect(data.nodes).toHaveLength(59);
+    expect(data.edges).toHaveLength(58);
+    expect(await workspaceRepository.listNodes(destination.id)).toHaveLength(59);
+    const destinationIds = new Set(data.nodes.map((node: { id: string }) => node.id));
+    for (const edge of data.edges) {
+      expect(destinationIds.has(edge.sourceNodeId)).toBe(true);
+      expect(destinationIds.has(edge.targetNodeId)).toBe(true);
+    }
+    expect(await workspaceRepository.listNodes(source.id)).toHaveLength(mode === 'copy' ? 60 : 1);
+    expect(await workspaceRepository.getNode(outside.id)).not.toBeNull();
+    expect(await workspaceRepository.listEdges(source.id)).toHaveLength(mode === 'copy' ? 59 : 0);
+    for (let index = 0; index < nodes.length; index++) {
+      expect(data.nodes[index].id).not.toBe(nodes[index].id);
+      expect(data.nodes[index].payload).toEqual(nodes[index].type === 'note' ? { ...nodes[index].payload, attachments: [] } : nodes[index].payload);
+      expect(data.nodes[index].x - data.nodes[0].x).toBe(nodes[index].x - nodes[0].x);
+      expect(data.nodes[index].y - data.nodes[0].y).toBe(nodes[index].y - nodes[0].y);
+    }
+  });
 
   it('copies nodes, internal edges, note attachments, and native designs without live runtime state', async () => {
     const { source, destination, sourceRoot, destinationRoot } = await workspacePair();
@@ -57,7 +135,11 @@ describe('CanvasNodeTransfer', () => {
     await workspaceRepository.createEdge({ workspaceId: source.id, sourceNodeId: terminal.id, targetNodeId: note.id });
     await workspaceRepository.createEdge({ workspaceId: source.id, sourceNodeId: terminal.id, targetNodeId: outside.id });
 
-    const result = await canvasNodeTransferService.transfer(new TransferCanvasNodesDto(source.id, destination.id, [terminal.id, note.id, design.id], 'copy'));
+    const response = await new CanvasNodeTransferController().store(transferEvent(source.id, {
+      destinationWorkspaceId: destination.id, nodeIds: [terminal.id, note.id, design.id], mode: 'copy',
+    }));
+    expect(response.status).toBe(201);
+    const { data: result } = await response.json() as { data: CanvasNodeTransferResult };
 
     expect(result.nodes).toHaveLength(3);
     expect(result.edges).toHaveLength(1);

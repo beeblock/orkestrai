@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Restore copying and moving Canvas selections between workspaces, including large selections of 59 nodes, while preserving internal connections and relative positions. Invalid requests are rejected before changing nodes, with clearer validation feedback.
+
 ## 0.31.1 - 2026-09-16
 
 ### Fixed

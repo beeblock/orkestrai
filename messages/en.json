@@ -4039,6 +4039,7 @@
   "canvas.transfer_error_asset_missing": "A selected node references a file that is no longer available.",
   "canvas.transfer_error_asset_invalid": "A selected file is outside the approved workspace directory.",
   "canvas.transfer_error_failed": "Could not transfer the selected nodes. Nothing was removed from the source workspace.",
+  "canvas.transfer_error_invalid_request": "The selection is invalid. Select between 1 and 100 nodes and choose a destination workspace.",
   "git.title": "Git workspace",
   "git.error_api": "Could not complete the Git request.",
   "git.error_load": "Could not load repository state.",

@@ -37,6 +37,7 @@
   function transferError(error: unknown): string {
     const code = error instanceof Error ? error.message : '';
     const messages: Record<string, () => string> = {
+      canvas_transfer_invalid_request: m['canvas.transfer_error_invalid_request'],
       canvas_transfer_same_workspace: m['canvas.transfer_error_same_workspace'],
       canvas_transfer_workspace_not_found: m['canvas.transfer_error_workspace_not_found'],
       canvas_transfer_node_not_found: m['canvas.transfer_error_node_not_found'],
