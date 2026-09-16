@@ -939,8 +939,8 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      "date": "Ainda não publicado",
-      "title": "Pendente: mensagens recebidas pelo companion",
+      "date": "16 de setembro de 2026 · 0.31.1",
+      "title": "Orkestrai 0.31.1: mensagens recebidas pelo companion",
       "summary": "Mensagens encaminhadas e legendas chegam ao companion autorizado.",
       "items": [
         "Reconhece mensagens encaminhadas e legendas de mídia do contato autorizado para que o companion receba os eventos em vez de esperar em silêncio. Preserva a identidade das mensagens e a proteção contra duplicatas; baixar ou transcrever anexos continua exigindo autorização separada."

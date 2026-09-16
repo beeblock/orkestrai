@@ -935,8 +935,8 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      "date": "Aún no publicado",
-      "title": "Pendiente: mensajes recibidos por el asistente",
+      "date": "16 de septiembre de 2026 · 0.31.1",
+      "title": "Orkestrai 0.31.1: mensajes recibidos por el asistente",
       "summary": "Los mensajes reenviados y las leyendas llegan al asistente autorizado.",
       "items": [
         "Reconoce mensajes reenviados y leyendas de archivos del contacto autorizado para que el asistente reciba los eventos en lugar de esperar en silencio. Conserva la identidad de los mensajes y la protección contra duplicados; descargar o transcribir archivos sigue requiriendo autorización independiente."

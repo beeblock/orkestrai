@@ -935,8 +935,8 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      "date": "Not yet released",
-      "title": "Pending: incoming companion messages",
+      "date": "September 16, 2026 · 0.31.1",
+      "title": "Orkestrai 0.31.1: incoming companion messages",
       "summary": "Forwarded messages and media captions reach the authorized companion.",
       "items": [
         "Recognize forwarded desktop messages and media captions from the authorized contact so companions receive their events instead of silently waiting. Preserve message identity and duplicate protection; downloading or transcribing attachments still requires separate authorization."
