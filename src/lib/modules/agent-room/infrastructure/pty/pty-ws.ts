@@ -150,6 +150,10 @@ export function handlePtyConnection(socket: WebSocket): void {
             }
           }
 
+          const conversationArgs = Array.isArray(message.conversationArgs) ? message.conversationArgs.map(String) : [];
+          const resumedSessionId = typeof message.agentSessionId === 'string' && conversationArgs.includes(message.agentSessionId)
+            ? message.agentSessionId
+            : conversationArgs.find((arg) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(arg)) ?? null;
           const reuseLiveNodeSession = () => {
             if (typeof message.workspaceId !== 'string' || typeof message.nodeId !== 'string') return false;
             const expectedCommand = message.command.trim();
@@ -161,14 +165,20 @@ export function handlePtyConnection(socket: WebSocket): void {
                 && (session.provider ?? null) === expectedProvider
                 && session.runtimeKey === expectedRuntime,
             );
-            const expectedAgentSessionId = Array.isArray(message.conversationArgs)
-              ? message.conversationArgs.map(String).find((arg) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(arg)) ?? null
-              : null;
+            const expectedAgentSessionId = resumedSessionId;
             if (!existing && expectedProvider && expectedAgentSessionId) {
-              existing = ptySessionManager.listLiveForAgentSession(expectedProvider, expectedAgentSessionId).find(
-                (session) => session.command === expectedCommand && session.runtimeKey === expectedRuntime,
-              );
-              if (existing) ptySessionManager.claimNode(existing.id, message.workspaceId, message.nodeId);
+              const conversationSessions = ptySessionManager.listLiveForAgentSession(expectedProvider, expectedAgentSessionId)
+                .filter(session => session.runtimeKey === expectedRuntime);
+              if (conversationSessions.some(session => (session.workspaceId && session.workspaceId !== message.workspaceId)
+                || (session.nodeId && session.nodeId !== message.nodeId))) {
+                send({ type: 'error', code: 'AGENT_SESSION_IN_USE', message: 'This conversation already belongs to another active agent. Its terminal was preserved.' });
+                return true;
+              }
+              existing = conversationSessions.find(session => session.command === expectedCommand);
+              if (existing && !ptySessionManager.claimNode(existing.id, message.workspaceId, message.nodeId)) {
+                send({ type: 'error', code: 'AGENT_SESSION_IN_USE', message: 'This conversation already belongs to another active agent. Its terminal was preserved.' });
+                return true;
+              }
             }
             if (!existing) {
               // A provider/runtime change should have retired the old PTY. If
@@ -178,7 +188,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             }
             ptySessionManager.killNode(message.workspaceId, message.nodeId, existing.id);
             if (expectedProvider && expectedAgentSessionId) {
-              ptySessionManager.killAgentSession(expectedProvider, expectedAgentSessionId, existing.id);
+              ptySessionManager.killAgentSession(expectedProvider, expectedAgentSessionId, { workspaceId: message.workspaceId, nodeId: message.nodeId }, existing.id);
             }
             const scrollback = attachSession(existing.id);
             send({ type: 'created', session: existing, scrollback, reused: true });
@@ -206,6 +216,7 @@ export function handlePtyConnection(socket: WebSocket): void {
                 (cwd) => posix.normalize(cwd),
               )
             : agentSessionTracker;
+          if (resumedSessionId) tracker.claim(resumedSessionId);
           const runtime = message.runtime ?? { kind: 'native' as const };
           const messageArgs = Array.isArray(message.args) ? message.args.map(String) : [];
           const providerArgs = message.provider === 'codex'
@@ -231,7 +242,7 @@ export function handlePtyConnection(socket: WebSocket): void {
           // secure profile resolution was awaiting I/O.
           if (reuseLiveNodeSession()) break;
 
-          const freshSessionId = Array.isArray(message.freshSessionArgs) && message.freshSessionArgs.length
+          const freshSessionId = !resumedSessionId && Array.isArray(message.freshSessionArgs) && message.freshSessionArgs.length
             ? randomUUID()
             : null;
           const freshSessionArgs = freshSessionId
@@ -266,7 +277,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             workspaceRoot: typeof message.workspaceRoot === 'string' ? message.workspaceRoot : undefined,
             transcriptHome: wslContext?.homeHostPath,
             transcriptCwd: wslContext?.linuxWorkingDir ?? resolvedCwd,
-            agentSessionId: typeof message.agentSessionId === 'string' ? message.agentSessionId : freshSessionId ?? undefined,
+            agentSessionId: resumedSessionId ?? freshSessionId ?? undefined,
             bridgeAgentToken: bridgeAgentToken ?? undefined,
           });
           sessionTrackers.set(session.id, tracker);
@@ -294,6 +305,7 @@ export function handlePtyConnection(socket: WebSocket): void {
           const provider = typeof message.provider === 'string' && message.provider.trim() ? message.provider : null;
           if (provider) {
             const reportAgentSession = (agentSessionId: string) => {
+              if (ptySessionManager.get(session.id)?.exited !== false) return;
               tracker.bind(session.id, agentSessionId);
               ptySessionManager.bindAgentSession(session.id, agentSessionId);
               // Broadcast global: o socket criador pode já ter sido fechado
@@ -308,7 +320,11 @@ export function handlePtyConnection(socket: WebSocket): void {
               send({ type: 'agentSession', sessionId: session.id, agentSessionId, provider });
             };
             const trackingCwd = wslContext?.linuxWorkingDir ?? session.cwd;
-            if (freshSessionId) {
+            if (resumedSessionId) {
+              // An exact resume is already attributed. Rediscovery by mtime
+              // can select another agent's active transcript in the same cwd.
+              reportAgentSession(resumedSessionId);
+            } else if (freshSessionId) {
               const watchingExpected = tracker.watchExpected(
                 session.id,
                 message.sessionStorage,

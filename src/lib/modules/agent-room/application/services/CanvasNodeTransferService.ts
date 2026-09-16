@@ -247,9 +247,9 @@ export class CanvasNodeTransferService {
           ptySessionManager.killNode(workspaceId, node.id);
           const provider = typeof payload.provider === 'string' ? payload.provider : null;
           const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
-          if (provider && agentSessionId) ptySessionManager.killAgentSession(provider, agentSessionId);
+          if (provider && agentSessionId) ptySessionManager.killAgentSession(provider, agentSessionId, { workspaceId, nodeId: node.id });
           const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
-          if (sessionId && ptySessionManager.get(sessionId)) ptySessionManager.kill(sessionId);
+          if (sessionId && ptySessionManager.claimNode(sessionId, workspaceId, node.id)) ptySessionManager.kill(sessionId);
         } catch {
           // The database transfer is already committed; stale PTYs self-expire.
         }

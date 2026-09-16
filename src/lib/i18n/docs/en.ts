@@ -941,6 +941,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: 'Unreleased',
+      title: 'Terminal conversation isolation',
+      summary: 'Restore each agent with its own conversation.',
+      items: ['Preserve the exact conversation ID when restoring terminals instead of rediscovering another modified transcript. Recovery, reload, transfer and dismissal cannot adopt or stop a terminal owned by a different agent. Fresh Codex discovery rejects conversations created before the new terminal.'],
+    },
+    {
       "date": "September 16, 2026 · 0.31.3",
       "title": "Orkestrai 0.31.3: opening project folders",
       "summary": "Open output folders without enabling Computer Control.",

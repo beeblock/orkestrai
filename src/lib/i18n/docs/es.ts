@@ -941,6 +941,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
+      date: 'Aún no publicado',
+      title: 'Aislamiento de conversaciones de terminales',
+      summary: 'Restaura cada agente con su propia conversación.',
+      items: ['Conserva el ID exacto de la conversación al restaurar terminales, sin redescubrir otro transcript modificado. La recuperación, recarga, transferencia y eliminación no pueden adoptar ni detener el terminal de otro agente. La detección de sesiones nuevas de Codex rechaza conversaciones creadas antes del nuevo terminal.'],
+    },
+    {
       "date": "16 de septiembre de 2026 · 0.31.3",
       "title": "Orkestrai 0.31.3: apertura de carpetas del proyecto",
       "summary": "Abre carpetas de resultados sin habilitar el control del ordenador.",

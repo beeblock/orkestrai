@@ -143,13 +143,33 @@ describe('AgentSessionTracker', () => {
     const targetId = '22222222-2222-4222-8222-222222222222';
     const otherPath = join(sessionsDir, `rollout-old-${otherId}.jsonl`);
     const targetPath = join(sessionsDir, `rollout-new-${targetId}.jsonl`);
-    writeFileSync(otherPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd: otherCwd } })}\n`);
-    writeFileSync(targetPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd } })}\n`);
+    writeFileSync(otherPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd: otherCwd, timestamp: new Date().toISOString() } })}\n`);
+    writeFileSync(targetPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd, timestamp: new Date().toISOString() } })}\n`);
     utimesSync(otherPath, new Date(Date.now() - 5_000), new Date(Date.now() - 5_000));
     utimesSync(targetPath, new Date(), new Date());
 
     expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBe(targetId);
     expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, otherCwd, since)).toBe(otherId);
+  });
+
+  it('does not claim an older Codex conversation just because another agent resumed it', () => {
+    const { home, tracker } = isolatedTracker();
+    const sessions = join(home, '.codex', 'sessions', '2026', '09', '16');
+    mkdirSync(sessions, { recursive: true });
+    const since = Date.now() - 10_000;
+    const cwd = home;
+    const oldId = '11111111-1111-4111-8111-111111111111';
+    const ownId = '22222222-2222-4222-8222-222222222222';
+    const oldPath = join(sessions, `rollout-old-${oldId}.jsonl`);
+    const ownPath = join(sessions, `rollout-new-${ownId}.jsonl`);
+    writeFileSync(oldPath, `${JSON.stringify({ type: 'session_meta', timestamp: new Date().toISOString(), payload: { cwd, timestamp: new Date(since - 60_000).toISOString() } })}\n`);
+    utimesSync(oldPath, new Date(), new Date());
+    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
+    writeFileSync(ownPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd, timestamp: new Date(since + 1_000).toISOString() } })}\n`);
+    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBe(ownId);
+    tracker.claim(ownId);
+    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
+    expect(tracker.findLatestAgentSessionId(codexAdapter.sessionStorage, cwd, new Set([ownId]))).toBe(oldId);
   });
 
   it('vincula a sessao do Kimi pelo hash exato mesmo com pastas de mesmo nome', () => {

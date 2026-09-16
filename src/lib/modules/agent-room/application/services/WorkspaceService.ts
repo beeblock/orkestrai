@@ -287,6 +287,8 @@ export class WorkspaceService {
       const executionRuntime = terminalExecutionRuntime(workspace, payload as never);
       const storedSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
       let storedPty = storedSessionId ? ptySessionManager.get(storedSessionId) : null;
+      if (storedPty && ((storedPty.workspaceId && storedPty.workspaceId !== workspace.id)
+        || (storedPty.nodeId && storedPty.nodeId !== node.id))) storedPty = null;
       const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
       const provider = typeof payload.provider === 'string' ? payload.provider : null;
       const liveNodeSessions = ptySessionManager.listLiveForNode(workspace.id, node.id);
@@ -300,8 +302,7 @@ export class WorkspaceService {
           (session) => session.command === payload.command
             && session.runtimeKey === executionRuntimeKey(executionRuntime),
         );
-        if (conversationSession) {
-          ptySessionManager.claimNode(conversationSession.id, workspace.id, node.id);
+        if (conversationSession && ptySessionManager.claimNode(conversationSession.id, workspace.id, node.id)) {
           compatibleNodeSessions = [conversationSession];
         }
       }
@@ -310,7 +311,7 @@ export class WorkspaceService {
         // perdeu o sessionId. Reassocie o PTY original e elimine duplicatas.
         const canonical = compatibleNodeSessions[0];
         ptySessionManager.killNode(workspace.id, node.id, canonical.id);
-        if (provider && agentSessionId) ptySessionManager.killAgentSession(provider, agentSessionId, canonical.id);
+        if (provider && agentSessionId) ptySessionManager.killAgentSession(provider, agentSessionId, { workspaceId, nodeId: node.id }, canonical.id);
         storedPty = canonical;
         if (storedSessionId !== canonical.id) {
           payload.sessionId = canonical.id;
@@ -467,10 +468,11 @@ export class WorkspaceService {
     let killed = ptySessionManager.killNode(workspaceId, nodeId);
     const provider = typeof payload.provider === 'string' ? payload.provider : null;
     const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
-    if (provider && agentSessionId) killed += ptySessionManager.killAgentSession(provider, agentSessionId);
+    if (provider && agentSessionId) killed += ptySessionManager.killAgentSession(provider, agentSessionId, { workspaceId, nodeId });
     const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
-    if (sessionId && ptySessionManager.get(sessionId)) {
-      ptySessionManager.kill(sessionId);
+    const session = sessionId ? ptySessionManager.get(sessionId) : null;
+    if (session && !session.exited && ptySessionManager.claimNode(session.id, workspaceId, nodeId)) {
+      ptySessionManager.kill(session.id);
       killed += 1;
     }
     return killed;

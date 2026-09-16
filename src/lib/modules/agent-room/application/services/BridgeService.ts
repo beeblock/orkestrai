@@ -1037,10 +1037,10 @@ export class BridgeService {
       const previousProvider = typeof previousPayload.provider === 'string' ? previousPayload.provider : null;
       const previousAgentSessionId = typeof previousPayload.agentSessionId === 'string' ? previousPayload.agentSessionId : null;
       if (previousProvider && previousAgentSessionId) {
-        ptySessionManager.killAgentSession(previousProvider, previousAgentSessionId);
+        ptySessionManager.killAgentSession(previousProvider, previousAgentSessionId, { workspaceId, nodeId: node.id });
       }
       const previousSessionId = typeof previousPayload.sessionId === 'string' ? previousPayload.sessionId : null;
-      if (previousSessionId && ptySessionManager.get(previousSessionId)) ptySessionManager.kill(previousSessionId);
+      if (previousSessionId && ptySessionManager.claimNode(previousSessionId, workspaceId, node.id)) ptySessionManager.kill(previousSessionId);
       const updated = await workspaceRepository.updateNode(node.id, { payload, title: input.title || node.title });
       try {
         const active = await agentSessionService.ensure(workspaceId, node.id);
@@ -1269,9 +1269,9 @@ export class BridgeService {
     const targetNode = await workspaceRepository.getNode(target.nodeId);
     const targetPayload = (targetNode?.payload ?? {}) as { provider?: string; agentSessionId?: string };
     if (targetPayload.provider && targetPayload.agentSessionId) {
-      ptySessionManager.killAgentSession(targetPayload.provider, targetPayload.agentSessionId);
+      ptySessionManager.killAgentSession(targetPayload.provider, targetPayload.agentSessionId, { workspaceId, nodeId: target.nodeId });
     }
-    if (target.sessionId && ptySessionManager.get(target.sessionId)) ptySessionManager.kill(target.sessionId);
+    if (target.sessionId && ptySessionManager.claimNode(target.sessionId, workspaceId, target.nodeId)) ptySessionManager.kill(target.sessionId);
     await workspaceRepository.deleteNode(target.nodeId);
     this.notifyWorkspaceChanged(workspaceId);
     return { dismissed: target.title };

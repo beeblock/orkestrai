@@ -278,7 +278,7 @@ export class AgentSessionTracker {
       (name: string, path: string) => {
         if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) return false;
         const id = uuidOf(name);
-        return id !== null && !exclude.has(id) && this.codexTranscriptMatchesCwd(path, targetCwd);
+        return id !== null && !exclude.has(id) && this.codexTranscriptMatchesCwd(path, targetCwd, since);
       },
       4
     );
@@ -288,14 +288,17 @@ export class AgentSessionTracker {
   /** O Codex guarda todas as sessoes numa arvore global. O session_meta do
       rollout e a unica forma segura de nao vincular um terminal ao transcript
       de outro workspace que esteja sendo usado ao mesmo tempo. */
-  private codexTranscriptMatchesCwd(path: string, targetCwd: string): boolean {
+  private codexTranscriptMatchesCwd(path: string, targetCwd: string, since: number): boolean {
     const fd = openSync(path, 'r');
     try {
       const buffer = Buffer.allocUnsafe(512 * 1024);
       const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
       const firstLine = buffer.toString('utf8', 0, bytesRead).split('\n', 1)[0] ?? '';
       if (!firstLine) return false;
-      const entry = JSON.parse(firstLine) as { type?: unknown; payload?: { cwd?: unknown } };
+      const entry = JSON.parse(firstLine) as { type?: unknown; timestamp?: unknown; payload?: { cwd?: unknown; timestamp?: unknown } };
+      // Appending a resumed conversation changes mtime, not its creation time.
+      const createdAt = Date.parse(String(entry.payload?.timestamp ?? entry.timestamp ?? ''));
+      if (since > 0 && (!Number.isFinite(createdAt) || createdAt < since)) return false;
       return entry.type === 'session_meta' &&
         typeof entry.payload?.cwd === 'string' &&
         this.realCwd(entry.payload.cwd) === targetCwd;

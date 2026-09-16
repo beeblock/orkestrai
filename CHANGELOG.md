@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Preserve exact agent conversation identities when restoring terminals instead of rediscovering another modified transcript. Recovery, reload, transfer and dismissal cannot adopt or stop a PTY owned by a different agent; fresh Codex discovery rejects conversations created before the new terminal.
+
 ## 0.31.3 - 2026-09-16
 
 ### Fixed

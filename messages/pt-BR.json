@@ -1469,6 +1469,7 @@
   "term.no_session": "Nenhuma sessão informada.",
   "term.ws_error": "Falha na conexão WebSocket com o servidor.",
   "term.workspace_suspended": "Este workspace está pausado. Abra-o novamente antes de iniciar um terminal.",
+  "term.conversation_in_use": "Esta conversa pertence a outro agente ativo. O terminal dele foi preservado; restaure a conversa própria deste agente antes de tentar novamente.",
   "term.connection_closed": "Conexão encerrada.",
   "term.reconnecting": "Reconectando ({attempt}/6)...",
   "term.idle": "Terminal ocioso",

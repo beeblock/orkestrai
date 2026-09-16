@@ -98,9 +98,15 @@ describe('PtySessionManager', () => {
       provider: 'codex',
     });
 
-    manager.claimNode(session.id, 'workspace-2', 'node-2');
+    expect(manager.claimNode(session.id, 'workspace-2', 'node-2')).toBe(false);
+    expect(manager.claimNode(session.id, 'workspace-1', 'node-2')).toBe(false);
+    expect(manager.claimNode(session.id, 'workspace-1', 'node-1')).toBe(true);
+    expect(manager.get(session.id)).toMatchObject({ workspaceId: 'workspace-1', nodeId: 'node-1' });
     expect(manager.listLiveForAgentSession('codex', conversationId)).toHaveLength(1);
-    expect(manager.killAgentSession('codex', conversationId)).toBe(1);
+    expect(manager.killAgentSession('codex', conversationId, { workspaceId: 'workspace-1', nodeId: 'node-2' })).toBe(0);
+    expect(manager.killAgentSession('codex', conversationId, { workspaceId: 'workspace-2', nodeId: 'node-1' })).toBe(0);
+    expect(manager.get(session.id)?.exited).toBe(false);
+    expect(manager.killAgentSession('codex', conversationId, { workspaceId: 'workspace-1', nodeId: 'node-1' })).toBe(1);
     expect(treeKill).toHaveBeenCalledWith(fakePty, true);
     expect(directKill).not.toHaveBeenCalled();
   });

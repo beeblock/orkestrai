@@ -76,15 +76,21 @@ export class AgentSessionService {
       return { nodeId: target.id, sessionId: compatibleLiveSession.id, state: 'existing' };
     }
     const confirmedAgentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : null;
-    const conversationSession = payload.provider && confirmedAgentSessionId
-      ? ptySessionManager.listLiveForAgentSession(payload.provider, confirmedAgentSessionId).find(
-          (session) => session.command === payload.command && session.runtimeKey === executionRuntimeKey(runtime),
-        ) ?? null
-      : null;
+    const conversationSessions = payload.provider && confirmedAgentSessionId
+      ? ptySessionManager.listLiveForAgentSession(payload.provider, confirmedAgentSessionId)
+          .filter(session => session.runtimeKey === executionRuntimeKey(runtime))
+      : [];
+    if (conversationSessions.some(session => (session.workspaceId && session.workspaceId !== workspaceId)
+      || (session.nodeId && session.nodeId !== target.id))) {
+      throw new Error('AGENT_SESSION_IN_USE');
+    }
+    const conversationSession = conversationSessions.find(session => session.command === payload.command) ?? null;
     if (conversationSession) {
-      ptySessionManager.claimNode(conversationSession.id, workspaceId, target.id);
+      if (!ptySessionManager.claimNode(conversationSession.id, workspaceId, target.id)) {
+        throw new Error('AGENT_SESSION_IN_USE');
+      }
       ptySessionManager.killNode(workspaceId, target.id, conversationSession.id);
-      ptySessionManager.killAgentSession(payload.provider!, confirmedAgentSessionId!, conversationSession.id);
+      ptySessionManager.killAgentSession(payload.provider!, confirmedAgentSessionId!, { workspaceId, nodeId: target.id }, conversationSession.id);
       if (payload.sessionId !== conversationSession.id) {
         await workspaceRepository.updateNode(target.id, {
           payload: { ...payload, sessionId: conversationSession.id } as never,
@@ -96,7 +102,7 @@ export class AgentSessionService {
     if (liveNodeSessions.length) ptySessionManager.killNode(workspaceId, target.id);
 
     const existing = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
-    if (existing && !existing.exited) {
+    if (existing && !existing.exited && ptySessionManager.claimNode(existing.id, workspaceId, target.id)) {
       return { nodeId: target.id, sessionId: existing.id, state: 'existing' };
     }
     if (!payload.command) throw new Error('AGENT_COMMAND_UNAVAILABLE');

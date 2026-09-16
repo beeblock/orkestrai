@@ -360,7 +360,8 @@ export class PtySessionManager {
 
   listLiveForAgentSession(provider: string, agentSessionId: string): PtySessionInfo[] {
     return [...this.sessions.values()]
-      .filter((session) => !session.exited && session.provider === provider && session.args.includes(agentSessionId))
+      .filter((session) => !session.exited && session.provider === provider
+        && (session.agentSessionId === agentSessionId || session.args.includes(agentSessionId)))
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .map((session) => this.toInfo(session));
   }
@@ -368,6 +369,9 @@ export class PtySessionManager {
   claimNode(id: string, workspaceId: string, nodeId: string): boolean {
     const session = this.sessions.get(id);
     if (!session || session.exited) return false;
+    // Recovery may adopt an orphan, never a terminal owned by another node.
+    if (session.workspaceId && session.workspaceId !== workspaceId) return false;
+    if (session.nodeId && session.nodeId !== nodeId) return false;
     session.workspaceId = workspaceId;
     session.nodeId = nodeId;
     return true;
@@ -532,12 +536,14 @@ export class PtySessionManager {
     return sessions.length;
   }
 
-  /** Ends a provider conversation even if a stale node lost its PTY id. */
-  killAgentSession(provider: string, agentSessionId: string, keepSessionId?: string): number {
+  /** Retire owned duplicates or unclaimed orphans, never another node's PTY. */
+  killAgentSession(provider: string, agentSessionId: string, owner: { workspaceId: string; nodeId: string }, keepSessionId?: string): number {
     const sessions = [...this.sessions.values()].filter(
       (session) => !session.exited
         && session.provider === provider
-        && session.args.includes(agentSessionId)
+        && (session.agentSessionId === agentSessionId || session.args.includes(agentSessionId))
+        && (!session.workspaceId || session.workspaceId === owner.workspaceId)
+        && (!session.nodeId || session.nodeId === owner.nodeId)
         && session.id !== keepSessionId,
     );
     for (const session of sessions) {

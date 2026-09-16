@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handlePtyConnection, isAllowedPtyWsOrigin } from '$lib/modules/agent-room/infrastructure/pty/pty-ws.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { agentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/AgentSessionTracker.ts';
 
 class FakeSocket extends EventEmitter {
   readonly OPEN = 1;
@@ -125,6 +126,64 @@ describe('PTY WebSocket protocol', () => {
       });
       expect(ptySessionManager.listLiveForNode('workspace-recovered', 'node-recovered'))
         .toHaveLength(1);
+    } finally {
+      socket.emit('close');
+      ptySessionManager.kill(original.id);
+    }
+  });
+
+  it.each([
+    ['codex', '11111111-1111-4111-8111-111111111111'],
+    ['claude', '22222222-2222-4222-8222-222222222222'],
+    ['kimi', 'session_exact_resume'],
+  ])('keeps the exact %s resume identity instead of watching other modified transcripts', async (provider, conversationId) => {
+    const watch = vi.spyOn(agentSessionTracker, 'watch');
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+    let sessionId: string | undefined;
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'create', command: '/bin/sh', args: ['-c', 'cat'], cwd: '/tmp',
+        provider, workspaceId: `exact-${provider}`, nodeId: `node-${provider}`,
+        agentSessionId: conversationId, conversationArgs: ['resume', conversationId],
+      }));
+      await vi.waitFor(() => expect(socket.frames.some(frame => frame.type === 'created')).toBe(true));
+      sessionId = (socket.frames.find(frame => frame.type === 'created')!.session as { id: string }).id;
+      expect(watch).not.toHaveBeenCalled();
+      expect(agentSessionTracker.agentSessionIdForPty(sessionId)).toBe(conversationId);
+      expect(ptySessionManager.get(sessionId)?.agentSessionId).toBe(conversationId);
+      expect(socket.frames).toContainEqual({ type: 'agentSession', sessionId, agentSessionId: conversationId, provider });
+    } finally {
+      socket.emit('close');
+      if (sessionId) {
+        ptySessionManager.kill(sessionId);
+        agentSessionTracker.forget(sessionId);
+      }
+    }
+  });
+
+  it.each([
+    ['same-workspace', '/bin/sh'],
+    ['different-workspace', '/bin/sh'],
+    ['same-workspace', 'codex'],
+  ])('does not steal a conversation owned by another node in %s using %s', async (workspaceId, command) => {
+    const conversationId = '33333333-3333-4333-8333-333333333333';
+    const original = ptySessionManager.create({
+      command: '/bin/sh', args: ['-c', 'cat', 'resume', conversationId], cwd: '/tmp',
+      provider: 'codex', workspaceId: 'same-workspace', nodeId: 'original-node', agentSessionId: conversationId,
+    });
+    const create = vi.spyOn(ptySessionManager, 'create');
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'create', command, args: ['-c', 'cat'], cwd: '/tmp', provider: 'codex',
+        workspaceId, nodeId: 'other-node', agentSessionId: conversationId, conversationArgs: ['resume', conversationId],
+      }));
+      await vi.waitFor(() => expect(socket.frames.some(frame => frame.code === 'AGENT_SESSION_IN_USE')).toBe(true));
+      expect(create).not.toHaveBeenCalled();
+      expect(ptySessionManager.get(original.id)).toMatchObject({ workspaceId: 'same-workspace', nodeId: 'original-node', exited: false });
+      expect(socket.frames.some(frame => frame.type === 'created')).toBe(false);
     } finally {
       socket.emit('close');
       ptySessionManager.kill(original.id);
