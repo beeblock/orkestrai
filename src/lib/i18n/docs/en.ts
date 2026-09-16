@@ -946,7 +946,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "summary": "Prevent indexing stalls, cancel stuck dictation, and preserve each agent's conversation.",
       "items": [
         "Exclude dependency folders and generated build output from code indexing at every depth. Select large file sets deterministically to prevent repeated database rewrites that block terminals and delay microphone startup.",
-        "Cancel microphone startup or transcription from the same control. Stop capture promptly and discard late results after cancellation or navigation. Startup times out after 15 seconds, transcription after three minutes; recording finishes automatically after 15 minutes.",
+        "Cancel microphone startup or transcription from the same control in Canvas and Workbench. Stop capture promptly and discard late results after cancellation or navigation. Startup times out after 15 seconds, transcription after three minutes; recording finishes automatically after 15 minutes.",
         "Restore each terminal with its exact conversation. Recovery cannot adopt or stop another agent's PTY, and simultaneous wake requests cannot create duplicate writers."
       ]
     },

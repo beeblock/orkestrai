@@ -730,8 +730,8 @@
 
   async function toggleLeaderDictation() {
     const workspaceId = selectedWorkspaceId;
-    if (!workspaceId || leaderDictationState === 'transcribing') return;
-    if (leaderDictationState === 'recording' && leaderDictationNodeId) {
+    if (!workspaceId) return;
+    if (leaderDictationState !== 'idle' && leaderDictationNodeId) {
       dispatchLeaderDictation(leaderDictationNodeId);
       return;
     }

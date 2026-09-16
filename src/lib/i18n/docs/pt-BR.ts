@@ -950,7 +950,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "summary": "Evita travamentos na indexação, permite cancelar o ditado e preserva a conversa de cada agente.",
       "items": [
         "Exclui dependências e arquivos gerados da indexação em qualquer nível de pasta. Seleciona grandes conjuntos de arquivos de forma estável, evitando regravações repetidas no banco que bloqueavam terminais e atrasavam a abertura do microfone.",
-        "Permite cancelar a abertura do microfone ou a transcrição pelo mesmo controle. Encerra a captura imediatamente e descarta resultados atrasados após cancelamento ou navegação. A abertura tem limite de 15 segundos, a transcrição de três minutos; a gravação termina automaticamente após 15 minutos.",
+        "Permite cancelar a abertura do microfone ou a transcrição pelo mesmo controle no Canvas e no Workbench. Encerra a captura imediatamente e descarta resultados atrasados após cancelamento ou navegação. A abertura tem limite de 15 segundos, a transcrição de três minutos; a gravação termina automaticamente após 15 minutos.",
         "Restaura cada terminal com sua conversa exata. A recuperação não assume nem encerra o PTY de outro agente, e solicitações simultâneas não iniciam processos duplicados para a mesma conversa."
       ]
     },

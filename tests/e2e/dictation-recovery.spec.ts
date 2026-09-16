@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-test('cancels delayed startup and transcription without reopening the mic or sending old text', async ({ page, request }) => {
+for (const mode of ['canvas', 'terminal']) {
+test(`${mode}: cancels delayed startup and transcription without reopening the mic or sending old text`, async ({ page, request }) => {
   test.setTimeout(60_000);
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-dictation-recovery-'));
   const response = await request.post('/api/agent-room/workspaces', {
@@ -11,10 +12,11 @@ test('cancels delayed startup and transcription without reopening the mic or sen
   });
   const workspace = (await response.json()).data;
   try {
-    await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+    const nodeResponse = await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
       data: { type: 'terminal', title: 'Dictation test', x: 40, y: 40, width: 650, height: 400,
         payload: { command: process.execPath, args: ['-e', 'process.stdin.on("data",b=>process.stdout.write(b))'], maestro: true } },
     });
+    const node = (await nodeResponse.json()).data;
     await page.addInitScript(() => {
       const state = { opened: 0, stopped: 0 };
       (window as any).__captureTest = state;
@@ -53,7 +55,7 @@ test('cancels delayed startup and transcription without reopening the mic or sen
       await models;
       await route.fulfill({ json: { data: { ready: true } } }).catch(() => {});
     });
-    await page.goto(`/canvas?workspace=${workspace.id}`);
+    await page.goto(`/${mode}?workspace=${workspace.id}&node=${node.id}`);
     const terminal = page.locator('.canvas-terminal');
     await expect(terminal.locator('.xterm-helper-textarea')).toBeAttached();
     const mic = terminal.getByRole('button', { name: /Ditar \(/ });
@@ -87,9 +89,32 @@ test('cancels delayed startup and transcription without reopening the mic or sen
     await terminal.getByRole('button', { name: /Parar ditado/ }).click();
     await expect(mic).toBeVisible();
     await expect.poll(() => page.evaluate(() => (window as any).__captureTest.stopped)).toBe(2);
+
+    let releaseFieldTranscript!: () => void;
+    const fieldTranscript = new Promise<void>((resolve) => { releaseFieldTranscript = resolve; });
+    let fieldRequests = 0;
+    await page.route('**/api/agent-room/voice/transcribe', async (route) => {
+      fieldRequests++;
+      await fieldTranscript;
+      await route.fulfill({ json: { data: { text: 'OLD_FIELD_TEXT' } } }).catch(() => {});
+    });
+    const draft = page.getByTestId('terminal-quick-prompt');
+    await draft.fill('Existing draft');
+    const orb = page.locator('.dictation-trigger');
+    await orb.click();
+    await expect(orb).toHaveAttribute('aria-pressed', 'true');
+    await orb.click();
+    await expect.poll(() => fieldRequests).toBe(1);
+    await expect.poll(() => page.evaluate(() => (window as any).__captureTest.stopped)).toBe(3);
+    await expect(orb).toHaveAttribute('aria-label', /Cancelar ditado/);
+    await orb.click();
+    releaseFieldTranscript();
+    await expect(orb).not.toHaveAttribute('aria-label', /Cancelar ditado/);
+    await expect(draft).toHaveValue('Existing draft');
   } finally {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     await rm(root, { recursive: true, force: true });
   }
 });
+}
