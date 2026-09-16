@@ -2939,7 +2939,7 @@
   {/snippet}
   </aside>
 
-  <section class="canvas-area" class:drawing={drawTool !== null} role="region" aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondrop={handleCanvasFileDrop}>
+  <section class="canvas-area" class:drawing={drawTool !== null} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondrop={handleCanvasFileDrop}>
     <SvelteFlowProvider>
     {#if activeWorkspace}
       {#if designModeNodeId}
