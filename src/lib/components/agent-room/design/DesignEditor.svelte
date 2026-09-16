@@ -3973,7 +3973,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
                   <label class="flex items-center justify-between gap-3"><span>{m['design.wrap']()}</span><Switch size="sm" checked={selected.layoutWrap} onCheckedChange={(checked: boolean) => void updateSelected({ layoutWrap: checked })} /></label>
                   <label class="flex items-center justify-between gap-3"><span>{m['design.clip_content']()}</span><Switch size="sm" checked={selected.clipContent} onCheckedChange={(checked: boolean) => void updateSelected({ clipContent: checked })} /></label>
                 </div>
-                <Button class="mt-2 w-full" variant="outline" size="sm" onclick={() => void applyAutoLayout()}><Sparkles size={13} />{m['design.apply_layout']()}</Button>
+                <Button class="mt-2 w-full" variant="outline" size="sm" disabled={saving} onclick={() => void applyAutoLayout()}><Sparkles size={13} />{m['design.apply_layout']()}</Button>
               {/if}
             </DesignInspectorSection>
           {/if}

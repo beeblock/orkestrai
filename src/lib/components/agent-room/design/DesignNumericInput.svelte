@@ -51,7 +51,7 @@
   function keydown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       event.preventDefault();
-      commit();
+      // Blur commits once; committing here too races the asynchronous document save.
       (event.currentTarget as HTMLInputElement).blur();
       return;
     }

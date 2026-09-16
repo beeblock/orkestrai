@@ -939,11 +939,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      "date": "Ainda não publicado",
-      "title": "Pendente: transferência de seleções do Canvas",
+      "date": "16 de setembro de 2026 · 0.31.2",
+      "title": "Orkestrai 0.31.2: transferência de seleções do Canvas",
       "summary": "Copie e mova seleções entre workspaces novamente.",
       "items": [
-        "Restaura a cópia e a movimentação de seleções do Canvas entre workspaces, incluindo seleções grandes de 59 nós, preservando conexões internas e posições relativas. Requisições inválidas são recusadas antes de alterar os nós, com uma mensagem de validação mais clara."
+        "Restaura a cópia e a movimentação de seleções do Canvas entre workspaces, incluindo seleções grandes de 59 nós, preservando conexões internas e posições relativas. Requisições inválidas são recusadas antes de alterar os nós, com uma mensagem de validação mais clara.",
+        "Salva edições numéricas do Design uma única vez ao pressionar Enter e aguarda o salvamento antes de aplicar o layout, evitando conflitos de revisão duplicados."
       ]
     },
     {

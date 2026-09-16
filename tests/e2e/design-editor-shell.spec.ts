@@ -297,8 +297,15 @@ test.describe('Design editor shell', () => {
       const filePanel = page.getByTestId('design-file-panel');
       await filePanel.getByRole('button', { name: 'Responsive card', exact: true }).click();
       const widthInput = page.getByRole('textbox', { name: 'W', exact: true });
+      const edits: unknown[] = [];
+      page.on('request', request => {
+        if (request.method() === 'PATCH' && request.url().endsWith(`/designs/${node.id}`)) edits.push(request.postDataJSON());
+      });
       await widthInput.fill('160 * 2 + 40');
       await widthInput.press('Enter');
+      // Undo becomes available after the first edit has finished saving.
+      await expect(page.getByTestId('design-toolbar').getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+      expect(edits).toHaveLength(1);
       await page.getByRole('button', { name: 'Apply layout' }).click();
 
       await expect.poll(async () => {

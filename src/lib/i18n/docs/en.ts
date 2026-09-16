@@ -935,11 +935,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      "date": "Not yet released",
-      "title": "Pending: Canvas selection transfers",
+      "date": "September 16, 2026 · 0.31.2",
+      "title": "Orkestrai 0.31.2: Canvas selection transfers",
       "summary": "Copy and move selections between workspaces again.",
       "items": [
-        "Restore copying and moving Canvas selections between workspaces, including large selections of 59 nodes, while preserving internal connections and relative positions. Invalid requests are rejected before changing nodes, with clearer validation feedback."
+        "Restore copying and moving Canvas selections between workspaces, including large selections of 59 nodes, while preserving internal connections and relative positions. Invalid requests are rejected before changing nodes, with clearer validation feedback.",
+        "Save numeric Design edits only once on Enter and wait for pending saves before applying layout, avoiding duplicate revision conflicts."
       ]
     },
     {

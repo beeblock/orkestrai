@@ -5,11 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.31.2 - 2026-09-16
 
 ### Fixed
 
 - Restore copying and moving Canvas selections between workspaces, including large selections of 59 nodes, while preserving internal connections and relative positions. Invalid requests are rejected before changing nodes, with clearer validation feedback.
+- Save numeric Design edits only once on Enter and wait for pending saves before applying layout, avoiding duplicate revision conflicts.
 
 ## 0.31.1 - 2026-09-16
 
