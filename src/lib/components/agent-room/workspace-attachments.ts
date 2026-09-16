@@ -53,7 +53,8 @@ export async function deleteWorkspaceAttachment(
 export function transferHasWorkspaceAttachments(transfer: DataTransfer | null): boolean {
   if (!transfer) return false;
   if (transfer.files.length > 0) return true;
-  return Array.from(transfer.types).includes('text/uri-list');
+  // External file drags are protected until drop: files is empty during dragover.
+  return Array.from(transfer.types).some(type => type === 'Files' || type === 'text/uri-list');
 }
 
 function transferUrl(transfer: DataTransfer): string | null {
@@ -71,14 +72,20 @@ function transferUrl(transfer: DataTransfer): string | null {
 }
 
 export async function attachmentsFromTransfer(workspaceId: string, transfer: DataTransfer): Promise<WorkspaceAttachment[]> {
-  const files = Array.from(transfer.files).slice(0, MAX_WORKSPACE_ATTACHMENTS);
-  const attachments: WorkspaceAttachment[] = [];
-  for (const file of files) attachments.push(await uploadWorkspaceAttachment(workspaceId, file));
+  const files = Array.from(transfer.files);
   const url = transferUrl(transfer);
-  if (url && attachments.length < MAX_WORKSPACE_ATTACHMENTS) {
-    attachments.push(await createWorkspaceLinkAttachment(workspaceId, url));
+  if (files.length + (url ? 1 : 0) > MAX_WORKSPACE_ATTACHMENTS) throw new Error('attachment_too_many');
+  if (files.some(file => file.size > MAX_WORKSPACE_ATTACHMENT_BYTES)) throw new Error('attachment_too_large');
+  const attachments: WorkspaceAttachment[] = [];
+  try {
+    for (const file of files) attachments.push(await uploadWorkspaceAttachment(workspaceId, file));
+    if (url) attachments.push(await createWorkspaceLinkAttachment(workspaceId, url));
+    return attachments;
+  } catch (error) {
+    // These uploads have not been handed to a note, task or prompt yet.
+    await Promise.allSettled(attachments.map(attachment => deleteWorkspaceAttachment(workspaceId, attachment)));
+    throw error;
   }
-  return attachments;
 }
 
 export async function attachmentsFromClipboard(workspaceId: string, clipboard: DataTransfer): Promise<WorkspaceAttachment[]> {

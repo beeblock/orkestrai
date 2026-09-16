@@ -1756,7 +1756,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'create-director',
         title: 'Create the Creative Director',
-        body: 'I add a single Codex agent to control every stage. Use an authenticated Codex account or plan with ImageGen available; no API key is required.',
+        body: 'I add a single Codex agent to control every stage. Use an authenticated Codex account or plan with ImageGen available; no API key is required. You can also drop your own images onto empty Canvas to create references, or onto the agent to attach them to its prompt. Dropping never sends the prompt automatically.',
         action: { kind: 'createAgent', title: 'XYZ Creative Director', provider: 'codex', position: { x: 40, y: 60 } },
         check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'XYZ Creative Director' },
       },

@@ -1,4 +1,10 @@
 {
+  "canvas.image_drop_importing": "Importando {count} imágenes de referencia...",
+  "canvas.image_drop_busy": "La importación de imágenes sigue en curso. Espera antes de soltar otro lote.",
+  "canvas.image_drop_limit": "Suelta entre 1 y 100 archivos de imagen a la vez.",
+  "canvas.image_drop_added": "Se añadieron {count} imágenes de referencia.",
+  "canvas.image_drop_failed": "No se pudieron importar {count} archivos: {files}. Usa imágenes PNG, JPEG, WebP, GIF, AVIF, BMP, ICO o SVG válidas de hasta 10 MB cada una.",
+  "attachment.too_many": "Adjunta hasta {count} archivos o enlaces por lote. No se importó ningún archivo.",
   "integrations.delivery_accepted": "Aceptado por el proveedor",
   "integrations.delivery_uncertain": "Envío sin confirmar",
   "integrations.delivery_pending": "En curso",

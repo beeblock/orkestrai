@@ -1,4 +1,10 @@
 {
+  "canvas.image_drop_importing": "Importing {count} image references...",
+  "canvas.image_drop_busy": "Image import is still in progress. Wait before dropping another batch.",
+  "canvas.image_drop_limit": "Drop between 1 and 100 image files at a time.",
+  "canvas.image_drop_added": "Added {count} image references.",
+  "canvas.image_drop_failed": "Could not import {count} files: {files}. Use valid PNG, JPEG, WebP, GIF, AVIF, BMP, ICO or SVG images up to 10 MB each.",
+  "attachment.too_many": "Attach up to {count} files or links per drop. No files were imported.",
   "integrations.delivery_accepted": "Accepted by provider",
   "integrations.delivery_uncertain": "Send unconfirmed",
   "integrations.delivery_pending": "In progress",

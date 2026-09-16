@@ -10,6 +10,7 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Restore copying and moving Canvas selections between workspaces, including large selections of 59 nodes, while preserving internal connections and relative positions. Invalid requests are rejected before changing nodes, with clearer validation feedback.
+- Restore external file drops: images dropped on empty Canvas become separate persistent reference nodes, while files dropped on an agent become prompt attachments without sending automatically. Recognize protected file drags before drop and preserve every input while uploading.
 - Save numeric Design edits only once on Enter and wait for pending saves before applying layout, avoiding duplicate revision conflicts.
 
 ## 0.31.1 - 2026-09-16

@@ -20,6 +20,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import {
     attachmentPromptReference,
+    MAX_WORKSPACE_ATTACHMENTS,
     attachmentsFromTransfer,
     transferHasWorkspaceAttachments,
     uploadWorkspaceAttachment,
@@ -466,6 +467,8 @@
     } catch (error) {
       attachmentError = error instanceof Error && error.message === 'attachment_too_large'
         ? m['attachment.too_large']()
+        : error instanceof Error && error.message === 'attachment_too_many'
+        ? m['attachment.too_many']({ count: MAX_WORKSPACE_ATTACHMENTS })
         : m['attachment.error']();
     } finally {
       attachmentBusy = false;
@@ -579,6 +582,9 @@
 </script>
 
 <NodeShell
+  onDragOver={handleAttachmentDragOver}
+  onDragLeave={() => (attachmentDropActive = false)}
+  onDrop={handleAttachmentDrop}
   {id}
   {selected}
   class="canvas-terminal"

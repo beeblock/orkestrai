@@ -75,6 +75,7 @@
   import ImageCanvasNode from '$lib/components/agent-room/canvas/ImageCanvasNode.svelte';
   import ImageWorkflowCanvasNode from '$lib/components/agent-room/canvas/ImageWorkflowCanvasNode.svelte';
   import ImageToolbarMenu from '$lib/components/agent-room/canvas/ImageToolbarMenu.svelte';
+  import { MAX_WORKSPACE_ATTACHMENT_BYTES, uploadWorkspaceAttachment } from '$lib/components/agent-room/workspace-attachments.js';
   import ToolbarButton from '$lib/components/agent-room/canvas/ToolbarButton.svelte';
   import RoutinePanel from '$lib/components/agent-room/canvas/RoutinePanel.svelte';
   import RolesPanel from '$lib/components/agent-room/canvas/RolesPanel.svelte';
@@ -470,6 +471,7 @@
   let nodes = $state.raw<Node[]>([]);
   let edges = $state.raw<Edge[]>([]);
   let shapePasteSequence = 0;
+  let importingImages = $state(false);
   let errorMessage = $state('');
   let designModeNodeId = $state<string | null>(null);
 
@@ -1945,6 +1947,75 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  function isCanvasFileDrop(event: DragEvent): boolean {
+    return Boolean(activeWorkspace && !designModeNodeId && !event.defaultPrevented
+      && event.target instanceof Element
+      && event.target.closest('.svelte-flow__pane')
+      && !event.target.closest('.svelte-flow__node, .svelte-flow__panel')
+      && event.dataTransfer && (event.dataTransfer.files.length || Array.from(event.dataTransfer.types).includes('Files')));
+  }
+
+  function handleCanvasFileDragOver(event: DragEvent) {
+    if (!isCanvasFileDrop(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  }
+
+  async function handleCanvasFileDrop(event: DragEvent) {
+    if (!isCanvasFileDrop(event) || !event.dataTransfer || !activeWorkspace || !zoomApi) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // Snapshot destination and File objects before the browser clears its drag store.
+    const workspaceId = activeWorkspace.id;
+    const floorId = visibleFloorId;
+    const files = Array.from(event.dataTransfer.files);
+    if (importingImages) { toast.error(m['canvas.image_drop_busy']()); return; }
+    if (!files.length || files.length > 100) { toast.error(m['canvas.image_drop_limit']()); return; }
+    const origin = zoomApi.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const occupied = nodes.map(node => ({ x: node.position.x, y: node.position.y, width: Number(node.width ?? node.measured?.width ?? 560), height: Number(node.height ?? node.measured?.height ?? 360) }));
+    const failed: string[] = [];
+    let createdCount = 0;
+    importingImages = true;
+    const progressToast = toast.info(m['canvas.image_drop_importing']({ count: files.length }), { duration: 0 });
+    try {
+      for (const file of files) {
+        let objectUrl: string | null = null;
+        try {
+          const supported = /^image\/(png|jpeg|webp|gif|avif|bmp|x-icon|vnd.microsoft.icon|svg\+xml)$/i.test(file.type)
+            || /\.(png|jpe?g|webp|gif|avif|bmp|ico|svg)$/i.test(file.name);
+          if (!supported || file.size === 0 || file.size > MAX_WORKSPACE_ATTACHMENT_BYTES) throw new Error('invalid_image');
+          objectUrl = URL.createObjectURL(file);
+          const image = new Image();
+          image.src = objectUrl;
+          await image.decode();
+          const width = 320;
+          const height = Math.max(180, Math.min(480, Math.round(width * image.naturalHeight / image.naturalWidth) + 40));
+          const position = findFreeCanvasPosition(occupied, { ...origin, width, height }, { rowsPerColumn: 3 });
+          const attachment = await uploadWorkspaceAttachment(workspaceId, file);
+          const node = await api<CanvasNode>(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+            method: 'POST',
+            body: JSON.stringify({ type: 'image', title: file.name.slice(0, 180), ...position, width, height, floorId, payload: { path: attachment.path } }),
+          });
+          occupied.push({ ...position, width, height });
+          createdCount += 1;
+          if (activeWorkspace?.id === workspaceId && visibleFloorId === floorId) {
+            nodes = [...nodes.filter(item => item.id !== node.id), toFlowNode(node)];
+          }
+        } catch {
+          failed.push(file.name);
+        } finally {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+        }
+      }
+      clearWorkspaceViewCache(workspaceId);
+      if (createdCount) toast.success(m['canvas.image_drop_added']({ count: createdCount }));
+      if (failed.length) toast.error(m['canvas.image_drop_failed']({ files: failed.slice(0, 5).join(', '), count: failed.length }));
+    } finally {
+      importingImages = false;
+      toast.dismiss(progressToast);
+    }
+  }
+
   async function addImageNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(320, 240);
@@ -2868,7 +2939,7 @@
   {/snippet}
   </aside>
 
-  <section class="canvas-area" class:drawing={drawTool !== null}>
+  <section class="canvas-area" class:drawing={drawTool !== null} role="region" aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondrop={handleCanvasFileDrop}>
     <SvelteFlowProvider>
     {#if activeWorkspace}
       {#if designModeNodeId}

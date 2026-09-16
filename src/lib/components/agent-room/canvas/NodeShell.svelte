@@ -29,6 +29,9 @@
     /** Titulo em texto puro + callback — habilita renomear com duplo-clique. */
     titleText?: string;
     onRename?: (id: string, title: string) => void;
+    onDragOver?: (event: DragEvent) => void;
+    onDragLeave?: (event: DragEvent) => void;
+    onDrop?: (event: DragEvent) => void;
     /** Classe extra no wrapper (ex.: canvas-terminal) — mantida para testes/estilo. */
     class?: string;
     icon: Snippet;
@@ -49,6 +52,9 @@
     onRemoveConnection,
     titleText = '',
     onRename,
+    onDragOver,
+    onDragLeave,
+    onDrop,
     class: klass = '',
     icon,
     title,
@@ -93,7 +99,7 @@
   );
 </script>
 
-<div class={`node-shell nowheel ${klass}`} class:selected style:--accent={accent}>
+<div class={`node-shell nowheel ${klass}`} class:selected style:--accent={accent} role="group" aria-label={titleText || undefined} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop}>
   <NodeResizer
     isVisible={selected ?? false}
     {minWidth}
