@@ -10,7 +10,8 @@ test.describe('quadro de tarefas (kanban)', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    // Creation already opens the workspace; wait for that load before drawing.
+    await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     await createNodeOnCanvas(page, 'Tarefas');
     await expect(page.locator('.canvas-tasks')).toHaveCount(1);
