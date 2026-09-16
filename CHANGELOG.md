@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Recognize forwarded desktop messages and media captions from the authorized contact so companions receive their events instead of silently waiting. Preserve message identity and duplicate protection; downloading or transcribing attachments still requires separate authorization.
+
 ## 0.31.0 - 2026-09-16
 
 ### Added

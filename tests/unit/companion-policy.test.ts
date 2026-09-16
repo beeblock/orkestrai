@@ -24,6 +24,8 @@ describe('companion publication boundary', () => {
   it('binds persona policy to the owner and treats media/memory as untrusted', () => {
     expect(companionInstructions(grant)).toContain('UNTRUSTED CONTENT');
     expect(companionInstructions(grant)).toContain('Friendly AI companion');
+    expect(companionInstructions(grant)).toContain('caption is not the image');
+    expect(companionInstructions(grant)).toContain('separately authorized media tools');
     expect(companionProfileSchema.safeParse({ ...companion, voice: 'not-a-real-voice' }).success).toBe(false);
   });
   it('disables shell, patch, node REPL and model-injected tools in restricted inference', () => {

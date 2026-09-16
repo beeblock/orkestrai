@@ -15,6 +15,8 @@ import { automationFormSchema } from '$lib/modules/agent-room/contracts/schemas/
 import { computerInboxService } from '$lib/modules/agent-room/application/services/ComputerInboxService.js';
 import { computerInboxRepository } from '$lib/modules/agent-room/infrastructure/repositories/ComputerInboxRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
+import { incomingConversation } from '$lib/modules/agent-room/application/adapters/computers/reply-scope.js';
+import type { ComputerAccessibility } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 
 const folders: string[] = [];
@@ -113,6 +115,45 @@ describe('Computer observation lifecycle', () => {
     expect(observer.status(workspace.id)).toMatchObject({ source: 'accessibility', notifications: 1 });
     now += 120_001;
     expect(observer.eventContent(workspace.id, event.eventId)).toBeNull();
+  });
+
+  it('dispatches a forwarded photo caption through the native filter and durable inbox, then continues with later text', async () => {
+    const { workspace, observer, agent, node, config, task } = await setup('auto');
+    const applicationId = 'net.whatsapp.WhatsApp';
+    const policy = await autonomyPolicyService.get(workspace.id);
+    const grant = { id: uuidv7(), enabled: true, nodeId: node.id, agentId: agent.id, taskId: task.id, applicationId,
+      recipient: { id: '0.0.0', role: 'AXButton', name: 'Taylor' }, composer: { id: '0.0.1', role: 'AXTextArea', name: 'Message' }, send: { id: '0.0.2', role: 'AXButton', name: 'Send' }, incomingMarker: '\u200emessage,', maxCharacters: 2000, maxPerHour: 60, memoryEnabled: false, memoryRetentionDays: 365, allowProactive: false };
+    await autonomyPolicyService.update(workspace.id, { enabled: true, mode: 'bounded', policy: { ...policy.policy, allowedApps: [applicationId], computerReplyGrants: [grant] } });
+    await workspaceRepository.updateNode(node.id, { payload: { computerConfig: { ...config, allowedApplications: [applicationId], watch: { ...config.watch, applicationId, intervalSeconds: 1, cooldownSeconds: 2, replyGrantId: grant.id } } } });
+    let now = Date.now(); vi.spyOn(Date, 'now').mockImplementation(() => now);
+    vi.spyOn(ptySessionManager, 'listLiveForNode').mockReturnValue([{ waiting: true }] as never);
+    const tree: ComputerAccessibility = { available: true, truncated: false, elements: [{ ...grant.recipient, value: '', protected: false, enabled: true, focused: false, actions: ['press'] }] };
+    vi.spyOn(computerService, 'observeAccessibility').mockImplementation(async () => ({ state: 'read', tree: incomingConversation(tree, grant) }));
+    const execute = vi.spyOn(computerService, 'execute');
+    const captures = vi.spyOn(computerService, 'observeWindow');
+    const enqueue = vi.spyOn(routineService, 'enqueueComputerObservation').mockResolvedValue(true);
+    await observer.tick(); now += 1000;
+    const caption = '\u200eForwarded.\n\u200ePhoto, Please collect the package, 09:08, \u200eReceived from Taylor';
+    tree.elements.push({ ...tree.elements[0], role: 'AXStaticText', id: '0.0.3', name: caption });
+    await observer.tick(); now += 1000;
+    expect(observer.status(workspace.id).pendingMessages).toBe(1);
+    await observer.tick(); now += 1000; await observer.tick();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const batch = JSON.parse(observer.eventContent(workspace.id, enqueue.mock.calls[0][2].eventId)!).reply;
+    expect(batch.messages.map((message: { text: string }) => message.text)).toEqual([caption]);
+    expect(batch.deliveryState).toBe('not_attempted');
+    await computerInboxService.acknowledge(workspace.id, grant, batch.batchId, batch.inReplyToDigest, 'replied');
+    now += 1000; await observer.tick();
+    expect(observer.status(workspace.id).pendingMessages).toBe(0);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const followup = '\u200emessage, What time?, 09:09, \u200eReceived from Taylor';
+    tree.elements.push({ ...tree.elements[1], id: '0.0.4', name: followup });
+    now += 1000; await observer.tick(); now += 2000; await observer.tick();
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(observer.eventContent(workspace.id, enqueue.mock.calls[1][2].eventId)!).reply.messages).toEqual([expect.objectContaining({ text: followup })]);
+    expect(captures).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect((await autonomyPolicyService.get(workspace.id)).policy.computerReplyGrants[0].media).toBeUndefined();
   });
 
   it('does not poll unsupported accessibility every tick or take screenshots while native input is busy', async () => {

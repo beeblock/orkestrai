@@ -50,17 +50,34 @@ export function validateReplyInteraction(input: ComputerStepInput, grant: Comput
 
 export function incomingConversation(tree: ComputerAccessibility, grant: ComputerReplyGrant): ComputerAccessibility {
   const scoped = scopedConversation(tree, grant);
-  const incoming = (label: string) => {
+  const incoming = (element: ComputerAccessibility['elements'][number]) => {
+    const label = element.name || element.value;
     if (label.startsWith(grant.incomingMarker)) return true;
     if (grant.media?.enabled && grant.media.receive?.enabled && grant.media.receive.incomingMarkers.some(marker => label.startsWith(marker))) return true;
-    // WhatsApp AX prepends reply metadata before the actual incoming message.
-    // Only strip the observed native prefix, never search an outgoing/quoted body.
-    if (grant.applicationId !== 'net.whatsapp.WhatsApp') return false;
-    const prefix = label.match(/^\u200eReplying to [^\n]{1,2000}\.\n/);
-    return Boolean(prefix && label.slice(prefix[0].length).startsWith(grant.incomingMarker));
+    if (grant.applicationId !== 'net.whatsapp.WhatsApp' || element.role !== 'AXStaticText') return false;
+    // Native forwarding/reply metadata precedes the message type. Never search
+    // inside an outgoing body or its quote for a marker that looks incoming.
+    let message = label;
+    for (let i = 0; i < 3; i++) {
+      const prefix = message.match(/^(?:\u200eForwarded(?: many times)?\.\n|\u200eReplying to [^\n]{1,2000}\.\n)/);
+      if (!prefix) break;
+      message = message.slice(prefix[0].length);
+    }
+    if (message.startsWith('\u200eYour ')) return false;
+    const quotedAt = message.indexOf('.\n\u200eQuoted message.\n');
+    const envelope = quotedAt < 0 ? message : message.slice(0, quotedAt);
+    const sender = ', \u200eReceived from ' + grant.recipient.name;
+    if (!envelope.endsWith(sender)) return false;
+    const beforeSender = envelope.slice(0, -sender.length);
+    // Media notifications/captions are readable conversation metadata even
+    // without file-download permission. Downloading still uses its own grant.
+    return /, \d{1,2}:\d{2}(?: [AP]M)?$/.test(beforeSender)
+      && (message.startsWith(grant.incomingMarker)
+        || /^\u200e(?:Photo|Video|Audio|Voice message|Document|GIF),/.test(message)
+        || /^\u200e[^\n,]{1,2000} sticker,/.test(message));
   };
   // Ignore receipts, our replies, the composer, and other conversations.
-  return { ...scoped, elements: scoped.elements.filter(e => !e.protected && !e.actions.includes('fill') && e.id !== grant.recipient.id && incoming(e.name || e.value)) };
+  return { ...scoped, elements: scoped.elements.filter(e => !e.protected && !e.actions.includes('fill') && e.id !== grant.recipient.id && incoming(e)) };
 }
 
 export function incomingDigest(element: ComputerAccessibility['elements'][number]): string {

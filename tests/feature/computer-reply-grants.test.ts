@@ -408,7 +408,7 @@ describe('Owner-approved conversation replies', () => {
     const grant = { ...s.grant, applicationId: 'net.whatsapp.WhatsApp', incomingMarker: '\u200emessage,' };
     const quoted = '\u200eReplying to \u200eYou.\n\u200emessage, Three questions about the list, 14:34, \u200eReceived from Approved contact.\n\u200eQuoted message.\nEarlier text';
     const names = [quoted, '\u200eYour message, own reply\n' + quoted, '\u200eReplying to someone.\n\u200eYour message, own reply\n\u200emessage, quoted incoming', '\u200emessage, next question, 14:35, \u200eReceived from Approved contact'];
-    s.tree.elements.splice(3, 1, ...names.map((name, i) => ({ ...s.tree.elements[3], id: `0.0.${i + 3}`, name })));
+    s.tree.elements.splice(3, 1, ...names.map((name, i) => ({ ...s.tree.elements[3], role: 'AXStaticText', id: `0.0.${i + 3}`, name })));
     expect(incomingConversation(s.tree, grant).elements.map(e => e.name)).toEqual([names[0], names[3]]);
     expect(incomingConversation(s.tree, { ...grant, applicationId: 'another.chat' }).elements.map(e => e.name)).toEqual([names[3]]);
   });
