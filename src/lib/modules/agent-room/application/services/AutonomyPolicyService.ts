@@ -16,6 +16,8 @@ import { AgentAutonomyAuditEvent } from '../../domain/models/AgentAutonomyAuditE
 import { AgentAutonomyPolicy } from '../../domain/models/AgentAutonomyPolicy.js';
 import { AgentRoutine } from '../../domain/models/AgentRoutine.js';
 import { AgentRoutineRun } from '../../domain/models/AgentRoutineRun.js';
+import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
+import { conversationRoot } from '../adapters/computers/reply-scope.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 
 export type AutonomyPolicyRecord = AutonomyPolicyInput & {
@@ -45,6 +47,8 @@ export type AutonomyOperation = {
   network?: { url: string; method?: string };
   filesystem?: { path: string; permission: 'read' | 'write' | 'create' | 'delete'; size?: number };
   application?: { id: string };
+  /** Set only by ComputerService after native scope, draft ownership and limits checks. Never accepted from a client. */
+  computerReplyAuthorization?: { grantId: string; grantDigest: string; taskId: string; nodeId: string };
 };
 
 export type AutonomyDecision = {
@@ -270,6 +274,23 @@ export class AutonomyPolicyService {
       }
       return { ...grant, root: canonical };
     }));
+    const ids = new Set<string>();
+    for (const grant of validated.policy.computerReplyGrants) {
+      if (ids.has(grant.id)) throw new Error('Duplicate conversation authorization.');
+      ids.add(grant.id);
+      conversationRoot(grant);
+      const identity = (g: typeof grant) => JSON.stringify([g.applicationId, g.recipient, g.agentId, g.taskId, g.nodeId]);
+      const previousGrant = existing.policy.computerReplyGrants.find(previous => previous.id === grant.id);
+      if (previousGrant && identity(previousGrant) !== identity(grant)) throw new Error('Create a new conversation authorization when changing its contact, application, agent or task. Revoke the old grant separately.');
+      // Revocation must remain possible after a task/agent is removed or reassigned.
+      const unchanged = existing.policy.computerReplyGrants.some(previous => previous.id === grant.id && JSON.stringify(previous) === JSON.stringify(grant));
+      if (!grant.enabled || unchanged) continue;
+      const [agent, node, task] = await Promise.all([
+        workspaceRepository.getNode(grant.agentId), workspaceRepository.getNode(grant.nodeId),
+        AgentBoardTask.query().where('workspace_id', workspaceId).where('id', grant.taskId).first(),
+      ]);
+      if (agent?.workspaceId !== workspaceId || agent.type !== 'terminal' || node?.workspaceId !== workspaceId || node.type !== 'computer' || !task || task.getAttribute('assignee_node_id') !== grant.agentId) throw new Error('Conversation authorization must reference this workspace Computer, agent and assigned task.');
+    }
     const now = new Date();
     await AgentAutonomyPolicy.query().where('id', existing.id).update({
       enabled: validated.enabled,
@@ -278,6 +299,13 @@ export class AutonomyPolicyService {
       revision: existing.revision + 1,
       updated_at: now,
     });
+    // Remove private history only after every policy target has validated.
+    // Revocation itself takes effect first, including if cleanup must be retried.
+    const removed = existing.policy.computerReplyGrants.filter(previous => !validated.policy.computerReplyGrants.some(grant => grant.id === previous.id));
+    if (removed.length) {
+      const { conversationMemoryRepository } = await import('../../infrastructure/repositories/ConversationMemoryRepository.js');
+      for (const grant of removed) await conversationMemoryRepository.removeGrant(workspaceId, grant.id);
+    }
     await this.appendAudit({
       workspaceId,
       capability: 'tool',
@@ -322,6 +350,13 @@ export class AutonomyPolicyService {
     }
     if (risk) {
       const requirement = policy.policy.gates[risk] ?? 'user';
+      const authorization = request.computerReplyAuthorization;
+      if (policy.mode === 'bounded' && risk === 'external_publication' && requirement === 'user' && request.capability === 'computer' && ['computer.interact', 'computer.reply', 'computer.send', 'computer.media_send'].includes(request.operation) && request.actorType === 'agent' && authorization) {
+        const grant = policy.policy.computerReplyGrants.find(g => g.id === authorization.grantId && g.enabled);
+        if (grant && (request.operation !== 'computer.send' || grant.allowProactive) && (request.operation !== 'computer.media_send' || grant.media?.enabled) && grant.agentId === request.actorId && grant.taskId === authorization.taskId && grant.nodeId === authorization.nodeId && grant.applicationId.toLowerCase() === request.application?.id.toLowerCase() && createHash('sha256').update(JSON.stringify(grant)).digest('hex') === authorization.grantDigest) {
+          return { status: 'allowed', reason: 'Guarded reply authorized by conversation grant ' + grant.id + '.', policy };
+        }
+      }
       if (requirement !== 'preapproved') {
         return this.gate(policy, request, risk, requirement, 'Risk gate required: ' + risk + '.');
       }

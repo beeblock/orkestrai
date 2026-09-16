@@ -102,6 +102,7 @@ export const workspaceToolManifestSchema = z.object({
   fixtures: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     input: z.record(z.string().max(120), z.unknown()),
+    expectedOutput: z.unknown().optional(),
   }).strict()).max(20).default([]),
 }).strict().superRefine((manifest, context) => {
   const references = new Set(manifest.secretRefs);

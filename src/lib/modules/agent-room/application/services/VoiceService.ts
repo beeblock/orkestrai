@@ -109,6 +109,10 @@ export class VoiceService {
   async speak(text: string, voice?: string, speed?: number): Promise<Buffer> {
     const backend = await this.backend();
     if (backend === 'embedded') {
+      if (voice !== undefined) {
+        const { requireEmbeddedTtsVoice } = await import('../../domain/voice.js');
+        requireEmbeddedTtsVoice(voice);
+      }
       if (!this.embeddedReady()) throw new Error(VOICE_MODELS_MISSING_ERROR);
       return speakWav(
         text,

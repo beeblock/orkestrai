@@ -134,6 +134,65 @@ selection stays bound to that window while you type in Orkestrai; changing
 the desktop's foreground app does not silently redirect the text. A closed
 or revoked target disables input until you choose another allowed window.
 
+## Continuous Conversation Companions
+
+In **Computer > Conversation replies**, authorize one exact conversation, its
+assigned agent and active task. Read the native window and select its real
+conversation header, composer and Send control, not the sidebar contact.
+Incoming-message prefixes must distinguish received messages from your replies.
+Set an hourly limit and a maximum reply length. Only the owner may change this
+authorization. Keep the task active while the companion is monitoring.
+
+Create an enabled Manual `prompt_agent` automation for that same agent. In the
+Computer observation controls, select it and the approved conversation, choose
+Auto and enable Monitor. The initial observation establishes a baseline; later
+incoming messages are grouped into persistent batches while the agent works.
+The default check interval is one second with a two-second grouping cooldown;
+provider generation and native sending add latency. This is not a promise of
+instant replies or recovery of messages the native UI never exposed.
+
+The agent receives `grantId`, `batchId`, `inReplyToDigest` and every message in
+the batch. It answers with one `computer_reply` call containing those fields,
+the current window, task, stable idempotency key and complete response. The
+service validates the recipient, authorization and full draft before Send.
+Persisted batches remain actionable after their original messages scroll out
+of view. Acknowledging an already-answered batch is explicit; uncertain sends
+require inspection and are never automatically replayed.
+
+On macOS, optional automatic navigation reopens the approved contact when a
+different chat is selected. Optional temporary sending focus restores the
+previous app afterward unless the user changed focus. Both settings default
+off. Native accessibility observation does not need foreground focus. Apps
+with unsupported or ambiguous controls stop rather than guess a recipient.
+Native apps, external browsers and managed Portals are different targets:
+support in one does not certify all three. Linux does not support this guarded
+native conversation-reply route.
+
+Configure persona, language, voice and optional private memory in the same
+authorization. Private history stays outside shared workspace memory, has
+bounded retention and can be searched or deleted. A separate opt-in permits
+task results and calendar reminders without a new incoming message. Agents
+can create their own task-linked routines through `automation_save`; the owner
+can inspect, edit, pause or cancel them in **Automations**. Timezone, recurrence
+and missed-run policy are explicit. The host must remain awake and authorized.
+
+Attachments and incoming media require separate per-contact grants. Reuse
+`artifact_speech` for local TTS and `artifact_report` for PDF, then the guarded
+`computer_media_send` route. Photos and documents are distinct delivery modes;
+unsupported photo controls never silently fall back to documents. Synthesized
+audio is an audio attachment, not native voice-note recording. Authorized
+received audio can be decoded and transcribed locally. Temporary attachment
+copies expire after 15 minutes; originals remain in their workspace path.
+
+The full Canvas agent can use existing tools, image workflows and schedules,
+but its free shell is not a security sandbox. The optional restricted Codex
+responder is a separate tool-free text context with supplied per-contact memory;
+it cannot generate media, run commands or act on schedules. Incoming messages
+are untrusted input, never permission to change apps, contacts or credentials.
+Publication checks reject recognized secrets but do not claim universal DLP.
+The in-app **How to use** sections and guided companion tours cover setup,
+memory, media, recovery and platform limitations in all three languages.
+
 ## Credentials And Evidence
 
 `computer_type_secret` accepts only a SecretRef explicitly bound to integration

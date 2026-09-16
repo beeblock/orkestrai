@@ -19,6 +19,8 @@
   import AutonomySecurityPanel from './AutonomySecurityPanel.svelte';
   import IntegrationCenterPanel from './IntegrationCenterPanel.svelte';
   import ToolWorkshopPanel from './ToolWorkshopPanel.svelte';
+  import CalendarScheduleFields from './CalendarScheduleFields.svelte';
+  import { calendarScheduleSchema } from '$lib/modules/agent-room/contracts/schemas/calendar-schedule.schema.js';
   import { automationFormSchema, type AutomationFormInput } from '$lib/modules/agent-room/contracts/schemas/automation.schema.js';
   import type { AutomationRecipe } from '$lib/modules/agent-room/application/catalogs/AutomationRecipeCatalog.js';
   import type { AutomationIntegration, AutomationRun, CanvasNode, Routine } from '$lib/modules/agent-room/domain/types.js';
@@ -72,6 +74,7 @@
   let editorOpen = $state(false);
   let editingId = $state<string | null>(null);
   let pendingDelete = $state<Routine | null>(null);
+  const companionText = m as unknown as Record<string, () => string>;
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -133,6 +136,7 @@
       name: automation.name,
       triggerType: automation.triggerType,
       intervalMinutes: Number(trigger.intervalMinutes ?? automation.intervalMinutes ?? 0) || null,
+      calendar: calendarScheduleSchema.safeParse(trigger.calendar).success ? calendarScheduleSchema.parse(trigger.calendar) : null,
       taskEvent: (trigger.event as AutomationFormInput['taskEvent']) ?? null,
       taskStatus: String(trigger.status ?? '') || null,
       messageContains: String(trigger.contains ?? '') || null,
@@ -272,6 +276,10 @@
   }
 
   function describeTrigger(automation: Routine): string {
+    if (automation.triggerType === 'schedule' && automation.triggerConfig.calendar) {
+      const calendar = calendarScheduleSchema.parse(automation.triggerConfig.calendar);
+      return `${companionText[`companion.${calendar.frequency}`]()} · ${calendar.time} · ${calendar.timeZone}${automation.nextRunAt ? ` · ${companionText['companion.next']()} ${new Date(automation.nextRunAt).toLocaleString()}` : ''}`;
+    }
     if (automation.triggerType === 'schedule') return m['automation.every']({ minutes: Number(automation.triggerConfig.intervalMinutes ?? 0) });
     if (automation.triggerType === 'usage_threshold') return `${automation.triggerConfig.provider} · ${automation.triggerConfig.window} · ${automation.triggerConfig.percent}%`;
     if (automation.triggerType === 'file_change') return String(automation.triggerConfig.path ?? '');
@@ -313,7 +321,11 @@
           <div class={`grid gap-3 ${compact ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <label class="block"><span class="mb-1 block text-ui-xs font-medium">{m['automation.name']()}</span><Input name="automation-name" bind:value={$formData.name} autocomplete="off" /></label>
             <label class="block"><span class="mb-1 block text-ui-xs font-medium">{m['automation.trigger']()}</span><Select.Root type="single" value={$formData.triggerType} onValueChange={(value) => { $formData.triggerType = value as AutomationFormInput['triggerType']; if (value === 'webhook' && !$formData.webhookSecret) $formData.webhookSecret = crypto.randomUUID(); }}><Select.Trigger class="w-full">{triggerLabel($formData.triggerType)}</Select.Trigger><Select.Content>{#each ['manual','schedule','task','message','git_commit','github_pull_request','webhook','file_change','usage_threshold'] as type}<Select.Item value={type}>{triggerLabel(type as Routine['triggerType'])}</Select.Item>{/each}</Select.Content></Select.Root></label>
-            {#if $formData.triggerType === 'schedule'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.interval']()}</span><Input type="number" min="1" bind:value={$formData.intervalMinutes} /></label>{/if}
+            {#if $formData.triggerType === 'schedule'}
+              <label class="space-y-1 text-xs"><span>{companionText['companion.schedule_mode']()}</span><Select.Root type="single" value={$formData.calendar ? 'calendar' : 'interval'} onValueChange={mode => { $formData.calendar = mode === 'calendar' ? calendarScheduleSchema.parse({ frequency: 'weekly', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', time: '14:00', weekdays: [1] }) : null; $formData.intervalMinutes = mode === 'calendar' ? null : 60; }}><Select.Trigger class="w-full">{$formData.calendar ? companionText['companion.calendar']() : m['automation.interval']()}</Select.Trigger><Select.Content><Select.Item value="interval">{m['automation.interval']()}</Select.Item><Select.Item value="calendar">{companionText['companion.calendar']()}</Select.Item></Select.Content></Select.Root></label>
+              {#if $formData.calendar}<div class={compact ? '' : 'col-span-2'}><CalendarScheduleFields bind:value={$formData.calendar} /></div>
+              {:else}<label class="space-y-1 text-xs"><span>{m['automation.interval']()}</span><Input type="number" min="1" bind:value={$formData.intervalMinutes} /></label>{/if}
+            {/if}
             {#if $formData.triggerType === 'task'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.task_event']()}</span><Select.Root type="single" value={$formData.taskEvent ?? undefined} onValueChange={(value) => ($formData.taskEvent = value as AutomationFormInput['taskEvent'])}><Select.Trigger class="w-full">{$formData.taskEvent ? ({created:m['automation.event_created'],updated:m['automation.event_updated'],status_changed:m['automation.event_status_changed'],completed:m['automation.event_completed']}[$formData.taskEvent])() : m['automation.task_event']()}</Select.Trigger><Select.Content><Select.Item value="created">{m['automation.event_created']()}</Select.Item><Select.Item value="updated">{m['automation.event_updated']()}</Select.Item><Select.Item value="status_changed">{m['automation.event_status_changed']()}</Select.Item><Select.Item value="completed">{m['automation.event_completed']()}</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1 block text-ui-xs font-medium">{m['automation.task_status']()}</span><Input bind:value={$formData.taskStatus} /></label>{/if}
             {#if $formData.triggerType === 'message'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.message_contains']()}</span><Input bind:value={$formData.messageContains} /></label>{/if}
             {#if $formData.triggerType === 'git_commit'}<label><span class="mb-1 block text-ui-xs font-medium">{m['automation.git_branch']()}</span><Input bind:value={$formData.gitBranch} /></label>{/if}

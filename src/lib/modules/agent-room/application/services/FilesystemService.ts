@@ -19,7 +19,7 @@ export type FsInspection = {
   size: number;
   modifiedAt: string;
   contentType: string;
-  kind: 'text' | 'markdown' | 'image' | 'pdf' | 'binary';
+  kind: 'text' | 'markdown' | 'image' | 'pdf' | 'audio' | 'binary';
 };
 
 const MAX_READ_BYTES = 512 * 1024; // 512 KB
@@ -128,6 +128,8 @@ export class FilesystemService {
     if (extension === 'pdf') {
       return { path: file, name, extension, size: info.size, modifiedAt: info.mtime.toISOString(), contentType: 'application/pdf', kind: 'pdf' };
     }
+    const audioTypes: Record<string,string> = { wav:'audio/wav',mp3:'audio/mpeg',ogg:'audio/ogg',m4a:'audio/mp4',flac:'audio/flac',opus:'audio/ogg' };
+    if (audioTypes[extension]) return { path:file,name,extension,size:info.size,modifiedAt:info.mtime.toISOString(),contentType:audioTypes[extension],kind:'audio' };
     let looksBinary = false;
     const handle = await open(file, 'r');
     try {
@@ -309,6 +311,7 @@ export class FilesystemService {
         webp: 'image/webp',
         svg: 'image/svg+xml',
         pdf: 'application/pdf',
+        wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg', m4a: 'audio/mp4', flac: 'audio/flac',
         txt: 'text/plain; charset=utf-8',
         md: 'text/markdown; charset=utf-8',
         json: 'application/json; charset=utf-8',

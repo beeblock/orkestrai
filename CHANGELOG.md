@@ -5,6 +5,28 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.31.0 - 2026-09-16
+
+### Added
+
+- Monitor authorized desktop conversations in the background and wake the Canvas agent when new messages arrive. On macOS, optional automatic navigation reopens the approved contact.
+
+- Process incoming messages in persistent batches, including after reopening a chat, with complete-draft verification, duplicate-send protection and recovery for interrupted composition.
+
+- Configure each companion's persona, language and voice, with optional private conversation memory, sourced preferences, retention controls and deletion.
+
+- Let agents create and manage task-linked calendar schedules for reminders and reports, with timezones, recurrence and missed-run handling.
+
+- Configure native photo and file delivery, authorized incoming audio transcription, 30 local TTS voice presets and audio playback in the Workbench. Media controls depend on the supported application; synthesized audio is an attachment, not a native voice note.
+
+- Keep desktop access scoped to approved applications and contacts, with publication safeguards, auditable actions and automatic cleanup of temporary captures and attachments.
+
+### Fixed
+
+- Improve Computer panel reliability, permission feedback and observation controls across Canvas and Workbench.
+
+- Harden integration delivery against duplicate retries and improve the contracts and validation for agent-created tools.
+
 ## 0.30.0 - 2026-09-11
 
 ### Added And Fixed

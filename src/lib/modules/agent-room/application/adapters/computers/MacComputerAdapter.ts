@@ -1,8 +1,15 @@
 import { access, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { ComputerAdapter } from './types.js';
-import type { ComputerCommandInput, ComputerSnapshot } from '../../../contracts/schemas/computer.schema.js';
+import type { ComputerCommandInput, ComputerInteraction, ComputerSnapshot } from '../../../contracts/schemas/computer.schema.js';
 import { runNative } from './native-runner.js';
+import { MAC_ACCESSIBILITY_SCRIPT, MAC_ACCESSIBILITY_SESSION_SCRIPT } from './mac-accessibility.js';
+import { macNativeSessionScript } from './mac-native-session.js';
+import { MAC_SCOPED_WINDOW_READ } from './mac-window-read.js';
+import { MAC_TEXT_EVENTS } from './mac-text-events.js';
+import { parseAccessibility, unavailableAccessibility } from './accessibility.js';
+import { NativeInteractionError } from './native-interaction-error.js';
+import { acquireMacForeground } from './mac-foreground.js';
 
 const DISPLAY_SCRIPT = `ObjC.import('AppKit'); function run(){const screens=$.NSScreen.screens.js;const primaryHeight=Number(screens[0]?.frame.size.height||0);return JSON.stringify(screens.map((s,i)=>({id:String(i+1),name:String(s.localizedName.js),bounds:{x:Number(s.frame.origin.x),y:primaryHeight-Number(s.frame.origin.y)-Number(s.frame.size.height),width:Number(s.frame.size.width),height:Number(s.frame.size.height)},scaleFactor:Number(s.backingScaleFactor),primary:i===0})));}`;
 const WINDOW_IDENTITY_SCRIPT = `
@@ -20,9 +27,12 @@ function matchesBounds(native, position, size) {
 }`;
 
 export const MAC_WINDOW_SCRIPT = `${WINDOW_IDENTITY_SCRIPT}
-function run() {
+${MAC_SCOPED_WINDOW_READ}
+function run(argv) {
   const registered = nativeWindows();
-  const processes = Application('System Events').applicationProcesses.whose({visible:true})();
+  const pid = Number(argv && argv[0]);
+  if(pid)return JSON.stringify(readScopedNativeWindows(pid,registered));
+  const processes = Application('System Events').applicationProcesses.whose(pid ? {unixId:pid} : {visible:true})();
   return JSON.stringify(processes.slice(0,100).flatMap(p => {
     const pid = Number(p.unixId()), appName = String(p.name());
     let appId = appName, windows = [];
@@ -38,6 +48,64 @@ function run() {
       } catch { return []; }
     });
   }).slice(0,500));
+}`;
+
+const MAC_SNAPSHOT_HANDLER = `${DISPLAY_SCRIPT.replace('function run()', 'function readDisplays()')}
+${MAC_WINDOW_SCRIPT.replace('function run(argv)', 'function readWindows(argv)')}
+ObjC.import('ApplicationServices');
+function readSnapshot(argv) {
+  const displays=JSON.parse(readDisplays());
+  let accessibility=false;
+  // The global UI scripting switch stays true even when this app's signature
+  // loses its TCC grant after a local replacement. Check the actual caller.
+  try{accessibility=Boolean($.AXIsProcessTrusted());}catch{}
+  return JSON.stringify({displays,accessibility,windows:accessibility?JSON.parse(readWindows(argv)):[]});
+}`;
+export const MAC_SNAPSHOT_SCRIPT = MAC_SNAPSHOT_HANDLER + '\nfunction run(argv){return readSnapshot(argv);}';
+const MAC_SNAPSHOT_SESSION_SCRIPT = macNativeSessionScript('readSnapshot', MAC_SNAPSHOT_HANDLER);
+
+// System Events "click at" performs an Accessibility action, which can silently
+// do nothing on custom list rows. Post actual mouse down/up events instead.
+export const MAC_CLICK_SCRIPT = `
+ObjC.import('CoreGraphics');
+ObjC.bindFunction('CGPreflightPostEventAccess',['bool',[]]);
+function run(argv) {
+  const x = Number(argv[0]), y = Number(argv[1]), count = Number(argv[2]);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isInteger(count) || count < 1 || count > 3) throw new Error('Invalid mouse input.');
+  if (!$.CGPreflightPostEventAccess()) throw new Error('Accessibility permission is required for native input.');
+  const position = $.CGPointMake(x,y);
+  for (let i = 1; i <= count; i++) {
+    const down = $.CGEventCreateMouseEvent(null,$.kCGEventLeftMouseDown,position,$.kCGMouseButtonLeft);
+    const up = $.CGEventCreateMouseEvent(null,$.kCGEventLeftMouseUp,position,$.kCGMouseButtonLeft);
+    if (!down || !up) throw new Error('Could not create native mouse input.');
+    $.CGEventSetFlags(down,0); $.CGEventSetFlags(up,0);
+    $.CGEventSetIntegerValueField(down,$.kCGMouseEventClickState,i);
+    $.CGEventSetIntegerValueField(up,$.kCGMouseEventClickState,i);
+    $.CGEventPost($.kCGHIDEventTap,down);
+    delay(0.02);
+    $.CGEventPost($.kCGHIDEventTap,up);
+    if (i < count) delay(0.04);
+  }
+}`;
+
+// NSData owns the UTF-16 buffer. The explicit pointer binding avoids JXA's
+// incompatible void*/UniChar* Ref coercion without using the user's clipboard.
+export const MAC_TYPE_SCRIPT = `
+ObjC.import('Foundation'); ObjC.import('CoreGraphics');
+ObjC.bindFunction('CGPreflightPostEventAccess',['bool',[]]);
+ObjC.bindFunction('CGEventKeyboardSetUnicodeString',['void',['void *','unsigned long','void *']]);
+${MAC_TEXT_EVENTS}
+function run() {
+  const input = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+  const decoded = $.NSString.alloc.initWithDataEncoding(input,$.NSUTF8StringEncoding);
+  if (decoded.isNil()) throw new Error('Invalid native text encoding.');
+  const value = decoded.js;
+  if (value.length > 20000) throw new Error('Native text input exceeded the safe limit.');
+  if (!$.CGPreflightPostEventAccess()) throw new Error('Accessibility permission is required for native input.');
+  for (const chunk of unicodeChunks(value)) {
+    for (const event of unicodeEvents(chunk)) $.CGEventPost($.kCGHIDEventTap,event);
+    delay(0.002);
+  }
 }`;
 
 export const MAC_FOCUS_SCRIPT = `${WINDOW_IDENTITY_SCRIPT}
@@ -69,24 +137,63 @@ function keyCode(key: string): number | null {
 
 export class MacComputerAdapter implements ComputerAdapter {
   readonly platform = 'macos' as const;
+  readonly backgroundWindowCapture = true;
+  readonly backgroundInteraction = true;
   private screenRecordingGranted = false;
+
+  private async accessibility(request: { targetId: string; appId: string; background?: boolean } & Partial<ComputerInteraction>) {
+    const result = await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_ACCESSIBILITY_SCRIPT], {
+      input: JSON.stringify(request), structuredOutput: true, timeoutMs: request.action === 'fill' ? 15_000 : 5000,
+      persistent: { script: MAC_ACCESSIBILITY_SESSION_SCRIPT, scope: 'mac-ax:' + request.targetId.split(':')[0] },
+    });
+    const parsed = JSON.parse(result.stdout);
+    if (parsed.error) {
+      if (!request.action && ['accessibility_unavailable', 'accessibility_failed'].includes(parsed.error)) return unavailableAccessibility();
+      throw new NativeInteractionError(`Native accessibility check failed (${String(parsed.error).replace(/[^a-z_]/g, '').slice(0, 60)}). ${parsed.inputAttempted === false ? 'No native input was attempted.' : 'No automatic retry; inspect the current target.'}`, parsed.inputAttempted !== false);
+    }
+    return parseAccessibility(parsed);
+  }
+
+  read(targetId: string, appId: string) { return this.accessibility({ targetId, appId }); }
+  acquireForeground(targetId: string, appId: string) { return acquireMacForeground(targetId, appId); }
+  interact(input: ComputerInteraction, appId: string, options?: { background: boolean }) { return this.accessibility({ ...input, appId, background: options?.background === true }); }
+
+  async attachFile(input: Parameters<NonNullable<ComputerAdapter['attachFile']>>[0]) {
+    const preview = await this.selectFile(input, 'open');
+    return { ...preview, selectedFile: { path: input.path, targetId: input.targetId, applicationId: input.appId } };
+  }
+
+  async receiveFile(input: Parameters<NonNullable<ComputerAdapter['receiveFile']>>[0]) {
+    return this.selectFile(input, 'save');
+  }
+
+  private async selectFile(input: Parameters<NonNullable<ComputerAdapter['attachFile']>>[0], mode: 'open' | 'save') {
+    const result = await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_ACCESSIBILITY_SCRIPT], {
+      input: JSON.stringify({ targetId: input.targetId, appId: input.appId, guards: input.guards, file: { mode, path: input.path, open: input.open, menu: input.menu } }), structuredOutput: true, timeoutMs: 15_000,
+    });
+    const parsed = JSON.parse(result.stdout);
+    if (parsed.error) throw new Error(`Native file selection failed (${String(parsed.error).replace(/[^a-z_]/g, '').slice(0, 60)}). Inspect the dialog before retrying.`);
+    return parseAccessibility(parsed);
+  }
 
   async launch(applicationId: string): Promise<void> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(applicationId)) throw new Error('Invalid application identifier.');
     await runNative('/usr/bin/open', ['-b', applicationId]);
   }
 
-  async snapshot(): Promise<ComputerSnapshot> {
+  async snapshot(scope?: { windowId?: string }): Promise<ComputerSnapshot> {
     if (process.platform !== 'darwin') return this.unavailable();
-    const displays = parseJson<ComputerSnapshot['displays']>((await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', DISPLAY_SCRIPT])).stdout, []);
-    const accessibilityCheck = await runNative('/usr/bin/osascript', ['-e', 'tell application "System Events" to get UI elements enabled'], { allowFailure: true });
-    const accessibility = accessibilityCheck.code === 0 && accessibilityCheck.stdout.trim() === 'true' ? 'granted' as const : 'denied' as const;
-    const windowResult = accessibility === 'granted'
-      ? await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_WINDOW_SCRIPT], { allowFailure: true })
-      : null;
-    const parsed = windowResult ? parseJson<ComputerSnapshot['windows'] | null>(windowResult.stdout, null) : [];
-    const windows = Array.isArray(parsed) ? parsed : [];
-    const failed = windowResult !== null && (windowResult.code !== 0 || !Array.isArray(parsed));
+    const target = scope?.windowId?.match(/^([1-9]\d*):cg:([1-9]\d*)$/);
+    if (scope?.windowId && !target) throw new Error('Invalid macOS window reference. Inspect again.');
+    const result = await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_SNAPSHOT_SCRIPT, ...(target ? ['--', target[1]] : [])], {
+      allowFailure: true, input: JSON.stringify(target ? [target[1]] : []), structuredOutput: true,
+      persistent: { script: MAC_SNAPSHOT_SESSION_SCRIPT, scope: 'mac-snapshot:' + (target?.[1] ?? 'all') },
+    });
+    const parsed = parseJson<{ displays: ComputerSnapshot['displays']; windows: ComputerSnapshot['windows']; accessibility: boolean } | null>(result.stdout, null);
+    const accessibility = parsed?.accessibility === true ? 'granted' as const : 'denied' as const;
+    const windows = Array.isArray(parsed?.windows) ? parsed.windows : [];
+    const displays = Array.isArray(parsed?.displays) ? parsed.displays : [];
+    const failed = result.code !== 0 || !parsed || !Array.isArray(parsed.windows) || !Array.isArray(parsed.displays);
     return {
       platform: this.platform,
       available: !failed,
@@ -107,8 +214,8 @@ export class MacComputerAdapter implements ComputerAdapter {
 
   async click(point: { x: number; y: number; button: 'left' | 'right' | 'middle'; count: number }): Promise<void> {
     if (point.button !== 'left') throw new Error('macOS right and middle clicks are not available through the accessibility adapter.');
-    const statements = Array.from({ length: point.count }, () => `click at {${point.x}, ${point.y}}`).join('\n');
-    await runNative('/usr/bin/osascript', ['-e', `tell application "System Events"\n${statements}\nend tell`]);
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isInteger(point.count) || point.count < 1 || point.count > 3) throw new Error('Invalid mouse input.');
+    await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_CLICK_SCRIPT, '--', String(point.x), String(point.y), String(point.count)]);
   }
 
   async type(text: string): Promise<void> {
@@ -116,8 +223,7 @@ export class MacComputerAdapter implements ComputerAdapter {
   }
 
   async typeSensitive(text: string): Promise<void> {
-    const script = `ObjC.import('Foundation');function run(){const data=$.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;const value=$.NSString.alloc.initWithDataEncoding(data,$.NSUTF8StringEncoding).js;Application('System Events').keystroke(value);}`;
-    await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', script], { input: text });
+    await runNative('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_TYPE_SCRIPT], { input: text });
   }
 
   async shortcut(keys: string[]): Promise<void> {
@@ -134,7 +240,7 @@ export class MacComputerAdapter implements ComputerAdapter {
     await runNative('/usr/bin/osascript', ['-e', `tell application "System Events" to ${action}`]);
   }
 
-  async screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: { evidencePath: string }): Promise<{ width: number | null; height: number | null }> {
+  async screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: { evidencePath: string; passive?: boolean }): Promise<{ width: number | null; height: number | null }> {
     await mkdir(dirname(context.evidencePath), { recursive: true });
     const args = ['-x', '-t', 'png'];
     if (input.target === 'display') {
@@ -142,13 +248,15 @@ export class MacComputerAdapter implements ComputerAdapter {
       args.push('-D', input.targetId);
     } else if (input.target === 'window') {
       if (!input.targetId) throw new Error('A target window is required.');
-      const snapshot = await this.snapshot();
+      const snapshot = await this.snapshot({ windowId: input.targetId });
       const window = snapshot.windows.find((candidate) => candidate.id === input.targetId);
       if (!window?.bounds) throw new Error('The target window or its bounds are unavailable.');
-      await this.focus(window.id);
-      await new Promise((resolve) => setTimeout(resolve, 120));
-      const refreshed = (await this.snapshot()).windows.find((candidate) => candidate.id === window.id);
-      if (!refreshed?.focused || !refreshed.bounds || refreshed.appId !== window.appId) throw new Error('Target window lost focus or bounds before capture.');
+      if (!context.passive && !window.focused) {
+        await this.focus(window.id);
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      const refreshed = (await this.snapshot({ windowId: window.id })).windows.find((candidate) => candidate.id === window.id);
+      if (!refreshed?.bounds || refreshed.appId !== window.appId || (!context.passive && !refreshed.focused)) throw new Error('Target window lost focus or bounds before capture.');
       args.push('-l', window.id.split(':cg:')[1], '-o');
     }
     args.push(context.evidencePath);

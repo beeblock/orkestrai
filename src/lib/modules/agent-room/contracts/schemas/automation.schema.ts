@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarScheduleSchema } from './calendar-schedule.schema.js';
 
 export const automationTriggerTypeSchema = z.enum([
   'manual', 'schedule', 'task', 'message', 'git_commit', 'github_pull_request',
@@ -11,6 +12,7 @@ export const automationFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
   triggerType: automationTriggerTypeSchema,
   intervalMinutes: z.coerce.number().int().min(1).max(525_600).nullish(),
+  calendar: calendarScheduleSchema.nullish(),
   taskEvent: z.enum(['created', 'updated', 'status_changed', 'completed']).nullish(),
   taskStatus: z.string().trim().max(80).nullish(),
   messageContains: z.string().trim().max(500).nullish(),
@@ -42,9 +44,10 @@ export const automationFormSchema = z.object({
   enabled: z.boolean().default(true),
   recipeId: z.string().trim().max(80).nullish(),
 }).superRefine((value, context) => {
-  if (value.triggerType === 'schedule' && !value.intervalMinutes) {
+  if (value.triggerType === 'schedule' && !value.intervalMinutes && !value.calendar) {
     context.addIssue({ code: 'custom', path: ['intervalMinutes'], message: 'Interval is required.' });
   }
+  if (value.triggerType === 'schedule' && value.intervalMinutes && value.calendar) context.addIssue({ code: 'custom', path: ['calendar'], message: 'Choose an interval or a calendar schedule, not both.' });
   if (value.triggerType === 'task' && !value.taskEvent) {
     context.addIssue({ code: 'custom', path: ['taskEvent'], message: 'Task event is required.' });
   }

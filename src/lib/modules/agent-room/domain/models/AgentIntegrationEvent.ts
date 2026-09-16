@@ -7,7 +7,7 @@ export class AgentIntegrationEvent extends Model {
   static timestamps = false;
   static fillable = [
     'id', 'workspace_id', 'integration_id', 'direction', 'kind', 'idempotency_key',
-    'status', 'payload_json', 'error', 'processed_at', 'created_at', 'updated_at',
+    'status', 'request_digest', 'payload_json', 'error', 'processed_at', 'created_at', 'updated_at',
   ];
 
   static casts = {

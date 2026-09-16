@@ -14,11 +14,13 @@ import { providerProfileService } from '$lib/modules/agent-room/application/serv
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
 import { afterDatabaseReady } from '$lib/modules/agent-room/infrastructure/background-startup.js';
+import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
 const globalRef = globalThis as unknown as {
   __orkestraiRoutineScheduler?: boolean;
   __orkestraiAgentRuntimeSupervisor?: boolean;
+  __orkestraiComputerObserver?: boolean;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
 };
@@ -30,6 +32,10 @@ globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
 };
 if (!building) {
   void afterDatabaseReady(() => {
+    if (!globalRef.__orkestraiComputerObserver) {
+      computerObservationService.start();
+      globalRef.__orkestraiComputerObserver = true;
+    }
     if (!globalRef.__orkestraiRoutineScheduler) {
       routineService.startScheduler();
       globalRef.__orkestraiRoutineScheduler = true;

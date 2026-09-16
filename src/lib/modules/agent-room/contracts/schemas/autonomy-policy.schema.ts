@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { computerReplyGrantSchema } from './computer-reply.schema.js';
 
 export const autonomyModeSchema = z.enum(['observe', 'prepare', 'ask_mutations', 'bounded']);
 export const autonomyCapabilitySchema = z.enum([
@@ -33,6 +34,7 @@ export const networkGrantSchema = z.object({
 
 export const autonomyPolicyDocumentSchema = z.object({
   halted: z.boolean().default(false),
+  computerReplyGrants: z.array(computerReplyGrantSchema).max(32).default([]),
   toolPublication: z.object({
     enabled: z.boolean().default(false),
     agentIds: z.array(z.string().uuid()).max(100).default([]),

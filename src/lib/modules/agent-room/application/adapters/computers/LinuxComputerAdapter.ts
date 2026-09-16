@@ -73,15 +73,18 @@ export class LinuxComputerAdapter implements ComputerAdapter {
   async typeSensitive(_text: string): Promise<void> { throw new Error('Secure credential typing is unavailable on this Linux desktop backend. Use an API integration or a managed Portal SecretRef instead.'); }
   async shortcut(keys: string[]): Promise<void> { await runNative('xdotool', ['key', '--clearmodifiers', keys.join('+')]); }
 
-  async screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: { evidencePath: string }): Promise<{ width: number | null; height: number | null }> {
+  async screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: { evidencePath: string; passive?: boolean }): Promise<{ width: number | null; height: number | null }> {
     await mkdir(dirname(context.evidencePath), { recursive: true });
     if (input.target === 'display') throw new Error('Display-only capture is unavailable in the Linux adapter; capture all displays or an allowed window.');
     if (input.target === 'window') {
       if (!input.targetId) throw new Error('A target window is required.');
-      await this.focus(input.targetId);
+      if (!context.passive) await this.focus(input.targetId);
+      const focused = (await this.snapshot()).focusedWindowId;
+      if (focused !== input.targetId) throw new Error('Target window lost focus before capture.');
       if (await available('gnome-screenshot')) await runNative('gnome-screenshot', ['-w', '-f', context.evidencePath]);
       else if (await available('scrot')) await runNative('scrot', ['-u', context.evidencePath]);
       else throw new Error('Install gnome-screenshot or scrot to capture windows.');
+      if ((await this.snapshot()).focusedWindowId !== input.targetId) throw new Error('Target window lost focus during capture.');
     } else if (await available('gnome-screenshot')) await runNative('gnome-screenshot', ['-f', context.evidencePath]);
     else if (await available('scrot')) await runNative('scrot', [context.evidencePath]);
     else throw new Error('Install gnome-screenshot or scrot to capture the desktop.');

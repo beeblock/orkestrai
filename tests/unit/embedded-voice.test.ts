@@ -5,6 +5,7 @@ import {
   embeddedTtsVoice,
   normalizeEmbeddedTtsSpeed,
   normalizeEmbeddedTtsVoice,
+  requireEmbeddedTtsVoice,
 } from '$lib/modules/agent-room/domain/voice.js';
 
 function makeWav(samples: number[], rate = 16_000, channels = 1): Buffer {
@@ -63,10 +64,15 @@ describe('wavToPcm16 / pcmToWav', () => {
 });
 
 describe('vozes Supertonic', () => {
-  it('oferece um preset para cada locale suportado pelo app', () => {
-    expect(EMBEDDED_TTS_VOICES.map((voice) => voice.locale)).toEqual(['pt-BR', 'en-US', 'es-MX']);
-    expect(EMBEDDED_TTS_VOICES.map((voice) => voice.language)).toEqual(['pt', 'en', 'es']);
-    expect(new Set(EMBEDDED_TTS_VOICES.map((voice) => voice.sid)).size).toBe(3);
+  it('offers the ten bundled styles in each supported language without changing legacy ids', () => {
+    expect(EMBEDDED_TTS_VOICES).toHaveLength(30);
+    for (const locale of ['pt-BR', 'en-US', 'es-MX']) {
+      expect(EMBEDDED_TTS_VOICES.filter(voice => voice.locale === locale).map(voice => voice.sid)).toEqual([0,1,2,3,4,5,6,7,8,9]);
+    }
+    expect(new Set(EMBEDDED_TTS_VOICES.map(voice => voice.id)).size).toBe(30);
+    expect(requireEmbeddedTtsVoice('en-US-m2').sid).toBe(6);
+    expect(requireEmbeddedTtsVoice('pt-BR-m5').sid).toBe(9);
+    expect(() => requireEmbeddedTtsVoice('invented')).toThrow('Unsupported');
   });
 
   it('migra vozes legadas do Kokoro e rejeita ids desconhecidos', () => {

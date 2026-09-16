@@ -1,11 +1,14 @@
-export const EMBEDDED_TTS_VOICES = [
-  { id: 'pt-BR-f1', locale: 'pt-BR', language: 'pt', sid: 0 },
-  { id: 'en-US-m2', locale: 'en-US', language: 'en', sid: 6 },
-  { id: 'es-MX-f3', locale: 'es-MX', language: 'es', sid: 2 },
+const locales = [
+  { locale: 'pt-BR', language: 'pt' },
+  { locale: 'en-US', language: 'en' },
+  { locale: 'es-MX', language: 'es' },
 ] as const;
-
-export type EmbeddedTtsVoiceId = (typeof EMBEDDED_TTS_VOICES)[number]['id'];
-export type EmbeddedTtsVoice = (typeof EMBEDDED_TTS_VOICES)[number];
+const styles = ['f1', 'f2', 'f3', 'f4', 'f5', 'm1', 'm2', 'm3', 'm4', 'm5'] as const;
+export type EmbeddedTtsVoiceId = `${typeof locales[number]['locale']}-${typeof styles[number]}`;
+export type EmbeddedTtsVoice = typeof locales[number] & { id: EmbeddedTtsVoiceId; style: typeof styles[number]; sid: number };
+// The pinned Supertonic voice.bin contains F1..F5 followed by M1..M5.
+export const EMBEDDED_TTS_VOICES: readonly EmbeddedTtsVoice[] = locales.flatMap(locale =>
+  styles.map((style, sid) => ({ ...locale, style, sid, id: `${locale.locale}-${style}` as EmbeddedTtsVoiceId })));
 
 export const DEFAULT_EMBEDDED_TTS_VOICE: EmbeddedTtsVoiceId = 'pt-BR-f1';
 export const DEFAULT_EMBEDDED_TTS_SPEED = 1;
@@ -23,6 +26,13 @@ export function embeddedTtsVoice(value?: string | null): EmbeddedTtsVoice {
 export function normalizeEmbeddedTtsVoice(value?: string | null): EmbeddedTtsVoiceId {
   if (!value || LEGACY_KOKORO_VOICES.has(value)) return DEFAULT_EMBEDDED_TTS_VOICE;
   return embeddedTtsVoice(value).id;
+}
+
+/** Explicit requests must not silently select another voice. */
+export function requireEmbeddedTtsVoice(value: string): EmbeddedTtsVoice {
+  const voice = EMBEDDED_TTS_VOICES.find(candidate => candidate.id === value);
+  if (!voice) throw new Error('Unsupported local voice. Choose an id from the voice catalog.');
+  return voice;
 }
 
 export function normalizeEmbeddedTtsSpeed(value?: string | number | null): number {

@@ -3,6 +3,7 @@ import type { AgentModelOption, AgentRunRequest, ModelEffort } from '../../domai
 import { cliInvocation, probeCliVersion } from '../../infrastructure/agent-path.js';
 import type { AgentAdapter, AgentCommandSpec, AgentDetection, ParsedAgentOutput } from './types.js';
 import { parseJsonLinesOutput } from './json-lines.js';
+import { codexCompanion } from './codex-companion.js';
 
 const CODEX_FALLBACK_OPTIONS: AgentModelOption[] = [
   { provider: 'codex', value: 'gpt-5.5', label: 'GPT-5.5', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] },
@@ -17,6 +18,7 @@ export const codexAdapter: AgentAdapter = {
   id: 'codex',
   displayName: 'Codex',
   supportsResume: false,
+  respondPrivately: codexCompanion,
   efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   sessionStorage: 'codex-rollout-jsonl',
   profileStrategy: { kind: 'configDir', envVar: 'CODEX_HOME', defaultDir: '~/.codex' },

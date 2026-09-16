@@ -72,6 +72,8 @@ export interface AgentAdapter {
   detect(): Promise<AgentDetection>;
   /** Monta o comando headless one-shot a partir do payload de execucao. */
   buildCommand(request: AgentRunRequest): AgentCommandSpec;
+  /** Separate tool-free inference; never reuse an interactive development session. */
+  respondPrivately?(input: { instructions: string; content: string; model?: string | null; launchArgs?: string[]; signal?: AbortSignal; profileEnv?: Record<string, string> }): Promise<string>;
   /** Monta o comando TUI interativo para rodar o agente num terminal PTY. */
   interactiveCommand(options?: { model?: string; effort?: ModelEffort | null }): AgentCommandSpec;
   /**

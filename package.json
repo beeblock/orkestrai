@@ -1,6 +1,6 @@
 {
   "name": "orkestrai",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "description": "A visual canvas for orchestrating multidisciplinary teams of AI agents.",
   "private": true,
   "license": "Apache-2.0",
@@ -20,6 +20,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js build",
+    "postbuild": "node scripts/build-computer-host.mjs",
     "preview": "vite preview",
     "postinstall": "patch-package && node scripts/ensure-node-pty-helper.mjs",
     "start": "node scripts/orkestrai-server.mjs",
@@ -92,6 +93,7 @@
     "@postman/tough-cookie": "^4.1.3-postman.1",
     "@readme/openapi-parser": "^7.0.1",
     "@tanstack/svelte-virtual": "^3.13.36",
+    "@trycua/cua-driver": "0.28.1",
     "@types/dompurify": "^3.2.0",
     "@usebruno/filestore": "^0.12.0",
     "@usebruno/js": "^0.51.0",
@@ -307,7 +309,10 @@
     },
     "rpm": {
       "artifactName": "${productName}-${version}.${arch}.${ext}",
-      "fpm": ["--rpm-rpmbuild-define", "_build_id_links none"],
+      "fpm": [
+        "--rpm-rpmbuild-define",
+        "_build_id_links none"
+      ],
       "depends": [
         "gtk3",
         "libnotify",

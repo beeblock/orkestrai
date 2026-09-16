@@ -3,21 +3,50 @@ import type {
   ComputerCommandInput,
   ComputerPlatform,
   ComputerSnapshot,
+  ComputerAccessibility,
+  ComputerInteraction,
 } from '../../../contracts/schemas/computer.schema.js';
+import type { ConversationIdentity } from './reply-scope.js';
 
 export type ComputerAdapterContext = {
   evidencePath: string;
+  passive?: boolean;
 };
+
+// Native-only receipt: emitted after the OS picker confirms the canonical URL.
+// It is never accepted from a bridge request or a persisted accessibility tree.
+export type ComputerFileSelection = ComputerAccessibility & {
+  selectedFile?: { path: string; targetId: string; applicationId: string };
+};
+
+export type ComputerForegroundLease = {
+  restore(): Promise<'restored' | 'unchanged' | 'skipped' | 'failed'>;
+};
+
+export type ComputerInputTarget = { targetId: string; appId: string };
 
 export interface ComputerAdapter {
   readonly platform: ComputerPlatform;
-  snapshot(): Promise<ComputerSnapshot>;
+  // True only for window-isolated capture, never for copying a desktop rectangle.
+  readonly backgroundWindowCapture?: boolean;
+  // Semantic controls only. Never permits global keyboard, coordinates or file dialogs.
+  readonly backgroundInteraction?: boolean;
+  // Official driver owns temporary focus/restoration per exact-window action.
+  readonly scopedForegroundInteraction?: boolean;
+  acquireForeground?(windowId: string, appId: string): Promise<ComputerForegroundLease>;
+  snapshot(scope?: { windowId?: string }): Promise<ComputerSnapshot>;
+  // Read the bound native window without activating it, even when another app has focus.
+  read?(windowId: string, appId: string): Promise<ComputerAccessibility>;
+  openConversation?(windowId: string, appId: string, identity: ConversationIdentity): Promise<ComputerAccessibility>;
+  interact?(input: ComputerInteraction, appId: string, options?: { background: boolean }): Promise<ComputerAccessibility>;
+  attachFile?(input: { targetId: string; appId: string; path: string; open: ComputerInteraction['element']; menu?: ComputerInteraction['element']; guards: ComputerInteraction['guards'] }): Promise<ComputerFileSelection>;
+  receiveFile?(input: { targetId: string; appId: string; path: string; open: ComputerInteraction['element']; menu?: ComputerInteraction['element']; guards: ComputerInteraction['guards'] }): Promise<ComputerAccessibility>;
   launch(applicationId: string): Promise<void>;
   focus(windowId: string): Promise<void>;
-  click(point: { x: number; y: number; button: 'left' | 'right' | 'middle'; count: number }): Promise<void>;
-  type(text: string): Promise<void>;
-  typeSensitive(text: string): Promise<void>;
-  shortcut(keys: string[]): Promise<void>;
+  click(point: { x: number; y: number; button: 'left' | 'right' | 'middle'; count: number }, target?: ComputerInputTarget): Promise<void>;
+  type(text: string, target?: ComputerInputTarget): Promise<void>;
+  typeSensitive(text: string, target?: ComputerInputTarget): Promise<void>;
+  shortcut(keys: string[], target?: ComputerInputTarget): Promise<void>;
   screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: ComputerAdapterContext): Promise<{ width: number | null; height: number | null }>;
   openSettings(permission: 'accessibility' | 'screenRecording'): Promise<void>;
 }

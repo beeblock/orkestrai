@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { nativeJsonSession } from './native-session.js';
 
 const MAX_OUTPUT = 2 * 1024 * 1024;
 
@@ -10,8 +11,13 @@ function nativeEnvironment(): NodeJS.ProcessEnv {
 export async function runNative(
   command: string,
   args: string[],
-  options: { input?: string; timeoutMs?: number; allowFailure?: boolean } = {},
+  options: { input?: string; timeoutMs?: number; allowFailure?: boolean; structuredOutput?: boolean; persistent?: { script: string; scope: string } } = {},
 ): Promise<{ stdout: string; stderr: string; code: number }> {
+  if (options.persistent) {
+    if (command !== '/usr/bin/osascript' || options.input === undefined || !options.structuredOutput) throw new Error('Invalid persistent native command.');
+    const session = nativeJsonSession(command, ['-l', 'JavaScript', '-e', options.persistent.script], nativeEnvironment(), options.persistent.scope);
+    return { stdout: await session.run(options.input, options.timeoutMs ?? 15_000), stderr: '', code: 0 };
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: nativeEnvironment() });
     const stdout: Buffer[] = [];
@@ -38,7 +44,7 @@ export async function runNative(
         return;
       }
       // Typed content, including SecretRefs, must never be echoed in errors.
-      if (options.input === undefined) bucket.push(chunk);
+      if (options.input === undefined || (options.structuredOutput && bucket === stdout)) bucket.push(chunk);
     };
     child.stdout.on('data', (chunk: Buffer) => collect(stdout, chunk));
     child.stderr.on('data', (chunk: Buffer) => collect(stderr, chunk));

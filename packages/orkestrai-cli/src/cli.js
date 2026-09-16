@@ -119,6 +119,8 @@ Uso:
   orkestrai computer click <x:0..1> <y:0..1> --target <windowId> --task <id> --idempotency <key>
   orkestrai computer type <texto> --target <windowId> | secret <secretRef> --target <windowId> | shortcut <key...> --target <windowId>
   orkestrai computer screenshot --target <windowId> | wait <exists|focused> <texto>
+  orkestrai computer batch '<steps-json>' --task <id> --idempotency <key>
+  orkestrai computer watch '<watch-json>' --task <id> --idempotency <key>
   Computer effects require --task and --idempotency; declare --risk external_publication before sending or publishing.
   orkestrai port [--check <porta>]  — devolve uma porta livre (ou testa uma)
   orkestrai fs read <path> | fs write <path> <conteudo> | fs search <termo> [--content]
@@ -1710,6 +1712,25 @@ export async function run(argv, options = {}) {
       else out(data.snapshot?.session ? `Dispositivo ativo: ${data.snapshot.session.deviceName}` : 'Dispositivo parado.');
       return 0;
     }
+    case 'artifact': {
+      const [action,...values] = rest;
+      if (!selfAgent || !flags.task || !flags.idempotency) throw new Error('Artifacts require an active agent, --task and --idempotency.');
+      if (!['speech','report','inspect','transcribe'].includes(action)) throw new Error('Usage: orkestrai artifact speech|report|inspect|transcribe <json> --task <id> --idempotency <key>');
+      const serialized = values.join(' ');
+      if (serialized.length > 320000) throw new Error('Artifact input exceeds the limit.');
+      const input = { ...JSON.parse(serialized || '{}'), command: `artifact_${action}` };
+      out(JSON.stringify(await bridge(config,'POST','/api/agent-room/bridge/computers',{ from:selfAgent,taskId:flags.task,idempotencyKey:flags.idempotency,input }),null,2)); return 0;
+    }
+    case 'automation': {
+      const [action, ...values] = rest;
+      if (!selfAgent || !flags.task || !flags.idempotency) throw new Error('Automation requires an active agent, --task and --idempotency.');
+      if (!['list', 'history', 'save', 'enabled', 'cancel'].includes(action)) throw new Error('Usage: orkestrai automation list|history|save|enabled|cancel <json> --task <id> --idempotency <key>');
+      const serialized = values.join(' ');
+      if (serialized.length > 25000) throw new Error('Automation input exceeds the limit.');
+      const input = { ...JSON.parse(serialized || '{}'), command: action };
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/automations', { from: selfAgent, taskId: flags.task, idempotencyKey: flags.idempotency, input });
+      out(JSON.stringify(data, null, 2)); return 0;
+    }
     case 'computer': {
       const [action, ...values] = rest;
       if (action === 'inspect' || action === 'list') {
@@ -1727,6 +1748,39 @@ export async function run(argv, options = {}) {
       if (!taskId || !idempotencyKey) throw new Error('Acoes de Computer exigem --task <id> e --idempotency <key>.');
       let input;
       if (action === 'prepare') input = { command: 'prepare' };
+      else if (action === 'capabilities') input = { command: 'capabilities' };
+      else if (action === 'open-conversation') {
+        if (!flags.target || !flags.grant) throw new Error('Usage: orkestrai computer open-conversation --target <windowId> --grant <id> --task <id> --idempotency <key>');
+        input = { command: 'open_conversation', targetId: flags.target, grantId: flags.grant };
+      }
+      else if (action === 'read') {
+        if (!flags.target) throw new Error('Usage: orkestrai computer read --target <windowId> --task <id> --idempotency <key>');
+        input = { command: 'read', targetId: flags.target };
+      } else if (action === 'reply') {
+        if (!flags.target || !flags.grant || !flags['in-reply-to'] || !values.length) throw new Error('Usage: orkestrai computer reply <text> --target <windowId> --grant <id> --in-reply-to <digest> --task <id> --idempotency <key>');
+        input = { command: 'reply', grantId: flags.grant, targetId: flags.target, inReplyToDigest: flags['in-reply-to'], ...(flags.batch ? { batchId: flags.batch } : {}), text: values.join(' ') };
+      } else if (action === 'media-send' || action === 'media-receive' || action === 'inbox-acknowledge') {
+        const serialized = values.join(' ');
+        if (serialized.length > 16000) throw new Error('Media command exceeds the input limit.');
+        input = { ...JSON.parse(serialized || '{}'), command: action.replace('-', '_') };
+      } else if (action === 'send') {
+        const serialized = values.join(' ');
+        if (serialized.length > 16000) throw new Error('Conversation command exceeds the input limit.');
+        input = { ...JSON.parse(serialized || '{}'), command: 'send' };
+      } else if (action === 'memory-search' || action === 'memory-save') {
+        const serialized = values.join(' ');
+        if (serialized.length > 10000) throw new Error('Memory command exceeds the input limit.');
+        input = { ...JSON.parse(serialized || '{}'), command: action.replace('-', '_') };
+      } else if (action === 'interact') {
+        const serialized = values.join(' ');
+        if (serialized.length > 250000) throw new Error('Computer command exceeds the input limit.');
+        input = { ...JSON.parse(serialized), command: 'interact' };
+      }
+      else if (action === 'batch' || action === 'watch') {
+        const serialized = values.join(' ');
+        if (serialized.length > 250000) throw new Error('Computer command exceeds the input limit.');
+        input = { command: action, [action === 'batch' ? 'steps' : 'watch']: JSON.parse(serialized) };
+      }
       else if (action === 'launch') {
         if (!values[0]) throw new Error('Usage: orkestrai computer launch <applicationId> --task <id> --idempotency <key>');
         input = { command: 'launch', applicationId: values[0] };
@@ -1748,13 +1802,13 @@ export async function run(argv, options = {}) {
         input = { command: 'shortcut', keys: values, targetId: flags.target };
       } else if (action === 'screenshot') {
         if (!flags.target) throw new Error('Uso: orkestrai computer screenshot --target <windowId>');
-        input = { command: 'screenshot', target: 'window', targetId: flags.target };
+        input = { command: 'screenshot', target: 'window', targetId: flags.target, retention: flags.retention ?? 'evidence' };
       } else if (action === 'wait') {
         const condition = values.shift();
         const value = values.join(' ');
         if (!condition || !value) throw new Error('Uso: orkestrai computer wait <exists|focused> <texto>');
         input = { command: 'wait', condition: condition === 'focused' ? 'window_focused' : 'window_exists', value, timeoutMs: Number(flags.timeout ?? 10000), pollMs: Number(flags.poll ?? 300) };
-      } else throw new Error('Uso: orkestrai computer <prepare|inspect|launch|focus|click|type|secret|shortcut|screenshot|wait> ...');
+      } else throw new Error('Usage: orkestrai computer <prepare|inspect|capabilities|read|interact|batch|watch|reply|send|media-send|media-receive|launch|focus|click|type|secret|shortcut|screenshot|wait> ...');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId, idempotencyKey, ...('risk' in flags && flags.risk ? { risk: flags.risk } : {}), input });
       out(JSON.stringify(data, null, 2));
       return 0;

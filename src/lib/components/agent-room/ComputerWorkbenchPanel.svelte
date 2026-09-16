@@ -10,16 +10,22 @@
   import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
   import type { ComputerCommandInput, ComputerCommandResult, ComputerDisplay, ComputerNodeConfig, ComputerSnapshot, ComputerWindow } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
-  import { computerSnapshotSchema } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
+  import { computerNodeConfigSchema, computerSnapshotSchema } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
   import * as m from '$lib/paraglide/messages.js';
+  import ComputerObservationControls from './ComputerObservationControls.svelte';
+  import ComputerReplyControls from './ComputerReplyControls.svelte';
+  import CompanionCapabilities from './CompanionCapabilities.svelte';
+  import type { ComputerStorageStats } from '$lib/modules/agent-room/application/services/ComputerEvidenceService.js';
+  import type { ObservationStatus } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 
-  type State = { nodeId: string | null; config: ComputerNodeConfig; snapshot: ComputerSnapshot; lastEvidence: string | null };
+  type State = { nodeId: string | null; config: ComputerNodeConfig; snapshot: ComputerSnapshot; lastEvidence: string | null; storage?: ComputerStorageStats; observation?: ObservationStatus };
   let { workspaceId }: { workspaceId: string } = $props();
   let computerState = $state<State | null>(null);
   let loading = $state(true);
   let loadError = $state(false);
   let busy = $state<string | null>(null);
   let inputText = $state('');
+  let replyOptionsVersion = $state(0);
   let applicationId = $state('');
   let inputWindowId = $state('');
   let panel: HTMLDivElement | undefined = $state();
@@ -79,7 +85,7 @@
     try {
       const result = await api<State>(`/api/agent-room/workspaces/${targetWorkspace}/computers`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) });
       if (request === loadRequest && targetWorkspace === workspaceId) {
-        computerState = { ...result, snapshot: computerSnapshotSchema.parse(result.snapshot) };
+        computerState = { ...result, config: computerNodeConfigSchema.parse(result.config), snapshot: computerSnapshotSchema.parse(result.snapshot) };
         loadError = false;
       }
     }
@@ -87,15 +93,16 @@
     finally { pendingLoads--; if (controller === loadAbort) loading = false; }
   }
 
-  async function saveConfig(config: ComputerNodeConfig): Promise<void> {
-    if (!computerState?.nodeId) return;
+  async function saveConfig(config: ComputerNodeConfig): Promise<boolean> {
+    if (!computerState?.nodeId) return false;
     const request = ++loadRequest;
     const targetWorkspace = workspaceId;
     busy = 'config';
     try {
       const saved = await api<ComputerNodeConfig>(`/api/agent-room/workspaces/${workspaceId}/computers/${computerState.nodeId}`, { method: 'PATCH', body: JSON.stringify(config) });
       if (request === loadRequest && targetWorkspace === workspaceId) computerState = { ...computerState, config: saved };
-    } catch (error) { toast.error(error instanceof Error ? error.message : m['computer.command_failed']()); }
+      return true;
+    } catch (error) { toast.error(error instanceof Error ? error.message : m['computer.command_failed']()); return false; }
     finally { busy = null; }
   }
 
@@ -114,7 +121,8 @@
     busy = input.command;
     try {
       const result = await api<ComputerCommandResult>(`/api/agent-room/workspaces/${workspaceId}/computers`, { method: 'POST', body: JSON.stringify(input) });
-      if (request === loadRequest && targetWorkspace === workspaceId) computerState = { ...(computerState as State), snapshot: computerSnapshotSchema.parse(result.snapshot), ...(result.kind === 'screenshot' ? { lastEvidence: result.path } : {}) };
+      if (request !== loadRequest || targetWorkspace !== workspaceId) return null;
+      if ('snapshot' in result) computerState = { ...(computerState as State), snapshot: computerSnapshotSchema.parse(result.snapshot), ...(result.kind === 'screenshot' ? { lastEvidence: result.path } : {}) };
       return result;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : m['computer.command_failed']());
@@ -132,7 +140,7 @@
     untrack(() => { inputWindowId = ''; inputText = ''; computerState = null; loadError = false; void load(); });
     const timer = setInterval(() => {
       if (!document.hidden && panel?.getClientRects().length && busy === null && !loading) void load(true);
-    }, 3_000);
+    }, 10_000);
     return () => { clearInterval(timer); ++loadRequest; loadAbort?.abort(); };
   });
 </script>
@@ -164,6 +172,9 @@
           </article>
         {/each}
       </section>
+
+      {#if computerState.nodeId}<ComputerReplyControls {workspaceId} nodeId={computerState.nodeId} windows={computerState.snapshot.windows.filter(w => applicationAllowed(w.appId))} {command} onchange={() => { replyOptionsVersion++; void load(true); }} />{/if}
+      <CompanionCapabilities {workspaceId} {command} />
 
       <section class="mt-4">
         <div class="mb-2 flex items-center gap-2"><ShieldCheck size={14} class="text-[var(--app-text-muted)]" /><h3 class="text-xs font-semibold">{m['computer.allowed_apps']()}</h3></div>
@@ -201,6 +212,8 @@
           {/each}
         </div>
       </section>
+
+      <ComputerObservationControls {workspaceId} optionsVersion={replyOptionsVersion} config={computerState.config} windows={computerState.snapshot.windows} storage={computerState.storage} observation={computerState.observation} busy={busy !== null} save={saveConfig} cleanup={async () => { await command({ command: 'cleanup' }); await load(true); }} />
 
       <section class="mt-4 border-t border-[var(--app-border)] pt-3">
         <div class="flex flex-wrap items-end gap-2">

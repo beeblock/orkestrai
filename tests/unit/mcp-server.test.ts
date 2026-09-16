@@ -42,6 +42,39 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it('routes automatic contact navigation without allowing a supplied recipient or arbitrary query', async () => {
+    const server = startMcp();
+    const args = { taskId: '00000000-0000-4000-8000-000000000001', idempotencyKey: 'open-contact-test', grantId: '00000000-0000-4000-8000-000000000002', targetId: '42:cg:80' };
+    server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'computer_open_conversation', arguments: args } });
+    const response = await server.waitFor(1);
+    expect(JSON.parse(response.result.content[0].text).body).toEqual({ from: 'n1', taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'open_conversation', grantId: args.grantId, targetId: args.targetId } });
+    const schema = MCP_TOOLS.find(t => t.name === 'computer_open_conversation')!.inputSchema;
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.properties).not.toHaveProperty('text');
+    server.input.end();
+  });
+  it('routes an explicit no-reply acknowledgment with its exact batch and reason', async () => {
+    const server = startMcp();
+    const args = { taskId: '00000000-0000-4000-8000-000000000001', idempotencyKey: 'no-reply-test', grantId: '00000000-0000-4000-8000-000000000002', batchId: '00000000-0000-4000-8000-000000000003', inReplyToDigest: 'a'.repeat(64), reason: 'already_answered' };
+    server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'computer_inbox_acknowledge', arguments: args } });
+    const response = await server.waitFor(1);
+    const result = JSON.parse(response.result.content[0].text);
+    expect(result.body).toEqual({ from: 'n1', taskId: args.taskId, idempotencyKey: args.idempotencyKey, input: { command: 'inbox_acknowledge', grantId: args.grantId, batchId: args.batchId, inReplyToDigest: args.inReplyToDigest, reason: args.reason } });
+    expect(MCP_TOOLS.find(tool => tool.name === 'computer_inbox_acknowledge')?.inputSchema.required).toContain('batchId');
+    server.input.end();
+  });
+  it.each(['computer_capabilities','computer_send','computer_media_send','computer_media_receive','computer_memory_search','artifact_speech','artifact_report','artifact_inspect','artifact_transcribe','automation_save','automation_cancel'])('preserves assigned identity and payload for %s', async name => {
+    const server = startMcp();
+    const args = { taskId:'00000000-0000-4000-8000-000000000001', idempotencyKey:'stable-test-key', grantId:'00000000-0000-4000-8000-000000000002', targetId:'42', text:'Hello', path:'generated/hello.wav', source:{kind:'task',id:'00000000-0000-4000-8000-000000000003'}, definition:{name:'Monday report',trigger:'calendar',prompt:'Report',calendar:{frequency:'weekly',weekdays:[1],time:'14:00',timeZone:'America/Sao_Paulo'}}, revision:2, id:'00000000-0000-4000-8000-000000000004' };
+    server.send({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}});
+    const response = await server.waitFor(1);
+    const result = JSON.parse(response.result.content[0].text);
+    expect(result.body.from).toBe('n1'); expect(result.body.taskId).toBe(args.taskId); expect(result.body.idempotencyKey).toBe(args.idempotencyKey);
+    expect(result.path).toBe('/api/agent-room/bridge/'+(name.startsWith('automation_')?'automations':'computers'));
+    expect(result.body.input.command).toBe(name.startsWith('artifact_')?name:name.replace(/^(computer|automation)_/,''));
+    expect(MCP_TOOLS.some(tool=>tool.name===name)).toBe(true);
+    server.input.end();
+  });
   it('handshake initialize + tools/list com as tools do canvas', async () => {
     const { send, waitFor, input } = startMcp();
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {} } });
@@ -162,6 +195,13 @@ describe('servidor MCP (orkestrai mcp)', () => {
     const secret = JSON.parse((await waitFor(2)).result.content[0].text);
     expect(secret.body.input).toEqual({ command: 'type_secret', secretRef: 'secretref:0123456789abcdef', targetId: 'window-1' });
     expect(JSON.stringify(secret)).not.toContain('password');
+    send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: {
+      name: 'computer_type',
+      arguments: { text: 'Ol\u00e1 aqui \u00e9 o orkestrai \ud83d\ude80', targetId: 'window-1', taskId, idempotencyKey: 'task:text:1' },
+    } });
+    const text = JSON.parse((await waitFor(3)).result.content[0].text);
+    expect(text.body.input).toEqual({ command: 'type', text: 'Ol\u00e1 aqui \u00e9 o orkestrai \ud83d\ude80', targetId: 'window-1' });
+    expect(text.body).toMatchObject({ taskId, idempotencyKey: 'task:text:1' });
     input.end();
   });
 
@@ -171,6 +211,11 @@ describe('servidor MCP (orkestrai mcp)', () => {
     for (const [id, name, arguments_, command] of [
       [1, 'computer_prepare', {}, { command: 'prepare' }],
       [2, 'computer_launch', { applicationId: 'com.apple.calculator' }, { command: 'launch', applicationId: 'com.apple.calculator' }],
+      [3, 'computer_batch', { steps: [{ input: { command: 'type', text: 'complete text', targetId: 'window-1' } }] }, { command: 'batch', steps: [{ input: { command: 'type', text: 'complete text', targetId: 'window-1' } }] }],
+      [4, 'computer_watch', { watch: { enabled: false, taskId } }, { command: 'watch', watch: { enabled: false, taskId } }],
+      [5, 'computer_screenshot', { targetId: 'window-1', retention: 'temporary' }, { command: 'screenshot', target: 'window', targetId: 'window-1', retention: 'temporary' }],
+      [6, 'computer_reply', { targetId: 'window-1', grantId: taskId, inReplyToDigest: 'a'.repeat(64), text: 'Hello' }, { command: 'reply', targetId: 'window-1', grantId: taskId, inReplyToDigest: 'a'.repeat(64), text: 'Hello' }],
+      [7, 'computer_reply', { targetId: 'window-1', grantId: taskId, batchId: '00000000-0000-7000-8000-000000000002', inReplyToDigest: 'b'.repeat(64), text: 'Queued response' }, { command: 'reply', targetId: 'window-1', grantId: taskId, batchId: '00000000-0000-7000-8000-000000000002', inReplyToDigest: 'b'.repeat(64), text: 'Queued response' }],
     ] as const) {
       send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: { ...arguments_, taskId, idempotencyKey: `desktop:${id}` } } });
       const response = JSON.parse((await waitFor(id)).result.content[0].text);

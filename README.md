@@ -26,6 +26,14 @@ common credentials redacted; normal agent output is not persisted.
 
 ## Highlights
 
+- **Continuous desktop companions:** monitor an approved conversation, group
+  incoming messages and let its Canvas agent reply with a consistent persona.
+  Optional private memory, local voices and task-linked calendar reminders share
+  the same owner-controlled contact scope. Native attachments depend on the
+  application's supported controls; audio files are not native voice notes.
+  Observation can run in the background; sending may briefly require focus.
+  Configure it in **Computer > Conversation replies** and **Automations**.
+
 - **24/7 Core foundation:** opt in to keep the local execution Core and active
   work available in the system tray after closing every window, and optionally
   start it silently when you sign in. Settings shows live health and uptime,

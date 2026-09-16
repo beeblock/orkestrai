@@ -6,6 +6,7 @@ export class AgentRoutine extends Model {
   static incrementing = false;
   static timestamps = false;
   static fillable = [
+    'author_agent_id', 'author_task_id', 'author_key', 'author_digest', 'revision',
     'id',
     'workspace_id',
     'target_node_id',

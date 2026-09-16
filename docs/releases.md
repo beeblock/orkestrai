@@ -114,7 +114,10 @@ Somente após essa autorização, use
 `ORKESTRAI_MAC_ALLOW_KEYCHAIN_PROMPTS=true ORKESTRAI_MAC_LOCAL_SIGNING_IDENTITY="Developer ID Application: ..." npm run package:mac -- --arm64`.
 Sem a autorização explícita, o wrapper recusa esse modo antes de assinar.
 O build local padrão continua ad-hoc, sem consultar uma identidade do Keychain.
-Esse modo habilita Hardened Runtime, não publica e não declara notarização.
+Ele não depende de CI nem de push: gere o pacote, substitua a instalação local
+e reteste. Esse modo desabilita Hardened Runtime, não publica e não declara
+notarização. Validação de assinatura oficial é uma etapa separada da release,
+não um pré-requisito para o teste local padrão.
 O workflow oficial continua exigindo todos os secrets e a notarização da Apple.
 
 ### Pacote assinado de QA sem publicar

@@ -51,7 +51,7 @@
     size: number;
     modifiedAt: string;
     contentType: string;
-    kind: 'text' | 'markdown' | 'image' | 'pdf' | 'binary';
+    kind: 'text' | 'markdown' | 'image' | 'pdf' | 'audio' | 'binary';
   };
 
   let {
@@ -527,6 +527,8 @@
           <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.reset_view']()} onclick={resetImage}><Maximize2 size={13} /></Button>
         </div>
       </div>
+    {:else if inspection?.kind === 'audio'}
+      <div class="flex h-full min-h-0 flex-col items-center justify-center gap-4 overflow-auto bg-[var(--app-surface-subtle)] p-5"><p class="max-w-full break-words text-sm font-medium">{inspection.name}</p><audio controls preload="metadata" class="w-full max-w-lg" src={rawUrl} aria-label={inspection.name}></audio></div>
     {:else if inspection?.kind === 'pdf'}
       <div class="flex h-full min-h-0 flex-col bg-[var(--app-surface-subtle)]">
         <div class="flex h-9 shrink-0 items-center justify-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface)]">

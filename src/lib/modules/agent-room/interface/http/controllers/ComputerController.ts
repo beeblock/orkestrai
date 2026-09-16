@@ -2,13 +2,14 @@ import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
 import { readFile } from 'node:fs/promises';
 import { computerNodeConfigSchema } from '../../../contracts/schemas/computer.schema.js';
 import { computerService } from '../../../application/services/ComputerService.js';
+import { computerObservationService } from '../../../application/services/ComputerObservationService.js';
 import { ExecuteComputerCommandAction } from '../../../application/actions/ExecuteComputerCommandAction.js';
 import { ComputerCommandRequest } from '../requests/ComputerCommandRequest.js';
 
 export class ComputerController extends Controller {
   async index(event: RequestEvent) {
     try {
-      return this.json({ data: await computerService.snapshot(event.params.id) });
+      return this.json({ data: { ...await computerService.snapshot(event.params.id), observation: computerObservationService.status(event.params.id) } });
     } catch (error) {
       return this.failure(error, 'Could not inspect this computer.');
     }

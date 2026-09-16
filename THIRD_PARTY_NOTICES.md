@@ -4,6 +4,22 @@ Orkestrai uses third-party software, models, services, names, and trademarks.
 Their licenses apply to those components independently from the license selected
 for Orkestrai's own source code.
 
+## Cua Driver
+
+- Purpose: native Computer-control backend under development; not a separate
+  agent or a replacement for Orkestrai permissions and audit.
+- SDK: `@trycua/cua-driver` 0.28.1, MIT.
+- Native packages: MIT and MPL-2.0; UniFFI bindings (`@ubjs/core` and
+  `@ubjs/node` 0.31.0-3) are MPL-2.0.
+- Source and corresponding native-runtime build transformations:
+  <https://github.com/trycua/cua/tree/cua-driver-rs-v0.28.1>
+- MPL-2.0: <https://www.mozilla.org/MPL/2.0/>
+
+The native package includes `node-runtime-NOTICE.md` describing its compatibility
+runtime derived from `uniffi-bindgen-react-native`. Preserve the dependency's
+notices when distributing its unmodified binaries. The SDK package version does
+not imply acceptance of every operating system, application or input route.
+
 ## Embedded Voice
 
 Orkestrai downloads voice models only after user confirmation and executes them

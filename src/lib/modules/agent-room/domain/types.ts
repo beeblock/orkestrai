@@ -1088,6 +1088,10 @@ export type Routine = {
   runCount: number;
   triggerType: AutomationTriggerType;
   triggerConfig: Record<string, unknown>;
+  nextRunAt?: string | null;
+  authorAgentId?: string | null;
+  authorTaskId?: string | null;
+  revision?: number;
   actionType: AutomationActionType;
   actionConfig: Record<string, unknown>;
   recipeId: string | null;

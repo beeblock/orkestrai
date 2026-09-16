@@ -17,7 +17,9 @@
   import { DEFAULT_DICTATION_HOTKEY, comboFromEvent, comboLabel } from '$lib/components/agent-room/dictation-hotkey.js';
   import { appSettingsStore, getAppSettings, invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
   import VoiceConfirmDialog from '$lib/components/agent-room/VoiceConfirmDialog.svelte';
+  import { localVoiceLabel } from '$lib/components/agent-room/voice-label.js';
   import {
+    EMBEDDED_TTS_VOICES,
     DEFAULT_EMBEDDED_TTS_SPEED,
     MAX_EMBEDDED_TTS_SPEED,
     MIN_EMBEDDED_TTS_SPEED,
@@ -116,14 +118,12 @@
   let confirmVoiceDownload = $state(false);
 
   function ttsVoiceLabel(voice: string): string {
-    if (voice === 'en-US-m2') return m['settings.tts_voice_en_us']();
-    if (voice === 'es-MX-f3') return m['settings.tts_voice_es_mx']();
-    return m['settings.tts_voice_pt_br']();
+    return localVoiceLabel(voice);
   }
 
   function ttsPreviewText(voice: string): string {
-    if (voice === 'en-US-m2') return m['settings.tts_preview_text_en']();
-    if (voice === 'es-MX-f3') return m['settings.tts_preview_text_es']();
+    if (voice.startsWith('en-US-')) return m['settings.tts_preview_text_en']();
+    if (voice.startsWith('es-MX-')) return m['settings.tts_preview_text_es']();
     return m['settings.tts_preview_text_pt']();
   }
 
@@ -754,9 +754,7 @@
             {ttsVoiceLabel(normalizeEmbeddedTtsVoice(settings.voiceTtsVoice))}
           </Select.Trigger>
           <Select.Content>
-            <Select.Item value="pt-BR-f1">{m['settings.tts_voice_pt_br']()}</Select.Item>
-            <Select.Item value="en-US-m2">{m['settings.tts_voice_en_us']()}</Select.Item>
-            <Select.Item value="es-MX-f3">{m['settings.tts_voice_es_mx']()}</Select.Item>
+            {#each EMBEDDED_TTS_VOICES as voice}<Select.Item value={voice.id}>{localVoiceLabel(voice.id)}</Select.Item>{/each}
           </Select.Content>
         </Select.Root>
       </div>

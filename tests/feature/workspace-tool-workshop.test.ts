@@ -11,6 +11,8 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { ToolRunsQueryRequest } from '$lib/modules/agent-room/interface/http/requests/AgentWorkspaceToolRequests.js';
 import { managedPortalService } from '$lib/modules/agent-room/application/services/ManagedPortalService.js';
 import { AutonomyGatePendingError } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
+import { workspaceToolReference, TOOL_MANIFEST_SCHEMA } from '../../packages/orkestrai-cli/src/workspace-tool-reference.js';
+import { MCP_TOOLS } from '../../packages/orkestrai-cli/src/mcp.js';
 
 function manifest(version: number) {
   return workspaceToolManifestSchema.parse({
@@ -25,6 +27,28 @@ function manifest(version: number) {
 
 describe('Tool Workshop', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('exposes the real contract and actor-specific limits and rejects hardcoded fixture outputs', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Authoring contract', workingDir: await mkdtemp(join(tmpdir(), 'orkestrai-tool-reference-')) });
+    const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Author' });
+    const current = await autonomyPolicyService.get(workspace.id);
+    await autonomyPolicyService.update(workspace.id, { enabled: true, mode: 'bounded', policy: { ...current.policy, capabilities: ['tool'], toolPublication: { enabled: true, agentIds: [agent.id], kinds: ['transform'], maxTimeoutMs: 1000, maxOutputBytes: 2048 } } });
+    const service = new AgentWorkspaceToolService();
+    const reference = await service.authoringReference(workspace.id, agent.id);
+    expect(reference.publication).toMatchObject({ allowed: true, maxTimeoutMs: 1000, maxOutputBytes: 2048 });
+    expect((await service.authoringReference(workspace.id, null)).publication.allowed).toBe(false);
+    expect((await service.authoringReference(workspace.id, 'other-agent')).publication.allowed).toBe(false);
+    expect(JSON.stringify(reference)).not.toContain(agent.id);
+    for (const name of ['tool_propose', 'tool_update']) expect(MCP_TOOLS.find(t => t.name === name)?.inputSchema.properties.manifest).toEqual(TOOL_MANIFEST_SCHEMA);
+    const example = workspaceToolManifestSchema.parse(workspaceToolReference().transformExample);
+    const created = await service.create(workspace.id, { name: 'Dynamic summary', slug: 'dynamic-summary', description: '', manifest: example, actor: { type: 'agent', id: agent.id } });
+    expect(created.publishedRevision).toBe(1);
+    const execution = await new ToolExecutionService().execute(workspace.id, created.id, { input: { revenue: 300, expenses: 80, balance: 220 }, idempotencyKey: 'different-fixture-values', dryRun: false, actor: { type: 'agent', id: agent.id }, automationRunId: null });
+    expect(execution.output).toEqual({ summary: 'Revenue: 300; Expenses: 80; Balance: 220' });
+    const bad = workspaceToolManifestSchema.parse({ ...example, executor: { kind: 'transform', operations: [{ kind: 'set', path: 'summary', value: 'Revenue: 100; Expenses: 25; Balance: 75' }, { kind: 'pick', paths: ['summary'] }] } });
+    const rejected = await service.create(workspace.id, { name: 'Hardcoded fixture', slug: 'hardcoded-fixture', description: '', manifest: bad, actor: { type: 'agent', id: agent.id } });
+    expect(rejected.publishedRevision).toBeNull();
+  });
 
   it('auto-publishes only bounded tools for named agents with valid fixtures and limits', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orkestrai-tool-publication-'));

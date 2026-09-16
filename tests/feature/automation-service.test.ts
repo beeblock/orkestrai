@@ -1,14 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import type { AutomationFormInput } from '$lib/modules/agent-room/contracts/schemas/automation.schema.js';
 import { AutomationTriggerReceived } from '$lib/modules/agent-room/domain/events/AutomationTriggerReceived.js';
-import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
+import { routineService, RoutineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
 import { AgentWorkspaceToolService } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
 import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { workspaceToolManifestSchema } from '$lib/modules/agent-room/contracts/schemas/agent-workspace-tool.schema.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { AgentRoutine } from '$lib/modules/agent-room/domain/models/AgentRoutine.js';
 
 function form(input: Partial<AutomationFormInput>): AutomationFormInput {
   return {
@@ -26,6 +27,54 @@ function form(input: Partial<AutomationFormInput>): AutomationFormInput {
 
 describe('workspace automations', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('runs a calendar occurrence only once across ticks and a restarted runner', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-09-14T16:59:00Z'));
+      const workspace = await workspaceRepository.createWorkspace({ name: 'Calendar restart', workingDir: '/tmp' });
+      const automation = await routineService.createAutomation(workspace.id, form({ triggerType: 'schedule', calendar: { frequency: 'weekly', timeZone: 'America/Sao_Paulo', time: '14:00', weekdays: [1], missed: 'latest', maxLatenessMinutes: 60 }, actionType: 'create_task', taskTitle: 'Monday report', notificationMessage: null }));
+      expect(await routineService.dueRoutines()).toEqual([]);
+      vi.setSystemTime(new Date('2026-09-14T17:00:01Z'));
+      await routineService.tick();
+      await new RoutineService().tick();
+      expect((await taskBoardService.list(workspace.id)).filter(t => t.title === 'Monday report')).toHaveLength(1);
+      expect(await routineService.history(automation.id)).toHaveLength(1);
+      vi.setSystemTime(new Date('2026-09-21T17:00:01Z'));
+      await new RoutineService().tick();
+      expect((await taskBoardService.list(workspace.id)).filter(t => t.title === 'Monday report')).toHaveLength(2);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not replay missed slots after sleep or run a paused calendar', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-09-14T16:59:00Z'));
+      const workspace = await workspaceRepository.createWorkspace({ name: 'Calendar pause', workingDir: '/tmp' });
+      const automation = await routineService.createAutomation(workspace.id, form({ triggerType: 'schedule', calendar: { frequency: 'daily', timeZone: 'America/Sao_Paulo', time: '14:00', missed: 'skip', maxLatenessMinutes: 60 }, actionType: 'create_task', taskTitle: 'Should not run', notificationMessage: null }));
+      vi.setSystemTime(new Date('2026-09-14T18:00:00Z'));
+      await routineService.tick();
+      expect(await routineService.history(automation.id)).toHaveLength(0);
+      await routineService.setEnabled(automation.id, false);
+      vi.setSystemTime(new Date('2026-09-15T17:00:01Z'));
+      await routineService.tick();
+      expect(await routineService.history(automation.id)).toHaveLength(0);
+      expect(await taskBoardService.list(workspace.id)).toHaveLength(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps manual event consumers enabled across consecutive runs, including legacy once metadata', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Continuous conversation', workingDir: '/tmp' });
+    const automation = await routineService.createAutomation(workspace.id, form({
+      actionType: 'create_task', taskTitle: 'Observed event', notificationMessage: null,
+    }));
+    expect(automation.triggerConfig).toEqual({});
+    for (let i = 0; i < 3; i++) {
+      if (i === 1) await AgentRoutine.query().where('id', automation.id).update({ trigger_config_json: JSON.stringify({ once: true }) });
+      expect((await routineService.runNow(automation.id)).ok).toBe(true);
+      expect(await routineService.get(automation.id)).toMatchObject({ enabled: true, runCount: i + 1 });
+    }
+  });
 
   it('records agent, provider and output while restoring a stopped terminal', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'automations', workingDir: '/tmp' });

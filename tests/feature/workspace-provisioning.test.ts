@@ -73,6 +73,8 @@ describe('WorkspaceService — provisionamento da ponte', () => {
     const agentsMd = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
     expect(agentsMd).toContain('<!-- orkestrai:begin -->');
     expect(agentsMd).toContain('orkestrai ask');
+    expect(agentsMd).toContain('send the complete value in one `computer_type` call');
+    expect(readFileSync(join(dir, '.claude', 'skills', 'orkestrai', 'SKILL.md'), 'utf8')).toContain('send the complete value in one `computer_type` call');
     const opencode = JSON.parse(readFileSync(join(dir, 'opencode.json'), 'utf8'));
     expect(opencode.mcp.orkestrai).toMatchObject({
       type: 'local',

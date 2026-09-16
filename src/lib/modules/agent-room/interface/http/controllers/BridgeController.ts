@@ -1,4 +1,6 @@
 import { Controller } from '@beeblock/svelar/routing';
+import { AutonomyGatePendingError } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
+import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
@@ -70,6 +72,8 @@ import { gitService } from '$lib/modules/agent-room/application/services/GitServ
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 import { automationIntegrationService } from '$lib/modules/agent-room/application/services/AutomationIntegrationService.js';
+import { BridgeAutomationCommandRequest } from '../requests/BridgeAutomationCommandRequest.js';
+import { ExecuteBridgeAutomationAction } from '../../../application/actions/ExecuteBridgeAutomationAction.js';
 import { integrationExecutionService } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
 import { integrationExecutionSchema, integrationEventsQuerySchema } from '$lib/modules/agent-room/contracts/schemas/integration.schema.js';
 import { bridgeComputerCommandSchema } from '$lib/modules/agent-room/contracts/schemas/computer.schema.js';
@@ -201,7 +205,8 @@ export class BridgeController extends Controller {
   async tools(event: any) {
     try {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
-      return this.json({ data: { tools: await agentWorkspaceToolService.list(workspace.id), runs: await toolExecutionService.listRuns(workspace.id) } });
+      const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      return this.json({ data: { tools: await agentWorkspaceToolService.list(workspace.id), runs: await toolExecutionService.listRuns(workspace.id), authoring: await agentWorkspaceToolService.authoringReference(workspace.id, actor ?? null) } });
     } catch (error) {
       return this.errorResponse(error, 'Failed to list workspace tools.', 401);
     }
@@ -956,6 +961,8 @@ export class BridgeController extends Controller {
       const [computer, secretRefs] = await Promise.all([computerService.snapshotForAgent(workspace.id), secretRefService.list(workspace.id)]);
       return this.json({ data: {
         ...computer,
+        replyGrants: (await autonomyPolicyService.get(workspace.id)).policy.computerReplyGrants.filter(g => g.agentId === authenticatedActor),
+        observation: computerObservationService.status(workspace.id),
         secretRefs: secretRefs.filter((secret) => secret.bindings.integrations.includes('computer') && secret.bindings.operations.includes('computer.type_secret')).map((secret) => ({
           ref: secret.ref,
           name: secret.name,
@@ -967,6 +974,19 @@ export class BridgeController extends Controller {
     } catch (error) {
       return this.errorResponse(error, 'Failed to inspect desktop control.', 401);
     }
+  }
+
+  async automationCommand(event: any) {
+    try {
+      const dto = await BridgeAutomationCommandRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveAgentActor(workspace.id, dto.request.from);
+      const assertRelevant = async () => {
+        if (ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? '')) !== actor) throw new Error('Automation authoring requires the active terminal identity.');
+      };
+      await assertRelevant();
+      return this.json({ data: await new ExecuteBridgeAutomationAction().execute(workspace.id, actor, dto, assertRelevant) });
+    } catch (error) { return this.errorResponse(error, 'Failed to manage agent automation.'); }
   }
 
   async computerCommand(event: any) {
@@ -987,6 +1007,13 @@ export class BridgeController extends Controller {
       }
       const result = await computerService.execute(workspace.id, request.input, {
         actorType: 'agent', actorId: actor, idempotencyKey: request.idempotencyKey, risk: request.risk,
+        taskId: request.taskId,
+        assertRelevant: async () => {
+          const currentTask = (await taskBoardService.list(workspace.id)).find((candidate) => candidate.id === request.taskId);
+          const currentWorkspace = await workspaceRepository.getWorkspace(workspace.id);
+          if (!currentWorkspace || currentWorkspace.suspendedAt || !currentTask || currentTask.assigneeNodeId !== actor || currentTask.status === 'done') throw new Error('The workspace or assigned task is no longer active.');
+          if (ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? '')) !== actor) throw new Error('The agent terminal is no longer authorized.');
+        },
       });
       await controlCenterService.recordActivity({
         workspaceId: workspace.id,
@@ -1789,6 +1816,7 @@ export class BridgeController extends Controller {
   }
 
   private errorResponse(error: unknown, fallback: string, status = 400) {
+    if (error instanceof AutonomyGatePendingError) return this.json({ error: `${error.message} Gate: ${error.gate.id}. Wait for the owner decision, inspect the current target, then retry with the same idempotency key.`, gateId: error.gate.id }, 409);
     const responseStatus = error instanceof CodeGraphAccessError ? error.status : status;
     return this.json({ error: error instanceof Error ? error.message : fallback }, responseStatus);
   }

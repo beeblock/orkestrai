@@ -20,6 +20,7 @@ import { integrationExecutionService } from './IntegrationExecutionService.js';
 import { secretRefService } from './SecretRefService.js';
 import { managedPortalService, portalProfileFromPayload } from './ManagedPortalService.js';
 import { managedPortalCommandSchema } from '../../contracts/schemas/managed-portal.schema.js';
+import { workspaceToolReference } from '../../../../../../packages/orkestrai-cli/src/workspace-tool-reference.js';
 
 const SECRET_KEY = /(?:password|passwd|secret|token|authorization|cookie|api[-_]?key|credential)/i;
 
@@ -137,6 +138,16 @@ function destinationAllowed(allowed: string[], destination: string): boolean {
 export class AgentWorkspaceToolService {
   async list(workspaceId: string) { return agentWorkspaceToolRepository.list(workspaceId); }
 
+  async authoringReference(workspaceId: string, actorId: string | null) {
+    const policy = await autonomyPolicyService.get(workspaceId);
+    const grant = policy.policy.toolPublication;
+    return { ...workspaceToolReference(), publication: {
+      allowed: Boolean(actorId && policy.enabled && policy.mode === 'bounded' && !policy.policy.halted && policy.policy.capabilities.includes('tool') && grant.enabled && grant.agentIds.includes(actorId)),
+      kinds: grant.kinds, maxTimeoutMs: grant.maxTimeoutMs, maxOutputBytes: grant.maxOutputBytes,
+      capabilities: policy.policy.capabilities,
+    } };
+  }
+
   async find(workspaceId: string, id: string) {
     const tool = await agentWorkspaceToolRepository.find(workspaceId, id);
     if (!tool) throw new Error('Tool not found.');
@@ -210,7 +221,11 @@ export class AgentWorkspaceToolService {
         }
         for (const fixture of tool.manifest.fixtures) {
           validateValue(tool.manifest.inputSchema, fixture.input);
-          if (executor.kind === 'transform') validateValue(tool.manifest.outputSchema, new ToolExecutionService().transform(fixture.input, executor.operations));
+          if (executor.kind === 'transform') {
+            const output = new ToolExecutionService().transform(fixture.input, executor.operations);
+            validateValue(tool.manifest.outputSchema, output);
+            if (Object.hasOwn(fixture, 'expectedOutput') && stable(output) !== stable(fixture.expectedOutput)) throw new Error('Transform fixture output did not match its expectation.');
+          }
         }
         const currentPolicy = await autonomyPolicyService.get(tool.workspaceId);
         if (currentPolicy.revision !== policy.revision) throw new Error('Publication policy changed during validation.');

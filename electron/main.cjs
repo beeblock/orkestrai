@@ -7,7 +7,8 @@
  * node-pty) precisam estar rebuildados para o ABI do Electron
  * (npm run electron:rebuild).
  */
-const { app, BrowserWindow, WebContentsView, View, clipboard, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerMonitor, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, View, clipboard, dialog, ipcMain, Menu, Notification, Tray, nativeImage, powerMonitor, safeStorage, session, shell, screen: electronScreen, systemPreferences, desktopCapturer } = require('electron');
+const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -19,6 +20,12 @@ const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./di
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
+const { createAudioDecoder } = require('./audio-decoder.cjs');
+const decodeAudio = createAudioDecoder();
+const { createDesktopCapture } = require('./computer-capture.cjs');
+const captureComputerDesktop = createDesktopCapture({ screen: electronScreen, desktopCapturer });
+const { createComputerClipboard } = require('./computer-clipboard.cjs');
+const withComputerClipboard = createComputerClipboard(clipboard);
 const {
   BACKGROUND_CORE_ARGUMENT,
   isBackgroundCoreLaunch,
@@ -53,6 +60,7 @@ const coreId = crypto.randomUUID();
 const coreToken = crypto.randomBytes(32).toString('base64url');
 let coreStartedAt = new Date().toISOString();
 let managedPortalExecutor = null;
+let computerHostClosing = Promise.resolve();
 
 function initializeDiagnostics() {
   app.setAppLogsPath();
@@ -548,6 +556,7 @@ async function startServer(port) {
       ORKESTRAI_CORE_STARTED_AT: coreStartedAt,
       ORKESTRAI_CORE_VERSION: app.getVersion(),
       ORKESTRAI_PRIVATE_ENV_KEYS: privateEnvKeys,
+      ORKESTRAI_EMBEDDED_COMPUTER: process.platform === 'darwin' ? '1' : '0',
       ...(bundledCliRuntime && fs.existsSync(bundledCliRuntime)
         ? { ORKESTRAI_CLI_CONSOLE_RUNTIME: bundledCliRuntime }
         : {}),
@@ -560,8 +569,72 @@ async function startServer(port) {
   });
 
   const requestingServer = serverProcess;
+  let computerHost = null;
+  let computerHostLoading = null;
+  let computerHostStopped = false;
+  const getComputerHost = () => {
+    if (computerHostStopped || requestingServer !== serverProcess || isQuitting) return Promise.reject(new Error('Computer host stopped.'));
+    if (!computerHostLoading) computerHostLoading = (async () => {
+      await computerHostClosing;
+      const { CuaComputerHost } = await import(pathToFileURL(path.join(runtimeRoot, 'build', 'computer-host', 'index.mjs')).href);
+      if (computerHostStopped || requestingServer !== serverProcess || isQuitting) throw new Error('Computer host stopped.');
+      computerHost = new CuaComputerHost({
+        captureDesktop: captureComputerDesktop,
+        clipboardText: withComputerClipboard,
+        openSettings: permission => shell.openExternal(permission === 'accessibility'
+          ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+          : 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'),
+        permissions: () => ({
+          accessibility: systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied',
+          screenRecording: systemPreferences.getMediaAccessStatus('screen') === 'granted' ? 'granted' : 'denied',
+        }),
+        displays: () => {
+          const primary = electronScreen.getPrimaryDisplay().id;
+          return electronScreen.getAllDisplays().map(display => ({ id: String(display.id), name: display.label || String(display.id),
+            bounds: display.bounds, scaleFactor: display.scaleFactor, primary: display.id === primary }));
+        },
+      });
+      return computerHost;
+    })().catch(error => { computerHostLoading = null; throw error; });
+    return computerHostLoading;
+  };
+  requestingServer.once('exit', () => {
+    computerHostStopped = true;
+    const loading = computerHostLoading;
+    computerHostClosing = (async () => {
+      await loading?.catch(() => undefined);
+      await computerHost?.stop();
+    })();
+    // Keep a failed shutdown as an admission barrier across server restarts.
+    // Logging must not convert it into permission to create another runtime.
+    void computerHostClosing.catch(() => { diagnostics?.write('warn', 'computer', 'Embedded Computer shutdown failed.'); });
+  });
   serverProcess.on('message', (message) => {
     if (!message?.requestId) return;
+    if (message.type === 'orkestrai:computer:execute') {
+      if (process.platform !== 'darwin' || typeof message.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(message.requestId)) return;
+      let requestHost;
+      void getComputerHost().then(host => { requestHost = host; return host.execute(message.request); }).then(result => {
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:computer:result', requestId: message.requestId, result, settled: requestHost?.ready === true }, () => {});
+      }).catch(error => {
+        const failureCode = requestHost?.failureCode(error);
+        diagnostics?.write('warn', 'computer', `Embedded Computer operation failed: ${failureCode ?? 'unclassified'}.`);
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:computer:result', requestId: message.requestId,
+          error: 'The embedded Computer operation could not be confirmed.',
+          failureCode,
+          settled: requestHost?.ready === true,
+          inputAttempted: typeof error?.inputAttempted === 'boolean' ? error.inputAttempted : !['snapshot', 'read', 'capture', 'settings'].includes(message.request?.operation) }, () => {});
+      });
+      return;
+    }
+    if (message.type === 'orkestrai:audio:decode') {
+      void decodeAudio(mainWindow?.webContents, `http://127.0.0.1:${serverPort}`, message).then(base64 => {
+        if (requestingServer?.connected) requestingServer.send({ type: 'orkestrai:audio:result', requestId: message.requestId, base64 });
+      }).catch(() => {
+        if (requestingServer?.connected) requestingServer.send({ type: 'orkestrai:audio:result', requestId: message.requestId, error: 'Local audio decoding failed.' });
+      });
+      return;
+    }
     if (message.type === 'orkestrai:portal:execute' || message.type === 'orkestrai:portal:inspect') {
       const operation = message.type === 'orkestrai:portal:inspect'
         ? managedPortalExecutor.inspect(message).then((result) => ({ ok: true, result }))

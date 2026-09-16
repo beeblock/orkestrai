@@ -2,7 +2,7 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import {
-    Bot, CheckCircle2, CircleAlert, Clock3, KeyRound, LoaderCircle,
+    Bot, CheckCircle2, CircleAlert, CircleHelp, Clock3, KeyRound, LoaderCircle,
     GitBranch, Mail, MessageCircle, MessagesSquare, Plus, Radio, RefreshCw, Send,
     ShieldCheck, Trash2, Webhook, XCircle,
   } from '@lucide/svelte';
@@ -16,10 +16,11 @@
   import type { AutomationIntegration } from '$lib/modules/agent-room/domain/types.js';
   import type { IntegrationType } from '$lib/modules/agent-room/contracts/schemas/integration.schema.js';
   import * as m from '$lib/paraglide/messages.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
 
   type ManifestAction = { id: string; mutation: boolean; risk: string | null };
   type Manifest = { id: IntegrationType; version: string; auth: string; secretSlots: number; hosts: string[]; actions: ManifestAction[] };
-  type IntegrationEvent = { id: string; integrationId: string; kind: string; status: string; error: string | null; createdAt: string };
+  type IntegrationEvent = { id: string; integrationId: string; kind: string; status: string; error: string | null; createdAt: string; deliveryState?: 'accepted' | 'uncertain' | 'pending' | 'not_submitted' | 'unknown' | null; receipt?: { messageIds: string[]; evidence: 'provider_message_id' | 'http_response' } | null };
   type SecretRefCreated = { id: string; ref: string; storageKey: string };
   type DesktopBridge = {
     saveAutomationSecret?: (key: string, value: string) => Promise<{ stored: boolean }>;
@@ -252,7 +253,40 @@
 
         {#if selected.error}<div class="mt-3 flex gap-2 border-l-2 border-[var(--app-danger)] bg-[var(--app-danger-soft)] px-3 py-2 text-ui-xs text-[var(--app-danger)]"><CircleAlert class="mt-0.5 shrink-0" size={14} /><span class="break-words">{selected.error}</span></div>{/if}
         <section class="mt-4"><div class="mb-2 flex items-center gap-2"><ShieldCheck size={14} class="text-[var(--app-text-muted)]" /><h3 class="text-xs font-semibold">{m['integrations.standing_grant']()}</h3></div><div class="flex flex-wrap gap-1.5">{#each selected.permissions as permission}<Badge variant="outline">{actionLabel(permission)}</Badge>{/each}</div><p class="mt-2 max-w-2xl text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['integrations.standing_grant_help']()}</p></section>
-        <section class="mt-5"><div class="mb-2 flex items-center gap-2"><Radio size={14} class="text-[var(--app-text-muted)]" /><h3 class="text-xs font-semibold">{m['integrations.activity']()}</h3></div>{#if selectedEvents.length === 0}<div class="border border-dashed border-[var(--app-border)] px-4 py-8 text-center text-ui-xs text-[var(--app-text-muted)]">{m['integrations.no_activity']()}</div>{:else}<div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">{#each selectedEvents as event (event.id)}<article class="flex items-start gap-3 bg-[var(--app-surface)] px-3 py-2.5">{#if event.status === 'succeeded'}<CheckCircle2 class="mt-0.5 shrink-0 text-[var(--app-success)]" size={14} />{:else if event.status === 'failed'}<XCircle class="mt-0.5 shrink-0 text-[var(--app-danger)]" size={14} />{:else}<Clock3 class="mt-0.5 shrink-0 text-[var(--app-warning)]" size={14} />{/if}<div class="min-w-0 flex-1"><p class="text-ui-xs font-medium">{actionLabel(event.kind)}</p><p class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]">{new Date(event.createdAt).toLocaleString()}</p>{#if event.error}<p class="mt-1 break-words text-ui-xs text-[var(--app-danger)]">{event.error}</p>{/if}</div></article>{/each}</div>{/if}</section>
+        <section class="mt-5">
+          <div class="mb-2 flex items-center gap-2"><Radio size={14} class="text-[var(--app-text-muted)]" /><h3 class="text-xs font-semibold">{m['integrations.activity']()}</h3></div>
+          {#if selectedEvents.length === 0}
+            <div class="border border-dashed border-[var(--app-border)] px-4 py-8 text-center text-ui-xs text-[var(--app-text-muted)]">{m['integrations.no_activity']()}</div>
+          {:else}
+            <div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">
+              {#each selectedEvents as event (event.id)}
+                <article class="flex items-start gap-3 bg-[var(--app-surface)] px-3 py-2.5">
+                  {#if event.deliveryState === 'uncertain'}<CircleAlert class="mt-0.5 shrink-0 text-[var(--app-warning)]" size={14} />
+                  {:else if event.deliveryState === 'unknown'}<CircleHelp class="mt-0.5 shrink-0 text-[var(--app-text-muted)]" size={14} />
+                  {:else if event.status === 'succeeded'}<CheckCircle2 class="mt-0.5 shrink-0 text-[var(--app-success)]" size={14} />
+                  {:else if event.status === 'failed'}<XCircle class="mt-0.5 shrink-0 text-[var(--app-danger)]" size={14} />
+                  {:else}<Clock3 class="mt-0.5 shrink-0 text-[var(--app-warning)]" size={14} />{/if}
+                  <div class="min-w-0 flex-1">
+                    <p class="text-ui-xs font-medium">{actionLabel(event.kind)}</p>
+                    <p class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]">{new Date(event.createdAt).toLocaleString(getLocale())}</p>
+                    {#if event.deliveryState}
+                      <p class="mt-1 text-xs font-medium">{messages[`integrations.delivery_${event.deliveryState}`]?.() ?? m['integrations.delivery_unknown']()}</p>
+                    {/if}
+                    {#if event.deliveryState === 'uncertain'}
+                      <p class="mt-1 text-xs text-[var(--app-warning)]">{m['integrations.delivery_uncertain_help']()}</p>
+                    {:else if event.error}<p class="mt-1 break-words text-xs text-[var(--app-danger)]">{event.deliveryState === 'not_submitted' ? m['integrations.delivery_not_submitted_help']() : event.error}</p>{/if}
+                    {#if event.receipt?.messageIds.length}
+                      <details class="mt-2 text-xs">
+                        <summary class="cursor-pointer text-[var(--app-text-muted)]">{m['integrations.delivery_receipt']()}</summary>
+                        <ul class="mt-1 space-y-1">{#each event.receipt.messageIds as id}<li class="break-all font-mono">{id}</li>{/each}</ul>
+                      </details>
+                    {/if}
+                  </div>
+                </article>
+              {/each}
+            </div>
+          {/if}
+        </section>
       {:else}
         <div class="grid min-h-64 place-items-center text-center"><div><Bot class="mx-auto text-[var(--app-text-muted)]" size={28} /><h2 class="mt-3 text-sm font-semibold">{m['integrations.empty_title']()}</h2><p class="mt-1 max-w-sm text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['integrations.empty_help']()}</p><Button class="mt-4" size="sm" onclick={() => { resetCreate(); dialogOpen = true; }}><Plus size={14} />{m['integrations.add']()}</Button></div></div>
       {/if}

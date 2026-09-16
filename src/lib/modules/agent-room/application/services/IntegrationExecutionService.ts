@@ -10,8 +10,9 @@ import { AgentIntegrationEvent } from '../../domain/models/AgentIntegrationEvent
 import { AgentAutomationIntegration } from '../../domain/models/AgentAutomationIntegration.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { TrustedIntegrationHttpClient } from '../../infrastructure/integrations/TrustedIntegrationHttpClient.js';
+import { integrationDeliveryState, integrationReceipt, integrationReceiptId, integrationRequestDigest, storedIntegrationReceipt } from '../../infrastructure/integrations/delivery.js';
 import { desktopSecretService } from '../../infrastructure/secrets/DesktopSecretService.js';
-import { autonomyPolicyService, redactAutonomyValue } from './AutonomyPolicyService.js';
+import { AutonomyGatePendingError, autonomyPolicyService, redactAutonomyValue } from './AutonomyPolicyService.js';
 import { secretRefService } from './SecretRefService.js';
 
 type ExecutionContext = {
@@ -42,11 +43,9 @@ function asIso(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-function safeError(status: number, provider: string, payload: unknown): Error {
-  const data = record(payload);
-  const providerError = record(data.error);
-  const code = String(providerError.code ?? data.error_code ?? data.error ?? data.description ?? '').slice(0, 120);
-  return new Error(`${provider} returned HTTP ${status}${code && !/token|secret|authorization/i.test(code) ? ` (${code})` : ''}.`);
+function safeError(status: number, provider: string, _payload: unknown): Error {
+  // Providers can echo tokens or private request content even in an error field.
+  return new Error(`${provider} rejected the request (HTTP ${status}).`);
 }
 
 function base64Url(value: Buffer | string): string {
@@ -82,10 +81,13 @@ export class IntegrationExecutionService {
     if (!integration.permissions.includes(action.id)) throw new Error('Integration action is outside the standing account grant.');
     const input = action.inputSchema.parse(request.input) as Record<string, unknown>;
     const idempotencyKey = request.idempotencyKey ?? this.idempotencyKey(integration.id, action.id, input);
+    const requestDigest = integrationRequestDigest(action.id, input);
     const prior = await AgentIntegrationEvent.query().where('integration_id', integration.id).where('idempotency_key', idempotencyKey).first();
+    if (prior && prior.getAttribute('request_digest') !== requestDigest) throw new Error('This idempotency key belongs to another or legacy unverified request. Inspect its existing receipt before proceeding.');
     if (prior && String(prior.getAttribute('status')) === 'succeeded') {
       return { duplicate: true, eventId: String(prior.getAttribute('id')), ...record(this.parse(prior.getAttribute('payload_json'))) };
     }
+    if (prior && prior.getAttribute('status') !== 'failed') throw new Error('This integration request is in progress or its result is uncertain. Do not resend with a new key; inspect the provider and the event first.');
 
     const eventId = prior ? String(prior.getAttribute('id')) : uuidv7();
     const now = new Date();
@@ -98,6 +100,7 @@ export class IntegrationExecutionService {
         kind: action.id,
         idempotency_key: idempotencyKey,
         status: 'running',
+        request_digest: requestDigest,
         payload_json: null,
         error: null,
         processed_at: null,
@@ -105,10 +108,12 @@ export class IntegrationExecutionService {
         updated_at: now,
       });
     } else {
-      await AgentIntegrationEvent.query().where('id', eventId).update({ status: 'running', error: null, updated_at: now });
+      const claimed = await AgentIntegrationEvent.query().where('id', eventId).where('status', 'failed').update({ status: 'running', error: null, updated_at: now });
+      if (!claimed) throw new Error('Another execution already claimed this integration request.');
     }
 
     const networkUrl = this.auditUrl(integration);
+    let dispatched = false;
     try {
       const result = await autonomyPolicyService.execute({
         workspaceId,
@@ -124,7 +129,26 @@ export class IntegrationExecutionService {
         auditOutput: (output) => this.auditResult(action.id, record(output)),
         certainty: 'semantic',
         network: { url: networkUrl, method: action.mutation ? 'POST' : 'GET' },
-      }, () => this.executeUnchecked(workspaceId, integration, action.id, input, context));
+      }, async () => {
+        const beforeDispatch = async () => {
+          const current = await this.requireIntegration(workspaceId, integration.id);
+          if (!current.enabled || current.status !== 'connected' || !current.permissions.includes(action.id) || JSON.stringify(current.config) !== JSON.stringify(integration.config) || JSON.stringify(current.secretRefs) !== JSON.stringify(integration.secretRefs)) throw new Error('Integration authorization changed before dispatch.');
+          if (action.mutation) {
+            // Resolve credentials/files first. Persist uncertainty immediately
+            // before publication, never while still waiting for a local gate.
+            await AgentIntegrationEvent.query().where('id', eventId).update({ status: 'dispatching', updated_at: new Date() });
+            dispatched = true;
+          }
+        };
+        let output: Record<string, unknown>;
+        try { output = await this.executeUnchecked(workspaceId, integration, action.id, input, context, beforeDispatch); }
+        catch (error) {
+          if (error instanceof AutonomyGatePendingError) throw error;
+          throw new Error('Integration transport did not return a confirmed result.');
+        }
+        const receipt = integrationReceipt(action.id, output);
+        return { ...output, ...(receipt ? { receipt } : {}) };
+      });
       const persisted = this.auditResult(action.id, result);
       const finished = new Date();
       await AgentIntegrationEvent.query().where('id', eventId).update({
@@ -136,10 +160,11 @@ export class IntegrationExecutionService {
     } catch (error) {
       const finished = new Date();
       await AgentIntegrationEvent.query().where('id', eventId).update({
-        status: 'failed', error: String(error instanceof Error ? error.message : error).slice(0, 2_000),
+        status: dispatched ? 'uncertain' : 'failed', error: dispatched ? 'Delivery is uncertain. Inspect the provider before another submission.' : 'The integration request failed before publication dispatch.',
         processed_at: finished, updated_at: finished,
       });
-      throw error;
+      if (error instanceof AutonomyGatePendingError) throw error;
+      throw new Error(dispatched ? 'Integration delivery is uncertain. Do not resend with a new key; inspect the provider and the event first.' : 'Integration request failed before publication dispatch. Check its authorization and configuration.');
     }
   }
 
@@ -154,6 +179,12 @@ export class IntegrationExecutionService {
       direction: String(row.getAttribute('direction')),
       kind: String(row.getAttribute('kind')),
       status: String(row.getAttribute('status')),
+      deliveryState: integrationDeliveryState({
+        direction: String(row.getAttribute('direction')), kind: String(row.getAttribute('kind')),
+        status: String(row.getAttribute('status')), requestDigest: row.getAttribute('request_digest'),
+        receipt: storedIntegrationReceipt(record(this.parse(row.getAttribute('payload_json'))).receipt),
+      }),
+      receipt: storedIntegrationReceipt(record(this.parse(row.getAttribute('payload_json'))).receipt),
       payload: this.parse(row.getAttribute('payload_json')),
       error: row.getAttribute('error') ? String(row.getAttribute('error')) : null,
       processedAt: row.getAttribute('processed_at') ? asIso(row.getAttribute('processed_at')) : null,
@@ -220,13 +251,14 @@ export class IntegrationExecutionService {
     action: string,
     input: Record<string, unknown>,
     context: ExecutionContext,
+    beforeDispatch: () => Promise<void>,
   ): Promise<Record<string, unknown>> {
     if (integration.type === 'github') return this.github(integration, action);
-    if (integration.type === 'gmail') return this.gmail(workspaceId, integration, action, input, context);
-    if (integration.type === 'slack') return this.slack(workspaceId, integration, action, input);
-    if (integration.type === 'telegram') return this.telegram(workspaceId, integration, action, input, context);
-    if (integration.type === 'whatsapp') return this.whatsapp(workspaceId, integration, action, input);
-    return this.webhook(workspaceId, integration, input);
+    if (integration.type === 'gmail') return this.gmail(workspaceId, integration, action, input, context, beforeDispatch);
+    if (integration.type === 'slack') return this.slack(workspaceId, integration, action, input, beforeDispatch);
+    if (integration.type === 'telegram') return this.telegram(workspaceId, integration, action, input, context, beforeDispatch);
+    if (integration.type === 'whatsapp') return this.whatsapp(workspaceId, integration, action, input, beforeDispatch);
+    return this.webhook(workspaceId, integration, input, beforeDispatch);
   }
 
   private async github(integration: AutomationIntegration, action: string): Promise<Record<string, unknown>> {
@@ -242,7 +274,7 @@ export class IntegrationExecutionService {
     return { number: pull.number ?? null, title: String(pull.title ?? '').slice(0, 500), state: pull.state ?? null, url: pull.html_url ?? null, updatedAt: pull.updated_at ?? null };
   }
 
-  private async gmail(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, context: ExecutionContext): Promise<Record<string, unknown>> {
+  private async gmail(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, context: ExecutionContext, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const credential = await this.googleCredential(integration, action);
     const token = await this.refreshGoogleCredential(workspaceId, integration, credential);
     const headers = { authorization: `Bearer ${token}`, accept: 'application/json', 'content-type': 'application/json' };
@@ -270,6 +302,7 @@ export class IntegrationExecutionService {
       }
       init = { method: 'POST', headers, body: JSON.stringify(payload) };
     }
+    await beforeDispatch();
     const response = await this.http.request(url, init);
     if (!response.ok) throw safeError(response.status, 'Gmail', response.json);
     const data = record(response.json);
@@ -278,7 +311,7 @@ export class IntegrationExecutionService {
     return { id: data.id ?? record(data.message).id ?? null, threadId: data.threadId ?? record(data.message).threadId ?? null, labelIds: stringArray(data.labelIds, 100) };
   }
 
-  private async slack(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async slack(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const token = await this.secret(integration, action, 'slack.com');
     let endpoint = 'auth.test';
     let method = 'POST';
@@ -293,6 +326,7 @@ export class IntegrationExecutionService {
       endpoint = 'conversations.history'; method = 'GET';
     }
     const query = method === 'GET' ? new URLSearchParams(Object.entries(input).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])) : null;
+    await beforeDispatch();
     const response = await this.http.request(`https://slack.com/api/${endpoint}${query ? `?${query}` : ''}`, {
       method,
       headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) },
@@ -305,7 +339,7 @@ export class IntegrationExecutionService {
     return { channel: data.channel ?? null, ts: data.ts ?? null, messageTs: record(data.message).ts ?? null };
   }
 
-  private async telegram(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, context: ExecutionContext): Promise<Record<string, unknown>> {
+  private async telegram(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, context: ExecutionContext, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const token = await this.secret(integration, action, 'api.telegram.org');
     const method = action === 'telegram.send_message' ? 'sendMessage' : action === 'telegram.send_document' ? 'sendDocument' : 'getUpdates';
     let body: BodyInit | undefined;
@@ -324,6 +358,7 @@ export class IntegrationExecutionService {
       headers['content-type'] = 'application/json';
       body = JSON.stringify({ offset: input.offset, timeout: input.timeout, limit: input.limit, allowed_updates: ['message', 'edited_message', 'channel_post'] });
     }
+    await beforeDispatch();
     const response = await this.http.request(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers, body });
     const data = record(response.json);
     if (!response.ok || data.ok !== true) throw safeError(response.status, 'Telegram', response.json);
@@ -332,13 +367,14 @@ export class IntegrationExecutionService {
     return { messageId: result.message_id ?? null, date: result.date ?? null, chatId: record(result.chat).id ?? null };
   }
 
-  private async whatsapp(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async whatsapp(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const token = await this.secret(integration, action, 'graph.facebook.com');
     const to = String(input.to ?? integration.config.defaultRecipient ?? '');
     if (!to) throw new Error('WhatsApp recipient is required.');
     const payload = action === 'whatsapp.send_document'
       ? { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'document', document: { link: input.link, filename: input.filename, caption: input.caption } }
       : { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: input.text, preview_url: input.previewUrl } };
+    await beforeDispatch();
     const response = await this.http.request(`https://graph.facebook.com/${encodeURIComponent(String(integration.config.apiVersion))}/${encodeURIComponent(String(integration.config.phoneNumberId))}/messages`, {
       method: 'POST', headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(payload),
     });
@@ -347,7 +383,7 @@ export class IntegrationExecutionService {
     return { messageIds: Array.isArray(data.messages) ? data.messages.slice(0, 20).map((message) => record(message).id) : [], contactWaIds: Array.isArray(data.contacts) ? data.contacts.slice(0, 20).map((contact) => record(contact).wa_id) : [] };
   }
 
-  private async webhook(workspaceId: string, integration: AutomationIntegration, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async webhook(workspaceId: string, integration: AutomationIntegration, input: Record<string, unknown>, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const url = String(integration.config.url);
     const headers: Record<string, string> = { accept: 'application/json', 'content-type': 'application/json' };
     if (String(integration.config.authScheme) !== 'none') {
@@ -355,6 +391,7 @@ export class IntegrationExecutionService {
       if (integration.config.authScheme === 'bearer') headers.authorization = `Bearer ${token}`;
       else headers[String(integration.config.authHeader)] = token;
     }
+    await beforeDispatch();
     const response = await this.http.request(url, { method: String(integration.config.method), headers, body: JSON.stringify(input.payload ?? {}) });
     if (!response.ok) throw safeError(response.status, 'Webhook', response.json);
     return { status: response.status, response: record(redactAutonomyValue(response.json)) };
@@ -507,9 +544,14 @@ export class IntegrationExecutionService {
 
   private auditResult(action: string, result: Record<string, unknown>): Record<string, unknown> {
     const summary: Record<string, unknown> = { action };
-    for (const key of ['id', 'threadId', 'channel', 'ts', 'messageId', 'status', 'eventId', 'duplicate']) {
-      if (result[key] !== undefined && result[key] !== null) summary[key] = result[key];
+    for (const key of ['id', 'threadId', 'channel', 'ts', 'messageId', 'eventId']) {
+      const id = integrationReceiptId(result[key]);
+      if (id !== null) summary[key] = id;
     }
+    if (typeof result.status === 'number' && Number.isInteger(result.status)) summary.status = result.status;
+    if (typeof result.duplicate === 'boolean') summary.duplicate = result.duplicate;
+    const receipt = integrationReceipt(action, result);
+    if (receipt) summary.receipt = receipt;
     for (const key of ['messages', 'updates', 'channels', 'messageIds', 'contactWaIds', 'labelIds']) {
       if (Array.isArray(result[key])) summary[`${key}Count`] = result[key].length;
     }

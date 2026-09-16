@@ -27,6 +27,14 @@ agentes não é persistida.
 
 ## Destaques
 
+- **Assistentes contínuos no desktop:** monitore uma conversa autorizada, agrupe
+  mensagens recebidas e deixe o agente do Canvas responder com uma persona
+  consistente. Memória privada opcional, vozes locais e lembretes de calendário
+  vinculados a tarefas respeitam a autorização do contato. Anexos nativos dependem
+  dos controles do aplicativo; arquivos de áudio não são mensagens de voz nativas.
+  A observação funciona em segundo plano; o envio pode exigir foco temporário.
+  Configure em **Computador > Respostas em conversas** e **Automações**.
+
 - **Base do Core 24/7:** ative para manter o Core de execução local e o trabalho
   ativo disponíveis na bandeja depois de fechar todas as janelas e, se quiser,
   iniciá-lo silenciosamente ao entrar no sistema. As Configurações mostram saúde

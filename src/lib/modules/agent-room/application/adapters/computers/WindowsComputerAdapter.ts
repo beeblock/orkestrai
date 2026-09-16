@@ -1,8 +1,10 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { ComputerAdapter } from './types.js';
-import type { ComputerCommandInput, ComputerSnapshot } from '../../../contracts/schemas/computer.schema.js';
+import type { ComputerCommandInput, ComputerInteraction, ComputerSnapshot } from '../../../contracts/schemas/computer.schema.js';
 import { runNative } from './native-runner.js';
+import { WINDOWS_ACCESSIBILITY_SCRIPT } from './windows-accessibility.js';
+import { parseAccessibility, unavailableAccessibility } from './accessibility.js';
 
 const WIN32 = `using System;using System.Text;using System.Collections.Generic;using System.Runtime.InteropServices;public class O{public delegate bool E(IntPtr h,IntPtr l);[DllImport("user32.dll")]public static extern bool EnumWindows(E e,IntPtr l);[DllImport("user32.dll")]public static extern bool IsWindowVisible(IntPtr h);[DllImport("user32.dll")]public static extern int GetWindowTextLength(IntPtr h);[DllImport("user32.dll")]public static extern int GetWindowText(IntPtr h,StringBuilder s,int n);[DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")]public static extern bool GetWindowRect(IntPtr h,out R r);[DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);[DllImport("user32.dll")]public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern void mouse_event(uint f,uint x,uint y,uint d,UIntPtr i);[StructLayout(LayoutKind.Sequential)]public struct R{public int Left,Top,Right,Bottom;}}`;
 const POWERSHELL = 'powershell.exe';
@@ -23,6 +25,18 @@ function ps(script: string, args: string[] = [], allowFailure = false) {
 
 export class WindowsComputerAdapter implements ComputerAdapter {
   readonly platform = 'windows' as const;
+  readonly backgroundInteraction = true;
+
+  private async accessibility(request: { targetId: string; appId: string; background?: boolean } & Partial<ComputerInteraction>) {
+    const result = await runNative(POWERSHELL, computerPowerShellArgs(WINDOWS_ACCESSIBILITY_SCRIPT), { input: JSON.stringify(request), structuredOutput: true, timeoutMs: 5000 });
+    const parsed = JSON.parse(result.stdout);
+    if (!request.action && parsed.error === 'accessibility_failed') return unavailableAccessibility();
+    if (parsed.error) throw new Error(`Native accessibility check failed (${String(parsed.error).replace(/[^a-z_]/g, '').slice(0, 60)}). No automatic retry; inspect the current target.`);
+    return parseAccessibility(parsed);
+  }
+
+  read(targetId: string, appId: string) { return this.accessibility({ targetId, appId }); }
+  interact(input: ComputerInteraction, appId: string, options?: { background: boolean }) { return this.accessibility({ ...input, appId, background: options?.background === true }); }
 
   async launch(applicationId: string): Promise<void> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(applicationId)) throw new Error('Invalid application identifier.');
@@ -74,15 +88,20 @@ export class WindowsComputerAdapter implements ComputerAdapter {
     await ps('Add-Type -AssemblyName System.Windows.Forms;[Windows.Forms.SendKeys]::SendWait($args[0])', [sequence]);
   }
 
-  async screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: { evidencePath: string }): Promise<{ width: number | null; height: number | null }> {
+  async screenshot(input: Extract<ComputerCommandInput, { command: 'screenshot' }>, context: { evidencePath: string; passive?: boolean }): Promise<{ width: number | null; height: number | null }> {
     await mkdir(dirname(context.evidencePath), { recursive: true });
     if (input.target === 'window') {
       if (!input.targetId) throw new Error('A target window is required.');
-      await this.focus(input.targetId);
-      await new Promise((resolve) => setTimeout(resolve, 120));
+      if (!context.passive) {
+        await this.focus(input.targetId);
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
     }
     const script = `Add-Type -AssemblyName System.Windows.Forms;Add-Type -AssemblyName System.Drawing;Add-Type -TypeDefinition '${WIN32}';$target=$args[0];$id=$args[1];if($target -eq 'window'){$r=New-Object O+R;if(-not [O]::GetWindowRect([IntPtr]::new([Int64]$id),[ref]$r)){exit 2};$b=New-Object Drawing.Rectangle($r.Left,$r.Top,[Math]::Max(1,$r.Right-$r.Left),[Math]::Max(1,$r.Bottom-$r.Top))}elseif($target -eq 'display'){$s=[Windows.Forms.Screen]::AllScreens|?{$_.DeviceName -eq $id}|Select-Object -First 1;if(-not $s){exit 3};$b=$s.Bounds}else{$b=[Windows.Forms.SystemInformation]::VirtualScreen};$bmp=New-Object Drawing.Bitmap($b.Width,$b.Height);$g=[Drawing.Graphics]::FromImage($bmp);$g.CopyFromScreen($b.Location,[Drawing.Point]::Empty,$b.Size);$bmp.Save($args[2],[Drawing.Imaging.ImageFormat]::Png);$g.Dispose();$bmp.Dispose();@{width=$b.Width;height=$b.Height}|ConvertTo-Json -Compress`;
-    const result = await ps(script, [input.target, input.targetId ?? '', context.evidencePath]);
+    // Screen copying must not record whichever app took foreground during capture.
+    const guarded = script.replace("$g.CopyFromScreen", "if($target -eq 'window' -and [O]::GetForegroundWindow() -ne [IntPtr]::new([Int64]$id)){throw 'Target window lost focus'};$g.CopyFromScreen")
+      .replace("$bmp.Save", "if($target -eq 'window' -and [O]::GetForegroundWindow() -ne [IntPtr]::new([Int64]$id)){throw 'Target window lost focus'};$bmp.Save");
+    const result = await ps(guarded, [input.target, input.targetId ?? '', context.evidencePath]);
     return JSON.parse(result.stdout) as { width: number; height: number };
   }
 

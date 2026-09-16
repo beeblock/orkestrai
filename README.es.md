@@ -27,6 +27,15 @@ normal de los agentes no se guarda.
 
 ## Características Principales
 
+- **Asistentes continuos en el escritorio:** supervisa una conversación autorizada,
+  agrupa los mensajes recibidos y deja que el agente del Canvas responda con una
+  persona consistente. Memoria privada opcional, voces locales y recordatorios de
+  calendario vinculados a tareas respetan la autorización del contacto. Los adjuntos
+  dependen de los controles de la aplicación; los archivos de audio no son notas de
+  voz nativas. La observación funciona en segundo plano; el envío puede requerir
+  foco temporal. Configúralo en **Computadora > Respuestas de conversación** y
+  **Automatizaciones**.
+
 - **Base del Core 24/7:** actívala para mantener el Core de ejecución local y el
   trabajo activo disponibles en la bandeja después de cerrar todas las ventanas
   y, si quieres, iniciarlo silenciosamente al entrar al sistema. Configuración
