@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodeGraphFileScanner } from '$lib/modules/agent-room/infrastructure/code-graph/CodeGraphFileScanner.js';
@@ -22,6 +22,26 @@ function source(path: string, content: string): ScannedCodeFile {
 }
 
 describe('CodeGraphFileScanner', () => {
+  it('excludes dependencies and build output at every depth despite positive source globs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-ignore-'));
+    const included = ['src/app.ts', 'packages/web/src/page.svelte', 'api/openapi.yaml'];
+    const excluded = ['node_modules/pkg/index.ts', 'packages/web/node_modules/pkg/index.js',
+      '.svelte-kit/generated/client.js', 'packages/web/.svelte-kit/types/route.ts',
+      'build/server.js', 'packages/web/dist/bundle.js', 'vendor/library/file.php',
+      'packages/api/storage/framework/views/compiled.php', '.git/hooks/script.js', 'src/bundle.min.js'];
+    try {
+      for (const path of [...included, ...excluded]) {
+        await mkdir(join(root, path, '..'), { recursive: true });
+        await writeFile(join(root, path), 'export const example = 1;');
+      }
+      const result = await new CodeGraphFileScanner().scan(root);
+      expect(result.files.map((file) => file.relativePath)).toEqual(included.sort());
+      expect(result.diagnostics).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('treats a repository without supported source files as an empty graph', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-empty-'));
     try {

@@ -24,7 +24,7 @@ export async function getAppSettings(force = false): Promise<Record<string, stri
   if (pending) return pending;
   pending = (async () => {
     try {
-      const response = await fetch('/api/agent-room/settings');
+      const response = await fetch('/api/agent-room/settings', { signal: AbortSignal.timeout(10_000) });
       const payload = await response.json();
       cache = payload.data ?? {};
       loadedAt = Date.now();

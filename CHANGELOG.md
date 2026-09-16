@@ -5,12 +5,14 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.31.4 - 2026-09-16
 
 ### Fixed
 
 - Preserve exact agent conversation identities when restoring terminals instead of rediscovering another modified transcript. Recovery, reload, transfer and dismissal cannot adopt or stop a PTY owned by a different agent; fresh Codex discovery rejects conversations created before the new terminal.
 - Recheck terminal ownership after asynchronous launch preparation so simultaneous wake requests cannot start duplicate writers for the same conversation.
+- Keep dependency folders and generated build output out of code indexing, including nested repositories, and select oversized file sets deterministically. This prevents repeated large database rewrites from freezing terminals and delaying microphone startup.
+- Make dictation startup and transcription cancellable from the microphone control, stop capture promptly, and reject late results after cancellation or navigation. Bound startup to 15 seconds, transcription to three minutes, and automatically finish recording after 15 minutes.
 
 ## 0.31.3 - 2026-09-16
 

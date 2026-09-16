@@ -19,9 +19,9 @@ const SOURCE_EXTENSIONS = new Map<string, CodeGraphLanguage>([
 const CONTRACT_FILE = /(?:^|[._-])(openapi|swagger)(?:[._-]|$)/i;
 const CONTRACT_GLOBS = ['*openapi*.json', '*openapi*.yaml', '*openapi*.yml', '*swagger*.json', '*swagger*.yaml', '*swagger*.yml'];
 const IGNORED_GLOBS = [
-  '.git/**', 'node_modules/**', 'vendor/**', '.svelte-kit/**', '.next/**', '.nuxt/**',
-  'build/**', 'dist/**', 'release/**', 'coverage/**', 'target/**', '.cache/**',
-  'storage/framework/**', 'bootstrap/cache/**', '**/*.min.js', '**/*.map',
+  '**/.git/**', '**/node_modules/**', '**/vendor/**', '**/.svelte-kit/**', '**/.next/**', '**/.nuxt/**',
+  '**/build/**', '**/dist/**', '**/release/**', '**/coverage/**', '**/target/**', '**/.cache/**',
+  '**/storage/framework/**', '**/bootstrap/cache/**', '**/*.min.js', '**/*.map',
 ];
 
 export type ScanResult = {
@@ -63,10 +63,11 @@ export class CodeGraphFileScanner {
     const { rgPath } = await import('@vscode/ripgrep');
     const args = [
       '--files', '--hidden', '--no-follow', '--max-filesize', String(MAX_FILE_BYTES),
-      ...IGNORED_GLOBS.flatMap((glob) => ['--glob', `!${glob}`]),
       ...[...SOURCE_EXTENSIONS.keys()].flatMap((extension) => ['--glob', `*${extension}`]),
       ...CONTRACT_GLOBS.flatMap((glob) => ['--glob', glob]),
-      '--', rootPath,
+      // ripgrep applies the LAST matching glob. Exclusions must win over *.ts etc.
+      ...IGNORED_GLOBS.flatMap((glob) => ['--glob', `!${glob}`]),
+      '--', '.',
     ];
     let stdout = '';
     try {
@@ -74,6 +75,7 @@ export class CodeGraphFileScanner {
         timeout: 30_000,
         maxBuffer: MAX_OUTPUT_BYTES,
         windowsHide: true,
+        cwd: rootPath,
       }));
     } catch (error) {
       const candidate = error as { code?: number; stdout?: string };
@@ -83,7 +85,9 @@ export class CodeGraphFileScanner {
       stdout = candidate.stdout ?? '';
     }
 
-    const paths = stdout.split(/\r?\n/).filter(Boolean).slice(0, MAX_FILES + 1);
+    // Parallel directory traversal has no stable order. Cap only after sorting,
+    // otherwise unchanged large repositories appear to replace thousands of files.
+    const paths = stdout.split(/\r?\n/).filter(Boolean).sort().slice(0, MAX_FILES + 1);
     if (paths.length > MAX_FILES) {
       diagnostics.push({
         path: null,
@@ -95,7 +99,7 @@ export class CodeGraphFileScanner {
 
     const results = await mapConcurrent(paths.slice(0, MAX_FILES), FILE_READ_CONCURRENCY, async (candidate) => {
       try {
-        const absolutePath = await realpath(resolve(candidate));
+        const absolutePath = await realpath(resolve(rootPath, candidate));
         if (!isInside(rootPath, absolutePath)) {
           return {
             file: null,
@@ -127,7 +131,7 @@ export class CodeGraphFileScanner {
         } satisfies ScannedCodeFile, diagnostic: null };
       } catch (error) {
         return { file: null, diagnostic: {
-          path: relative(rootPath, candidate).split(sep).join('/'),
+          path: relative(rootPath, resolve(rootPath, candidate)).split(sep).join('/'),
           severity: 'warning',
           code: 'file_read_failed',
           message: error instanceof Error ? error.message.slice(0, 300) : 'Source file could not be read.',

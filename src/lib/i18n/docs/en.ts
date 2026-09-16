@@ -761,7 +761,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'leader-dictation',
       title: 'Dictate into any text field',
-      body: 'Focus any editable field — a kanban title or description, role, note, or form — then use the global voice orb or Alt+Space. The very first click preserves that field and inserts the transcript at its cursor without requiring a leader. Under Settings → Voice dictation, you can enable automatic sending: terminals also receive Enter after the transcript, while regular fields still only receive text. The clickable badge shows whether the orb is pinned or movable and opens position controls directly; the tooltip also displays the Ctrl-click or Command-click shortcut. In Workbench, the pinned position uses a dedicated header slot and never covers tabs or actions; unpinning restores free movement. With no active field, the same control finds the workspace leader in both Canvas and Workbench. On macOS, Fn/Globe by itself belongs to the system; choose a key combination or an F1–F12 key.',
+      body: 'Focus any editable field — a kanban title or description, role, note, or form — then use the global voice orb or Alt+Space. The very first click preserves that field and inserts the transcript at its cursor without requiring a leader. Under Settings → Voice dictation, you can enable automatic sending: terminals also receive Enter after the transcript, while regular fields still only receive text. The clickable badge shows whether the orb is pinned or movable and opens position controls directly; the tooltip also displays the Ctrl-click or Command-click shortcut. In Workbench, the pinned position uses a dedicated header slot and never covers tabs or actions; unpinning restores free movement. With no active field, the same control finds the workspace leader in both Canvas and Workbench. On macOS, Fn/Globe by itself belongs to the system; choose a key combination or an F1–F12 key.' + " While the microphone is opening or transcribing, click its Cancel control to stop the attempt. Late responses cannot open the microphone or insert text afterwards. Startup is limited to 15 seconds and transcription to three minutes; recording automatically stops and transcribes after 15 minutes. Cancelling discards that attempt without sending text to the agent.",
       tags: ['Global dictation', 'text fields', 'local voice'],
     },
     {
@@ -941,10 +941,14 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Unreleased',
-      title: 'Terminal conversation isolation',
-      summary: 'Restore each agent with its own conversation.',
-      items: ['Preserve the exact conversation ID when restoring terminals instead of rediscovering another modified transcript. Recovery, reload, transfer and dismissal cannot adopt or stop a terminal owned by a different agent. Fresh Codex discovery rejects conversations created before the new terminal.', 'Recheck terminal ownership after asynchronous launch preparation so simultaneous wake requests cannot start duplicate writers for the same conversation.'],
+      "date": "September 16, 2026 · 0.31.4",
+      "title": "Orkestrai 0.31.4: responsive dictation and terminal recovery",
+      "summary": "Prevent indexing stalls, cancel stuck dictation, and preserve each agent's conversation.",
+      "items": [
+        "Exclude dependency folders and generated build output from code indexing at every depth. Select large file sets deterministically to prevent repeated database rewrites that block terminals and delay microphone startup.",
+        "Cancel microphone startup or transcription from the same control. Stop capture promptly and discard late results after cancellation or navigation. Startup times out after 15 seconds, transcription after three minutes; recording finishes automatically after 15 minutes.",
+        "Restore each terminal with its exact conversation. Recovery cannot adopt or stop another agent's PTY, and simultaneous wake requests cannot create duplicate writers."
+      ]
     },
     {
       "date": "September 16, 2026 · 0.31.3",

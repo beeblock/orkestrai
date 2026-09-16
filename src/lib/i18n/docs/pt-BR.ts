@@ -765,7 +765,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'leader-dictation',
       title: 'Ditar em qualquer campo de texto',
-      body: 'Clique em qualquer campo editável — título ou descrição do kanban, role, nota ou formulário — e use a bolinha de voz global ou Alt+Espaço. Já no primeiro clique, o campo é preservado e a transcrição entra exatamente no cursor, sem exigir líder. Em Configurações → Ditado por voz, você pode ativar o envio automático: em terminais, a transcrição também pressiona Enter; campos comuns continuam apenas recebendo o texto. O badge clicável mostra se a bolinha está fixada ou livre e abre diretamente os controles de posição; o tooltip também exibe o atalho Ctrl+clique ou Command+clique. No Workbench, a posição fixada ocupa um espaço próprio no cabeçalho e não cobre abas nem ações; ao desafixar, ela volta a se mover livremente. Sem campo ativo, o controle encontra o líder do workspace tanto no Canvas quanto no Workbench. No macOS, Fn/Globe isolada pertence ao sistema; escolha um combo ou uma tecla F1–F12.',
+      body: 'Clique em qualquer campo editável — título ou descrição do kanban, role, nota ou formulário — e use a bolinha de voz global ou Alt+Espaço. Já no primeiro clique, o campo é preservado e a transcrição entra exatamente no cursor, sem exigir líder. Em Configurações → Ditado por voz, você pode ativar o envio automático: em terminais, a transcrição também pressiona Enter; campos comuns continuam apenas recebendo o texto. O badge clicável mostra se a bolinha está fixada ou livre e abre diretamente os controles de posição; o tooltip também exibe o atalho Ctrl+clique ou Command+clique. No Workbench, a posição fixada ocupa um espaço próprio no cabeçalho e não cobre abas nem ações; ao desafixar, ela volta a se mover livremente. Sem campo ativo, o controle encontra o líder do workspace tanto no Canvas quanto no Workbench. No macOS, Fn/Globe isolada pertence ao sistema; escolha um combo ou uma tecla F1–F12.' + " Enquanto o microfone abre ou transcreve, clique no controle Cancelar para encerrar a tentativa. Respostas atrasadas não podem abrir o microfone nem inserir texto depois. A abertura tem limite de 15 segundos e a transcrição de três minutos; a gravação para e transcreve automaticamente após 15 minutos. Cancelar descarta aquela tentativa sem enviar texto ao agente.",
       tags: ['Ditado global', 'campos de texto', 'voz local'],
     },
     {
@@ -945,10 +945,14 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Ainda não publicado',
-      title: 'Isolamento das conversas dos terminais',
-      summary: 'Restaure cada agente com sua própria conversa.',
-      items: ['Preserva o ID exato da conversa ao restaurar terminais, sem redescobrir outro transcript modificado. Recuperação, recarga, transferência e dispensa não podem assumir ou encerrar o terminal de outro agente. A descoberta de sessões novas do Codex rejeita conversas criadas antes do novo terminal.', 'Verifica novamente a quem pertence o terminal após a preparação assíncrona, impedindo que solicitações simultâneas iniciem processos duplicados para a mesma conversa.'],
+      "date": "16 de setembro de 2026 · 0.31.4",
+      "title": "Orkestrai 0.31.4: ditado responsivo e recuperação de terminais",
+      "summary": "Evita travamentos na indexação, permite cancelar o ditado e preserva a conversa de cada agente.",
+      "items": [
+        "Exclui dependências e arquivos gerados da indexação em qualquer nível de pasta. Seleciona grandes conjuntos de arquivos de forma estável, evitando regravações repetidas no banco que bloqueavam terminais e atrasavam a abertura do microfone.",
+        "Permite cancelar a abertura do microfone ou a transcrição pelo mesmo controle. Encerra a captura imediatamente e descarta resultados atrasados após cancelamento ou navegação. A abertura tem limite de 15 segundos, a transcrição de três minutos; a gravação termina automaticamente após 15 minutos.",
+        "Restaura cada terminal com sua conversa exata. A recuperação não assume nem encerra o PTY de outro agente, e solicitações simultâneas não iniciam processos duplicados para a mesma conversa."
+      ]
     },
     {
       "date": "16 de setembro de 2026 · 0.31.3",

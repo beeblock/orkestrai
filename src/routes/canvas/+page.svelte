@@ -774,8 +774,8 @@
   }
 
   async function toggleLeaderDictation() {
-    if (!activeWorkspace || leaderDictationState === 'transcribing') return;
-    if (leaderDictationState === 'recording' && leaderDictationNodeId) {
+    if (!activeWorkspace) return;
+    if (leaderDictationState !== 'idle' && leaderDictationNodeId) {
       dispatchLeaderDictation(leaderDictationNodeId);
       return;
     }

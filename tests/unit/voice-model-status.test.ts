@@ -14,7 +14,7 @@ describe('voiceModelsReadyForUse', () => {
     const settings = { voiceBackend: 'embedded', voiceModelsConfirmed: 'true' };
 
     await expect(voiceModelsReadyForUse(settings, fetchFn)).resolves.toBe(false);
-    expect(fetchFn).toHaveBeenCalledWith('/api/agent-room/voice/models');
+    expect(fetchFn).toHaveBeenCalledWith('/api/agent-room/voice/models', undefined);
   });
 
   it('libera o motor local somente quando os arquivos estao prontos', async () => {

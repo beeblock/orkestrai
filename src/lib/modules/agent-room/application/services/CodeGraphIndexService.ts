@@ -27,7 +27,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { codeGraphSemanticService } from './CodeGraphSemanticService.js';
 
 const execFileAsync = promisify(execFile);
-const INDEXER_VERSION = 3;
+const INDEXER_VERSION = 4;
 const PARSE_CONCURRENCY = 4;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
 const WATCHED_SOURCE = /\.(?:[cm]?[jt]sx?|svelte|php)$/i;

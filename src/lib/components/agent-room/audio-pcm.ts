@@ -103,6 +103,7 @@ export class PcmAudioRecorder {
     this.sampleRate = context.sampleRate;
     try {
       await context.audioWorklet.addModule('/audio/pcm-capture-worklet.js');
+      if (this.stopped) throw new DOMException('Capture cancelled.', 'AbortError');
       this.source = context.createMediaStreamSource(this.stream);
       this.processor = new AudioWorkletNode(context, 'orkestrai-pcm-capture', {
         numberOfInputs: 1,
@@ -123,6 +124,7 @@ export class PcmAudioRecorder {
       this.processor.connect(this.mutedOutput);
       this.mutedOutput.connect(context.destination);
       if (context.state === 'suspended') await context.resume();
+      if (this.stopped) throw new DOMException('Capture cancelled.', 'AbortError');
       this.startBackupCapture();
     } catch (error) {
       await this.disposeGraph();
@@ -164,7 +166,6 @@ export class PcmAudioRecorder {
   }
 
   cancel(): void {
-    if (this.stopped) return;
     this.stopped = true;
     void this.stopBackupCapture().catch(() => null);
     void this.disposeGraph();

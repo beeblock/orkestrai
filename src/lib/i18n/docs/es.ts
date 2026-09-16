@@ -761,7 +761,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'leader-dictation',
       title: 'Dictar en cualquier campo de texto',
-      body: 'Enfoca cualquier campo editable — título o descripción del kanban, rol, nota o formulario — y usa la esfera de voz global o Alt+Espacio. Desde el primer clic, el campo se conserva y la transcripción entra en el cursor sin requerir líder. En Configuración → Dictado por voz, puedes activar el envío automático: en terminales, la transcripción también presiona Enter; los campos comunes siguen recibiendo solo el texto. El indicador clicable muestra si la esfera está fijada o libre y abre directamente los controles de posición; el tooltip también presenta el atajo Ctrl+clic o Command+clic. En el Workbench, la posición fijada usa un espacio propio del encabezado y no cubre pestañas ni acciones; al liberarla, vuelve a moverse libremente. Sin campo activo, el control encuentra al líder del workspace tanto en Canvas como en el Workbench. En macOS, Fn/Globe por sí sola pertenece al sistema; elige una combinación o una tecla F1–F12.',
+      body: 'Enfoca cualquier campo editable — título o descripción del kanban, rol, nota o formulario — y usa la esfera de voz global o Alt+Espacio. Desde el primer clic, el campo se conserva y la transcripción entra en el cursor sin requerir líder. En Configuración → Dictado por voz, puedes activar el envío automático: en terminales, la transcripción también presiona Enter; los campos comunes siguen recibiendo solo el texto. El indicador clicable muestra si la esfera está fijada o libre y abre directamente los controles de posición; el tooltip también presenta el atajo Ctrl+clic o Command+clic. En el Workbench, la posición fijada usa un espacio propio del encabezado y no cubre pestañas ni acciones; al liberarla, vuelve a moverse libremente. Sin campo activo, el control encuentra al líder del workspace tanto en Canvas como en el Workbench. En macOS, Fn/Globe por sí sola pertenece al sistema; elige una combinación o una tecla F1–F12.' + " Mientras el micrófono se abre o transcribe, pulsa Cancelar para detener el intento. Las respuestas tardías no pueden abrir el micrófono ni insertar texto después. La apertura tiene un límite de 15 segundos y la transcripción de tres minutos; la grabación se detiene y transcribe automáticamente a los 15 minutos. Cancelar descarta ese intento sin enviar texto al agente.",
       tags: ['Dictado global', 'campos de texto', 'voz local'],
     },
     {
@@ -941,10 +941,14 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     {
-      date: 'Aún no publicado',
-      title: 'Aislamiento de conversaciones de terminales',
-      summary: 'Restaura cada agente con su propia conversación.',
-      items: ['Conserva el ID exacto de la conversación al restaurar terminales, sin redescubrir otro transcript modificado. La recuperación, recarga, transferencia y eliminación no pueden adoptar ni detener el terminal de otro agente. La detección de sesiones nuevas de Codex rechaza conversaciones creadas antes del nuevo terminal.', 'Comprueba de nuevo a quién pertenece el terminal después de preparar el inicio asíncrono para evitar que solicitudes simultáneas abran procesos duplicados para la misma conversación.'],
+      "date": "16 de septiembre de 2026 · 0.31.4",
+      "title": "Orkestrai 0.31.4: dictado fluido y recuperación de terminales",
+      "summary": "Evita bloqueos de indexación, permite cancelar el dictado y conserva la conversación de cada agente.",
+      "items": [
+        "Excluye dependencias y archivos generados de la indexación en cualquier nivel de carpeta. Selecciona conjuntos grandes de archivos de forma estable, evitando escrituras repetidas en la base de datos que bloqueaban terminales y retrasaban el micrófono.",
+        "Permite cancelar la apertura del micrófono o la transcripción desde el mismo control. Detiene la captura inmediatamente y descarta resultados tardíos después de cancelar o navegar. La apertura tiene un límite de 15 segundos y la transcripción de tres minutos; la grabación termina automáticamente a los 15 minutos.",
+        "Restaura cada terminal con su conversación exacta. La recuperación no adopta ni detiene el PTY de otro agente, y las solicitudes simultáneas no crean procesos duplicados para la misma conversación."
+      ]
     },
     {
       "date": "16 de septiembre de 2026 · 0.31.3",

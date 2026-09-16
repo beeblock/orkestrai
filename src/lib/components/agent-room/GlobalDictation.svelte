@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Mic, Move, Pin, PinOff, RotateCcw, Square } from '@lucide/svelte';
+  import { Mic, Move, Pin, PinOff, RotateCcw, Square, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import * as Kbd from '$lib/components/ui/kbd';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import VoiceConfirmDialog from './VoiceConfirmDialog.svelte';
   import { PcmAudioRecorder } from './audio-pcm.js';
+  import { DictationOperation, DICTATION_START_TIMEOUT_MS, DICTATION_TRANSCRIBE_TIMEOUT_MS, DICTATION_MAX_RECORDING_MS } from './dictation-operation.js';
   import { appSettingsStore, getAppSettings, updateAppSettings } from './app-settings.svelte.js';
   import {
     DEFAULT_AUDIO_DEVICE_ID,
@@ -35,6 +36,8 @@
   let source = $state<'text' | 'leader' | null>(null);
   let voiceConfirmOpen = $state(false);
   let checkingVoiceModels = false;
+  let dictationOperation: DictationOperation | null = null;
+  let recordingTimer: ReturnType<typeof setTimeout> | null = null;
   let audioRecorder: PcmAudioRecorder | null = null;
   let mediaStream: MediaStream | null = null;
   let recordingTarget: Editable | null = null;
@@ -212,7 +215,7 @@
 
   function label(): string {
     if (status === 'recording') return m['dictation.stop']();
-    if (status === 'transcribing') return m['dictation.transcribing']();
+    if (status === 'transcribing' || status === 'starting') return m['voice.cancel_dictation']();
     return editableUsable(target) ? m['dictation.start_field']() : m['dictation.start']();
   }
 
@@ -229,62 +232,79 @@
       void finishTextDictation();
       return;
     }
+    if (source === 'text' && (status === 'starting' || status === 'transcribing')) {
+      cancelTextDictation();
+      return;
+    }
     if (status !== 'idle' || !editableUsable(target) || checkingVoiceModels) return;
 
+    const operation = new DictationOperation();
+    dictationOperation = operation;
+    operation.deadline(DICTATION_START_TIMEOUT_MS);
+    recordingTarget = target;
+    source = 'text';
+    status = 'starting';
     checkingVoiceModels = true;
     let voiceSettings: Record<string, string> = appSettingsStore.values;
     try {
-      voiceSettings = await getAppSettings(true);
-      if (!(await voiceModelsReadyForUse(voiceSettings))) {
+      voiceSettings = await operation.wait(getAppSettings(true));
+      if (!(await operation.wait(voiceModelsReadyForUse(voiceSettings, fetch, operation.signal)))) {
         voiceConfirmOpen = true;
         return;
       }
-    } catch {
-      toast.error(m['voice.model_status_error']());
-      return;
-    } finally {
-      checkingVoiceModels = false;
-    }
-
-    try {
-      const opened = await openPreferredAudioInput(voiceSettings.audioInputDeviceId);
+      const opened = await operation.wait(openPreferredAudioInput(voiceSettings.audioInputDeviceId),
+        (late) => late.stream.getTracks().forEach((track) => track.stop()));
       mediaStream = opened.stream;
       if (opened.fallback) {
         toast.warning(m['voice.mic_fallback']());
         void updateAppSettings({ audioInputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
       }
+      const recorder = new PcmAudioRecorder(mediaStream);
+      audioRecorder = recorder;
+      await operation.wait(recorder.start());
+      status = 'recording';
+      recordingTimer = setTimeout(() => void finishTextDictation(), DICTATION_MAX_RECORDING_MS);
     } catch (error) {
-      const count = (await audioDeviceInventory().catch(() => ({ inputs: [], outputs: [] }))).inputs.length;
-      toast.error(audioCaptureFailureMessage(classifyAudioCaptureFailure(error, count)));
-      return;
+      if (dictationOperation === operation) toast.error(operation.signal.reason?.name === 'TimeoutError'
+        ? m['voice.operation_timeout']()
+        : audioCaptureFailureMessage(classifyAudioCaptureFailure(error, 1)));
+    } finally {
+      operation.deadline(null);
+      if (dictationOperation === operation) {
+        checkingVoiceModels = false;
+        if (status !== 'recording') cancelTextDictation();
+      }
     }
+  }
 
-    const recorder = new PcmAudioRecorder(mediaStream);
-    audioRecorder = recorder;
-    recordingTarget = target;
-    try {
-      await recorder.start();
-    } catch (error) {
-      audioRecorder = null;
-      recordingTarget = null;
-      stopTracks();
-      toast.error(audioCaptureFailureMessage(classifyAudioCaptureFailure(error, 1)));
-      return;
-    }
-    source = 'text';
-    status = 'recording';
+  function cancelTextDictation() {
+    dictationOperation?.cancel();
+    dictationOperation = null;
+    audioRecorder?.cancel();
+    audioRecorder = null;
+    recordingTarget = null;
+    if (recordingTimer) clearTimeout(recordingTimer);
+    recordingTimer = null;
+    stopTracks();
+    checkingVoiceModels = false;
+    status = 'idle';
+    source = null;
   }
 
   async function finishTextDictation() {
     const recorder = audioRecorder;
+    const operation = dictationOperation;
     const insertionTarget = recordingTarget;
-    if (!recorder || !insertionTarget || status !== 'recording' || source !== 'text') return;
-    audioRecorder = null;
+    if (!recorder || !operation || !insertionTarget || status !== 'recording' || source !== 'text') return;
+    operation.deadline(DICTATION_TRANSCRIBE_TIMEOUT_MS);
+    if (recordingTimer) clearTimeout(recordingTimer);
+    recordingTimer = null;
     recordingTarget = null;
     status = 'transcribing';
     try {
-      const recording = await recorder.stop();
+      const pending = recorder.stop();
       stopTracks();
+      const recording = await operation.wait(pending);
       if (audioSignalIsEmpty(recording.stats)) {
         toast.error(m['voice.mic_no_signal']());
         return;
@@ -295,23 +315,25 @@
       if (locale === 'pt-BR') form.append('language', 'pt');
       if (locale === 'en') form.append('language', 'en');
       const csrf = getCsrfToken();
-      const response = await fetch('/api/agent-room/voice/transcribe', {
+      const response = await operation.wait(fetch('/api/agent-room/voice/transcribe', {
         method: 'POST',
         headers: csrf ? { 'X-CSRF-Token': csrf } : undefined,
         body: form,
-      });
-      const payload = await response.json().catch(() => ({}));
+        signal: operation.signal,
+      }));
+      const payload = await operation.wait(response.json().catch(() => ({})));
       if (response.status === 413) throw new Error(m['voice.recording_too_long']());
       if (!response.ok || payload.error) throw new Error(payload.error || m['voice.dictation_error']());
       const text = String(payload.data?.text ?? '').trim();
       if (!text) toast.error(m['voice.nothing_transcribed']());
       else insertText(insertionTarget, text);
     } catch (error) {
-      stopTracks();
-      toast.error(error instanceof Error ? error.message : m['voice.dictation_error']());
+      if (dictationOperation === operation) toast.error(operation.signal.reason?.name === 'TimeoutError'
+        ? m['voice.operation_timeout']()
+        : error instanceof Error ? error.message : m['voice.dictation_error']());
     } finally {
-      status = 'idle';
-      source = null;
+      operation.deadline(null);
+      if (dictationOperation === operation) cancelTextDictation();
     }
   }
 
@@ -322,7 +344,7 @@
   }
 
   function toggle() {
-    if (!supported || status === 'transcribing') return;
+    if (!supported) return;
     if (source === 'leader' || (!editableUsable(target) && source !== 'text')) {
       target = null;
       requestFallback();
@@ -392,7 +414,7 @@
     };
     const leaderState = (event: Event) => {
       const detail = (event as CustomEvent<LeaderDictationStateDetail>).detail;
-      if (!detail) return;
+      if (!detail || source === 'text') return;
       source = detail.status === 'idle' ? null : 'leader';
       status = detail.status;
     };
@@ -428,10 +450,7 @@
       window.removeEventListener('resize', clampOnResize);
       placementObserver.disconnect();
       surfaceObserver.disconnect();
-      audioRecorder?.cancel();
-      audioRecorder = null;
-      recordingTarget = null;
-      stopTracks();
+      cancelTextDictation();
     };
   });
 </script>
@@ -453,17 +472,15 @@
             class="dictation-trigger absolute inset-0 grid size-12 place-items-center rounded-full border-0 p-[3px] text-white disabled:cursor-wait"
             class:movable={!placement.pinned}
             class:animate-pulse={status === 'recording'}
-            class:animate-spin={status === 'transcribing'}
             aria-label={`${label()}. ${placementStatus()}. ${placementShortcut()}`}
             aria-pressed={status === 'recording'}
-            disabled={status === 'transcribing'}
             onpointerdown={startDrag}
             onpointermove={moveDrag}
             onpointerup={stopDrag}
             onclick={triggerClick}
           >
             <span class="grid size-full place-items-center rounded-full border border-white/15 bg-[#11102f]">
-              {#if status === 'recording'}<Square size={14} fill="currentColor" />{:else}<Mic size={18} />{/if}
+              {#if status === 'recording'}<Square size={14} fill="currentColor" />{:else if status === 'starting' || status === 'transcribing'}<X size={18} />{:else}<Mic size={18} />{/if}
             </span>
           </button>
         {/snippet}

@@ -3,7 +3,7 @@
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { SearchAddon } from '@xterm/addon-search';
-  import { Mic, Square, Volume2, VolumeX } from '@lucide/svelte';
+  import { Mic, Square, Volume2, VolumeX, X } from '@lucide/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import * as Select from '$lib/components/ui/select';
@@ -13,13 +13,14 @@
   import { TERMINAL_THEMES, type TerminalThemeName } from './terminal-themes.js';
   import { DEFAULT_DICTATION_HOTKEY, comboLabel, matchesCombo } from './dictation-hotkey.js';
   import { appSettingsStore, getAppSettings, updateAppSettings } from './app-settings.svelte.js';
-  import { DEFAULT_AUDIO_DEVICE_ID, audioDeviceInventory, classifyAudioCaptureFailure, openPreferredAudioInput } from './audio-devices.js';
+  import { DEFAULT_AUDIO_DEVICE_ID, classifyAudioCaptureFailure, openPreferredAudioInput } from './audio-devices.js';
   import { audioCaptureFailureMessage } from './audio-device-messages.js';
   import { PcmAudioRecorder } from './audio-pcm.js';
   import { cleanSpeechText, normalizeSpeechText } from './voice-cleanup.js';
   import { speakText } from './voice-speech.js';
   import { voiceModelsReadyForUse } from './voice-model-status.js';
   import { terminalDictationInput } from './terminal-dictation.js';
+  import { DictationOperation, DICTATION_START_TIMEOUT_MS, DICTATION_TRANSCRIBE_TIMEOUT_MS, DICTATION_MAX_RECORDING_MS } from './dictation-operation.js';
   import { isTerminalCopyShortcut, isWindowsTerminalPasteShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange, type TerminalCell } from './terminal-selection.js';
   import { workingDirectoryFromOsc } from './terminal-working-directory.js';
   import { audioSignalIsEmpty } from '$lib/modules/agent-room/domain/voice-audio.js';
@@ -98,7 +99,8 @@
   let dictateError = $state('');
   let dictateStatus = $state('');
   let voiceConfirmOpen = $state(false);
-  let checkingVoiceModels = false;
+  let checkingVoiceModels = $state(false);
+  let dictationOperation: DictationOperation | null = null;
   /** Atalho REATIVO da store global (mudanca em Configuracoes aplica na hora). */
   const dictateHotkey = $derived(appSettingsStore.values.dictationHotkey || DEFAULT_DICTATION_HOTKEY);
   const dictationAutoSubmit = $derived(appSettingsStore.values.dictationAutoSubmit === 'true');
@@ -110,7 +112,11 @@
 
   function startRecTimer() {
     recSeconds = 0;
-    recTimer = setInterval(() => (recSeconds += 1), 1_000);
+    const startedAt = Date.now();
+    recTimer = setInterval(() => {
+      recSeconds = Math.floor((Date.now() - startedAt) / 1_000);
+      if (Date.now() - startedAt >= DICTATION_MAX_RECORDING_MS) void finishDictation();
+    }, 1_000);
   }
 
   function stopRecTimer() {
@@ -200,68 +206,79 @@
       void finishDictation();
       return;
     }
-    if (transcribing) return;
-    if (checkingVoiceModels) return;
+    if (transcribing || checkingVoiceModels) {
+      cancelDictation();
+      return;
+    }
+    const operation = new DictationOperation();
+    dictationOperation = operation;
+    operation.deadline(DICTATION_START_TIMEOUT_MS);
     checkingVoiceModels = true;
+    reportDictationState('starting');
     let voiceSettings: Record<string, string> = appSettingsStore.values;
     try {
       // A presenca real dos modelos prevalece sobre a confirmacao persistida:
       // eles podem ter sido apagados nas Configuracoes ou fora do app.
-      voiceSettings = await getAppSettings(true);
-      if (!(await voiceModelsReadyForUse(voiceSettings))) {
+      voiceSettings = await operation.wait(getAppSettings(true));
+      if (!(await operation.wait(voiceModelsReadyForUse(voiceSettings, fetch, operation.signal)))) {
         voiceConfirmOpen = true;
-        reportDictationState('idle');
         return;
       }
-    } catch {
-      dictateError = m['voice.model_status_error']();
-      reportDictationState('idle');
-      return;
-    } finally {
-      checkingVoiceModels = false;
-    }
-    try {
-      const opened = await openPreferredAudioInput(voiceSettings.audioInputDeviceId);
+      const opened = await operation.wait(openPreferredAudioInput(voiceSettings.audioInputDeviceId),
+        (late) => late.stream.getTracks().forEach((track) => track.stop()));
       mediaStream = opened.stream;
       if (opened.fallback) {
         dictateError = m['voice.mic_fallback']();
         void updateAppSettings({ audioInputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
       }
+      const recorder = new PcmAudioRecorder(mediaStream);
+      audioRecorder = recorder;
+      await operation.wait(recorder.start());
+      dictating = true;
+      reportDictationState('recording');
+      pendingDictation = false;
+      startRecTimer();
     } catch (error) {
-      const count = (await audioDeviceInventory().catch(() => ({ inputs: [], outputs: [] }))).inputs.length;
-      dictateError = audioCaptureFailureMessage(classifyAudioCaptureFailure(error, count));
-      reportDictationState('idle');
-      return;
+      if (dictationOperation === operation) dictateError = operation.signal.reason?.name === 'TimeoutError'
+        ? m['voice.operation_timeout']()
+        : audioCaptureFailureMessage(classifyAudioCaptureFailure(error, 1));
+    } finally {
+      operation.deadline(null);
+      if (dictationOperation === operation) {
+        checkingVoiceModels = false;
+        if (!dictating) cancelDictation();
+      }
     }
-    const recorder = new PcmAudioRecorder(mediaStream);
-    audioRecorder = recorder;
-    try {
-      await recorder.start();
-    } catch (error) {
-      audioRecorder = null;
-      stopTracks();
-      dictateError = audioCaptureFailureMessage(classifyAudioCaptureFailure(error, 1));
-      reportDictationState('idle');
-      return;
-    }
-    dictating = true;
-    reportDictationState('recording');
-    pendingDictation = false; // so o ditado mais recente conta
-    startRecTimer();
+  }
+
+  function cancelDictation() {
+    dictationOperation?.cancel();
+    dictationOperation = null;
+    audioRecorder?.cancel();
+    audioRecorder = null;
+    stopTracks();
+    stopRecTimer();
+    dictating = false;
+    transcribing = false;
+    checkingVoiceModels = false;
+    dictateStatus = '';
+    reportDictationState('idle');
   }
 
   async function finishDictation() {
     const recorder = audioRecorder;
-    if (!recorder || !dictating) return;
-    audioRecorder = null;
+    const operation = dictationOperation;
+    if (!recorder || !dictating || !operation) return;
+    operation.deadline(DICTATION_TRANSCRIBE_TIMEOUT_MS);
     stopRecTimer();
     dictating = false;
     transcribing = true;
     reportDictationState('transcribing');
     dictateStatus = m['voice.transcribing']();
     try {
-      const recording = await recorder.stop();
+      const pending = recorder.stop();
       stopTracks();
+      const recording = await operation.wait(pending);
       if (audioSignalIsEmpty(recording.stats)) {
         dictateError = m['voice.mic_no_signal']();
         return;
@@ -270,12 +287,13 @@
       form.append('file', recording.wav, 'ditado.wav');
       if (dictateLang !== 'auto') form.append('language', dictateLang);
       const csrf = getCsrfToken();
-      const response = await fetch('/api/agent-room/voice/transcribe', {
+      const response = await operation.wait(fetch('/api/agent-room/voice/transcribe', {
         method: 'POST',
         headers: csrf ? { 'X-CSRF-Token': csrf } : undefined,
         body: form,
-      });
-      const payload = await response.json().catch(() => ({}));
+        signal: operation.signal,
+      }));
+      const payload = await operation.wait(response.json().catch(() => ({})));
       if (response.status === 413) throw new Error(m['voice.recording_too_long']());
       if (!response.ok || payload.error) throw new Error(payload.error || `Erro ${response.status}`);
       const text = String(payload.data?.text ?? '').trim();
@@ -287,12 +305,12 @@
         }
       } else dictateError = m['voice.nothing_transcribed']();
     } catch (error) {
-      stopTracks();
-      dictateError = error instanceof Error ? error.message : m['voice.dictation_error']();
+      if (dictationOperation === operation) dictateError = operation.signal.reason?.name === 'TimeoutError'
+        ? m['voice.operation_timeout']()
+        : error instanceof Error ? error.message : m['voice.dictation_error']();
     } finally {
-      transcribing = false;
-      dictateStatus = '';
-      reportDictationState('idle');
+      operation.deadline(null);
+      if (dictationOperation === operation) cancelDictation();
     }
   }
 
@@ -767,12 +785,7 @@
       window.visualViewport?.removeEventListener('resize', refitForDisplayChange);
       window.removeEventListener(LEADER_DICTATION_COMMAND, handleLeaderDictation);
       reportDictationState('idle');
-      audioRecorder?.cancel();
-      audioRecorder = null;
-      dictating = false;
-      transcribing = false;
-      stopTracks();
-      stopRecTimer();
+      cancelDictation();
       if (speakTimer) clearTimeout(speakTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
@@ -810,6 +823,8 @@
         <span class="dictate-rec" aria-live="polite">● {recSeconds}s</span>
       {:else if transcribing}
         <span class="dictate-transcribing">{m['voice.transcribing']()}</span>
+      {:else if checkingVoiceModels}
+        <span class="dictate-transcribing">{m['voice.preparing']()}</span>
       {/if}
       <Select.Root type="single" value={dictateLang} onValueChange={(value: string) => (dictateLang = value as 'auto' | 'pt' | 'en')} disabled={dictating || transcribing}>
         <Select.Trigger class="dictate-lang" aria-label={m['voice.dictation_lang']()}>
@@ -822,13 +837,13 @@
         </Select.Content>
       </Select.Root>
       <HeaderIconButton
-        label={dictating ? m['voice.stop_dictation']({ hotkey: comboLabel(dictateHotkey) }) : transcribing ? m['voice.transcribing']() : m['voice.dictate']({ hotkey: comboLabel(dictateHotkey) })}
+        label={dictating ? m['voice.stop_dictation']({ hotkey: comboLabel(dictateHotkey) }) : transcribing || checkingVoiceModels ? m['voice.cancel_dictation']() : m['voice.dictate']({ hotkey: comboLabel(dictateHotkey) })}
         class="dictate-btn"
         side="left"
         active={dictating}
         onclick={toggleDictation}
       >
-        {#if dictating}<Square size={11} />{:else}<Mic size={12} />{/if}
+        {#if dictating}<Square size={11} />{:else if transcribing || checkingVoiceModels}<X size={12} />{:else}<Mic size={12} />{/if}
       </HeaderIconButton>
       <HeaderIconButton
         label={voiceOn ? m['voice.on_tooltip']() : m['voice.off_tooltip']()}

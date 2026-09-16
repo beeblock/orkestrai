@@ -65,4 +65,19 @@ describe('PcmAudioRecorder', () => {
     expect(recording.wav.size).toBeGreaterThan(44);
     expect(close).toHaveBeenCalledOnce();
   });
+
+  it('does not reopen a cancelled recording after its worklet finishes loading', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.stubGlobal('AudioWorkletNode', FakeAudioWorkletNode);
+    let ready!: () => void;
+    addModule.mockImplementationOnce(() => new Promise<void>((resolve) => { ready = resolve; }));
+    const recorder = new PcmAudioRecorder({} as MediaStream);
+    const started = recorder.start();
+    const result = expect(started).rejects.toMatchObject({ name: 'AbortError' });
+    recorder.cancel();
+    ready();
+    await result;
+    expect(FakeAudioWorkletNode.latest).toBeNull();
+    expect(close).toHaveBeenCalledOnce();
+  });
 });
