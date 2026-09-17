@@ -15,6 +15,7 @@ import { falModelCatalog, validateFalParameters } from './FalModelCatalogService
 import { genericFalInput } from '../../domain/model-input.js';
 import { modelPromptField } from '../../domain/model-contract.js';
 import { creativeCharacterService } from './CreativeCharacterService.js';
+import { shotDirectionPrompt } from '../../domain/shot-direction.js';
 
 const previewState = globalThis as typeof globalThis & { __orkestraiCreativePreviews?: Map<string, { workspaceId: string; actor: CreativeActor; preview: CreativePreview }> };
 const previews = previewState.__orkestraiCreativePreviews ??= new Map();
@@ -114,8 +115,10 @@ export class CreativeWorkflowService {
       if (current.sha256 !== origin.frozenReference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
     }
     let config = creativeConfigSchema.parse(workflow.config);
+    const legacyModel = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS];
+    if (!legacyModel && (config.startImageNodeId || config.endImageNodeId)) throw new CreativeMediaError('creative_unsupported_input');
     if (config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id))) throw new CreativeMediaError('creative_character_binding_required');
-    const references = new Set([config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)]);
+    const references = new Set(legacyModel ? [config.startImageNodeId, config.endImageNodeId] : config.mediaBindings.map(binding => binding.nodeId));
     if (config.requiredReferenceNodeIds.some(id => !references.has(id))) throw new CreativeMediaError('creative_reference_required');
     const contexts: string[] = [];
     for (const id of config.contextNodeIds) {
@@ -124,12 +127,11 @@ export class CreativeWorkflowService {
       if (typeof text !== 'string') throw new CreativeMediaError('creative_context_unavailable');
       contexts.push(text);
     }
-    const legacyModel = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS];
     const modelContract = legacyModel ? undefined : await falModelCatalog.contract(config.modelId);
     const identities = await creativeCharacterService.resolve(workflow.workspaceId, config, modelContract);
     config = identities.config;
     const configuredPrompt = config.parameters[modelContract ? modelPromptField(modelContract.schema) ?? 'prompt' : 'prompt'];
-    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), ...contexts, ...identities.directions].filter(Boolean).join('\n\n').trim();
+    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), shotDirectionPrompt(config.shot), ...contexts, ...identities.directions].filter(Boolean).join('\n\n').trim();
     if (/@\{[^}\n]+\}/.test(prompt)) throw new CreativeMediaError('creative_reference_alias_missing');
     if (modelContract) {
       const media = [];

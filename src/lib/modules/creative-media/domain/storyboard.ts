@@ -8,7 +8,7 @@ export type StoryboardSceneProgress = { id: string; image: string; video: string
 export type StoryboardRead = { storyboard: CreativeStoryboard; progress: StoryboardSceneProgress[]; inputs: Array<{ id: string; type: string; title: string; path?: string }>; executors: Array<{ id: string; title: string }> };
 
 export function sceneBrief(scene: StoryboardScene) {
-  return { title: scene.title, direction: scene.direction, dialogue: scene.dialogue, language: scene.language, duration: scene.duration, characterIds: scene.characterIds, referenceNodeIds: scene.referenceNodeIds };
+  return { title: scene.title, direction: scene.direction, dialogue: scene.dialogue, language: scene.language, duration: scene.duration, shot: scene.shot, characterIds: scene.characterIds, referenceNodeIds: scene.referenceNodeIds };
 }
 export function applyStoryboardOperations(source: StoryboardDocument, operations: StoryboardOperation[]): StoryboardDocument {
   const document = structuredClone(source);

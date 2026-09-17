@@ -25,6 +25,7 @@ test('storyboard scenes share Canvas, Workbench and revisioned agent drafts', as
     await ui.getByRole('button', { name: 'Add scene', exact: true }).click();
     await ui.getByRole('textbox', { name: 'Scene title' }).fill('Opening');
     await ui.getByRole('textbox', { name: 'Direction', exact: true }).fill('A bright opening shot, the same approved subject.');
+    await ui.getByRole('radio', { name: 'Full body', exact: true }).check();
     await ui.getByRole('textbox', { name: 'Dialogue / narration' }).fill('Welcome to the studio.');
     await ui.getByRole('checkbox', { name: 'Opening reference' }).check();
     await ui.getByRole('button', { name: 'Save', exact: true }).click();
@@ -44,8 +45,10 @@ test('storyboard scenes share Canvas, Workbench and revisioned agent drafts', as
     await expect.poll(async () => (await load()).storyboard.document.scenes[0].videoWorkflowNodeId).toBeTruthy();
     const board = (await load()).storyboard;
     const scene = board.document.scenes[0];
+    expect(scene.shot.framing).toBe('full');
     const workflow = (await (await request.get(`${base}/creative-media/workflows/${scene.videoWorkflowNodeId}`)).json()).data;
     expect(workflow.runs).toEqual([]);
+    expect(workflow.workflow.config.shot.framing).toBe('full');
     expect(workflow.workflow.config.requiredReferenceNodeIds).toEqual([image.id]);
     await ui.getByRole('textbox', { name: 'Dialogue / narration' }).fill('Unsaved local dialogue');
     const response = await request.post(`${base}/creative-media/storyboards`, { headers, data: { command: 'apply', nodeId, revision: board.revision, operations: [{ type: 'update', id: scene.id, patch: { title: 'Remote revision' } }] } });

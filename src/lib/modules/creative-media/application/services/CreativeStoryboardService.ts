@@ -12,6 +12,9 @@ import { CreativeMediaError, type CreativeActor } from '../../domain/types.js';
 import { creativeWorkflowService } from './CreativeWorkflowService.js';
 import { CreativeMediaFiles } from './CreativeMediaFiles.js';
 import { withCreativeProfileLock } from './creative-profile-lock.js';
+import { shotDirectionPrompt, requestedDurationParameters } from '../../domain/shot-direction.js';
+import { CREATIVE_MODELS } from '../../domain/catalog.js';
+import { falModelCatalog } from './FalModelCatalogService.js';
 
 const briefHash = (scene: StoryboardScene) => createHash('sha256').update(JSON.stringify(sceneBrief(scene))).digest('hex');
 export class CreativeStoryboardService {
@@ -100,7 +103,8 @@ export class CreativeStoryboardService {
     if (linked && (input.kind === 'image' ? scene.imageBriefHash : scene.videoBriefHash) === hash) return;
     const prompt = [scene.direction, scene.dialogue ? `Dialogue (${scene.language}): ${scene.dialogue}` : '', `Requested duration: ${scene.duration} seconds.`].filter(Boolean).join('\n\n');
     if (input.kind === 'video') {
-      const config = creativeConfigSchema.parse({ ...(input.config ?? {}), duration: scene.duration, prompt, requiredCharacterIds: scene.characterIds, requiredReferenceNodeIds: scene.referenceNodeIds });
+      const config = creativeConfigSchema.parse({ ...(input.config ?? {}), duration: scene.duration, shot: scene.shot, prompt, requiredCharacterIds: scene.characterIds, requiredReferenceNodeIds: scene.referenceNodeIds });
+      if (!Object.hasOwn(CREATIVE_MODELS, config.modelId)) config.parameters = requestedDurationParameters(config.parameters, await falModelCatalog.contract(config.modelId), scene.duration);
       const workflow = await creativeWorkflowService.save(board.workspaceId, { title: scene.title, config }, actor, undefined, board.nodeId);
       scene.videoWorkflowNodeId = workflow.nodeId; scene.videoBriefHash = hash;
       await this.workspace.connect(board.workspaceId, board.nodeId, workflow.nodeId);
@@ -127,7 +131,7 @@ export class CreativeStoryboardService {
       const node = existing ?? await this.workspace.createNode(board.workspaceId, 'image', character.definition.name, { path, characterId: character.id, characterVersion: character.version, characterDigest: character.snapshot!.digest }, board.nodeId);
       references.push(node.id); existingPaths.add(path);
     }
-    const draft = await this.workspace.createImageDraft(board.workspaceId, { title: scene.title, prompt: [scene.direction, ...characters.map(character => `${character.definition.name}: ${character.definition.appearance}`)].join('\n\n'), from: 'storyboard', filePrefix: `scene-${scene.id.slice(0, 8)}` }, board.nodeId, scene.executorNodeId, references);
+    const draft = await this.workspace.createImageDraft(board.workspaceId, { title: scene.title, prompt: [scene.direction, shotDirectionPrompt(scene.shot, true), ...characters.map(character => `${character.definition.name}: ${character.definition.appearance}`)].filter(Boolean).join('\n\n'), from: 'storyboard', filePrefix: `scene-${scene.id.slice(0, 8)}` }, board.nodeId, scene.executorNodeId, references);
     scene.imageWorkflowNodeId = draft.id; scene.imageBriefHash = hash;
   }
   async clone(sourceWorkspaceId: string, nodeId: string, targetWorkspaceId: string, targetNodeId: string, ids: ReadonlyMap<string, string>) {

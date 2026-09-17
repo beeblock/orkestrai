@@ -1,3 +1,4 @@
+export const SHOT_DIRECTION_SCHEMA = { type: 'object', additionalProperties: false, properties: { framing: { enum: ['custom', 'wide', 'full', 'medium', 'close_up', 'detail'] }, angle: { enum: ['eye_level', 'low', 'high', 'overhead'] }, motion: { enum: ['none', 'static', 'push_in', 'pull_out', 'pan_left', 'pan_right', 'orbit', 'tracking'] }, pace: { enum: ['gentle', 'normal', 'energetic'] } } };
 export const VIDEO_CONFIG_SCHEMA = {
   type: 'object', additionalProperties: false, properties: {
     modelId: { type: 'string', maxLength: 240, description: 'Exact endpoint ID from video_workflow_models; legacy wan-2.7-text and kling-v3-pro-image remain supported.' },
@@ -9,7 +10,7 @@ export const VIDEO_CONFIG_SCHEMA = {
     requiredCharacterIds: { type: 'array', maxItems: 8, uniqueItems: true, items: { type: 'string', format: 'uuid' } },
     requiredReferenceNodeIds: { type: 'array', maxItems: 20, uniqueItems: true, items: { type: 'string', format: 'uuid' } },
     prompt: { type: 'string', maxLength: 50000 }, negativePrompt: { type: 'string', maxLength: 2500 },
-    duration: { type: 'integer', minimum: 2, maximum: 15 },
+    duration: { type: 'number', minimum: 1, maximum: 120 }, shot: SHOT_DIRECTION_SCHEMA,
     aspectRatio: { type: 'string', enum: ['16:9', '9:16', '1:1', '4:3', '3:4'] },
     resolution: { type: 'string', enum: ['720p', '1080p'] }, generateAudio: { type: 'boolean' },
     seed: { type: ['integer', 'null'], minimum: 0, maximum: 2147483647 },

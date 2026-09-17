@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'creative-shot-direction': 'creative-shot-direction',
   'creative-storyboard': 'creative-storyboard',
   'creative-variants': 'creative-variants',
   'creative-actions': 'creative-actions',

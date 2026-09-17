@@ -1,3 +1,4 @@
+import { SHOT_DIRECTION_SCHEMA } from './video-reference.js';
 const id = { type: 'string', format: 'uuid' };
 const content = {
   title: { type: 'string', minLength: 1, maxLength: 120 },
@@ -6,6 +7,7 @@ const content = {
   characterIds: { type: 'array', uniqueItems: true, maxItems: 8, items: id },
   referenceNodeIds: { type: 'array', uniqueItems: true, maxItems: 20, items: id },
   executorNodeId: { type: ['string', 'null'], format: 'uuid' },
+  shot: SHOT_DIRECTION_SCHEMA,
 };
 const object = (properties, required) => ({ type: 'object', additionalProperties: false, properties, required });
 export const STORYBOARD_COMMAND_SCHEMA = object({

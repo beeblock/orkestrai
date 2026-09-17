@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { creativeConfigSchema } from './creative-media.schema.js';
+import { shotDirectionSchema } from '../../domain/shot-direction.js';
 
 const id = z.string().uuid();
 const ids = (max: number) => z.array(id).max(max).refine(value => new Set(value).size === value.length, 'creative_duplicate_input');
@@ -9,6 +10,7 @@ export const storyboardSceneContentSchema = z.object({
   dialogue: z.string().trim().max(8000).default(''),
   language: z.string().trim().min(2).max(35).default('en-US'),
   duration: z.number().finite().min(1).max(120).default(5),
+  shot: shotDirectionSchema.default({}),
   characterIds: ids(8).default([]),
   referenceNodeIds: ids(20).default([]),
   executorNodeId: id.nullable().default(null),

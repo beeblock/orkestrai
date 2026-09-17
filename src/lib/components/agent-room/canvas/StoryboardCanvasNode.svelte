@@ -5,6 +5,7 @@
   import type { NodeProps } from '@xyflow/svelte';
   import { Clapperboard, Plus, Copy, Trash2, ArrowUp, ArrowDown, Save, Undo2, Image, Film, ExternalLink, RefreshCw, Columns2, X } from '@lucide/svelte';
   import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
+  import CreativeShotControls from '../CreativeShotControls.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
@@ -127,6 +128,7 @@
           <fieldset disabled={busy} class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 text-xs disabled:opacity-70" oninput={changed}>
             <label class="block space-y-1"><span>{m['storyboard.scene_title']()}</span><Input bind:value={draft.title} maxlength={120} aria-invalid={Boolean($errors.title)} /></label>
             <label class="block space-y-1"><span>{m['creative.prompt']()}</span><Textarea bind:value={draft.direction} maxlength={16000} class="min-h-24" /></label>
+            <CreativeShotControls value={draft.shot} disabled={busy} onChange={(value) => { draft.shot = value; changed(); }} />
             <label class="block space-y-1"><span>{m['storyboard.dialogue']()}</span><Textarea bind:value={draft.dialogue} maxlength={8000} /></label>
             <label class="block space-y-1"><span>{m['creative.character_language']()}</span><Input bind:value={draft.language} maxlength={35} /></label>
             <div class="space-y-3"><span>{m['creative.duration']()} · {draft.duration} s</span><Slider type="single" value={draft.duration} min={1} max={120} step={1} aria-label={m['creative.duration']()} onValueChange={(value: number) => { draft.duration = value; changed(); }} /></div>

@@ -17,6 +17,8 @@
   import CreativeProviderDialog from '../CreativeProviderDialog.svelte';
   import CreativeCharacterBindings from '../CreativeCharacterBindings.svelte';
   import CreativePrompt from '../CreativePrompt.svelte';
+  import CreativeShotControls from '../CreativeShotControls.svelte';
+  import { switchCreativeModel } from '$lib/modules/creative-media/domain/creative-model-switch.js';
   import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
@@ -73,7 +75,7 @@
       const next = await creativeApi<FalModelContract>(`${base}/models?endpoint=${encodeURIComponent(modelId)}`);
       if (sequence !== contractSequence || config.modelId !== modelId) return;
       contract = next;
-      if (defaults) config.parameters = modelDefaults(next.schema);
+      if (defaults) config.parameters = { ...modelDefaults(next.schema), ...config.parameters };
     } catch (cause) { if (sequence === contractSequence) error = (cause as Error).message; }
     finally { if (sequence === contractSequence) contractLoading = false; }
   }
@@ -105,8 +107,9 @@
   function changed() { dirty = true; preview = null; error = ''; }
   async function chooseModel(value: string) {
     if (!value || value === config.modelId) return;
-    const previous = config;
-    config = creativeConfigSchema.parse({ ...$state.snapshot(previous), modelId: value, parameters: {}, mediaBindings: [] });
+    try {
+      config = switchCreativeModel($state.snapshot(config), value);
+    } catch (cause) { error = cause instanceof Error && cause.message === 'creative_model_mapping_required' ? cause.message : 'creative_unsupported_input'; return; }
     billing = null;
     changed(); await loadContract(value, true);
   }
@@ -159,6 +162,7 @@
       {#if contract}<a class="block break-all text-xs text-[var(--app-accent)] underline" href={contract.documentationUrl} target="_blank" rel="noreferrer">{contract.id}</a>{/if}
       <CreativeCharacterBindings workspaceId={data.workspaceId} {config} {contract} disabled={busy || Boolean(active) || loading || contractLoading} onRecords={(value) => characters = value} onChange={(value) => { config.characterBindings = value; changed(); }} />
       {#if model || promptField}<CreativePrompt value={config.prompt} references={promptReferences} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} onChange={(value) => { config.prompt = value; changed(); }} />{/if}
+      <CreativeShotControls value={config.shot} disabled={busy || Boolean(active) || loading} onChange={(value) => { config.shot = value; changed(); }} />
       {#if contract}
         {#key contract.id}<CreativeModelFields schema={contract.schema} value={config.parameters} managedPointers={[...config.mediaBindings.map(binding => binding.pointer), ...config.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer])]} onChange={(value) => { config.parameters = value; changed(); }} onValidityChange={(valid) => parametersValid = valid} />{/key}
         <section class="space-y-2 border-t border-[var(--app-border)] pt-2" aria-label={m['creative.media_bindings']()}>

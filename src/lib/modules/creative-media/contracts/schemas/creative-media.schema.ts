@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { CREATIVE_MODEL_IDS, CREATIVE_MODELS } from '../../domain/catalog.js';
 import { FAL_ENDPOINT_PATTERN } from '../../domain/model-contract.js';
+import { shotDirectionSchema } from '../../domain/shot-direction.js';
 
 const id = z.string().uuid();
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
@@ -36,7 +37,8 @@ export const creativeConfigSchema = z.object({
   profileId: id.nullable().default(null),
   prompt: z.string().trim().max(50000).default(''),
   negativePrompt: z.string().trim().max(2500).default(''),
-  duration: z.number().int().min(2).max(15).default(5),
+  duration: z.number().finite().min(1).max(120).default(5),
+  shot: shotDirectionSchema.default({}),
   aspectRatio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4']).default('16:9'),
   resolution: z.enum(['720p', '1080p']).default('720p'),
   generateAudio: z.boolean().default(false),
@@ -57,7 +59,7 @@ export const creativeConfigSchema = z.object({
   for (const [field, maximum] of [['prompt', model.promptLimit], ['negativePrompt', model.negativePromptLimit]] as const) {
     if (value[field].length > maximum) ctx.addIssue({ code: 'custom', path: [field], message: 'creative_prompt_too_long' });
   }
-  if (value.duration < model.minDuration) ctx.addIssue({ code: 'custom', path: ['duration'], message: 'creative_invalid_duration' });
+  if (!Number.isInteger(value.duration) || value.duration < model.minDuration || value.duration > model.maxDuration) ctx.addIssue({ code: 'custom', path: ['duration'], message: 'creative_invalid_duration' });
   if (!model.startImage && (value.startImageNodeId || value.endImageNodeId)) ctx.addIssue({ code: 'custom', path: ['startImageNodeId'], message: 'creative_unsupported_input' });
   if (!model.seed && value.seed !== null) ctx.addIssue({ code: 'custom', path: ['seed'], message: 'creative_unsupported_input' });
   if (!model.audioToggle && value.generateAudio) ctx.addIssue({ code: 'custom', path: ['generateAudio'], message: 'creative_unsupported_input' });
