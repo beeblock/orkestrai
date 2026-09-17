@@ -762,9 +762,7 @@ export class TaskBoardService {
       'Verifique o resultado e o quadro agora; se estiver correto, integre o andar quando houver e distribua o proximo trabalho. ' +
       'Use orkestrai task list e orkestrai ask para qualquer confirmacao necessaria.';
     const messageId = uuidv7();
-    const expiresAt = Date.now() + 30_000;
     const isStillRelevant = async () => {
-      if (Date.now() >= expiresAt) return false;
       const [currentTask, currentLeader] = await Promise.all([
         AgentBoardTask.find(task.id),
         workspaceRepository.getNode(leader.id),
@@ -777,6 +775,7 @@ export class TaskBoardService {
         && currentLeader?.workspaceId === workspaceId
         && currentLeader.type === 'terminal'
         && Boolean((currentLeader.payload as { maestro?: boolean }).maestro)
+        && (currentLeader.payload as { sessionId?: string }).sessionId === session.id
       );
     };
     await controlCenterService.recordDelivery({

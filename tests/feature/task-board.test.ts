@@ -272,6 +272,23 @@ describe('TaskBoardService', () => {
     leader.id && expect(leader.id).toBeTruthy();
   });
 
+  it('keeps a completion handoff relevant beyond 30 seconds but cancels reopened work', async () => {
+    const { workspace, leader, leaderSession } = await createWorkspaceWithLeader();
+    let relevant: (() => Promise<boolean>) | undefined;
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockImplementation(async (input) => { relevant = input.isStillRelevant; });
+    const task = await taskBoardService.create(workspace.id, { title: 'Review after a long leader turn', dispatch: false });
+    try {
+      await taskBoardService.update(workspace.id, task.id, { status: 'done', notifyCompletion: true });
+      expect(relevant).toBeTypeOf('function');
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 60_000);
+      try { expect(await relevant!()).toBe(true); } finally { clock.mockRestore(); }
+      await taskBoardService.update(workspace.id, task.id, { status: 'doing' });
+      expect(await relevant!()).toBe(false);
+      expect(leader.id).toBeTruthy();
+    } finally { deliver.mockRestore(); ptySessionManager.kill(leaderSession.id); }
+  });
+
   it('criada com assignee ja nasce doing; titulo vazio falha', async () => {
     const { workspace, session } = await createWorkspaceWithTerminal();
     await expect(taskBoardService.create(workspace.id, { title: '  ' })).rejects.toThrow('título');

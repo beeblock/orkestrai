@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Serialize agent message delivery without blocking other senders for an entire model response; route reciprocal agent messages to waiting callers and preserve exact reply attribution. Recognize Claude prompts absorbed into an active turn and keep valid completion reports available to the leader.
+
 ## 0.31.4 - 2026-09-16
 
 ### Fixed

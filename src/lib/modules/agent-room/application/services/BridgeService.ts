@@ -159,6 +159,12 @@ function comparablePortalUrl(rawUrl: string): string | null {
  */
 export class BridgeService {
   private readonly askTails = new Map<string, Promise<void>>();
+  private readonly pendingReplies = new Set<{
+    workspaceId: string;
+    from: string;
+    to: string;
+    accept: (reply: { text: string; messageId: string }) => void;
+  }>();
 
   /** Resolve o workspace dono do token; lanca erro se inválido. */
   async resolveWorkspaceByToken(token: string): Promise<Workspace> {
@@ -304,6 +310,20 @@ export class BridgeService {
     const target = this.findAgent(await this.listAgents(workspaceId), input.to);
     const origin = input.from ? this.findAgent(await this.listAgents(workspaceId), input.from) : null;
     await this.assertTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, origin?.nodeId ?? null);
+    input = { ...input, messageId: input.messageId ?? uuidv7() };
+    await controlCenterService.recordDelivery({
+      messageId: input.messageId!, workspaceId, fromNodeId: origin?.nodeId ?? null, toNodeId: target.nodeId,
+      state: 'queued', content: input.message,
+      metadata: { ...input.metadata, ...(input.taskId ? { taskId: input.taskId, correlationId: `task:${input.taskId}` } : {}) },
+    });
+    // A recipient can call ask back while its caller is blocked in this tool.
+    // That exact, explicit message is a reply, not terminal-output inference.
+    // Only one unambiguous reverse conversation may consume it.
+    const reverse = origin && !input.signal?.aborted
+      ? [...this.pendingReplies].filter((pending) => pending.workspaceId === workspaceId
+        && pending.from === target.nodeId && pending.to === origin.nodeId)
+      : [];
+    if (reverse.length === 1) reverse[0].accept({ text: input.message, messageId: input.messageId! });
     const key = `${workspaceId}:${target.nodeId}`;
     const previous = this.askTails.get(key) ?? Promise.resolve();
     let release!: () => void;
@@ -315,7 +335,15 @@ export class BridgeService {
       if (input.signal?.aborted) throw new Error('Agent request cancelled.');
       await this.waitForAskTurn(previous, input.maxQueueWaitMs ?? MAX_ASK_QUEUE_WAIT_MS, input.signal);
       await this.assertTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, origin?.nodeId ?? null);
-      return await this.performAsk(workspaceId, input);
+      return await this.performAsk(workspaceId, input, release);
+    } catch (error) {
+      const cancelled = error instanceof ObsoletePtyDeliveryError || error instanceof AskQueueExpiredError || input.signal?.aborted;
+      await controlCenterService.recordDelivery({
+        messageId: input.messageId!, workspaceId, fromNodeId: origin?.nodeId ?? null, toNodeId: target.nodeId,
+        state: 'failed', content: input.message, error: error instanceof Error ? error.message : String(error),
+        metadata: { ...input.metadata, ...(input.taskId ? { taskId: input.taskId } : {}), ...(cancelled ? { cancelled: true } : {}) },
+      });
+      throw error;
     } finally {
       release();
       void tail.finally(() => {
@@ -324,7 +352,7 @@ export class BridgeService {
     }
   }
 
-  private async performAsk(workspaceId: string, input: BridgeAskInput): Promise<BridgeAskResult> {
+  private async performAsk(workspaceId: string, input: BridgeAskInput, releaseDelivery: () => void): Promise<BridgeAskResult> {
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.to);
     if (!target.sessionId || !target.sessionAlive) {
@@ -335,19 +363,12 @@ export class BridgeService {
     if (origin) await this.ensureEdge(workspaceId, origin.nodeId, target.nodeId);
     const messageId = input.messageId ?? uuidv7();
     const requestStartedAt = Date.now();
-    const metadata = {
+    // Repeated identical questions still need distinct transcript identities.
+    const prompt = target.provider ? `[orkestrai:message:${messageId}] ${input.message}` : input.message;
+    const metadata: Record<string, unknown> = {
       ...(input.metadata ?? {}),
       ...(input.taskId ? { taskId: input.taskId, correlationId: `task:${input.taskId}` } : {}),
     };
-    await controlCenterService.recordDelivery({
-      messageId,
-      workspaceId,
-      fromNodeId: origin?.nodeId ?? null,
-      toNodeId: target.nodeId,
-      state: 'queued',
-      content: input.message,
-      metadata,
-    });
     this.broadcastTalking(workspaceId, origin?.nodeId ?? null, target.nodeId, true);
     let reply: { text: string; timedOut: boolean };
     let transcriptMatch: MatchedTranscriptReply | null = null;
@@ -359,17 +380,27 @@ export class BridgeService {
     const submitted = new Promise<void>((resolve) => {
       markSubmitted = resolve;
     });
+    let acceptDirectReply!: (reply: { text: string; messageId: string }) => void;
+    const directReply = new Promise<{ text: string; messageId: string }>((resolve) => { acceptDirectReply = resolve; });
+    const pending = origin ? {
+      workspaceId, from: origin.nodeId, to: target.nodeId, accept: acceptDirectReply,
+    } : null;
+    if (pending) this.pendingReplies.add(pending);
+    let directReplyText: string | null = null;
     try {
       const terminalReply = this.askAndWait(
         workspaceId,
         target.nodeId,
         target.sessionId,
-        input.message,
+        prompt,
         input.timeoutMs ?? 180_000,
         transcriptAbort.signal,
         target.provider,
         async () => {
           terminalDelivered = true;
+          // Provider replies are matched to their exact prompt in the transcript.
+          // Serialize writes, not entire model turns; PTY still protects drafts.
+          if (target.provider && ptySessionManager.get(target.sessionId!)?.provider) releaseDelivery();
           await controlCenterService.recordDelivery({
             messageId,
             workspaceId,
@@ -414,16 +445,27 @@ export class BridgeService {
         workspaceId,
         target.nodeId,
         target.sessionId!,
-        input.message,
+        prompt,
         requestStartedAt,
         input.timeoutMs ?? 180_000,
         transcriptAbort.signal,
       ));
       const winner = await Promise.race([
-        terminalReply.then((value) => ({ kind: 'terminal' as const, value })),
+        terminalReply.then(async (value) => target.provider && terminalDelivered
+          ? { kind: 'transcript' as const, value: await structuredReply }
+          : { kind: 'terminal' as const, value }),
         structuredReply.then((value) => ({ kind: 'transcript' as const, value })),
+        submitted.then(() => directReply).then((value) => ({ kind: 'direct' as const, value })),
       ]);
-      if (winner.kind === 'transcript' && winner.value) {
+      if (input.signal?.aborted) throw new Error('Agent request cancelled.');
+      if (winner.kind === 'direct') {
+        directReplyText = winner.value.text;
+        metadata.replySource = 'agent_message';
+        metadata.replyMessageId = winner.value.messageId;
+        reply = { text: '', timedOut: false };
+        transcriptAbort.abort();
+        await terminalReply.catch(() => undefined);
+      } else if (winner.kind === 'transcript' && winner.value) {
         transcriptMatch = winner.value;
         reply = { text: '', timedOut: false };
         transcriptAbort.abort();
@@ -434,44 +476,32 @@ export class BridgeService {
           workspaceId,
           target.nodeId,
           target.sessionId,
-          input.message,
+          prompt,
           requestStartedAt,
         ).catch(() => null);
         if (immediate?.complete) transcriptMatch = immediate;
         else if (immediate) transcriptMatch = await structuredReply ?? immediate;
       }
-    } catch (error) {
-      const cancelled = error instanceof ObsoletePtyDeliveryError || error instanceof AskQueueExpiredError;
-      await controlCenterService.recordDelivery({
-        messageId,
-        workspaceId,
-        fromNodeId: origin?.nodeId ?? null,
-        toNodeId: target.nodeId,
-        state: 'failed',
-        content: input.message,
-        error: error instanceof Error ? error.message : String(error),
-        metadata: cancelled ? { ...metadata, cancelled: true } : metadata,
-      });
-      throw error;
     } finally {
+      if (pending) this.pendingReplies.delete(pending);
       transcriptAbort.abort();
       input.signal?.removeEventListener('abort', abortFromCaller);
       this.broadcastTalking(workspaceId, origin?.nodeId ?? null, target.nodeId, false);
     }
 
-    // O transcrito estruturado evita ANSI/redraw e só é aceito quando a última
-    // pergunta coincide exatamente com a mensagem injetada nesta chamada.
+    // Only the transcript turn matching this delivery's unique prompt is used;
+    // redraws and other pending messages never stand in for its answer.
     let incompleteTranscript: MatchedTranscriptReply | null = null;
-    const immediateTranscript = await this.transcriptReply(
+    const immediateTranscript = directReplyText ? null : await this.transcriptReply(
       workspaceId,
       target.nodeId,
       target.sessionId,
-      input.message,
+      prompt,
       requestStartedAt,
     ).catch(() => null);
     if (immediateTranscript?.complete) transcriptMatch ??= immediateTranscript;
     else incompleteTranscript = immediateTranscript;
-    if (!transcriptMatch) {
+    if (!transcriptMatch && !directReplyText) {
       const node = await workspaceRepository.getNode(target.nodeId);
       const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };
       const liveSessionId = ptySessionManager.get(target.sessionId)?.agentSessionId;
@@ -482,12 +512,13 @@ export class BridgeService {
       if (hasStructuredReplySession(payload.provider, payload.agentSessionId, liveSessionId, trackedSessionId)) {
         const deadline = Date.now() + 90_000;
         while (!transcriptMatch && Date.now() < deadline) {
+          if (input.signal?.aborted) throw new Error('Agent request cancelled.');
           await new Promise((resolve) => setTimeout(resolve, 2_000));
           const candidate = await this.transcriptReply(
             workspaceId,
             target.nodeId,
             target.sessionId,
-            input.message,
+            prompt,
             requestStartedAt,
           ).catch(() => null);
           if (candidate?.complete) transcriptMatch = candidate;
@@ -496,28 +527,14 @@ export class BridgeService {
       }
     }
     transcriptMatch ??= incompleteTranscript;
-    const transcriptText = transcriptMatch?.text ?? null;
+    const transcriptText = directReplyText ?? transcriptMatch?.text ?? null;
     // Usa o provider da sessao PTY real, não apenas o metadata do nó. Isso
     // mantém shells explícitos utilizáveis e protege somente TUIs de agentes.
     const activeProvider = target.sessionId
       ? ptySessionManager.get(target.sessionId)?.provider ?? target.provider
       : target.provider;
-    let replyText: string;
-    try {
-      replyText = resolveAgentReplyText(transcriptText, reply.text, activeProvider, target.title);
-    } catch (error) {
-      await controlCenterService.recordDelivery({
-        messageId,
-        workspaceId,
-        fromNodeId: origin?.nodeId ?? null,
-        toNodeId: target.nodeId,
-        state: 'failed',
-        content: input.message,
-        error: error instanceof Error ? error.message : String(error),
-        metadata,
-      });
-      throw error;
-    }
+    if (input.signal?.aborted) throw new Error('Agent request cancelled.');
+    const replyText = resolveAgentReplyText(transcriptText, reply.text, activeProvider, target.title);
     const replyConfirmed = Boolean(transcriptText) || (!activeProvider && !reply.timedOut && Boolean(replyText));
 
     if (terminalDelivered && (reply.text || transcriptText)) {
@@ -646,8 +663,15 @@ export class BridgeService {
     const task = await AgentBoardTask.find(taskId);
     if (!task || task.getAttribute('workspace_id') !== workspaceId || task.getAttribute('archived_at')) return false;
     const status = String(task.getAttribute('status'));
-    if (status === 'todo' || status === 'done') return false;
+    if (status === 'todo') return false;
     const assigneeNodeId = task.getAttribute('assignee_node_id') as string | null;
+    if (status === 'done') {
+      const target = await workspaceRepository.getNode(targetNodeId);
+      // Closing work must not silence its author's completion/review report.
+      // A closed task still cannot dispatch new work to its former assignee.
+      return Boolean(assigneeNodeId && assigneeNodeId === originNodeId && target?.workspaceId === workspaceId
+        && target.type === 'terminal' && (target.payload as { maestro?: boolean }).maestro);
+    }
     return Boolean(assigneeNodeId && (assigneeNodeId === targetNodeId || assigneeNodeId === originNodeId));
   }
 
@@ -1839,7 +1863,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
         // A espera só vale para TUIs de providers registrados; shell puro (ou
         // provider simulado em teste) recebe a mensagem imediatamente.
         const isTui = Boolean(provider && sess?.provider);
-        const ready = Boolean(sess?.hasOutput && sess.waiting && ageMs >= 12_000);
+        const ready = Boolean(sess?.hasOutput && (ptySessionManager.hasReachedInitialIdle(sessionId) || sess.waiting) && ageMs >= 12_000);
         if (!sess || sess.exited || !isTui || ready || Date.now() >= readyDeadline) {
           send();
           return;

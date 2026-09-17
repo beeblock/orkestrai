@@ -217,11 +217,20 @@ function normalizedPrompt(value: string): string {
 }
 
 function isClaudeUserPrompt(event: any): boolean {
+  if (claudeQueuedPrompt(event)) return true;
   if (event?.type !== 'user' || event.isMeta === true) return false;
   const content = event.message?.content;
   return typeof content === 'string'
     ? content.trim().length > 0
     : Array.isArray(content) && content.some((block: any) => block?.type === 'text' && String(block.text ?? '').trim().length > 0);
+}
+
+function claudeQueuedPrompt(event: any): string | null {
+  const attachment = event?.attachment;
+  return event?.type === 'attachment' && event.isSidechain !== true
+    && attachment?.type === 'queued_command' && attachment.commandMode === 'prompt'
+    && typeof attachment.prompt === 'string'
+    ? attachment.prompt.trim() || null : null;
 }
 
 function claudeTurnComplete(jsonl: string): boolean {
@@ -253,6 +262,8 @@ function claudePrompt(jsonl: string): string | null {
       continue;
     }
     if (!isClaudeUserPrompt(event)) continue;
+    const queued = claudeQueuedPrompt(event);
+    if (queued) return queued;
     const content = event.message?.content;
     if (typeof content === 'string' && content.trim()) return content.trim();
     if (!Array.isArray(content)) continue;
@@ -411,6 +422,8 @@ function kimiTurnComplete(jsonl: string): boolean {
 
 function promptFromJsonlEvent(storage: string, event: any): string | null {
   if (storage === 'claude-project-jsonl') {
+    const queued = claudeQueuedPrompt(event);
+    if (queued) return queued;
     if (!isClaudeUserPrompt(event)) return null;
     const content = event.message?.content;
     if (typeof content === 'string') return content.trim() || null;
@@ -520,6 +533,22 @@ function transcriptTurnForPrompt(storage: string, transcript: string, expectedPr
 }
 
 export function transcriptContainsPrompt(storage: string, transcript: string, expectedPrompt: string): boolean {
+  if (storage === 'claude-project-jsonl') {
+    const expected = normalizedPrompt(expectedPrompt);
+    for (const line of transcript.trim().split('\n').reverse()) {
+      let event: any;
+      try { event = JSON.parse(line); } catch { continue; }
+      const prompt = promptFromJsonlEvent(storage, event);
+      if (prompt) return normalizedPrompt(prompt) === expected;
+      // Enqueue proves Enter was accepted, not that the model replied.
+      // Removal confirms consumption only for the explicit mid-turn reason.
+      if (event?.type === 'queue-operation' && typeof event.content === 'string'
+        && normalizedPrompt(event.content) === expected) {
+        return event.operation === 'enqueue' || (event.operation === 'remove' && event.reason === 'absorbed_mid_turn');
+      }
+    }
+    return false;
+  }
   const parser = parserForStorage(storage);
   const prompt = parser?.(transcript).prompt;
   return Boolean(prompt && normalizedPrompt(prompt) === normalizedPrompt(expectedPrompt));

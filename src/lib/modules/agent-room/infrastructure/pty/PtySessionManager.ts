@@ -137,6 +137,8 @@ type PtySession = PtySessionInfo & {
   activeDelivery: ComposerDelivery | null;
   deliveryInProgress: boolean;
   awaitingDeliveryIdle: boolean;
+  lastSubmittedDelivery: ComposerDelivery | null;
+  lastDeliveryAccepted: boolean;
   deliveryReadyAt: number;
   deferredHumanInput: string[];
   humanComposerLength: number;
@@ -155,6 +157,8 @@ type ComposerDelivery = {
 
 export type ComposerDeliveryHandle = {
   submitted: Promise<void>;
+  /** Only an exact structured prompt match may acknowledge this delivery. */
+  acknowledge: () => void;
   /** Cancela somente enquanto a entrega ainda está aguardando na fila. */
   cancel: (reason?: Error) => boolean;
 };
@@ -305,6 +309,8 @@ export class PtySessionManager {
       activeDelivery: null,
       deliveryInProgress: false,
       awaitingDeliveryIdle: false,
+      lastSubmittedDelivery: null,
+      lastDeliveryAccepted: false,
       deliveryReadyAt: 0,
       deferredHumanInput: [],
       humanComposerLength: 0,
@@ -619,7 +625,20 @@ export class PtySessionManager {
       options.signal?.removeEventListener('abort', cancelQueuedDelivery);
     }
     if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
-    if (!session.provider || !session.conptySubmitGuard) return;
+    if (!session.provider) return;
+    if (!session.conptySubmitGuard) {
+      // Native delivery does not depend on transcript support. A bounded,
+      // optional match can release the queue even while a TUI keeps animating.
+      if (options.isAccepted) {
+        void this.waitForAcceptance(async () => {
+          if (session.exited || this.sessions.get(id) !== session) return true;
+          if (!(await options.isAccepted!())) return false;
+          queued.acknowledge();
+          return true;
+        }, 15_000, options.signal).catch(() => undefined);
+      }
+      return;
+    }
 
     const confirmationWindowMs = options.confirmationWindowMs ?? 4_000;
     const maxAttempts = Math.max(1, options.maxAttempts ?? 3);
@@ -628,7 +647,10 @@ export class PtySessionManager {
       const confirmed = options.isAccepted
         ? await this.waitForAcceptance(options.isAccepted, confirmationWindowMs, options.signal)
         : await this.waitForOutputAfter(id, revisionAtSubmit, confirmationWindowMs, options.signal);
-      if (confirmed) return;
+      if (confirmed) {
+        if (options.isAccepted) queued.acknowledge();
+        return;
+      }
       const current = this.requireSession(id);
       if (current.exited) throw new Error(`Sessão PTY ${id} finalizada antes de confirmar o envio.`);
       if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
@@ -655,12 +677,17 @@ export class PtySessionManager {
   }
 
   /** Aguarda somente a primeira estabilizacao do TUI; depois disso nao bloqueia trabalho enfileirado. */
+  hasReachedInitialIdle(id: string): boolean {
+    const session = this.sessions.get(id);
+    return Boolean(session && !session.exited && (!session.provider || session.initialIdleObserved));
+  }
+
   async waitUntilInitialIdle(id: string, timeoutMs = 20_000): Promise<boolean> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
       const session = this.sessions.get(id);
       if (!session || session.exited) return false;
-      if (!session.provider || session.initialIdleObserved) return true;
+      if (this.hasReachedInitialIdle(id)) return true;
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
     }
     return false;
@@ -671,6 +698,7 @@ export class PtySessionManager {
     if (session.exited) {
       return {
         submitted: Promise.reject(new Error(`Sessão PTY ${id} já finalizada.`)),
+        acknowledge: () => {},
         cancel: () => false,
       };
     }
@@ -678,6 +706,7 @@ export class PtySessionManager {
     if (!sanitized) {
       return {
         submitted: Promise.reject(new Error('A mensagem para o terminal está vazia.')),
+        acknowledge: () => {},
         cancel: () => false,
       };
     }
@@ -690,6 +719,11 @@ export class PtySessionManager {
     });
     return {
       submitted,
+      acknowledge: () => {
+        if (session.exited || session.lastSubmittedDelivery !== delivery) return;
+        session.lastDeliveryAccepted = true;
+        this.releaseDeliveryBarrierWhenReady(session);
+      },
       cancel: (reason = new Error('Entrega ao terminal cancelada antes do envio.')) => {
         const index = session.deliveryQueue.indexOf(delivery);
         if (index < 0) return false;
@@ -795,6 +829,8 @@ export class PtySessionManager {
       try {
         session.lastSubmitOutputRevision = session.outputRevision;
         this.write(session.id, '\r');
+        session.lastSubmittedDelivery = delivery;
+        session.lastDeliveryAccepted = false;
         delivery.resolve();
         session.awaitingDeliveryIdle = true;
         session.deliveryReadyAt = Date.now() + this.deliverySettleMs(session);
@@ -857,11 +893,13 @@ export class PtySessionManager {
     if (!session.awaitingDeliveryIdle || session.exited) return;
     const now = Date.now();
     const outputQuiet = session.lastOutputAt === 0 || now - session.lastOutputAt >= SESSION_IDLE_MS;
-    if (now < session.deliveryReadyAt || !outputQuiet) {
+    if (now < session.deliveryReadyAt || (!outputQuiet && !session.lastDeliveryAccepted)) {
       this.scheduleDeliveryBarrierFallback(session);
       return;
     }
     session.awaitingDeliveryIdle = false;
+    session.lastSubmittedDelivery = null;
+    session.lastDeliveryAccepted = false;
     if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
     session.deliveryTimer = null;
     this.drainDeliveryQueue(session);
@@ -877,6 +915,8 @@ export class PtySessionManager {
     this.updateHumanComposerState(session, data);
     this.write(session.id, data);
     if (session.provider && submitted) {
+      session.lastSubmittedDelivery = null;
+      session.lastDeliveryAccepted = false;
       // The renderer may submit a human prompt while an automatic handoff is
       // already queued. Give the TUI time to consume Enter and keep the queue
       // behind any response; otherwise both prompts can become one turn.
@@ -916,6 +956,8 @@ export class PtySessionManager {
     for (const delivery of session.deliveryQueue.splice(0)) delivery.reject(error);
     session.deliveryInProgress = false;
     session.awaitingDeliveryIdle = false;
+    session.lastSubmittedDelivery = null;
+    session.lastDeliveryAccepted = false;
   }
 
   private requireSession(id: string): PtySession {

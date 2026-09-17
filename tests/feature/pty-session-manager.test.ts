@@ -7,6 +7,121 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it.each(['native', 'wsl'] as const)('releases an accepted %s prompt during continuous provider output', async (runtime) => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: (listener: (data: string) => void) => { emitData = listener; return { dispose() {} }; },
+      onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({
+      command: 'codex', cwd: process.cwd(), provider: 'codex',
+      ...(runtime === 'wsl' ? { runtime: { kind: 'wsl' as const, distribution: 'Ubuntu', linuxWorkingDir: '/workspace' } } : {}),
+    });
+    try {
+      const first = manager.writeWithConfirmedSubmit(session.id, 'first prompt', { isAccepted: async () => true });
+      await vi.advanceTimersByTimeAsync(600);
+      await first;
+      const second = manager.writeWithSubmit(session.id, 'second prompt');
+      const spinner = setInterval(() => emitData('working...'), 100);
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(writes).toEqual(['first prompt', '\r']);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(writes).toContain('second prompt');
+      clearInterval(spinner);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await second;
+      expect(writes).toEqual(['first prompt', '\r', 'second prompt', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('keeps an unconfirmed prompt behind the output barrier', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: (listener: (data: string) => void) => { emitData = listener; return { dispose() {} }; },
+      onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex' });
+    try {
+      const first = manager.writeWithConfirmedSubmit(session.id, 'first', { isAccepted: async () => false });
+      await vi.advanceTimersByTimeAsync(600);
+      await first;
+      const second = manager.queueWithSubmit(session.id, 'second');
+      const rejected = second.submitted.catch(() => undefined);
+      const spinner = setInterval(() => emitData('working...'), 100);
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect(writes).toEqual(['first', '\r']);
+      clearInterval(spinner);
+      second.cancel();
+      await rejected;
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it.each(['draft', 'submitted', 'next-delivery'] as const)('does not let an old acknowledgement bypass a %s', async (state) => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: (listener: (data: string) => void) => { emitData = listener; return { dispose() {} }; },
+      onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex' });
+    try {
+      const first = manager.queueWithSubmit(session.id, 'first');
+      await vi.advanceTimersByTimeAsync(600);
+      await first.submitted;
+      if (state === 'next-delivery') {
+        first.acknowledge();
+        await vi.advanceTimersByTimeAsync(9_000);
+        const next = manager.queueWithSubmit(session.id, 'next');
+        await vi.advanceTimersByTimeAsync(600);
+        await next.submitted;
+      } else manager.writeHumanInput(session.id, state === 'draft' ? 'human draft' : 'human prompt\r');
+      const pending = manager.queueWithSubmit(session.id, 'must stay queued');
+      const rejected = pending.submitted.catch(() => undefined);
+      const spinner = setInterval(() => emitData('working...'), 100);
+      first.acknowledge();
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(writes).not.toContain('must stay queued');
+      clearInterval(spinner);
+      pending.cancel();
+      await rejected;
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('retains initial provider readiness when new input makes it busy again', async () => {
+    vi.useFakeTimers();
+    let onData!: (data: string) => void;
+    const fakePty = {
+      write() {}, resize() {}, kill() {}, pid: 1,
+      onData: (listener: (data: string) => void) => { onData = listener; return { dispose() {} }; },
+      onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex' });
+    try {
+      expect(manager.hasReachedInitialIdle(session.id)).toBe(false);
+      onData('ready');
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(manager.hasReachedInitialIdle(session.id)).toBe(true);
+      manager.write(session.id, 'next question\r');
+      onData('working again');
+      expect(manager.get(session.id)?.waiting).toBe(false);
+      expect(manager.hasReachedInitialIdle(session.id)).toBe(true);
+      manager.kill(session.id);
+      expect(manager.hasReachedInitialIdle(session.id)).toBe(false);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
   it('exposes xterm capabilities to native and WSL terminal children', () => {
     let spawnedOptions: { env?: Record<string, string> } | undefined;
     const fakePty = {

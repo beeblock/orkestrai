@@ -307,6 +307,22 @@ describe('BridgeService', () => {
     ptySessionManager.kill(session.id);
   });
 
+  it('allows the assigned author to report completed work to the leader without dispatching it again', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    const leaderSession = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    const leader = await workspaceRepository.createNode({
+      workspaceId: workspace.id, type: 'terminal', title: 'Leader',
+      payload: { command: '/bin/cat', sessionId: leaderSession.id, maestro: true },
+    });
+    try {
+      const task = await taskBoardService.create(workspace.id, { title: 'Completed review', assigneeNodeId: terminal.id, dispatch: false });
+      await taskBoardService.update(workspace.id, task.id, { status: 'done', notifyCompletion: false });
+      const result = await bridgeService.ask(workspace.id, { from: terminal.id, to: leader.id, taskId: task.id, message: 'Review is ready', timeoutMs: 10_000 });
+      expect(result).toMatchObject({ replyConfirmed: true, delivered: true });
+      await expect(bridgeService.ask(workspace.id, { from: leader.id, to: terminal.id, taskId: task.id, message: 'Repeat the finished work' })).rejects.toThrow('no longer active');
+    } finally { ptySessionManager.kill(session.id); ptySessionManager.kill(leaderSession.id); }
+  }, 20_000);
+
   it('ask funciona nos dois sentidos entre terminais Claude e Codex', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'duplex', workingDir: '/tmp' });
     const claudeSession = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });

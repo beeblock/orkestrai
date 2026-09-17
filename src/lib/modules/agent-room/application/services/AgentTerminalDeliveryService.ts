@@ -25,8 +25,12 @@ export class AgentTerminalDeliveryService {
     }
     const startedAt = Date.now();
     const requiresConfirmation = ptySessionManager.requiresSubmitConfirmation(input.sessionId);
-    const confirmAccepted = requiresConfirmation
-      ? await this.preparePromptConfirmation(input, startedAt)
+    const provider = ptySessionManager.get(input.sessionId)?.provider;
+    const confirmAccepted = provider
+      ? await this.preparePromptConfirmation(input, startedAt).catch((error) => {
+        if (requiresConfirmation) throw error;
+        return undefined;
+      })
       : undefined;
     await ptySessionManager.writeWithConfirmedSubmit(input.sessionId, input.message, {
       submitDelayMs: input.submitDelayMs ?? 200,

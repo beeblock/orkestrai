@@ -34,7 +34,7 @@ export const DOCS_EN: DocsCatalog = {
     {
       id: 'wsl-bridge-console',
       title: 'Reliable agent communication from WSL',
-      body: `The Windows package includes a pinned console Node runtime verified by SHA-256. Each WSL launcher uses that known runtime when available and keeps Node inside its exact distribution as a fallback; it never invokes the graphical Orkestrai.exe for bridge commands, because Windows GUI processes do not reliably return stdout, stderr, or JSON-RPC to WSL. Existing workspaces repair this launcher automatically when opened. Task-related agent messages carry the Kanban task id, expire while waiting behind an older conversation, and are cancelled before reaching the composer when the task is completed, archived, or reassigned. A late status update cannot reopen completed work. If an ask is not structurally confirmed, reload the affected terminal and retry only after checking the current task state.`,
+      body: "The Windows package includes a pinned console Node runtime verified by SHA-256. Each WSL launcher uses that known runtime when available and keeps Node inside its exact distribution as a fallback; it never invokes the graphical Orkestrai.exe for bridge commands, because Windows GUI processes do not reliably return stdout, stderr, or JSON-RPC to WSL. Existing workspaces repair this launcher automatically when opened. Messages between agents share a serialized delivery queue, not an exclusive lock on the recipient's entire response. Each reply remains linked to its exact prompt. If two agents ask each other while one is waiting, the explicit reverse message can resolve the waiting call without pretending that unrelated terminal output is an answer. Claude messages accepted while it is working are tracked as queued commands and then matched when consumed. Task guards still prevent stale work dispatch; an assigned agent may report completed work to the leader. Completion notices wait while the leader has an unsent draft instead of expiring after 30 seconds; reopening or archiving the task, changing the leader, or replacing its session invalidates the notice.",
     },
     {
       id: 'agentes',
@@ -940,6 +940,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {"date":"Unreleased","title":"Agent communication","summary":"Unreleased corrections, not included in 0.31.4.","items":["Deliver queued agent messages without waiting for an entire model response. Reciprocal messages unblock waiting callers, Claude mid-turn messages retain their transcript association, and valid completion reports remain available to the leader."]},
     {
       "date": "September 16, 2026 · 0.31.4",
       "title": "Orkestrai 0.31.4: responsive dictation and terminal recovery",

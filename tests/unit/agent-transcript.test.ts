@@ -18,6 +18,43 @@ import {
 } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 
 describe('parseClaudeTranscriptReply', () => {
+  it('ignores non-event JSON and does not acknowledge a cancelled queued prompt', () => {
+    const transcript = [
+      { type: 'queue-operation', operation: 'enqueue', content: 'Cancelled' },
+      { type: 'queue-operation', operation: 'remove', reason: 'cancelled', content: 'Cancelled' },
+      null, 0, 'unrelated', {},
+    ].map((event) => JSON.stringify(event)).join('\n');
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, 'Cancelled')).toBe(false);
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, 'Missing')).toBe(false);
+  });
+
+  it('matches a mid-turn queued prompt without including the previous answer', () => {
+    const events = [
+      { type: 'user', message: { content: 'Old prompt' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Old answer' }], stop_reason: 'end_turn' } },
+      { type: 'queue-operation', operation: 'enqueue', content: 'Review the new change' },
+      { type: 'queue-operation', operation: 'remove', reason: 'absorbed_mid_turn', content: 'Review the new change' },
+      { type: 'attachment', isSidechain: false, attachment: { type: 'queued_command', commandMode: 'prompt', prompt: 'Review the new change' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'New review' }], stop_reason: 'end_turn' } },
+    ];
+    const transcript = events.map((event) => JSON.stringify(event)).join('\n');
+    expect(transcriptContainsPrompt('claude-project-jsonl', events.slice(0, 3).map((e) => JSON.stringify(e)).join('\n'), 'Review the new change')).toBe(true);
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', transcript, 'Review the new change')).toEqual({ text: 'New review', complete: true });
+    expect(parseClaudeTranscriptReply(transcript)).toBe('New review');
+    expect(parseTranscriptReplyForPrompt('claude-project-jsonl', transcript, 'Old prompt')).toBe('Old answer');
+  });
+
+  it('does not turn an enqueue, unrelated attachment or tool output into an agent answer', () => {
+    const transcript = [
+      { type: 'user', message: { content: 'Old prompt' } },
+      { type: 'queue-operation', operation: 'enqueue', content: 'Queued prompt' },
+      { type: 'attachment', attachment: { type: 'other', prompt: 'Queued prompt' } },
+      { type: 'user', message: { content: [{ type: 'tool_result', content: 'Not an answer' }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Old response' }] } },
+    ].map((event) => JSON.stringify(event)).join('\n');
+    expect(parseTranscriptReplyForPrompt('claude-project-jsonl', transcript, 'Queued prompt')).toBeNull();
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, 'Missing prompt')).toBe(false);
+  });
   it('junta TODOS os blocos de texto do assistant apos a ultima pergunta (inclusive com tool calls no meio)', () => {
     const jsonl = [
       JSON.stringify({ type: 'user', message: { role: 'user', content: 'como estao as tasks?' } }),

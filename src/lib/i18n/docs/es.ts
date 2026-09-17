@@ -34,7 +34,7 @@ export const DOCS_ES: DocsCatalog = {
     {
       id: 'wsl-bridge-console',
       title: 'Comunicación confiable de agentes desde WSL',
-      body: `El paquete de Windows incluye un runtime Node de consola fijado y verificado por SHA-256. Cada launcher WSL usa ese runtime conocido cuando está disponible y mantiene el Node de la distribución exacta como fallback; nunca ejecuta el Orkestrai.exe gráfico para comandos del puente, porque los procesos GUI de Windows no devuelven stdout, stderr o JSON-RPC de forma confiable a WSL. Los workspaces existentes reparan este launcher automáticamente al abrirse. Los mensajes relacionados con trabajo llevan el id de la tarea Kanban, expiran mientras esperan una conversación anterior y se cancelan antes del composer cuando la tarea finaliza, se archiva o cambia de responsable. Un estado tardío no reabre trabajo terminado. Si un ask no obtiene confirmación estructurada, recarga el terminal afectado y vuelve a intentarlo solo después de comprobar el estado actual de la tarea.`,
+      body: "El paquete de Windows incluye un runtime Node de consola fijado y verificado por SHA-256. Cada launcher WSL usa ese runtime conocido cuando está disponible y mantiene el Node de la distribución exacta como fallback; nunca ejecuta el Orkestrai.exe gráfico para comandos del puente, porque los procesos GUI de Windows no devuelven stdout, stderr o JSON-RPC de forma confiable a WSL. Los workspaces existentes reparan este launcher automáticamente al abrirse. Los mensajes entre agentes comparten una cola de envío, no un bloqueo exclusivo durante toda la respuesta del destinatario. Cada respuesta sigue vinculada a la pregunta exacta. Si dos agentes se preguntan mutuamente mientras uno espera, el mensaje recíproco explícito puede resolver la llamada pendiente sin tratar salida del terminal no relacionada como respuesta. Los mensajes recibidos por Claude mientras trabaja se siguen como comandos encolados y se vinculan al consumirse. Las protecciones siguen impidiendo despachos obsoletos; el responsable puede informar al líder sobre trabajo completado. Los avisos de finalización esperan mientras el líder tiene un borrador humano sin enviar, en lugar de expirar después de 30 segundos; reabrir o archivar la tarea, cambiar de líder o sustituir su sesión invalida el aviso.",
     },
     {
       id: 'agentes',
@@ -940,6 +940,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    {"date":"Sin publicar","title":"Comunicación entre agentes","summary":"Correcciones aún no publicadas, no incluidas en 0.31.4.","items":["Entregar mensajes entre agentes sin esperar toda la respuesta del modelo. Los mensajes recíprocos desbloquean al remitente, los mensajes recibidos por Claude durante el trabajo mantienen su vínculo con el transcript y los avisos válidos de finalización siguen disponibles para el líder."]},
     {
       "date": "16 de septiembre de 2026 · 0.31.4",
       "title": "Orkestrai 0.31.4: dictado fluido y recuperación de terminales",
