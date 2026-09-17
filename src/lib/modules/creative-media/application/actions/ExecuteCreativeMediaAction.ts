@@ -4,11 +4,14 @@ import type { CreativeRunRequest, CreativeWorkflowSave } from '../../contracts/s
 import { creativeWorkflowService } from '../services/CreativeWorkflowService.js';
 import { falModelCatalog } from '../services/FalModelCatalogService.js';
 import { creativeCatalogQuerySchema } from '../../contracts/schemas/creative-media.schema.js';
+import { CreativeCharacterDto } from '../dto/CreativeCharacterDto.js';
+import { ExecuteCreativeCharacterAction } from './ExecuteCreativeCharacterAction.js';
 export class ExecuteCreativeMediaAction extends Action<CreativeMediaDto, unknown> {
   async execute(dto: CreativeMediaDto): Promise<unknown> {
     const service = creativeWorkflowService;
     await service.assertActor(dto.workspaceId, dto.actor, !['models', 'read', 'list', 'cancel', 'close_unconfirmed', 'remove'].includes(dto.command));
     switch (dto.command) {
+      case 'characters': return new ExecuteCreativeCharacterAction().execute(CreativeCharacterDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'models': {
         const input = creativeCatalogQuerySchema.parse(dto.input);
         if (input.endpoint) return falModelCatalog.contract(input.endpoint);

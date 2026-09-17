@@ -434,7 +434,18 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   /** @type {Record<string, object>} */
   const properties = { taskId: { type: 'string', format: 'uuid' } };
   const required = ['taskId'];
-  if (!['models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (!['characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (command === 'characters') {
+    properties.input = { type: 'object', additionalProperties: false, properties: {
+      command: { type: 'string', enum: ['list', 'read', 'create', 'update', 'fork', 'remove', 'place', 'binding'] }, id: { type: 'string', format: 'uuid' }, revision: { type: 'integer', minimum: 1 }, config: VIDEO_CONFIG_SCHEMA,
+      position: { type: 'object', additionalProperties: false, properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'] }, floorId: { type: ['string', 'null'], format: 'uuid' },
+      definition: { type: 'object', additionalProperties: false, properties: { name: { type: 'string', maxLength: 80 }, appearance: { type: 'string', maxLength: 8000 }, images: { type: 'array', maxItems: 12, items: { type: 'string', description: 'Workspace-relative image path generated through the Codex image workflow.' } }, voice: { oneOf: [
+        { type: 'object', additionalProperties: false, properties: { kind: { const: 'unassigned' } }, required: ['kind'] },
+        { type: 'object', additionalProperties: false, properties: { kind: { const: 'audio' }, path: { type: 'string' }, language: { type: 'string' }, style: { type: 'string' } }, required: ['kind', 'path', 'language'] },
+        { type: 'object', additionalProperties: false, properties: { kind: { const: 'provider' }, voiceId: { type: 'string' }, profileId: { type: 'string', format: 'uuid' }, modelIds: { type: 'array', minItems: 1, items: { type: 'string' } }, language: { type: 'string' }, style: { type: 'string' } }, required: ['kind', 'voiceId', 'profileId', 'modelIds', 'language'] },
+      ] } }, required: ['name'] },
+    }, required: ['command'] }; required.push('input');
+  }
   if (command === 'models') properties.input = { type: 'object', additionalProperties: false, properties: { endpoint: { type: 'string', maxLength: 240 }, query: { type: 'string', maxLength: 100 }, offset: { type: 'integer', minimum: 0, maximum: 10000 }, limit: { type: 'integer', minimum: 1, maximum: 5000 }, refresh: { type: 'boolean' } } };
   if (['cancel', 'retry_download'].includes(command)) { properties.runId = { type: 'string', format: 'uuid' }; required.push('runId'); }
   if (['create', 'update'].includes(command)) {

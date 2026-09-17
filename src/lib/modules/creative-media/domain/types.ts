@@ -13,6 +13,7 @@ export type CreativeSnapshot = {
   startImage: CreativeReference | null; endImage: CreativeReference | null;
   modelContract?: FalModelContract;
   media?: Array<{ pointer: string; reference: CreativeMediaReference }>;
+  characters?: Array<{ id: string; version: number; digest: string; name: string }>;
 };
 export type CreativeMediaReference = { nodeId?: string; path: string; sha256: string; size: number; mimeType: string };
 export type CreativeVideoAsset = {

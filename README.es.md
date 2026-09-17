@@ -118,6 +118,9 @@ normal de los agentes no se guarda.
   La clave permanece en la bóveda del escritorio. Ejecuciones persistentes,
   descargas recuperables y nodos de medios conservan los archivos originales en el proyecto,
   Canvas y Workbench. CLI/MCP comparte el contrato; las imágenes Codex no cambian.
+  Los personajes aprobados conservan versiones de apariencia y voz. Arrastra desde
+  la biblioteca compartida a otro workspace para copiar todas las referencias como
+  nodos nativos, sin transferir credenciales ni autorizar generaciones de pago.
 - **Flujos nativos de imágenes:** conecta Notas, referencias ordenadas de Imagen
   PNG/JPEG/WebP y un agente Codex activo a un nodo Generar imágenes en el mismo
   canvas; el mismo nodo se abre en Workbench. El Codex conectado usa la tool

@@ -31,15 +31,24 @@ export function isVideoCategory(category: string) {
   return /(?:^|-)to-video$/.test(category) || ['video-editing', 'video-upscaling', 'video-to-video', 'video', 'video-interpolation', 'video-extension', 'video-inpainting', 'video-outpainting'].includes(category);
 }
 
-export function modelMediaSlots(schema: ModelSchema, used: string[] = [], prefix = '', depth = 0): string[] {
+function modelStringSlots(schema: ModelSchema, matches: (path: string) => boolean, used: string[], prefix = '', depth = 0): string[] {
   if (depth > 6) return [];
   const spec = concreteSchema(schema);
   const branches = spec.anyOf ?? spec.oneOf;
-  if (branches) return [...new Set(branches.flatMap(branch => modelMediaSlots(branch, used, prefix, depth + 1)))].slice(0, 150);
+  if (branches) return [...new Set(branches.flatMap(branch => modelStringSlots(branch, matches, used, prefix, depth + 1)))].slice(0, 150);
   if (spec.type === 'array' && spec.items) {
-    const count = Math.min(spec.maxItems ?? 50, used.filter(path => path.startsWith(`${prefix}/`)).length + 1, 50);
-    return Array.from({ length: count }, (_, index) => modelMediaSlots(spec.items!, used, `${prefix}/${index}`, depth + 1)).flat();
+    const indices = used.filter(path => path.startsWith(`${prefix}/`)).map(path => path.slice(prefix.length + 1).split('/')[0]).filter(index => /^\d+$/.test(index)).map(Number);
+    const count = Math.max(0, Math.min(spec.maxItems ?? 50, Math.max(spec.minItems ?? 0, ...indices.map(index => index + 2), 1), 50));
+    return Array.from({ length: count }, (_, index) => modelStringSlots(spec.items!, matches, used, `${prefix}/${index}`, depth + 1)).flat().slice(0, 150);
   }
-  if (spec.type === 'object' || spec.properties) return Object.entries(spec.properties ?? {}).flatMap(([key, value]) => modelMediaSlots(value, used, `${prefix}/${key}`, depth + 1)).slice(0, 150);
-  return spec.type === 'string' && /(?:image|video|audio|mask|reference|file|frame).*url/i.test(prefix) ? [prefix] : [];
+  if (spec.type === 'object' || spec.properties) return Object.entries(spec.properties ?? {}).flatMap(([key, value]) => modelStringSlots(value, matches, used, `${prefix}/${key}`, depth + 1)).slice(0, 150);
+  return spec.type === 'string' && matches(prefix) ? [prefix] : [];
+}
+
+export function modelMediaSlots(schema: ModelSchema, used: string[] = [], prefix = '', depth = 0): string[] {
+  return modelStringSlots(schema, path => /(?:image|video|audio|voice|mask|reference|file|frame).*url/i.test(path), used, prefix, depth);
+}
+
+export function modelVoiceIdSlots(schema: ModelSchema, used: string[] = []): string[] {
+  return modelStringSlots(schema, path => /\/voice_ids?(?:\/\d+)?$/.test(path), used);
 }

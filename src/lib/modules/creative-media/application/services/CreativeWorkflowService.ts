@@ -14,6 +14,7 @@ import { withCreativeProfileLock } from './creative-profile-lock.js';
 import { falModelCatalog, validateFalParameters } from './FalModelCatalogService.js';
 import { genericFalInput } from '../../domain/model-input.js';
 import { modelPromptField } from '../../domain/model-contract.js';
+import { creativeCharacterService } from './CreativeCharacterService.js';
 
 const previewState = globalThis as typeof globalThis & { __orkestraiCreativePreviews?: Map<string, { workspaceId: string; actor: CreativeActor; preview: CreativePreview }> };
 const previews = previewState.__orkestraiCreativePreviews ??= new Map();
@@ -70,6 +71,10 @@ export class CreativeWorkflowService {
     if (nodeId) {
       if ((await this.workspace.node(workspaceId, nodeId))?.type !== 'videoWorkflow') throw new CreativeMediaError('creative_workflow_not_found', 404);
       if (await this.repository.activeForNodes(workspaceId, [nodeId])) throw new CreativeMediaError('creative_workflow_busy', 409);
+      const current = await this.repository.workflow(workspaceId, nodeId);
+      const approved = current?.config.characterBindings ?? [];
+      if (actor.type === 'agent' && approved.length && JSON.stringify(approved.map(binding => binding.id)) !== JSON.stringify(value.config.characterBindings.map(binding => binding.id))) throw new CreativeMediaError('creative_character_owner_change_required', 403);
+      if (actor.type === 'agent' && approved.some(binding => binding.alias && value.config.characterBindings.some(next => next.alias === binding.alias && next.id !== binding.id))) throw new CreativeMediaError('creative_character_owner_change_required', 403);
     } else {
       if (value.revision !== undefined) throw new CreativeMediaError('creative_revision_conflict', 409);
       nodeId = (await this.workspace.createNode(workspaceId, 'videoWorkflow', value.title, { schemaVersion: 1 }, actor.type === 'agent' ? actor.nodeId : undefined)).id;
@@ -101,7 +106,7 @@ export class CreativeWorkflowService {
 
   async snapshot(workflow: CreativeWorkflow): Promise<CreativeSnapshot> {
     await this.validateBindings(workflow.workspaceId, workflow.config);
-    const config = creativeConfigSchema.parse(workflow.config);
+    let config = creativeConfigSchema.parse(workflow.config);
     const contexts: string[] = [];
     for (const id of config.contextNodeIds) {
       const node = await this.workspace.node(workflow.workspaceId, id);
@@ -111,8 +116,11 @@ export class CreativeWorkflowService {
     }
     const legacyModel = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS];
     const modelContract = legacyModel ? undefined : await falModelCatalog.contract(config.modelId);
+    const identities = await creativeCharacterService.resolve(workflow.workspaceId, config, modelContract);
+    config = identities.config;
     const configuredPrompt = config.parameters[modelContract ? modelPromptField(modelContract.schema) ?? 'prompt' : 'prompt'];
-    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), ...contexts].filter(Boolean).join('\n\n').trim();
+    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), ...contexts, ...identities.directions].filter(Boolean).join('\n\n').trim();
+    if (/@\{[^}\n]+\}/.test(prompt)) throw new CreativeMediaError('creative_reference_alias_missing');
     if (modelContract) {
       const media = [];
       let size = 0;
@@ -124,7 +132,7 @@ export class CreativeWorkflowService {
       }
       const input = genericFalInput(config, prompt, Object.fromEntries(media.map(item => [item.pointer, `https://media.invalid/${item.reference.sha256}`])), modelContract);
       validateFalParameters(modelContract, input);
-      return { config, prompt, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage: null, endImage: null, modelContract, media };
+      return { config, prompt, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage: null, endImage: null, modelContract, media, ...(identities.characters.length ? { characters: identities.characters } : {}) };
     }
     if (!prompt) throw new CreativeMediaError('creative_prompt_required');
     if (prompt.length > legacyModel.promptLimit) throw new CreativeMediaError('creative_prompt_too_long');

@@ -91,6 +91,46 @@ export class CreativeMediaFiles {
     return `data:${reference.mimeType};base64,${bytes.toString('base64')}`;
   }
 
+  async freeze(workspaceId: string, reference: CreativeMediaReference, relativePath: string, sourceWorkspaceId = workspaceId): Promise<CreativeMediaReference> {
+    const bytes = await this.readImage(sourceWorkspaceId, reference.path, 64 * 1024 * 1024);
+    if (createHash('sha256').update(bytes).digest('hex') !== reference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+    const destination = await this.workspace.writablePath(workspaceId, relativePath);
+    await mkdir(dirname(destination), { recursive: true });
+    // Recheck after creating parents; never overwrite an approved or user-edited file.
+    if (await this.workspace.writablePath(workspaceId, relativePath) !== destination) throw new CreativeMediaError('creative_reference_changed', 409);
+    let handle;
+    try { handle = await open(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const existing = await this.media(workspaceId, { path: relativePath });
+      if (existing.sha256 !== reference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+      return existing;
+    }
+    try { await handle.writeFile(bytes); await handle.sync(); }
+    catch (error) { await handle.close(); await unlink(destination).catch(() => undefined); throw error; }
+    await handle.close();
+    const frozen = await this.media(workspaceId, { path: relativePath });
+    if (frozen.sha256 !== reference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+    return frozen;
+  }
+
+  async freezeMany(workspaceId: string, items: Array<{ reference: CreativeMediaReference; path: string }>, sourceWorkspaceId = workspaceId) {
+    for (const item of items) {
+      const current = await this.media(sourceWorkspaceId, { path: item.reference.path });
+      if (current.sha256 !== item.reference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+      await this.workspace.writablePath(workspaceId, item.path);
+      try {
+        const existing = await this.media(workspaceId, { path: item.path });
+        if (existing.sha256 !== item.reference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    const results: CreativeMediaReference[] = [];
+    for (const item of items) results.push(await this.freeze(workspaceId, item.reference, item.path, sourceWorkspaceId));
+    return results;
+  }
+
   async store(run: CreativeRun, video: CreativeRemoteVideo, response: Response, outputIndex = 0): Promise<CreativeVideoAsset> {
     const mimeType = video.mimeType ?? 'video/mp4';
     const path = creativeOutputPath(run, video, outputIndex);

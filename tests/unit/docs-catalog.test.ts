@@ -62,6 +62,8 @@ describe('catalogo de docs (integridade i18n)', () => {
         }
       }
       for (const useCase of catalog.useCases) {
+        expect(Object.keys(useCase).sort()).toEqual(['body', 'id', 'tags', 'title']);
+        expect(useCase.body).not.toMatch(/\bundefined\b/);
         expect(useCase.title.trim().length).toBeGreaterThan(2);
         expect(useCase.body.trim().length).toBeGreaterThan(20);
         expect(useCase.tags.length).toBeGreaterThan(0);

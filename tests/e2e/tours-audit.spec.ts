@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { execSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TOURS_PT } from '../../src/lib/components/agent-room/tours/catalog/pt-BR';
@@ -71,7 +71,8 @@ for (const tour of TOURS_PT) {
     const created = await request.post('/api/agent-room/workspaces', { data: { name: workspaceName, workingDir: dir } });
     const workspace = (await created.json()).data as { id: string };
 
-    if (tour.id === 'creative-image-workflow') {
+    const usesNativeImageGen = tour.steps.some(step => (Array.isArray(step.action) ? step.action : [step.action]).some(action => action?.kind === 'runImageWorkflow'));
+    if (usesNativeImageGen) {
       // The native workflow contract is exercised elsewhere. This catalog
       // audit replaces only the authenticated external ImageGen execution.
       await page.route('**/api/agent-room/workspaces/*/image-workflows/*', async (route) => {
@@ -108,7 +109,7 @@ for (const tour of TOURS_PT) {
         const next = panel.getByRole('button', { name: /Próximo passo/ });
         if (await doForMe.count()) {
           await doForMe.click();
-          if (tour.id === 'creative-image-workflow') {
+          if (usesNativeImageGen) {
             const currentStep = tour.steps.find((step) => step.title === titleBefore);
             const actions = currentStep?.action ? (Array.isArray(currentStep.action) ? currentStep.action : [currentStep.action]) : [];
             const run = actions.find((action) => action.kind === 'runImageWorkflow');
@@ -134,6 +135,7 @@ for (const tour of TOURS_PT) {
     } finally {
       await request.post(`/api/agent-room/workspaces/${workspace.id}/unload`).catch(() => {});
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`).catch(() => {});
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 }

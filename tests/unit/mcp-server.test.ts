@@ -42,7 +42,16 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
-  it.each(['models','list','read','create','update','preview','run','cancel','retry_download','remove'])('routes native video %s through the same task-bound contract without credentials', async command => {
+  it('keeps storyboard images on Codex and makes native video audio an explicit model capability', () => {
+    const description = MCP_TOOLS.find(tool => tool.name === 'video_workflow_create')!.description;
+    expect(description).toContain('image_gen.imagegen');
+    expect(description).toContain('never fal image generation');
+    expect(description).toContain('validated Image outputs');
+    expect(description).toContain('native audio');
+    expect(description).toContain('requested language');
+    expect(description).toContain('silently substitute a mute model');
+  });
+  it.each(['characters','models','list','read','create','update','preview','run','cancel','retry_download','remove'])('routes native video %s through the same task-bound contract without credentials', async command => {
     const server = startMcp();
     const args = { taskId:'00000000-0000-4000-8000-000000000001', nodeId:'00000000-0000-4000-8000-000000000002', input:{title:'Test video',config:{prompt:'A scene'} } };
     server.send({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:`video_workflow_${command}`,arguments:args}});
@@ -53,6 +62,12 @@ describe('servidor MCP (orkestrai mcp)', () => {
     expect(tool.inputSchema.properties).not.toHaveProperty('credential');
     expect(tool.inputSchema.additionalProperties).toBe(false);
     if (command === 'update') expect(tool.inputSchema.properties.input.required).toEqual(['title', 'config']);
+    if (command === 'characters') {
+      expect(tool.inputSchema.required).not.toContain('nodeId');
+      expect(tool.inputSchema.properties.input.properties.command.enum).not.toContain('lock');
+      expect(tool.inputSchema.properties.input.properties.command.enum).toContain('binding');
+      expect(tool.inputSchema.properties.input.properties.config.properties.characterBindings.items.properties.alias).toBeDefined();
+    }
     server.input.end(); await server.done;
   });
   it('routes automatic contact navigation without allowing a supplied recipient or arbitrary query', async () => {

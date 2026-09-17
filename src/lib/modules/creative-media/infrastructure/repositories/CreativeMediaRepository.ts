@@ -4,6 +4,7 @@ import { CreativeProviderProfile } from '../../domain/models/CreativeProviderPro
 import { CreativeWorkspacePolicy as PolicyModel } from '../../domain/models/CreativeWorkspacePolicy.js';
 import { CreativeWorkflow as WorkflowModel } from '../../domain/models/CreativeWorkflow.js';
 import { CreativeRun as RunModel } from '../../domain/models/CreativeRun.js';
+import { creativeCharacterRepository } from './CreativeCharacterRepository.js';
 import { creativeConfigSchema, creativePolicySchema } from '../../contracts/schemas/creative-media.schema.js';
 import type { CreativePolicy, CreativeWorkflowSave } from '../../contracts/schemas/creative-media.schema.js';
 import { ACTIVE_CREATIVE_STATUSES, type CreativeRunStatus } from '../../domain/catalog.js';
@@ -112,6 +113,7 @@ export class CreativeMediaRepository {
   }
   async removeWorkspace(workspaceId: string): Promise<void> {
     await Connection.transaction(async () => {
+      await creativeCharacterRepository.removeWorkspace(workspaceId);
       await RunModel.query().where('workspace_id', workspaceId).delete();
       await WorkflowModel.query().where('workspace_id', workspaceId).delete();
       await PolicyModel.query().where('workspace_id', workspaceId).delete();

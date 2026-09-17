@@ -209,6 +209,9 @@ common credentials redacted; normal agent output is not persisted.
   recover downloads without generating again, and play delivered workspace media
   in Canvas or Workbench. CLI/MCP agents use the same revisioned contract.
   Video requires a funded fal account; it does not change Codex image generation.
+  Approved characters keep versioned visual and voice references. Drag a character
+  from the shared library into another workspace to copy its complete native
+  reference bundle without granting access to credentials or paid generation.
 - **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
   references, and a live Codex agent to a Generate images node on the same
   canvas; the same node opens in Workbench. A connected Codex can create and

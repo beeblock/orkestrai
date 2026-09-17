@@ -15,6 +15,9 @@
   import type { CreativeProfile, CreativeWorkflow, CreativeRun, CreativePreview } from '$lib/modules/creative-media/domain/types.js';
   import { creativeApi, creativeStatus, creativeError } from '../creative-media-client.js';
   import CreativeProviderDialog from '../CreativeProviderDialog.svelte';
+  import CreativeCharacterBindings from '../CreativeCharacterBindings.svelte';
+  import CreativePrompt from '../CreativePrompt.svelte';
+  import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import ModelCombobox from './ModelCombobox.svelte';
@@ -24,6 +27,11 @@
   type Data = { title: string; workspaceId: string; payload: { revision?: number; draftConfig?: CreativeConfig }; connections?: NodeConnection[]; onDelete: (id: string) => void; onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void; onRename?: (id: string, title: string) => void; onJumpToNode?: (id: string) => void; onRemoveConnection?: (id: string) => void; };
   let { id, data, selected } = $props<NodeProps & { data: Data }>();
   let config = $state<CreativeConfig>(creativeConfigSchema.parse({}));
+  let characters = $state<CreativeCharacter[]>([]);
+  const promptReferences = $derived(config.characterBindings.flatMap(binding => {
+    const character = characters.find(item => item.id === binding.id);
+    return binding.alias && character ? [{ alias: binding.alias, name: character.definition.name, version: character.version }] : [];
+  }));
   let revision = $state<number | undefined>(), runs = $state<CreativeRun[]>([]), profiles = $state<CreativeProfile[]>([]);
   let inputs = $state<Array<{ id: string; type: string; title: string }>>([]);
   let busy = $state(false), loading = $state(true), dirty = $state(false), error = $state(''), configure = $state(false), preview = $state<CreativePreview | null>(null);
@@ -98,7 +106,7 @@
   async function chooseModel(value: string) {
     if (!value || value === config.modelId) return;
     const previous = config;
-    config = creativeConfigSchema.parse({ modelId: value, profileId: previous.profileId, prompt: previous.prompt, contextNodeIds: previous.contextNodeIds, outputDirectory: previous.outputDirectory, filePrefix: previous.filePrefix });
+    config = creativeConfigSchema.parse({ modelId: value, profileId: previous.profileId, prompt: previous.prompt, contextNodeIds: previous.contextNodeIds, characterBindings: previous.characterBindings, outputDirectory: previous.outputDirectory, filePrefix: previous.filePrefix });
     billing = null;
     changed(); await loadContract(value, true);
   }
@@ -148,9 +156,10 @@
       <div class="flex items-center justify-between gap-2 text-xs text-[var(--app-text-muted)]"><span>{m['creative.catalog_count']({ count: String(catalog.length) })}{#if catalogDate} · {new Date(catalogDate).toLocaleDateString()}{/if}</span><Button size="icon-sm" variant="ghost" disabled={catalogLoading} aria-label={m['creative.refresh_catalog']()} title={m['creative.refresh_catalog']()} onclick={() => loadCatalog(true)}><RefreshCw size={13} /></Button></div>
       {#if catalogError}<p role="alert" class="text-xs text-destructive">{creativeError(catalogError)}</p>{/if}
       {#if contract}<a class="block break-all text-xs text-[var(--app-accent)] underline" href={contract.documentationUrl} target="_blank" rel="noreferrer">{contract.id}</a>{/if}
-      {#if model || promptField}<label class="block space-y-1 text-xs"><span>{m['creative.prompt']()}</span><Textarea bind:value={config.prompt} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} class="min-h-24 resize-y text-sm" /></label>{/if}
+      <CreativeCharacterBindings workspaceId={data.workspaceId} {config} {contract} disabled={busy || Boolean(active) || loading || contractLoading} onRecords={(value) => characters = value} onChange={(value) => { config.characterBindings = value; changed(); }} />
+      {#if model || promptField}<CreativePrompt value={config.prompt} references={promptReferences} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} onChange={(value) => { config.prompt = value; changed(); }} />{/if}
       {#if contract}
-        {#key contract.id}<CreativeModelFields schema={contract.schema} value={config.parameters} onChange={(value) => { config.parameters = value; changed(); }} onValidityChange={(valid) => parametersValid = valid} />{/key}
+        {#key contract.id}<CreativeModelFields schema={contract.schema} value={config.parameters} managedPointers={[...config.mediaBindings.map(binding => binding.pointer), ...config.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer])]} onChange={(value) => { config.parameters = value; changed(); }} onValidityChange={(valid) => parametersValid = valid} />{/key}
         <section class="space-y-2 border-t border-[var(--app-border)] pt-2" aria-label={m['creative.media_bindings']()}>
           <div class="flex items-center justify-between gap-2 text-xs font-medium"><span>{m['creative.media_bindings']()}</span><Button size="icon-sm" variant="ghost" disabled={config.mediaBindings.length >= 50} title={m['creative.add_media']()} aria-label={m['creative.add_media']()} onclick={() => { config.mediaBindings = [...config.mediaBindings, { pointer: mediaSlots.find(path => !config.mediaBindings.some(binding => binding.pointer === path)) ?? '', path: '' }]; changed(); }}><Plus size={14} /></Button></div>
           <p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['creative.upload_disclosure']()}</p>
@@ -202,6 +211,7 @@
         <div class="space-y-1 border-b border-[var(--app-border)] py-3 text-xs">
           <div class="flex items-start justify-between gap-2"><strong class="min-w-0 break-words">{creativeStatus(run.status)}</strong><time class="shrink-0 text-[var(--app-text-muted)]">{new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
           <div class="break-words text-[var(--app-text-muted)]">{run.snapshot.modelContract?.name ?? CREATIVE_MODELS[run.snapshot.config.modelId as CreativeModelId]?.name ?? run.snapshot.config.modelId} · {usd(run.reservedCents)}</div>
+          {#if run.snapshot.characters?.length}<p class="break-words">{run.snapshot.characters.map(character => `${character.name} · v${character.version}`).join(', ')}</p>{#if run.status === 'completed'}<p class="text-[var(--app-text-muted)]">{m['creative.character_review_required']()}</p>{/if}{/if}
           {#if run.errorCode}<p class="break-words leading-5 text-[var(--app-danger)]">{creativeError(run.errorCode)}</p>{/if}
           <div class="flex flex-wrap items-center gap-2 pt-1">
             {#if ACTIVE_CREATIVE_STATUSES.includes(run.status) && !['submission_uncertain', 'cancel_requested'].includes(run.status)}<Button size="sm" variant="outline" disabled={busy} onclick={() => command(run.id, 'cancel')}><Square size={12} />{m['creative.cancel']()}</Button>{/if}

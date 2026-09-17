@@ -3,9 +3,37 @@ import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import type { CanvasNode, CanvasNodePayload, Workspace } from '../../domain/types.js';
 import { workspacePathService } from './WorkspacePathService.js';
+import { AgentFloor } from '../../domain/models/AgentFloor.js';
+import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
 
 /** Narrow workspace facade for the creative-media module. */
 export class CreativeWorkspaceGateway {
+  async characterDestination(workspaceId: string, floorId: string | null) {
+    const workspace = await this.workspace(workspaceId);
+    if (!workspace || workspace.suspendedAt) throw new Error('creative_workspace_unavailable');
+    if (floorId && !await AgentFloor.query().where('id', floorId).where('workspace_id', workspaceId).first()) throw new Error('creative_workspace_unavailable');
+  }
+  async placeCharacter(character: CreativeCharacter, position = { x: 100, y: 100 }, floorId: string | null = null) {
+    const { workspaceId } = character;
+    await this.characterDestination(workspaceId, floorId);
+    const all = (await this.nodes(workspaceId)).filter(node => (node.floorId ?? null) === floorId);
+    const count = character.definition.images.length;
+    const width = 888, height = Math.max(380, Math.ceil(count / 2) * 280 + 64);
+    const origin = findFreeCanvasPosition(all, { ...position, width, height });
+    // The character service wraps the profile and this whole bundle in one transaction.
+    const nodes: CanvasNode[] = [], edges = [];
+    const identity = { characterId: character.id, characterVersion: character.version, characterDigest: character.snapshot!.digest };
+    const note = await workspaceRepository.createNode({ workspaceId, floorId, type: 'note', title: `${character.definition.name} · v${character.version}`, x: origin.x + 24, y: origin.y + 32, width: 300, height: 320, payload: { ...identity, formatted: true, color: 'neutral', content: `# ${character.definition.name}\n\n${character.definition.appearance}\n\n\`\`\`json\n${JSON.stringify({ ...identity, ...character.definition }, null, 2)}\n\`\`\`` } });
+    nodes.push(note);
+    for (let i = 0; i < count; i++) {
+      const image = await workspaceRepository.createNode({ workspaceId, floorId, type: 'image', title: `${character.definition.name} · ${i + 1}`, x: origin.x + 344 + (i % 2) * 264, y: origin.y + 32 + Math.floor(i / 2) * 280, width: 240, height: 256, payload: { ...identity, path: character.definition.images[i] } });
+      nodes.push(image);
+      edges.push(await workspaceRepository.createEdge({ workspaceId, sourceNodeId: note.id, targetNodeId: image.id, style: 'cord' }));
+    }
+    const group = await workspaceRepository.createNode({ workspaceId, floorId, type: 'group', title: `${character.definition.name} · v${character.version}`, ...origin, width, height, zIndex: -1, payload: { ...identity, workflowKind: 'creative-character', members: nodes.map(node => node.id) } });
+    nodes.unshift(group);
+    return { nodes, edges };
+  }
   async workspace(id: string): Promise<Workspace | null> { return workspaceRepository.getWorkspace(id); }
   async nodes(workspaceId: string): Promise<CanvasNode[]> { return workspaceRepository.listNodes(workspaceId); }
   async node(workspaceId: string, id: string): Promise<CanvasNode | null> {

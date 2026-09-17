@@ -15,6 +15,11 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_character_locked_or_changed' || code === 'creative_character_owner_change_required') return m['creative.character_error_locked']();
+  if (code === 'creative_character_model_incompatible' || code === 'creative_character_audio_required') return m['creative.character_error_model']();
+  if (code === 'creative_character_auto_binding') return m['creative.reference_binding_error']();
+  if (code === 'creative_reference_alias_missing') return m['creative.reference_alias_error']();
+  if (code.startsWith('creative_character_')) return m['creative.character_error']();
   if (code === 'creative_model_contract_unavailable') return m['creative.error_contract_unavailable']();
   if (code === 'creative_billing_units_required') return m['creative.billing_units_help']();
   if (/catalog/.test(code)) return m['creative.error_catalog']();

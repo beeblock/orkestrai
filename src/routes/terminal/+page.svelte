@@ -22,8 +22,12 @@
     MessageCircleMore,
     Power,
     Film,
+    BookUser,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import CreativeCharacterLibrary from '$lib/components/agent-room/CreativeCharacterLibrary.svelte';
+  import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import * as InputGroup from '$lib/components/ui/input-group';
   import * as Resizable from '$lib/components/ui/resizable';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -371,6 +375,20 @@
   }
 
   let addingVideo = $state(false);
+  let showCharacters = $state(false), placingCharacter = $state(false);
+  async function placeCharacter(character: CreativeCharacter) {
+    if (!selectedWorkspaceId || placingCharacter) return;
+    const workspaceId = selectedWorkspaceId;
+    placingCharacter = true;
+    try {
+      const result = await creativeApi<{ nodes: CanvasNode[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/characters`, 'POST', { command: 'place', id: character.id, sourceWorkspaceId: character.workspaceId });
+      await loadWorkspace(workspaceId);
+      const note = result.nodes.find(node => node.type === 'note');
+      if (note && selectedWorkspaceId === workspaceId) selectNode(workspaceId, note.id);
+      toast.success(m['creative.character_placed']());
+    } catch (cause) { toast.error(creativeError((cause as Error).message)); }
+    finally { placingCharacter = false; }
+  }
   async function addVideoWorkflow() {
     if (!selectedWorkspaceId || addingVideo) return;
     addingVideo = true;
@@ -1127,7 +1145,8 @@
   {/if}
 {/snippet}
 
-<main class="grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)] max-[720px]:grid-cols-[236px_minmax(420px,1fr)]" data-testid="workbench-shell">
+<main class="relative grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)] max-[720px]:grid-cols-[236px_minmax(420px,1fr)]" data-testid="workbench-shell">
+  {#if showCharacters && selectedWorkspaceId}<CreativeCharacterLibrary overlay workspaceId={selectedWorkspaceId} busy={placingCharacter} onPlace={placeCharacter} onClose={() => showCharacters = false} />{/if}
   <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-sidebar)]">
     <div class="flex h-11 shrink-0 items-center gap-2 px-3">
       <img src="/brand/icon.svg" width="20" height="20" alt="" />
@@ -1141,7 +1160,7 @@
         nodeId={isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId}
       />
       <AttentionCenter workspaceId={selectedWorkspaceId} />
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} size="icon" variant="ghost" disabled={!selectedWorkspaceId || addingVideo} aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['creative.add']()}</Tooltip.Content></Tooltip.Root>
+      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
 
     <div class="shrink-0 p-2.5">

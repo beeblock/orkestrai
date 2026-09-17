@@ -68,6 +68,21 @@ describe('Creative video persistence and queue', () => {
     await RunModel.query().where('id', run.id).update({ next_poll_at: new Date(0).toISOString(), lease_expires_at: null });
     return (await repository.run(run.workspaceId, run.id))!;
   }
+  it('prevents agents from removing or replacing a character chosen for an existing scene', async () => {
+    const workspaceId = uuidv7(), nodeId = uuidv7(), characterId = uuidv7();
+    const node = { id: nodeId, type: 'videoWorkflow' };
+    const workspace = { workspace: vi.fn(async () => ({})), actorCanWork: vi.fn(async () => true), node: vi.fn(async () => node), writablePath: vi.fn(async () => '/confined/generated/videos'), updateNode: vi.fn(), connect: vi.fn(), broadcast: vi.fn() };
+    const service = new CreativeWorkflowService(repository, {} as never, {} as never, workspace as never);
+    const config = creativeConfigSchema.parse({ characterBindings: [{ id: characterId, alias: 'Hero', imagePointers: ['/image_urls/0'], voicePointer: '/audio_urls/0' }, { id: uuidv7(), alias: 'Friend', imagePointers: ['/image_urls/1'], voicePointer: '/audio_urls/1' }] });
+    const saved = await service.save(workspaceId, { title: 'Pinned scene', config }, { type: 'user' }, nodeId);
+    const actor = { type: 'agent' as const, nodeId: uuidv7(), taskId: uuidv7() };
+    await expect(service.save(workspaceId, { title: saved.title, revision: saved.revision, config: { ...config, characterBindings: [] } }, actor, nodeId)).rejects.toThrow('creative_character_owner_change_required');
+    await expect(service.save(workspaceId, { title: saved.title, revision: saved.revision, config: { ...config, characterBindings: [{ ...config.characterBindings[0], id: uuidv7() }] } }, actor, nodeId)).rejects.toThrow('creative_character_owner_change_required');
+    await expect(service.save(workspaceId, { title: saved.title, revision: saved.revision, config: { ...config, characterBindings: config.characterBindings.map((binding, index) => ({ ...binding, alias: index ? 'Hero' : 'Friend' })) } }, actor, nodeId)).rejects.toThrow('creative_character_owner_change_required');
+    expect((await repository.workflow(workspaceId, nodeId))?.revision).toBe(saved.revision);
+    const edited = await service.save(workspaceId, { title: saved.title, revision: saved.revision, config: { ...config, prompt: 'A different camera angle' } }, actor, nodeId);
+    expect(edited.config.characterBindings).toEqual(config.characterBindings);
+  });
   function runtime(workflow: unknown) {
     const provider = { submit: vi.fn(async () => remote), status: vi.fn(async () => ({ status: 'completed', queuePosition: null })), cancel: vi.fn(async () => 'requested'), result: vi.fn(async () => ({ url: 'https://fal.media/video.mp4' })), download: vi.fn(async () => new Response('test')) };
     const output = { path: 'generated/videos/test.mp4', sha256: 'a'.repeat(64), size: 42, mimeType: 'video/mp4' };

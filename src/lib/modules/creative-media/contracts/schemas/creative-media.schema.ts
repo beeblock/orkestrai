@@ -25,6 +25,11 @@ export const creativeConfigSchema = z.object({
   modelId: creativeModelIdSchema.default('wan-2.7-text'),
   parameters: creativeParametersSchema.default({}),
   mediaBindings: z.array(z.object({ pointer: z.string().min(1).max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/), nodeId: id.optional(), path: creativePathSchema.optional() }).strict().refine(value => Boolean(value.nodeId) !== Boolean(value.path), 'creative_reference_required')).max(50).default([]),
+  characterBindings: z.array(z.object({
+    id, alias: z.string().min(1).max(64).regex(/^[a-zA-Z][a-zA-Z0-9_]*$/).optional(),
+    imagePointers: z.array(z.string().max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/)).min(1).max(12),
+    voicePointer: z.string().max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/),
+  }).strict()).max(8).default([]),
   billingUnits: z.number().finite().positive().max(1000000000).nullable().default(null),
   profileId: id.nullable().default(null),
   prompt: z.string().trim().max(50000).default(''),
@@ -41,6 +46,10 @@ export const creativeConfigSchema = z.object({
   filePrefix: z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/).default('orkestrai-video'),
 }).strict().superRefine((value, ctx) => {
   if (new Set(value.mediaBindings.map(binding => binding.pointer)).size !== value.mediaBindings.length) ctx.addIssue({ code: 'custom', path: ['mediaBindings'], message: 'creative_duplicate_input' });
+  const pointers = value.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer]);
+  const aliases = value.characterBindings.flatMap(binding => binding.alias ? [binding.alias] : []);
+  if (new Set(aliases).size !== aliases.length) ctx.addIssue({ code: 'custom', path: ['characterBindings'], message: 'creative_duplicate_input' });
+  if (new Set(pointers).size !== pointers.length || pointers.some(pointer => value.mediaBindings.some(binding => binding.pointer === pointer)) || new Set(value.characterBindings.map(binding => binding.id)).size !== value.characterBindings.length) ctx.addIssue({ code: 'custom', path: ['characterBindings'], message: 'creative_duplicate_input' });
   const model = CREATIVE_MODELS[value.modelId as keyof typeof CREATIVE_MODELS];
   if (!model) return;
   for (const [field, maximum] of [['prompt', model.promptLimit], ['negativePrompt', model.negativePromptLimit]] as const) {

@@ -8,7 +8,7 @@
   export type ImageNodeData = {
     title: string;
     workspaceId: string;
-    payload: { path?: string };
+    payload: { path?: string; characterId?: string; characterDigest?: string };
     onDelete: (id: string) => void;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
     onPayloadChange: (id: string, partial: Record<string, unknown>) => void;
@@ -28,6 +28,7 @@
   );
 
   async function saveBlob(blob: Blob) {
+    if (data.payload.characterId && data.payload.characterDigest) return;
     const buffer = await blob.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     let binary = '';
@@ -76,9 +77,9 @@
   {#snippet icon()}<ImageIcon size={13} />{/snippet}
   {#snippet title()}{data.title || m['node.image']()}{/snippet}
   {#snippet actions()}
-    <HeaderIconButton class="node-action-btn" label={m['node.image_replace']()} onclick={() => fileInput.click()}>
+    {#if !data.payload.characterId || !data.payload.characterDigest}<HeaderIconButton class="node-action-btn" label={m['node.image_replace']()} onclick={() => fileInput.click()}>
       <ImagePlus size={13} />
-    </HeaderIconButton>
+    </HeaderIconButton>{/if}
     <HeaderIconButton class="node-action-btn" label={m['node.image_remove']()} danger onclick={() => data.onDelete(id)}>
       <X size={13} /></HeaderIconButton>
   {/snippet}

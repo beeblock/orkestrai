@@ -75,6 +75,10 @@
   import ImageCanvasNode from '$lib/components/agent-room/canvas/ImageCanvasNode.svelte';
   import ImageWorkflowCanvasNode from '$lib/components/agent-room/canvas/ImageWorkflowCanvasNode.svelte';
   import VideoWorkflowCanvasNode from '$lib/components/agent-room/canvas/VideoWorkflowCanvasNode.svelte';
+  import CreativeCharacterLibrary from '$lib/components/agent-room/CreativeCharacterLibrary.svelte';
+  import { CHARACTER_DRAG_TYPE, characterDragSchema } from '$lib/components/agent-room/character-drag.js';
+  import { creativeApi, creativeError } from '$lib/components/agent-room/creative-media-client.js';
+  import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import VideoCanvasNode from '$lib/components/agent-room/canvas/VideoCanvasNode.svelte';
   import ImageToolbarMenu from '$lib/components/agent-room/canvas/ImageToolbarMenu.svelte';
   import { MAX_WORKSPACE_ATTACHMENT_BYTES, uploadWorkspaceAttachment } from '$lib/components/agent-room/workspace-attachments.js';
@@ -720,6 +724,7 @@
   let showUsagePanel = $state(false);
   let showPortsPanel = $state(false);
   let showPresetPanel = $state(false);
+  let showCharacterLibrary = $state(false);
   let leaderDictationState = $state<LeaderDictationStatus>('idle');
   let leaderDictationNodeId = $state<string | null>(null);
   let sidebarCollapsed = $state(false);
@@ -727,7 +732,7 @@
   let visibleFloorId = $state<string | null>(null);
   let floors = $state<Floor[]>([]);
 
-  type SidePanelName = 'presets' | 'floors' | 'routines' | 'roles' | 'usage' | 'ports';
+  type SidePanelName = 'presets' | 'floors' | 'routines' | 'roles' | 'usage' | 'ports' | 'characters';
 
   function toggleSidePanel(panel: SidePanelName) {
     const next = panel === 'presets' ? !showPresetPanel
@@ -735,6 +740,7 @@
       : panel === 'routines' ? !showRoutinePanel
       : panel === 'roles' ? !showRolesPanel
       : panel === 'usage' ? !showUsagePanel
+      : panel === 'characters' ? !showCharacterLibrary
       : !showPortsPanel;
     showPresetPanel = panel === 'presets' && next;
     showFloorPanel = panel === 'floors' && next;
@@ -742,6 +748,7 @@
     showRolesPanel = panel === 'roles' && next;
     showUsagePanel = panel === 'usage' && next;
     showPortsPanel = panel === 'ports' && next;
+    showCharacterLibrary = panel === 'characters' && next;
   }
 
   function createWorkspaceFromPreset(presetId: string) {
@@ -1954,6 +1961,27 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  let placingCharacter = $state(false);
+  function isCharacterDrop(event: DragEvent) {
+    return Boolean(activeWorkspace && !designModeNodeId && !event.defaultPrevented && event.target instanceof Element && event.target.closest('.svelte-flow__pane') && !event.target.closest('.svelte-flow__node, .svelte-flow__panel') && event.dataTransfer?.types.includes(CHARACTER_DRAG_TYPE));
+  }
+  async function placeCharacter(input: { id: string; sourceWorkspaceId: string }, position?: { x: number; y: number }) {
+    if (!activeWorkspace || placingCharacter) return;
+    const workspaceId = activeWorkspace.id, floorId = visibleFloorId;
+    placingCharacter = true;
+    try {
+      const result = await creativeApi<{ character: CreativeCharacter; nodes: CanvasNode[]; edges: CanvasEdge[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/characters`, 'POST', { command: 'place', ...input, floorId, position: position ?? nextFreePosition(888, 580) });
+      clearWorkspaceViewCache(workspaceId);
+      if (activeWorkspace?.id === workspaceId && visibleFloorId === floorId) {
+        const ids = new Set(result.nodes.map(node => node.id));
+        nodes = [...nodes.filter(node => !ids.has(node.id)), ...result.nodes.map(toFlowNode)];
+        const edgeIds = new Set(result.edges.map(edge => edge.id));
+        edges = [...edges.filter(edge => !edgeIds.has(edge.id)), ...result.edges.map(toFlowEdge)];
+      }
+      toast.success(m['creative.character_placed']());
+    } catch (cause) { toast.error(creativeError((cause as Error).message)); }
+    finally { placingCharacter = false; }
+  }
   function isCanvasFileDrop(event: DragEvent): boolean {
     return Boolean(activeWorkspace && !designModeNodeId && !event.defaultPrevented
       && event.target instanceof Element
@@ -1963,12 +1991,20 @@
   }
 
   function handleCanvasFileDragOver(event: DragEvent) {
-    if (!isCanvasFileDrop(event)) return;
+    if (!isCanvasFileDrop(event) && !isCharacterDrop(event)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
   }
 
   async function handleCanvasFileDrop(event: DragEvent) {
+    if (isCharacterDrop(event) && event.dataTransfer && zoomApi) {
+      event.preventDefault(); event.stopPropagation();
+      try {
+        const input = characterDragSchema.parse(JSON.parse(event.dataTransfer.getData(CHARACTER_DRAG_TYPE)));
+        await placeCharacter(input, zoomApi.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      } catch { toast.error(m['creative.character_invalid']()); }
+      return;
+    }
     if (!isCanvasFileDrop(event) || !event.dataTransfer || !activeWorkspace || !zoomApi) return;
     event.preventDefault();
     event.stopPropagation();
@@ -3052,7 +3088,7 @@
             <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
               <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
             </ToolbarButton>
-            <ImageToolbarMenu active={drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} />
+            <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} />
             <DesignToolbarMenu
               active={drawTool === 'design' || designExplorationOpen}
               onBlank={() => toggleDrawTool('design')}
@@ -3135,6 +3171,9 @@
         <img src="/brand/icon.svg" width="56" height="56" alt="" />
         <p>{m['canvas.empty']()}</p>
       </div>
+    {/if}
+    {#if showCharacterLibrary && activeWorkspace && !designModeNodeId}
+      <CreativeCharacterLibrary workspaceId={activeWorkspace.id} busy={placingCharacter} onClose={() => showCharacterLibrary = false} onPlace={(character) => void placeCharacter({ id: character.id, sourceWorkspaceId: character.workspaceId })} />
     {/if}
     {#if showPalette}
       <CommandPalette {nodes} actions={paletteActions} onJumpToNode={jumpToNode} onClose={() => (showPalette = false)} />
