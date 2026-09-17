@@ -9,9 +9,9 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
-- Create native fal.ai video workflows from text, Image references and context Notes in Canvas and Workbench. Wan 2.7 and Kling 3 Pro expose model-specific duration, format and audio controls; the existing Codex subscription image workflow remains unchanged.
+- Create native fal.ai video workflows in Canvas and Workbench with searchable discovery of the complete published video catalog, including Seedance 2.5. Official endpoint contracts drive typed parameters, nested inputs and multiple image/video/audio references. Existing Wan/Kling drafts and Codex subscription image workflows remain compatible.
 - Configure encrypted desktop credentials, workspace opt-in, permitted models, agent access, external-data consent, cost reservations and concurrency. Preview outgoing data and estimates before paid execution, subject to workspace security gates.
-- Resume persistent video jobs without duplicate submissions, cancel tracked work, recover downloads and retain MP4 files in the workspace with hashes and reusable Video nodes. Agents use the same revisioned CLI/MCP contract; guided documentation and onboarding cover the workflow.
+- Resume persistent video jobs without duplicate submissions, cancel tracked work, recover downloads and retain native video/audio outputs in the workspace with hashes and reusable nodes. Each output rechecks filesystem and network permissions. Agents use the same revisioned CLI/MCP contract; guided documentation and onboarding cover the workflow.
 
 ### Fixed
 

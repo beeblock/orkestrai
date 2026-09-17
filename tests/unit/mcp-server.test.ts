@@ -42,7 +42,7 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
-  it.each(['list','read','create','update','preview','run','cancel','retry_download','remove'])('routes native video %s through the same task-bound contract without credentials', async command => {
+  it.each(['models','list','read','create','update','preview','run','cancel','retry_download','remove'])('routes native video %s through the same task-bound contract without credentials', async command => {
     const server = startMcp();
     const args = { taskId:'00000000-0000-4000-8000-000000000001', nodeId:'00000000-0000-4000-8000-000000000002', input:{title:'Test video',config:{prompt:'A scene'} } };
     server.send({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:`video_workflow_${command}`,arguments:args}});

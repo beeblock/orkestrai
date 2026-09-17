@@ -11,7 +11,8 @@
   import { Button } from '$lib/components/ui/button';
   import { Switch } from '$lib/components/ui/switch';
   import { Checkbox } from '$lib/components/ui/checkbox';
-  import { CREATIVE_MODELS, type CreativeModelId } from '$lib/modules/creative-media/domain/catalog.js';
+  import { CREATIVE_MODELS } from '$lib/modules/creative-media/domain/catalog.js';
+  import type { FalModelSummary } from '$lib/modules/creative-media/domain/model-contract.js';
   import { creativePolicySchema, creativePolicySaveSchema, creativeProfileSaveSchema, type CreativePolicy, type CreativeProfileSave } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
   import type { CreativeProfile, CreativeWorkspacePolicy } from '$lib/modules/creative-media/domain/types.js';
   import { creativeApi, creativeError } from './creative-media-client.js';
@@ -24,6 +25,15 @@
   let runUsd = $state(0), dayUsd = $state(0), revision = $state<number | undefined>(), policyRevision = $state<number | undefined>();
   let busy = $state(false), error = $state(''), saved = $state(false), tab = $state('account');
   let confirmDelete = $state(false);
+  let models = $state<FalModelSummary[]>([]), modelQuery = $state(''), modelError = $state(''), modelsLoading = $state(false);
+  const allModels = $derived([...Object.values(CREATIVE_MODELS).map(model => ({ id: model.id, name: model.name })), ...models]);
+  const filteredModels = $derived(allModels.filter(model => `${model.name} ${model.id}`.toLowerCase().includes(modelQuery.toLowerCase())));
+  async function loadModels(refresh = false) {
+    modelsLoading = true; modelError = '';
+    try { models = (await creativeApi<{ models: FalModelSummary[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/models?limit=5000${refresh ? '&refresh=true' : ''}`)).models; }
+    catch (cause) { modelError = (cause as Error).message; }
+    finally { modelsLoading = false; }
+  }
   const accountAdapter = zod(creativeProfileSaveSchema as unknown as Parameters<typeof zod>[0]);
   const policyAdapter = zod(creativePolicySaveSchema as unknown as Parameters<typeof zod>[0]);
   const accountForm = superForm<CreativeProfileSave>(defaults({ name: 'fal.ai', provider: 'fal', enabled: false }, accountAdapter) as never, { id: 'creative-account', SPA: true, validators: accountAdapter as never });
@@ -50,7 +60,7 @@
     profiles = data.profiles; policies = data.policies;
     select(selected || profiles[0]?.id || '');
   }
-  $effect(() => { if (open) { untrack(() => { void load().catch(cause => { error = String(cause.message); }); }); } else untrack(clearCredential); });
+  $effect(() => { if (open) { untrack(() => { void load().catch(cause => { error = String(cause.message); }); void loadModels(); }); } else untrack(clearCredential); });
   async function saveAccount() {
     busy = true; error = ''; saved = false;
     try {
@@ -77,8 +87,8 @@
     try { await creativeApi(`/api/agent-room/creative-media/profiles/${profileId}`, 'DELETE'); await load(''); await onSaved(); }
     catch (cause) { error = (cause as Error).message; } finally { busy = false; }
   }
-  function modelChecked(id: CreativeModelId, checked: boolean) {
-    policy.modelIds = checked ? [...policy.modelIds, id] : policy.modelIds.filter(value => value !== id);
+  function modelChecked(id: string, checked: boolean) {
+    policy.modelIds = checked ? [...new Set([...policy.modelIds, id])] : policy.modelIds.filter(value => value !== id);
   }
 </script>
 
@@ -107,7 +117,13 @@
           <label class="flex items-center justify-between gap-4 text-sm"><span>{m['creative.workspace_enabled']()}</span><Switch bind:checked={policy.enabled} /></label>
           <label class="flex items-center justify-between gap-4 text-sm"><span>{m['creative.agents_allowed']()}</span><Switch bind:checked={policy.allowAgents} /></label>
           <label class="flex items-start justify-between gap-4 text-sm"><span>{m['creative.external_allowed']()}</span><Switch bind:checked={policy.allowExternalMedia} /></label>
-          <fieldset class="space-y-2"><legend class="mb-2 text-sm font-medium">{m['creative.allowed_models']()}</legend>{#each Object.values(CREATIVE_MODELS) as model}<label class="flex items-center gap-2 text-sm"><Checkbox checked={policy.modelIds.includes(model.id)} onCheckedChange={(checked: boolean | 'indeterminate') => modelChecked(model.id, checked === true)} />{model.name}</label>{/each}</fieldset>
+          <fieldset class="space-y-2"><legend class="mb-2 text-sm font-medium">{m['creative.allowed_models']()} ({policy.modelIds.length})</legend>
+            <Input bind:value={modelQuery} placeholder={m['creative.search_models']()} aria-label={m['creative.search_models']()} />
+            {#if modelsLoading}<p role="status" class="text-xs text-muted-foreground">{m['creative.catalog_loading']()}</p>{/if}
+            {#if modelError}<p role="alert" class="text-xs text-destructive">{creativeError(modelError)}</p><Button size="sm" variant="outline" onclick={() => loadModels(true)}>{m['creative.refresh']()}</Button>{/if}
+            <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" onclick={() => policy.modelIds = [...new Set([...policy.modelIds, ...filteredModels.filter(model => !('status' in model) || model.status === 'active').map(model => model.id)])]}>{m['creative.allow_filtered']()}</Button><Button size="sm" variant="ghost" onclick={() => policy.modelIds = policy.modelIds.filter(id => !filteredModels.some(model => model.id === id))}>{m['creative.deny_filtered']()}</Button></div>
+            <div class="max-h-52 space-y-2 overflow-y-auto overscroll-contain py-2">{#each filteredModels as model (model.id)}<label class="flex items-start gap-2 text-sm"><Checkbox checked={policy.modelIds.includes(model.id)} disabled={'status' in model && model.status === 'deprecated'} onCheckedChange={(checked: boolean | 'indeterminate') => modelChecked(model.id, checked === true)} /><span class="min-w-0 break-words">{model.name}<span class="block break-all font-mono text-xs text-muted-foreground">{model.id}</span></span></label>{/each}</div>
+          </fieldset>
           <div class="grid grid-cols-2 gap-3">
             <label class="space-y-1 text-xs"><span>{m['creative.run_budget']()}</span><Input name="maxRunCents" type="number" min={0} max={1000} step={0.01} bind:value={runUsd} aria-invalid={Boolean($policyErrors.maxRunCents)} />{#if $policyErrors.maxRunCents}<span role="alert" class="block text-destructive">{m['creative.field_invalid']()}</span>{/if}</label>
             <label class="space-y-1 text-xs"><span>{m['creative.day_budget']()}</span><Input name="maxDayCents" type="number" min={0} max={10000} step={0.01} bind:value={dayUsd} aria-invalid={Boolean($policyErrors.maxDayCents)} />{#if $policyErrors.maxDayCents}<span role="alert" class="block text-destructive">{m['creative.field_invalid']()}</span>{/if}</label>

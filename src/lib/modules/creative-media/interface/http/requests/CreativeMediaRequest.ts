@@ -8,7 +8,7 @@ export class CreativeWorkflowRequest extends FormRequest { rules() { return crea
 export class CreativeRunRequest extends FormRequest { rules() { return creativeRunRequestSchema; } }
 export class CreativeRunCommandRequest extends FormRequest { rules() { return creativeRunCommandSchema; } }
 export const creativeBridgeSchema = z.object({
-  command: z.enum(['list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove']),
+  command: z.enum(['models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove']),
   nodeId: z.string().uuid().optional(), runId: z.string().uuid().optional(), taskId: z.string().uuid(), input: z.unknown().optional(),
 }).strict();
 export class CreativeBridgeRequest extends FormRequest { rules() { return creativeBridgeSchema; } }

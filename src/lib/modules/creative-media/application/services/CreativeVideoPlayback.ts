@@ -4,6 +4,7 @@ import { Readable } from 'node:stream';
 import { creativeWorkspaceGateway } from '$lib/modules/agent-room/application/services/CreativeWorkspaceGateway.js';
 import { creativeMediaRepository } from '../../infrastructure/repositories/CreativeMediaRepository.js';
 import { MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.js';
+import { VIDEO_FORMATS, matchesVideoHeader, videoMimeFromPath } from '../../domain/video-format.js';
 
 export function videoByteRange(value: string | null, size: number): { start: number; end: number } | null {
   if (!value) return null;
@@ -26,13 +27,14 @@ export async function creativeVideoResponse(workspaceId: string, assetId: string
     handle = await open(fullPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     const info = await handle.stat();
     if (!info.isFile() || info.size < 32 || info.size > MAX_CREATIVE_VIDEO_BYTES) throw new Error('invalid_video');
-    const header = Buffer.alloc(8); await handle.read(header, 0, 8, 0);
-    if (header.toString('ascii', 4) !== 'ftyp') throw new Error('invalid_video');
+    const mimeType = videoMimeFromPath(path);
+    const header = Buffer.alloc(Math.min(1024, info.size)); await handle.read(header, 0, header.length, 0);
+    if (!matchesVideoHeader(header, mimeType)) throw new Error('invalid_video');
     let range: ReturnType<typeof videoByteRange>;
     try { range = videoByteRange(request.headers.get('range'), info.size); }
     catch { await handle.close(); return new Response(null, { status: 416, headers: { 'content-range': `bytes */${info.size}` } }); }
     const start = range?.start ?? 0, end = range?.end ?? info.size - 1;
-    const headers: Record<string, string> = { 'content-type': 'video/mp4', 'content-length': String(end - start + 1), 'accept-ranges': 'bytes', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'content-disposition': `inline; filename="orkestrai-video-${assetId}.mp4"` };
+    const headers: Record<string, string> = { 'content-type': mimeType, 'content-length': String(end - start + 1), 'accept-ranges': 'bytes', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'content-disposition': `inline; filename="orkestrai-video-${assetId}.${VIDEO_FORMATS[mimeType]}"` };
     if (range) headers['content-range'] = `bytes ${start}-${end}/${info.size}`;
     if (request.method === 'HEAD') { await handle.close(); return new Response(null, { status: range ? 206 : 200, headers }); }
     const stream = handle.createReadStream({ start, end, autoClose: true });

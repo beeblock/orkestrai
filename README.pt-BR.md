@@ -110,11 +110,12 @@ agentes não é persistida.
   arquivo portátil da coleção. Scripts Bruno permanecem deliberadamente no
   runtime QuickJS seguro oficial: o acesso NodeVM inseguro ao filesystem, aos
   processos e a módulos locais arbitrários da máquina não é habilitado.
-- **Fluxos nativos de vídeo:** gere pela fal.ai com Wan 2.7 (texto) ou Kling
-  3 Pro (imagem), usando Imagens e Notas do Canvas. Conta, modelos, agentes,
+- **Fluxos nativos de vídeo:** pesquise o catálogo da fal.ai, incluindo Seedance
+  2.5, com contratos por modelo e referências de imagem, vídeo e áudio.
+  Use também Notas do Canvas como contexto. Conta, modelos, agentes,
   envio de dados e reservas de orçamento dependem de autorização do workspace.
   A chave fica no cofre do desktop. Execuções persistentes, recuperação de
-  downloads e nós de Vídeo mantêm os MP4 no projeto, no Canvas e no Workbench.
+  downloads e nós de mídia mantêm os arquivos originais no projeto, no Canvas e no Workbench.
   CLI/MCP usa o mesmo contrato; o fluxo de imagens da assinatura Codex não muda.
 - **Fluxos nativos de imagem:** conecte Notas, referências ordenadas de Imagem
   PNG/JPEG/WebP e um agente Codex ativo a um node Gerar imagens no mesmo canvas;

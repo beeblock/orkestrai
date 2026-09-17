@@ -184,6 +184,9 @@ export class CreativeMediaRepository {
   async release(id: string, owner: string) {
     await RunModel.query().where('id', id).where('lease_owner', owner).update({ lease_owner: null, lease_expires_at: null });
   }
+  async renewLease(id: string, owner: string) {
+    return (await RunModel.query().where('id', id).where('lease_owner', owner).update({ lease_expires_at: new Date(Date.now() + 300000).toISOString() })) > 0;
+  }
   async command(workspaceId: string, id: string, command: 'cancel' | 'retry_download' | 'close_unconfirmed'): Promise<CreativeRun> {
     const current = await this.run(workspaceId, id);
     if (!current) throw new CreativeMediaError('creative_run_not_found', 404);

@@ -41,6 +41,9 @@ export class CreativeQueueService {
     const owner = uuidv7();
     const claimed = await repository.claim(candidate.workspaceId, candidate.id, owner);
     if (!claimed) return;
+    // Large reference uploads and multi-output downloads may exceed one lease.
+    const heartbeat = setInterval(() => { void repository.renewLease(candidate.id, owner).catch(() => undefined); }, 60000);
+    heartbeat.unref?.();
     let { run, remote } = claimed;
     let submitted = false;
     try {
@@ -59,12 +62,16 @@ export class CreativeQueueService {
         const references = {
           start: run.snapshot.startImage ? await files.referenceData(run.workspaceId, run.snapshot.startImage) : undefined,
           end: run.snapshot.endImage ? await files.referenceData(run.workspaceId, run.snapshot.endImage) : undefined,
+          media: {} as Record<string, string>,
         };
+        for (const item of run.snapshot.media ?? []) references.media[item.pointer] = await files.mediaData(run.workspaceId, item.reference);
         await this.workflows.dispatch(run, async () => {
+          await this.workflows.authorize({ ...workflow, config: run.snapshot.config }, run.actor);
+          if (run.snapshot.modelContract && provider.prepareMedia) references.media = await provider.prepareMedia(credential.revealInsideTrustedExecutor(), references.media);
           await this.workflows.authorize({ ...workflow, config: run.snapshot.config }, run.actor);
           if (!await repository.transition(run.id, owner, ['queued'], 'submitting', { errorCode: null })) return;
           submitted = true;
-          const handle = await provider.submit(credential.revealInsideTrustedExecutor(), run.snapshot.config, run.snapshot.prompt, references);
+          const handle = await provider.submit(credential.revealInsideTrustedExecutor(), run.snapshot.config, run.snapshot.prompt, references, run.snapshot.modelContract);
           // Cancellation may race with the HTTP response: always retain the
           // provider handle so the following tick can cancel the actual job.
           const saved = await repository.transition(run.id, owner, ['submitting'], 'provider_running', { remote: handle });
@@ -106,10 +113,17 @@ export class CreativeQueueService {
         run = { ...run, status: 'downloading' };
       }
       if (run.status === 'downloading') {
-        const video = await provider.result(credential, remote);
-        const output = await files.store(run, video, await provider.download(credential, video));
-        const existing = (await workspace.nodes(run.workspaceId)).find(node => node.type === 'video' && (node.payload as { runId?: string }).runId === run.id);
-        if (!existing) await workspace.createNode(run.workspaceId, 'video', run.snapshot.config.filePrefix, output, run.nodeId);
+        const video = await provider.result(credential, remote, run.snapshot.modelContract);
+        const outputs = [];
+        const videos = [video, ...(video.variants ?? [])];
+        if (videos.length > 10) throw new CreativeMediaError('creative_invalid_provider_response');
+        for (const [index, result] of videos.entries()) {
+          const asset = await this.workflows.download(run, result, index, credential);
+          outputs.push(asset);
+          const existing = (await workspace.nodes(run.workspaceId)).find(node => node.type === 'video' && (node.payload as { runId?: string }).runId === run.id && ((node.payload as { outputIndex?: number }).outputIndex ?? 0) === index);
+          if (!existing) await workspace.createNode(run.workspaceId, 'video', `${run.snapshot.config.filePrefix}${index ? ` ${index + 1}` : ''}`, asset, run.nodeId);
+        }
+        const output = { ...outputs[0], ...(outputs.length > 1 ? { additionalOutputs: outputs.slice(1) } : {}) };
         await repository.transition(run.id, owner, ['downloading', 'cancel_requested'], 'completed', { output, errorCode: null });
         await autonomyPolicyService.recordSemanticEffect({ workspaceId: run.workspaceId, capability: 'integration', operation: 'creative.video.completed', actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null, runId: run.id, input: { nodeId: run.nodeId } }, { path: output.path, sha256: output.sha256, size: output.size });
       }
@@ -130,6 +144,7 @@ export class CreativeQueueService {
         await repository.transition(run.id, owner, [latest.status], expired ? 'download_failed' : latest.status, { errorCode: code });
       }
     } finally {
+      clearInterval(heartbeat);
       await repository.release(run.id, owner);
       workspace.broadcast(run.workspaceId);
     }

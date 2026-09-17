@@ -434,7 +434,8 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   /** @type {Record<string, object>} */
   const properties = { taskId: { type: 'string', format: 'uuid' } };
   const required = ['taskId'];
-  if (!['list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (!['models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (command === 'models') properties.input = { type: 'object', additionalProperties: false, properties: { endpoint: { type: 'string', maxLength: 240 }, query: { type: 'string', maxLength: 100 }, offset: { type: 'integer', minimum: 0, maximum: 10000 }, limit: { type: 'integer', minimum: 1, maximum: 5000 }, refresh: { type: 'boolean' } } };
   if (['cancel', 'retry_download'].includes(command)) { properties.runId = { type: 'string', format: 'uuid' }; required.push('runId'); }
   if (['create', 'update'].includes(command)) {
     properties.input = { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1, maxLength: 120 }, config: VIDEO_CONFIG_SCHEMA, ...(command === 'update' ? { revision: { type: 'integer', minimum: 1 } } : {}) }, required: ['title', 'config'] };

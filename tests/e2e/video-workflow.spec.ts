@@ -6,6 +6,37 @@ import { createHash } from 'node:crypto';
 
 const headers = { origin: 'http://127.0.0.1:5199' };
 test.describe('native video workflows', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/creative-media/models?*', route => route.fulfill({ json: { data: { models: [], total: 0, nextOffset: null } } }));
+  });
+  test('searches a large catalog and saves Seedance 2.5 with its own string duration and audio controls', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-catalog-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E model catalog', workingDir: dir } })).json()).data;
+    const endpoint = 'bytedance/seedance-2.5/text-to-video';
+    const models = [...Array.from({ length: 150 }, (_, index) => ({ id: `fal-ai/model-${index}/text-to-video`, name: `Model ${index}`, category: 'text-to-video', status: 'active' })), { id: endpoint, name: 'Seedance 2.5 Text to Video', category: 'text-to-video', status: 'active' }];
+    await page.route('**/creative-media/models?*', route => route.fulfill({ json: { data: new URL(route.request().url()).searchParams.has('endpoint') ? { ...models.at(-1), documentationUrl: `https://fal.ai/models/${endpoint}/api`, digest: 'a'.repeat(64), schema: { type: 'object', required: ['prompt'], properties: { prompt: { type: 'string' }, duration: { type: 'string', enum: ['4', '5', '30', 'auto'], default: 'auto' }, resolution: { type: 'string', enum: ['480p', '720p'], default: '720p' }, generate_audio: { type: 'boolean', default: true } } }, outputSchema: {} } : { models, total: models.length, nextOffset: null } } }));
+    try {
+      const created = await request.post(`/api/agent-room/workspaces/${workspace.id}/creative-media`, { headers, data: { title: 'Seedance draft', config: { prompt: 'A coffee product rotates slowly' } } });
+      expect(created.ok()).toBeTruthy();
+      const workflow = (await created.json()).data;
+      await page.goto(`/terminal?workspace=${workspace.id}&node=${workflow.nodeId}`);
+      const node = page.getByTestId('video-workflow');
+      await node.getByRole('combobox', { name: /Modelo|Model/, exact: true }).click();
+      await page.locator('[data-slot=command-input]').fill('Seedance 2.5');
+      await page.getByRole('option', { name: /Seedance 2.5 Text/ }).click();
+      await expect(node.getByText(endpoint, { exact: true })).toBeVisible();
+      await node.locator('select[id$="duration"]').selectOption('"30"');
+      await expect(node.getByRole('switch')).toBeChecked();
+      await node.getByRole('button', { name: /Salvar|Save|Guardar/, exact: true }).click();
+      await expect.poll(async () => {
+        const saved = await request.get(`/api/agent-room/workspaces/${workspace.id}/creative-media/workflows/${workflow.nodeId}`);
+        return (await saved.json()).data.workflow.config;
+      }).toMatchObject({ modelId: endpoint, parameters: { duration: '30', resolution: '720p', generate_audio: true } });
+      await page.reload();
+      await expect(node.locator('select[id$="duration"]')).toHaveValue('"30"');
+      await page.screenshot({ path: '/tmp/orkestrai-seedance-catalog.png' });
+    } finally { await request.delete(`/api/agent-room/workspaces/${workspace.id}`); await rm(dir, { recursive: true, force: true }); }
+  });
   test('persists a draft, exposes access settings and reopens in Workbench without charging', async ({ page, request }) => {
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-ui-'));
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E video draft', workingDir: dir } })).json()).data;
@@ -55,27 +86,27 @@ test.describe('native video workflows', () => {
     }
   });
 
-  test('serves a real local MP4 with byte ranges and native playback', async ({ page, request }) => {
+  for (const [format, mimeType] of [['mp4', 'video/mp4'], ['webm', 'video/webm']]) test(`serves a real local ${format.toUpperCase()} with byte ranges and native playback`, async ({ page, request }) => {
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-playback-'));
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E video playback', workingDir: dir } })).json()).data;
     try {
       await page.goto(`/canvas?workspace=${workspace.id}`);
       // Browser-generated test media exercises decoding without a paid API call.
-      const bytes = await page.evaluate(async () => {
+      const bytes = await page.evaluate(async (mimeType) => {
         const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 180;
         const context = canvas.getContext('2d')!;
         const stream = canvas.captureStream(12);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/mp4' });
+        const recorder = new MediaRecorder(stream, { mimeType });
         const chunks: Blob[] = [];
-        const finished = new Promise<Blob>(resolve => { recorder.ondataavailable = event => chunks.push(event.data); recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/mp4' })); });
+        const finished = new Promise<Blob>(resolve => { recorder.ondataavailable = event => chunks.push(event.data); recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType })); });
         recorder.start();
         for (let frame = 0; frame < 12; frame++) { context.fillStyle = frame % 2 ? '#087f8c' : '#e63946'; context.fillRect(0,0,320,180); await new Promise(resolve => setTimeout(resolve, 90)); }
         recorder.stop();
         const blob = await finished; stream.getTracks().forEach(track => track.stop());
         return Array.from(new Uint8Array(await blob.arrayBuffer()));
-      });
-      const video = Buffer.from(bytes); await writeFile(join(dir, 'test.mp4'), video);
-      const response = await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, { data: { type: 'video', title: 'Playback test', x: 0, y: 0, width: 520, height: 390, payload: { path: 'test.mp4', mimeType: 'video/mp4', size: video.length, sha256: createHash('sha256').update(video).digest('hex'), width: 320, height: 180, duration: 1, fps: 12 } } });
+      }, mimeType);
+      const video = Buffer.from(bytes); await writeFile(join(dir, `test.${format}`), video);
+      const response = await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, { data: { type: 'video', title: 'Playback test', x: 0, y: 0, width: 520, height: 390, payload: { path: `test.${format}`, mimeType, size: video.length, sha256: createHash('sha256').update(video).digest('hex'), width: 320, height: 180, duration: 1, fps: 12 } } });
       expect(response.ok()).toBeTruthy();
       const node = (await response.json()).data;
       const url = `/api/agent-room/workspaces/${workspace.id}/creative-media/videos/${node.id}`;
@@ -90,6 +121,24 @@ test.describe('native video workflows', () => {
       try { await request.delete(`/api/agent-room/workspaces/${workspace.id}`); }
       finally { await rm(dir, { recursive: true, force: true }); }
     }
+  });
+
+  test('shows an unavailable official model contract after reopening its saved draft', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-unavailable-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E unavailable model', workingDir: dir } })).json()).data;
+    const endpoint = 'fal-ai/unavailable-video';
+    await page.route('**/creative-media/models?*', route => new URL(route.request().url()).searchParams.has('endpoint')
+      ? route.fulfill({ status: 503, json: { error: 'creative_model_contract_unavailable' } })
+      : route.fulfill({ json: { data: { models: [{ id: endpoint, name: 'Unavailable model', category: 'text-to-video', status: 'active' }], total: 1, nextOffset: null } } }));
+    try {
+      const response = await request.post(`/api/agent-room/workspaces/${workspace.id}/creative-media`, { headers, data: { title: 'Unavailable draft', config: { modelId: endpoint } } });
+      expect(response.ok()).toBeTruthy();
+      const workflow = (await response.json()).data;
+      await page.goto(`/terminal?workspace=${workspace.id}&node=${workflow.nodeId}`);
+      const node = page.getByTestId('video-workflow');
+      await expect(node.getByRole('alert')).toContainText('creative_model_contract_unavailable');
+      await expect(node.getByRole('button', { name: /Estimar|Estimate/ })).toBeDisabled();
+    } finally { await request.delete(`/api/agent-room/workspaces/${workspace.id}`); await rm(dir, { recursive: true, force: true }); }
   });
 
   test('keeps video controls accessible in both themes and compact viewports', async ({ page, request }) => {

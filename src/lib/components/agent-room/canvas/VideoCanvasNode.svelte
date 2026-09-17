@@ -16,9 +16,15 @@
   {#snippet title()}{data.title || m['creative.video']()}{/snippet}
   {#snippet actions()}<HeaderIconButton label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
   <div class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-canvas)]">
+    {#if data.payload.mimeType === 'image/gif'}
+      <img src={url} alt={data.title || m['creative.video']()} class="min-h-0 w-full flex-1 object-contain" onerror={() => failed = true} />
+    {:else if data.payload.mimeType?.startsWith('audio/')}
+      <div class="flex min-h-0 flex-1 items-center p-3"><audio src={url} controls preload="metadata" aria-label={data.title || m['creative.audio']()} class="w-full" onerror={() => failed = true}></audio></div>
+    {:else}
     <!-- Generated clips have no supplied caption track; native controls remain accessible. -->
     <!-- svelte-ignore a11y_media_has_caption -->
     <video src={url} controls playsinline preload="metadata" aria-label={data.title || m['creative.video']()} class="min-h-0 w-full flex-1 object-contain" onloadedmetadata={(event) => { decodedSize = { width: event.currentTarget.videoWidth, height: event.currentTarget.videoHeight }; failed = false; }} onerror={() => failed = true}></video>
+    {/if}
     <footer class="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--app-border)] p-2 text-xs text-[var(--app-text-muted)]">
       <span class="min-w-0 break-words">{#if failed}{m['creative.video_unavailable']()}{:else if decodedSize?.width}{decodedSize.width} × {decodedSize.height}{:else if data.payload.width && data.payload.height}{data.payload.width} × {data.payload.height}{:else}{data.payload.path?.split('/').at(-1) ?? ''}{/if}</span>
       <a href={url} download class="inline-flex shrink-0 items-center gap-1 text-[var(--app-accent)] underline"><Download size={13} />{m['creative.download']()}</a>

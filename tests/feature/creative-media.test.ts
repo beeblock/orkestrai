@@ -9,11 +9,36 @@ import { CreativeMediaError } from '$lib/modules/creative-media/domain/types.js'
 import type { CreativePreview, CreativeRun } from '$lib/modules/creative-media/domain/types.js';
 import { CreativeWorkflowService } from '$lib/modules/creative-media/application/services/CreativeWorkflowService.js';
 import { CreativeProviderService } from '$lib/modules/creative-media/application/services/CreativeProviderService.js';
+import { falModelCatalog, parseFalContract } from '$lib/modules/creative-media/application/services/FalModelCatalogService.js';
+import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 
-vi.mock('$lib/modules/agent-room/application/services/AutonomyPolicyService.js', () => ({ autonomyPolicyService: { recordSemanticEffect: vi.fn(async () => undefined), get: vi.fn(async () => ({ policy: { halted: false } })) }, AutonomyGatePendingError: class extends Error {} }));
+vi.mock('$lib/modules/agent-room/application/services/AutonomyPolicyService.js', () => ({ autonomyPolicyService: { recordSemanticEffect: vi.fn(async () => undefined), get: vi.fn(async () => ({ policy: { halted: false } })), execute: vi.fn(async (_operation, callback) => callback()) }, AutonomyGatePendingError: class extends Error {} }));
 
 describe('Creative video persistence and queue', () => {
   useSvelarTest({ refreshDatabase: true });
+  it('pins the real model contract and reference hashes before an agent can submit a generic model', async () => {
+    const id = 'bytedance/seedance-2.5/image-to-video';
+    const inputSchema = { type: 'object', required: ['prompt', 'image_url', 'duration'], properties: { prompt: { type: 'string' }, image_url: { type: 'string' }, duration: { type: 'string', enum: ['5', '30'] } } };
+    const outputSchema = { type: 'object', properties: { video: { type: 'object', properties: { url: { type: 'string' } } } } };
+    const contract = parseFalContract({ endpoint_id: id, metadata: { display_name: 'Seedance 2.5', category: 'image-to-video', status: 'active' }, openapi: { paths: {
+      [`/${id}`]: { post: { requestBody: { content: { 'application/json': { schema: inputSchema } } } } },
+      [`/${id}/requests/{request_id}`]: { get: { responses: { 200: { content: { 'application/json': { schema: outputSchema } } } } } },
+    } } });
+    const lookup = vi.spyOn(falModelCatalog, 'contract').mockResolvedValue(contract);
+    try {
+      const workspaceId = uuidv7(), nodeId = uuidv7(), imageId = uuidv7();
+      const config = creativeConfigSchema.parse({ modelId: id, prompt: 'Animate the portrait', parameters: { duration: '30' }, mediaBindings: [{ pointer: '/image_url', nodeId: imageId }] });
+      const workspace = { node: vi.fn(async () => ({ id: imageId, type: 'image' })), writablePath: vi.fn(async () => '/workspace/generated/videos') };
+      const reference = { nodeId: imageId, path: 'portrait.png', sha256: 'a'.repeat(64), size: 800, mimeType: 'image/png' };
+      const service = new CreativeWorkflowService(repository, {} as never, {} as never, workspace as never, { media: vi.fn(async () => reference) } as never);
+      const snapshot = await service.snapshot({ id: uuidv7(), workspaceId, nodeId, title: 'Seedance test', revision: 1, config });
+      expect(snapshot.modelContract?.digest).toBe(contract.digest);
+      expect(snapshot.media).toEqual([{ pointer: '/image_url', reference }]);
+      expect(snapshot.config.parameters.duration).toBe('30');
+      expect(JSON.stringify(snapshot)).not.toContain('base64');
+      await expect(service.snapshot({ id: uuidv7(), workspaceId, nodeId, title: 'Invalid', revision: 1, config: { ...config, parameters: { duration: 30 } } })).rejects.toThrow('creative_model_parameters_invalid');
+    } finally { lookup.mockRestore(); }
+  });
   async function fixture() {
     const workspaceId = uuidv7(), nodeId = uuidv7(), profileId = uuidv7();
     const profile = await repository.saveProfile({ id: profileId, name: 'Test fal', provider: 'fal', enabled: true, hasCredential: true });
@@ -47,8 +72,9 @@ describe('Creative video persistence and queue', () => {
     const provider = { submit: vi.fn(async () => remote), status: vi.fn(async () => ({ status: 'completed', queuePosition: null })), cancel: vi.fn(async () => 'requested'), result: vi.fn(async () => ({ url: 'https://fal.media/video.mp4' })), download: vi.fn(async () => new Response('test')) };
     const output = { path: 'generated/videos/test.mp4', sha256: 'a'.repeat(64), size: 42, mimeType: 'video/mp4' };
     const service = { repository, provider, profiles: { credential: vi.fn(async () => ({ revealInsideTrustedExecutor: () => 'not-a-real-key' })) },
-      workspace: { workspace: vi.fn(async () => ({ suspendedAt: null })), nodes: vi.fn(async () => []), createNode: vi.fn(), broadcast: vi.fn() },
-      files: { store: vi.fn(async () => output), referenceData: vi.fn() }, authorize: vi.fn(async () => workflow), dispatch: vi.fn(async (_run, submit) => submit()),
+      workspace: { workspace: vi.fn(async () => ({ suspendedAt: null })), writablePath: vi.fn(async (_workspace: string, path: string) => `/workspace/${path}`), nodes: vi.fn(async () => []), createNode: vi.fn(), broadcast: vi.fn() },
+      files: { store: vi.fn(async (_run?: unknown, _video?: unknown, _response?: unknown, _index?: number) => output), referenceData: vi.fn() }, authorize: vi.fn(async () => workflow), dispatch: vi.fn(async (_run, submit) => submit()),
+      download: CreativeWorkflowService.prototype.download,
     };
     return { service, provider, queue: new CreativeQueueService(service as unknown as CreativeWorkflowService) };
   }
@@ -58,6 +84,33 @@ describe('Creative video persistence and queue', () => {
     await expect(repository.saveWorkflow(f.workspaceId, f.nodeId, { title: 'Stale', config: f.workflow.config, revision: 2 })).rejects.toThrow('creative_revision_conflict');
     expect(JSON.stringify(f.run)).not.toMatch(/remote_json|credential|not-a-real-key/);
     await expect(repository.reserve(f.workspaceId, uuidv7(), f.preview, { type: 'user' }, f.key)).rejects.toThrow('creative_idempotency_conflict');
+  });
+  it('materializes each output as a separate reusable node without resubmitting', async () => {
+    const f = await fixture(); const r = runtime(f.workflow);
+    r.provider.result.mockResolvedValue({ url: 'https://fal.media/a.mp4', variants: [{ url: 'https://fal.media/b.webm', mimeType: 'video/webm' }] } as never);
+    r.service.files.store.mockImplementation(async (_run?: unknown, _video?: unknown, _response?: unknown, index = 0) => ({ path: `generated/videos/${index}.mp4`, outputIndex: index, runId: f.run.id }) as never);
+    await r.queue.process(f.run);
+    await r.queue.process(await ready(f.run));
+    const completed = await repository.run(f.workspaceId, f.run.id);
+    expect(completed?.status).toBe('completed');
+    expect(completed?.output?.additionalOutputs).toHaveLength(1);
+    expect(r.service.workspace.createNode).toHaveBeenCalledTimes(2);
+    expect(r.service.workspace.createNode.mock.calls.map(call => (call[3] as any).outputIndex)).toEqual([0, 1]);
+    expect(autonomyPolicyService.execute).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: 'creative.video.download', stepId: 'output:1', filesystem: expect.objectContaining({ path: expect.stringMatching(/-2\.webm$/), permission: 'create' }),
+    }), expect.any(Function));
+    expect(r.provider.submit).toHaveBeenCalledOnce();
+  });
+  it('does not download or publish when output permissions have been revoked', async () => {
+    const f = await fixture(); const r = runtime(f.workflow);
+    await r.queue.process(f.run);
+    vi.mocked(autonomyPolicyService.execute).mockRejectedValueOnce(new Error('Outside approved filesystem scope'));
+    await r.queue.process(await ready(f.run));
+    expect(r.provider.download).not.toHaveBeenCalled();
+    expect(r.service.files.store).not.toHaveBeenCalled();
+    expect(r.service.workspace.createNode).not.toHaveBeenCalled();
+    expect(await repository.run(f.workspaceId, f.run.id)).toMatchObject({ status: 'download_failed', errorCode: 'creative_policy_denied' });
+    expect(r.provider.submit).toHaveBeenCalledOnce();
   });
   it('enforces daily budget across separate workflows and changed policies', async () => {
     const f = await fixture();

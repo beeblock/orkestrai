@@ -1,5 +1,7 @@
 import type { CreativeConfig, CreativePolicy } from '../contracts/schemas/creative-media.schema.js';
 import type { CreativeRunStatus } from './catalog.js';
+import type { FalModelContract } from './model-contract.js';
+import type { VideoMime } from './video-format.js';
 
 export type CreativeActor = { type: 'user' } | { type: 'agent'; nodeId: string; taskId: string };
 export type CreativeProfile = { id: string; name: string; provider: 'fal'; enabled: boolean; hasCredential: boolean; revision: number };
@@ -9,11 +11,15 @@ export type CreativeReference = { nodeId: string; path: string; sha256: string; 
 export type CreativeSnapshot = {
   config: CreativeConfig; prompt: string; catalogRevision: string; revision: number;
   startImage: CreativeReference | null; endImage: CreativeReference | null;
+  modelContract?: FalModelContract;
+  media?: Array<{ pointer: string; reference: CreativeMediaReference }>;
 };
+export type CreativeMediaReference = { nodeId?: string; path: string; sha256: string; size: number; mimeType: string };
 export type CreativeVideoAsset = {
-  path: string; sha256: string; size: number; mimeType: 'video/mp4';
+  path: string; sha256: string; size: number; mimeType: VideoMime;
   width: number | null; height: number | null; duration: number | null; fps: number | null;
   workflowNodeId: string; runId: string; modelId: CreativeConfig['modelId'];
+  outputIndex?: number; additionalOutputs?: CreativeVideoAsset[];
 };
 export type CreativeRun = {
   id: string; workspaceId: string; workflowId: string; nodeId: string; profileId: string;
@@ -28,7 +34,7 @@ export type CreativePreview = {
 };
 
 export class CreativeMediaError extends Error {
-  constructor(public readonly code: string, public readonly status = 422) {
+  constructor(public readonly code: string, public readonly status = 422, public readonly billing?: { unit: string; unitPrice: number; currency: 'USD' }) {
     super(code);
     this.name = 'CreativeMediaError';
   }

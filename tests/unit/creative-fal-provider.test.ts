@@ -34,6 +34,21 @@ describe('native creative video contracts', () => {
 });
 
 describe('fal video adapter', () => {
+  it('uploads bounded references once with expiration and never forwards the account key to storage', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(json({ file_url: 'https://v3b.fal.media/files/input.png', upload_url: 'https://v3.fal.media/upload/input?signature=temporary' })).mockResolvedValueOnce(new Response(null, { status: 200 })).mockResolvedValueOnce(json({ token: 'temporary-cdn-token' })).mockResolvedValueOnce(new Response('https://v3b.fal.media/files/input.png?identity=read-only-expiring'));
+    const input = 'data:image/png;base64,c3ludGhldGlj';
+    const output = await new FalVideoProvider(fetch).prepareMedia(credential, { '/image_urls/0': input, '/image_urls/1': input });
+    expect(output).toEqual({ '/image_urls/0': 'https://v3b.fal.media/files/input.png?identity=read-only-expiring', '/image_urls/1': 'https://v3b.fal.media/files/input.png?identity=read-only-expiring' });
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(JSON.parse(fetch.mock.calls[0][1].headers['X-Fal-Object-Lifecycle-Preference'])).toEqual({ expiration_duration_seconds: 86400, initial_acl: { default: 'forbid', rules: [] } });
+    expect(JSON.stringify(fetch.mock.calls[1])).not.toContain(credential);
+    expect(fetch.mock.calls[1][1].headers).toEqual({ 'Content-Type': 'image/png' });
+    expect(fetch.mock.calls[3][1].headers.Authorization).toBe('Bearer temporary-cdn-token');
+    expect(JSON.stringify(output)).not.toContain('signature');
+    const malicious = vi.fn().mockResolvedValue(json({ file_url: 'https://v3b.fal.media/files/input.png', upload_url: 'https://evil.test/upload' }));
+    await expect(new FalVideoProvider(malicious).prepareMedia(credential, { '/image_url': input })).rejects.toThrow('creative_unsafe_provider_url');
+    expect(malicious).toHaveBeenCalledTimes(1);
+  });
   it('submits once with retention/privacy controls and no automatic provider fallback', async () => {
     const fetch = vi.fn().mockResolvedValue(json({ request_id: requestId, status_url: handle.statusUrl, response_url: handle.responseUrl, cancel_url: handle.cancelUrl }));
     const adapter = new FalVideoProvider(fetch);
@@ -75,7 +90,7 @@ describe('fal video adapter', () => {
     expect(await new FalVideoProvider(fetch).estimate(credential, creativeConfigSchema.parse({}))).toEqual({ estimatedCents: 25, reservedCents: 100 });
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ estimate_type: 'unit_price', endpoints: { [endpoint]: { unit_quantity: 5 } } });
     const unknown = vi.fn().mockResolvedValue(json({ prices: [{ endpoint_id: endpoint, unit_price: 0.05, unit: 'compute_unit', currency: 'USD' }] }));
-    await expect(new FalVideoProvider(unknown).estimate(credential, creativeConfigSchema.parse({}))).rejects.toThrow('creative_estimate_unavailable');
+    await expect(new FalVideoProvider(unknown).estimate(credential, creativeConfigSchema.parse({}))).rejects.toMatchObject({ code: 'creative_billing_units_required', billing: { unit: 'compute_unit', unitPrice: 0.05, currency: 'USD' } });
     expect(unknown).toHaveBeenCalledTimes(1);
   });
   it('exchanges a short-lived CDN token without forwarding the API key to media hosts', async () => {
@@ -88,6 +103,11 @@ describe('fal video adapter', () => {
     expect(fetch.mock.calls[1][1].headers).toEqual({ Authorization: 'Bearer synthetic-cdn-token' });
     expect(fetch.mock.calls[1][1].redirect).toBe('manual');
     expect(JSON.stringify(fetch.mock.calls[1])).not.toContain(credential);
+  });
+  it('accepts a confirmed zero-price quote without inventing a charge', async () => {
+    const endpoint = 'fal-ai/wan/v2.7/text-to-video';
+    const fetch = vi.fn().mockResolvedValueOnce(json({ prices: [{ endpoint_id: endpoint, unit_price: 0, unit: 'second', currency: 'USD' }] })).mockResolvedValueOnce(json({ total_cost: 0, currency: 'USD' }));
+    expect(await new FalVideoProvider(fetch).estimate(credential, creativeConfigSchema.parse({}))).toEqual({ estimatedCents: 0, reservedCents: 0 });
   });
   it('refuses local outputs, oversized media and forwarded redirects', async () => {
     for (const url of ['http://127.0.0.1:5199/secret', 'file:///etc/passwd', 'https://v3b.fal.media.evil.test/a', 'https://user:pass@v3b.fal.media/a']) {

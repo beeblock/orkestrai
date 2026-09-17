@@ -6,7 +6,7 @@ export async function creativeApi<T>(url: string, method = 'GET', body?: unknown
   const csrf = getCsrfToken();
   const response = await fetch(url, { method, signal: AbortSignal.timeout(60000), headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const result = await response.json();
-  if (!response.ok || result.error) throw new Error(result.error ?? 'creative_request_failed');
+  if (!response.ok || result.error) throw Object.assign(new Error(result.error ?? 'creative_request_failed'), { billing: result.billing });
   return result.data;
 }
 export function creativeStatus(status: CreativeRunStatus) {
@@ -15,6 +15,10 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_model_contract_unavailable') return m['creative.error_contract_unavailable']();
+  if (code === 'creative_billing_units_required') return m['creative.billing_units_help']();
+  if (/catalog/.test(code)) return m['creative.error_catalog']();
+  if (/model_contract|model_parameters|model_not_found/.test(code)) return m['creative.error_contract']();
   if (code === 'creative_submission_uncertain') return m['creative.submission_uncertain']();
   if (code === 'creative_approval_required') return m['creative.error_approval']();
   if (/budget|concurrency/.test(code)) return m['creative.error_budget']();

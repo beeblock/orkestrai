@@ -5,12 +5,15 @@ import { autonomyPolicyService, AutonomyGatePendingError } from '$lib/modules/ag
 import { creativeMediaRepository, type CreativeMediaRepository } from '../../infrastructure/repositories/CreativeMediaRepository.js';
 import { FalVideoProvider } from '../../infrastructure/providers/FalVideoProvider.js';
 import { creativeConfigSchema, creativeRunRequestSchema, creativeWorkflowSaveSchema, type CreativeRunRequest, type CreativeWorkflowSave } from '../../contracts/schemas/creative-media.schema.js';
-import { ACTIVE_CREATIVE_STATUSES, CREATIVE_CATALOG_REVISION, CREATIVE_MODELS } from '../../domain/catalog.js';
+import { ACTIVE_CREATIVE_STATUSES, CREATIVE_CATALOG_REVISION, CREATIVE_MODELS, MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.js';
 import { CreativeMediaError, type CreativeActor, type CreativePreview, type CreativeRun, type CreativeSnapshot, type CreativeWorkflow } from '../../domain/types.js';
-import type { CreativeVideoProvider } from '../ports/CreativeVideoProvider.js';
-import { CreativeMediaFiles } from './CreativeMediaFiles.js';
+import type { CreativeVideoProvider, CreativeRemoteVideo } from '../ports/CreativeVideoProvider.js';
+import { CreativeMediaFiles, creativeOutputPath } from './CreativeMediaFiles.js';
 import { creativeProviderService, type CreativeProviderService } from './CreativeProviderService.js';
 import { withCreativeProfileLock } from './creative-profile-lock.js';
+import { falModelCatalog, validateFalParameters } from './FalModelCatalogService.js';
+import { genericFalInput } from '../../domain/model-input.js';
+import { modelPromptField } from '../../domain/model-contract.js';
 
 const previewState = globalThis as typeof globalThis & { __orkestraiCreativePreviews?: Map<string, { workspaceId: string; actor: CreativeActor; preview: CreativePreview }> };
 const previews = previewState.__orkestraiCreativePreviews ??= new Map();
@@ -45,11 +48,11 @@ export class CreativeWorkflowService {
       if (profile.enabled && policy?.enabled && policy.allowExternalMedia && (actor.type !== 'agent' || policy.allowAgents)) profiles.push({ id: profile.id, name: profile.name, modelIds: policy.modelIds, maxRunCents: policy.maxRunCents, maxDayCents: policy.maxDayCents, maxConcurrentRuns: policy.maxConcurrentRuns });
     }
     const nodes = await this.workspace.nodes(workspaceId);
-    const inputs = nodes.filter(node => node.type === 'image' || node.type === 'note').map(node => ({ id: node.id, title: node.title, type: node.type }));
+    const inputs = nodes.filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => ({ id: node.id, title: node.title, type: node.type }));
     const workflows = await this.list(workspaceId);
     const persisted = new Set(workflows.map(workflow => workflow.nodeId));
     const drafts = nodes.filter(node => node.type === 'videoWorkflow' && !persisted.has(node.id)).map(node => ({ nodeId: node.id, title: node.title, config: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) }));
-    return { workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS) };
+    return { workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', paginated: true } };
   }
 
   async read(workspaceId: string, nodeId: string) {
@@ -75,7 +78,7 @@ export class CreativeWorkflowService {
     try {
       const result = await this.repository.saveWorkflow(workspaceId, nodeId, value);
       await this.workspace.updateNode(workspaceId, nodeId, value.title, { schemaVersion: 1, workflowId: result.id, revision: result.revision });
-      for (const inputId of [value.config.startImageNodeId, value.config.endImageNodeId, ...value.config.contextNodeIds]) if (inputId) await this.workspace.connect(workspaceId, inputId, nodeId);
+      for (const inputId of [value.config.startImageNodeId, value.config.endImageNodeId, ...value.config.contextNodeIds, ...value.config.mediaBindings.map(binding => binding.nodeId)]) if (inputId) await this.workspace.connect(workspaceId, inputId, nodeId);
       this.workspace.broadcast(workspaceId);
       return result;
     } catch (error) {
@@ -85,6 +88,10 @@ export class CreativeWorkflowService {
   }
 
   private async validateBindings(workspaceId: string, config: CreativeWorkflowSave['config']) {
+    for (const binding of config.mediaBindings ?? []) {
+      if (binding.nodeId && !['image', 'video'].includes((await this.workspace.node(workspaceId, binding.nodeId))?.type ?? '')) throw new CreativeMediaError('creative_reference_unavailable');
+      if (binding.path) await this.workspace.existingPath(workspaceId, binding.path);
+    }
     for (const id of [config.startImageNodeId, config.endImageNodeId]) {
       if (id && (await this.workspace.node(workspaceId, id))?.type !== 'image') throw new CreativeMediaError('creative_reference_unavailable');
     }
@@ -102,12 +109,28 @@ export class CreativeWorkflowService {
       if (typeof text !== 'string') throw new CreativeMediaError('creative_context_unavailable');
       contexts.push(text);
     }
-    const prompt = [config.prompt, ...contexts].filter(Boolean).join('\n\n').trim();
+    const legacyModel = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS];
+    const modelContract = legacyModel ? undefined : await falModelCatalog.contract(config.modelId);
+    const configuredPrompt = config.parameters[modelContract ? modelPromptField(modelContract.schema) ?? 'prompt' : 'prompt'];
+    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), ...contexts].filter(Boolean).join('\n\n').trim();
+    if (modelContract) {
+      const media = [];
+      let size = 0;
+      for (const binding of config.mediaBindings) {
+        const reference = await this.files.media(workflow.workspaceId, binding);
+        size += reference.size;
+        if (size > 100 * 1024 * 1024) throw new CreativeMediaError('creative_reference_size');
+        media.push({ pointer: binding.pointer, reference });
+      }
+      const input = genericFalInput(config, prompt, Object.fromEntries(media.map(item => [item.pointer, `https://media.invalid/${item.reference.sha256}`])), modelContract);
+      validateFalParameters(modelContract, input);
+      return { config, prompt, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage: null, endImage: null, modelContract, media };
+    }
     if (!prompt) throw new CreativeMediaError('creative_prompt_required');
-    if (prompt.length > CREATIVE_MODELS[config.modelId].promptLimit) throw new CreativeMediaError('creative_prompt_too_long');
+    if (prompt.length > legacyModel.promptLimit) throw new CreativeMediaError('creative_prompt_too_long');
     const startImage = config.startImageNodeId ? await this.files.image(workflow.workspaceId, config.startImageNodeId) : null;
     const endImage = config.endImageNodeId ? await this.files.image(workflow.workspaceId, config.endImageNodeId) : null;
-    if (CREATIVE_MODELS[config.modelId].startImage && !startImage) throw new CreativeMediaError('creative_reference_required');
+    if (legacyModel.startImage && !startImage) throw new CreativeMediaError('creative_reference_required');
     return { config, prompt, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage, endImage };
   }
 
@@ -130,7 +153,7 @@ export class CreativeWorkflowService {
     const { profile, policy } = await this.authorize(workflow, actor);
     const snapshot = await this.snapshot(workflow);
     const credential = await this.profiles.credential(profile.id);
-    const estimate = await this.provider.estimate(credential.revealInsideTrustedExecutor(), snapshot.config);
+    const estimate = await this.provider.estimate(credential.revealInsideTrustedExecutor(), snapshot.config, snapshot.modelContract);
     if (estimate.reservedCents > policy.maxRunCents || estimate.reservedCents > policy.maxDayCents) throw new CreativeMediaError('creative_budget_exceeded', 403);
     const preview: CreativePreview = { id: uuidv7(), workflowId: workflow.id, revision: workflow.revision, snapshot, profileId: profile.id, profileRevision: profile.revision, policyRevision: policy.revision, ...estimate, currency: 'USD', expiresAt: new Date(Date.now() + 300000).toISOString() };
     for (const [id, entry] of previews) if (new Date(entry.preview.expiresAt).getTime() <= Date.now()) previews.delete(id);
@@ -183,13 +206,35 @@ export class CreativeWorkflowService {
     const operation = { workspaceId: run.workspaceId, capability: 'integration' as const, operation: 'creative.video.submit',
       actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null, runId: run.id,
       mutation: true, risk: 'purchase' as const, certainty: 'semantic' as const,
-      network: { url: `https://queue.fal.run/${CREATIVE_MODELS[run.snapshot.config.modelId].endpoint}`, method: 'POST' },
+      network: { url: `https://queue.fal.run/${run.snapshot.modelContract?.id ?? CREATIVE_MODELS[run.snapshot.config.modelId as keyof typeof CREATIVE_MODELS].endpoint}`, method: 'POST' },
       filesystem: { path: outputPath, permission: 'create' as const },
       input: { modelId: run.snapshot.config.modelId, promptDigest: createHash('sha256').update(run.snapshot.prompt).digest('hex'), reservedCents: run.reservedCents },
       auditOutput: () => ({ accepted: true }),
     };
     try { return await autonomyPolicyService.execute(operation, submit); }
     catch (error) {
+      if (error instanceof AutonomyGatePendingError) throw new CreativeMediaError('creative_approval_required', 409);
+      if (error instanceof CreativeMediaError) throw error;
+      throw new CreativeMediaError('creative_policy_denied', 403);
+    }
+  }
+
+  async download(run: CreativeRun, video: CreativeRemoteVideo, outputIndex: number, credential: string) {
+    const path = creativeOutputPath(run, video, outputIndex);
+    const destination = await this.workspace.writablePath(run.workspaceId, path);
+    try {
+      // Recheck the actual file, not the provisional MP4 name approved before
+      // generation. Each variant respects current exclusions and size grants.
+      return await autonomyPolicyService.execute({
+        workspaceId: run.workspaceId, capability: 'filesystem', operation: 'creative.video.download',
+        actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null,
+        runId: run.id, stepId: `output:${outputIndex}`, mutation: true, certainty: 'semantic',
+        filesystem: { path: destination, permission: 'create', size: video.size ?? MAX_CREATIVE_VIDEO_BYTES },
+        network: { url: new URL(video.url).origin, method: 'GET' },
+        input: { path, outputIndex, mimeType: video.mimeType ?? 'video/mp4', size: video.size },
+        auditOutput: result => { const asset = result as { path: string; sha256: string; size: number }; return { path: asset.path, sha256: asset.sha256, size: asset.size }; },
+      }, async () => this.files.store(run, video, await this.provider.download(credential, video), outputIndex));
+    } catch (error) {
       if (error instanceof AutonomyGatePendingError) throw new CreativeMediaError('creative_approval_required', 409);
       if (error instanceof CreativeMediaError) throw error;
       throw new CreativeMediaError('creative_policy_denied', 403);

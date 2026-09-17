@@ -51,12 +51,33 @@ describe('workspace video files', () => {
     for (const bytes of [Buffer.from('<html>not a video</html>'), f.bytes.subarray(0,40)]) await expect(f.files.store(f.run, f.video, new Response(bytes))).rejects.toThrow('creative_video_invalid');
     expect(await readdir(join(f.dir, 'videos'))).toEqual([]);
   });
+  it('stores native transparent WebM output without conversion or an MP4 extension', async () => {
+    const f = await fixture();
+    const bytes = Buffer.alloc(96); bytes.set([0x1a, 0x45, 0xdf, 0xa3]); bytes.write('webm', 12);
+    const result = await f.files.store(f.run, { ...f.video, mimeType: 'video/webm' }, new Response(bytes), 1);
+    expect(result).toMatchObject({ mimeType: 'video/webm', outputIndex: 1 });
+    expect(result.path).toMatch(/-2\.webm$/);
+    expect(await readFile(join(f.dir, result.path))).toEqual(bytes);
+    await expect(f.files.store(f.run, { ...f.video, mimeType: 'video/webm' }, new Response(f.bytes), 2)).rejects.toThrow('creative_video_invalid');
+  });
   it('handles seek ranges without accepting multiple or out-of-bounds ranges', () => {
     expect(videoByteRange(null, 100)).toBeNull();
     expect(videoByteRange('bytes=10-20', 100)).toEqual({ start:10,end:20 });
     expect(videoByteRange('bytes=90-', 100)).toEqual({ start:90,end:99 });
     expect(videoByteRange('bytes=-20', 100)).toEqual({ start:80,end:99 });
     for(const value of ['bytes=100-', 'bytes=4-2', 'bytes=0-1,4-5', 'bytes=-0', 'bytes=-', 'bytes=99999999999999999999-']) expect(() => videoByteRange(value,100)).toThrow();
+  });
+  it('accepts a workspace FLAC reference and detects changed audio before upload', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-audio-')); dirs.push(dir);
+    const bytes = Buffer.alloc(96); bytes.write('fLaC');
+    await writeFile(join(dir, 'reference.flac'), bytes);
+    const workspace = { existingPath: async (_id: string, path: string) => join(dir, path) } as CreativeWorkspaceGateway;
+    const files = new CreativeMediaFiles(workspace);
+    const reference = await files.media('workspace', { path: 'reference.flac' });
+    expect(reference.mimeType).toBe('audio/flac');
+    expect(await files.mediaData('workspace', reference)).toBe(`data:audio/flac;base64,${bytes.toString('base64')}`);
+    await writeFile(join(dir, 'reference.flac'), Buffer.concat([bytes, Buffer.from('changed')]));
+    await expect(files.mediaData('workspace', reference)).rejects.toThrow('creative_reference_changed');
   });
 });
 

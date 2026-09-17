@@ -139,6 +139,12 @@ export function transferredNodePayload(
       contextNodeIds: remapIds(config.contextNodeIds, ids),
       startImageNodeId: typeof config.startImageNodeId === 'string' ? ids.get(config.startImageNodeId) ?? null : null,
       endImageNodeId: typeof config.endImageNodeId === 'string' ? ids.get(config.endImageNodeId) ?? null : null,
+      mediaBindings: Array.isArray(config.mediaBindings) ? config.mediaBindings.flatMap(binding => {
+        if (!binding || typeof binding !== 'object') return [];
+        const value = binding as { pointer?: string; nodeId?: string };
+        const nodeId = value.nodeId ? ids.get(value.nodeId) : null;
+        return nodeId ? [{ pointer: value.pointer, nodeId }] : [];
+      }) : [],
     } };
   }
   if (type === 'video') {

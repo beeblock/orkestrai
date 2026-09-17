@@ -1,12 +1,18 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, link, copyFile, unlink } from 'node:fs/promises';
-import { dirname, posix } from 'node:path';
+import { dirname, posix, extname } from 'node:path';
 import { imageSize } from 'image-size';
 import { creativeWorkspaceGateway, type CreativeWorkspaceGateway } from '$lib/modules/agent-room/application/services/CreativeWorkspaceGateway.js';
 import type { CreativeRemoteVideo } from '../ports/CreativeVideoProvider.js';
 import { MAX_CREATIVE_IMAGE_BYTES, MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.js';
-import { CreativeMediaError, type CreativeReference, type CreativeRun, type CreativeVideoAsset } from '../../domain/types.js';
+import { CreativeMediaError, type CreativeReference, type CreativeMediaReference, type CreativeRun, type CreativeVideoAsset } from '../../domain/types.js';
+import { VIDEO_FORMATS, matchesVideoHeader, videoMimeFromPath } from '../../domain/video-format.js';
+
+export function creativeOutputPath(run: CreativeRun, video: CreativeRemoteVideo, outputIndex = 0) {
+  const name = `${run.snapshot.config.filePrefix}-${run.id}${outputIndex ? `-${outputIndex + 1}` : ''}.${VIDEO_FORMATS[video.mimeType ?? 'video/mp4']}`;
+  return posix.join(run.snapshot.config.outputDirectory.replace(/\\/g, '/'), name);
+}
 
 export class CreativeMediaFiles {
   constructor(private readonly workspace: CreativeWorkspaceGateway = creativeWorkspaceGateway) {}
@@ -24,12 +30,12 @@ export class CreativeMediaFiles {
     return { nodeId, path, sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.length, mimeType: mimeType as CreativeReference['mimeType'], width, height };
   }
 
-  private async readImage(workspaceId: string, path: string): Promise<Buffer> {
+  private async readImage(workspaceId: string, path: string, maximum = MAX_CREATIVE_IMAGE_BYTES): Promise<Buffer> {
     const fullPath = await this.workspace.existingPath(workspaceId, path);
     const handle = await open(fullPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     try {
       const info = await handle.stat();
-      if (!info.isFile() || info.size < 12 || info.size > MAX_CREATIVE_IMAGE_BYTES) throw new CreativeMediaError('creative_reference_size');
+      if (!info.isFile() || info.size < 12 || info.size > maximum) throw new CreativeMediaError('creative_reference_size');
       const buffer = Buffer.alloc(info.size + 1);
       let position = 0;
       while (position < buffer.length) {
@@ -50,9 +56,44 @@ export class CreativeMediaFiles {
     return `data:${reference.mimeType};base64,${bytes.toString('base64')}`;
   }
 
-  async store(run: CreativeRun, video: CreativeRemoteVideo, response: Response): Promise<CreativeVideoAsset> {
-    const name = `${run.snapshot.config.filePrefix}-${run.id}.mp4`;
-    const path = posix.join(run.snapshot.config.outputDirectory.replace(/\\/g, '/'), name);
+  async media(workspaceId: string, binding: { nodeId?: string; path?: string }): Promise<CreativeMediaReference> {
+    let path = binding.path;
+    if (binding.nodeId) {
+      const node = await this.workspace.node(workspaceId, binding.nodeId);
+      if (!node || !['image', 'video'].includes(node.type)) throw new CreativeMediaError('creative_reference_unavailable');
+      path = (node.payload as { path?: string }).path;
+    }
+    if (!path) throw new CreativeMediaError('creative_reference_unavailable');
+    const bytes = await this.readImage(workspaceId, path, 64 * 1024 * 1024);
+    let mimeType: string | undefined;
+    if (bytes.toString('ascii', 4, 8) === 'ftyp') mimeType = extname(path).toLowerCase() === '.m4a' ? 'audio/mp4' : 'video/mp4';
+    else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WAVE') mimeType = 'audio/wav';
+    else if (bytes.toString('ascii', 0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && extname(path).toLowerCase() === '.mp3')) mimeType = 'audio/mpeg';
+    else if (bytes.toString('ascii', 0, 4) === 'OggS') mimeType = 'audio/ogg';
+    else if (bytes.toString('ascii', 0, 4) === 'fLaC') mimeType = 'audio/flac';
+    else if (['.webm', '.mkv', '.gif'].includes(extname(path).toLowerCase()) && matchesVideoHeader(bytes.subarray(0, 1024), videoMimeFromPath(path))) mimeType = videoMimeFromPath(path);
+    else {
+      try {
+        const image = imageSize(bytes);
+        if ((image.width ?? 0) * (image.height ?? 0) > 40_000_000 || bytes.length > MAX_CREATIVE_IMAGE_BYTES) throw new Error();
+        mimeType = ({ png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' } as Record<string, string>)[image.type ?? ''];
+      } catch { throw new CreativeMediaError('creative_reference_invalid'); }
+    }
+    if (!mimeType) throw new CreativeMediaError('creative_reference_invalid');
+    return { ...(binding.nodeId ? { nodeId: binding.nodeId } : {}), path, mimeType, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  }
+
+  async mediaData(workspaceId: string, reference: CreativeMediaReference) {
+    const current = await this.media(workspaceId, reference.nodeId ? { nodeId: reference.nodeId } : { path: reference.path });
+    if (JSON.stringify(current) !== JSON.stringify(reference)) throw new CreativeMediaError('creative_reference_changed', 409);
+    const bytes = await this.readImage(workspaceId, reference.path, 64 * 1024 * 1024);
+    if (createHash('sha256').update(bytes).digest('hex') !== reference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+    return `data:${reference.mimeType};base64,${bytes.toString('base64')}`;
+  }
+
+  async store(run: CreativeRun, video: CreativeRemoteVideo, response: Response, outputIndex = 0): Promise<CreativeVideoAsset> {
+    const mimeType = video.mimeType ?? 'video/mp4';
+    const path = creativeOutputPath(run, video, outputIndex);
     let destination = await this.workspace.writablePath(run.workspaceId, path);
     await mkdir(dirname(destination), { recursive: true });
     destination = await this.workspace.writablePath(run.workspaceId, path);
@@ -69,7 +110,7 @@ export class CreativeMediaFiles {
         if (next.done) break;
         size += next.value.byteLength;
         if (size > MAX_CREATIVE_VIDEO_BYTES) throw new CreativeMediaError('creative_video_too_large');
-        if (header.length < 32) header = Buffer.concat([header, Buffer.from(next.value.subarray(0, 32 - header.length))]);
+        if (header.length < 1024) header = Buffer.concat([header, Buffer.from(next.value.subarray(0, 1024 - header.length))]);
         hash.update(next.value);
         let offset = 0;
         while (offset < next.value.byteLength) {
@@ -78,7 +119,7 @@ export class CreativeMediaFiles {
           offset += result.bytesWritten;
         }
       }
-      if (size < 32 || header.toString('ascii', 4, 8) !== 'ftyp' || (video.size !== null && size !== video.size)) throw new CreativeMediaError('creative_video_invalid');
+      if (size < 32 || !matchesVideoHeader(header, mimeType) || (video.size !== null && size !== video.size)) throw new CreativeMediaError('creative_video_invalid');
       await handle.sync();
       await handle.close();
       await this.workspace.writablePath(run.workspaceId, path);
@@ -104,7 +145,7 @@ export class CreativeMediaFiles {
         } finally { await existing.close(); }
       }
       await unlink(temporary);
-      return { path, sha256, size, mimeType: 'video/mp4', width: video.width, height: video.height, duration: video.duration, fps: video.fps, workflowNodeId: run.nodeId, runId: run.id, modelId: run.snapshot.config.modelId };
+      return { path, sha256, size, mimeType, width: video.width, height: video.height, duration: video.duration, fps: video.fps, workflowNodeId: run.nodeId, runId: run.id, modelId: run.snapshot.config.modelId, ...(outputIndex ? { outputIndex } : {}) };
     } catch (error) {
       await reader?.cancel().catch(() => undefined);
       await handle.close().catch(() => undefined);

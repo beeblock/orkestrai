@@ -15,12 +15,16 @@ import { creativeVideoResponse } from '../../../application/services/CreativeVid
 import { CreativeProfileRequest, CreativePolicyRequest, CreativeWorkflowRequest, CreativeRunRequest, CreativeRunCommandRequest, CreativeBridgeRequest, creativeBodyEvent } from '../requests/CreativeMediaRequest.js';
 
 export class CreativeMediaController extends Controller {
+  models(event: any) { return this.respond(async () => {
+    this.owner(event);
+    return new ExecuteCreativeMediaAction().execute(CreativeMediaDto.from(event.params.id, { type: 'user' }, 'models', undefined, Object.fromEntries(event.url.searchParams)));
+  }); }
   video(event: any) { return creativeVideoResponse(event.params.id, event.params.assetId, event.request); }
   private async respond(operation: () => Promise<unknown>) {
     try { return this.json({ data: await operation() }); }
     catch (error) {
       const validation = error instanceof FormValidationError || (error as Error)?.name === 'ZodError';
-      return this.json({ error: error instanceof CreativeMediaError ? error.code : validation ? 'creative_invalid_input' : 'creative_request_failed' }, error instanceof CreativeMediaError ? error.status : validation ? 422 : 500);
+      return this.json({ error: error instanceof CreativeMediaError ? error.code : validation ? 'creative_invalid_input' : 'creative_request_failed', ...(error instanceof CreativeMediaError && error.billing ? { billing: error.billing } : {}) }, error instanceof CreativeMediaError ? error.status : validation ? 422 : 500);
     }
   }
   private owner(event: any) {
@@ -42,7 +46,7 @@ export class CreativeMediaController extends Controller {
       const policy = await creativeProviderService.repository.policy(event.params.id, profile.id);
       if (policy) policies.push(policy);
     }
-    const inputs = (await creativeWorkspaceGateway.nodes(event.params.id)).filter(node => node.type === 'image' || node.type === 'note').map(node => ({ id: node.id, type: node.type, title: node.title }));
+    const inputs = (await creativeWorkspaceGateway.nodes(event.params.id)).filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => ({ id: node.id, type: node.type, title: node.title }));
     return { profiles, policies, inputs, catalog: Object.values(CREATIVE_MODELS), workflows: await creativeWorkflowService.list(event.params.id) };
   }); }
   savePolicy(event: any) { return this.respond(async () => {

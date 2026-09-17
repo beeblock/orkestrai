@@ -1,0 +1,3939 @@
+{
+  "fetchedAt": "2026-09-17T09:23:58.513Z",
+  "models": [
+    {
+      "id": "minimax/h3-max/image-to-video",
+      "name": "H3 Max Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/image-to-video",
+      "name": "Kling Video v3 Image to Video [Pro]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/pro/image-to-video/api"
+    },
+    {
+      "id": "minimax/h3-max-turbo/image-to-video",
+      "name": "H3 Max Turbo Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max-turbo/image-to-video/api"
+    },
+    {
+      "id": "minimax/h3-max/reference-to-video",
+      "name": "H3 Max Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max/reference-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.5/reference-to-video",
+      "name": "Seedance 2.5 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.5/reference-to-video/api"
+    },
+    {
+      "id": "minimax/h3-max/text-to-video",
+      "name": "MiniMax H3 Max Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max/text-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.5/image-to-video",
+      "name": "Seedance 2.5 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+      "name": "Kling Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/standard/image-to-video",
+      "name": "Kling Video v3 Image to Video [Standard]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/standard/image-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/image-to-video",
+      "name": "Seedance 2 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/image-to-video/api"
+    },
+    {
+      "id": "minimax/h3/reference-to-video",
+      "name": "MiniMax H3 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3/reference-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/reference-to-video",
+      "name": "Seedance 2 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/reference-to-video/api"
+    },
+    {
+      "id": "minimax/h3-max-turbo/text-to-video",
+      "name": "H3 Max Turbo Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max-turbo/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.6/pro/image-to-video",
+      "name": "Kling Video v2.6 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.6/pro/image-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.5/text-to-video",
+      "name": "Seedance 2.5 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.5/text-to-video/api"
+    },
+    {
+      "id": "minimax/h3/image-to-video",
+      "name": "MiniMax H3 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/fast/image-to-video",
+      "name": "Veo 3.1 Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/fast/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seedance/v1.5/pro/image-to-video",
+      "name": "Bytedance Seedance V1.5 Pro Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1.5/pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/image-to-video",
+      "name": "Veo 3.1",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/image-to-video/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/image-to-video",
+      "name": "Grok Imagine Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/image-to-video/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/v1.5/image-to-video",
+      "name": "Grok Imagine Video 1.5",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/v1.5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/lite/image-to-video",
+      "name": "Veo3.1 Lite Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/lite/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/text-to-video",
+      "name": "Kling Video v3 Text to Video [Pro]",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/pro/text-to-video/api"
+    },
+    {
+      "id": "alibaba/wan-3.0-prime/reference-to-video",
+      "name": "Wan 3.0 Prime",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/wan-3.0-prime/reference-to-video/api"
+    },
+    {
+      "id": "alibaba/wan-3.0/reference-to-video",
+      "name": "Wan 3.0",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/wan-3.0/reference-to-video/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/v1.1/image-to-video",
+      "name": "Gemini Omni Flash 1.1 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/v1.1/image-to-video/api"
+    },
+    {
+      "id": "minimax/h3-max/camera-controls",
+      "name": "H3 Max Camera Controls",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max/camera-controls/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/image-to-video",
+      "name": "Kling O3 Image to Video [Pro]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/v3",
+      "name": "sync-3 Lipsync",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sync-lipsync/v3/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/video-to-video/edit",
+      "name": "Kling O3 Edit Video [Pro]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/pro/video-to-video/edit/api"
+    },
+    {
+      "id": "alibaba/wan-3.0/image-to-video",
+      "name": "Wan 3.0",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/wan-3.0/image-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/fast/image-to-video",
+      "name": "Seedance 2.0 Fast Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/fast/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/reference-to-video",
+      "name": "Kling O3 Reference to Video [Pro]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/pro/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/standard/image-to-video",
+      "name": "Kling O3 Image to Video [Pro]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/standard/image-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/fast/reference-to-video",
+      "name": "Seedance 2.0 Fast Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/fast/reference-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/text-to-video",
+      "name": "Seedance 2.0 Text to Video API",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/fast",
+      "name": "Veo 3.1 Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/fast/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seedance/v1/pro/image-to-video",
+      "name": "Seedance 1.0 Pro",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/image-to-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/image-to-video",
+      "name": "FLUX 3 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/merge-videos",
+      "name": "Ffmpeg Api",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ffmpeg-api/merge-videos/api"
+    },
+    {
+      "id": "fal-ai/kling-video/ai-avatar/v2/standard",
+      "name": "Kling AI Avatar v2 Standard",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/ai-avatar/v2/standard/api"
+    },
+    {
+      "id": "fal-ai/bytedance/omnihuman/v1.5",
+      "name": "Bytedance Omnihuman V1.5",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/omnihuman/v1.5/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/v1.1/reference-to-video",
+      "name": "Gemini Omni Flash 1.1 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/v1.1/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/turbo/pro/image-to-video",
+      "name": "Kling Video V3 Turbo Pro Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/turbo/pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/compose",
+      "name": "FFmpeg API Compose",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ffmpeg-api/compose/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/pro/motion-control",
+      "name": "Kling Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/pro/motion-control/api"
+    },
+    {
+      "id": "minimax/h3/text-to-video",
+      "name": "MiniMax H3 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/v2",
+      "name": "Sync Lipsync 2.0",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sync-lipsync/v2/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/image-to-video",
+      "name": "Gemini Omni Flash",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/standard/text-to-video",
+      "name": "Kling Video v3 Text to Video [Standard]",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/standard/text-to-video/api"
+    },
+    {
+      "id": "topaz/upscale/video/precision",
+      "name": "Topaz Upscale Video Precision",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/upscale/video/precision/api"
+    },
+    {
+      "id": "alibaba/wan-3.0-prime/image-to-video",
+      "name": "Wan 3.0 Prime",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/wan-3.0-prime/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1",
+      "name": "Veo 3.1",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.6/standard/motion-control",
+      "name": "Kling Video v2.6 Motion Control [Standard]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.6/standard/motion-control/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/turbo/standard/image-to-video",
+      "name": "Kling Video V3 Standard Turbo Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/turbo/standard/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.5-turbo/pro/text-to-video",
+      "name": "Kling v2.5 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-02/standard/image-to-video",
+      "name": "MiniMax Hailuo 02 [Standard] (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-02/standard/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.5-turbo/standard/image-to-video",
+      "name": "Kling Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/standard/image-to-video/api"
+    },
+    {
+      "id": "veed/fabric-1.0",
+      "name": "Fabric 1.0",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/fabric-1.0/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/standard/reference-to-video",
+      "name": "Kling O3 Reference to Video [Standard]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/standard/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/standard/motion-control",
+      "name": "Kling Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/standard/motion-control/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/mini/reference-to-video",
+      "name": "Seedance 2.0 Mini",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/mini/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.7/image-to-video",
+      "name": "Wan",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.7/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/ai-avatar/v2/pro",
+      "name": "Kling AI Avatar v2 Pro",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/ai-avatar/v2/pro/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seedance/v1/pro/fast/image-to-video",
+      "name": "Bytedance Seedance V1 Pro Fast Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/fast/image-to-video/api"
+    },
+    {
+      "id": "alibaba/wan-3.0/text-to-video",
+      "name": "Wan Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/wan-3.0/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/merge-audio-video",
+      "name": "Ffmpeg Api Merge Audio-Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ffmpeg-api/merge-audio-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/image-to-video/turbo",
+      "name": "Wan",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video/turbo/api"
+    },
+    {
+      "id": "fal-ai/bytedance-upscaler/upscale/video",
+      "name": "Bytedance Upscaler Upscale Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance-upscaler/upscale/video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/fast/text-to-video",
+      "name": "Seedance 2.0 Fast Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/fast/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v6/image-to-video",
+      "name": "PixVerse V6 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v6/image-to-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/edit-video",
+      "name": "Flux 3 FAST Edit Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/edit-video/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/v1.1/edit",
+      "name": "Gemini Omni Flash 1.1 Edit",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/v1.1/edit/api"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/v2/pro",
+      "name": "Sync Lipsync",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sync-lipsync/v2/pro/api"
+    },
+    {
+      "id": "fal-ai/wan-25-preview/image-to-video",
+      "name": "Wan 2.5 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-25-preview/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/lipsync/audio-to-video",
+      "name": "Kling LipSync Audio-to-Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/lipsync/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/latentsync",
+      "name": "LatentSync",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/latentsync/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/image-to-video",
+      "name": "Wan v2.2 A14B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/mini/image-to-video",
+      "name": "Seedance 2.0 Mini Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/mini/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/trim-video",
+      "name": "Workflow Utilities Trim Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/trim-video/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/text-to-video",
+      "name": "Grok Imagine Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/text-to-video/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/reference-to-video",
+      "name": "Gemini Omni Flash",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/seedvr/upscale/video",
+      "name": "SeedVR2",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/seedvr/upscale/video/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/v1.1/text-to-video",
+      "name": "Gemini Omni Flash 1.1 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/v1.1/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/heygen/avatar4/image-to-video",
+      "name": "Heygen",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/avatar4/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/mmaudio-v2",
+      "name": "MMAudio V2",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/mmaudio-v2/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/text-to-video",
+      "name": "Flux 3 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/first-last-frame-to-video",
+      "name": "Veo 3.1",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/first-last-frame-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/fast/first-last-frame-to-video",
+      "name": "Veo 3.1 Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/fast/first-last-frame-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/lite",
+      "name": "Veo3.1 Lite Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/lite/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seedance/v1.5/pro/text-to-video",
+      "name": "Bytedance Seedance V1.5 Pro Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1.5/pro/text-to-video/api"
+    },
+    {
+      "id": "veed/lipsync",
+      "name": "Lipsync",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/lipsync/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.6/pro/motion-control",
+      "name": "Kling Video v2.6 Motion Control [Pro]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.6/pro/motion-control/api"
+    },
+    {
+      "id": "google/gemini-omni-flash",
+      "name": "Gemini Omni Flash",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v2.6/pro/text-to-video",
+      "name": "Kling Video v2.6 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v2.6/pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/reference-to-video",
+      "name": "Veo 3.1",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/standard/video-to-video/edit",
+      "name": "Kling O3 Edit Video [Standard]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/standard/video-to-video/edit/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/4k/image-to-video",
+      "name": "Kling Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/4k/image-to-video/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/v1.5/reference-to-video",
+      "name": "Grok Imagine Video 1.5 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/v1.5/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/image-to-video/fast",
+      "name": "LTX 2.3 Video Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/image-to-video/fast/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/reference-to-video",
+      "name": "Grok Imagine Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/v3/image-to-video",
+      "name": "sync-3 Avatar Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sync-lipsync/v3/image-to-video/api"
+    },
+    {
+      "id": "veed/subtitles",
+      "name": "Subtitles",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/subtitles/api"
+    },
+    {
+      "id": "fal-ai/sync-lipsync",
+      "name": "sync.so -- lipsync 1.9.0-beta",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sync-lipsync/api"
+    },
+    {
+      "id": "alibaba/wan-3.0-prime/text-to-video",
+      "name": "Wan 3.0 Prime",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/wan-3.0-prime/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-14b/animate/replace",
+      "name": "Wan-2.2 Animate Replace",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace/api"
+    },
+    {
+      "id": "veed/lipsync/v2",
+      "name": "VEED Lipsync",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/lipsync/v2/api"
+    },
+    {
+      "id": "google/gemini-omni-flash/edit",
+      "name": "Gemini Omni Flash",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-omni-flash/edit/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/first-last-frame-to-video",
+      "name": "Flux 3 First Last Frame to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/first-last-frame-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/video-to-video/reference",
+      "name": "Kling O3 Reference Video to Video [Pro]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/pro/video-to-video/reference/api"
+    },
+    {
+      "id": "fal-ai/wan-i2v",
+      "name": "Wan-2.1 Image-to-Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-i2v/api"
+    },
+    {
+      "id": "fal-ai/depth-anything-video",
+      "name": "Depth Anything Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/depth-anything-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/lite/first-last-frame-to-video",
+      "name": "Veo3.1 Lite FLF",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/lite/first-last-frame-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/image-to-video",
+      "name": "Kling O1 First Frame Last Frame to Video [Pro]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/image-to-video/api"
+    },
+    {
+      "id": "wan/v2.6/image-to-video",
+      "name": "Wan v2.6 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/wan/v2.6/image-to-video/api"
+    },
+    {
+      "id": "lightricks/ltx-2.5/image-to-video/fast",
+      "name": "LTX 2.5 Image to Video Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/lightricks/ltx-2.5/image-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/video-to-video/edit",
+      "name": "Kling O1 Edit Video [Pro]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/edit/api"
+    },
+    {
+      "id": "lightricks/ltx-2.5/image-to-video/pro",
+      "name": "LTX 2.5 Image to Video Pro",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/lightricks/ltx-2.5/image-to-video/pro/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3-fast/standard/image-to-video",
+      "name": "MiniMax Hailuo 2.3 Fast [Standard] (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3-fast/standard/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-02/pro/image-to-video",
+      "name": "MiniMax Hailuo 02 [Pro] (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-02/pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v6/text-to-video",
+      "name": "PixVerse V6 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v6/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/image-to-video",
+      "name": "LTX 2.3 Video Pro",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/pro/image-to-video",
+      "name": "MiniMax Hailuo 2.3 [Pro] (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3/pro/image-to-video/api"
+    },
+    {
+      "id": "topaz/upscale/video/generative",
+      "name": "Topaz Upscale Video Generative",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/upscale/video/generative/api"
+    },
+    {
+      "id": "alibaba/happy-horse/image-to-video",
+      "name": "Happy Horse",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/image-to-video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/mini/text-to-video",
+      "name": "Seedance 2.0 Mini Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/mini/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/pro/text-to-video",
+      "name": "Kling O3 Text to Video [Pro]",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/fast/reference-to-video",
+      "name": "Veo 3.1 Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/fast/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/turbo/standard/text-to-video",
+      "name": "Kling Video V3 Standard Turbo Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/turbo/standard/text-to-video/api"
+    },
+    {
+      "id": "bria/video/background-removal/v3",
+      "name": "Bria's VRMBG 3.0",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/background-removal/v3/api"
+    },
+    {
+      "id": "fal-ai/pixverse/lipsync",
+      "name": "PixVerse Lipsync",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/lipsync/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-02/standard/text-to-video",
+      "name": "MiniMax Hailuo 02 [Standard] (Text to Video)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-02/standard/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/standard/image-to-video",
+      "name": "MiniMax Hailuo 2.3 [Standard] (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3/standard/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/4k/image-to-video",
+      "name": "Kling Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/4k/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/scale-video",
+      "name": "Workflow Utilities Scale Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/scale-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/standard/text-to-video",
+      "name": "Kling O3 Text to Video [Standard]",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/standard/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/auto-subtitle",
+      "name": "Workflow Utilities Auto Subtitle",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/auto-subtitle/api"
+    },
+    {
+      "id": "luma/agent/ray/v3.2/image-to-video",
+      "name": "Luma Ray 3.2 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/luma/agent/ray/v3.2/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/text-to-video/fast",
+      "name": "LTX 2.3 Video Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/text-to-video/fast/api"
+    },
+    {
+      "id": "alibaba/happy-horse/video-edit",
+      "name": "Happy Horse Video Edit",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/video-edit/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/text-to-video/draft",
+      "name": "Flux 3 Text To Video Draft",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/text-to-video/draft/api"
+    },
+    {
+      "id": "alibaba/happy-horse/v1.1/image-to-video",
+      "name": "Happy Horse 1.1 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/v1.1/image-to-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-video-upscale",
+      "name": "Flux Video Upscale",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-video-upscale/api"
+    },
+    {
+      "id": "decart/lucy-2-5/realtime",
+      "name": "Lucy 2.5",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/decart/lucy-2-5/realtime/api"
+    },
+    {
+      "id": "fal-ai/creatify/aurora",
+      "name": "Creatify Aurora",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/creatify/aurora/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/v1.5/text-to-video",
+      "name": "Grok Imagine Video 1.5 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/v1.5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.7/text-to-video",
+      "name": "Wan Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.7/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/birefnet/v2/video",
+      "name": "Birefnet",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/birefnet/v2/video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-5b/image-to-video",
+      "name": "Wan v2.2 5B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-5b/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-25-preview/text-to-video",
+      "name": "Wan 2.5 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-25-preview/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-14b/animate/move",
+      "name": "Wan-2.2 Animate Move",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/move/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.7/edit-video",
+      "name": "Wan",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.7/edit-video/api"
+    },
+    {
+      "id": "veed/video-background-removal",
+      "name": "Video Background Removal",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/video-background-removal/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/text-to-video",
+      "name": "Wan-2.2 Text-to-Video A14B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/text-to-video/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/edit-video",
+      "name": "Grok Imagine Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/edit-video/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seedance/v1/pro/text-to-video",
+      "name": "Seedance 1.0 Pro",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/turbo/pro/text-to-video",
+      "name": "Kling Video V3 Turbo Pro Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/turbo/pro/text-to-video/api"
+    },
+    {
+      "id": "alibaba/happy-horse/reference-to-video",
+      "name": "Happy Horse",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.7/reference-to-video",
+      "name": "Wan 2.7 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.7/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/standard/video-to-video/reference",
+      "name": "Kling O3 Reference Video to Video [Standard]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/standard/video-to-video/reference/api"
+    },
+    {
+      "id": "fal-ai/bytedance/omnihuman",
+      "name": "OmniHuman",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/omnihuman/api"
+    },
+    {
+      "id": "fal-ai/pixverse/swap",
+      "name": "PixVerse Swap",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/swap/api"
+    },
+    {
+      "id": "veed/video-background-removal/fast",
+      "name": "Video Background Removal",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/video-background-removal/fast/api"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/images-to-video",
+      "name": "Ffmpeg Api Images to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ffmpeg-api/images-to-video/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seedance/v1/pro/fast/text-to-video",
+      "name": "Bytedance Seedance V1 Pro Fast Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/fast/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/standard/text-to-video",
+      "name": "MiniMax Hailuo 2.3 [Standard] (Text to Video)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3/standard/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/4k/reference-to-video",
+      "name": "Kling Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/4k/reference-to-video/api"
+    },
+    {
+      "id": "alibaba/happy-horse/text-to-video",
+      "name": "Happy Horse",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/sam-3/video",
+      "name": "Sam 3",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-3/video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/4k/video-to-video/reference",
+      "name": "Kling Video 4K Video to Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/4k/video-to-video/reference/api"
+    },
+    {
+      "id": "fal-ai/bytedance/dreamactor/v2",
+      "name": "Bytedance Dreamactor V2",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/dreamactor/v2/api"
+    },
+    {
+      "id": "fal-ai/infinitalk",
+      "name": "Infinitalk",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/infinitalk/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/standard/image-to-video",
+      "name": "Kling O1 First Frame Last Frame to Video [Standard]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/standard/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/reference-to-video",
+      "name": "Kling O1 Reference Image to Video [Pro]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/text-to-video/turbo",
+      "name": "Wan",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/text-to-video/turbo/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/4k/video-to-video/edit",
+      "name": "Kling Video 4K Video to Video Edit",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/4k/video-to-video/edit/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/image-to-video/draft",
+      "name": "Flux 3 Image To Video Draft",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/image-to-video/draft/api"
+    },
+    {
+      "id": "fal-ai/video-upscaler",
+      "name": "Video Upscaler",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/video-upscaler/api"
+    },
+    {
+      "id": "alibaba/happy-horse/v1.1/reference-to-video",
+      "name": "Happy Horse 1.1 Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/v1.1/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-02-fast/image-to-video",
+      "name": "Minimax",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-02-fast/image-to-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/extend-video",
+      "name": "Flux 3 Extend Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/extend-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/c1/image-to-video",
+      "name": "PixVerse C1 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/c1/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/image-to-video",
+      "name": "Pika Image to Video (v2.2)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2.2/image-to-video/api"
+    },
+    {
+      "id": "bria/video/background-removal",
+      "name": "Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/background-removal/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v6/transition",
+      "name": "PixVerse V6 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v6/transition/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/text-to-video",
+      "name": "LTX Video 2.3 Pro",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2/image-to-video",
+      "name": "Luma Ray 2 (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2/image-to-video/api"
+    },
+    {
+      "id": "wan/v2.6/text-to-video",
+      "name": "Wan v2.6 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/wan/v2.6/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/rife/video",
+      "name": "RIFE",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/rife/video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/reframe",
+      "name": "Ltx 2.3 ",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/reframe/api"
+    },
+    {
+      "id": "wan/v2.6/image-to-video/flash",
+      "name": "V2.6",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/wan/v2.6/image-to-video/flash/api"
+    },
+    {
+      "id": "fal-ai/vidu/q3/image-to-video",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q3/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/flashvsr/upscale/video",
+      "name": "Flashvsr",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/flashvsr/upscale/video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v3/4k/text-to-video",
+      "name": "Kling Video V3 Text to Video 4K",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v3/4k/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video",
+      "name": "MiniMax Hailuo 2.3 Fast [Pro] (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5/image-to-video",
+      "name": "PixVerse V5 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/image-to-video",
+      "name": "PixVerse V5.5 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01",
+      "name": "MiniMax (Hailuo AI) Video 01",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01/api"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/text-to-video",
+      "name": "Pika Text to Video (v2.2)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2.2/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-video",
+      "name": "LTX Video (preview)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/keyframes-to-video",
+      "name": "Flux 3 Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/keyframes-to-video/api"
+    },
+    {
+      "id": "xai/grok-imagine-video/extend-video",
+      "name": "Grok Imagine Extend Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/grok-imagine-video/extend-video/api"
+    },
+    {
+      "id": "fal-ai/void-video-inpainting",
+      "name": "Void Video Inpainting",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/void-video-inpainting/api"
+    },
+    {
+      "id": "minimax/h3/reference-to-video/lora",
+      "name": "MiniMax H3 Reference to Video LoRA",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3/reference-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/vidu/q3/image-to-video/turbo",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q3/image-to-video/turbo/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/dubbing",
+      "name": "ElevenLabs Dubbing",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/dubbing/api"
+    },
+    {
+      "id": "topaz/upscale/video/creative",
+      "name": "Topaz Upscale Video Creative",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/upscale/video/creative/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5/transition",
+      "name": "PixVerse V5 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5/transition/api"
+    },
+    {
+      "id": "pixelcut/video-background-removal",
+      "name": "Pixelcut Video Background Removal",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/pixelcut/video-background-removal/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/us/reference-to-video",
+      "name": "Seedance 2.0 US Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/us/reference-to-video/api"
+    },
+    {
+      "id": "luma/agent/ray/v3.2/video-to-video",
+      "name": "Luma Ray 3.2 Video to Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/luma/agent/ray/v3.2/video-to-video/api"
+    },
+    {
+      "id": "mirelo-ai/sfx-v1.5/video-to-video",
+      "name": "Mirelo SFX V1.5",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx-v1.5/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/sam-3/video-rle",
+      "name": "Sam 3",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-3/video-rle/api"
+    },
+    {
+      "id": "lightricks/ltx-2.5/text-to-video/fast",
+      "name": "Ltx 2.5 Text to Video Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/lightricks/ltx-2.5/text-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/image-to-video",
+      "name": "PixVerse V4.5 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4.5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1/pro/ai-avatar",
+      "name": "Kling AI Avatar Pro",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1/pro/ai-avatar/api"
+    },
+    {
+      "id": "fal-ai/heygen/v3/lipsync/precision",
+      "name": "Heygen Lipsync - Precision",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v3/lipsync/precision/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01/image-to-video",
+      "name": "MiniMax (Hailuo AI) Video 01",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/extend-video",
+      "name": "Veo 3.1",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/extend-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-video/image-to-video",
+      "name": "LTX Video (preview)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/c1/reference-to-video",
+      "name": "PixVerse C1 Reference To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/c1/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/standard/video-to-video/edit",
+      "name": "Kling O1 Edit Video [Standard]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/standard/video-to-video/edit/api"
+    },
+    {
+      "id": "fal-ai/wan-t2v",
+      "name": "Wan-2.1 Text-to-Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-t2v/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5/text-to-video",
+      "name": "PixVerse V5 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/veo3.1/fast/extend-video",
+      "name": "Veo 3.1 Fast",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/veo3.1/fast/extend-video/api"
+    },
+    {
+      "id": "veed/fabric-1.0/fast",
+      "name": "Fabric 1.0 Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/fabric-1.0/fast/api"
+    },
+    {
+      "id": "fal-ai/ltxv-13b-098-distilled/image-to-video",
+      "name": "LTX-Video 13B 0.9.8 Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltxv-13b-098-distilled/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/musetalk",
+      "name": "MuseTalk",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/musetalk/api"
+    },
+    {
+      "id": "luma/agent/ray/v3.2/reframe",
+      "name": "Luma Ray 3.2 Reframe",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/luma/agent/ray/v3.2/reframe/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-5b/text-to-video",
+      "name": "Wan v2.2 5B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-5b/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-flf2v",
+      "name": "Wan-2.1 First-Last-Frame-to-Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-flf2v/api"
+    },
+    {
+      "id": "fal-ai/sadtalker",
+      "name": "Sad Talker",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sadtalker/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/image-to-video/lora",
+      "name": "Wan v2.2 A14B Image-to-Video A14B with LoRAs",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/flashtalk",
+      "name": "Flashtalk",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/flashtalk/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-13b-distilled/image-to-video",
+      "name": "LTX Video-0.9.7 13B Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled/image-to-video/api"
+    },
+    {
+      "id": "alibaba/happy-horse/v1.1/text-to-video",
+      "name": "Happy Horse 1.1 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/happy-horse/v1.1/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/video-to-video/reference",
+      "name": "Kling O1 Reference Video to Video [Pro]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/reference/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/audio-to-video",
+      "name": "LTX 2.3 Video Pro",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1/standard/ai-avatar",
+      "name": "Kling AI Avatar",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1/standard/ai-avatar/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/effects",
+      "name": "PixVerse V5.5 Effects",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.5/effects/api"
+    },
+    {
+      "id": "fal-ai/sam-3-1/video",
+      "name": "Sam 3 1",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-3-1/video/api"
+    },
+    {
+      "id": "lightricks/ltx-2.5/text-to-video/pro",
+      "name": "Ltx 2.5 Text to Video Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/lightricks/ltx-2.5/text-to-video/pro/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/us/image-to-video",
+      "name": "Seedance 2.0 US Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/us/image-to-video/api"
+    },
+    {
+      "id": "luma/agent/ray/v3.2/text-to-video",
+      "name": "Luma Ray 3.2 Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/luma/agent/ray/v3.2/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-2.3/pro/text-to-video",
+      "name": "MiniMax Hailuo 2.3 [Pro] (Text to Video)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3/pro/text-to-video/api"
+    },
+    {
+      "id": "minimax/h3/image-to-video/lora",
+      "name": "MiniMax H3 Image to Video LoRA",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3/image-to-video/lora/api"
+    },
+    {
+      "id": "sonilo/v1.1/video-to-video-music",
+      "name": "V1.1 Video to Video Music",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/sonilo/v1.1/video-to-video-music/api"
+    },
+    {
+      "id": "fal-ai/ben/v2/video",
+      "name": "Ben-Video-Bg-Rm",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ben/v2/video/api"
+    },
+    {
+      "id": "fal-ai/live-portrait",
+      "name": "Live Portrait",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/live-portrait/api"
+    },
+    {
+      "id": "fal-ai/wan-motion",
+      "name": "Wan Motion",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-motion/api"
+    },
+    {
+      "id": "fal-ai/sam-3-1/video-rle",
+      "name": "Sam 3 1",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-3-1/video-rle/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2",
+      "name": "Luma Ray 2",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2/api"
+    },
+    {
+      "id": "topaz/interpolate/video",
+      "name": "Topaz Interpolate Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/interpolate/video/api"
+    },
+    {
+      "id": "bytedance/seedance-2.0/us/text-to-video",
+      "name": "Seedance 2.0 US Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seedance-2.0/us/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-13b-distilled",
+      "name": "LTX Video-0.9.7 13B Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2-flash/image-to-video",
+      "name": "Luma Ray 2 Flash (Image to Video)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2-flash/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/hailuo-02/pro/text-to-video",
+      "name": "MiniMax Hailuo 02 [Pro] (Text to Video)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/hailuo-02/pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/inpainting",
+      "name": "Wan VACE 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-14b/inpainting/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/first-last-frame-to-video/draft",
+      "name": "Flux 3 First Last Frame to Video Draft",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/first-last-frame-to-video/draft/api"
+    },
+    {
+      "id": "fal-ai/sync-lipsync/react-1",
+      "name": "Sync React-1",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sync-lipsync/react-1/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video-foley",
+      "name": "Hunyuan Video Foley",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video-foley/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2/modify",
+      "name": "Luma Ray 2 Modify",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2/modify/api"
+    },
+    {
+      "id": "fal-ai/id-v2v",
+      "name": "ID-V2V",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/id-v2v/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/extend-video",
+      "name": "LTX Video 2.3 Pro",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/extend-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v6/extend",
+      "name": "PixVerse V6 Extend",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v6/extend/api"
+    },
+    {
+      "id": "fal-ai/vidu/q3/text-to-video",
+      "name": "Vidu",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q3/text-to-video/api"
+    },
+    {
+      "id": "mirelo-ai/sfx1.6/video-to-video",
+      "name": "Mirelo SFX1.6",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx1.6/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/heygen/v2/translate/speed",
+      "name": "Heygen",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v2/translate/speed/api"
+    },
+    {
+      "id": "decart/lucy-restyle",
+      "name": "Lucy Restyle",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/decart/lucy-restyle/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/image-to-video",
+      "name": "LTX-2 19B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/image-to-video",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/standard/reference-to-video",
+      "name": "Kling O1 Reference Image to Video [Standard]",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/standard/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video",
+      "name": "Hunyuan Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01-live/image-to-video",
+      "name": "MiniMax (Hailuo AI) Video 01",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01-live/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/c1/text-to-video",
+      "name": "PixVerse C1 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/c1/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/auto-caption",
+      "name": "Auto-Captioner",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/auto-caption/api"
+    },
+    {
+      "id": "fal-ai/heygen/v3/video-agent",
+      "name": "Heygen Video Agent",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v3/video-agent/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-14b/speech-to-video",
+      "name": "Wan-2.2 Speech-to-Video 14B",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-14b/speech-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/text-to-video",
+      "name": "PixVerse V4.5 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4.5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/heygen/v2/translate/precision",
+      "name": "Heygen",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v2/translate/precision/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/image-to-video",
+      "name": "LTX-2.3 22B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/image-to-video/api"
+    },
+    {
+      "id": "clarityai/crystal-video-upscaler",
+      "name": "Crystal Upscaler [Video]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/clarityai/crystal-video-upscaler/api"
+    },
+    {
+      "id": "minimax/h3/text-to-video/lora",
+      "name": "MiniMax H3 Text to Video LoRA",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3/text-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/wan-22-vace-fun-a14b/inpainting",
+      "name": "Wan 2.2 VACE Fun A14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-22-vace-fun-a14b/inpainting/api"
+    },
+    {
+      "id": "fal-ai/film/video",
+      "name": "FILM",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/film/video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o3/4k/text-to-video",
+      "name": "Kling Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o3/4k/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/image-to-video",
+      "name": "LTX-2 19B Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/render-to-real",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/render-to-real/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/distilled/image-to-video/720p",
+      "name": "LongCat Video Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/distilled/image-to-video/720p/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b",
+      "name": "Wan VACE 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-14b/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/video-to-video",
+      "name": "Wan",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-effects",
+      "name": "Wan Effects",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-effects/api"
+    },
+    {
+      "id": "fal-ai/vidu/q3/reference-to-video/mix",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q3/reference-to-video/mix/api"
+    },
+    {
+      "id": "bria/video/erase/mask",
+      "name": "Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/erase/mask/api"
+    },
+    {
+      "id": "lightricks/ltx-2.5/audio-to-video/pro",
+      "name": "Ltx 2.5 Audio to Video Pro",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/lightricks/ltx-2.5/audio-to-video/pro/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/image-to-video",
+      "name": "Ltx 2.3 Quality",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-5b/text-to-video/fast-wan",
+      "name": "Wan",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-5b/text-to-video/fast-wan/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2-flash/reframe",
+      "name": "Luma Ray 2 Flash Reframe",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2-flash/reframe/api"
+    },
+    {
+      "id": "fal-ai/bernini-r/edit-video",
+      "name": "Bernini-R Edit Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bernini-r/edit-video/api"
+    },
+    {
+      "id": "veed/video-background-removal/green-screen",
+      "name": "Video Background Removal",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/video-background-removal/green-screen/api"
+    },
+    {
+      "id": "sonilo/v1.1/video-to-video-sound-effects",
+      "name": "V1.1 Video to Video Sound Effects",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/sonilo/v1.1/video-to-video-sound-effects/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/inpaint",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/inpaint/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/reference-video-to-video",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/reference-video-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01-live",
+      "name": "MiniMax (Hailuo AI) Video 01 Live",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01-live/api"
+    },
+    {
+      "id": "fal-ai/longcat-single-avatar/image-audio-to-video",
+      "name": "Longcat Single Avatar",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-single-avatar/image-audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/stable-video",
+      "name": "High Quality Stable Video Diffusion",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-video/api"
+    },
+    {
+      "id": "fal-ai/heygen/avatar5/digital-twin",
+      "name": "Heygen v5 Digital Twin",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/avatar5/digital-twin/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/outpaint",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/outpaint/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/text-to-video",
+      "name": "LTX-2.3 22B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/transition",
+      "name": "PixVerse V5.5 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.5/transition/api"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/pikaframes",
+      "name": "Pika",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2.2/pikaframes/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/distilled/image-to-video/480p",
+      "name": "LongCat Video Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/distilled/image-to-video/480p/api"
+    },
+    {
+      "id": "fal-ai/id-v2v/relight",
+      "name": "ID-V2V Relight",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/id-v2v/relight/api"
+    },
+    {
+      "id": "fal-ai/wan-pro/image-to-video",
+      "name": "Wan-2.1 Pro Image-to-Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-pro/image-to-video/api"
+    },
+    {
+      "id": "bria/video/background-removal/green-screen-despill",
+      "name": "Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/background-removal/green-screen-despill/api"
+    },
+    {
+      "id": "decart/lucy-edit/pro",
+      "name": "Lucy Edit [Pro]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/decart/lucy-edit/pro/api"
+    },
+    {
+      "id": "fal-ai/vidu/q1/reference-to-video",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q1/reference-to-video/api"
+    },
+    {
+      "id": "topaz/sdr-to-hdr/video",
+      "name": "Topaz Sdr To Hdr Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/sdr-to-hdr/video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/transition",
+      "name": "PixVerse V4.5 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4.5/transition/api"
+    },
+    {
+      "id": "fal-ai/vidu/q2/reference-to-video/pro",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q2/reference-to-video/pro/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video-image-to-video",
+      "name": "Hunyuan Video Image-to-Video Inference",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video-image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.5/text-to-video",
+      "name": "PixVerse V5.5 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/vidu/q3/text-to-video/turbo",
+      "name": "Vidu",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q3/text-to-video/turbo/api"
+    },
+    {
+      "id": "fal-ai/sam2/video",
+      "name": "Segment Anything Model 2",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam2/video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3/retake-video",
+      "name": "LTX Video 2.3 Pro",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3/retake-video/api"
+    },
+    {
+      "id": "lightricks/ltx-2.5/audio-to-video/fast",
+      "name": "Ltx 2.5 Audio to Video Fast",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/lightricks/ltx-2.5/audio-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/vidu/q2/image-to-video/turbo",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q2/image-to-video/turbo/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/extend-video",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/extend-video/api"
+    },
+    {
+      "id": "bria/video/erase/prompt",
+      "name": "Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/erase/prompt/api"
+    },
+    {
+      "id": "fal-ai/thinksound",
+      "name": "ThinkSound",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/thinksound/api"
+    },
+    {
+      "id": "fal-ai/wan-22-vace-fun-a14b/depth",
+      "name": "Wan 2.2 VACE Fun A14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-22-vace-fun-a14b/depth/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/text-to-video",
+      "name": "LTX-2 19B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/text-to-video/api"
+    },
+    {
+      "id": "mirage-api/avatar-x/reference-to-video",
+      "name": "Mirage Avatar X",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirage-api/avatar-x/reference-to-video/api"
+    },
+    {
+      "id": "wan/v2.6/reference-to-video",
+      "name": "Wan v2.6 Reference to Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/wan/v2.6/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-apps/video-edit",
+      "name": "Wan VACE Video Edit",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-apps/video-edit/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/effects",
+      "name": "PixVerse V4.5 Effects",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4.5/effects/api"
+    },
+    {
+      "id": "fal-ai/ovi/image-to-video",
+      "name": "Ovi",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ovi/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/image-to-video",
+      "name": "PixVerse V4 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/heygen/v3/lipsync/speed",
+      "name": "Heygen Lipsync - Speed",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v3/lipsync/speed/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.6/image-to-video",
+      "name": "PixVerse V5.6 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.6/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/outpainting",
+      "name": "Wan VACE 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-14b/outpainting/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/audio-to-video",
+      "name": "Ltx 2.3 Quality",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/audio-to-video/api"
+    },
+    {
+      "id": "nvidia/cosmos-3-super/image-to-video",
+      "name": "Cosmos 3 Super Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/nvidia/cosmos-3-super/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/vidu/start-end-to-video",
+      "name": "Vidu Start-End to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/start-end-to-video/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2-flash",
+      "name": "Luma Ray 2 Flash",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2-flash/api"
+    },
+    {
+      "id": "fal-ai/kandinsky5-pro/image-to-video",
+      "name": "Kandinsky5 Pro",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kandinsky5-pro/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-a14b/text-to-video/lora",
+      "name": "Wan-2.2 Text-to-Video A14B with LoRAs",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-a14b/text-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/depth",
+      "name": "Wan VACE 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-14b/depth/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/blend-video",
+      "name": "Workflow Utilities Blend Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/blend-video/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video-v1.5/text-to-video",
+      "name": "Hunyuan Video V1.5",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video-v1.5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2/reframe",
+      "name": "Luma Ray 2 Reframe",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2/reframe/api"
+    },
+    {
+      "id": "fal-ai/pixverse/c1/transition",
+      "name": "PixVerse C1 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/c1/transition/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/text-to-video",
+      "name": "LTX-2 19B Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.6/standard/effects",
+      "name": "Kling 1.6",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1.6/standard/effects/api"
+    },
+    {
+      "id": "fal-ai/ltxv-13b-098-distilled",
+      "name": "LTX-Video 13B 0.9.8 Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltxv-13b-098-distilled/api"
+    },
+    {
+      "id": "fal-ai/pixverse/extend",
+      "name": "PixVerse Extend",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/extend/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/reverse-video",
+      "name": "Workflow Utilities Reverse Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/reverse-video/api"
+    },
+    {
+      "id": "fal-ai/ovi",
+      "name": "Ovi Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ovi/api"
+    },
+    {
+      "id": "fal-ai/kling-video/o1/standard/video-to-video/reference",
+      "name": "Kling O1 Reference Video to Video [Standard]",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/o1/standard/video-to-video/reference/api"
+    },
+    {
+      "id": "fal-ai/scail-2",
+      "name": "Scail 2",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/scail-2/api"
+    },
+    {
+      "id": "fal-ai/pixverse/sound-effects",
+      "name": "PixVerse Sound Effects",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/sound-effects/api"
+    },
+    {
+      "id": "fal-ai/vidu/q2/image-to-video/pro",
+      "name": "Vidu",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q2/image-to-video/pro/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/audio-to-video",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/kandinsky5-pro/text-to-video",
+      "name": "Kandinsky5 Pro",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kandinsky5-pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/echomimic-v3",
+      "name": "EchoMimic V3",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/echomimic-v3/api"
+    },
+    {
+      "id": "fal-ai/dwpose/video",
+      "name": "DWPose Pose Prediction",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/dwpose/video/api"
+    },
+    {
+      "id": "fal-ai/infinitalk/video-to-video",
+      "name": "Infinitalk",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/infinitalk/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5/effects",
+      "name": "PixVerse V5 Effects",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5/effects/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/distilled/text-to-video/720p",
+      "name": "LongCat Video Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/distilled/text-to-video/720p/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-apps/long-reframe",
+      "name": "Wan 2.1 VACE Long Reframe",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-apps/long-reframe/api"
+    },
+    {
+      "id": "fal-ai/framepack",
+      "name": "Framepack",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/framepack/api"
+    },
+    {
+      "id": "fal-ai/controlfoley",
+      "name": "Controlfoley",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/controlfoley/api"
+    },
+    {
+      "id": "topaz/deblur/video",
+      "name": "Topaz Deblur Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/deblur/video/api"
+    },
+    {
+      "id": "fal-ai/bernini-r/reference-to-video",
+      "name": "Bernini-R Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bernini-r/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/fast-svd-lcm",
+      "name": "Stable Video Diffusion Turbo",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-svd-lcm/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/video-to-video",
+      "name": "LTX-2 19B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/video-to-video/api"
+    },
+    {
+      "id": "veed/avatars/text-to-video",
+      "name": "Avatars",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/avatars/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/audio-to-video",
+      "name": "LTX-2.3 22B",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-v095",
+      "name": "LTX Video-0.9.5",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-v095/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/keyframes-to-video/draft",
+      "name": "Flux 3 Keyframes To Video Draft",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/keyframes-to-video/draft/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/text-to-video",
+      "name": "Ltx 2.3 Quality",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/amt-interpolation/frame-interpolation",
+      "name": "AMT Frame Interpolation",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/amt-interpolation/frame-interpolation/api"
+    },
+    {
+      "id": "fal-ai/vidu/q1/start-end-to-video",
+      "name": "Vidu Start End to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q1/start-end-to-video/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video-v1.5/image-to-video",
+      "name": "Hunyuan Video V1.5",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video-v1.5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/text-to-video/fast",
+      "name": "PixVerse V4.5 Text To Video Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4.5/text-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/vidu/q1/image-to-video",
+      "name": "Vidu Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q1/image-to-video/api"
+    },
+    {
+      "id": "bria/bria_video_eraser/erase/prompt",
+      "name": "Bria Video Eraser",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/bria_video_eraser/erase/prompt/api"
+    },
+    {
+      "id": "fal-ai/vidu/reference-to-video",
+      "name": "Vidu Reference to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/reference-to-video/api"
+    },
+    {
+      "id": "fal-ai/krea-wan-14b/video-to-video",
+      "name": "Krea Wan 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/krea-wan-14b/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/cogvideox-5b",
+      "name": "CogVideoX-5B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cogvideox-5b/api"
+    },
+    {
+      "id": "cassetteai/video-sound-effects-generator",
+      "name": "Video Sound Effects Generator",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/cassetteai/video-sound-effects-generator/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/image-to-video/720p",
+      "name": "LongCat Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/image-to-video/720p/api"
+    },
+    {
+      "id": "fal-ai/flashhead",
+      "name": "Flashhead",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/flashhead/api"
+    },
+    {
+      "id": "veed/avatars/audio-to-video",
+      "name": "Avatars",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/avatars/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/vidu/q2/text-to-video",
+      "name": "Vidu",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q2/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/text-to-video",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ai-avatar/single-text",
+      "name": "AI Avatar Single Text",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ai-avatar/single-text/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01-subject-reference",
+      "name": "MiniMax (Hailuo AI) Video 01 Subject Reference",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01-subject-reference/api"
+    },
+    {
+      "id": "decart/lucy2-vton/realtime",
+      "name": "Lucy 2.1 VTON Realtime",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/decart/lucy2-vton/realtime/api"
+    },
+    {
+      "id": "fal-ai/kandinsky5/text-to-video/distill",
+      "name": "Kandinsky5",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kandinsky5/text-to-video/distill/api"
+    },
+    {
+      "id": "fal-ai/vidu/image-to-video",
+      "name": "Vidu Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/luma-dream-machine/ray-2-flash/modify",
+      "name": "Luma Ray 2 Flash Modify",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/luma-dream-machine/ray-2-flash/modify/api"
+    },
+    {
+      "id": "fal-ai/lightx/relight",
+      "name": "Lightx",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/lightx/relight/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/hdr",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/hdr/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.6/text-to-video",
+      "name": "PixVerse V5.6 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.6/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/effects",
+      "name": "PixVerse V4 Effects",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4/effects/api"
+    },
+    {
+      "id": "fal-ai/pika/v2.2/pikascenes",
+      "name": "Pika Scenes (v2.2)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2.2/pikascenes/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/reframe",
+      "name": "Wan VACE 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-14b/reframe/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-13b-distilled/multiconditioning",
+      "name": "LTX Video-0.9.7 13B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled/multiconditioning/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/distilled/text-to-video/480p",
+      "name": "LongCat Video Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/distilled/text-to-video/480p/api"
+    },
+    {
+      "id": "fal-ai/infinitalk/single-text",
+      "name": "Infinitalk",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/infinitalk/single-text/api"
+    },
+    {
+      "id": "fal-ai/amt-interpolation",
+      "name": "AMT Interpolation",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/amt-interpolation/api"
+    },
+    {
+      "id": "fal-ai/ai-avatar/multi",
+      "name": "AI Avatar Multi",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ai-avatar/multi/api"
+    },
+    {
+      "id": "fal-ai/bernini-r/reference-edit-video",
+      "name": "Bernini-R Reference Edit Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bernini-r/reference-edit-video/api"
+    },
+    {
+      "id": "moonvalley/marey/i2v",
+      "name": "Marey Realism V1.5",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/moonvalley/marey/i2v/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/text-to-video/720p",
+      "name": "LongCat Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/text-to-video/720p/api"
+    },
+    {
+      "id": "fal-ai/kandinsky5/text-to-video",
+      "name": "Kandinsky5",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kandinsky5/text-to-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/extend-video/draft",
+      "name": "Flux 3 Extend Video Draft",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/extend-video/draft/api"
+    },
+    {
+      "id": "fal-ai/editto",
+      "name": "Editto",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/editto/api"
+    },
+    {
+      "id": "fal-ai/cogvideox-5b/image-to-video",
+      "name": "CogVideoX-5B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cogvideox-5b/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/kling-video/lipsync/text-to-video",
+      "name": "Kling LipSync Text-to-Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/lipsync/text-to-video/api"
+    },
+    {
+      "id": "blackforestlabs/flux-3/draft-enhance",
+      "name": "Flux 3 Draft Enhance",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/blackforestlabs/flux-3/draft-enhance/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01-director/image-to-video",
+      "name": "MiniMax (Hailuo AI) Video 01 Director - Image to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01-director/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/davinci-magihuman",
+      "name": "Davinci Magihuman",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/davinci-magihuman/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/text-to-video",
+      "name": "PixVerse V4 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4/text-to-video/api"
+    },
+    {
+      "id": "moonvalley/marey/motion-transfer",
+      "name": "Marey Realism V1.5",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/moonvalley/marey/motion-transfer/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/text-to-video/480p",
+      "name": "LongCat Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/text-to-video/480p/api"
+    },
+    {
+      "id": "fal-ai/thinksound/audio",
+      "name": "ThinkSound",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/thinksound/audio/api"
+    },
+    {
+      "id": "fal-ai/wan-pro/text-to-video",
+      "name": "Wan-2.1 Pro Text-to-Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-pro/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/one-to-all-animation/14b",
+      "name": "One To All Animation",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/one-to-all-animation/14b/api"
+    },
+    {
+      "id": "fal-ai/wan-i2v-lora",
+      "name": "Wan-2.1 Image-to-Video with LoRAs",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-i2v-lora/api"
+    },
+    {
+      "id": "wan/v2.6/reference-to-video/flash",
+      "name": "V2.6",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/wan/v2.6/reference-to-video/flash/api"
+    },
+    {
+      "id": "fal-ai/lightx/recamera",
+      "name": "Lightx",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/lightx/recamera/api"
+    },
+    {
+      "id": "fal-ai/fast-animatediff/turbo/text-to-video",
+      "name": "AnimateDiff Turbo",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-animatediff/turbo/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/fast-animatediff/text-to-video",
+      "name": "AnimateDiff",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-animatediff/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/minimax/video-01-director",
+      "name": "MiniMax (Hailuo AI) Video 01 Director",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/video-01-director/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video/video-to-video",
+      "name": "Hunyuan Video (Video-to-Video)",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v3.5/transition",
+      "name": "PixVerse V3.5 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v3.5/transition/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v5.6/transition",
+      "name": "PixVerse V5.6 Transition",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v5.6/transition/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/reference-video-to-video",
+      "name": "LTX-2.3 22B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/reference-video-to-video/api"
+    },
+    {
+      "id": "fal-ai/longcat-video/image-to-video/480p",
+      "name": "LongCat Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-video/image-to-video/480p/api"
+    },
+    {
+      "id": "fal-ai/wan-t2v-lora",
+      "name": "Wan-2.1 Text-to-Video with LoRAs",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-t2v-lora/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1/standard/effects",
+      "name": "Kling 1.0",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1/standard/effects/api"
+    },
+    {
+      "id": "mirelo-ai/sfx-v1/video-to-video",
+      "name": "Mirelo SFX",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx-v1/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/audio-to-video",
+      "name": "LTX-2 19B",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/wan-22-vace-fun-a14b/reframe",
+      "name": "Wan 2.2 VACE Fun A14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-22-vace-fun-a14b/reframe/api"
+    },
+    {
+      "id": "topaz/denoise/video",
+      "name": "Topaz Denoise Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/denoise/video/api"
+    },
+    {
+      "id": "fal-ai/krea-wan-14b/text-to-video",
+      "name": "Krea Wan 14b- Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/krea-wan-14b/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/audio-to-video/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/audio-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/clean-plate",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/clean-plate/api"
+    },
+    {
+      "id": "fal-ai/fast-svd/text-to-video",
+      "name": "Stable Video Diffusion",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-svd/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/audio-to-video",
+      "name": "LTX-2 19B Distilled",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/text-to-video/lora",
+      "name": "LTX-2.3 22B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/text-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/pixverse/extend/fast",
+      "name": "PixVerse Extend Fast",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/extend/fast/api"
+    },
+    {
+      "id": "bria/video/erase/keypoints",
+      "name": "Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/erase/keypoints/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.6/pro/effects",
+      "name": "Kling 1.6",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1.6/pro/effects/api"
+    },
+    {
+      "id": "fal-ai/fast-svd-lcm/text-to-video",
+      "name": "Stable Video Diffusion Turbo",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-svd-lcm/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/cosmos-predict-2.5/text-to-video",
+      "name": "Cosmos Predict 2.5 2B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cosmos-predict-2.5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/framepack/f1",
+      "name": "Framepack F1",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/framepack/f1/api"
+    },
+    {
+      "id": "bria/bria_video_eraser/erase/mask",
+      "name": "Bria Video Eraser Erase Mask",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/bria_video_eraser/erase/mask/api"
+    },
+    {
+      "id": "fal-ai/vidu/q2/video-extension/pro",
+      "name": "Vidu",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q2/video-extension/pro/api"
+    },
+    {
+      "id": "fal-ai/wan-vace-14b/pose",
+      "name": "Wan VACE 14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-vace-14b/pose/api"
+    },
+    {
+      "id": "fal-ai/vidu/q1/text-to-video",
+      "name": "Vidu Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/q1/text-to-video/api"
+    },
+    {
+      "id": "moonvalley/marey/t2v",
+      "name": "Marey Realism V1.5",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/moonvalley/marey/t2v/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v3.5/image-to-video",
+      "name": "PixVerse V3.5 Image To Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v3.5/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/audio-to-video/lora",
+      "name": "LTX-2 19B",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/audio-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/magi-distilled/extend-video",
+      "name": "MAGI-1 (Distilled)",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/magi-distilled/extend-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-v095/extend",
+      "name": "LTX Video-0.9.5",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-v095/extend/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/colorization",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/colorization/api"
+    },
+    {
+      "id": "fal-ai/fast-animatediff/video-to-video",
+      "name": "AnimateDiff",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-animatediff/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4.5/image-to-video/fast",
+      "name": "PixVerse V4.5 Image To Video Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4.5/image-to-video/fast/api"
+    },
+    {
+      "id": "bria/video/increase-resolution",
+      "name": "Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/increase-resolution/api"
+    },
+    {
+      "id": "fal-ai/vidu/template-to-video",
+      "name": "Vidu Template to Video",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vidu/template-to-video/api"
+    },
+    {
+      "id": "veed/fabric-1.0/text",
+      "name": "Fabric 1.0",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/veed/fabric-1.0/text/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v3.5/text-to-video",
+      "name": "PixVerse V3.5 Text To Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v3.5/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/cosmos-predict-2.5/distilled/text-to-video",
+      "name": "Cosmos Predict 2.5 2B Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cosmos-predict-2.5/distilled/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/extend-video",
+      "name": "LTX-2 19B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/extend-video/api"
+    },
+    {
+      "id": "fal-ai/longcat-single-avatar/audio-to-video",
+      "name": "Longcat Single Avatar",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/longcat-single-avatar/audio-to-video/api"
+    },
+    {
+      "id": "fal-ai/fast-animatediff/turbo/video-to-video",
+      "name": "AnimateDiff Turbo",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/fast-animatediff/turbo/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/cosmos-predict-2.5/image-to-video",
+      "name": "Cosmos Predict 2.5 2B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cosmos-predict-2.5/image-to-video/api"
+    },
+    {
+      "id": "topaz/colorize/video",
+      "name": "Topaz Colorize Video",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/topaz/colorize/video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/video-to-video",
+      "name": "LTX-2.3 22B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltxv-13b-098-distilled/multiconditioning",
+      "name": "LTX-Video 13B 0.9.8 Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltxv-13b-098-distilled/multiconditioning/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/extend-video",
+      "name": "LTX-2 19B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/extend-video/api"
+    },
+    {
+      "id": "fal-ai/wan/v2.2-5b/text-to-video/distill",
+      "name": "Wan",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan/v2.2-5b/text-to-video/distill/api"
+    },
+    {
+      "id": "fal-ai/wan-22-vace-fun-a14b/outpainting",
+      "name": "Wan 2.2 VACE Fun A14B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/wan-22-vace-fun-a14b/outpainting/api"
+    },
+    {
+      "id": "fal-ai/magi-distilled/image-to-video",
+      "name": "MAGI-1 (Distilled)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/magi-distilled/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/cosmos-predict-2.5/video-to-video",
+      "name": "Cosmos Predict 2.5 2B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cosmos-predict-2.5/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/text-to-video/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/text-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/image-to-video/fast",
+      "name": "PixVerse V4 Image To Video Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4/image-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/framepack/flf2v",
+      "name": "Framepack",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/framepack/flf2v/api"
+    },
+    {
+      "id": "fal-ai/t2v-turbo",
+      "name": "T2V Turbo - Video Crafter",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/t2v-turbo/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/reference-video-to-video/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/reference-video-to-video/lora/api"
+    },
+    {
+      "id": "bria/video/background-removal/realtime",
+      "name": "Bria's VRMBG 3.0 Realtime",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/video/background-removal/realtime/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v4/text-to-video/fast",
+      "name": "PixVerse V4 Text To Video Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v4/text-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-v095/multiconditioning",
+      "name": "LTX Video-0.9.5",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-v095/multiconditioning/api"
+    },
+    {
+      "id": "fal-ai/magi-distilled",
+      "name": "MAGI-1 (Distilled)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/magi-distilled/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/extend-video/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/extend-video/lora/api"
+    },
+    {
+      "id": "moonvalley/marey/pose-transfer",
+      "name": "Marey Realism V1.5",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/moonvalley/marey/pose-transfer/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/image-to-video/lora",
+      "name": "LTX-2.3 22B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/image-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/extend-video",
+      "name": "LTX-2.3 22B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/extend-video/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v3.5/text-to-video/fast",
+      "name": "PixVerse V3.5 Text To Video Fast",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v3.5/text-to-video/fast/api"
+    },
+    {
+      "id": "creatify/boreal",
+      "name": "Boreal",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/creatify/boreal/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v3.5/effects",
+      "name": "PixVerse V3.5 Effects",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v3.5/effects/api"
+    },
+    {
+      "id": "fal-ai/pixverse/v3.5/image-to-video/fast",
+      "name": "PixVerse V3.5 Image To Video Fast",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pixverse/v3.5/image-to-video/fast/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/image-to-video/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/image-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/ingredient",
+      "name": "Ltx 2.3 Quality",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/ingredient/api"
+    },
+    {
+      "id": "fal-ai/heygen/avatar3/digital-twin",
+      "name": "Heygen",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/avatar3/digital-twin/api"
+    },
+    {
+      "id": "fal-ai/heygen/v2/video-agent",
+      "name": "Heygen",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v2/video-agent/api"
+    },
+    {
+      "id": "fal-ai/ltx-video-13b-distilled/extend",
+      "name": "LTX Video-0.9.7 13B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled/extend/api"
+    },
+    {
+      "id": "fal-ai/infinity-star/text-to-video",
+      "name": "Infinity Star",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/infinity-star/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltxv-13b-098-distilled/extend",
+      "name": "LTX-Video 13B 0.9.8 Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltxv-13b-098-distilled/extend/api"
+    },
+    {
+      "id": "fal-ai/cogvideox-5b/video-to-video",
+      "name": "CogVideoX-5B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/cogvideox-5b/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/heygen/v3/filler-word-removal",
+      "name": "Heygen",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/v3/filler-word-removal/api"
+    },
+    {
+      "id": "fal-ai/heygen/avatar4/digital-twin",
+      "name": "Heygen",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/heygen/avatar4/digital-twin/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/text-to-video/lora",
+      "name": "LTX-2 19B",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/text-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/bernini-r/text-to-video",
+      "name": "Bernini-R Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bernini-r/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/reference-video-to-video/lora",
+      "name": "LTX 2.3 22B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/reference-video-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/outpaint/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/outpaint/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/text-to-video/lora",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/text-to-video/lora/api"
+    },
+    {
+      "id": "mirage-api/avatar-x/text-to-video",
+      "name": "Avatar X",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirage-api/avatar-x/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/one-to-all-animation/1.3b",
+      "name": "One To All Animation",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/one-to-all-animation/1.3b/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/decompression",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/decompression/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/deblur",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/deblur/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/reference-video-to-video",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/reference-video-to-video/api"
+    },
+    {
+      "id": "bytedance/lynx",
+      "name": "Lynx",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/lynx/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/inpaint/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/inpaint/lora/api"
+    },
+    {
+      "id": "bria/bria_video_eraser/erase/keypoints",
+      "name": "Bria Video Eraser",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bria/bria_video_eraser/erase/keypoints/api"
+    },
+    {
+      "id": "fal-ai/ai-avatar/multi-text",
+      "name": "AI Avatar Multi Text",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ai-avatar/multi-text/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/video-to-video",
+      "name": "LTX-2 19B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/audio-to-video/lora",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/audio-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/day-to-night",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/day-to-night/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/image-to-video/lora",
+      "name": "LTX-2 19B Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/image-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/reference-video-to-video/lora",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/reference-video-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1.5/pro/effects",
+      "name": "Kling 1.5",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1.5/pro/effects/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/audio-to-video/lora",
+      "name": "LTX-2 19B Distilled",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/audio-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/sadtalker/reference",
+      "name": "Sad Talker",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sadtalker/reference/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/text-to-video/lora",
+      "name": "LTX-2 19B Distilled",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/text-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/pika/v2/turbo/image-to-video",
+      "name": "Pika Image to Video Turbo (v2)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2/turbo/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/image-to-video/lora",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/image-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/video-to-video/lora",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/video-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/extend-video/lora",
+      "name": "LTX-2.3 22B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/extend-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/video-to-video/lora",
+      "name": "LTX-2.3 22B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/video-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/hdr/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/hdr/lora/api"
+    },
+    {
+      "id": "argil/avatars/audio-to-video",
+      "name": "Avatars Audio to Video",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/argil/avatars/audio-to-video/api"
+    },
+    {
+      "id": "argil/avatars/text-to-video",
+      "name": "Avatars Text to Video",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/argil/avatars/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/decart/lucy-5b/image-to-video",
+      "name": "Decart",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/decart/lucy-5b/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/hunyuan-video-img2vid-lora",
+      "name": "Hunyuan Video Image-to-Video LoRA Inference",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/hunyuan-video-img2vid-lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/extend-video/lora",
+      "name": "LTX-2 19B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/extend-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/distilled/video-to-video/lora",
+      "name": "LTX-2 19B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/distilled/video-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/extend-video/lora",
+      "name": "LTX-2 19B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/extend-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/image-to-video/lora",
+      "name": "LTX-2 19B",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/image-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2-19b/video-to-video/lora",
+      "name": "LTX-2 19B",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2-19b/video-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/audio-to-video/lora",
+      "name": "LTX-2.3 22B",
+      "category": "audio-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/audio-to-video/lora/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-22b/distilled/video-to-video",
+      "name": "LTX-2.3 22B Distilled",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-22b/distilled/video-to-video/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/cross-eyed",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/cross-eyed/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/instant-shave",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/instant-shave/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/water-simulation",
+      "name": "Ltx 2.3 Quality",
+      "category": "video-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/water-simulation/api"
+    },
+    {
+      "id": "fal-ai/pika/v2.1/image-to-video",
+      "name": "Pika Image to Video (v2.1)",
+      "category": "image-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2.1/image-to-video/api"
+    },
+    {
+      "id": "fal-ai/pika/v2.1/text-to-video",
+      "name": "Pika Text to Video (v2.1)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2.1/text-to-video/api"
+    },
+    {
+      "id": "fal-ai/pika/v2/turbo/text-to-video",
+      "name": "Pika Text to Video Turbo (v2)",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/pika/v2/turbo/text-to-video/api"
+    },
+    {
+      "id": "minimax/h3-max/director",
+      "name": "H3 Max Director",
+      "category": "text-to-video",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/h3-max/director/api"
+    }
+  ]
+}
