@@ -24,11 +24,11 @@
     Film,
     BookUser,
     Palette,
-    Workflow,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import CreativeCharacterLibrary from '$lib/components/agent-room/CreativeCharacterLibrary.svelte';
+  import CreativeRecipeDialog from '$lib/components/agent-room/CreativeRecipeDialog.svelte';
   import CreativeBrandDialog from '$lib/components/agent-room/CreativeBrandDialog.svelte';
   import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import * as InputGroup from '$lib/components/ui/input-group';
@@ -174,6 +174,7 @@
     'image',
     'imageWorkflow',
     'videoWorkflow',
+    'sequence',
     'storyboard',
     'video',
     'flow',
@@ -222,7 +223,7 @@
   const EXPLORER_GROUPS: Array<{ id: 'agents' | 'work' | 'content' | 'tools'; types: CanvasNodeType[] }> = [
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
-    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'storyboard', 'design'] },
+    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'sequence', 'storyboard', 'design'] },
     { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'toolWorkshop', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
@@ -380,7 +381,7 @@
 
   let addingVideo = $state(false);
   let showCharacters = $state(false), placingCharacter = $state(false);
-  let showBrands = $state(false);
+  let showBrands = $state(false), showRecipes = $state(false);
   async function placeCharacter(character: CreativeCharacter) {
     if (!selectedWorkspaceId || placingCharacter) return;
     const workspaceId = selectedWorkspaceId;
@@ -412,6 +413,18 @@
     const workspaceId = selectedWorkspaceId;
     try {
       const node = await creativeApi<{ nodeId: string }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/storyboards`, 'POST', { command: 'create', title: m['storyboard.title']() });
+      await loadWorkspace(workspaceId);
+      if (selectedWorkspaceId === workspaceId) selectNode(workspaceId, node.nodeId);
+    } catch (cause) { toast.error(creativeError((cause as Error).message)); }
+    finally { addingVideo = false; }
+  }
+
+  async function addSequence() {
+    if (!selectedWorkspaceId || addingVideo) return;
+    addingVideo = true;
+    const workspaceId = selectedWorkspaceId;
+    try {
+      const node = await creativeApi<{ nodeId: string }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/sequences`, 'POST', { command: 'create', title: m['sequence.title']() });
       await loadWorkspace(workspaceId);
       if (selectedWorkspaceId === workspaceId) selectNode(workspaceId, node.nodeId);
     } catch (cause) { toast.error(creativeError((cause as Error).message)); }
@@ -682,6 +695,7 @@
     if (node.type === 'image') return m['terminal_browser.kind_image']();
     if (node.type === 'imageWorkflow') return m['image_workflow.title']();
     if (node.type === 'videoWorkflow') return m['creative.title']();
+    if (node.type === 'sequence') return m['sequence.title']();
     if (node.type === 'storyboard') return m['storyboard.title']();
     if (node.type === 'video') return m['creative.video']();
     if (node.type === 'flow') return m['terminal_browser.kind_flow']();
@@ -1165,6 +1179,7 @@
 
 <main class="relative grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)] max-[720px]:grid-cols-[236px_minmax(420px,1fr)]" data-testid="workbench-shell">
   {#if showCharacters && selectedWorkspaceId}<CreativeCharacterLibrary overlay workspaceId={selectedWorkspaceId} busy={placingCharacter} onPlace={placeCharacter} onClose={() => showCharacters = false} />{/if}
+  {#if selectedWorkspaceId}<CreativeRecipeDialog bind:open={showRecipes} workspaceId={selectedWorkspaceId} onOpenNode={async (id) => { const workspace = selectedWorkspaceId; if (workspace) { await loadWorkspace(workspace); if (selectedWorkspaceId === workspace) selectNode(workspace, id); } }} />{/if}
   {#if selectedWorkspaceId}<CreativeBrandDialog bind:open={showBrands} workspaceId={selectedWorkspaceId} onPlaced={async (id) => { const workspace = selectedWorkspaceId; if (workspace) { await loadWorkspace(workspace); if (selectedWorkspaceId === workspace) selectNode(workspace, id); } }} />{/if}
   <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-sidebar)]">
     <div class="flex h-11 shrink-0 items-center gap-2 px-3">
@@ -1179,7 +1194,7 @@
         nodeId={isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId}
       />
       <AttentionCenter workspaceId={selectedWorkspaceId} />
-      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
+      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['sequence.title']()} onclick={addSequence}><Film size={15} />{m['sequence.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_recipe.title']()} onclick={() => showRecipes = true}><Workflow size={15} />{m['creative_recipe.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
 
     <div class="shrink-0 p-2.5">

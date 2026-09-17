@@ -75,8 +75,10 @@
   import ImageCanvasNode from '$lib/components/agent-room/canvas/ImageCanvasNode.svelte';
   import ImageWorkflowCanvasNode from '$lib/components/agent-room/canvas/ImageWorkflowCanvasNode.svelte';
   import VideoWorkflowCanvasNode from '$lib/components/agent-room/canvas/VideoWorkflowCanvasNode.svelte';
+  import SequenceCanvasNode from '$lib/components/agent-room/canvas/SequenceCanvasNode.svelte';
   import StoryboardCanvasNode from '$lib/components/agent-room/canvas/StoryboardCanvasNode.svelte';
   import CreativeCharacterLibrary from '$lib/components/agent-room/CreativeCharacterLibrary.svelte';
+  import CreativeRecipeDialog from '$lib/components/agent-room/CreativeRecipeDialog.svelte';
   import CreativeBrandDialog from '$lib/components/agent-room/CreativeBrandDialog.svelte';
   import { CHARACTER_DRAG_TYPE, characterDragSchema } from '$lib/components/agent-room/character-drag.js';
   import { creativeApi, creativeError } from '$lib/components/agent-room/creative-media-client.js';
@@ -152,6 +154,7 @@
     image: ImageCanvasNode,
     imageWorkflow: ImageWorkflowCanvasNode,
     videoWorkflow: VideoWorkflowCanvasNode,
+    sequence: SequenceCanvasNode,
     storyboard: StoryboardCanvasNode,
     video: VideoCanvasNode,
     usage: UsageCanvasNode,
@@ -181,6 +184,7 @@
     image: 'var(--app-secondary)',
     imageWorkflow: 'var(--app-secondary)',
     videoWorkflow: 'var(--app-secondary)',
+    sequence: 'var(--app-secondary)',
     storyboard: 'var(--app-secondary)',
     video: 'var(--app-secondary)',
     usage: 'var(--app-warning)',
@@ -604,7 +608,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'storyboard' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -642,6 +646,7 @@
     image: async (rect) => { await addImageNode(rect); },
     imageWorkflow: async (rect) => { await addImageWorkflowNode(rect); },
     videoWorkflow: async (rect) => { await addVideoWorkflowNode(rect); },
+    sequence: async (rect) => { await addSequenceNode(rect); },
     storyboard: async (rect) => { await addStoryboardNode(rect); },
     usage: async (rect) => { await addUsageNode(rect); },
     codeGraph: async (rect) => { await addCodeGraphNode(rect); },
@@ -730,7 +735,7 @@
   let showPortsPanel = $state(false);
   let showPresetPanel = $state(false);
   let showCharacterLibrary = $state(false);
-  let showBrands = $state(false);
+  let showBrands = $state(false), showRecipes = $state(false);
   let leaderDictationState = $state<LeaderDictationStatus>('idle');
   let leaderDictationNodeId = $state<string | null>(null);
   let sidebarCollapsed = $state(false);
@@ -2119,6 +2124,15 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  async function addSequenceNode(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(860, 600);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST', body: JSON.stringify({ type: 'sequence', title: m['sequence.title'](), ...position, ...nodeSize(rect, 560, 440, 860, 600), floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
   async function addDesignNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(520, 380);
@@ -3103,7 +3117,7 @@
             <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
               <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
             </ToolbarButton>
-            <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} />
+            <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
             <DesignToolbarMenu
               active={drawTool === 'design' || designExplorationOpen}
               onBlank={() => toggleDrawTool('design')}
@@ -3190,6 +3204,7 @@
     {#if showCharacterLibrary && activeWorkspace && !designModeNodeId}
       <CreativeCharacterLibrary workspaceId={activeWorkspace.id} busy={placingCharacter} onClose={() => showCharacterLibrary = false} onPlace={(character) => void placeCharacter({ id: character.id, sourceWorkspaceId: character.workspaceId })} />
     {/if}
+    {#if activeWorkspace}<CreativeRecipeDialog bind:open={showRecipes} workspaceId={activeWorkspace.id} floorId={visibleFloorId} onOpenNode={async (id) => { if (activeWorkspace) { await refreshCanvasGraph(activeWorkspace.id); jumpToNode(id); } }} />{/if}
     {#if activeWorkspace}<CreativeBrandDialog bind:open={showBrands} workspaceId={activeWorkspace.id} floorId={visibleFloorId} onPlaced={async () => { if (activeWorkspace) await refreshCanvasGraph(activeWorkspace.id); }} />{/if}
     {#if showPalette}
       <CommandPalette {nodes} actions={paletteActions} onJumpToNode={jumpToNode} onClose={() => (showPalette = false)} />

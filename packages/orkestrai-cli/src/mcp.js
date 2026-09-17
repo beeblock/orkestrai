@@ -18,6 +18,8 @@ import { apiClientReference } from './api-client-reference.js';
 import { TOOL_MANIFEST_SCHEMA } from './workspace-tool-reference.js';
 import { VIDEO_CONFIG_SCHEMA, VIDEO_TOOL_DESCRIPTIONS } from './video-reference.js';
 import { BRAND_COMMAND_SCHEMA } from './brand-reference.js';
+import { SEQUENCE_COMMAND_SCHEMA } from './sequence-reference.js';
+import { RECIPE_COMMAND_SCHEMA } from './recipe-reference.js';
 import { STORYBOARD_COMMAND_SCHEMA } from './storyboard-reference.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -436,7 +438,7 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   /** @type {Record<string, object>} */
   const properties = { taskId: { type: 'string', format: 'uuid' } };
   const required = ['taskId'];
-  if (!['brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (!['sequences', 'recipes', 'brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
   if (command === 'assets') {
     properties.input = { type: 'object', additionalProperties: false, properties: { command: { enum: ['list', 'inspect', 'decide', 'prepare'] }, nodeId: { type: 'string', format: 'uuid' }, expectedDigest: { type: 'string', pattern: '^[a-f0-9]{64}$' }, revision: { type: 'integer', minimum: 0 }, decision: { enum: ['proposed'] }, comment: { type: 'string', maxLength: 8000 }, edit: { type: 'object', additionalProperties: false, properties: {
       operation: { enum: ['variation', 'remove_background', 'annotated_change', 'animate'] }, direction: { type: 'string', maxLength: 16000 }, executorNodeId: { type: ['string', 'null'], format: 'uuid' }, count: { type: 'integer', minimum: 1, maximum: 10 }, config: VIDEO_CONFIG_SCHEMA,
@@ -447,6 +449,8 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
     properties.input = { ...STORYBOARD_COMMAND_SCHEMA, properties: { ...STORYBOARD_COMMAND_SCHEMA.properties, config: VIDEO_CONFIG_SCHEMA } }; required.push('input');
   }
   if (command === 'brands') { properties.input = BRAND_COMMAND_SCHEMA; required.push('input'); }
+  if (command === 'sequences') { properties.input = SEQUENCE_COMMAND_SCHEMA; required.push('input'); }
+  if (command === 'recipes') { properties.input = RECIPE_COMMAND_SCHEMA; required.push('input'); }
   if (command === 'characters') {
     properties.input = { type: 'object', additionalProperties: false, properties: {
       command: { type: 'string', enum: ['list', 'read', 'create', 'update', 'fork', 'remove', 'place', 'binding'] }, id: { type: 'string', format: 'uuid' }, revision: { type: 'integer', minimum: 1 }, config: VIDEO_CONFIG_SCHEMA,

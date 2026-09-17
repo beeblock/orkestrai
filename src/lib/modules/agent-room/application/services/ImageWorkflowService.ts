@@ -899,7 +899,7 @@ export class ImageWorkflowService {
     };
   }
 
-  async status(workspaceId: string, nodeId: string) {
+  async status(workspaceId: string, nodeId: string): Promise<{ running: boolean; runId: string | null; lastError: string | null; executorReady: boolean; executorNodeId: string | null; executorTitle: string | null }> {
     const [node, nodes, edges, agents] = await Promise.all([
       workspaceRepository.getNode(nodeId), workspaceRepository.listNodes(workspaceId),
       workspaceRepository.listEdges(workspaceId), bridgeService.listAgents(workspaceId),
@@ -909,6 +909,7 @@ export class ImageWorkflowService {
     if (payload.status === 'running' && !payload.activeRun) {
       await workspaceRepository.updateNode(node.id, { payload: nextPayload(payload, {}, { status: 'failed', activeRunId: null, activeRun: null, lastError: 'image_workflow_interrupted' }) });
       broadcast(workspaceId, node.id);
+      return this.status(workspaceId, nodeId);
     }
     if (payload.status === 'running' && payload.activeRun) {
       const executorAlive = agents.some((agent) => agent.nodeId === payload.activeRun?.executorNodeId && agent.sessionAlive);

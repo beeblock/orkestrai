@@ -1,0 +1,76 @@
+import { test, expect } from '@playwright/test';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+test('save, reuse and inspect real creative workflows through both native surfaces', async ({ page, request }) => {
+  test.setTimeout(120000);
+  const sourceFolder = await mkdtemp(join(tmpdir(), 'orkestrai-recipe-ui-')), targetFolder = await mkdtemp(join(tmpdir(), 'orkestrai-recipe-ui-target-'));
+  const ids: string[] = [], errors: string[] = [], headers = { origin: 'http://127.0.0.1:5199' };
+  page.on('pageerror', error => errors.push(error.message));
+  const settings = (await (await request.get('/api/agent-room/settings')).json()).data;
+  try {
+    await request.put('/api/agent-room/settings', { data: { ...settings, uiLanguage: 'en', appTheme: 'orkestrai-light' } });
+    const source = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Recipe source', workingDir: sourceFolder } })).json()).data; ids.push(source.id);
+    const target = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Recipe destination', workingDir: targetFolder } })).json()).data; ids.push(target.id);
+    const png = await readFile('electron/resources/icons/512x512.png');
+    for (const folder of [sourceFolder, targetFolder]) await writeFile(join(folder, 'product.png'), png);
+    const ref = (await (await request.post(`/api/agent-room/workspaces/${source.id}/nodes`, { data: { type: 'image', title: 'Product', payload: { path: 'product.png' } } })).json()).data;
+    const targetRef = (await (await request.post(`/api/agent-room/workspaces/${target.id}/nodes`, { data: { type: 'image', title: 'Local product', payload: { path: 'product.png' } } })).json()).data;
+    const base = `/api/agent-room/workspaces/${source.id}/creative-media`;
+    const board = (await (await request.post(`${base}/storyboards`, { headers, data: { command: 'create', title: 'Social campaign' } })).json()).data;
+    expect((await request.post(`${base}/storyboards`, { headers, data: { command: 'apply', nodeId: board.nodeId, revision: 1, operations: [{ type: 'add', scene: { title: 'Opening', direction: 'Show the product. {{script}}', referenceNodeIds: [ref.id] } }] } })).ok()).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/terminal?workspace=${source.id}&node=${board.nodeId}`);
+    await page.getByRole('button', { name: 'Save workflow', exact: true }).click();
+    const ui = page.getByTestId('creative-recipes');
+    await expect(ui.getByRole('textbox', { name: 'Workflow name' })).toBeEnabled();
+    await ui.getByRole('textbox', { name: 'Workflow name' }).fill('Product reel');
+    await ui.getByRole('textbox', { name: 'Description', exact: true }).fill('A reusable product opening');
+    await ui.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(ui.getByRole('tab', { name: 'Library', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(ui.getByRole('heading', { name: 'Product reel · v1' })).toBeVisible();
+    const activeColor = await ui.evaluate(element => {
+      const probe = document.createElement('span'); probe.style.backgroundColor = 'var(--app-accent-soft)'; element.append(probe);
+      const color = getComputedStyle(probe).backgroundColor; probe.remove(); return color;
+    });
+    await expect(ui.getByRole('tab', { name: 'Library', exact: true })).toHaveCSS('background-color', activeColor);
+    await expect(ui.getByRole('tab', { name: 'Save workflow', exact: true })).not.toHaveCSS('background-color', activeColor);
+    await page.screenshot({ path: '/tmp/orkestrai-recipes-light.png' });
+    await page.keyboard.press('Escape'); await expect(ui).not.toBeVisible();
+    await request.put('/api/agent-room/settings', { data: { ...settings, uiLanguage: 'en', appTheme: 'orkestrai-dark' } });
+    await page.setViewportSize({ width: 900, height: 650 });
+    await page.goto(`/canvas?workspace=${target.id}`);
+    await page.getByRole('button', { name: 'Images', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Creative workflows' }).click();
+    await expect(ui.getByRole('textbox', { name: 'Production brief / script' })).toBeEnabled();
+    await ui.getByRole('textbox', { name: 'Production brief / script' }).fill('Announce the spring collection.');
+    await ui.getByRole('combobox', { name: 'Product', exact: true }).click();
+    await page.getByRole('option', { name: 'Local product', exact: true }).click();
+    await ui.getByRole('combobox', { name: 'Aspect ratio', exact: true }).click();
+    await page.getByRole('option', { name: '9:16', exact: true }).click();
+    const create = ui.getByRole('button', { name: 'Create editable storyboard' });
+    const box = await create.boundingBox(); expect(box!.y + box!.height).toBeLessThan(650);
+    await page.screenshot({ path: '/tmp/orkestrai-recipes-dark.png' });
+    await create.click(); await expect(ui).not.toBeVisible();
+    const targetBase = `/api/agent-room/workspaces/${target.id}/creative-media`;
+    const boards = (await (await request.get(`${targetBase}/storyboards`)).json()).data;
+    expect(boards).toHaveLength(1);
+    expect(boards[0].document.scenes[0]).toMatchObject({ direction: 'Show the product. Announce the spring collection.', aspectRatio: '9:16', referenceNodeIds: [targetRef.id], imageWorkflowNodeId: null });
+    const scene = boards[0].document.scenes[0];
+    expect((await request.post(`${targetBase}/storyboards`, { headers, data: { command: 'materialize', nodeId: boards[0].nodeId, revision: 1, sceneId: scene.id, kind: 'image' } })).ok()).toBe(true);
+    await page.getByRole('button', { name: 'Images', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Creative workflows' }).click();
+    await ui.getByRole('tab', { name: 'Generation queue' }).click();
+    await expect(ui.getByRole('tab', { name: 'Generation queue' })).toHaveAttribute('aria-selected', 'true');
+    await expect(ui.getByText('Draft', { exact: true })).toBeVisible();
+    await expect(ui.getByRole('button', { name: 'Cancel run' })).toHaveCount(0);
+    await ui.getByRole('button', { name: 'Open linked workflow' }).click();
+    await expect(ui).not.toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    for (const id of ids) expect.soft((await request.delete(`/api/agent-room/workspaces/${id}`)).ok()).toBe(true);
+    await request.put('/api/agent-room/settings', { data: settings }).catch(() => undefined);
+    await rm(sourceFolder, { recursive: true, force: true }); await rm(targetFolder, { recursive: true, force: true });
+  }
+});

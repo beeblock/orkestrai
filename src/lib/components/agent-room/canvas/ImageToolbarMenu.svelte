@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { ChevronDown, Image as ImageIcon, Sparkles, Film, BookUser, Clapperboard, Palette } from '@lucide/svelte';
+  import { ChevronDown, Image as ImageIcon, Sparkles, Film, BookUser, Clapperboard, Palette, Workflow } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils.js';
   import * as m from '$lib/paraglide/messages.js';
 
-  let { active, onImage, onWorkflow, onVideo, onCharacters, onStoryboard, onBrands }: { active: boolean; onImage: () => void; onWorkflow: () => void; onVideo?: () => void; onCharacters?: () => void; onStoryboard?: () => void; onBrands?: () => void } = $props();
+  let { active, onImage, onWorkflow, onVideo, onCharacters, onStoryboard, onBrands, onRecipes, onSequence }: { active: boolean; onImage: () => void; onWorkflow: () => void; onVideo?: () => void; onCharacters?: () => void; onStoryboard?: () => void; onBrands?: () => void; onRecipes?: () => void; onSequence?: () => void } = $props();
 </script>
 
 <DropdownMenu.Root>
@@ -32,5 +32,7 @@
     {#if onCharacters}<DropdownMenu.Item aria-label={m['creative.characters']()} class="min-h-11 gap-3" onclick={onCharacters}><BookUser size={16} class="shrink-0" /><strong class="text-xs">{m['creative.characters']()}</strong></DropdownMenu.Item>{/if}
     {#if onStoryboard}<DropdownMenu.Item aria-label={m['storyboard.title']()} class="min-h-11 gap-3" onclick={onStoryboard}><Clapperboard size={16} class="shrink-0" /><strong class="text-xs">{m['storyboard.title']()}</strong></DropdownMenu.Item>{/if}
     {#if onBrands}<DropdownMenu.Item aria-label={m['creative_brand.title']()} class="min-h-11 gap-3" onclick={onBrands}><Palette size={16} class="shrink-0" /><strong class="text-xs">{m['creative_brand.title']()}</strong></DropdownMenu.Item>{/if}
+    {#if onSequence}<DropdownMenu.Item aria-label={m['sequence.title']()} class="min-h-11 gap-3" onclick={onSequence}><Film size={16} /><strong class="text-xs">{m['sequence.title']()}</strong></DropdownMenu.Item>{/if}
+    {#if onRecipes}<DropdownMenu.Item aria-label={m['creative_recipe.title']()} class="min-h-11 gap-3" onclick={onRecipes}><Workflow size={16} class="shrink-0" /><strong class="text-xs">{m['creative_recipe.title']()}</strong></DropdownMenu.Item>{/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

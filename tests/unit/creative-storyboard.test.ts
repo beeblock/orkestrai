@@ -29,6 +29,8 @@ describe('native storyboard operations', () => {
   it('shares all scene fields and operations with the MCP contract', () => {
     const props = STORYBOARD_COMMAND_SCHEMA.properties.operations.items.oneOf;
     expect(props.map((item: { properties: { type: { const: string } } }) => item.properties.type.const)).toEqual(['add', 'update', 'remove', 'duplicate', 'move', 'rename', 'link']);
-    expect(Object.keys(props[0].properties.scene.properties).sort()).toEqual(['id', ...Object.keys(storyboardSceneContentSchema.shape)].sort());
+    const add = props[0].properties;
+    if (!('scene' in add)) throw new Error('Missing MCP add scene contract');
+    expect(Object.keys(add.scene.properties).sort()).toEqual(['id', ...Object.keys(storyboardSceneContentSchema.shape)].sort());
   });
 });

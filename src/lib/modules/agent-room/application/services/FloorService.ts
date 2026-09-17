@@ -170,6 +170,8 @@ export class FloorService {
       }
       const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
       for (const node of groundNodes.filter(item => item.type === 'storyboard')) await creativeStoryboardService.clone(workspaceId, node.id, workspaceId, clonedIds.get(node.id)!, clonedIds);
+      const { creativeSequenceService } = await import('$lib/modules/creative-media/application/services/CreativeSequenceService.js');
+      for (const node of groundNodes.filter(item => item.type === 'sequence')) await creativeSequenceService.clone(workspaceId, node.id, workspaceId, clonedIds.get(node.id)!, clonedIds);
     }
 
     const hooks = workspace.hooks;

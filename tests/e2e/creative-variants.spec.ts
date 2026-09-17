@@ -60,18 +60,19 @@ test('reviews actual variants, invalidates changed evidence and shares video tra
     expect(Math.abs(times[0] - times[1])).toBeLessThan(0.13);
     await page.screenshot({ path: '/tmp/orkestrai-variants-dark.png' });
     await page.setViewportSize({ width: 620, height: 640 });
-    await expect.poll(async () => (await dialog.boundingBox())!.x).toBeGreaterThanOrEqual(0);
-    const bounds = await dialog.boundingBox(); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(640);
-    const panes = dialog.locator('section');
-    const first = (await panes.nth(0).boundingBox())!, second = (await panes.nth(1).boundingBox())!;
-    expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
-    const history = (await panes.nth(0).locator('summary').boundingBox())!;
-    expect(history.y + history.height).toBeLessThanOrEqual(first.y + first.height + 1);
+    // Read all bounds in one frame while the responsive dialog settles.
+    await expect.poll(() => dialog.evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const panes = element.querySelectorAll('section');
+      const first = panes[0].getBoundingClientRect(), second = panes[1].getBoundingClientRect();
+      const history = panes[0].querySelector('summary')!.getBoundingClientRect();
+      return { contained: bounds.x >= 0 && bounds.bottom <= innerHeight, separated: second.y >= first.bottom, historyContained: history.bottom <= first.bottom + 1 };
+    })).toEqual({ contained: true, separated: true, historyContained: true });
     await page.screenshot({ path: '/tmp/orkestrai-variants-small.png' });
     await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible();
     expect(errors).toEqual([]);
   } finally {
-    if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`);
+    if (workspaceId) expect.soft((await request.delete(`/api/agent-room/workspaces/${workspaceId}`)).ok()).toBe(true);
     await request.put('/api/agent-room/settings', { data: settings });
     await rm(folder, { recursive: true, force: true });
   }

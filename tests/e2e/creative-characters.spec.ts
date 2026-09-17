@@ -153,7 +153,7 @@ test('approves a character and drags its complete version into another workspace
   } finally {
     try {
       await request.put('/api/agent-room/settings', { data: settings }).catch(() => undefined);
-      for (const id of workspaceIds) await request.delete(`/api/agent-room/workspaces/${id}`).catch(() => undefined);
+      for (const id of workspaceIds) expect.soft((await request.delete(`/api/agent-room/workspaces/${id}`)).ok()).toBe(true);
     } finally { for (const folder of folders) await rm(folder, { recursive: true, force: true }); }
   }
 });

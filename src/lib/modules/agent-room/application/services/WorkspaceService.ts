@@ -392,11 +392,20 @@ export class WorkspaceService {
 
   async createNode(dto: CreateCanvasNodeDto) {
     const workspace = await this.get(dto.workspaceId);
+    if (dto.type === 'sequence') {
+      const { creativeSequenceService } = await import('$lib/modules/creative-media/application/services/CreativeSequenceService.js');
+      const result = await creativeSequenceService.execute(dto.workspaceId, { command: 'create', title: dto.title || 'Video sequence', floorId: dto.floorId }, { type: 'user' }) as { nodeId: string };
+      const created = await workspaceRepository.updateNode(result.nodeId, { ...(dto.x !== undefined ? { x: dto.x } : {}), ...(dto.y !== undefined ? { y: dto.y } : {}), ...(dto.width !== undefined ? { width: Math.max(560, dto.width) } : {}), ...(dto.height !== undefined ? { height: Math.max(440, dto.height) } : {}) });
+      if (!created) throw new Error('creative_sequence_not_found');
+      return created;
+    }
     if (dto.type === 'storyboard') {
       const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
       const result = await creativeStoryboardService.execute(dto.workspaceId, { command: 'create', title: dto.title || 'Storyboard', floorId: dto.floorId, ...(dto.x !== undefined && dto.y !== undefined ? { position: { x: dto.x, y: dto.y } } : {}) }, { type: 'user' });
       if (!('nodeId' in result)) throw new Error('creative_request_failed');
-      return workspaceRepository.updateNode(result.nodeId, { ...(dto.width !== undefined ? { width: Math.max(540, dto.width) } : {}), ...(dto.height !== undefined ? { height: Math.max(380, dto.height) } : {}) });
+      const created = await workspaceRepository.updateNode(result.nodeId, { ...(dto.width !== undefined ? { width: Math.max(540, dto.width) } : {}), ...(dto.height !== undefined ? { height: Math.max(380, dto.height) } : {}) });
+      if (!created) throw new Error('creative_storyboard_not_found');
+      return created;
     }
     const existingNodes = await workspaceRepository.listNodes(dto.workspaceId);
     if (dto.type === 'device' || dto.type === 'computer') {
@@ -447,6 +456,12 @@ export class WorkspaceService {
     const existing = await workspaceRepository.getNode(dto.nodeId);
     if (!existing) throw new Error('No nao encontrado.');
     let changes = dto.changes;
+    if (existing.type === 'sequence') {
+      const { creativeSequenceService } = await import('$lib/modules/creative-media/application/services/CreativeSequenceService.js');
+      const current = await creativeSequenceService.read(existing.workspaceId, existing.id);
+      if (typeof changes.title === 'string' && changes.title !== current.document.title) await creativeSequenceService.execute(existing.workspaceId, { command: 'apply', nodeId: existing.id, revision: current.revision, operations: [{ type: 'settings', title: changes.title }] }, { type: 'user' });
+      changes = { ...changes, payload: undefined };
+    }
     if (existing.type === 'storyboard') {
       const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
       const current = (await creativeStoryboardService.read(existing.workspaceId, existing.id)).storyboard;
@@ -616,6 +631,11 @@ export class WorkspaceService {
       this.killTerminalSessions(workspaceId, nodeId, { ...((node.payload ?? {}) as Record<string, unknown>) });
     }
     if (node.type === 'design') await designDocumentService.remove(workspaceId, nodeId);
+    if (node.type === 'sequence') {
+      const { creativeSequenceService } = await import('$lib/modules/creative-media/application/services/CreativeSequenceService.js');
+      const current = await creativeSequenceService.read(workspaceId, nodeId);
+      await creativeSequenceService.execute(workspaceId, { command: 'remove', nodeId, revision: current.revision }, { type: 'user' });
+    }
     if (node.type === 'storyboard') {
       const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
       await creativeStoryboardRepository.remove(workspaceId, nodeId);

@@ -8,7 +8,9 @@ const content = {
   referenceNodeIds: { type: 'array', uniqueItems: true, maxItems: 20, items: id },
   executorNodeId: { type: ['string', 'null'], format: 'uuid' },
   shot: SHOT_DIRECTION_SCHEMA,
+  aspectRatio: { enum: ['16:9', '9:16', '1:1', '4:3', '3:4'] },
 };
+/** @template {Record<string, object>} T @param {T} properties @param {string[]} required */
 const object = (properties, required) => ({ type: 'object', additionalProperties: false, properties, required });
 export const STORYBOARD_COMMAND_SCHEMA = object({
   command: { type: 'string', enum: ['list', 'read', 'create', 'apply', 'materialize', 'remove'] },

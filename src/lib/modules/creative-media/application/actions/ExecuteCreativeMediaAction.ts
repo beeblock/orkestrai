@@ -12,11 +12,17 @@ import { CreativeAssetReviewDto } from '../dto/CreativeAssetReviewDto.js';
 import { ExecuteCreativeAssetReviewAction } from './ExecuteCreativeAssetReviewAction.js';
 import { CreativeBrandKitDto } from '../dto/CreativeBrandKitDto.js';
 import { ExecuteCreativeBrandKitAction } from './ExecuteCreativeBrandKitAction.js';
+import { CreativeSequenceDto } from '../dto/CreativeSequenceDto.js';
+import { ExecuteCreativeSequenceAction } from './ExecuteCreativeSequenceAction.js';
+import { CreativeRecipeDto } from '../dto/CreativeRecipeDto.js';
+import { ExecuteCreativeRecipeAction } from './ExecuteCreativeRecipeAction.js';
 export class ExecuteCreativeMediaAction extends Action<CreativeMediaDto, unknown> {
   async execute(dto: CreativeMediaDto): Promise<unknown> {
     const service = creativeWorkflowService;
     await service.assertActor(dto.workspaceId, dto.actor, !['models', 'read', 'list', 'cancel', 'close_unconfirmed', 'remove'].includes(dto.command));
     switch (dto.command) {
+      case 'sequences': return new ExecuteCreativeSequenceAction().execute(CreativeSequenceDto.from(dto.workspaceId, dto.actor, dto.input));
+      case 'recipes': return new ExecuteCreativeRecipeAction().execute(CreativeRecipeDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'brands': return new ExecuteCreativeBrandKitAction().execute(CreativeBrandKitDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'assets': return new ExecuteCreativeAssetReviewAction().execute(CreativeAssetReviewDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'storyboards': return new ExecuteCreativeStoryboardAction().execute(CreativeStoryboardDto.from(dto.workspaceId, dto.actor, dto.input));

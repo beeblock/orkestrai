@@ -4,7 +4,7 @@
   import { zod } from 'sveltekit-superforms/adapters';
   import { WandSparkles, Eraser, Film, Focus, Undo2 } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
-  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import * as RadioGroup from '$lib/components/ui/radio-group';
   import { Button } from '$lib/components/ui/button';
   import { Textarea } from '$lib/components/ui/textarea';
   import { Slider } from '$lib/components/ui/slider';
@@ -14,7 +14,9 @@
   import type { CreativeAssetInspection } from '$lib/modules/creative-media/domain/asset-review.js';
   import * as m from '$lib/paraglide/messages.js';
   let { open = $bindable(false), workspaceId, nodeId, onOpenNode }: { open?: boolean; workspaceId: string; nodeId: string; onOpenNode?: (id: string) => void } = $props();
-  const { form } = superForm(defaults({ operation: 'variation', direction: '', count: 1, executorNodeId: null }, zod(creativeEditSchema)), { id: untrack(() => `creative-edit-${nodeId}`), SPA: true, validators: zod(creativeEditSchema), resetForm: false });
+  const id = $props.id();
+  const adapter = zod(creativeEditSchema as unknown as Parameters<typeof zod>[0]);
+  const { form } = superForm<CreativeEdit>(defaults({ operation: 'variation', direction: '', count: 1, executorNodeId: null }, adapter) as never, { id: untrack(() => `creative-edit-${nodeId}`), SPA: true, validators: adapter as never, resetForm: false });
   let source = $state<CreativeAssetInspection | null>(null), busy = $state(false), loading = $state(false), error = $state('');
   let executors = $state<Array<{ value: string; label: string }>>([]), region = $state({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
   let dimensions = $state({ width: 0, height: 0 }), imageElement = $state<HTMLImageElement>(null!);
@@ -31,7 +33,8 @@
     } catch (cause) { if (token === sequence) error = (cause as Error).message; }
     finally { if (token === sequence) loading = false; }
   }
-  $effect(() => { const key = `${workspaceId}:${nodeId}`; if (open && key) untrack(() => void load()); else sequence++; });
+  const dialogContext = $derived(open ? `${workspaceId}:${nodeId}` : '');
+  $effect(() => { if (dialogContext) untrack(() => void load()); else sequence++; });
   function point(event: PointerEvent) { const rect = imageElement.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) }; }
   function start(event: PointerEvent) { if (busy || $form.operation !== 'annotated_change' || !dimensions.width) return; event.preventDefault(); drag = { ...point(event), pointerId: event.pointerId }; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId); }
   function move(event: PointerEvent) { if (!drag || event.pointerId !== drag.pointerId) return; const p = point(event); region = { x: Math.min(0.999, p.x, drag.x), y: Math.min(0.999, p.y, drag.y), width: Math.max(0.001, Math.abs(p.x - drag.x)), height: Math.max(0.001, Math.abs(p.y - drag.y)) }; }
@@ -56,13 +59,13 @@
 <Dialog.Root bind:open>
   <Dialog.Content data-testid="creative-asset-actions" class="flex max-h-[calc(100dvh-24px)] w-[calc(100vw-24px)] min-w-0 flex-col gap-3 overflow-hidden sm:max-w-4xl">
     <Dialog.Header class="pr-6"><Dialog.Title>{m['creative_edit.title']()}</Dialog.Title><Dialog.Description>{m['creative_edit.description']()}</Dialog.Description></Dialog.Header>
-    <ToggleGroup.Root type="single" value={$form.operation} onValueChange={(value) => { if (value) $form.operation = value as CreativeEdit['operation']; }} class="flex shrink-0 flex-wrap justify-start" disabled={busy}>
-      {#each operations as operation}<ToggleGroup.Item value={operation.value} aria-label={operation.label} class="gap-2 border border-transparent text-xs aria-checked:border-[var(--app-accent)] aria-checked:bg-[var(--app-hover)]"><operation.icon size={15} />{operation.label}</ToggleGroup.Item>{/each}
-    </ToggleGroup.Root>
+    <RadioGroup.Root value={$form.operation} onValueChange={(value) => { if (value) $form.operation = value as CreativeEdit['operation']; }} class="flex shrink-0 flex-wrap justify-start gap-2" disabled={busy} aria-label={m['creative_edit.title']()}>
+      {#each operations as operation}<div class="relative"><RadioGroup.Item id={`${id}-${operation.value}`} value={operation.value} class="peer absolute inset-0 z-10 h-full w-full rounded opacity-0 after:hidden" /><label for={`${id}-${operation.value}`} class="pointer-events-none flex min-h-9 items-center justify-center gap-2 rounded border border-[var(--app-border)] px-3 py-2 text-xs text-[var(--app-text-soft)] peer-aria-checked:border-[var(--app-accent)] peer-aria-checked:bg-[var(--app-accent-soft)] peer-aria-checked:text-[var(--app-text)] peer-focus-visible:outline-2 peer-focus-visible:outline-[var(--app-accent)] peer-disabled:opacity-50"><operation.icon size={15} />{operation.label}</label></div>{/each}
+    </RadioGroup.Root>
     <div class="grid min-h-0 gap-4 overflow-y-auto overscroll-contain sm:grid-cols-[minmax(0,1fr)_260px]">
       <div class="flex min-h-40 min-w-0 items-center justify-center overflow-hidden rounded border bg-[var(--app-canvas)] p-2">
         {#if source}<div class="relative inline-block max-w-full">
-          <img bind:this={imageElement} src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(source.snapshot.media.path)}&v=${source.snapshot.media.sha256}`} alt={source.asset.title} draggable="false" class="block h-auto max-h-[48dvh] w-auto max-w-full" onload={(event) => dimensions = { width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }} onerror={() => { dimensions = { width: 0, height: 0 }; error = 'creative_reference_unavailable'; }} />
+          <img bind:this={imageElement} src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(source.snapshot.media.path)}&v=${source.snapshot.media.sha256}`} alt={source.asset.title} draggable="false" class="block h-auto max-h-[48dvh] w-auto max-w-full" onload={(event) => dimensions = { width: (event.currentTarget as HTMLImageElement).naturalWidth, height: (event.currentTarget as HTMLImageElement).naturalHeight }} onerror={() => { dimensions = { width: 0, height: 0 }; error = 'creative_reference_unavailable'; }} />
           {#if $form.operation === 'annotated_change'}<button type="button" class="absolute inset-0 cursor-crosshair touch-none" aria-label={m['creative_edit.region']()} onpointerdown={start} onpointermove={move} onpointerup={() => drag = null} onpointercancel={() => drag = null} onlostpointercapture={() => drag = null}><span class="pointer-events-none absolute border-2 border-cyan-400 bg-cyan-500/15 shadow-[0_0_0_1px_black]" style={`left:${region.x * 100}%;top:${region.y * 100}%;width:${region.width * 100}%;height:${region.height * 100}%`}></span></button>{/if}
         </div>{:else}<span role="status" class="text-xs">{m['creative.loading']()}</span>{/if}
       </div>

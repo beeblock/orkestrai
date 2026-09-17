@@ -212,6 +212,13 @@ common credentials redacted; normal agent output is not persisted.
   Approved characters keep versioned visual and voice references. Drag a character
   from the shared library into another workspace to copy its complete native
   reference bundle without granting access to credentials or paid generation.
+- **Creative production:** native ordered storyboards, comparison and human review,
+  contextual image edits, shot direction and approved brand kits share Canvas and
+  Workbench. Save versioned workflows with named local inputs, a script and format;
+  reuse them as editable storyboards without copying credentials or starting jobs.
+  The generation queue shows actual image/video state and download recovery.
+  Assemble delivered clips in a native Video sequence: reorder, trim, caption,
+  adjust audio and export a new MP4 locally, preserving the source files.
 - **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
   references, and a live Codex agent to a Generate images node on the same
   canvas; the same node opens in Workbench. A connected Codex can create and

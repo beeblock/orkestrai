@@ -4,6 +4,24 @@ Orkestrai uses third-party software, models, services, names, and trademarks.
 Their licenses apply to those components independently from the license selected
 for Orkestrai's own source code.
 
+## Optional Video Assembly Encoder
+
+FFmpeg/FFprobe are separate command-line executables downloaded only after owner
+confirmation. They are not linked into Orkestrai and are not in its installers.
+The pinned 9.0.1 builds enable GPL components (including x264) and are licensed
+under GPL-3.0-or-later, independently of Orkestrai's Apache-2.0 source.
+
+- FFmpeg license and source: <https://ffmpeg.org/legal.html>, <https://ffmpeg.org/download.html>
+- macOS builds and corresponding build scripts: <https://ffmpeg.martin-riedl.de/>,
+  <https://git.martin-riedl.de/ffmpeg/build-script>
+- Windows/Linux builds and source/build recipes: <https://github.com/BtbN/FFmpeg-Builds>
+- Exact archive URLs and SHA-256 values: `SequenceEncoderRuntime.ts`; downloaded
+  installations retain an `installed.json` manifest and `NOTICE.txt`.
+
+Do not mirror or redistribute these binaries without independently satisfying
+their corresponding-source and license obligations. Codec patent requirements
+depend on the jurisdiction and use; this notice is not a patent license.
+
 ## Cua Driver
 
 - Purpose: native Computer-control backend under development; not a separate

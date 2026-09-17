@@ -146,6 +146,13 @@ describe('image delivery normalization', () => {
 });
 
 describe('ImageWorkflowService', () => {
+  it('returns the repaired failure immediately when a running workflow has no run record', async () => {
+    const state = setupWorkflow();
+    state.getWorkflow().payload.status = 'running';
+    const status = await new ImageWorkflowService().status('workspace-1', 'workflow-1');
+    expect(status).toMatchObject({ running: false, runId: null, lastError: 'image_workflow_interrupted' });
+    expect(state.getWorkflow().payload.status).toBe('failed');
+  });
   it('prepares the exact built-in Codex image tool contract with notes and local references', async () => {
     setupWorkflow();
     const result = await new ImageWorkflowService().begin(new RunImageWorkflowDto(

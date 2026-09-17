@@ -121,6 +121,13 @@ normal de los agentes no se guarda.
   Los personajes aprobados conservan versiones de apariencia y voz. Arrastra desde
   la biblioteca compartida a otro workspace para copiar todas las referencias como
   nodos nativos, sin transferir credenciales ni autorizar generaciones de pago.
+- **Producción creativa:** storyboards ordenados, comparación y revisión humana,
+  ediciones contextuales, dirección de cámara y kits de marca aprobados en Canvas
+  y Workbench. Guarda flujos versionados con referencias locales, guion y formato;
+  reutilízalos como storyboards editables, sin copiar credenciales ni iniciar trabajos.
+  La cola muestra el estado real de imágenes/vídeos y la recuperación de descargas.
+  Monta clips entregados en una Secuencia de vídeo nativa: reordena, recorta,
+  subtitula, ajusta el audio y exporta un MP4 local sin alterar los originales.
 - **Flujos nativos de imágenes:** conecta Notas, referencias ordenadas de Imagen
   PNG/JPEG/WebP y un agente Codex activo a un nodo Generar imágenes en el mismo
   canvas; el mismo nodo se abre en Workbench. El Codex conectado usa la tool

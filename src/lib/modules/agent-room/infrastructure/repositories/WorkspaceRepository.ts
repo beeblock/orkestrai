@@ -25,6 +25,14 @@ import { AgentMemorySource } from '../../domain/models/AgentMemorySource.js';
 import { AgentHuddle } from '../../domain/models/AgentHuddle.js';
 import { AgentHuddleParticipant } from '../../domain/models/AgentHuddleParticipant.js';
 import { AgentHuddleTurn } from '../../domain/models/AgentHuddleTurn.js';
+import { AgentAutonomyPolicy } from '../../domain/models/AgentAutonomyPolicy.js';
+import { AgentAutonomyAuditEvent } from '../../domain/models/AgentAutonomyAuditEvent.js';
+import { AgentApprovalGate } from '../../domain/models/AgentApprovalGate.js';
+import { AgentSecretRef } from '../../domain/models/AgentSecretRef.js';
+import { AgentIntegrationEvent } from '../../domain/models/AgentIntegrationEvent.js';
+import { AgentWorkspaceTool } from '../../domain/models/AgentWorkspaceTool.js';
+import { AgentWorkspaceToolRun } from '../../domain/models/AgentWorkspaceToolRun.js';
+import { desktopSecretService } from '../secrets/DesktopSecretService.js';
 import { controlCenterRepository } from './ControlCenterRepository.js';
 import { reviewCenterRepository } from './ReviewCenterRepository.js';
 import { councilRepository } from './CouncilRepository.js';
@@ -256,24 +264,38 @@ export class WorkspaceRepository {
     await reviewCenterRepository.deleteWorkspaceHistory(id);
     await councilRepository.deleteWorkspaceHistory(id);
     await codeGraphRepository.deleteWorkspace(id);
-    await AgentMemorySource.query().where('workspace_id', id).delete();
-    await AgentMemoryEntry.query().where('workspace_id', id).delete();
-    await AgentHuddleTurn.query().where('workspace_id', id).delete();
-    await AgentHuddleParticipant.query().where('workspace_id', id).delete();
-    await AgentHuddle.query().where('workspace_id', id).delete();
-    await AgentCanvasEdge.query().where('workspace_id', id).delete();
-    await AgentCanvasNode.query().where('workspace_id', id).delete();
-    await AgentFloor.query().where('workspace_id', id).delete();
-    await AgentBoardTask.query().where('workspace_id', id).delete();
-    await AgentBoardColumn.query().where('workspace_id', id).delete();
-    const routineIds = await AgentRoutine.query().where('workspace_id', id).pluck('id');
-    for (const routineId of routineIds) {
-      await AgentRoutineRun.query().where('routine_id', routineId).delete();
+    const secretIds = await AgentSecretRef.query().where('workspace_id', id).where('provider', 'desktop').pluck('id');
+    for (const secretId of secretIds) {
+      await desktopSecretService.delete(`automation:secret-ref:${id}:${secretId}`);
     }
-    await AgentRoutine.query().where('workspace_id', id).delete();
-    await AgentAutomationIntegration.query().where('workspace_id', id).delete();
-    const deleted = await AgentWorkspace.query().where('id', id).delete();
-    return deleted > 0;
+    const deleted = await Connection.transaction(async () => {
+      // Policy reads create workspace-bound rows too; remove every dependency before its parent.
+      await AgentIntegrationEvent.query().where('workspace_id', id).delete();
+      await AgentWorkspaceToolRun.query().where('workspace_id', id).delete();
+      await AgentWorkspaceTool.query().where('workspace_id', id).delete();
+      await AgentApprovalGate.query().where('workspace_id', id).delete();
+      await AgentAutonomyAuditEvent.query().where('workspace_id', id).delete();
+      await AgentAutonomyPolicy.query().where('workspace_id', id).delete();
+      await AgentSecretRef.query().where('workspace_id', id).delete();
+      await AgentMemorySource.query().where('workspace_id', id).delete();
+      await AgentMemoryEntry.query().where('workspace_id', id).delete();
+      await AgentHuddleTurn.query().where('workspace_id', id).delete();
+      await AgentHuddleParticipant.query().where('workspace_id', id).delete();
+      await AgentHuddle.query().where('workspace_id', id).delete();
+      await AgentCanvasEdge.query().where('workspace_id', id).delete();
+      await AgentCanvasNode.query().where('workspace_id', id).delete();
+      await AgentFloor.query().where('workspace_id', id).delete();
+      await AgentBoardTask.query().where('workspace_id', id).delete();
+      await AgentBoardColumn.query().where('workspace_id', id).delete();
+      const routineIds = await AgentRoutine.query().where('workspace_id', id).pluck('id');
+      for (const routineId of routineIds) {
+        await AgentRoutineRun.query().where('routine_id', routineId).delete();
+      }
+      await AgentRoutine.query().where('workspace_id', id).delete();
+      await AgentAutomationIntegration.query().where('workspace_id', id).delete();
+      return (await AgentWorkspace.query().where('id', id).delete()) > 0;
+    });
+    return deleted;
   }
 
   // -- Nos do canvas ----------------------------------------------------------

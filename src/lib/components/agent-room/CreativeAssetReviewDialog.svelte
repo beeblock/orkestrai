@@ -55,7 +55,8 @@
     } catch (cause) { if (token === sequence) error = (cause as Error).message; }
     finally { if (token === sequence) loading = false; }
   }
-  $effect(() => { const workspace = workspaceId, node = initialNodeId; if (open && workspace) untrack(() => { void load(); }); else untrack(() => { sequence++; stop(); }); });
+  const dialogContext = $derived(open ? `${workspaceId}:${initialNodeId ?? ''}` : '');
+  $effect(() => { if (dialogContext) untrack(() => { void load(); }); else untrack(() => { sequence++; stop(); }); });
   async function decide(index: number, decision: CreativeAssetReview['decision']) {
     const current = inspections[index]; if (!current || busy || !decoded[index]) return;
     const token = sequence, base = endpoint;

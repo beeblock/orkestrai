@@ -155,6 +155,12 @@ export class CanvasNodeTransferService {
         edges: preparedEdges,
         sourceNodeIds: dto.nodeIds,
         beforeCommit: async () => {
+          const { creativeSequenceService } = await import('$lib/modules/creative-media/application/services/CreativeSequenceService.js');
+          const { creativeSequenceRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeSequenceRepository.js');
+          for (const node of selected.filter(node => node.type === 'sequence')) {
+            await creativeSequenceService.clone(dto.sourceWorkspaceId, node.id, dto.destinationWorkspaceId, ids.get(node.id)!, ids);
+            if (dto.mode === 'move') await creativeSequenceRepository.remove(dto.sourceWorkspaceId, node.id);
+          }
           if (dto.mode === 'move') {
             const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
             for (const node of selected.filter(node => node.type === 'storyboard')) await creativeStoryboardRepository.remove(dto.sourceWorkspaceId, node.id);

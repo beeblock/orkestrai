@@ -74,7 +74,7 @@ test('storyboard scenes share Canvas, Workbench and revisioned agent drafts', as
     expect((await (await request.get(`${base}/nodes`)).json()).data.some((node: { id: string }) => node.id === scene.imageWorkflowNodeId)).toBe(true);
     expect(errors).toEqual([]);
   } finally {
-    if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`);
+    if (workspaceId) expect.soft((await request.delete(`/api/agent-room/workspaces/${workspaceId}`)).ok()).toBe(true);
     await request.put('/api/agent-room/settings', { data: settings });
     await rm(folder, { recursive: true, force: true });
   }

@@ -1,5 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'creative-reusable-workflows': 'creative-reusable-workflows',
+  'creative-video-sequences': 'creative-video-sequences',
   'creative-brand-kits': 'creative-brand-kits',
   'creative-shot-direction': 'creative-shot-direction',
   'creative-storyboard': 'creative-storyboard',

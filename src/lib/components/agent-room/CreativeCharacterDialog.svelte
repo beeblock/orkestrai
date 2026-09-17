@@ -44,7 +44,8 @@
     } catch (cause) { if (sequence === loadSequence) error = (cause as Error).message; }
     finally { if (sequence === loadSequence) loading = false; }
   }
-  $effect(() => { const workspace = workspaceId; if (open && workspace) untrack(() => { void load(); }); else untrack(() => { loadSequence++; ready = false; }); });
+  const dialogContext = $derived(open ? workspaceId : '');
+  $effect(() => { if (dialogContext) untrack(() => { void load(); }); else untrack(() => { loadSequence++; ready = false; }); });
   async function command(command: CreativeCharacterCommand['command']) {
     if (busy || !ready) return;
     const workspace = workspaceId, sequence = loadSequence, current = record;

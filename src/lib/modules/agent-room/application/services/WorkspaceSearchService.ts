@@ -270,6 +270,16 @@ export class WorkspaceSearchService {
         route: `/terminal?workspace=${workspace.id}&node=${node.id}`,
       }, ['storyboard scene cena escena', scene.direction, scene.dialogue, scene.language]));
     }
+    const { creativeSequenceRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeSequenceRepository.js');
+    for (const sequence of await creativeSequenceRepository.list(workspace.id)) {
+      if (!nodes.some(node => node.id === sequence.nodeId)) continue;
+      for (const item of sequence.document.clips) results.push(indexed({
+        id: `sequence-clip:${sequence.nodeId}:${item.id}`, kind: 'artifact', title: item.title,
+        subtitle: `${workspace.name} · ${sequence.document.title}`, preview: clip(item.caption),
+        workspaceId: workspace.id, workspaceName: workspace.name, nodeId: sequence.nodeId, taskId: null, path: item.path,
+        route: `/terminal?workspace=${workspace.id}&node=${sequence.nodeId}`,
+      }, ['video sequence sequencia secuencia', item.caption]));
+    }
     for (const { node, document } of designDocuments) {
       if (!document) continue;
       const route = `/terminal?workspace=${workspace.id}&node=${node.id}`;

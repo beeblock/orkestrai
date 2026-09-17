@@ -70,9 +70,9 @@
     } finally { if (sequence === loadSequence) loading = false; }
   }
   function reload() { void load().catch(cause => { error = String(cause.message); }); }
+  const dialogContext = $derived(open ? workspaceId : '');
   $effect(() => {
-    const currentWorkspace = workspaceId;
-    if (open && currentWorkspace) untrack(() => { reload(); void loadModels(); });
+    if (dialogContext) untrack(() => { reload(); void loadModels(); });
     else untrack(() => { loadSequence++; loading = true; ready = false; clearCredential(); });
   });
   async function saveAccount() {

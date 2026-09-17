@@ -63,7 +63,7 @@ test('brand kits are editable, approved and reusable through the native UI', asy
     expect((await readFile(join(targetFolder, imported[0].definition.assets[0].path))).equals(bytes)).toBe(true);
     expect(errors).toEqual([]);
   } finally {
-    for (const id of ids) await request.delete(`/api/agent-room/workspaces/${id}`);
+    for (const id of ids) expect.soft((await request.delete(`/api/agent-room/workspaces/${id}`)).ok()).toBe(true);
     await request.put('/api/agent-room/settings', { data: settings });
     await rm(folder, { recursive: true, force: true }); await rm(targetFolder, { recursive: true, force: true });
   }

@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
+- Assemble native video sequences with ordered, hash-pinned clips, non-destructive trims, captions, audio levels and local H.264/AAC export. Download a verified encoder on demand, preserve source media, cancel bounded jobs and expose the same revisioned commands in Canvas, Workbench and CLI/MCP.
+- Save reusable, versioned storyboard workflows with named character/reference inputs, production scripts and output formats. Recreate editable native nodes without copying run history or paid authority, and inspect the actual image/video queue with guarded cancellation and download recovery.
 - Save versioned brand kits with palettes, frozen logos/products/style references and communication rules. Reuse approved kits as connected native nodes across workspaces without transferring accounts, secrets or grants; agents share the same revisioned commands.
 - Direct framing, camera angle, movement and pace in storyboards and video drafts. Preserve shot, references and voice across model changes, and reject unsupported scene durations instead of silently shortening them.
 - Add contextual image variation, genuine-alpha background removal, annotated changes and animation drafts. Preserve originals and frozen source lineage through the existing Codex image and fal video workflows.
@@ -21,9 +23,10 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Delete workspace-bound policies, audit records, integration events and tools in dependency order without leaving a partially removed Canvas; preserve unrelated workspaces and project files.
 - Require a protected operating-system credential store and preserve existing credentials when the vault file is unreadable or malformed.
 - Find curated skills by spaced or hyphenated names even when the online registry is unavailable.
-- Keep video account settings read-only until loading completes so delayed responses cannot overwrite edits or validation feedback.
+- Keep video account settings read-only until loading completes so delayed responses cannot overwrite edits or validation feedback. Keep creative dialog edits and selections stable during workspace refreshes.
 
 ## 0.31.5 - 2026-09-16
 

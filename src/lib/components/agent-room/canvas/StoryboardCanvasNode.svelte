@@ -5,6 +5,7 @@
   import type { NodeProps } from '@xyflow/svelte';
   import { Clapperboard, Plus, Copy, Trash2, ArrowUp, ArrowDown, Save, Undo2, Image, Film, ExternalLink, RefreshCw, Columns2, X } from '@lucide/svelte';
   import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
+  import CreativeRecipeDialog from '../CreativeRecipeDialog.svelte';
   import CreativeShotControls from '../CreativeShotControls.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
@@ -27,7 +28,7 @@
   let sceneId = $state(''), draft = $state(storyboardSceneContentSchema.parse({ title: 'Scene' }));
   let busy = $state(false), loading = $state(true), dirty = $state(false), conflict = $state(false), error = $state('');
   let dragging = $state(''), dropBefore = $state<string | null>(null), removeId = $state<string | null>(null);
-  let reviewing = $state(false);
+  let reviewing = $state(false), recipeOpen = $state(false);
   let mounted = false, refreshing = false, generation = 0;
   const base = $derived(`/api/agent-room/workspaces/${data.workspaceId}/creative-media`);
   const endpoint = $derived(`${base}/storyboards`);
@@ -105,7 +106,7 @@
 <NodeShell {id} {selected} accent="var(--app-secondary)" minWidth={540} minHeight={380} onResize={data.onResize} connections={data.connections ?? []} titleText={data.title} onRename={data.onRename} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection}>
   {#snippet icon()}<Clapperboard size={14} />{/snippet}
   {#snippet title()}{data.title || m['storyboard.title']()}{/snippet}
-  {#snippet actions()}<HeaderIconButton label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={14} /></HeaderIconButton><HeaderIconButton label={m['creative.refresh']()} onclick={() => refresh()}><RefreshCw size={14} /></HeaderIconButton><HeaderIconButton label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
+  {#snippet actions()}<HeaderIconButton label={m['creative_recipe.capture']()} onclick={() => recipeOpen = true}><Save size={14} /></HeaderIconButton><HeaderIconButton label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={14} /></HeaderIconButton><HeaderIconButton label={m['creative.refresh']()} onclick={() => refresh()}><RefreshCw size={14} /></HeaderIconButton><HeaderIconButton label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
   <div data-testid="storyboard" class="nodrag nowheel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-panel)] text-[var(--app-text)]">
     <div class="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--app-border)] px-3 py-2 text-xs"><span>{scenes.length} {m['storyboard.scenes']()} · {scenes.reduce((sum, item) => sum + item.duration, 0)} s</span><Button variant="outline" size="sm" disabled={busy || dirty || loading || scenes.length >= 100} onclick={add}><Plus size={14} />{m['storyboard.add_scene']()}</Button></div>
     {#if loading}<p role="status" class="p-3 text-xs">{m['creative.loading']()}</p>{/if}
@@ -128,6 +129,7 @@
           <fieldset disabled={busy} class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 text-xs disabled:opacity-70" oninput={changed}>
             <label class="block space-y-1"><span>{m['storyboard.scene_title']()}</span><Input bind:value={draft.title} maxlength={120} aria-invalid={Boolean($errors.title)} /></label>
             <label class="block space-y-1"><span>{m['creative.prompt']()}</span><Textarea bind:value={draft.direction} maxlength={16000} class="min-h-24" /></label>
+            <div class="space-y-1"><span>{m['creative.ratio']()}</span><ModelCombobox value={draft.aspectRatio} options={['16:9','9:16','1:1','4:3','3:4'].map(value => ({ value, label: value }))} defaultLabel="16:9" searchPlaceholder={m['creative.ratio']()} emptyLabel={m['creative.no_inputs']()} ariaLabel={m['creative.ratio']()} onValueChange={(value) => { draft.aspectRatio = value as typeof draft.aspectRatio; changed(); }} /></div>
             <CreativeShotControls value={draft.shot} disabled={busy} onChange={(value) => { draft.shot = value; changed(); }} />
             <label class="block space-y-1"><span>{m['storyboard.dialogue']()}</span><Textarea bind:value={draft.dialogue} maxlength={8000} /></label>
             <label class="block space-y-1"><span>{m['creative.character_language']()}</span><Input bind:value={draft.language} maxlength={35} /></label>
@@ -152,5 +154,6 @@
     {#if error}<p role="alert" class="shrink-0 border-t border-[var(--app-border)] p-2 text-xs text-destructive">{creativeError(error)}</p>{/if}
   </div>
 </NodeShell>
+<CreativeRecipeDialog bind:open={recipeOpen} workspaceId={data.workspaceId} sourceNodeId={id} onOpenNode={data.onJumpToNode} />
 <CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={progress?.outputs[0]?.id} onOpenNode={data.onJumpToNode} />
 <AlertDialog.Root open={removeId !== null} onOpenChange={(value) => { if (!value) removeId = null; }}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['creative.delete']()}</AlertDialog.Title><AlertDialog.Description>{m['storyboard.remove_help']()}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['dlg.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => { const next = removeId; removeId = null; if (next) void apply([{ type: 'remove', id: next }]); }}>{m['creative.delete']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>

@@ -10,6 +10,7 @@ export const storyboardSceneContentSchema = z.object({
   dialogue: z.string().trim().max(8000).default(''),
   language: z.string().trim().min(2).max(35).default('en-US'),
   duration: z.number().finite().min(1).max(120).default(5),
+  aspectRatio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4']).default('16:9'),
   shot: shotDirectionSchema.default({}),
   characterIds: ids(8).default([]),
   referenceNodeIds: ids(20).default([]),

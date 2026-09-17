@@ -111,6 +111,7 @@ export function transferredNodePayload(
   keepMaestro: boolean,
 ): CanvasNodePayload {
   const payload = structuredClone((source ?? {}) as Record<string, unknown>);
+  if (type === 'sequence') return { schemaVersion: 1, revision: 1 };
   if (type === 'terminal') {
     delete payload.sessionId;
     delete payload.agentSessionId;

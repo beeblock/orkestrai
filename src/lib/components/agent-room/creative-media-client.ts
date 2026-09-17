@@ -15,6 +15,14 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_sequence_runtime_required') return m['sequence.error_runtime']();
+  if (code === 'creative_sequence_disk_full') return m['sequence.error_disk']();
+  if (code === 'creative_sequence_trim_invalid') return m['sequence.error_trim']();
+  if (code === 'creative_sequence_interrupted') return m['sequence.error_interrupted']();
+  if (code === 'creative_sequence_transfer_sources') return m['sequence.error_transfer']();
+  if (code.startsWith('creative_sequence_') && code !== 'creative_sequence_busy') return m['sequence.error']();
+  if (code === 'creative_recipe_format_unsupported') return m['creative_recipe.error_format']();
+  if (code.startsWith('creative_recipe_')) return m['creative_recipe.error']();
   if (code === 'creative_brand_locked' || code === 'creative_brand_lock_required') return m['creative_brand.error_locked']();
   if (code.startsWith('creative_brand_')) return m['creative_brand.error']();
   if (code === 'creative_model_mapping_required') return m['creative_shot.model_mapping_required']();
