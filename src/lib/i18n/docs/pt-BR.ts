@@ -944,7 +944,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    {"date":"Não publicado","title":"Comunicação entre agentes","summary":"Correções ainda não publicadas, não incluídas na 0.31.4.","items":["Entregar mensagens entre agentes sem aguardar toda a resposta do modelo. Mensagens recíprocas desbloqueiam quem aguarda, mensagens recebidas pelo Claude durante o trabalho mantêm o vínculo com o transcript, e avisos válidos de conclusão continuam disponíveis ao líder."]},
+    {"date":"Não publicado","title":"Comunicação entre agentes e seleção no terminal","summary":"Correções ainda não publicadas, não incluídas na 0.31.4.","items":["Entregar mensagens entre agentes sem aguardar toda a resposta do modelo. Mensagens recíprocas desbloqueiam quem aguarda, mensagens recebidas pelo Claude durante o trabalho mantêm o vínculo com o transcript, e avisos válidos de conclusão continuam disponíveis ao líder.","Alinhar as coordenadas do mouse ao zoom do Canvas ao arrastar, selecionar palavras e usar telas com escala."]},
     {
       "date": "16 de setembro de 2026 · 0.31.4",
       "title": "Orkestrai 0.31.4: ditado responsivo e recuperação de terminais",

@@ -1,31 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { isTerminalCopyShortcut, isWindowsTerminalPasteShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange } from '$lib/components/agent-room/terminal-selection.js';
+import { isTerminalCopyShortcut, isWindowsTerminalPasteShortcut, unscaleTerminalPoint } from '$lib/components/agent-room/terminal-selection.js';
 
 describe('terminal selection geometry', () => {
-  it('mapeia coordenadas pelo retangulo visual escalado', () => {
-    const rect = { left: 100, top: 50, width: 400, height: 200 };
-    expect(terminalCellAtPoint({ clientX: 300, clientY: 150 }, rect, 80, 20, 40)).toEqual({ column: 40, row: 50 });
+  it.each([0.35, 0.67, 1, 1.25, 1.5, 2])('normalizes every native mouse gesture at scale %s', (scale) => {
+    const width = 601.5;
+    const height = 301.25;
+    const rect = { left: 180, top: 90, width: width * scale, height: height * scale };
+    const point = unscaleTerminalPoint({ clientX: 180 + 125 * scale, clientY: 90 + 80 * scale }, rect, width, height);
+    expect(point.clientX).toBeCloseTo(305);
+    expect(point.clientY).toBeCloseTo(170);
   });
-
-  it('normaliza selecao reversa em varias linhas', () => {
-    expect(terminalSelectionRange({ column: 10, row: 8 }, { column: 5, row: 6 }, 80)).toEqual({
-      column: 5,
-      row: 6,
-      length: 166,
-    });
-  });
-
-  it('so suprime a selecao nativa do xterm no clique unico, fora de modo de rastreamento de mouse', () => {
-    const leftSingleClick = { button: 0, detail: 1, shiftKey: false };
-    expect(shouldSuppressNativeSingleClickSelection(leftSingleClick, 'none')).toBe(true);
-    // Duplo/triplo clique (selecao de palavra/linha) continuam nativos do xterm.
-    expect(shouldSuppressNativeSingleClickSelection({ ...leftSingleClick, detail: 2 }, 'none')).toBe(false);
-    expect(shouldSuppressNativeSingleClickSelection({ ...leftSingleClick, detail: 3 }, 'none')).toBe(false);
-    // So o botao esquerdo.
-    expect(shouldSuppressNativeSingleClickSelection({ ...leftSingleClick, button: 2 }, 'none')).toBe(false);
-    // TUI com mouse tracking: xterm deve reportar o clique ao programa, exceto com Shift.
-    expect(shouldSuppressNativeSingleClickSelection(leftSingleClick, 'x10')).toBe(false);
-    expect(shouldSuppressNativeSingleClickSelection({ ...leftSingleClick, shiftKey: true }, 'x10')).toBe(true);
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY])('preserves the point while layout dimensions are invalid (%s)', (width) => {
+    const point = { clientX: 12, clientY: 24 };
+    expect(unscaleTerminalPoint(point, { left: 0, top: 0, width: 100, height: 100 }, width, 100)).toBe(point);
   });
 
   it('copia com Ctrl/Cmd+C somente quando ha selecao e preserva SIGINT sem selecao', () => {

@@ -21,7 +21,7 @@
   import { voiceModelsReadyForUse } from './voice-model-status.js';
   import { terminalDictationInput } from './terminal-dictation.js';
   import { DictationOperation, DICTATION_START_TIMEOUT_MS, DICTATION_TRANSCRIBE_TIMEOUT_MS, DICTATION_MAX_RECORDING_MS } from './dictation-operation.js';
-  import { isTerminalCopyShortcut, isWindowsTerminalPasteShortcut, shouldSuppressNativeSingleClickSelection, terminalCellAtPoint, terminalSelectionRange, type TerminalCell } from './terminal-selection.js';
+  import { installScaledTerminalMouse, isTerminalCopyShortcut, isWindowsTerminalPasteShortcut } from './terminal-selection.js';
   import { workingDirectoryFromOsc } from './terminal-working-directory.js';
   import { audioSignalIsEmpty } from '$lib/modules/agent-room/domain/voice-audio.js';
   import {
@@ -453,48 +453,15 @@
       return true;
     });
 
-    // O canvas aplica transform: scale() e alguns Chromiums no Windows usam as
-    // metricas nao escaladas do xterm para selecao. Recalcula a faixa pelo
-    // retangulo visual real, inclusive em DPI 125/150% e zoom do canvas.
+    const restoreTerminalMouse = installScaledTerminalMouse(terminal);
     const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen') ?? null;
-    let selectionStart: TerminalCell | null = null;
-    let selectionOrigin: { x: number; y: number } | null = null;
-    const selectionPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || !screen) return;
-      if (terminal.modes.mouseTrackingMode !== 'none' && !event.shiftKey) return;
-      selectionOrigin = { x: event.clientX, y: event.clientY };
-      selectionStart = terminalCellAtPoint(event, screen.getBoundingClientRect(), terminal.cols, terminal.rows, terminal.buffer.active.viewportY);
-    };
-    const selectionPointerMove = (event: PointerEvent) => {
-      if (!screen || !selectionStart || !selectionOrigin || (event.buttons & 1) === 0) return;
-      if (Math.hypot(event.clientX - selectionOrigin.x, event.clientY - selectionOrigin.y) < 3) return;
-      const end = terminalCellAtPoint(event, screen.getBoundingClientRect(), terminal.cols, terminal.rows, terminal.buffer.active.viewportY);
-      const range = terminalSelectionRange(selectionStart, end, terminal.cols);
-      terminal.select(range.column, range.row, range.length);
-    };
-    const selectionPointerUp = () => {
-      selectionStart = null;
-      selectionOrigin = null;
-    };
     const copySelectionFromContextMenu = (event: MouseEvent) => {
       if (!terminal.hasSelection()) return;
       event.preventDefault();
       event.stopPropagation();
       void copyTerminalSelection(terminal);
     };
-    // terminal.element tambem recebe o mousedown nativo que o proprio xterm
-    // usa para selecionar (fase de bubble); ele roda depois do pointerdown
-    // acima e, sem isso, sobrescreve visualmente a selecao correta do overlay
-    // com as metricas nao escaladas do xterm quando o canvas esta com zoom.
-    const blockNativeSingleClickSelection = (event: MouseEvent) => {
-      if (!screen || !shouldSuppressNativeSingleClickSelection(event, terminal.modes.mouseTrackingMode)) return;
-      event.stopPropagation();
-    };
-    screen?.addEventListener('pointerdown', selectionPointerDown);
     screen?.addEventListener('contextmenu', copySelectionFromContextMenu);
-    terminal.element?.addEventListener('mousedown', blockNativeSingleClickSelection, { capture: true });
-    window.addEventListener('pointermove', selectionPointerMove);
-    window.addEventListener('pointerup', selectionPointerUp);
 
     // Cmd/Ctrl+clique em caminhos de arquivo (ex.: src/index.ts:42, ./a/b.js).
     if (onOpenPath) {
@@ -776,11 +743,8 @@
 
     return () => {
       disposed = true;
-      screen?.removeEventListener('pointerdown', selectionPointerDown);
+      restoreTerminalMouse();
       screen?.removeEventListener('contextmenu', copySelectionFromContextMenu);
-      terminal.element?.removeEventListener('mousedown', blockNativeSingleClickSelection, { capture: true });
-      window.removeEventListener('pointermove', selectionPointerMove);
-      window.removeEventListener('pointerup', selectionPointerUp);
       window.removeEventListener('resize', refitForDisplayChange);
       window.visualViewport?.removeEventListener('resize', refitForDisplayChange);
       window.removeEventListener(LEADER_DICTATION_COMMAND, handleLeaderDictation);

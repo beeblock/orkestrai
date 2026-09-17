@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Align terminal text selection and mouse coordinates with Canvas zoom, including word selection, dragging, display scaling and restored terminals.
 - Serialize agent message delivery without blocking other senders for an entire model response; route reciprocal agent messages to waiting callers and preserve exact reply attribution. Recognize Claude prompts absorbed into an active turn and keep valid completion reports available to the leader.
 
 ## 0.31.4 - 2026-09-16

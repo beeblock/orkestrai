@@ -1,45 +1,39 @@
-export type TerminalCell = { column: number; row: number };
+type Point = { clientX: number; clientY: number };
+type MouseService = {
+  getCoords(event: Point, element: HTMLElement, cols: number, rows: number, selection?: boolean): [number, number] | undefined;
+  getMouseReportCoords(event: Point, element: HTMLElement): { col: number; row: number; x: number; y: number } | undefined;
+};
 
-export function terminalCellAtPoint(
-  point: { clientX: number; clientY: number },
-  rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
-  cols: number,
-  rows: number,
-  viewportY: number
-): TerminalCell {
-  const column = Math.max(0, Math.min(cols - 1, Math.floor(((point.clientX - rect.left) / rect.width) * cols)));
-  const visibleRow = Math.max(0, Math.min(rows - 1, Math.floor(((point.clientY - rect.top) / rect.height) * rows)));
-  return { column, row: viewportY + visibleRow };
-}
-
-export function terminalSelectionRange(start: TerminalCell, end: TerminalCell, cols: number) {
-  const startOffset = start.row * cols + start.column;
-  const endOffset = end.row * cols + end.column;
-  const first = Math.min(startOffset, endOffset);
-  const last = Math.max(startOffset, endOffset);
+export function unscaleTerminalPoint(point: Point, rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>, width: number, height: number): Point {
+  if (![rect.width, rect.height, width, height].every((value) => Number.isFinite(value) && value > 0)) return point;
   return {
-    column: first % cols,
-    row: Math.floor(first / cols),
-    length: last - first + 1,
+    clientX: rect.left + (point.clientX - rect.left) * width / rect.width,
+    clientY: rect.top + (point.clientY - rect.top) * height / rect.height,
   };
 }
 
-/**
- * O xterm tem seu proprio SelectionService escutando "mousedown" nativo, que
- * recalcula a faixa com metricas de fonte nao escaladas (alheias ao
- * transform:scale() do canvas) e sobrescreve visualmente a selecao correta
- * do overlay baseado em pointerdown/pointermove. So bloqueamos o clique
- * unico (detail===1) na mesma condicao em que o overlay assume a selecao;
- * duplo/triplo clique (palavra/linha) continuam nativos do xterm, que le
- * event.detail do proprio navegador — nao depende de ver o mousedown
- * anterior, entao bloquear so o clique 1 nao quebra a contagem.
- */
-export function shouldSuppressNativeSingleClickSelection(
-  event: Pick<MouseEvent, 'button' | 'detail' | 'shiftKey'>,
-  mouseTrackingMode: string
-): boolean {
-  if (event.button !== 0 || event.detail !== 1) return false;
-  return mouseTrackingMode === 'none' || event.shiftKey;
+/** xterm has no public coordinate hook. Keep this shape-checked adapter at the
+ * mouse boundary so native word/line/wide-character selection stays intact. */
+export function installScaledTerminalMouse(terminal: unknown): () => void {
+  const core = (terminal as { _core?: { _mouseService?: MouseService } })._core;
+  const mouse = core?._mouseService;
+  if (!mouse?.getCoords || !mouse.getMouseReportCoords) throw new Error('Unsupported xterm mouse service.');
+  const getCoords = mouse.getCoords;
+  const getMouseReportCoords = mouse.getMouseReportCoords;
+  const point = (event: Point, element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    return unscaleTerminalPoint(event, element.getBoundingClientRect(), parseFloat(style.width), parseFloat(style.height));
+  };
+  mouse.getCoords = function (event, element, cols, rows, selection) {
+    return getCoords.call(this, point(event, element), element, cols, rows, selection);
+  };
+  mouse.getMouseReportCoords = function (event, element) {
+    return getMouseReportCoords.call(this, point(event, element), element);
+  };
+  return () => {
+    mouse.getCoords = getCoords;
+    mouse.getMouseReportCoords = getMouseReportCoords;
+  };
 }
 
 export function isTerminalCopyShortcut(event: Pick<KeyboardEvent, 'type' | 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>, hasSelection: boolean) {
