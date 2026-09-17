@@ -11,6 +11,7 @@ import type { ImageWorkflowNodePayload } from '$lib/modules/agent-room/domain/ty
 import { creativeWorkflowService } from './CreativeWorkflowService.js';
 import { CreativeMediaFiles } from './CreativeMediaFiles.js';
 import { withCreativeProfileLock } from './creative-profile-lock.js';
+import { creativeAssetActionService } from './CreativeAssetActionService.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export class CreativeAssetReviewService {
   async list(workspaceId: string): Promise<CreativeAssetSummary[]> {
@@ -31,6 +32,8 @@ export class CreativeAssetReviewService {
     if (asset.type === 'image' && asset.groupId && runId) {
       const workflow = await creativeWorkspaceGateway.node(workspaceId, asset.groupId);
       const history = (workflow?.payload as ImageWorkflowNodePayload | undefined)?.history?.find(item => item.id === runId && item.inputHash === snapshot.origin.inputHash);
+      const inherited = (workflow?.payload as ImageWorkflowNodePayload | undefined)?.creativeOrigin?.source.characters ?? [];
+      if (history) snapshot.characters.push(...inherited);
       for (const refId of history?.referenceNodeIds ?? []) {
         const reference = await creativeWorkspaceGateway.node(workspaceId, refId);
         const identity = reference?.payload as { characterId?: string; characterDigest?: string } | undefined;
@@ -44,13 +47,14 @@ export class CreativeAssetReviewService {
   }
   async execute(workspaceId: string, raw: CreativeAssetCommand, actor: CreativeActor) {
     const input = creativeAssetCommandSchema.parse(raw);
-    await creativeWorkflowService.assertActor(workspaceId, actor, input.command === 'decide');
+    await creativeWorkflowService.assertActor(workspaceId, actor, !['list', 'inspect'].includes(input.command));
     if (input.command === 'list') return this.list(workspaceId);
     if (input.command === 'inspect') return this.inspect(workspaceId, input.nodeId!);
-    if (actor.type === 'agent' && input.decision !== 'proposed') throw new CreativeMediaError('creative_owner_required', 403);
+    if (input.command === 'decide' && actor.type === 'agent' && input.decision !== 'proposed') throw new CreativeMediaError('creative_owner_required', 403);
     return withCreativeProfileLock(`asset-review:${workspaceId}:${input.nodeId}`, async () => {
       const current = await this.inspect(workspaceId, input.nodeId!);
       if (current.digest !== input.expectedDigest) throw new CreativeMediaError('creative_reference_changed', 409);
+      if (input.command === 'prepare') return creativeAssetActionService.prepare(workspaceId, current, input.edit!, actor);
       await creativeAssetReviewRepository.append(workspaceId, input.nodeId!, input.revision!, current.digest, current.snapshot, input.decision!, input.comment, actor);
       await autonomyPolicyService.recordSemanticEffect({ workspaceId, capability: 'filesystem', operation: 'creative.asset.review', actorType: actor.type, actorId: actor.type === 'agent' ? actor.nodeId : null, input: { nodeId: input.nodeId, digest: current.digest, decision: input.decision } }, { reviewed: true });
       creativeWorkspaceGateway.broadcast(workspaceId);

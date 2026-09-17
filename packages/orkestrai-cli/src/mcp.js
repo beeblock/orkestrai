@@ -437,7 +437,10 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   const required = ['taskId'];
   if (!['assets', 'storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
   if (command === 'assets') {
-    properties.input = { type: 'object', additionalProperties: false, properties: { command: { enum: ['list', 'inspect', 'decide'] }, nodeId: { type: 'string', format: 'uuid' }, expectedDigest: { type: 'string', pattern: '^[a-f0-9]{64}$' }, revision: { type: 'integer', minimum: 0 }, decision: { enum: ['proposed'] }, comment: { type: 'string', maxLength: 8000 } }, required: ['command'] }; required.push('input');
+    properties.input = { type: 'object', additionalProperties: false, properties: { command: { enum: ['list', 'inspect', 'decide', 'prepare'] }, nodeId: { type: 'string', format: 'uuid' }, expectedDigest: { type: 'string', pattern: '^[a-f0-9]{64}$' }, revision: { type: 'integer', minimum: 0 }, decision: { enum: ['proposed'] }, comment: { type: 'string', maxLength: 8000 }, edit: { type: 'object', additionalProperties: false, properties: {
+      operation: { enum: ['variation', 'remove_background', 'annotated_change', 'animate'] }, direction: { type: 'string', maxLength: 16000 }, executorNodeId: { type: ['string', 'null'], format: 'uuid' }, count: { type: 'integer', minimum: 1, maximum: 10 }, config: VIDEO_CONFIG_SCHEMA,
+      annotation: { type: 'object', additionalProperties: false, properties: { sourceWidth: { type: 'integer', minimum: 1, maximum: 16384 }, sourceHeight: { type: 'integer', minimum: 1, maximum: 16384 }, x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 }, width: { type: 'number', exclusiveMinimum: 0, maximum: 1 }, height: { type: 'number', exclusiveMinimum: 0, maximum: 1 } }, required: ['sourceWidth', 'sourceHeight', 'x', 'y', 'width', 'height'] },
+    }, required: ['operation'] } }, required: ['command'] }; required.push('input');
   }
   if (command === 'storyboards') {
     properties.input = { ...STORYBOARD_COMMAND_SCHEMA, properties: { ...STORYBOARD_COMMAND_SCHEMA.properties, config: VIDEO_CONFIG_SCHEMA } }; required.push('input');

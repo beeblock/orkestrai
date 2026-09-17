@@ -58,4 +58,28 @@ describe('creative approval evidence', () => {
     await workspaceRepository.updateNode(node.id, { payload: { path: '../outside.mp4' } });
     await expect(new CreativeMediaFiles().asset(f.workspaceId, node.id)).rejects.toThrow();
   });
+  it('creates connected native action drafts without altering or generating the source', async () => {
+    const f = await fixture(), source = await f.service.inspect(f.workspaceId, f.node.id);
+    for (const operation of ['variation', 'remove_background', 'annotated_change', 'animate'] as const) {
+      const result = await f.service.execute(f.workspaceId, { command: 'prepare', nodeId: f.node.id, expectedDigest: source.digest, comment: '', edit: { operation, direction: 'Make the jacket green.', count: 3, executorNodeId: null, ...(operation === 'annotated_change' ? { annotation: { sourceWidth: 512, sourceHeight: 512, x: 0.2, y: 0.25, width: 0.4, height: 0.5 } } : {}) } }, owner) as { nodeId: string; referenceNodeId: string; lineage: { frozenReference: { path: string } } };
+      const node = await creativeWorkspaceGateway.node(f.workspaceId, result.nodeId);
+      expect(node?.type).toBe(operation === 'animate' ? 'videoWorkflow' : 'imageWorkflow');
+      expect(await readFile(join(f.folder, 'output.png'))).toEqual(f.bytes);
+      expect(await readFile(join(f.folder, result.lineage.frozenReference.path))).toEqual(f.bytes);
+      if (operation !== 'animate') expect(node?.payload).toMatchObject({ status: 'idle', count: 3, history: [], transparentBackground: operation === 'remove_background', referenceOrder: [result.referenceNodeId] });
+      const edges = await workspaceRepository.listEdges(f.workspaceId);
+      expect(edges.some(edge => edge.sourceNodeId === f.node.id && edge.targetNodeId === result.referenceNodeId)).toBe(true);
+      expect(edges.filter(edge => edge.sourceNodeId === result.nodeId || edge.targetNodeId === result.nodeId)).toHaveLength(1);
+      expect(edges.some(edge => edge.sourceNodeId === result.referenceNodeId && edge.targetNodeId === result.nodeId)).toBe(true);
+    }
+  });
+  it('rejects changed inputs and forged annotation geometry before preparing an action', async () => {
+    const f = await fixture(), source = await f.service.inspect(f.workspaceId, f.node.id);
+    const command = { command: 'prepare' as const, nodeId: f.node.id, expectedDigest: source.digest, comment: '', edit: { operation: 'annotated_change' as const, direction: 'Change only the marked region.', count: 1, executorNodeId: null, annotation: { sourceWidth: 1024, sourceHeight: 1024, x: 0.5, y: 0.5, width: 0.4, height: 0.4 } } };
+    await expect(f.service.execute(f.workspaceId, command, owner)).rejects.toThrow('creative_reference_changed');
+    expect(await creativeWorkspaceGateway.nodes(f.workspaceId)).toHaveLength(1);
+    await writeFile(join(f.folder, 'output.png'), Buffer.concat([f.bytes, Buffer.from('changed')]));
+    await expect(f.service.execute(f.workspaceId, command, owner)).rejects.toThrow('creative_reference_changed');
+    expect(await creativeWorkspaceGateway.nodes(f.workspaceId)).toHaveLength(1);
+  });
 });

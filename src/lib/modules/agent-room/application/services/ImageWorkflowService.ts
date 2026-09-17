@@ -672,11 +672,14 @@ export class ImageWorkflowService {
       ]);
       if (!file || !inspection) throw new ImageWorkflowError('image_workflow_reference_unavailable');
       if (file.data.length > MAX_REFERENCE_BYTES) throw new ImageWorkflowError('image_workflow_reference_too_large');
+      const frozen = existingPayload.creativeOrigin?.frozenReference;
+      if (frozen?.path === path && createHash('sha256').update(file.data).digest('hex') !== frozen.sha256) throw new ImageWorkflowError('image_workflow_reference_unavailable');
       referenceBytes += file.data.length;
       if (referenceBytes > MAX_REFERENCE_TOTAL_BYTES) throw new ImageWorkflowError('image_workflow_references_too_large');
       if (!imageMime(file.data)) throw new ImageWorkflowError('image_workflow_reference_format_invalid');
       references.push({ node, data: file.data, path: relativeWorkspacePath(workspace, inspection.path) });
     }
+    if (existingPayload.creativeOrigin?.frozenReference && !references.some(reference => reference.path === existingPayload.creativeOrigin!.frozenReference.path)) throw new ImageWorkflowError('image_workflow_reference_missing');
 
     const runId = uuidv7();
     const suffix = runId.replaceAll('-', '').slice(-10);

@@ -83,7 +83,8 @@ export class CreativeWorkflowService {
     }
     try {
       const result = await this.repository.saveWorkflow(workspaceId, nodeId, value);
-      await this.workspace.updateNode(workspaceId, nodeId, value.title, { schemaVersion: 1, workflowId: result.id, revision: result.revision });
+      const origin = ((await this.workspace.node(workspaceId, nodeId))?.payload as { creativeOrigin?: unknown })?.creativeOrigin;
+      await this.workspace.updateNode(workspaceId, nodeId, value.title, { schemaVersion: 1, workflowId: result.id, revision: result.revision, ...(origin ? { creativeOrigin: origin } : {}) });
       for (const inputId of [value.config.startImageNodeId, value.config.endImageNodeId, ...value.config.contextNodeIds, ...value.config.mediaBindings.map(binding => binding.nodeId)]) if (inputId) await this.workspace.connect(workspaceId, inputId, nodeId);
       this.workspace.broadcast(workspaceId);
       return result;
@@ -107,6 +108,11 @@ export class CreativeWorkflowService {
 
   async snapshot(workflow: CreativeWorkflow): Promise<CreativeSnapshot> {
     await this.validateBindings(workflow.workspaceId, workflow.config);
+    const origin = ((await this.workspace.node(workflow.workspaceId, workflow.nodeId))?.payload as { creativeOrigin?: import('../../domain/asset-lineage.js').CreativeAssetLineage })?.creativeOrigin;
+    if (origin?.frozenReference) {
+      const current = await this.files.media(workflow.workspaceId, { path: origin.frozenReference.path });
+      if (current.sha256 !== origin.frozenReference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+    }
     let config = creativeConfigSchema.parse(workflow.config);
     if (config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id))) throw new CreativeMediaError('creative_character_binding_required');
     const references = new Set([config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)]);

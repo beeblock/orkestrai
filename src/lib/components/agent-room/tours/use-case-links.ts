@@ -2,6 +2,7 @@
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'creative-storyboard': 'creative-storyboard',
   'creative-variants': 'creative-variants',
+  'creative-actions': 'creative-actions',
   'creative-video-workflow': 'creative-video-workflow',
   'leader-team': 'team-leader',
   'workspace-node-transfer': 'workspace-node-transfer',

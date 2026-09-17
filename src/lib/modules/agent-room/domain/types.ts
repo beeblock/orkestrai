@@ -736,6 +736,7 @@ export type ImageWorkflowActiveRun = {
 export type ImageWorkflowOutputPreset = 'auto' | 'instagram-square' | 'instagram-portrait' | 'instagram-story' | 'tiktok' | 'custom';
 
 export type ImageWorkflowNodePayload = {
+  creativeOrigin?: import('$lib/modules/creative-media/domain/asset-lineage.js').CreativeAssetLineage;
   schemaVersion?: 1;
   prompt?: string;
   count?: number;

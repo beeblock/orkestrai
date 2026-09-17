@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
+- Add contextual image variation, genuine-alpha background removal, annotated changes and animation drafts. Preserve originals and frozen source lineage through the existing Codex image and fal video workflows.
 - Compare image and video variants with synchronized playback and immutable, hash-bound review history. Changed files invalidate approval; agents can propose but cannot self-approve.
 - Plan native storyboards with ordered scenes, dialogue, locked character selections, references and connected image/video drafts in Canvas and Workbench. UI and agents share revision guards, recoverable missing inputs and stale-scene indicators without automatic paid execution or deleting delivered files.
 - Create native fal.ai video workflows in Canvas and Workbench with searchable discovery of the complete published video catalog, including Seedance 2.5. Official endpoint contracts drive typed parameters, nested inputs and multiple image/video/audio references. Existing Wan/Kling drafts and Codex subscription image workflows remain compatible.

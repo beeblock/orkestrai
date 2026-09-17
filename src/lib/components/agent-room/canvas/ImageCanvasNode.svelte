@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Image as ImageIcon, ImagePlus, Columns2, X } from '@lucide/svelte';
+  import { Image as ImageIcon, ImagePlus, Columns2, WandSparkles, X } from '@lucide/svelte';
+  import CreativeAssetActionDialog from '../CreativeAssetActionDialog.svelte';
   import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import * as m from '$lib/paraglide/messages.js';
@@ -24,6 +25,7 @@
 
   let fileInput: HTMLInputElement;
   let reviewing = $state(false);
+  let editing = $state(false);
   const imageUrl = $derived(
     data.payload.path
       ? `/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(data.payload.path)}`
@@ -80,6 +82,7 @@
   {#snippet icon()}<ImageIcon size={13} />{/snippet}
   {#snippet title()}{data.title || m['node.image']()}{/snippet}
   {#snippet actions()}
+    {#if imageUrl}<HeaderIconButton label={m['creative_edit.title']()} onclick={() => editing = true}><WandSparkles size={13} /></HeaderIconButton>{/if}
     {#if imageUrl}<HeaderIconButton label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={13} /></HeaderIconButton>{/if}
     {#if !data.payload.characterId || !data.payload.characterDigest}<HeaderIconButton class="node-action-btn" label={m['node.image_replace']()} onclick={() => fileInput.click()}>
       <ImagePlus size={13} />
@@ -102,6 +105,7 @@
   {/if}
 </NodeShell>
 <CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={id} onOpenNode={data.onJumpToNode} />
+<CreativeAssetActionDialog bind:open={editing} workspaceId={data.workspaceId} nodeId={id} onOpenNode={data.onJumpToNode} />
 
 <style>
   .hidden-input {
