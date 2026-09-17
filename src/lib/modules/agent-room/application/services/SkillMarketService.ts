@@ -102,8 +102,9 @@ export class SkillMarketService {
   /** Curadoria filtrada + registry (curadoria sempre primeiro). Sem termo: so a curadoria. */
   async search(query: string): Promise<SkillSearchResult[]> {
     const q = query.trim();
-    const ql = q.toLowerCase();
-    const curated = CURATED.filter((skill) => !ql || `${skill.name} ${skill.skillId} ${skill.source}`.toLowerCase().includes(ql));
+    const normalize = (value: string) => value.toLowerCase().replace(/[-_/\s]+/g, ' ').trim();
+    const ql = normalize(q);
+    const curated = CURATED.filter((skill) => !ql || normalize(`${skill.name} ${skill.skillId} ${skill.source}`).includes(ql));
     if (!q) return curated;
     try {
       const payload = await this.fetchJson(`${SKILLS_SH_BASE}/api/search?q=${encodeURIComponent(q)}`);

@@ -71,4 +71,10 @@ describe('SkillMarketService', () => {
     expect(results[0]).toMatchObject({ id: 'someone/repo/safe', skillId: 'safe', source: 'someone/repo', installs: 0 });
     expect(results[0].name).toHaveLength(120);
   });
+  it('matches spaced names against curated hyphenated IDs when the registry is unavailable', async () => {
+    const service = new SkillMarketService((async () => { throw new Error('network down'); }) as typeof fetch);
+    for (const query of ['web design guidelines', 'WEB-DESIGN-GUIDELINES', 'vercel labs/agent skills']) {
+      expect((await service.search(query)).map(skill => skill.id)).toContain('vercel-labs/agent-skills/web-design-guidelines');
+    }
+  });
 });
