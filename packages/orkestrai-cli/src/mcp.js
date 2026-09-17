@@ -435,7 +435,10 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   /** @type {Record<string, object>} */
   const properties = { taskId: { type: 'string', format: 'uuid' } };
   const required = ['taskId'];
-  if (!['storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (!['assets', 'storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (command === 'assets') {
+    properties.input = { type: 'object', additionalProperties: false, properties: { command: { enum: ['list', 'inspect', 'decide'] }, nodeId: { type: 'string', format: 'uuid' }, expectedDigest: { type: 'string', pattern: '^[a-f0-9]{64}$' }, revision: { type: 'integer', minimum: 0 }, decision: { enum: ['proposed'] }, comment: { type: 'string', maxLength: 8000 } }, required: ['command'] }; required.push('input');
+  }
   if (command === 'storyboards') {
     properties.input = { ...STORYBOARD_COMMAND_SCHEMA, properties: { ...STORYBOARD_COMMAND_SCHEMA.properties, config: VIDEO_CONFIG_SCHEMA } }; required.push('input');
   }

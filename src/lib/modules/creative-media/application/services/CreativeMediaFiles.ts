@@ -17,6 +17,31 @@ export function creativeOutputPath(run: CreativeRun, video: CreativeRemoteVideo,
 export class CreativeMediaFiles {
   constructor(private readonly workspace: CreativeWorkspaceGateway = creativeWorkspaceGateway) {}
 
+  async asset(workspaceId: string, nodeId: string): Promise<CreativeMediaReference> {
+    const node = await this.workspace.node(workspaceId, nodeId);
+    if (node?.type === 'image') return this.media(workspaceId, { nodeId });
+    const path = (node?.payload as { path?: string })?.path;
+    if (node?.type !== 'video' || !path) throw new CreativeMediaError('creative_reference_unavailable');
+    const mimeType = videoMimeFromPath(path);
+    const handle = await open(await this.workspace.existingPath(workspaceId, path), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    try {
+      const initial = await handle.stat();
+      if (!initial.isFile() || initial.size < 12 || initial.size > MAX_CREATIVE_VIDEO_BYTES) throw new CreativeMediaError('creative_reference_size');
+      const header = Buffer.alloc(Math.min(initial.size, 1024));
+      await handle.read(header, 0, header.length, 0);
+      if (!matchesVideoHeader(header, mimeType)) throw new CreativeMediaError('creative_reference_invalid');
+      const hash = createHash('sha256'); let size = 0;
+      for await (const chunk of handle.createReadStream({ start: 0, autoClose: false })) {
+        size += chunk.length;
+        if (size > MAX_CREATIVE_VIDEO_BYTES) throw new CreativeMediaError('creative_reference_size');
+        hash.update(chunk);
+      }
+      const final = await handle.stat();
+      if (size !== initial.size || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || final.ctimeMs !== initial.ctimeMs) throw new CreativeMediaError('creative_reference_changed', 409);
+      return { nodeId, path, mimeType, size, sha256: hash.digest('hex') };
+    } finally { await handle.close(); }
+  }
+
   async image(workspaceId: string, nodeId: string): Promise<CreativeReference> {
     const node = await this.workspace.node(workspaceId, nodeId);
     const path = (node?.payload as { path?: string } | undefined)?.path;

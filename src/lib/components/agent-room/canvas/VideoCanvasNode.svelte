@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Film, Download, X } from '@lucide/svelte';
+  import { Film, Download, Columns2, X } from '@lucide/svelte';
+  import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
   import * as m from '$lib/paraglide/messages.js';
   import type { CreativeVideoAsset } from '$lib/modules/creative-media/domain/types.js';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
@@ -8,13 +9,14 @@
   type Data = { title: string; workspaceId: string; payload: Partial<CreativeVideoAsset>; connections?: NodeConnection[]; onDelete: (id: string) => void; onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void; onRename?: (id: string, title: string) => void; onJumpToNode?: (id: string) => void; onRemoveConnection?: (id: string) => void; };
   let { id, data, selected } = $props<NodeProps & { data: Data }>();
   let failed = $state(false);
+  let reviewing = $state(false);
   let decodedSize = $state<{ width: number; height: number } | null>(null);
   const url = $derived(`/api/agent-room/workspaces/${data.workspaceId}/creative-media/videos/${id}`);
 </script>
 <NodeShell {id} {selected} accent="var(--app-secondary)" minWidth={280} minHeight={220} onResize={data.onResize} connections={data.connections ?? []} titleText={data.title} onRename={data.onRename} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection}>
   {#snippet icon()}<Film size={14} />{/snippet}
   {#snippet title()}{data.title || m['creative.video']()}{/snippet}
-  {#snippet actions()}<HeaderIconButton label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
+  {#snippet actions()}<HeaderIconButton label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={14} /></HeaderIconButton><HeaderIconButton label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
   <div class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-canvas)]">
     {#if data.payload.mimeType === 'image/gif'}
       <img src={url} alt={data.title || m['creative.video']()} class="min-h-0 w-full flex-1 object-contain" onerror={() => failed = true} />
@@ -31,3 +33,4 @@
     </footer>
   </div>
 </NodeShell>
+<CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={id} onOpenNode={data.onJumpToNode} />

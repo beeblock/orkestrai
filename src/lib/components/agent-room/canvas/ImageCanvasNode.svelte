@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Image as ImageIcon, ImagePlus, X } from '@lucide/svelte';
+  import { Image as ImageIcon, ImagePlus, Columns2, X } from '@lucide/svelte';
+  import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
+  import { getCsrfToken } from '@beeblock/svelar/http';
   import * as m from '$lib/paraglide/messages.js';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
@@ -21,6 +23,7 @@
   let { id, data, selected } = $props<NodeProps & { data: ImageNodeData }>();
 
   let fileInput: HTMLInputElement;
+  let reviewing = $state(false);
   const imageUrl = $derived(
     data.payload.path
       ? `/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(data.payload.path)}`
@@ -38,7 +41,7 @@
     const path = `.orkestrai/images/${crypto.randomUUID()}.${ext}`;
     const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/fs/write-binary`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}) },
       body: JSON.stringify({ path, base64 }),
     });
     if (!response.ok) return;
@@ -77,6 +80,7 @@
   {#snippet icon()}<ImageIcon size={13} />{/snippet}
   {#snippet title()}{data.title || m['node.image']()}{/snippet}
   {#snippet actions()}
+    {#if imageUrl}<HeaderIconButton label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={13} /></HeaderIconButton>{/if}
     {#if !data.payload.characterId || !data.payload.characterDigest}<HeaderIconButton class="node-action-btn" label={m['node.image_replace']()} onclick={() => fileInput.click()}>
       <ImagePlus size={13} />
     </HeaderIconButton>{/if}
@@ -97,6 +101,7 @@
     </button>
   {/if}
 </NodeShell>
+<CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={id} onOpenNode={data.onJumpToNode} />
 
 <style>
   .hidden-input {
