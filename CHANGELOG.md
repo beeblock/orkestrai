@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
+- Save versioned brand kits with palettes, frozen logos/products/style references and communication rules. Reuse approved kits as connected native nodes across workspaces without transferring accounts, secrets or grants; agents share the same revisioned commands.
 - Direct framing, camera angle, movement and pace in storyboards and video drafts. Preserve shot, references and voice across model changes, and reject unsupported scene durations instead of silently shortening them.
 - Add contextual image variation, genuine-alpha background removal, annotated changes and animation drafts. Preserve originals and frozen source lineage through the existing Codex image and fal video workflows.
 - Compare image and video variants with synchronized playback and immutable, hash-bound review history. Changed files invalidate approval; agents can propose but cannot self-approve.

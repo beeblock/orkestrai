@@ -5,9 +5,27 @@ import type { CanvasNode, CanvasNodePayload, Workspace } from '../../domain/type
 import { workspacePathService } from './WorkspacePathService.js';
 import { AgentFloor } from '../../domain/models/AgentFloor.js';
 import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
+import { brandBrief, type CreativeBrandKit } from '$lib/modules/creative-media/domain/brand-kit.js';
 
 /** Narrow workspace facade for the creative-media module. */
 export class CreativeWorkspaceGateway {
+  async placeBrand(kit: CreativeBrandKit, position = { x: 100, y: 100 }, floorId: string | null = null) {
+    const { workspaceId } = kit;
+    await this.characterDestination(workspaceId, floorId);
+    const all = (await this.nodes(workspaceId)).filter(node => (node.floorId ?? null) === floorId);
+    const width = 888, height = Math.max(420, Math.ceil(kit.definition.assets.length / 2) * 280 + 64);
+    const origin = findFreeCanvasPosition(all, { ...position, width, height });
+    const identity = { brandKitId: kit.id, brandVersion: kit.version, brandDigest: kit.snapshot!.digest };
+    const note = await workspaceRepository.createNode({ workspaceId, floorId, type: 'note', title: `${kit.definition.name} · v${kit.version}`, x: origin.x + 24, y: origin.y + 32, width: 300, height: 360, payload: { ...identity, formatted: true, color: 'neutral', content: brandBrief(kit) } });
+    const nodes: CanvasNode[] = [note], edges = [];
+    for (const [index, asset] of kit.definition.assets.entries()) {
+      const image = await workspaceRepository.createNode({ workspaceId, floorId, type: 'image', title: asset.label, x: origin.x + 344 + (index % 2) * 264, y: origin.y + 32 + Math.floor(index / 2) * 280, width: 240, height: 256, payload: { ...identity, path: asset.path } });
+      nodes.push(image);
+      edges.push(await workspaceRepository.createEdge({ workspaceId, sourceNodeId: note.id, targetNodeId: image.id, style: 'cord' }));
+    }
+    const group = await workspaceRepository.createNode({ workspaceId, floorId, type: 'group', title: `${kit.definition.name} · v${kit.version}`, ...origin, width, height, zIndex: -1, payload: { ...identity, workflowKind: 'creative-brand', members: nodes.map(node => node.id) } });
+    return { nodes: [group, ...nodes], edges };
+  }
   async characterDestination(workspaceId: string, floorId: string | null) {
     const workspace = await this.workspace(workspaceId);
     if (!workspace || workspace.suspendedAt) throw new Error('creative_workspace_unavailable');

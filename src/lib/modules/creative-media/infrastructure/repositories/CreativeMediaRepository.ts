@@ -118,6 +118,8 @@ export class CreativeMediaRepository {
       const { creativeAssetReviewRepository } = await import('./CreativeAssetReviewRepository.js');
       await creativeAssetReviewRepository.removeWorkspace(workspaceId);
       await creativeCharacterRepository.removeWorkspace(workspaceId);
+      const { creativeBrandKitRepository } = await import('./CreativeBrandKitRepository.js');
+      await creativeBrandKitRepository.removeWorkspace(workspaceId);
       await RunModel.query().where('workspace_id', workspaceId).delete();
       await WorkflowModel.query().where('workspace_id', workspaceId).delete();
       await PolicyModel.query().where('workspace_id', workspaceId).delete();

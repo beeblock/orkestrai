@@ -1003,7 +1003,7 @@ export async function run(argv, options = {}) {
     }
     case 'video': {
       const [command, id] = rest;
-      if (!['assets', 'storyboards', 'characters', 'models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'].includes(command)) throw new Error('Unknown video command.');
+      if (!['brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'].includes(command)) throw new Error('Unknown video command.');
       const videoFlags = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (flags));
       if (!selfAgent || !videoFlags.task) throw new Error('Video workflows require an active terminal identity and --task.');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/creative-media', {

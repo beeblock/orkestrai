@@ -77,6 +77,7 @@
   import VideoWorkflowCanvasNode from '$lib/components/agent-room/canvas/VideoWorkflowCanvasNode.svelte';
   import StoryboardCanvasNode from '$lib/components/agent-room/canvas/StoryboardCanvasNode.svelte';
   import CreativeCharacterLibrary from '$lib/components/agent-room/CreativeCharacterLibrary.svelte';
+  import CreativeBrandDialog from '$lib/components/agent-room/CreativeBrandDialog.svelte';
   import { CHARACTER_DRAG_TYPE, characterDragSchema } from '$lib/components/agent-room/character-drag.js';
   import { creativeApi, creativeError } from '$lib/components/agent-room/creative-media-client.js';
   import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
@@ -729,6 +730,7 @@
   let showPortsPanel = $state(false);
   let showPresetPanel = $state(false);
   let showCharacterLibrary = $state(false);
+  let showBrands = $state(false);
   let leaderDictationState = $state<LeaderDictationStatus>('idle');
   let leaderDictationNodeId = $state<string | null>(null);
   let sidebarCollapsed = $state(false);
@@ -3101,7 +3103,7 @@
             <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
               <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
             </ToolbarButton>
-            <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} />
+            <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} />
             <DesignToolbarMenu
               active={drawTool === 'design' || designExplorationOpen}
               onBlank={() => toggleDrawTool('design')}
@@ -3188,6 +3190,7 @@
     {#if showCharacterLibrary && activeWorkspace && !designModeNodeId}
       <CreativeCharacterLibrary workspaceId={activeWorkspace.id} busy={placingCharacter} onClose={() => showCharacterLibrary = false} onPlace={(character) => void placeCharacter({ id: character.id, sourceWorkspaceId: character.workspaceId })} />
     {/if}
+    {#if activeWorkspace}<CreativeBrandDialog bind:open={showBrands} workspaceId={activeWorkspace.id} floorId={visibleFloorId} onPlaced={async () => { if (activeWorkspace) await refreshCanvasGraph(activeWorkspace.id); }} />{/if}
     {#if showPalette}
       <CommandPalette {nodes} actions={paletteActions} onJumpToNode={jumpToNode} onClose={() => (showPalette = false)} />
     {/if}

@@ -15,6 +15,8 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_brand_locked' || code === 'creative_brand_lock_required') return m['creative_brand.error_locked']();
+  if (code.startsWith('creative_brand_')) return m['creative_brand.error']();
   if (code === 'creative_model_mapping_required') return m['creative_shot.model_mapping_required']();
   if (code === 'creative_storyboard_reference_limit') return m['storyboard.reference_limit']();
   if (code === 'creative_storyboard_executor_invalid') return m['storyboard.invalid_executor']();
