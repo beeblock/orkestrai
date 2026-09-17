@@ -268,10 +268,13 @@ export class WorkspaceService {
   }
 
   async remove(id: string) {
+    const { creativeMediaRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeMediaRepository.js');
+    if (await creativeMediaRepository.activeForWorkspace(id)) throw new Error('creative_workflow_busy');
     ptySessionManager.killWorkspace(id);
     await controlCenterService.settleWorkspace(id);
     const deleted = await workspaceRepository.deleteWorkspace(id);
     if (!deleted) throw new Error('Workspace nao encontrado.');
+    await creativeMediaRepository.removeWorkspace(id);
     return { deleted: true };
   }
 
@@ -577,6 +580,11 @@ export class WorkspaceService {
   async deleteNode(workspaceId: string, nodeId: string) {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId) throw new Error('No nao encontrado.');
+    if (node.type === 'videoWorkflow') {
+      const { creativeMediaRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeMediaRepository.js');
+      if (await creativeMediaRepository.activeForNodes(workspaceId, [nodeId])) throw new Error('creative_workflow_busy');
+      await creativeMediaRepository.removeWorkflow(workspaceId, nodeId);
+    }
     // Nota vinculada a tarefa do quadro NAO apaga pelo X do canvas: ela so sai
     // de verdade junto com a tarefa (ou quando desvinculada).
     if (node.type === 'note') {

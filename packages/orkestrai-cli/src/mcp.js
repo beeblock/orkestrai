@@ -16,6 +16,7 @@
 import { DESIGN_REFERENCE_TOPICS, designReference } from './design-reference.js';
 import { apiClientReference } from './api-client-reference.js';
 import { TOOL_MANIFEST_SCHEMA } from './workspace-tool-reference.js';
+import { VIDEO_CONFIG_SCHEMA, VIDEO_TOOL_DESCRIPTIONS } from './video-reference.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -429,7 +430,28 @@ TOOLS.push({ name:`artifact_${command}`, description:`${command === 'speech' ? '
 }
 
 /** Mapeia tool -> chamada da bridge (mesmos endpoints da CLI). */
+for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
+  /** @type {Record<string, object>} */
+  const properties = { taskId: { type: 'string', format: 'uuid' } };
+  const required = ['taskId'];
+  if (!['list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (['cancel', 'retry_download'].includes(command)) { properties.runId = { type: 'string', format: 'uuid' }; required.push('runId'); }
+  if (['create', 'update'].includes(command)) {
+    properties.input = { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1, maxLength: 120 }, config: VIDEO_CONFIG_SCHEMA, ...(command === 'update' ? { revision: { type: 'integer', minimum: 1 } } : {}) }, required: ['title', 'config'] };
+    required.push('input');
+  }
+  if (command === 'run') {
+    properties.input = { type: 'object', additionalProperties: false, properties: { revision: { type: 'integer', minimum: 1 }, previewId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', format: 'uuid' } }, required: ['revision', 'previewId', 'idempotencyKey'] };
+    required.push('input');
+  }
+  TOOLS.push({ name: `video_workflow_${command}`, description: `${description} Requires an active task assigned to this authenticated terminal. Existing Codex image_workflow_* remains unchanged.`, inputSchema: { type: 'object', additionalProperties: false, properties, required } });
+}
+
 async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
+  if (name.startsWith('video_workflow_') && Object.hasOwn(VIDEO_TOOL_DESCRIPTIONS, name.slice('video_workflow_'.length))) {
+    if (!selfAgent) throw new Error('Video workflows require an active Orkestrai terminal identity.');
+    return bridge('POST', '/api/agent-room/bridge/creative-media', { ...args, command: name.slice('video_workflow_'.length) });
+  }
   /** @type {{ taskId?: string, idempotencyKey?: string, risk?: string, applicationId?: string, targetId?: string, element?: Record<string, unknown>, guards?: Record<string, unknown>[], action?: string, text?: string, grantId?: string, source?: Record<string, unknown>, path?: string, expectedHash?: string, inReplyToDigest?: string, downloadId?: string }} */
   const computerArgs = args;
   /** @param {Record<string, unknown>} input */

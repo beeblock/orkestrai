@@ -5,6 +5,18 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.32.0 - Unreleased
+
+### Added
+
+- Create native fal.ai video workflows from text, Image references and context Notes in Canvas and Workbench. Wan 2.7 and Kling 3 Pro expose model-specific duration, format and audio controls; the existing Codex subscription image workflow remains unchanged.
+- Configure encrypted desktop credentials, workspace opt-in, permitted models, agent access, external-data consent, cost reservations and concurrency. Preview outgoing data and estimates before paid execution, subject to workspace security gates.
+- Resume persistent video jobs without duplicate submissions, cancel tracked work, recover downloads and retain MP4 files in the workspace with hashes and reusable Video nodes. Agents use the same revisioned CLI/MCP contract; guided documentation and onboarding cover the workflow.
+
+### Fixed
+
+- Require a protected operating-system credential store and preserve existing credentials when the vault file is unreadable or malformed.
+
 ## 0.31.5 - 2026-09-16
 
 ### Fixed

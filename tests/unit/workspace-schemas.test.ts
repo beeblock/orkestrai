@@ -11,7 +11,9 @@ describe('workspaceSchemas — tipos de nó do canvas', () => {
     for (const type of types) {
       expect(canvasNodeTypeSchema.safeParse(type).success).toBe(true);
     }
-    expect(canvasNodeTypeSchema.safeParse('video').success).toBe(false);
+    expect(canvasNodeTypeSchema.safeParse('video').success).toBe(true);
+    expect(canvasNodeTypeSchema.safeParse('videoWorkflow').success).toBe(true);
+    expect(canvasNodeTypeSchema.safeParse('unknown-node').success).toBe(false);
   });
 
   it('cria nó de imagem com payload de path', () => {

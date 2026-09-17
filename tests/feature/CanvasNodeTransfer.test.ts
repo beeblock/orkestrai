@@ -13,6 +13,8 @@ import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoard
 import { AgentRoutine } from '$lib/modules/agent-room/domain/models/AgentRoutine.js';
 import type { ApiClientNodePayload, CanvasNodeTransferResult, ImageNodePayload, NoteNodePayload, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { creativeMediaRepository } from '$lib/modules/creative-media/infrastructure/repositories/CreativeMediaRepository.js';
+import { creativeConfigSchema } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
 
 describe('CanvasNodeTransfer', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -185,6 +187,27 @@ describe('CanvasNodeTransfer', () => {
       .rejects.toThrow('canvas_transfer_asset_missing');
     expect(await workspaceRepository.listNodes(source.id)).toHaveLength(1);
     expect(await workspaceRepository.listNodes(destination.id)).toHaveLength(0);
+  });
+
+  it('copies video, notes and image bindings without account authority or paid run identity', async () => {
+    const { source, destination, sourceRoot, destinationRoot } = await workspacePair();
+    await writeFile(join(sourceRoot, 'clip.mp4'), 'video fixture');
+    await writeFile(join(sourceRoot, 'reference.png'), 'image fixture');
+    const note = await workspaceRepository.createNode({ workspaceId: source.id, type: 'note', title: 'Direction', payload: { content: 'Slow camera movement' } });
+    const image = await workspaceRepository.createNode({ workspaceId: source.id, type: 'image', payload: { path: 'reference.png' } });
+    const workflow = await workspaceRepository.createNode({ workspaceId: source.id, type: 'videoWorkflow', payload: { workflowId: uuidv7(), revision: 2 } });
+    const video = await workspaceRepository.createNode({ workspaceId: source.id, type: 'video', payload: { path: 'clip.mp4', mimeType: 'video/mp4', runId: uuidv7(), workflowNodeId: workflow.id } });
+    await creativeMediaRepository.saveWorkflow(source.id, workflow.id, { title: 'Animate', config: creativeConfigSchema.parse({ modelId: 'kling-v3-pro-image', profileId: uuidv7(), startImageNodeId: image.id, contextNodeIds: [note.id] }) });
+    await workspaceRepository.createEdge({ workspaceId: source.id, sourceNodeId: workflow.id, targetNodeId: video.id });
+    const copied = await canvasNodeTransferService.transfer(new TransferCanvasNodesDto(source.id, destination.id, [workflow.id, video.id, note.id, image.id], 'copy'));
+    const copiedWorkflow = copied.nodes.find(node => node.type === 'videoWorkflow')!;
+    expect(copiedWorkflow.payload).toMatchObject({ draftConfig: { profileId: null, startImageNodeId: copied.nodes.find(node => node.type === 'image')!.id, contextNodeIds: [copied.nodes.find(node => node.type === 'note')!.id] } });
+    expect(copiedWorkflow.payload).not.toHaveProperty('workflowId');
+    const copiedVideo = copied.nodes.find(node => node.type === 'video')!;
+    expect(copiedVideo.payload).not.toHaveProperty('runId');
+    expect(copiedVideo.payload).not.toHaveProperty('workflowNodeId');
+    expect(await readFile(join(destinationRoot, String((copiedVideo.payload as Record<string, unknown>).path)), 'utf8')).toBe('video fixture');
+    expect(copied.edges).toHaveLength(1);
   });
 
   it('copies an exact-delivery image together with its preserved native master', async () => {

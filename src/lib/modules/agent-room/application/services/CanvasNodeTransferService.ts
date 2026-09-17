@@ -66,6 +66,8 @@ export class CanvasNodeTransferService {
     const sourceById = new Map(sourceNodes.map((node) => [node.id, node]));
     const selected = dto.nodeIds.map((id) => sourceById.get(id)).filter((node): node is CanvasNode => Boolean(node));
     if (selected.length !== dto.nodeIds.length) throw new CanvasNodeTransferError('canvas_transfer_node_not_found');
+    const { creativeMediaRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeMediaRepository.js');
+    if (selected.some(node => node.type === 'videoWorkflow') && await creativeMediaRepository.activeForNodes(dto.sourceWorkspaceId, dto.nodeIds)) throw new CanvasNodeTransferError('canvas_transfer_workflow_running');
     if (selected.some((node) => node.type === 'imageWorkflow' && (node.payload as { status?: string }).status === 'running')) {
       throw new CanvasNodeTransferError('canvas_transfer_workflow_running');
     }
@@ -107,9 +109,11 @@ export class CanvasNodeTransferService {
         const wantsMaestro = node.type === 'terminal' && (node.payload as { maestro?: boolean }).maestro === true;
         const keepMaestro = wantsMaestro && maestroAvailable;
         if (keepMaestro) maestroAvailable = false;
-        let payload = transferredNodePayload(node.type, node.payload, ids, keepMaestro);
+        const creative = node.type === 'videoWorkflow' ? await creativeMediaRepository.workflow(dto.sourceWorkspaceId, node.id) : null;
+        let payload = transferredNodePayload(node.type, creative ? { draftConfig: creative.config } : node.payload, ids, keepMaestro);
         if (node.type === 'note') payload = await this.copyNoteAttachments(sourceWorkspace, destinationWorkspace, payload as NoteNodePayload, destinationFiles);
         if (node.type === 'image') payload = await this.copyImage(sourceWorkspace, destinationWorkspace, destinationNodeId, payload as ImageNodePayload, destinationFiles);
+        if (node.type === 'video') payload = await this.copyVideo(sourceWorkspace, destinationWorkspace, destinationNodeId, payload, destinationFiles);
         let title = node.type === 'terminal' ? uniqueTerminalTitle(node.title, occupiedTerminalTitles) : node.title;
         if (node.type === 'design') {
           title ||= 'Untitled design';
@@ -191,6 +195,24 @@ export class CanvasNodeTransferService {
       attachments.push({ ...attachment, id, path });
     }
     return { ...payload, attachments };
+  }
+
+  private async copyVideo(source: Workspace, destination: Workspace, nodeId: string, payload: CanvasNodePayload, files: Array<{ workspaceId: string; path: string }>): Promise<CanvasNodePayload> {
+    const value = payload as Record<string, unknown>;
+    if (typeof value.path !== 'string') throw new CanvasNodeTransferError('canvas_transfer_asset_missing');
+    const { constants } = await import('node:fs');
+    const { copyFile, mkdir, stat } = await import('node:fs/promises');
+    const { dirname } = await import('node:path');
+    const sourcePath = await workspacePathService.resolveExisting(source, value.path);
+    const info = await stat(sourcePath);
+    if (!info.isFile() || info.size > 256 * 1024 * 1024) throw new CanvasNodeTransferError('canvas_transfer_asset_invalid');
+    const path = `.orkestrai/transfers/${nodeId}/video.mp4`;
+    const targetPath = await workspacePathService.resolveWritable(destination, path);
+    await mkdir(dirname(targetPath), { recursive: true });
+    await workspacePathService.resolveWritable(destination, path);
+    await copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
+    files.push({ workspaceId: destination.id, path });
+    return { ...value, path };
   }
 
   private async copyImage(

@@ -1748,6 +1748,9 @@ export const TOURS_ES: Tour[] = [
     ],
   },
   {
+    ...{"id":"creative-video-workflow","icon":"Images","title":"Convertir un brief en video","tagline":"Prepara, autoriza y sigue la entrega de video en el Canvas existente.","steps":[{"id":"draft","title":"Preparar el flujo","body":"Crea un borrador vertical de cinco segundos desde texto. Esta acción no contacta fal.ai ni gasta créditos.","action":{"kind":"createVideoWorkflow","title":"Convertir un brief en video","prompt":"Un video vertical de cinco segundos de una taza de café de cerámica sobre una mesa oscura limpia, luz lateral suave, acercamiento lento de cámara, sin texto."},"check":{"kind":"nodeExists","nodeType":"videoWorkflow","titleIncludes":"Convertir un brief en video"}},{"id":"access","title":"Autorizar este workspace","body":"Abre Configurar acceso en el nodo. Guarda la clave fal.ai en la bóveda, activa cuenta y workspace, permite medios externos, selecciona Wan 2.7 y define reservas. Permite agentes solo cuando quieras que agentes con tareas envíen ejecuciones de pago."},{"id":"generate","title":"Revisar y generar","body":"Selecciona la cuenta, edita la dirección, guarda y estima. Revisa la reserva y posibles aprobaciones de Seguridad antes de Generar video. Para imagen a video, elige Kling y selecciona un nodo Imagen como primer fotograma."},{"id":"result","title":"Verificar el MP4 real","body":"Espera Completado, reproduce el nodo Video y descarga el original. Revisa la salida en generated/videos. Reintentar descarga reutiliza el resultado remoto sin generar de nuevo. Los flujos de imágenes existentes con Codex no cambian."}]},
+  },
+  {
     id: 'creative-image-workflow',
     icon: 'Images',
     title: 'Crea un personaje y una campaña completa',

@@ -201,6 +201,13 @@ common credentials redacted; normal agent output is not persisted.
   in a portable collection file. Bruno scripts deliberately stay in its official
   safe QuickJS runtime: unsafe NodeVM access to the host filesystem, processes,
   and arbitrary local modules is not enabled.
+- **Native video workflows:** create opt-in fal.ai text-to-video (Wan 2.7) or
+  image-to-video (Kling 3 Pro) jobs from existing Images and Notes. Configure
+  credentials in the desktop vault, workspace/model/agent permissions and cost
+  reservations. Review outgoing data and estimates, follow persistent jobs,
+  recover downloads without generating again, and play delivered workspace MP4s
+  in Canvas or Workbench. CLI/MCP agents use the same revisioned contract.
+  Video requires a funded fal account; it does not change Codex image generation.
 - **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
   references, and a live Codex agent to a Generate images node on the same
   canvas; the same node opens in Workbench. A connected Codex can create and

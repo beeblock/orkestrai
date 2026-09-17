@@ -1748,6 +1748,9 @@ export const TOURS_EN: Tour[] = [
     ],
   },
   {
+    ...{"id":"creative-video-workflow","icon":"Images","title":"Turn a brief into a video","tagline":"Prepare, authorize and follow a video delivery in the existing Canvas.","steps":[{"id":"draft","title":"Prepare the workflow","body":"Create a vertical five-second text-to-video draft. This action does not contact fal.ai or spend credit.","action":{"kind":"createVideoWorkflow","title":"Turn a brief into a video","prompt":"A smooth five-second vertical product shot of a ceramic coffee cup on a clean dark table, soft side lighting, slow camera push-in, no text."},"check":{"kind":"nodeExists","nodeType":"videoWorkflow","titleIncludes":"Turn a brief into a video"}},{"id":"access","title":"Authorize this workspace","body":"Open Configure access in the node. Save the fal.ai key in the desktop vault, enable the account and workspace, allow external media, select Wan 2.7 and set reservation limits. Allow agents only when you want assigned agents to submit paid video jobs."},{"id":"generate","title":"Review and generate","body":"Select the account, edit the direction, save and estimate. Review the reservation and any Security gate before Generate video. For image-to-video, choose Kling and select an existing Image node as the first frame."},{"id":"result","title":"Inspect the actual MP4","body":"Wait for Completed, play the Video node and download the original. Check the output under generated/videos. Retry download reuses the remote result without regenerating. Your existing Codex image flows are unchanged."}]},
+  },
+  {
     id: 'creative-image-workflow',
     icon: 'Images',
     title: 'Create a character and a complete campaign',

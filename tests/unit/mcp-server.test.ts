@@ -42,6 +42,19 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it.each(['list','read','create','update','preview','run','cancel','retry_download','remove'])('routes native video %s through the same task-bound contract without credentials', async command => {
+    const server = startMcp();
+    const args = { taskId:'00000000-0000-4000-8000-000000000001', nodeId:'00000000-0000-4000-8000-000000000002', input:{title:'Test video',config:{prompt:'A scene'} } };
+    server.send({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:`video_workflow_${command}`,arguments:args}});
+    const response = await server.waitFor(1);
+    expect(JSON.parse(response.result.content[0].text)).toMatchObject({method:'POST',path:'/api/agent-room/bridge/creative-media',body:{...args,command}});
+    const tool = MCP_TOOLS.find(tool => tool.name === `video_workflow_${command}`)!;
+    expect(tool.inputSchema.required).toContain('taskId');
+    expect(tool.inputSchema.properties).not.toHaveProperty('credential');
+    expect(tool.inputSchema.additionalProperties).toBe(false);
+    if (command === 'update') expect(tool.inputSchema.properties.input.required).toEqual(['title', 'config']);
+    server.input.end(); await server.done;
+  });
   it('routes automatic contact navigation without allowing a supplied recipient or arbitrary query', async () => {
     const server = startMcp();
     const args = { taskId: '00000000-0000-4000-8000-000000000001', idempotencyKey: 'open-contact-test', grantId: '00000000-0000-4000-8000-000000000002', targetId: '42:cg:80' };

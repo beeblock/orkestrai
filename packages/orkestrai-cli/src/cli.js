@@ -55,6 +55,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
+  orkestrai video <list|read|create|update|preview|run|cancel|retry_download|remove> [nodeId-or-runId] --task <taskId> [--input <json>]
   orkestrai integration list [--json] | integration events [integrationId] [--limit <n>] [--json] | integration execute <integrationId> <action> --input <json> --task <taskId> --idempotency <key> [--json]
   orkestrai tool list [--json] | tool propose --name <nome> --slug <slug> --manifest <json> --task <taskId> | tool update <toolId> --manifest <json> --task <taskId> | tool execute <toolId> --input <json> --task <taskId> --idempotency <key> [--dry-run]
   orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
@@ -999,6 +1000,19 @@ export async function run(argv, options = {}) {
         return data.ok ? 0 : 2;
       }
       throw new Error('Uso: orkestrai api <list|reference|read|import|create|replace|sync-status|pull|push|export|run|run-runner> ...');
+    }
+    case 'video': {
+      const [command, id] = rest;
+      if (!['list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'].includes(command)) throw new Error('Unknown video command.');
+      const videoFlags = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (flags));
+      if (!selfAgent || !videoFlags.task) throw new Error('Video workflows require an active terminal identity and --task.');
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/creative-media', {
+        command, taskId: String(videoFlags.task),
+        ...(id ? ['cancel', 'retry_download'].includes(command) ? { runId: id } : { nodeId: id } : {}),
+        ...(videoFlags.input ? { input: JSON.parse(String(videoFlags.input)) } : {}),
+      });
+      out(JSON.stringify(data, null, 2));
+      return 0;
     }
     case 'image': {
       const [action, nodeId, target] = rest;

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { ChevronDown, Image as ImageIcon, Sparkles } from '@lucide/svelte';
+  import { ChevronDown, Image as ImageIcon, Sparkles, Film } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils.js';
   import * as m from '$lib/paraglide/messages.js';
 
-  let { active, onImage, onWorkflow }: { active: boolean; onImage: () => void; onWorkflow: () => void } = $props();
+  let { active, onImage, onWorkflow, onVideo }: { active: boolean; onImage: () => void; onWorkflow: () => void; onVideo?: () => void } = $props();
 </script>
 
 <DropdownMenu.Root>
@@ -28,5 +28,6 @@
     <DropdownMenu.Label>{m['image_workflow.menu']()}</DropdownMenu.Label>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onImage}><ImageIcon size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_image']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_image_hint']()}</small></span></DropdownMenu.Item>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onWorkflow}><Sparkles size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_workflow']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_workflow_hint']()}</small></span></DropdownMenu.Item>
+    {#if onVideo}<DropdownMenu.Separator /><DropdownMenu.Item class="min-h-11 gap-3" onclick={onVideo}><Film size={16} class="shrink-0" /><strong class="text-xs">{m['creative.add']()}</strong></DropdownMenu.Item>{/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

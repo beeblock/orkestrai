@@ -133,6 +133,18 @@ export function transferredNodePayload(
     payload.lastError = null;
     payload.history = [];
   }
+  if (type === 'videoWorkflow') {
+    const config = payload.draftConfig && typeof payload.draftConfig === 'object' ? payload.draftConfig as Record<string, unknown> : {};
+    return { schemaVersion: 1, draftConfig: { ...config, profileId: null,
+      contextNodeIds: remapIds(config.contextNodeIds, ids),
+      startImageNodeId: typeof config.startImageNodeId === 'string' ? ids.get(config.startImageNodeId) ?? null : null,
+      endImageNodeId: typeof config.endImageNodeId === 'string' ? ids.get(config.endImageNodeId) ?? null : null,
+    } };
+  }
+  if (type === 'video') {
+    delete payload.runId;
+    delete payload.workflowNodeId;
+  }
   if (type === 'image') {
     const generatedBy = payload.generatedBy;
     if (generatedBy && typeof generatedBy === 'object' && !Array.isArray(generatedBy)) {

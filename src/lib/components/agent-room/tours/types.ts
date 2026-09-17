@@ -11,6 +11,7 @@ export type TourAction =
   | { kind: 'createGit'; title: string }
   | { kind: 'createCodeGraph'; title: string }
   | { kind: 'indexCodeGraph' }
+  | { kind: 'createVideoWorkflow'; title: string; prompt: string }
   | {
       kind: 'createImageWorkflow';
       title: string;

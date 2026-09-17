@@ -16,6 +16,8 @@
   import FlowCanvasNode from './canvas/FlowCanvasNode.svelte';
   import ImageCanvasNode from './canvas/ImageCanvasNode.svelte';
   import ImageWorkflowCanvasNode from './canvas/ImageWorkflowCanvasNode.svelte';
+  import VideoWorkflowCanvasNode from './canvas/VideoWorkflowCanvasNode.svelte';
+  import VideoCanvasNode from './canvas/VideoCanvasNode.svelte';
   import UsageCanvasNode from './canvas/UsageCanvasNode.svelte';
   import CodeGraphCanvasNode from './canvas/CodeGraphCanvasNode.svelte';
   import DesignCanvasNode from './canvas/DesignCanvasNode.svelte';
@@ -74,6 +76,8 @@
     flow: FlowCanvasNode,
     image: ImageCanvasNode,
     imageWorkflow: ImageWorkflowCanvasNode,
+    videoWorkflow: VideoWorkflowCanvasNode,
+    video: VideoCanvasNode,
     usage: UsageCanvasNode,
     codeGraph: CodeGraphCanvasNode,
     computer: ComputerCanvasNode,

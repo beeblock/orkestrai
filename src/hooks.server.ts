@@ -15,6 +15,7 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
 import { afterDatabaseReady } from '$lib/modules/agent-room/infrastructure/background-startup.js';
 import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
+import { creativeQueueService } from '$lib/modules/creative-media/application/services/CreativeQueueService.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
 const globalRef = globalThis as unknown as {
@@ -32,6 +33,7 @@ globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
 };
 if (!building) {
   void afterDatabaseReady(() => {
+    creativeQueueService.start();
     if (!globalRef.__orkestraiComputerObserver) {
       computerObservationService.start();
       globalRef.__orkestraiComputerObserver = true;

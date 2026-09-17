@@ -21,6 +21,7 @@
     MessageSquareText,
     MessageCircleMore,
     Power,
+    Film,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as InputGroup from '$lib/components/ui/input-group';
@@ -29,6 +30,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import FocusedCanvasNode from '$lib/components/agent-room/FocusedCanvasNode.svelte';
+  import { creativeApi, creativeError } from '$lib/components/agent-room/creative-media-client.js';
   import WorkbenchFileExplorer from '$lib/components/agent-room/WorkbenchFileExplorer.svelte';
   import WorkbenchFileView from '$lib/components/agent-room/WorkbenchFileView.svelte';
   import WorkbenchNodeIcon from '$lib/components/agent-room/WorkbenchNodeIcon.svelte';
@@ -164,6 +166,8 @@
     'diff',
     'image',
     'imageWorkflow',
+    'videoWorkflow',
+    'video',
     'flow',
     'loop',
     'usage',
@@ -210,7 +214,7 @@
   const EXPLORER_GROUPS: Array<{ id: 'agents' | 'work' | 'content' | 'tools'; types: CanvasNodeType[] }> = [
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
-    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'design'] },
+    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'design'] },
     { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'toolWorkshop', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
@@ -364,6 +368,19 @@
         persistWorkbenchLayout(workspaceId, normalized);
       }
     }
+  }
+
+  let addingVideo = $state(false);
+  async function addVideoWorkflow() {
+    if (!selectedWorkspaceId || addingVideo) return;
+    addingVideo = true;
+    const workspaceId = selectedWorkspaceId;
+    try {
+      const node = await creativeApi<{ nodeId: string }>(`/api/agent-room/workspaces/${workspaceId}/creative-media`, 'POST', { title: m['creative.title'](), config: {} });
+      await loadWorkspace(workspaceId);
+      selectNode(workspaceId, node.nodeId);
+    } catch (error) { toast.error(creativeError(error instanceof Error ? error.message : 'creative_request_failed')); }
+    finally { addingVideo = false; }
   }
 
   async function loadWorkspace(workspaceId: string, options: { resume?: boolean } = {}) {
@@ -629,6 +646,8 @@
     if (node.type === 'diff') return m['terminal_browser.kind_diff']();
     if (node.type === 'image') return m['terminal_browser.kind_image']();
     if (node.type === 'imageWorkflow') return m['image_workflow.title']();
+    if (node.type === 'videoWorkflow') return m['creative.title']();
+    if (node.type === 'video') return m['creative.video']();
     if (node.type === 'flow') return m['terminal_browser.kind_flow']();
     if (node.type === 'loop') return m['terminal_browser.kind_loop']();
     if (node.type === 'usage') return m['terminal_browser.kind_usage']();
@@ -1122,6 +1141,7 @@
         nodeId={isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId}
       />
       <AttentionCenter workspaceId={selectedWorkspaceId} />
+      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} size="icon" variant="ghost" disabled={!selectedWorkspaceId || addingVideo} aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['creative.add']()}</Tooltip.Content></Tooltip.Root>
     </div>
 
     <div class="shrink-0 p-2.5">

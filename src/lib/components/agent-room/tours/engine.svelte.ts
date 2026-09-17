@@ -315,6 +315,13 @@ async function runAction(action: TourAction): Promise<void> {
         if (!indexed) throw new Error(m['code_graph.index_error']());
         break;
       }
+      case 'createVideoWorkflow': {
+        if (await findNode(action.title)) break;
+        await api(`/api/agent-room/workspaces/${workspaceId}/creative-media`, {
+          method: 'POST', body: JSON.stringify({ title: action.title, config: { modelId: 'wan-2.7-text', prompt: action.prompt, duration: 5, aspectRatio: '9:16', resolution: '720p', outputDirectory: 'generated/videos' } }),
+        });
+        break;
+      }
       case 'createImageWorkflow': {
         if (await findNode(action.title)) break;
         await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {

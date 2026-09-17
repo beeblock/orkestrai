@@ -74,6 +74,8 @@
   import FlowCanvasNode from '$lib/components/agent-room/canvas/FlowCanvasNode.svelte';
   import ImageCanvasNode from '$lib/components/agent-room/canvas/ImageCanvasNode.svelte';
   import ImageWorkflowCanvasNode from '$lib/components/agent-room/canvas/ImageWorkflowCanvasNode.svelte';
+  import VideoWorkflowCanvasNode from '$lib/components/agent-room/canvas/VideoWorkflowCanvasNode.svelte';
+  import VideoCanvasNode from '$lib/components/agent-room/canvas/VideoCanvasNode.svelte';
   import ImageToolbarMenu from '$lib/components/agent-room/canvas/ImageToolbarMenu.svelte';
   import { MAX_WORKSPACE_ATTACHMENT_BYTES, uploadWorkspaceAttachment } from '$lib/components/agent-room/workspace-attachments.js';
   import ToolbarButton from '$lib/components/agent-room/canvas/ToolbarButton.svelte';
@@ -143,6 +145,8 @@
     flow: FlowCanvasNode,
     image: ImageCanvasNode,
     imageWorkflow: ImageWorkflowCanvasNode,
+    videoWorkflow: VideoWorkflowCanvasNode,
+    video: VideoCanvasNode,
     usage: UsageCanvasNode,
     codeGraph: CodeGraphCanvasNode,
     device: DeviceCanvasNode,
@@ -169,6 +173,8 @@
     flow: 'var(--app-accent)',
     image: 'var(--app-secondary)',
     imageWorkflow: 'var(--app-secondary)',
+    videoWorkflow: 'var(--app-secondary)',
+    video: 'var(--app-secondary)',
     usage: 'var(--app-warning)',
     codeGraph: 'var(--app-secondary)',
     device: 'var(--app-secondary)',
@@ -590,7 +596,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -627,6 +633,7 @@
     flow: async (rect) => { await addFlowNode(rect); },
     image: async (rect) => { await addImageNode(rect); },
     imageWorkflow: async (rect) => { await addImageWorkflowNode(rect); },
+    videoWorkflow: async (rect) => { await addVideoWorkflowNode(rect); },
     usage: async (rect) => { await addUsageNode(rect); },
     codeGraph: async (rect) => { await addCodeGraphNode(rect); },
     design: async (rect) => { await addDesignNode(rect); },
@@ -2052,6 +2059,15 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  async function addVideoWorkflowNode(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(460, 640);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST', body: JSON.stringify({ type: 'videoWorkflow', title: m['creative.title'](), ...position, ...nodeSize(rect, 390, 420, 460, 640), payload: { schemaVersion: 1 }, floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
   async function addDesignNode(rect?: { x: number; y: number; width: number; height: number }) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(520, 380);
@@ -3036,7 +3052,7 @@
             <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
               <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
             </ToolbarButton>
-            <ImageToolbarMenu active={drawTool === 'image' || drawTool === 'imageWorkflow'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} />
+            <ImageToolbarMenu active={drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} />
             <DesignToolbarMenu
               active={drawTool === 'design' || designExplorationOpen}
               onBlank={() => toggleDrawTool('design')}

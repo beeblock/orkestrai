@@ -187,11 +187,18 @@ function validAutomationSecretKey(key) {
   return typeof key === 'string' && /^automation:[a-z0-9:_-]{1,240}$/i.test(key);
 }
 
-function readSecureSecrets() {
+function protectedSecretStorageAvailable() {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  return process.platform !== 'linux' || !['basic_text', 'unknown', undefined].includes(safeStorage.getSelectedStorageBackend?.());
+}
+
+function readSecureSecrets(strict = false) {
   try {
     const parsed = JSON.parse(fs.readFileSync(secureSecretsPath(), 'utf8'));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.entries(parsed).every(([key, value]) => validAutomationSecretKey(key) && typeof value === 'string')) return parsed;
+    throw new Error('Invalid credential store.');
+  } catch (error) {
+    if (strict && error.code !== 'ENOENT') throw new Error('Credential store cannot be read; existing credentials were not changed.');
     return {};
   }
 }
@@ -205,7 +212,7 @@ function writeSecureSecrets(secrets) {
 }
 
 function readAutomationSecret(key) {
-  if (!validAutomationSecretKey(key) || !safeStorage.isEncryptionAvailable()) return null;
+  if (!validAutomationSecretKey(key) || !protectedSecretStorageAvailable()) return null;
   const encrypted = readSecureSecrets()[key];
   if (typeof encrypted !== 'string' || !encrypted) return null;
   try {
@@ -218,8 +225,8 @@ function readAutomationSecret(key) {
 function saveAutomationSecret(key, value) {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
   if (typeof value !== 'string' || !value.trim()) throw new Error('Credential cannot be empty.');
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this device.');
-  const secrets = readSecureSecrets();
+  if (!protectedSecretStorageAvailable()) throw new Error('Secure credential storage is unavailable on this device.');
+  const secrets = readSecureSecrets(true);
   secrets[key] = safeStorage.encryptString(value.trim()).toString('base64');
   writeSecureSecrets(secrets);
   return { stored: true };
@@ -227,7 +234,7 @@ function saveAutomationSecret(key, value) {
 
 function deleteAutomationSecret(key) {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
-  const secrets = readSecureSecrets();
+  const secrets = readSecureSecrets(true);
   const existed = Object.hasOwn(secrets, key);
   delete secrets[key];
   writeSecureSecrets(secrets);
@@ -1153,7 +1160,7 @@ ipcMain.on('orkestrai:portal-layout', (event, input) => {
 
 ipcMain.handle('orkestrai:automation-secret-status', (_event, key) => {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
-  return { available: safeStorage.isEncryptionAvailable(), stored: Boolean(readAutomationSecret(key)) };
+  return { available: protectedSecretStorageAvailable(), stored: Boolean(readAutomationSecret(key)) };
 });
 
 ipcMain.handle('orkestrai:automation-secret-save', (_event, key, value) => saveAutomationSecret(key, value));
