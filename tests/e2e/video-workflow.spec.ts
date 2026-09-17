@@ -141,6 +141,39 @@ test.describe('native video workflows', () => {
     } finally { await request.delete(`/api/agent-room/workspaces/${workspace.id}`); await rm(dir, { recursive: true, force: true }); }
   });
 
+  test('keeps account editing locked until its current server state has loaded', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-account-loading-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E delayed video account', workingDir: dir } })).json()).data;
+    let release!: () => void;
+    const responseGate = new Promise<void>(resolve => { release = resolve; });
+    try {
+      const created = await request.post(`/api/agent-room/workspaces/${workspace.id}/creative-media`, { headers, data: { title: 'Account loading', config: { prompt: 'A product shot' } } });
+      const workflow = (await created.json()).data;
+      await page.goto(`/terminal?workspace=${workspace.id}&node=${workflow.nodeId}`);
+      await expect(page.getByTestId('video-workflow').getByRole('textbox').first()).toHaveValue('A product shot');
+      await page.route(`**/api/agent-room/workspaces/${workspace.id}/creative-media`, async route => {
+        if (route.request().method() === 'GET') await responseGate;
+        await route.continue();
+      });
+      await page.getByRole('button', { name: /Configure access|Configurar acesso|Configurar acceso/ }).first().click();
+      const dialog = page.getByRole('dialog');
+      const name = dialog.getByRole('textbox', { name: /Account name|Nome da conta|Nombre de la cuenta/ });
+      const save = dialog.getByRole('button', { name: /Save|Salvar|Guardar/, exact: true });
+      await expect(name).toBeDisabled();
+      await expect(save).toBeDisabled();
+      release();
+      await expect(name).toBeEnabled();
+      await name.fill('');
+      await save.click();
+      await expect(dialog.getByRole('alert')).toBeVisible();
+      await expect(name).toHaveValue('');
+    } finally {
+      release();
+      try { await request.delete(`/api/agent-room/workspaces/${workspace.id}`); }
+      finally { await rm(dir, { recursive: true, force: true }); }
+    }
+  });
+
   test('keeps video controls accessible in both themes and compact viewports', async ({ page, request }) => {
     test.setTimeout(60000);
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-themes-'));

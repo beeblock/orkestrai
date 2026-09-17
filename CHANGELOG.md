@@ -17,6 +17,7 @@ pt-BR, English, and Spanish translations.
 
 - Require a protected operating-system credential store and preserve existing credentials when the vault file is unreadable or malformed.
 - Find curated skills by spaced or hyphenated names even when the online registry is unavailable.
+- Keep video account settings read-only until loading completes so delayed responses cannot overwrite edits or validation feedback.
 
 ## 0.31.5 - 2026-09-16
 

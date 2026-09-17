@@ -25,6 +25,7 @@
   let runUsd = $state(0), dayUsd = $state(0), revision = $state<number | undefined>(), policyRevision = $state<number | undefined>();
   let busy = $state(false), error = $state(''), saved = $state(false), tab = $state('account');
   let confirmDelete = $state(false);
+  let loading = $state(true), ready = $state(false), loadSequence = 0;
   let models = $state<FalModelSummary[]>([]), modelQuery = $state(''), modelError = $state(''), modelsLoading = $state(false);
   const allModels = $derived([...Object.values(CREATIVE_MODELS).map(model => ({ id: model.id, name: model.name })), ...models]);
   const filteredModels = $derived(allModels.filter(model => `${model.name} ${model.id}`.toLowerCase().includes(modelQuery.toLowerCase())));
@@ -56,11 +57,24 @@
     policyRevision = grant?.revision; runUsd = policy.maxRunCents / 100; dayUsd = policy.maxDayCents / 100;
   }
   async function load(selected = profileId) {
-    const data = await creativeApi<{ profiles: CreativeProfile[]; policies: CreativeWorkspacePolicy[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media`);
-    profiles = data.profiles; policies = data.policies;
-    select(selected || profiles[0]?.id || '');
+    const sequence = ++loadSequence, requestedWorkspace = workspaceId;
+    loading = true; ready = false;
+    try {
+      const data = await creativeApi<{ profiles: CreativeProfile[]; policies: CreativeWorkspacePolicy[] }>(`/api/agent-room/workspaces/${requestedWorkspace}/creative-media`);
+      if (!open || sequence !== loadSequence || workspaceId !== requestedWorkspace) return;
+      profiles = data.profiles; policies = data.policies;
+      select(selected || profiles[0]?.id || '');
+      ready = true;
+    } catch (cause) {
+      if (open && sequence === loadSequence && workspaceId === requestedWorkspace) throw cause;
+    } finally { if (sequence === loadSequence) loading = false; }
   }
-  $effect(() => { if (open) { untrack(() => { void load().catch(cause => { error = String(cause.message); }); void loadModels(); }); } else untrack(clearCredential); });
+  function reload() { void load().catch(cause => { error = String(cause.message); }); }
+  $effect(() => {
+    const currentWorkspace = workspaceId;
+    if (open && currentWorkspace) untrack(() => { reload(); void loadModels(); });
+    else untrack(() => { loadSequence++; loading = true; ready = false; clearCredential(); });
+  });
   async function saveAccount() {
     busy = true; error = ''; saved = false;
     try {
@@ -95,6 +109,8 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="flex max-h-[min(760px,calc(100dvh-32px))] w-[calc(100vw-32px)] flex-col overflow-hidden sm:max-w-xl [&_[data-slot=native-select-wrapper]]:w-full">
     <Dialog.Header><Dialog.Title>{m['creative.providers']()}</Dialog.Title><Dialog.Description>{m['creative.key_help']()}</Dialog.Description></Dialog.Header>
+    {#if loading}<p role="status" class="shrink-0 text-xs text-muted-foreground">{m['creative.loading']()}</p>{/if}
+    <fieldset disabled={busy || !ready} aria-busy={loading} class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 disabled:opacity-70">
     <div class="flex min-w-0 items-center gap-2">
       <NativeSelect.Root class="min-w-0 flex-1" value={profileId} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => select(event.currentTarget.value)} aria-label={m['creative.account']()}>
         <option value="">{m['creative.new_account']()}</option>
@@ -133,10 +149,12 @@
         </Tabs.Content>
       </div>
     </Tabs.Root>
+    </fieldset>
     {#if error}<div role="alert" class="shrink-0 text-sm text-destructive">{creativeError(error)}<span class="mt-1 block break-all font-mono text-xs">{error.startsWith('creative_') ? error : ''}</span></div>{/if}
+    {#if !ready && !loading}<Button variant="outline" onclick={reload}>{m['creative.refresh']()}</Button>{/if}
     <Dialog.Footer class="shrink-0 border-t pt-3 sm:justify-between">
-      <div>{#if profileId && tab === 'account'}<Button variant="ghost" disabled={busy} onclick={() => confirmDelete = true}><Trash2 size={14} />{m['creative.delete']()}</Button>{/if}</div>
-      <div class="flex items-center justify-end gap-2">{#if saved}<span role="status" class="text-xs text-muted-foreground">{m['creative.saved']()}</span>{/if}<Button variant="outline" onclick={() => open = false}>{m['creative.close']()}</Button><Button disabled={busy || (tab === 'workspace' && !profileId)} onclick={tab === 'account' ? saveAccount : savePolicy}><Save size={14} />{m['creative.save']()}</Button></div>
+      <div>{#if profileId && tab === 'account'}<Button variant="ghost" disabled={busy || !ready} onclick={() => confirmDelete = true}><Trash2 size={14} />{m['creative.delete']()}</Button>{/if}</div>
+      <div class="flex items-center justify-end gap-2">{#if saved}<span role="status" class="text-xs text-muted-foreground">{m['creative.saved']()}</span>{/if}<Button variant="outline" onclick={() => open = false}>{m['creative.close']()}</Button><Button disabled={busy || !ready || (tab === 'workspace' && !profileId)} onclick={tab === 'account' ? saveAccount : savePolicy}><Save size={14} />{m['creative.save']()}</Button></div>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
