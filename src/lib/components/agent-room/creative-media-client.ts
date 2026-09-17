@@ -15,6 +15,9 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_storyboard_reference_limit') return m['storyboard.reference_limit']();
+  if (code === 'creative_storyboard_executor_invalid') return m['storyboard.invalid_executor']();
+  if (code === 'creative_storyboard_not_found' || code === 'creative_storyboard_scene_missing') return m['storyboard.not_found']();
   if (code === 'creative_character_locked_or_changed' || code === 'creative_character_owner_change_required') return m['creative.character_error_locked']();
   if (code === 'creative_character_model_incompatible' || code === 'creative_character_audio_required') return m['creative.character_error_model']();
   if (code === 'creative_character_auto_binding') return m['creative.reference_binding_error']();

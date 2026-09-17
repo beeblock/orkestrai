@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { ChevronDown, Image as ImageIcon, Sparkles, Film, BookUser } from '@lucide/svelte';
+  import { ChevronDown, Image as ImageIcon, Sparkles, Film, BookUser, Clapperboard } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils.js';
   import * as m from '$lib/paraglide/messages.js';
 
-  let { active, onImage, onWorkflow, onVideo, onCharacters }: { active: boolean; onImage: () => void; onWorkflow: () => void; onVideo?: () => void; onCharacters?: () => void } = $props();
+  let { active, onImage, onWorkflow, onVideo, onCharacters, onStoryboard }: { active: boolean; onImage: () => void; onWorkflow: () => void; onVideo?: () => void; onCharacters?: () => void; onStoryboard?: () => void } = $props();
 </script>
 
 <DropdownMenu.Root>
@@ -30,5 +30,6 @@
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onWorkflow}><Sparkles size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_workflow']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_workflow_hint']()}</small></span></DropdownMenu.Item>
     {#if onVideo}<DropdownMenu.Separator /><DropdownMenu.Item aria-label={m['creative.add']()} class="min-h-11 gap-3" onclick={onVideo}><Film size={16} class="shrink-0" /><strong class="text-xs">{m['creative.add']()}</strong></DropdownMenu.Item>{/if}
     {#if onCharacters}<DropdownMenu.Item aria-label={m['creative.characters']()} class="min-h-11 gap-3" onclick={onCharacters}><BookUser size={16} class="shrink-0" /><strong class="text-xs">{m['creative.characters']()}</strong></DropdownMenu.Item>{/if}
+    {#if onStoryboard}<DropdownMenu.Item aria-label={m['storyboard.title']()} class="min-h-11 gap-3" onclick={onStoryboard}><Clapperboard size={16} class="shrink-0" /><strong class="text-xs">{m['storyboard.title']()}</strong></DropdownMenu.Item>{/if}
   </DropdownMenu.Content>
 </DropdownMenu.Root>

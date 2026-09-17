@@ -63,7 +63,7 @@ export class CreativeWorkflowService {
     return { workflow, ...(!workflow ? { draftConfig: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) } : {}), runs: await this.repository.runs(workspaceId, nodeId), catalog: Object.values(CREATIVE_MODELS) };
   }
 
-  async save(workspaceId: string, input: CreativeWorkflowSave, actor: CreativeActor, nodeId?: string) {
+  async save(workspaceId: string, input: CreativeWorkflowSave, actor: CreativeActor, nodeId?: string, nearNodeId?: string) {
     await this.assertActor(workspaceId, actor);
     const value = creativeWorkflowSaveSchema.parse(input);
     await this.validateBindings(workspaceId, value.config);
@@ -72,12 +72,13 @@ export class CreativeWorkflowService {
       if ((await this.workspace.node(workspaceId, nodeId))?.type !== 'videoWorkflow') throw new CreativeMediaError('creative_workflow_not_found', 404);
       if (await this.repository.activeForNodes(workspaceId, [nodeId])) throw new CreativeMediaError('creative_workflow_busy', 409);
       const current = await this.repository.workflow(workspaceId, nodeId);
+      if (actor.type === 'agent' && current && (JSON.stringify(current.config.requiredCharacterIds) !== JSON.stringify(value.config.requiredCharacterIds) || JSON.stringify(current.config.requiredReferenceNodeIds) !== JSON.stringify(value.config.requiredReferenceNodeIds))) throw new CreativeMediaError('creative_character_owner_change_required', 403);
       const approved = current?.config.characterBindings ?? [];
       if (actor.type === 'agent' && approved.length && JSON.stringify(approved.map(binding => binding.id)) !== JSON.stringify(value.config.characterBindings.map(binding => binding.id))) throw new CreativeMediaError('creative_character_owner_change_required', 403);
       if (actor.type === 'agent' && approved.some(binding => binding.alias && value.config.characterBindings.some(next => next.alias === binding.alias && next.id !== binding.id))) throw new CreativeMediaError('creative_character_owner_change_required', 403);
     } else {
       if (value.revision !== undefined) throw new CreativeMediaError('creative_revision_conflict', 409);
-      nodeId = (await this.workspace.createNode(workspaceId, 'videoWorkflow', value.title, { schemaVersion: 1 }, actor.type === 'agent' ? actor.nodeId : undefined)).id;
+      nodeId = (await this.workspace.createNode(workspaceId, 'videoWorkflow', value.title, { schemaVersion: 1 }, nearNodeId ?? (actor.type === 'agent' ? actor.nodeId : undefined))).id;
       created = true;
     }
     try {
@@ -107,6 +108,9 @@ export class CreativeWorkflowService {
   async snapshot(workflow: CreativeWorkflow): Promise<CreativeSnapshot> {
     await this.validateBindings(workflow.workspaceId, workflow.config);
     let config = creativeConfigSchema.parse(workflow.config);
+    if (config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id))) throw new CreativeMediaError('creative_character_binding_required');
+    const references = new Set([config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)]);
+    if (config.requiredReferenceNodeIds.some(id => !references.has(id))) throw new CreativeMediaError('creative_reference_required');
     const contexts: string[] = [];
     for (const id of config.contextNodeIds) {
       const node = await this.workspace.node(workflow.workspaceId, id);

@@ -171,6 +171,7 @@
     'image',
     'imageWorkflow',
     'videoWorkflow',
+    'storyboard',
     'video',
     'flow',
     'loop',
@@ -218,7 +219,7 @@
   const EXPLORER_GROUPS: Array<{ id: 'agents' | 'work' | 'content' | 'tools'; types: CanvasNodeType[] }> = [
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
-    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'design'] },
+    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'storyboard', 'design'] },
     { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'toolWorkshop', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
@@ -398,6 +399,18 @@
       await loadWorkspace(workspaceId);
       selectNode(workspaceId, node.nodeId);
     } catch (error) { toast.error(creativeError(error instanceof Error ? error.message : 'creative_request_failed')); }
+    finally { addingVideo = false; }
+  }
+
+  async function addStoryboard() {
+    if (!selectedWorkspaceId || addingVideo) return;
+    addingVideo = true;
+    const workspaceId = selectedWorkspaceId;
+    try {
+      const node = await creativeApi<{ nodeId: string }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/storyboards`, 'POST', { command: 'create', title: m['storyboard.title']() });
+      await loadWorkspace(workspaceId);
+      if (selectedWorkspaceId === workspaceId) selectNode(workspaceId, node.nodeId);
+    } catch (cause) { toast.error(creativeError((cause as Error).message)); }
     finally { addingVideo = false; }
   }
 
@@ -665,6 +678,7 @@
     if (node.type === 'image') return m['terminal_browser.kind_image']();
     if (node.type === 'imageWorkflow') return m['image_workflow.title']();
     if (node.type === 'videoWorkflow') return m['creative.title']();
+    if (node.type === 'storyboard') return m['storyboard.title']();
     if (node.type === 'video') return m['creative.video']();
     if (node.type === 'flow') return m['terminal_browser.kind_flow']();
     if (node.type === 'loop') return m['terminal_browser.kind_loop']();
@@ -1160,7 +1174,7 @@
         nodeId={isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId}
       />
       <AttentionCenter workspaceId={selectedWorkspaceId} />
-      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
+      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
 
     <div class="shrink-0 p-2.5">

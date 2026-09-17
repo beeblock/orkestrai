@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
+- Plan native storyboards with ordered scenes, dialogue, locked character selections, references and connected image/video drafts in Canvas and Workbench. UI and agents share revision guards, recoverable missing inputs and stale-scene indicators without automatic paid execution or deleting delivered files.
 - Create native fal.ai video workflows in Canvas and Workbench with searchable discovery of the complete published video catalog, including Seedance 2.5. Official endpoint contracts drive typed parameters, nested inputs and multiple image/video/audio references. Existing Wan/Kling drafts and Codex subscription image workflows remain compatible.
 - Configure encrypted desktop credentials, workspace opt-in, permitted models, agent access, external-data consent, cost reservations and concurrency. Preview outgoing data and estimates before paid execution, subject to workspace security gates.
 - Save owner-approved character versions with immutable, fingerprinted appearance and voice references. Drag characters from the shared library into another workspace to copy their complete reference bundle without copying credentials or permissions; bind the exact version to video scenes through UI or agents. Preview master images and voice, match compatible inputs automatically, and insert named references without silently dropping assets or changing identities.

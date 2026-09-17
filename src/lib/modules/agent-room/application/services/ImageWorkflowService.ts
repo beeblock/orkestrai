@@ -28,6 +28,7 @@ import {
 } from '../dto/ImageWorkflowDtos.js';
 import {
   imageWorkflowConfigSchema,
+  createImageWorkflowSchema,
   type BridgeRunImageWorkflowInput,
   type ImageWorkflowConfigInput,
 } from '../../contracts/schemas/imageWorkflowSchemas.js';
@@ -397,29 +398,38 @@ export class ImageWorkflowService {
 
   async create(dto: CreateImageWorkflowDto) {
     const actor = await this.requireCodexActor(dto.workspaceId, dto.actorNodeId);
-    const { from: _from, title, ...config } = dto.input;
-    const nodes = await workspaceRepository.listNodes(dto.workspaceId);
-    const position = findFreeCanvasPosition(occupiedOnFloor(nodes, actor.floorId ?? null), {
-      x: actor.x + actor.width + 72,
-      y: actor.y,
+    const workflow = await this.createDraft(dto.workspaceId, dto.input, actor.id, actor.id, []);
+    return this.read(dto.workspaceId, workflow.id);
+  }
+
+  async createDraft(workspaceId: string, input: unknown, nearNodeId: string, executorNodeId: string | null, referenceNodeIds: string[]) {
+    const { from: _from, title, ...config } = createImageWorkflowSchema.parse(input);
+    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const near = nodes.find(node => node.id === nearNodeId);
+    if (!near) throw new ImageWorkflowError('image_workflow_not_found', 404);
+    if (executorNodeId) await this.requireCodexActor(workspaceId, executorNodeId);
+    if (referenceNodeIds.length > MAX_REFERENCES || new Set(referenceNodeIds).size !== referenceNodeIds.length || referenceNodeIds.some(id => nodes.find(node => node.id === id)?.type !== 'image')) throw new ImageWorkflowError('image_workflow_reference_unavailable');
+    const position = findFreeCanvasPosition(occupiedOnFloor(nodes, near.floorId ?? null), {
+      x: near.x + near.width + 72,
+      y: near.y,
       width: 440,
       height: 560,
     });
     const workflow = await workspaceRepository.createNode({
-      workspaceId: dto.workspaceId,
+      workspaceId,
       type: 'imageWorkflow',
       title,
       x: position.x,
       y: position.y,
       width: 440,
       height: 560,
-      zIndex: actor.zIndex,
-      floorId: actor.floorId,
+      zIndex: near.zIndex,
+      floorId: near.floorId,
       payload: {
         schemaVersion: 1,
         ...config,
         contextOrder: [],
-        referenceOrder: [],
+        referenceOrder: referenceNodeIds,
         status: 'idle',
         activeRunId: null,
         activeRun: null,
@@ -427,9 +437,9 @@ export class ImageWorkflowService {
         history: [],
       } satisfies ImageWorkflowNodePayload,
     });
-    await workspaceRepository.createEdge({ workspaceId: dto.workspaceId, sourceNodeId: actor.id, targetNodeId: workflow.id, style: 'cord' });
-    broadcast(dto.workspaceId, workflow.id);
-    return this.read(dto.workspaceId, workflow.id);
+    for (const id of [...new Set([near.id, ...(executorNodeId ? [executorNodeId] : []), ...referenceNodeIds])]) await workspaceRepository.createEdge({ workspaceId, sourceNodeId: id, targetNodeId: workflow.id, style: 'cord' });
+    broadcast(workspaceId, workflow.id);
+    return workflow;
   }
 
   async update(dto: UpdateImageWorkflowDto) {

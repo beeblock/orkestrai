@@ -315,6 +315,13 @@ async function runAction(action: TourAction): Promise<void> {
         if (!indexed) throw new Error(m['code_graph.index_error']());
         break;
       }
+      case 'createStoryboard': {
+        if (await findNode(action.title)) break;
+        await api(`/api/agent-room/workspaces/${workspaceId}/creative-media/storyboards`, {
+          method: 'POST', body: JSON.stringify({ command: 'create', title: action.title, position: nextPosition() }),
+        });
+        break;
+      }
       case 'createVideoWorkflow': {
         if (await findNode(action.title)) break;
         await api(`/api/agent-room/workspaces/${workspaceId}/creative-media`, {

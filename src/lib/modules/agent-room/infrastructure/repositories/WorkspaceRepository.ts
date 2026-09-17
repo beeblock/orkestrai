@@ -402,6 +402,7 @@ export class WorkspaceRepository {
       style: CanvasEdgeStyle;
     }>;
     sourceNodeIds: string[];
+    beforeCommit?: () => Promise<void>;
   }): Promise<{ nodes: CanvasNode[]; edges: CanvasEdge[] }> {
     return Connection.transaction(async () => {
       const createdNodes: CanvasNode[] = [];
@@ -441,6 +442,7 @@ export class WorkspaceRepository {
         await AgentCanvasEdge.query().where('workspace_id', input.sourceWorkspaceId).whereIn('target_node_id', input.sourceNodeIds).delete();
         await AgentCanvasNode.query().where('workspace_id', input.sourceWorkspaceId).whereIn('id', input.sourceNodeIds).delete();
       }
+      await input.beforeCommit?.();
       return { nodes: createdNodes, edges: createdEdges };
     });
   }

@@ -143,6 +143,7 @@ export class FloorService {
 
     if (input.cloneLayout) {
       const groundNodes = await workspaceRepository.listNodes(workspaceId, null);
+      const clonedIds = new Map<string, string>();
       for (const node of groundNodes) {
         const payload: Record<string, unknown> = {
           ...(node.payload as Record<string, unknown>),
@@ -153,7 +154,7 @@ export class FloorService {
           delete payload.agentSessionId;
           payload.resumeRecovery = false;
         }
-        await workspaceRepository.createNode({
+        const cloned = await workspaceRepository.createNode({
           workspaceId,
           type: node.type,
           title: node.title,
@@ -165,7 +166,10 @@ export class FloorService {
           payload,
           floorId: floor.id,
         });
+        clonedIds.set(node.id, cloned.id);
       }
+      const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
+      for (const node of groundNodes.filter(item => item.type === 'storyboard')) await creativeStoryboardService.clone(workspaceId, node.id, workspaceId, clonedIds.get(node.id)!, clonedIds);
     }
 
     const hooks = workspace.hooks;

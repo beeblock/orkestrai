@@ -106,7 +106,7 @@
   async function chooseModel(value: string) {
     if (!value || value === config.modelId) return;
     const previous = config;
-    config = creativeConfigSchema.parse({ modelId: value, profileId: previous.profileId, prompt: previous.prompt, contextNodeIds: previous.contextNodeIds, characterBindings: previous.characterBindings, outputDirectory: previous.outputDirectory, filePrefix: previous.filePrefix });
+    config = creativeConfigSchema.parse({ ...$state.snapshot(previous), modelId: value, parameters: {}, mediaBindings: [] });
     billing = null;
     changed(); await loadContract(value, true);
   }
@@ -147,6 +147,7 @@
   {/snippet}
   <div data-testid="video-workflow" class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-3 text-[var(--app-text)] [&_[data-slot=native-select-wrapper]]:w-full">
     {#if loading}<p role="status" class="text-xs text-[var(--app-text-muted)]">{m['creative.loading']()}</p>{/if}
+    {#if config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id)) || config.requiredReferenceNodeIds.some(id => ![config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)].includes(id))}<p role="status" class="mb-3 border-l-2 border-[var(--app-warning)] pl-2 text-xs text-[var(--app-text)]">{m['storyboard.bind_required']()}</p>{/if}
     <fieldset disabled={busy || Boolean(active) || contractLoading} class="min-w-0 space-y-3 disabled:opacity-70" oninput={changed} onchange={changed}>
       <div class="grid grid-cols-2 gap-3">
         <div class="min-w-0 space-y-1 text-xs"><span>{m['creative.model']()}</span><ModelCombobox value={config.modelId} options={modelOptions} defaultLabel={m['creative.choose_model']()} searchPlaceholder={m['creative.search_models']()} emptyLabel={m['creative.no_models']()} ariaLabel={m['creative.model']()} onValueChange={chooseModel} /></div>

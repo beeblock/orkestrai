@@ -136,6 +136,7 @@ export function transferredNodePayload(
   if (type === 'videoWorkflow') {
     const config = payload.draftConfig && typeof payload.draftConfig === 'object' ? payload.draftConfig as Record<string, unknown> : {};
     return { schemaVersion: 1, draftConfig: { ...config, profileId: null,
+      requiredReferenceNodeIds: Array.isArray(config.requiredReferenceNodeIds) ? config.requiredReferenceNodeIds.map(id => typeof id === 'string' ? ids.get(id) ?? id : id) : [],
       contextNodeIds: remapIds(config.contextNodeIds, ids),
       startImageNodeId: typeof config.startImageNodeId === 'string' ? ids.get(config.startImageNodeId) ?? null : null,
       endImageNodeId: typeof config.endImageNodeId === 'string' ? ids.get(config.endImageNodeId) ?? null : null,

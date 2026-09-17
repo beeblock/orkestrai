@@ -30,6 +30,8 @@ export const creativeConfigSchema = z.object({
     imagePointers: z.array(z.string().max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/)).min(1).max(12),
     voicePointer: z.string().max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/),
   }).strict()).max(8).default([]),
+  requiredCharacterIds: z.array(id).max(8).default([]),
+  requiredReferenceNodeIds: z.array(id).max(20).default([]),
   billingUnits: z.number().finite().positive().max(1000000000).nullable().default(null),
   profileId: id.nullable().default(null),
   prompt: z.string().trim().max(50000).default(''),

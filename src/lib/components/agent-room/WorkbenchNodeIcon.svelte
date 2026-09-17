@@ -26,6 +26,7 @@
     GitFork,
     Wrench,
     Film,
+    Clapperboard,
   } from '@lucide/svelte';
   import type { CanvasNodeType } from '$lib/modules/agent-room/domain/types.js';
 
@@ -44,6 +45,7 @@
 {:else if type === 'image'}<ImageIcon {size} aria-hidden="true" />
 {:else if type === 'imageWorkflow'}<Sparkles {size} aria-hidden="true" />
 {:else if type === 'video' || type === 'videoWorkflow'}<Film {size} aria-hidden="true" />
+{:else if type === 'storyboard'}<Clapperboard {size} aria-hidden="true" />
 {:else if type === 'flow'}<Workflow {size} aria-hidden="true" />
 {:else if type === 'loop'}<Repeat2 {size} aria-hidden="true" />
 {:else if type === 'usage'}<Gauge {size} aria-hidden="true" />

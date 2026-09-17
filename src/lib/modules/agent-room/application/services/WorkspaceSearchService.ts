@@ -260,6 +260,16 @@ export class WorkspaceSearchService {
     const designDocuments = await Promise.all(nodes
       .filter((node) => node.type === 'design')
       .map(async (node) => ({ node, document: await designDocumentService.get(workspace.id, node.id).catch(() => null) })));
+    const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
+    for (const node of nodes.filter(item => item.type === 'storyboard')) {
+      const board = await creativeStoryboardService.read(workspace.id, node.id).catch(() => null);
+      for (const scene of board?.storyboard.document.scenes ?? []) results.push(indexed({
+        id: `storyboard-scene:${node.id}:${scene.id}`, kind: 'artifact', title: scene.title,
+        subtitle: `${workspace.name} · ${board!.storyboard.document.title}`, preview: clip(scene.direction),
+        workspaceId: workspace.id, workspaceName: workspace.name, nodeId: node.id, taskId: null, path: null,
+        route: `/terminal?workspace=${workspace.id}&node=${node.id}`,
+      }, ['storyboard scene cena escena', scene.direction, scene.dialogue, scene.language]));
+    }
     for (const { node, document } of designDocuments) {
       if (!document) continue;
       const route = `/terminal?workspace=${workspace.id}&node=${node.id}`;

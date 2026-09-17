@@ -15,7 +15,7 @@ function createdTitles(tour: Tour): Set<string> {
     const actions = step.action ? (Array.isArray(step.action) ? step.action : [step.action]) : [];
     for (const action of actions) {
       if (action.kind === 'createAgent' || action.kind === 'createNote' || action.kind === 'createUsage' || action.kind === 'createApiClient' || action.kind === 'createCodeGraph' || action.kind === 'createImageWorkflow' || action.kind === 'createSampleImage' || action.kind === 'createShape' || action.kind === 'createDesign') titles.add(action.title);
-      if (action.kind === 'createFlow' || action.kind === 'createVideoWorkflow') titles.add(action.title);
+      if (action.kind === 'createFlow' || action.kind === 'createVideoWorkflow' || action.kind === 'createStoryboard') titles.add(action.title);
       if (action.kind === 'createPortal') titles.add(action.title ?? 'Portal');
     }
   }

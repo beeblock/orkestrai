@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'creative-storyboard': 'creative-storyboard',
   'creative-video-workflow': 'creative-video-workflow',
   'leader-team': 'team-leader',
   'workspace-node-transfer': 'workspace-node-transfer',

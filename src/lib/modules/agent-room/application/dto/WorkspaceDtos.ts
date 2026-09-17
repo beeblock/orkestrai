@@ -114,7 +114,8 @@ export class CreateCanvasNodeDto {
     public readonly width: number | undefined,
     public readonly height: number | undefined,
     public readonly zIndex: number | undefined,
-    public readonly payload: CanvasNodePayload | undefined
+    public readonly payload: CanvasNodePayload | undefined,
+    public readonly floorId?: string | null
   ) {}
 
   static from(workspaceId: string, input: CreateCanvasNodeInput): CreateCanvasNodeDto {
@@ -127,7 +128,8 @@ export class CreateCanvasNodeDto {
       input.width,
       input.height,
       input.zIndex,
-      input.payload
+      input.payload,
+      input.floorId
     );
   }
 }

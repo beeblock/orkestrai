@@ -392,6 +392,12 @@ export class WorkspaceService {
 
   async createNode(dto: CreateCanvasNodeDto) {
     const workspace = await this.get(dto.workspaceId);
+    if (dto.type === 'storyboard') {
+      const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
+      const result = await creativeStoryboardService.execute(dto.workspaceId, { command: 'create', title: dto.title || 'Storyboard', floorId: dto.floorId, ...(dto.x !== undefined && dto.y !== undefined ? { position: { x: dto.x, y: dto.y } } : {}) }, { type: 'user' });
+      if (!('nodeId' in result)) throw new Error('creative_request_failed');
+      return workspaceRepository.updateNode(result.nodeId, { ...(dto.width !== undefined ? { width: Math.max(540, dto.width) } : {}), ...(dto.height !== undefined ? { height: Math.max(380, dto.height) } : {}) });
+    }
     const existingNodes = await workspaceRepository.listNodes(dto.workspaceId);
     if (dto.type === 'device' || dto.type === 'computer') {
       const existing = existingNodes.find((node) => node.type === dto.type);
@@ -441,6 +447,12 @@ export class WorkspaceService {
     const existing = await workspaceRepository.getNode(dto.nodeId);
     if (!existing) throw new Error('No nao encontrado.');
     let changes = dto.changes;
+    if (existing.type === 'storyboard') {
+      const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
+      const current = (await creativeStoryboardService.read(existing.workspaceId, existing.id)).storyboard;
+      if (typeof changes.title === 'string' && changes.title !== current.document.title) await creativeStoryboardService.execute(existing.workspaceId, { command: 'apply', nodeId: existing.id, revision: current.revision, operations: [{ type: 'rename', title: changes.title }] }, { type: 'user' });
+      changes = { ...changes, payload: undefined };
+    }
     const portalBefore = existing.type === 'portal' ? portalProfileFromPayload(existing.payload) : null;
     const portalAfter = portalBefore && changes.payload ? portalProfileFromPayload(changes.payload) : null;
     if (existing.type === 'terminal' && changes.payload) {
@@ -604,6 +616,10 @@ export class WorkspaceService {
       this.killTerminalSessions(workspaceId, nodeId, { ...((node.payload ?? {}) as Record<string, unknown>) });
     }
     if (node.type === 'design') await designDocumentService.remove(workspaceId, nodeId);
+    if (node.type === 'storyboard') {
+      const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
+      await creativeStoryboardRepository.remove(workspaceId, nodeId);
+    }
     await workspaceRepository.deleteNode(nodeId);
     if (node.type === 'terminal') {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);

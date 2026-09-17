@@ -96,6 +96,7 @@ export class CanvasNodeTransferService {
     const offsetY = destinationPosition.y - sourceBounds.y;
     const destinationFiles: Array<{ workspaceId: string; path: string }> = [];
     const preparedDesignIds: string[] = [];
+    const preparedStoryboardIds: string[] = [];
     const occupiedTerminalTitles = new Set(destinationNodes
       .filter((node) => node.type === 'terminal' && node.title)
       .map((node) => node.title!.toLocaleLowerCase()));
@@ -119,6 +120,12 @@ export class CanvasNodeTransferService {
           title ||= 'Untitled design';
           await designDocumentService.cloneToWorkspace(dto.sourceWorkspaceId, node.id, dto.destinationWorkspaceId, destinationNodeId, title);
           preparedDesignIds.push(destinationNodeId);
+        }
+        if (node.type === 'storyboard') {
+          const { creativeStoryboardService } = await import('$lib/modules/creative-media/application/services/CreativeStoryboardService.js');
+          await creativeStoryboardService.clone(dto.sourceWorkspaceId, node.id, dto.destinationWorkspaceId, destinationNodeId, ids);
+          preparedStoryboardIds.push(destinationNodeId);
+          payload = { schemaVersion: 1 };
         }
         preparedNodes.push({
           id: destinationNodeId,
@@ -147,6 +154,12 @@ export class CanvasNodeTransferService {
         nodes: preparedNodes,
         edges: preparedEdges,
         sourceNodeIds: dto.nodeIds,
+        beforeCommit: async () => {
+          if (dto.mode === 'move') {
+            const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
+            for (const node of selected.filter(node => node.type === 'storyboard')) await creativeStoryboardRepository.remove(dto.sourceWorkspaceId, node.id);
+          }
+        },
       });
       databaseCommitted = true;
       if (dto.mode === 'move') await this.cleanupMovedRuntime(dto.sourceWorkspaceId, selected);
@@ -161,6 +174,8 @@ export class CanvasNodeTransferService {
       };
     } catch (error) {
       if (!databaseCommitted) {
+        const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
+        for (const nodeId of preparedStoryboardIds) await creativeStoryboardRepository.remove(dto.destinationWorkspaceId, nodeId);
         await Promise.all([
           ...destinationFiles.map(({ workspaceId, path }) => filesystemService.deleteFile(workspaceId, path).catch(() => false)),
           ...preparedDesignIds.map((nodeId) => designDocumentService.removeWorkspaceFiles(dto.destinationWorkspaceId, nodeId).catch(() => undefined)),

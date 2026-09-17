@@ -113,6 +113,8 @@ export class CreativeMediaRepository {
   }
   async removeWorkspace(workspaceId: string): Promise<void> {
     await Connection.transaction(async () => {
+      const { creativeStoryboardRepository } = await import('./CreativeStoryboardRepository.js');
+      await creativeStoryboardRepository.removeWorkspace(workspaceId);
       await creativeCharacterRepository.removeWorkspace(workspaceId);
       await RunModel.query().where('workspace_id', workspaceId).delete();
       await WorkflowModel.query().where('workspace_id', workspaceId).delete();
