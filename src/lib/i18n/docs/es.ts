@@ -940,7 +940,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    {"date":"Sin publicar","title":"Comunicación entre agentes y selección del terminal","summary":"Correcciones aún no publicadas, no incluidas en 0.31.4.","items":["Entregar mensajes entre agentes sin esperar toda la respuesta del modelo. Los mensajes recíprocos desbloquean al remitente, los mensajes recibidos por Claude durante el trabajo mantienen su vínculo con el transcript y los avisos válidos de finalización siguen disponibles para el líder.","Alinear las coordenadas del ratón con el zoom del Canvas al arrastrar, seleccionar palabras y utilizar pantallas con escala."]},
+    {"date":"16 de septiembre de 2026","title":"Orkestrai 0.31.5: comunicación entre agentes y selección del terminal","summary":"Comunicación fiable entre agentes y selección precisa en el terminal.","items":["Entregar mensajes entre agentes sin esperar toda la respuesta del modelo. Los mensajes recíprocos desbloquean al remitente, los mensajes recibidos por Claude durante el trabajo mantienen su vínculo con el transcript y los avisos válidos de finalización siguen disponibles para el líder.","Alinear las coordenadas del ratón con el zoom del Canvas al arrastrar, seleccionar palabras y utilizar pantallas con escala."]},
     {
       "date": "16 de septiembre de 2026 · 0.31.4",
       "title": "Orkestrai 0.31.4: dictado fluido y recuperación de terminales",

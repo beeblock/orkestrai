@@ -940,7 +940,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    {"date":"Unreleased","title":"Agent communication and terminal selection","summary":"Unreleased corrections, not included in 0.31.4.","items":["Deliver queued agent messages without waiting for an entire model response. Reciprocal messages unblock waiting callers, Claude mid-turn messages retain their transcript association, and valid completion reports remain available to the leader.","Keep terminal mouse coordinates aligned with Canvas zoom for dragging, word selection and scaled displays."]},
+    {"date":"September 16, 2026","title":"Orkestrai 0.31.5: agent communication and terminal selection","summary":"Reliable agent handoffs and precise terminal text selection.","items":["Deliver queued agent messages without waiting for an entire model response. Reciprocal messages unblock waiting callers, Claude mid-turn messages retain their transcript association, and valid completion reports remain available to the leader.","Keep terminal mouse coordinates aligned with Canvas zoom for dragging, word selection and scaled displays."]},
     {
       "date": "September 16, 2026 · 0.31.4",
       "title": "Orkestrai 0.31.4: responsive dictation and terminal recovery",
