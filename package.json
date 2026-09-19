@@ -19,7 +19,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js build",
+    "build": "node --max-old-space-size=12288 node_modules/vite/bin/vite.js build",
     "postbuild": "node scripts/build-computer-host.mjs",
     "preview": "vite preview",
     "postinstall": "patch-package && node scripts/ensure-node-pty-helper.mjs",

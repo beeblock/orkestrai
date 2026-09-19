@@ -8,6 +8,7 @@ Mac ARM não é confiável).
 
 - **Node.js 24+** (o servidor de produção usa type stripping do Node 24)
 - **Git**
+- **16 GB de RAM recomendados para compilar**: o build de produção permite até 12 GB de heap ao Node para empacotar o servidor. Isso não aumenta o limite de memória do app instalado.
 - Não precisa de Visual Studio nem de MSVC: os módulos nativos usam prebuilds.
 
 ## Passo a passo
