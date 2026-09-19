@@ -170,6 +170,7 @@ describe('packaged updater', () => {
       expect(packageJson.dependencies?.[dependency]).toBeTruthy();
     }
     expect(packageJson.build?.files).toContain('src/lib/modules/agent-room/infrastructure/codex-mcp-config.ts');
+    expect(packageJson.build?.files).toContain('src/lib/modules/agent-room/application/adapters/interactive-startup.ts');
   });
 
   it('ships a verified console Node runtime for the Windows and WSL bridge', () => {

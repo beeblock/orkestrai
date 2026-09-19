@@ -255,7 +255,9 @@ export class RoleService {
 
     const session = ptySessionManager.get(payload.sessionId);
     if (!session || session.exited) throw new Error('Sessão PTY não está ativa.');
-    await ptySessionManager.waitUntilIdle(payload.sessionId);
+    if (!(await ptySessionManager.waitUntilIdle(payload.sessionId))) {
+      return { applied: false, tasksDelivered: 0 };
+    }
 
     let applied = false;
     if (shouldApplyRole && role) {

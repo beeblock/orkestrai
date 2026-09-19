@@ -7,6 +7,67 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it.each(['native', 'wsl'] as const)('does not submit initial tasks to the Claude trust dialog in %s', async (runtime) => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: (listener: (data: string) => void) => { emitData = listener; return { dispose() {} }; },
+      onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({
+      command: 'claude', cwd: process.cwd(), provider: 'claude',
+      ...(runtime === 'wsl' ? { runtime: { kind: 'wsl' as const, distribution: 'Ubuntu', linuxWorkingDir: '/workspace' } } : {}),
+    });
+    try {
+      const pending = manager.queueWithSubmit(session.id, '[initial Kanban] Review the open tasks.');
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(writes).toEqual([]);
+      emitData('Quick safety check: Is this a project you trust?\r\n\u276f No, exit\r\nYes, I trust this folder');
+      const ready = manager.waitUntilIdle(session.id, 20_000);
+      await vi.advanceTimersByTimeAsync(21_000);
+      expect(await ready).toBe(false);
+      expect(manager.hasReachedInitialIdle(session.id)).toBe(false);
+      expect(manager.submitIfComposerFree(session.id)).toBe(false);
+      expect(writes).toEqual([]);
+      manager.writeHumanInput(session.id, '\x1b[B');
+      manager.writeHumanInput(session.id, '\r');
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(writes).toEqual(['\x1b[B', '\r']);
+      emitData('\x1b[2J\u276f \r\n? for shortcuts');
+      await vi.advanceTimersByTimeAsync(4_000);
+      await pending.submitted;
+      expect(manager.hasReachedInitialIdle(session.id)).toBe(true);
+      expect(writes).toEqual(['\x1b[B', '\r', '[initial Kanban] Review the open tasks.', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('rejects queued tasks if the user declines Claude workspace trust', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    let emitExit!: (event: { exitCode: number }) => void;
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: (listener: (data: string) => void) => { emitData = listener; return { dispose() {} }; },
+      onExit: (listener: typeof emitExit) => { emitExit = listener; return { dispose() {} }; },
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'claude', cwd: process.cwd(), provider: 'claude' });
+    try {
+      emitData('Quick safety check:\r\nNo, exit\r\nYes, I trust this folder');
+      const pending = manager.queueWithSubmit(session.id, 'must never be entered');
+      const rejected = expect(pending.submitted).rejects.toThrow('código 1');
+      manager.writeHumanInput(session.id, '\r');
+      emitExit({ exitCode: 1 });
+      await vi.advanceTimersByTimeAsync(25_000);
+      await rejected;
+      expect(writes).toEqual(['\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
   it.each(['native', 'wsl'] as const)('releases an accepted %s prompt during continuous provider output', async (runtime) => {
     vi.useFakeTimers();
     const writes: string[] = [];
@@ -533,6 +594,8 @@ describe('PtySessionManager', () => {
       cwd: process.cwd(),
       runtime: { kind: 'wsl', distribution: 'Ubuntu-24.04', linuxWorkingDir: '/workspace' },
     });
+
+    emitData?.('? for shortcuts');
 
     await manager.writeWithSubmit(session.id, 'mensagem entre agentes', 5);
 

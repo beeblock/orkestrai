@@ -23,6 +23,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Wait for Claude's message composer before sending initial roles, Kanban tasks or automatic Enter. Keep workspace trust confirmation under human control instead of accidentally selecting `No, exit`, and do not claim delivery when startup readiness times out.
 - Delete workspace-bound policies, audit records, integration events and tools in dependency order without leaving a partially removed Canvas; preserve unrelated workspaces and project files.
 - Require a protected operating-system credential store and preserve existing credentials when the vault file is unreadable or malformed.
 - Find curated skills by spaced or hyphenated names even when the online registry is unavailable.

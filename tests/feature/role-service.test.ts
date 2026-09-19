@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,6 +10,27 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 
 describe('RoleService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it.each(['fresh', 'resume'] as const)('does not deliver or claim initial tasks when %s readiness times out', async (mode) => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'trust confirmation', workingDir: '/tmp' });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    const leader = await workspaceRepository.createNode({
+      workspaceId: workspace.id, type: 'terminal', title: 'Leader',
+      payload: { command: '/bin/cat', sessionId: session.id, maestro: true },
+    });
+    await taskBoardService.create(workspace.id, { title: 'Pending task', createdBy: 'preset' });
+    const ready = vi.spyOn(ptySessionManager, 'waitUntilIdle').mockResolvedValue(false);
+    const deliver = vi.spyOn(ptySessionManager, 'writeWithConfirmedSubmit');
+    try {
+      expect(await roleService.applyToTerminal(workspace.id, leader.id, mode))
+        .toEqual({ applied: false, tasksDelivered: 0 });
+      expect(deliver).not.toHaveBeenCalled();
+    } finally {
+      ready.mockRestore();
+      deliver.mockRestore();
+      ptySessionManager.kill(session.id);
+    }
+  });
 
   it('discovers validated roles from a selected folder without overwriting existing slugs', async () => {
     const workingDir = mkdtempSync(join(tmpdir(), 'orkestrai-role-target-'));

@@ -8,6 +8,7 @@ import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
 import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch } from '../WslRuntime.ts';
+import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 
 // PATH aumentado e resolucao de comando (registro/PATHEXT/.cmd) foram movidos
 // para ../agent-path.ts, compartilhado com o Modo Maestro (application/agents.ts)
@@ -124,6 +125,7 @@ type PtySession = PtySessionInfo & {
   bridgeAgentToken: string | null;
   ownsProcessTree: boolean;
   initialIdleObserved: boolean;
+  startupGuard: InteractiveStartupGuard | null;
   scrollback: string;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
@@ -296,6 +298,7 @@ export class PtySessionManager {
       bridgeAgentToken: input.bridgeAgentToken ?? null,
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       initialIdleObserved: false,
+      startupGuard: interactiveStartupGuard(input.provider),
       scrollback: '',
       listeners: new Set(),
       exitListeners: new Set(),
@@ -326,6 +329,8 @@ export class PtySessionManager {
       session.lastOutputAt = Date.now();
       session.outputRevision += 1;
       session.scrollback = (session.scrollback + data).slice(-SCROLLBACK_LIMIT);
+      session.startupGuard?.observe(data);
+      if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
       this.scheduleAttentionCheck(session);
       if (firstOutput || resumedFromIdle) this.recordLifecycle(session, 'working');
@@ -670,7 +675,7 @@ export class PtySessionManager {
       const session = this.sessions.get(id);
       if (!session || session.exited) return false;
       if (!session.provider) return true;
-      if (session.waiting) return true;
+      if (session.waiting && (!session.startupGuard || session.startupGuard.canAcceptMessages)) return true;
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
     }
     return false;
@@ -679,7 +684,7 @@ export class PtySessionManager {
   /** Aguarda somente a primeira estabilizacao do TUI; depois disso nao bloqueia trabalho enfileirado. */
   hasReachedInitialIdle(id: string): boolean {
     const session = this.sessions.get(id);
-    return Boolean(session && !session.exited && (!session.provider || session.initialIdleObserved));
+    return Boolean(session && !session.exited && (!session.startupGuard || session.startupGuard.canAcceptMessages) && (!session.provider || session.initialIdleObserved));
   }
 
   async waitUntilInitialIdle(id: string, timeoutMs = 20_000): Promise<boolean> {
@@ -737,7 +742,7 @@ export class PtySessionManager {
   /** Reenvia Enter apenas se não houver um rascunho humano em andamento. */
   submitIfComposerFree(id: string): boolean {
     const session = this.requireSession(id);
-    if (session.exited || session.deliveryInProgress || session.humanComposerLength > 0) return false;
+    if (session.exited || session.deliveryInProgress || session.humanComposerLength > 0 || (session.startupGuard && !session.startupGuard.canAcceptMessages)) return false;
     this.write(id, '\r');
     return true;
   }
@@ -750,8 +755,10 @@ export class PtySessionManager {
   private scheduleAttentionCheck(session: PtySession): void {
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => {
+      if (session.startupGuard && !session.startupGuard.canAcceptMessages) return;
       this.setWaiting(session, true);
       this.releaseDeliveryBarrierWhenReady(session);
+      this.drainDeliveryQueue(session);
     }, SESSION_IDLE_MS);
   }
 
@@ -786,6 +793,7 @@ export class PtySessionManager {
   private drainDeliveryQueue(session: PtySession): void {
     if (
       session.exited ||
+      (session.startupGuard && !session.startupGuard.canAcceptMessages) ||
       session.deliveryInProgress ||
       session.awaitingDeliveryIdle ||
       session.humanComposerLength > 0
@@ -827,6 +835,9 @@ export class PtySessionManager {
         return;
       }
       try {
+        if (session.startupGuard && !session.startupGuard.canAcceptMessages) {
+          throw new Error('Complete the provider workspace trust confirmation in its terminal before sending agent messages.');
+        }
         session.lastSubmitOutputRevision = session.outputRevision;
         this.write(session.id, '\r');
         session.lastSubmittedDelivery = delivery;
@@ -912,6 +923,7 @@ export class PtySessionManager {
 
   private writeHumanInputNow(session: PtySession, data: string): void {
     const submitted = /[\r\n]/.test(data);
+    session.startupGuard?.humanInput(data);
     this.updateHumanComposerState(session, data);
     this.write(session.id, data);
     if (session.provider && submitted) {
