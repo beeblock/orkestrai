@@ -114,7 +114,9 @@ jobs:
   build-macos:
     name: Build macOS (Apple Silicon + Intel)
     needs: validate
-    runs-on: macos-15
+    # The standard Intel runner has 14 GB RAM; the M1 label only has 7 GB.
+    # Packaging selects target-architecture binaries for both installers.
+    runs-on: macos-15-intel
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7

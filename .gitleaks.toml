@@ -22,3 +22,11 @@ condition = "AND"
 paths = ['''^tests/unit/mcp-server\.test\.ts$''']
 regexTarget = "match"
 regexes = ['''secretref:0123456789abcdef''']
+
+[[allowlists]]
+description = "Public video CDN hostname after googleapis triggers the generic API-key heuristic."
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^src/lib/modules/creative-media/infrastructure/providers/FalVideoProvider\.ts$''']
+regexTarget = "secret"
+regexes = ['''^cdn3\.pixelcut\.app$''']

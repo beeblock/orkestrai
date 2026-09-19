@@ -77,6 +77,14 @@ function fixture() {
 }
 
 describe('release artifact validation', () => {
+  it('uses a standard macOS runner with enough memory for the production build', () => {
+    const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
+    expect(workflow.jobs['build-macos']['runs-on']).toBe('macos-15-intel');
+    const packaging = workflow.jobs['build-macos'].steps.find((step: { name?: string }) => step.name === 'Package macOS installers');
+    expect(packaging.run).toContain('scripts/package-macos.sh --arm64 --x64');
+    expect(packaging.env.ORKESTRAI_REQUIRE_MAC_SIGNING).toBe('true');
+  });
+
   it('builds QA from an immutable tested SHA without enabling release publication', () => {
     const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
     expect(workflow.on.workflow_dispatch.inputs.build_only).toMatchObject({ type: 'boolean', default: false });

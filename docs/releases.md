@@ -71,6 +71,12 @@ O workflow `Release Desktop` compila:
 - Windows x64: instalador NSIS e blockmap;
 - Linux x64: AppImage, RPM e manifest `latest-linux.yml` (o electron-builder não gera blockmap separado para AppImage).
 
+O build macOS usa o runner padrão `macos-15-intel` de 14 GB de RAM, em vez do
+runner M1 de 7 GB. O heap do build web permite até 12 GB; os binários nativos
+são selecionados pela arquitetura de cada instalador, não pela do runner.
+Os dois pacotes continuam exigindo assinatura Developer ID e notarização.
+Consulte as [especificações dos runners do GitHub](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
 Depois dos builds, `scripts/validate-release-artifacts.mjs` confere versão,
 arquivos referenciados, tamanho e SHA-512 dos manifests `latest-mac.yml`,
 `latest.yml` e `latest-linux.yml`. A release fica em draft durante o upload e só

@@ -30,7 +30,7 @@ The publisher refuses to alter an already-public release. Failed upload retries 
 ## Known Build Requirements
 
 - Use Node 24 and npm `11.6.2` in every job, including the publisher.
-- Keep `NODE_OPTIONS=--max-old-space-size=6144`; the adapter-node build exceeds Node's default heap on macOS runners.
+- Keep the general `NODE_OPTIONS=--max-old-space-size=6144` for tooling. `npm run build` explicitly permits a 12 GB heap for the complete Vite/adapter-node process. Use the standard 14 GB `macos-15-intel` runner for both target architectures, not the 7 GB M1 runner; changing only the heap does not provide physical memory.
 - Official releases require all five Apple secrets and `mac.notarize: true`; the preflight and macOS job must fail instead of publishing an unsigned build when any credential is absent.
 - `scripts/package-macos.sh` retains ad-hoc signing with hardened runtime disabled and 0% manifest rollout only for explicit local builds without Apple credentials.
 - Every release macOS build must pass strict deep code-sign verification, Developer ID authority and Team ID checks, Hardened Runtime inspection, Gatekeeper assessment, and stapler validation for both app bundles, plus DMG and ZIP integrity checks before upload.
