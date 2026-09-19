@@ -138,7 +138,11 @@ export class CreativeQueueService {
       else if (latest.status === 'queued') {
         if (code === 'creative_approval_required') await repository.transition(run.id, owner, ['queued'], 'queued', { errorCode: code });
         else await repository.transition(run.id, owner, ['queued'], 'failed', { errorCode: code, releaseReservation: true });
-      } else if (latest.status === 'downloading') await repository.transition(run.id, owner, ['downloading'], 'download_failed', { errorCode: code });
+      } else if (latest.status === 'downloading') {
+        // Queue completion also covers rejected inference. A 422 result has no
+        // downloadable asset; retain its reservation without offering a retry.
+        await repository.transition(run.id, owner, ['downloading'], code === 'creative_provider_rejected' ? 'failed' : 'download_failed', { errorCode: code });
+      }
       else if (['provider_running', 'cancel_requested'].includes(latest.status)) {
         const expired = Date.now() - Date.parse(run.createdAt) > 24 * 60 * 60 * 1000;
         await repository.transition(run.id, owner, [latest.status], expired ? 'download_failed' : latest.status, { errorCode: code });

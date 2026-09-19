@@ -37,8 +37,9 @@
   }
   const accountAdapter = zod(creativeProfileSaveSchema as unknown as Parameters<typeof zod>[0]);
   const policyAdapter = zod(creativePolicySaveSchema as unknown as Parameters<typeof zod>[0]);
-  const accountForm = superForm<CreativeProfileSave>(defaults({ name: 'fal.ai', provider: 'fal', enabled: false }, accountAdapter) as never, { id: 'creative-account', SPA: true, validators: accountAdapter as never });
-  const policyForm = superForm<CreativePolicy & { revision?: number }>(defaults(creativePolicySchema.parse({}), policyAdapter) as never, { id: 'creative-policy', SPA: true, validators: policyAdapter as never });
+  const instanceId = $props.id();
+  const accountForm = superForm<CreativeProfileSave>(defaults({ name: 'fal.ai', provider: 'fal', enabled: false }, accountAdapter) as never, { id: `creative-account-${instanceId}`, SPA: true, validators: accountAdapter as never });
+  const policyForm = superForm<CreativePolicy & { revision?: number }>(defaults(creativePolicySchema.parse({}), policyAdapter) as never, { id: `creative-policy-${instanceId}`, SPA: true, validators: policyAdapter as never });
   const { errors: accountErrors } = accountForm;
   const { errors: policyErrors } = policyForm;
 
@@ -107,11 +108,13 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="flex max-h-[min(760px,calc(100dvh-32px))] w-[calc(100vw-32px)] flex-col overflow-hidden sm:max-w-xl [&_[data-slot=native-select-wrapper]]:w-full">
-    <Dialog.Header><Dialog.Title>{m['creative.providers']()}</Dialog.Title><Dialog.Description>{m['creative.key_help']()}</Dialog.Description></Dialog.Header>
+  <Dialog.Content class="flex h-[min(760px,calc(100dvh-32px))] max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden sm:max-w-xl [&_[data-slot=native-select-wrapper]]:w-full">
+    <Dialog.Header class="shrink-0 pr-6"><Dialog.Title>{m['creative.providers']()}</Dialog.Title><Dialog.Description>{m['creative.key_help']()}</Dialog.Description></Dialog.Header>
     {#if loading}<p role="status" class="shrink-0 text-xs text-muted-foreground">{m['creative.loading']()}</p>{/if}
-    <fieldset disabled={busy || !ready} aria-busy={loading} class="flex min-h-0 min-w-0 flex-1 flex-col gap-4 disabled:opacity-70">
-    <div class="flex min-w-0 items-center gap-2">
+    <fieldset disabled={busy || !ready} aria-busy={loading} class="min-h-0 min-w-0 flex-1 overflow-hidden disabled:opacity-70">
+    <!-- Fieldset's anonymous content box cannot constrain nested flex scroll areas. -->
+    <div class="flex h-full min-h-0 flex-col gap-4">
+    <div class="flex min-w-0 shrink-0 items-center gap-2">
       <NativeSelect.Root class="min-w-0 flex-1" value={profileId} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => select(event.currentTarget.value)} aria-label={m['creative.account']()}>
         <option value="">{m['creative.new_account']()}</option>
         {#each profiles as profile}<option value={profile.id}>{profile.name}</option>{/each}
@@ -149,10 +152,11 @@
         </Tabs.Content>
       </div>
     </Tabs.Root>
+    </div>
     </fieldset>
     {#if error}<div role="alert" class="shrink-0 text-sm text-destructive">{creativeError(error)}<span class="mt-1 block break-all font-mono text-xs">{error.startsWith('creative_') ? error : ''}</span></div>{/if}
     {#if !ready && !loading}<Button variant="outline" onclick={reload}>{m['creative.refresh']()}</Button>{/if}
-    <Dialog.Footer class="shrink-0 border-t pt-3 sm:justify-between">
+    <Dialog.Footer class="grid shrink-0 grid-cols-[auto_1fr] items-center gap-2 border-t pt-3">
       <div>{#if profileId && tab === 'account'}<Button variant="ghost" disabled={busy || !ready} onclick={() => confirmDelete = true}><Trash2 size={14} />{m['creative.delete']()}</Button>{/if}</div>
       <div class="flex items-center justify-end gap-2">{#if saved}<span role="status" class="text-xs text-muted-foreground">{m['creative.saved']()}</span>{/if}<Button variant="outline" onclick={() => open = false}>{m['creative.close']()}</Button><Button disabled={busy || !ready || (tab === 'workspace' && !profileId)} onclick={tab === 'account' ? saveAccount : savePolicy}><Save size={14} />{m['creative.save']()}</Button></div>
     </Dialog.Footer>

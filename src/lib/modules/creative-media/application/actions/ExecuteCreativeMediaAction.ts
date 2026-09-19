@@ -29,6 +29,7 @@ export class ExecuteCreativeMediaAction extends Action<CreativeMediaDto, unknown
       case 'characters': return new ExecuteCreativeCharacterAction().execute(CreativeCharacterDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'models': {
         const input = creativeCatalogQuerySchema.parse(dto.input);
+        if (input.pricingIds) return service.prices(dto.workspaceId, dto.actor, input.profileId!, input.pricingIds);
         if (input.endpoint) return falModelCatalog.contract(input.endpoint);
         if (input.refresh) await falModelCatalog.list(true);
         const catalog = falModelCatalog.discover();

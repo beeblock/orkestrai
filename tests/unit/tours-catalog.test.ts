@@ -23,6 +23,16 @@ function createdTitles(tour: Tour): Set<string> {
 }
 
 describe('catalogo de tours (integridade)', () => {
+  it('creates and authorizes the video draft before presenting model controls', () => {
+    for (const catalog of Object.values(CATALOGS)) {
+      const steps = catalog.find(tour => tour.id === 'creative-video-workflow')!.steps;
+      const ids = steps.map(step => step.id);
+      expect(ids.indexOf('draft')).toBeLessThan(ids.indexOf('access'));
+      expect(ids.indexOf('access')).toBeLessThan(ids.indexOf('model-controls'));
+      expect(ids.indexOf('model-controls')).toBeLessThan(ids.indexOf('generate'));
+    }
+  });
+
   it('todos os idiomas tem os mesmos tours e passos (ids e ordem)', () => {
     const ptIds = TOURS_PT.map((tour) => tour.id);
     expect(TOURS_EN.map((tour) => tour.id)).toEqual(ptIds);

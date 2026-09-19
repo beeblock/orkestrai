@@ -45,7 +45,12 @@ test('save, reuse and inspect real creative workflows through both native surfac
     await page.getByRole('menuitem', { name: 'Creative workflows' }).click();
     await expect(ui.getByRole('textbox', { name: 'Production brief / script' })).toBeEnabled();
     await ui.getByRole('textbox', { name: 'Production brief / script' }).fill('Announce the spring collection.');
+    await ui.getByRole('combobox', { name: 'Product', exact: true }).scrollIntoViewIfNeeded();
     await ui.getByRole('combobox', { name: 'Product', exact: true }).click();
+    await expect.poll(() => page.locator('[data-slot="popover-content"]').evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.top >= 0 && bounds.bottom <= innerHeight;
+    })).toBe(true);
     await page.getByRole('option', { name: 'Local product', exact: true }).click();
     await ui.getByRole('combobox', { name: 'Aspect ratio', exact: true }).click();
     await page.getByRole('option', { name: '9:16', exact: true }).click();

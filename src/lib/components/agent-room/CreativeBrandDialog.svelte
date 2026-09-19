@@ -26,7 +26,8 @@
   const dirty = $derived(record ? JSON.stringify(definition) !== JSON.stringify(record.definition) : !!definition.name || !!definition.description || !!definition.tone || !!definition.rules || definition.assets.length > 0 || definition.colors.length > 0);
   const filtered = $derived(library.filter(item => `${item.definition.name} ${item.workspaceName}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
   const adapter = zod(creativeBrandDefinitionSchema as unknown as Parameters<typeof zod>[0]);
-  const form = superForm<CreativeBrandDefinition>(defaults({ name: '', description: '', assets: [], colors: [], rules: '', tone: '' }, adapter) as never, { id: 'creative-brand', SPA: true, dataType: 'json', validators: adapter as never });
+  const instanceId = $props.id();
+  const form = superForm<CreativeBrandDefinition>(defaults({ name: '', description: '', assets: [], colors: [], rules: '', tone: '' }, adapter) as never, { id: `creative-brand-${instanceId}`, SPA: true, dataType: 'json', validators: adapter as never });
   const { errors } = form;
   function select(id: string) {
     selectedId = records.some(item => item.id === id) ? id : ''; error = ''; form.errors.set({});

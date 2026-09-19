@@ -7,6 +7,7 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { FilesystemController } from '$lib/modules/agent-room/interface/http/controllers/FilesystemController.js';
 
 function makeGitRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'orkestrai-git-'));
@@ -23,6 +24,22 @@ function makeGitRepo() {
 
 describe('FilesystemService + GitService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('declares the exact raw media length without changing bytes or security headers', async () => {
+    const dir = makeGitRepo();
+    const bytes = Buffer.from('RIFF\x00\x00\x00\x00WAVE\x00\xff', 'latin1');
+    writeFileSync(join(dir, 'voice.wav'), bytes);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'voice-preview', workingDir: dir });
+    const response = await new FilesystemController().raw({ params: { id: workspace.id }, url: new URL('http://localhost/fs/raw?path=voice.wav') });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-length')).toBe(String(bytes.length));
+    expect(response.headers.get('content-type')).toBe('audio/wav');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('content-security-policy')).toContain('sandbox');
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+    const escaped = await new FilesystemController().raw({ params: { id: workspace.id }, url: new URL('http://localhost/fs/raw?path=../../etc/passwd') });
+    expect(escaped.status).toBe(404);
+  });
 
   it('lista diretorio confinado ao workspace e bloqueia fuga de path', async () => {
     const dir = makeGitRepo();

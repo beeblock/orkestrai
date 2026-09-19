@@ -1,11 +1,13 @@
 export const FAL_ENDPOINT_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*\/[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_.-]*)*$/;
 export type ModelSchema = {
+  title?: string; description?: string; examples?: unknown[];
   type?: string | string[]; properties?: Record<string, ModelSchema>; required?: string[];
   items?: ModelSchema; enum?: unknown[]; default?: unknown; const?: unknown;
   anyOf?: ModelSchema[]; oneOf?: ModelSchema[]; allOf?: ModelSchema[];
   minimum?: number; maximum?: number; minLength?: number; maxLength?: number;
   minItems?: number; maxItems?: number; [key: string]: unknown;
 };
+export type FalModelPrice = { endpointId: string; unitPrice: number; unit: string; currency: 'USD' };
 export type FalModelSummary = { id: string; name: string; category: string; status: 'active' | 'deprecated'; documentationUrl: string };
 export type FalModelContract = FalModelSummary & { schema: ModelSchema; outputSchema: ModelSchema; digest: string };
 export function concreteSchema(schema: ModelSchema): ModelSchema {

@@ -177,7 +177,9 @@ export class CreativeCharacterService {
       if (audio && (config.parameters.generate_audio ?? audio.default) !== true) throw new CreativeMediaError('creative_character_audio_required');
       characters.push({ id: character.id, version: character.version, digest: frozen.digest, name: frozen.definition.name });
       mentions.push({ alias: binding.alias, name: frozen.definition.name });
-      directions.push(`Character ${frozen.definition.name} (locked v${character.version}): ${frozen.definition.appearance}\nVisual references: ${binding.imagePointers.map(pointer => referenceLabel(config.modelId, pointer)).join(', ')}. Voice reference: ${referenceLabel(config.modelId, binding.voicePointer)}. Language: ${voice.language}. Delivery: ${voice.style}. Preserve the supplied visual identity and voice; do not replace either.`);
+      // Production notes and approval/version provenance belong to the local
+      // snapshot, never to material the model might render or speak.
+      directions.push(`Casting instructions only, not dialogue, narration or on-screen text. Speak only the dialogue explicitly requested in the scene direction; do not read casting descriptions or repeat reference audio transcripts as additional dialogue.\nCharacter ${frozen.definition.name}: ${frozen.definition.appearance}\nVisual references: ${binding.imagePointers.map(pointer => referenceLabel(config.modelId, pointer)).join(', ')}. Voice reference: ${referenceLabel(config.modelId, binding.voicePointer)}. Language: ${voice.language}. Vocal delivery instructions: ${voice.style}. Preserve the supplied visual identity and voice; do not replace either.\nEnd casting instructions.`);
     }
     // Expanded references are fixed run inputs; character IDs remain separately
     // in provenance instead of colliding with their resolved media pointers.

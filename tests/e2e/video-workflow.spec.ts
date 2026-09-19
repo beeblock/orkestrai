@@ -9,6 +9,28 @@ test.describe('native video workflows', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/creative-media/models?*', route => route.fulfill({ json: { data: { models: [], total: 0, nextOffset: null } } }));
   });
+  test('isolates creative forms when several video and storyboard nodes restore together', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-creative-forms-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Creative form isolation', workingDir: dir } })).json()).data;
+    const warnings: string[] = [];
+    page.on('console', message => { if (/Duplicate form id/i.test(message.text())) warnings.push(message.text()); });
+    try {
+      const base = `/api/agent-room/workspaces/${workspace.id}/creative-media`;
+      for (const title of ['First', 'Second']) {
+        expect((await request.post(base, { headers, data: { title, config: { prompt: title } } })).ok()).toBe(true);
+        expect((await request.post(`${base}/storyboards`, { headers, data: { command: 'create', title } })).ok()).toBe(true);
+      }
+      await page.goto(`/canvas?workspace=${workspace.id}`);
+      await expect(page.getByTestId('video-workflow')).toHaveCount(2);
+      await expect(page.getByTestId('storyboard')).toHaveCount(2);
+      await expect(page.getByTestId('video-workflow').getByRole('textbox', { name: /Direction|Direção|Dirección/, exact: true })).toHaveCount(2);
+      expect(warnings).toEqual([]);
+      await page.reload();
+      await expect(page.getByTestId('video-workflow')).toHaveCount(2);
+      await expect(page.getByTestId('storyboard')).toHaveCount(2);
+      expect(warnings).toEqual([]);
+    } finally { await request.delete(`/api/agent-room/workspaces/${workspace.id}`); await rm(dir, { recursive: true, force: true }); }
+  });
   test('searches a large catalog and saves Seedance 2.5 with its own string duration and audio controls', async ({ page, request }) => {
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-catalog-'));
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E model catalog', workingDir: dir } })).json()).data;

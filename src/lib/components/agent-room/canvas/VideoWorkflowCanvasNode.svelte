@@ -18,12 +18,13 @@
   import CreativeCharacterBindings from '../CreativeCharacterBindings.svelte';
   import CreativePrompt from '../CreativePrompt.svelte';
   import CreativeShotControls from '../CreativeShotControls.svelte';
-  import { switchCreativeModel } from '$lib/modules/creative-media/domain/creative-model-switch.js';
+  import { switchCreativeModel, expandLegacyCreativeModel } from '$lib/modules/creative-media/domain/creative-model-switch.js';
   import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import ModelCombobox from './ModelCombobox.svelte';
   import CreativeModelFields from './CreativeModelFields.svelte';
+  import CreativeModelPicker from './CreativeModelPicker.svelte';
   import { modelDefaults, modelMediaSlots, modelPromptField, concreteSchema, type FalModelSummary, type FalModelContract } from '$lib/modules/creative-media/domain/model-contract.js';
 
   type Data = { title: string; workspaceId: string; payload: { revision?: number; draftConfig?: CreativeConfig }; connections?: NodeConnection[]; onDelete: (id: string) => void; onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void; onRename?: (id: string, title: string) => void; onJumpToNode?: (id: string) => void; onRemoveConnection?: (id: string) => void; };
@@ -52,7 +53,8 @@
   const active = $derived(runs.find(run => ACTIVE_CREATIVE_STATUSES.includes(run.status)));
   const images = $derived(inputs.filter(input => input.type === 'image'));
   const notes = $derived(inputs.filter(input => input.type === 'note'));
-  const mediaSlots = $derived(contract ? modelMediaSlots(contract.schema, config.mediaBindings.map(binding => binding.pointer)) : []);
+  const characterPointers = $derived(config.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer]));
+  const mediaSlots = $derived(contract ? modelMediaSlots(contract.schema, [...config.mediaBindings.map(binding => binding.pointer), ...characterPointers]).filter(path => !characterPointers.includes(path)) : []);
   const usd = (cents: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);
 
   async function options() {
@@ -82,7 +84,7 @@
   async function refresh(reset = false) {
     if (refreshing) return;
     refreshing = true;
-    if (reset) { error = ''; preview = null; }
+    if (reset) { loading = true; error = ''; preview = null; }
     try {
       const result = await creativeApi<{ workflow: CreativeWorkflow | null; runs: CreativeRun[] }>(endpoint);
       runs = result.runs;
@@ -116,6 +118,10 @@
   async function persist() {
     const result = await creativeApi<CreativeWorkflow>(endpoint, 'PUT', { title: data.title || m['creative.title'](), config, ...(revision ? { revision } : {}) });
     revision = result.revision; config = result.config; dirty = false;
+  }
+  async function expandContract() {
+    try { config = expandLegacyCreativeModel($state.snapshot(config)); changed(); await loadContract(config.modelId); }
+    catch (cause) { error = (cause as Error).message; }
   }
   async function execute(action: 'save' | 'estimate' | 'run') {
     busy = true; error = '';
@@ -151,14 +157,15 @@
   <div data-testid="video-workflow" class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-3 text-[var(--app-text)] [&_[data-slot=native-select-wrapper]]:w-full">
     {#if loading}<p role="status" class="text-xs text-[var(--app-text-muted)]">{m['creative.loading']()}</p>{/if}
     {#if config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id)) || config.requiredReferenceNodeIds.some(id => ![config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)].includes(id))}<p role="status" class="mb-3 border-l-2 border-[var(--app-warning)] pl-2 text-xs text-[var(--app-text)]">{m['storyboard.bind_required']()}</p>{/if}
-    <fieldset disabled={busy || Boolean(active) || contractLoading} class="min-w-0 space-y-3 disabled:opacity-70" oninput={changed} onchange={changed}>
+    <fieldset disabled={loading || busy || Boolean(active) || contractLoading} class="min-w-0 space-y-3 disabled:opacity-70" oninput={changed} onchange={changed}>
       <div class="grid grid-cols-2 gap-3">
-        <div class="min-w-0 space-y-1 text-xs"><span>{m['creative.model']()}</span><ModelCombobox value={config.modelId} options={modelOptions} defaultLabel={m['creative.choose_model']()} searchPlaceholder={m['creative.search_models']()} emptyLabel={m['creative.no_models']()} ariaLabel={m['creative.model']()} onValueChange={chooseModel} /></div>
+        <CreativeModelPicker {base} profileId={config.profileId} value={config.modelId} options={modelOptions} onValueChange={chooseModel} />
         <label class="min-w-0 space-y-1 text-xs"><span>{m['creative.account']()}</span><NativeSelect.Root value={config.profileId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.profileId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.choose_account']()}</option>{#each profiles as profile}<option value={profile.id}>{profile.name}</option>{/each}</NativeSelect.Root></label>
       </div>
       {#if catalogLoading || contractLoading}<p role="status" class="text-xs text-[var(--app-text-muted)]">{m['creative.catalog_loading']()}</p>{/if}
       <div class="flex items-center justify-between gap-2 text-xs text-[var(--app-text-muted)]"><span>{m['creative.catalog_count']({ count: String(catalog.length) })}{#if catalogDate} · {new Date(catalogDate).toLocaleDateString()}{/if}</span><Button size="icon-sm" variant="ghost" disabled={catalogLoading} aria-label={m['creative.refresh_catalog']()} title={m['creative.refresh_catalog']()} onclick={() => loadCatalog(true)}><RefreshCw size={13} /></Button></div>
       {#if catalogError}<p role="alert" class="text-xs text-destructive">{creativeError(catalogError)}</p>{/if}
+      {#if model}<Button size="sm" variant="outline" title={m['creative.full_contract_help']()} onclick={expandContract}>{m['creative.full_contract']()}</Button>{/if}
       {#if contract}<a class="block break-all text-xs text-[var(--app-accent)] underline" href={contract.documentationUrl} target="_blank" rel="noreferrer">{contract.id}</a>{/if}
       <CreativeCharacterBindings workspaceId={data.workspaceId} {config} {contract} disabled={busy || Boolean(active) || loading || contractLoading} onRecords={(value) => characters = value} onChange={(value) => { config.characterBindings = value; changed(); }} />
       {#if model || promptField}<CreativePrompt value={config.prompt} references={promptReferences} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} onChange={(value) => { config.prompt = value; changed(); }} />{/if}
@@ -204,8 +211,8 @@
       <details class="mt-2"><summary class="cursor-pointer font-medium">{m['creative.outgoing_data']()}</summary><p class="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">{preview.snapshot.prompt}</p>{#each [preview.snapshot.startImage, preview.snapshot.endImage].filter(Boolean) as reference}<p class="mt-2 break-all font-mono">{reference?.path} ({reference?.width} × {reference?.height})</p>{/each}{#if preview.snapshot.modelContract}<pre class="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(preview.snapshot.config.parameters, null, 2)}</pre>{#each preview.snapshot.media ?? [] as item}<p class="break-all font-mono">{item.pointer}: {item.reference.path}</p>{/each}{/if}</details>
     </div>{/if}
     <div class="my-3 flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="outline" disabled={busy || Boolean(active) || contractLoading || !parametersValid} onclick={() => execute('save')}><Save size={14} />{m['creative.save']()}</Button>
-      {#if preview}<Button size="sm" disabled={busy || Boolean(active) || !parametersValid || contractLoading} onclick={() => execute('run')}><Play size={14} />{m['creative.generate']()}</Button>{:else}<Button size="sm" disabled={busy || Boolean(active) || !config.profileId || !parametersValid || contractLoading || (!model && !contract)} onclick={() => execute('estimate')}><Film size={14} />{m['creative.estimate']()}</Button>{/if}
+      <Button size="sm" variant="outline" disabled={loading || busy || Boolean(active) || contractLoading || !parametersValid} onclick={() => execute('save')}><Save size={14} />{m['creative.save']()}</Button>
+      {#if preview}<Button size="sm" disabled={loading || busy || Boolean(active) || !parametersValid || contractLoading} onclick={() => execute('run')}><Play size={14} />{m['creative.generate']()}</Button>{:else}<Button size="sm" disabled={loading || busy || Boolean(active) || !config.profileId || !parametersValid || contractLoading || (!model && !contract)} onclick={() => execute('estimate')}><Film size={14} />{m['creative.estimate']()}</Button>{/if}
       <Button size="icon" variant="ghost" title={m['creative.configure']()} aria-label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={15} /></Button>
       {#if dirty}<span class="text-xs text-[var(--app-text-muted)]">{m['creative.dirty']()}</span>{/if}
     </div>

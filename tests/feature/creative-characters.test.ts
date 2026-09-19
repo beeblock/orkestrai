@@ -104,6 +104,25 @@ describe('immutable workspace character identities', () => {
     expect(() => creativeConfigSchema.parse({ ...config(f.locked.id), mediaBindings: [{ pointer: '/image_urls/0', path: 'replacement.png' }] })).toThrow();
     await expect(f.service.resolve(uuidv7(), config(f.locked.id), contract)).rejects.toThrow('creative_character_not_found');
   });
+  it('keeps production and approval notes out of the actual provider prompt', async () => {
+    const f = await fixture();
+    const productionNotes = 'Amostra da produção MiniMax H3 aprovada pelo usuário para reutilização.';
+    const draft = await f.service.execute(f.workspaceId, { command: 'update', id: f.draft.id, revision: f.draft.revision, definition: { ...f.definition, productionNotes } }, actor) as typeof f.draft;
+    const locked = await f.service.execute(f.workspaceId, { command: 'lock', id: draft.id, revision: draft.revision }, actor) as typeof f.draft;
+    expect(locked.snapshot!.definition.productionNotes).toBe(productionNotes);
+    const scene = { ...config(locked.id), prompt: 'Mox says only: "Bom dia!"' };
+    const resolved = await f.service.resolve(f.workspaceId, scene, contract);
+    const prompt = [resolved.config.prompt, ...resolved.directions].join('\n\n');
+    const input = genericFalInput(resolved.config, prompt, { '/image_urls/0': 'https://media.invalid/image.png', '/audio_urls/0': 'https://media.invalid/voice.wav' }, contract);
+    expect(input.prompt).toContain(scene.prompt);
+    expect(input.prompt).toContain('Casting instructions only, not dialogue');
+    expect(input.prompt).toContain('Calm, dry humor.');
+    expect(input.prompt).not.toContain(productionNotes);
+    expect(input.prompt).not.toContain('MiniMax');
+    expect(input.prompt).not.toContain('locked v');
+    expect(input.prompt).not.toContain(locked.snapshot!.digest);
+    expect(resolved.characters[0]).toMatchObject({ id: locked.id, version: locked.version, digest: locked.snapshot!.digest });
+  });
   it('scopes a provider voice ID to its account and declared compatible endpoint', async () => {
     const f = await fixture(), profileId = uuidv7();
     const endpoint = 'fal-ai/kling-video/v2.6/pro/image-to-video';

@@ -34,6 +34,21 @@ describe('native creative video contracts', () => {
 });
 
 describe('fal video adapter', () => {
+  it('batches account base prices and strips unrelated or unbounded provider data without submitting', async () => {
+    const ids = ['minimax/h3/image-to-video', 'bytedance/seedance-2.5/image-to-video'];
+    const fetch = vi.fn().mockResolvedValue(json({ prices: [
+      { endpoint_id: ids[0], unit_price: 0.06, unit: 'second', currency: 'USD', secret: 'must-not-return' },
+      { endpoint_id: 'unrequested/model', unit_price: 1, unit: 'video', currency: 'USD' },
+    ] }));
+    const result = await new FalVideoProvider(fetch).prices(credential, ids);
+    expect(result).toEqual([{ endpointId: ids[0], unitPrice: 0.06, unit: 'second', currency: 'USD' }]);
+    expect(new URL(fetch.mock.calls[0][0]).searchParams.getAll('endpoint_id')).toEqual(ids);
+    expect(fetch.mock.calls[0][0]).toContain('https://api.fal.ai/v1/models/pricing?');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const invalid = vi.fn().mockResolvedValue(json({ prices: [{ endpoint_id: ids[0], unit_price: -1, unit: 'video', currency: 'USD' }] }));
+    await expect(new FalVideoProvider(invalid).prices(credential, ids)).rejects.toThrow('creative_estimate_unavailable');
+    await expect(new FalVideoProvider(fetch).prices(credential, Array(51).fill(ids[0]))).rejects.toThrow('creative_invalid_input');
+  });
   it('uploads bounded references once with expiration and never forwards the account key to storage', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(json({ file_url: 'https://v3b.fal.media/files/input.png', upload_url: 'https://v3.fal.media/upload/input?signature=temporary' })).mockResolvedValueOnce(new Response(null, { status: 200 })).mockResolvedValueOnce(json({ token: 'temporary-cdn-token' })).mockResolvedValueOnce(new Response('https://v3b.fal.media/files/input.png?identity=read-only-expiring'));
     const input = 'data:image/png;base64,c3ludGhldGlj';

@@ -106,6 +106,7 @@ export class FilesystemController extends Controller {
       return new Response(Buffer.from(file.data), {
         headers: {
           'content-type': file.contentType,
+          'content-length': String(file.data.byteLength),
           'content-disposition': `${file.contentType.startsWith('image/') ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
           'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
           'x-content-type-options': 'nosniff',

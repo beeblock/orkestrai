@@ -169,22 +169,30 @@ export class FalVideoProvider implements CreativeVideoProvider {
     }
   }
 
+  async prices(credential: string, endpoints: string[]) {
+    if (!endpoints.length || endpoints.length > 50) throw new CreativeMediaError('creative_invalid_input');
+    const query = new URLSearchParams();
+    for (const endpoint of new Set(endpoints)) query.append('endpoint_id', endpoint);
+    const response = await this.request(`https://api.fal.ai/v1/models/pricing?${query}`, credential);
+    const parsed = z.object({ prices: z.array(z.object({ endpoint_id: z.string().max(240), unit_price: z.number().finite().min(0).max(1000), unit: z.string().min(1).max(80), currency: z.literal('USD') })).max(50) }).safeParse(response);
+    if (!parsed.success) throw new CreativeMediaError('creative_estimate_unavailable', 502);
+    return parsed.data.prices.filter(price => endpoints.includes(price.endpoint_id)).map(price => ({ endpointId: price.endpoint_id, unitPrice: price.unit_price, unit: price.unit, currency: price.currency }));
+  }
+
   async estimate(credential: string, config: CreativeConfig, contract?: FalModelContract) {
     const endpoint = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS]?.endpoint ?? contract?.id;
     if (!endpoint || (contract && contract.id !== config.modelId)) throw new CreativeMediaError('creative_model_contract_invalid');
-    const response = await this.request(`https://api.fal.ai/v1/models/pricing?endpoint_id=${encodeURIComponent(endpoint)}`, credential);
-    const parsed = z.object({ prices: z.array(z.object({ endpoint_id: z.string().max(240), unit_price: z.number().finite().min(0).max(1000), unit: z.string().min(1).max(80), currency: z.literal('USD') })).max(50) }).safeParse(response);
-    const price = parsed.success ? parsed.data.prices.find(value => value.endpoint_id === endpoint) : null;
+    const price = (await this.prices(credential, [endpoint])).find(value => value.endpointId === endpoint);
     if (!price) throw new CreativeMediaError('creative_estimate_unavailable', 502);
     const unit = price.unit.toLowerCase();
     const quantity = falBillingQuantity(config, unit, contract);
-    if (quantity === null) throw new CreativeMediaError('creative_billing_units_required', 422, { unit: price.unit, unitPrice: price.unit_price, currency: 'USD' });
+    if (quantity === null) throw new CreativeMediaError('creative_billing_units_required', 422, { unit: price.unit, unitPrice: price.unitPrice, currency: 'USD' });
     const estimate = await this.request('https://api.fal.ai/v1/models/pricing/estimate', credential, {
       method: 'POST', body: JSON.stringify({ estimate_type: 'unit_price', endpoints: { [endpoint]: { unit_quantity: quantity } } }),
     });
     const result = z.object({ total_cost: z.number().finite().min(0).max(1000), currency: z.literal('USD') }).safeParse(estimate);
     if (!result.success) throw new CreativeMediaError('creative_estimate_unavailable', 502);
-    const estimatedCents = Math.ceil(Math.max(result.data.total_cost, price.unit_price * quantity) * 100);
+    const estimatedCents = Math.ceil(Math.max(result.data.total_cost, price.unitPrice * quantity) * 100);
     // Account pricing is a base-unit estimate, not an input-aware billing cap.
     // Reserve headroom for model-specific audio/resolution multipliers and disclose it.
     return { estimatedCents, reservedCents: estimatedCents * 4 };

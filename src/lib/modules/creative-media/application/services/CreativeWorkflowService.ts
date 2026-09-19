@@ -13,7 +13,7 @@ import { creativeProviderService, type CreativeProviderService } from './Creativ
 import { withCreativeProfileLock } from './creative-profile-lock.js';
 import { falModelCatalog, validateFalParameters } from './FalModelCatalogService.js';
 import { genericFalInput } from '../../domain/model-input.js';
-import { modelPromptField } from '../../domain/model-contract.js';
+import { modelPromptField, type FalModelPrice } from '../../domain/model-contract.js';
 import { creativeCharacterService } from './CreativeCharacterService.js';
 import { shotDirectionPrompt } from '../../domain/shot-direction.js';
 
@@ -21,6 +21,8 @@ const previewState = globalThis as typeof globalThis & { __orkestraiCreativePrev
 const previews = previewState.__orkestraiCreativePreviews ??= new Map();
 
 export class CreativeWorkflowService {
+  private priceCache = new Map<string, { expires: number; price: FalModelPrice | null }>();
+  private priceRequests = new Map<string, Promise<void>>();
   constructor(
     readonly repository: CreativeMediaRepository = creativeMediaRepository,
     readonly profiles: CreativeProviderService = creativeProviderService,
@@ -40,6 +42,37 @@ export class CreativeWorkflowService {
   async list(workspaceId: string) {
     const nodes = new Set((await this.workspace.nodes(workspaceId)).map(node => node.id));
     return (await this.repository.workflows(workspaceId)).filter(workflow => nodes.has(workflow.nodeId));
+  }
+
+  async prices(workspaceId: string, actor: CreativeActor, profileId: string, modelIds: string[]) {
+    await this.assertActor(workspaceId, actor, false);
+    const profile = await this.repository.profile(profileId);
+    if (!profile?.enabled) throw new CreativeMediaError('creative_profile_disabled', 403);
+    if (actor.type === 'agent') {
+      const policy = await this.repository.policy(workspaceId, profileId);
+      if (!policy?.enabled || !policy.allowAgents || !policy.allowExternalMedia || modelIds.some(id => !policy.modelIds.includes(id))) throw new CreativeMediaError('creative_workspace_disabled', 403);
+    }
+    if (!this.provider.prices) throw new CreativeMediaError('creative_estimate_unavailable', 503);
+    const endpoints = [...new Set(modelIds.map(id => CREATIVE_MODELS[id as keyof typeof CREATIVE_MODELS]?.endpoint ?? id))];
+    const key = (endpoint: string) => `${profileId}:${profile.revision}:${endpoint}`;
+    for (const [key, item] of this.priceCache) if (item.expires <= Date.now()) this.priceCache.delete(key);
+    const missing = endpoints.filter(endpoint => !this.priceCache.has(key(endpoint))).sort();
+    if (missing.length) {
+      const requestKey = key(missing.join(','));
+      let pending = this.priceRequests.get(requestKey);
+      if (!pending) {
+        if (this.priceRequests.size >= 8) throw new CreativeMediaError('creative_rate_limited', 429);
+        pending = (async () => {
+          const secret = await this.profiles.credential(profileId);
+          const prices = await this.provider.prices!(secret.revealInsideTrustedExecutor(), missing);
+          while (this.priceCache.size + missing.length > 5000) this.priceCache.delete(this.priceCache.keys().next().value!);
+          for (const endpoint of missing) this.priceCache.set(key(endpoint), { expires: Date.now() + 300000, price: prices.find(price => price.endpointId === endpoint) ?? null });
+        })().finally(() => this.priceRequests.delete(requestKey));
+        this.priceRequests.set(requestKey, pending);
+      }
+      await pending;
+    }
+    return { prices: endpoints.flatMap(endpoint => this.priceCache.get(key(endpoint))?.price ?? []), unavailable: endpoints.filter(endpoint => !this.priceCache.get(key(endpoint))?.price), fetchedAt: new Date().toISOString() };
   }
 
   async capabilities(workspaceId: string, actor: CreativeActor) {

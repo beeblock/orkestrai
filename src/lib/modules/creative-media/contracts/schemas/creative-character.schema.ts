@@ -6,6 +6,7 @@ const style = z.string().trim().max(2000).default('');
 export const creativeCharacterDefinitionSchema = z.object({
   name: z.string().trim().min(1).max(80),
   appearance: z.string().trim().max(8000).default(''),
+  productionNotes: z.string().trim().max(8000).optional(),
   images: z.array(creativePathSchema).max(12).default([]),
   voice: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('unassigned') }).strict(),

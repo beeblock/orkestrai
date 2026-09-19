@@ -42,6 +42,14 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it('exposes per-model contracts and read-only pricing without presenting suggestions as hard constraints', () => {
+    const tool = MCP_TOOLS.find(tool => tool.name === 'video_workflow_models')!;
+    expect(tool.description).toContain('descriptions, examples, defaults');
+    expect(tool.description).toContain('not exclusive enums');
+    expect(tool.description).toContain('not render speed');
+    expect(tool.inputSchema.properties.input.properties.pricingIds.maxItems).toBe(50);
+    expect(tool.inputSchema.properties.input.properties.profileId.format).toBe('uuid');
+  });
   it('keeps storyboard images on Codex and makes native video audio an explicit model capability', () => {
     const description = MCP_TOOLS.find(tool => tool.name === 'video_workflow_create')!.description;
     expect(description).toContain('image_gen.imagegen');

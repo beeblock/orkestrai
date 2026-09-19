@@ -20,17 +20,41 @@ function validatorFor(contract: Pick<FalModelContract, 'digest' | 'schema'>) {
   return validator;
 }
 const safeKey = (key: string) => !['__proto__', 'prototype', 'constructor'].includes(key);
+function boundedExamples(value: unknown): unknown[] | undefined {
+  // Annotations are provider data, never executable markup or validation enums.
+  let nodes = 0;
+  const valid = (item: unknown, depth = 0): boolean => {
+    if (++nodes > 1000 || depth > 12) return false;
+    if (item === null || typeof item === 'boolean') return true;
+    if (typeof item === 'number') return Number.isFinite(item);
+    if (typeof item === 'string') return item.length <= 8000;
+    if (Array.isArray(item)) return item.length <= 50 && item.every(child => valid(child, depth + 1));
+    return !!item && typeof item === 'object' && Object.entries(item).every(([key, child]) => safeKey(key) && key.length <= 150 && valid(child, depth + 1));
+  };
+  if (!Array.isArray(value) || value.length > 20 || !valid(value)) return undefined;
+  let encoded: string;
+  try { encoded = JSON.stringify(value); } catch { return undefined; }
+  if (!encoded || encoded.length > 16000) return undefined;
+  return value;
+}
 
 function normalizeSchema(source: any, document: any, depth = 0, budget = { nodes: 0 }): ModelSchema {
   if (++budget.nodes > 6000 || depth > 24 || !source || typeof source !== 'object' || Array.isArray(source)) throw new CreativeMediaError('creative_model_contract_invalid');
   if (source.$ref) {
     if (typeof source.$ref !== 'string' || !/^#\/components\/schemas\/[a-zA-Z0-9_.-]+$/.test(source.$ref)) throw new CreativeMediaError('creative_model_contract_invalid');
-    return normalizeSchema(document.components?.schemas?.[source.$ref.split('/').pop()], document, depth + 1, budget);
+    const resolved = normalizeSchema(document.components?.schemas?.[source.$ref.split('/').pop()], document, depth + 1, budget);
+    const { $ref: _ref, ...siblings } = source;
+    return { ...resolved, ...normalizeSchema(siblings, document, depth + 1, budget) };
   }
   const result: ModelSchema = {};
   for (const [key, value] of Object.entries(source)) {
     if (!safeKey(key)) throw new CreativeMediaError('creative_model_contract_invalid');
-    if (['properties', 'patternProperties'].includes(key)) {
+    if (key === 'title' || key === 'description') {
+      if (typeof value === 'string') result[key] = value.slice(0, key === 'title' ? 200 : 8000);
+    } else if (key === 'examples' || key === 'example') {
+      const examples = boundedExamples(key === 'example' ? [value] : value);
+      if (examples) result.examples = examples;
+    } else if (['properties', 'patternProperties'].includes(key)) {
       if (key === 'patternProperties' || !value || typeof value !== 'object' || Object.keys(value).length > 150) throw new CreativeMediaError('creative_model_contract_invalid');
       result.properties = Object.fromEntries(Object.entries(value).map(([name, child]) => {
         if (!safeKey(name) || name.length > 150) throw new CreativeMediaError('creative_model_contract_invalid');

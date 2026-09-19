@@ -25,7 +25,8 @@
   const record = $derived(records.find(item => item.id === selectedId));
   const locked = $derived(record?.state === 'locked');
   const adapter = zod(creativeCharacterDefinitionSchema as unknown as Parameters<typeof zod>[0]);
-  const form = superForm<CreativeCharacterDefinition>(defaults({ name: '', appearance: '', images: [], voice: { kind: 'unassigned' } }, adapter) as never, { id: 'creative-character', SPA: true, dataType: 'json', validators: adapter as never });
+  const instanceId = $props.id();
+  const form = superForm<CreativeCharacterDefinition>(defaults({ name: '', appearance: '', images: [], voice: { kind: 'unassigned' } }, adapter) as never, { id: `creative-character-${instanceId}`, SPA: true, dataType: 'json', validators: adapter as never });
   const { errors } = form;
   function select(id: string) {
     selectedId = records.some(item => item.id === id) ? id : ''; error = ''; form.errors.set({});
@@ -83,6 +84,7 @@
           <label class="block space-y-1 text-sm"><span>{m['creative.character_name']()}</span><Input bind:value={definition.name} maxlength={80} aria-invalid={Boolean($errors.name)} /></label>
           {#if $errors.name}<p role="alert" class="text-xs text-destructive">{m['creative.field_invalid']()}</p>{/if}
           <label class="block space-y-1 text-sm"><span>{m['creative.character_appearance']()}</span><Textarea bind:value={definition.appearance} maxlength={8000} class="min-h-28" /></label>
+          <label class="block space-y-1 text-sm"><span>{m['creative.character_production_notes']()}</span><Textarea value={definition.productionNotes ?? ''} oninput={(event) => definition.productionNotes = event.currentTarget.value} maxlength={8000} /></label>
           <section class="space-y-2" aria-label={m['creative.character_images']()}>
             <div class="flex items-center justify-between gap-2 text-sm font-medium"><span>{m['creative.character_images']()}</span><Button size="icon-sm" variant="ghost" disabled={definition.images.length >= 12 || locked} title={m['creative.add_media']()} aria-label={m['creative.add_media']()} onclick={() => definition.images = [...definition.images, '']}><Plus size={14} /></Button></div>
             {#if !locked && images.length}<ModelCombobox value="" options={images.filter(image => !definition.images.includes(image.path)).map(image => ({ value: image.path, label: image.title || image.path }))} defaultLabel={m['creative.character_add_image']()} searchPlaceholder={m['creative.search_media']()} emptyLabel={m['creative.no_inputs']()} ariaLabel={m['creative.character_add_image']()} onValueChange={(path) => { if (path && definition.images.length < 12) definition.images = [...definition.images, path]; }} />{/if}

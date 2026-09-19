@@ -5,7 +5,7 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## 0.32.0 - Unreleased
+## 0.32.0 - 2026-09-19
 
 ### Added
 
@@ -25,10 +25,18 @@ pt-BR, English, and Spanish translations.
 
 - Update the serialization dependency to fix denial of service from malformed input.
 - Wait for Claude's message composer before sending initial roles, Kanban tasks or automatic Enter. Keep workspace trust confirmation under human control instead of accidentally selecting `No, exit`, and do not claim delivery when startup readiness times out.
+- Keep character production notes and approval/version provenance out of generation prompts; separate casting instructions from scene dialogue while preserving immutable reference history.
+- Preserve provider descriptions, examples and defaults in model contracts for both users and agents. Add nested input controls, visible prompt-rewriting warnings, explicit legacy-draft expansion and unsupported-parameter feedback after model changes. Compare account-specific base rates and billing units in the model picker without submitting paid jobs; configured estimates and budget gates remain required.
+- Isolate creative forms per mounted dialog so restoring several Canvas nodes cannot reuse character, account, policy, brand or recipe form identifiers. Keep provider settings scrollable with account selection, tabs and actions fixed, including compact windows.
+- Reserve character image and voice inputs when attaching scene media so the editor offers the next available model slots without conflicting with approved identities.
+- Close the video encoder confirmation after approval so the completed download cannot leave the sequence editor blocked behind an overlay.
+- Declare exact workspace media response sizes so voice reference previews can determine their duration without waiting for playback to finish.
+- Keep searchable model and reference menus inside the viewport, including workflow inputs near the bottom of a dialog.
 - Delete workspace-bound policies, audit records, integration events and tools in dependency order without leaving a partially removed Canvas; preserve unrelated workspaces and project files.
 - Require a protected operating-system credential store and preserve existing credentials when the vault file is unreadable or malformed.
 - Find curated skills by spaced or hyphenated names even when the online registry is unavailable.
 - Keep video account settings read-only until loading completes so delayed responses cannot overwrite edits or validation feedback. Keep creative dialog edits and selections stable during workspace refreshes.
+- Treat provider-rejected video generation as a failed run rather than a recoverable download, retaining its budget reservation without automatically submitting another paid request.
 
 ## 0.31.5 - 2026-09-16
 

@@ -32,7 +32,8 @@
   const endpoint = $derived(`/api/agent-room/workspaces/${workspaceId}/creative-media/recipes`);
   const dialogContext = $derived(open ? workspaceId : '');
   const adapter = zod(creativeRecipeCaptureSchema as unknown as Parameters<typeof zod>[0]);
-  const form = superForm<{ name: string; description: string; sourceNodeId: string; revision: number; previousId?: string }>(defaults({ name: '', description: '', sourceNodeId: '', revision: 1 }, adapter) as never, { id: 'creative-recipe', SPA: true, dataType: 'json', validators: adapter as never });
+  const instanceId = $props.id();
+  const form = superForm<{ name: string; description: string; sourceNodeId: string; revision: number; previousId?: string }>(defaults({ name: '', description: '', sourceNodeId: '', revision: 1 }, adapter) as never, { id: `creative-recipe-${instanceId}`, SPA: true, dataType: 'json', validators: adapter as never });
   const { errors } = form;
   function select(id: string) {
     selectedId = id; error = ''; bindings = creativeRecipeBindingsSchema.parse({});

@@ -1,5 +1,5 @@
 import type { CreativeConfig } from '../../contracts/schemas/creative-media.schema.js';
-import type { FalModelContract } from '../../domain/model-contract.js';
+import type { FalModelContract, FalModelPrice } from '../../domain/model-contract.js';
 import type { VideoMime } from '../../domain/video-format.js';
 
 export type CreativeRemoteHandle = {
@@ -14,6 +14,7 @@ export type CreativeRemoteVideo = {
   mimeType?: VideoMime;
 };
 export interface CreativeVideoProvider {
+  prices?(credential: string, endpoints: string[]): Promise<FalModelPrice[]>;
   prepareMedia?(credential: string, media: Record<string, string>): Promise<Record<string, string>>;
   estimate(credential: string, config: CreativeConfig, contract?: FalModelContract): Promise<{ estimatedCents: number; reservedCents: number }>;
   submit(credential: string, config: CreativeConfig, prompt: string, references: { start?: string; end?: string; media?: Record<string, string> }, contract?: FalModelContract): Promise<CreativeRemoteHandle>;

@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { shotDirectionPrompt, shotDirectionSchema, requestedDurationParameters } from '$lib/modules/creative-media/domain/shot-direction.js';
 import type { FalModelContract, ModelSchema } from '$lib/modules/creative-media/domain/model-contract.js';
-import { switchCreativeModel } from '$lib/modules/creative-media/domain/creative-model-switch.js';
+import { switchCreativeModel, expandLegacyCreativeModel } from '$lib/modules/creative-media/domain/creative-model-switch.js';
 import { creativeConfigSchema } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
 describe('creative shot intent and duration', () => {
+  it('explicitly expands a legacy draft to full controls without losing references or changing its duration type', () => {
+    const image = '01950000-0000-7000-8000-000000000001';
+    const config = creativeConfigSchema.parse({ modelId: 'kling-v3-pro-image', prompt: 'Approved scene', startImageNodeId: image, duration: 9, generateAudio: true });
+    const next = expandLegacyCreativeModel(config);
+    expect(next).toMatchObject({ modelId: 'fal-ai/kling-video/v3/pro/image-to-video', prompt: config.prompt, startImageNodeId: null, parameters: { duration: '9', generate_audio: true }, mediaBindings: [{ pointer: '/start_image_url', nodeId: image }] });
+    expect(config.startImageNodeId).toBe(image);
+    expect(() => expandLegacyCreativeModel({ ...config, parameters: { unknown: 1 } })).toThrow('creative_model_mapping_required');
+  });
   const contract = (properties: Record<string, ModelSchema>) => ({ schema: { type: 'object', properties } }) as FalModelContract;
   it('keeps legacy prompts unchanged until shot intent is explicitly selected', () => {
     expect(shotDirectionPrompt(shotDirectionSchema.parse({}))).toBe('');

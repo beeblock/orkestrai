@@ -7,7 +7,13 @@ import { shotDirectionSchema } from '../../domain/shot-direction.js';
 const id = z.string().uuid();
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 export const creativeModelIdSchema = z.string().max(240).refine(value => CREATIVE_MODEL_IDS.includes(value as typeof CREATIVE_MODEL_IDS[number]) || FAL_ENDPOINT_PATTERN.test(value), 'creative_model_not_found');
-export const creativeCatalogQuerySchema = z.object({ endpoint: z.string().max(240).regex(FAL_ENDPOINT_PATTERN).optional(), query: z.string().max(100).default(''), offset: z.coerce.number().int().min(0).max(10000).default(0), limit: z.coerce.number().int().min(1).max(5000).default(100), refresh: z.preprocess(value => value === 'true' ? true : value === 'false' ? false : value, z.boolean().default(false)) }).strict();
+export const creativeCatalogQuerySchema = z.object({
+  endpoint: z.string().max(240).regex(FAL_ENDPOINT_PATTERN).optional(),
+  pricingIds: z.preprocess(value => typeof value === 'string' ? value.split(',') : value, z.array(creativeModelIdSchema).min(1).max(50).optional()),
+  profileId: id.optional(),
+  query: z.string().max(100).default(''), offset: z.coerce.number().int().min(0).max(10000).default(0), limit: z.coerce.number().int().min(1).max(5000).default(100),
+  refresh: z.preprocess(value => value === 'true' ? true : value === 'false' ? false : value, z.boolean().default(false)),
+}).strict().refine(value => !value.pricingIds || (Boolean(value.profileId) && !value.endpoint), 'creative_profile_required');
 function safeJson(value: unknown, depth = 0, count = { value: 0 }): boolean {
   if (++count.value > 10000 || depth > 16) return false;
   if (value === null || typeof value === 'boolean') return true;

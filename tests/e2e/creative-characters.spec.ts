@@ -145,6 +145,15 @@ test('approves a character and drags its complete version into another workspace
     await expect(prompt).toHaveValue('Show @{Mox_approved} ');
     await video.getByRole('button', { name: 'Save', exact: true }).click();
     await expect.poll(async () => (await (await request.get(`/api/agent-room/workspaces/${destination}/creative-media/workflows/${workflow.nodeId}`)).json()).data.workflow.config.characterBindings).toEqual([{ id: copy.id, alias: 'Mox_approved', imagePointers: ['/image_urls/0'], voicePointer: '/audio_urls/0' }]);
+    await video.getByRole('button', { name: 'Attach workspace media', exact: true }).click();
+    const media = video.getByRole('region', { name: 'Workspace media inputs', exact: true });
+    await media.getByRole('combobox', { name: 'Input path (e.g. /image_urls/0)', exact: true }).click();
+    await expect(page.getByRole('option', { name: '/image_urls/0', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('option', { name: '/audio_urls/0', exact: true })).toHaveCount(0);
+    await page.getByRole('option', { name: '/image_urls/1', exact: true }).click();
+    await media.getByRole('textbox', { name: 'Workspace-relative file path', exact: true }).fill(copy.definition.images[0]);
+    await video.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(async () => (await (await request.get(`/api/agent-room/workspaces/${destination}/creative-media/workflows/${workflow.nodeId}`)).json()).data.workflow.config.mediaBindings).toEqual([{ pointer: '/image_urls/1', path: copy.definition.images[0] }]);
     await page.reload();
     await expect(prompt).toHaveValue('Show @{Mox_approved}');
     await expect(video.getByText('Provided by the attached references').first()).toBeAttached();

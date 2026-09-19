@@ -16,6 +16,29 @@ vi.mock('$lib/modules/agent-room/application/services/AutonomyPolicyService.js',
 
 describe('Creative video persistence and queue', () => {
   useSvelarTest({ refreshDatabase: true });
+  it('shares price lookup with agents without secrets, submissions, bypassed grants or cross-account caches', async () => {
+    const workspaceId = uuidv7(), profileId = uuidv7();
+    await repository.saveProfile({ id: profileId, name: 'Pricing fixture', provider: 'fal', enabled: true, hasCredential: true });
+    const policy = creativePolicySchema.parse({ enabled: true, allowAgents: true, allowExternalMedia: true, modelIds: ['wan-2.7-text'] });
+    const saved = await repository.savePolicy(workspaceId, profileId, policy);
+    const credential = vi.fn(async () => ({ revealInsideTrustedExecutor: () => 'synthetic-private-key' }));
+    const prices = vi.fn(async () => [{ endpointId: 'fal-ai/wan/v2.7/text-to-video', unitPrice: 0.05, unit: 'second', currency: 'USD' }]);
+    const submit = vi.fn();
+    const workspace = { workspace: vi.fn(async () => ({})), actorCanWork: vi.fn(async () => true) };
+    const service = new CreativeWorkflowService(repository, { credential } as never, { prices, submit } as never, workspace as never);
+    const actor = { type: 'agent' as const, nodeId: uuidv7(), taskId: uuidv7() };
+    const a = await service.prices(workspaceId, actor, profileId, ['wan-2.7-text']);
+    const b = await service.prices(workspaceId, actor, profileId, ['wan-2.7-text']);
+    expect(a.prices).toEqual(b.prices);
+    expect(prices).toHaveBeenCalledTimes(1);
+    expect(credential).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(a)).not.toContain('synthetic-private-key');
+    expect(submit).not.toHaveBeenCalled();
+    await expect(service.prices(workspaceId, actor, profileId, ['minimax/h3/image-to-video'])).rejects.toThrow('creative_workspace_disabled');
+    await repository.savePolicy(workspaceId, profileId, { ...policy, allowAgents: false }, saved.revision);
+    await expect(service.prices(workspaceId, actor, profileId, ['wan-2.7-text'])).rejects.toThrow('creative_workspace_disabled');
+    expect(prices).toHaveBeenCalledTimes(1);
+  });
   it('pins the real model contract and reference hashes before an agent can submit a generic model', async () => {
     const id = 'bytedance/seedance-2.5/image-to-video';
     const inputSchema = { type: 'object', required: ['prompt', 'image_url', 'duration'], properties: { prompt: { type: 'string' }, image_url: { type: 'string' }, duration: { type: 'string', enum: ['5', '30'] } } };
@@ -183,6 +206,18 @@ describe('Creative video persistence and queue', () => {
     await r.queue.process(await ready(f.run));
     expect((await repository.run(f.workspaceId, f.run.id))?.status).toBe('completed');
     expect(r.provider.submit).toHaveBeenCalledTimes(1);
+  });
+  it('marks rejected inference as failed rather than a recoverable download and retains the reservation', async () => {
+    const f = await fixture(); const r = runtime(f.workflow);
+    await r.queue.process(f.run);
+    r.provider.result.mockRejectedValueOnce(new CreativeMediaError('creative_provider_rejected'));
+    await r.queue.process(await ready(f.run));
+    expect(await repository.run(f.workspaceId, f.run.id)).toMatchObject({ status: 'failed', errorCode: 'creative_provider_rejected', reservedCents: 400 });
+    expect(r.provider.download).not.toHaveBeenCalled();
+    expect(r.service.workspace.createNode).not.toHaveBeenCalled();
+    await r.queue.process(await ready(f.run));
+    expect(r.provider.submit).toHaveBeenCalledOnce();
+    expect(r.provider.result).toHaveBeenCalledOnce();
   });
   it('retains the budget when an owner closes an uncertain submission', async () => {
     const f = await fixture(); const r = runtime(f.workflow);

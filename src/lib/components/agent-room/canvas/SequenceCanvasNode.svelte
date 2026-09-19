@@ -52,6 +52,7 @@
   function togglePlayback() { if (!video || !clip) return; playing = !playing; if (!playing) video.pause(); else { if (video.currentTime < trimIn || video.currentTime >= trimOut) video.currentTime = trimIn; video.volume = Math.min(1, volume); void video.play().catch(() => { playing = false; error = 'creative_sequence_source_invalid'; }); } }
   function markDirty() { dirty = true; playing = false; video?.pause(); error = ''; }
   async function exportVideo() { requestKey ??= crypto.randomUUID(); await command('export', { idempotencyKey: requestKey }); if (!error) requestKey = null; }
+  async function installRuntime() { installOpen = false; await command('install_runtime'); }
   async function toggleFullscreen() { try { if (fullscreen) await document.exitFullscreen(); else await preview?.requestFullscreen(); } catch { error = 'creative_request_failed'; } }
 </script>
 
@@ -85,4 +86,4 @@
     {#if error}<p role="alert" class="p-2 text-xs text-destructive">{creativeError(error)}</p>{/if}
   </div>
 </NodeShell>
-<AlertDialog.Root bind:open={installOpen}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['sequence.install']()}</AlertDialog.Title><AlertDialog.Description>{m['sequence.install_help']()}</AlertDialog.Description></AlertDialog.Header><a class="text-sm underline" href="https://ffmpeg.org/legal.html" target="_blank" rel="noreferrer">FFmpeg · GPL-3.0-or-later</a><AlertDialog.Footer><AlertDialog.Cancel>{m['dlg.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => command('install_runtime')}>{m['sequence.install']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>
+<AlertDialog.Root bind:open={installOpen}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['sequence.install']()}</AlertDialog.Title><AlertDialog.Description>{m['sequence.install_help']()}</AlertDialog.Description></AlertDialog.Header><a class="text-sm underline" href="https://ffmpeg.org/legal.html" target="_blank" rel="noreferrer">FFmpeg · GPL-3.0-or-later</a><AlertDialog.Footer><AlertDialog.Cancel>{m['dlg.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={installRuntime}>{m['sequence.install']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>

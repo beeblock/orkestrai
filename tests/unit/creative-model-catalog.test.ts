@@ -16,6 +16,23 @@ function model(id = endpoint) {
 const response = (models: unknown[], more = false, cursor: string | null = null) => new Response(JSON.stringify({ models, has_more: more, next_cursor: cursor }), { headers: { 'content-type': 'application/json' } });
 
 describe('official fal model contracts', () => {
+  it('keeps bounded descriptions, examples and reference annotations without turning examples into enums', () => {
+    const raw = model();
+    const props = raw.openapi.components.schemas.Input.properties as Record<string, unknown>;
+    props.prompt_expansion_mode = { type: 'string', title: 'Prompt expansion', description: 'Rewrites the prompt, not render speed.', examples: ['disabled', 'fast', 'balanced', 'quality'], default: 'balanced' };
+    props.nested = { type: 'object', properties: { reference: { $ref: '#/components/schemas/Output', description: 'Local annotation' } } };
+    const contract = parseFalContract(raw);
+    expect(contract.schema.properties!.prompt_expansion_mode).toMatchObject(props.prompt_expansion_mode as object);
+    expect(contract.schema.properties!.nested.properties!.reference.description).toBe('Local annotation');
+    expect(() => validateFalParameters(contract, { prompt: 'Scene', prompt_expansion_mode: 'future-provider-value' })).not.toThrow();
+    expect(modelDefaults(contract.schema).generate_audio).toBe(true);
+    props.tooLong = { type: 'string', description: 'x'.repeat(9000), examples: ['x'.repeat(9000)] };
+    const bounded = parseFalContract(raw).schema.properties!.tooLong;
+    expect(bounded.description).toHaveLength(8000);
+    expect(bounded.examples).toBeUndefined();
+    props.hostile = { type: 'string', examples: [JSON.parse('{"__proto__":{"polluted":true}}')] };
+    expect(parseFalContract(raw).schema.properties!.hostile.examples).toBeUndefined();
+  });
   it('resolves official schema aliases without changing the charged endpoint', () => {
     const raw = model('VEED/fabric-1.0');
     (raw.openapi as any).info = { 'x-fal-metadata': { endpointId: 'VEED/fabric-1.0' } };
@@ -85,12 +102,12 @@ describe('official fal model contracts', () => {
       expect(() => parseFalContract(raw)).toThrow('creative_model_contract_invalid');
     }
   });
-  it('does not execute provider expressions or carry presentation markup into model contracts', () => {
+  it('does not compile arbitrary provider expressions and retains descriptions only as inert data', () => {
     const raw = model(); (raw.openapi.components.schemas.Input.properties.prompt as any).pattern = '(a+)+$';
     expect(() => parseFalContract(raw)).toThrow('creative_model_contract_invalid');
     delete (raw.openapi.components.schemas.Input.properties.prompt as any).pattern;
     (raw.openapi.components.schemas.Input as any).description = '<script>steal()</script>';
-    expect(parseFalContract(raw).schema).not.toHaveProperty('description');
+    expect(parseFalContract(raw).schema.description).toBe('<script>steal()</script>');
   });
   it('binds multiple nested images without leaking local paths or changing order', () => {
     const contract = parseFalContract(model());

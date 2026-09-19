@@ -114,6 +114,18 @@
 - O locale vem da setting `uiLanguage` (seletor em Configurações) via `overwriteGetLocale` em `src/lib/i18n/locale.svelte.ts`; o layout raiz usa `{#key localeState.current}` para remontar a árvore na troca (é o mecanismo de reatividade — não remova).
 - **Cobertura é 100%**: não existe "página ainda não migrada" — toda string visível usa `m.*()`. Conteúdo longo e estruturado NÃO vai para o paraglide: a página "Como usar" usa catálogos TS por idioma em `src/lib/i18n/docs/{pt-BR,en,es}.ts` (mesmo padrão dos tours em `tours/catalog/`), com teste de integridade (`tests/unit/docs-catalog.test.ts`) garantindo estrutura idêntica nos 3 idiomas — ao editar docs/changelog in-app, edite os 3 catálogos no mesmo commit.
 
+## Paid Creative Generation
+
+- Before a paid run, preserve an immutable manifest with the approved asset paths/hashes, exact endpoint, resolved prompt, parameters, each media binding's semantic role, duration, resolution, estimate, reservation and authorization. Inspect the resolved preview, not only the draft form. Never expose credentials.
+- Model capabilities must come from the exact endpoint contract. Image-to-video first/last frames do not imply multi-reference identity or voice conditioning. Reference-to-video is not inherently incorrect; never claim changing endpoints guarantees fidelity. An attached but unmapped asset is not an input.
+- Keep production notes, approvals, tool/model names and internal history out of spoken/visual generation prompts. Quote only intended dialogue. Check the final compiled prompt for leaked metadata and conflicting object states.
+- For repeated motion/identity failures, stop full-film retries. Preserve approved footage and prove one short, high-risk action first with appropriate reviewed control frames. One failed hypothesis must not trigger paid fan-out or feed a continuation.
+- Reuse an accepted clip's actual final decoded frame for direct continuation, while checking identity, object state, camera, lighting and motion. Frame continuity is not a guarantee of temporal consistency. Never use rejected outputs as new references without an explicit targeted repair plan.
+- Review actual motion and audio, not only a contact sheet or transcript: character likeness, brand artwork, hands, prop persistence, closed/open states, contact-before-success, physical interaction, speech and edit continuity. Provider completion is not approval; record defects and preserve human review decisions.
+- Judge the complete edit against the original acceptance criterion. Review every clip boundary and cuts inside reused footage; successful playback and one matched boundary do not prove whole-film continuity. Approval of an isolated shot never waives the whole-film requirement. Do not silently substitute previously rejected transitions or redefine requested continuity as intentional cutaways.
+- Separate the user's reported spend, provider-confirmed charges, current estimate and local budget reservation. Never present a reservation as the invoice. No blind paid retries, unconfirmed cancellation refunds, or budget/concurrency increases without authorization. Start with a bounded pilot; report a failed pilot rather than spending through it.
+- Keep the Canvas usable: reuse relevant workflow nodes, retain approved references, remove only explicitly rejected/discarded outputs, and keep audit files outside the app repository. Do not claim these procedural rules are enforced by runtime code unless that code and its tests exist.
+
 ## Verification
 
 - Before shipping meaningful changes, run focused tests and `npm run build` when feasible.

@@ -11,19 +11,39 @@ test('discovers sequences and confirms the optional encoder without starting a d
   try {
     await request.put('/api/agent-room/settings', { data: { ...settings, uiLanguage: 'en', appTheme: 'orkestrai-dark' } });
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Empty sequence', workingDir: folder } })).json()).data; workspaceId = workspace.id;
+    // Exercise first-install UI even when another acceptance test installed the runtime.
+    await page.route(`**/workspaces/${workspaceId}/creative-media/sequences?nodeId=*`, async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.data.runtime = { ...body.data.runtime, installed: false, installing: false, supported: true };
+      await route.fulfill({ response, json: body });
+    });
     await page.goto(`/terminal?workspace=${workspaceId}`);
     await page.getByRole('button', { name: 'Images', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Video sequence', exact: true }).click();
     const ui = page.getByTestId('video-sequence');
     await expect(ui.getByRole('button', { name: 'Export MP4', exact: true })).toBeDisabled();
-    const runtime = (await (await request.get(`/api/agent-room/workspaces/${workspaceId}/creative-media/sequences?command=runtime`)).json()).data;
-    if (!runtime.installed) {
+    {
       await ui.getByRole('button', { name: 'Install video encoder', exact: true }).click();
       const dialog = page.getByRole('alertdialog');
       await expect(dialog.getByRole('link', { name: 'FFmpeg · GPL-3.0-or-later' })).toBeVisible();
       await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(dialog).not.toBeVisible();
       await expect(ui.getByRole('button', { name: 'Install video encoder', exact: true })).toBeEnabled();
+      // Simulate a rejected download, without fetching another encoder during CI.
+      const endpoint = `**/workspaces/${workspaceId}/creative-media/sequences`;
+      await page.route(endpoint, async route => {
+        if (route.request().method() === 'POST' && route.request().postDataJSON().command === 'install_runtime') {
+          return route.fulfill({ status: 503, json: { error: 'creative_sequence_runtime_required' } });
+        }
+        return route.continue();
+      });
+      await ui.getByRole('button', { name: 'Install video encoder', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Install video encoder', exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(ui.getByRole('alert')).toBeVisible();
+      await expect(ui.getByRole('button', { name: 'Install video encoder', exact: true })).toBeEnabled();
+      await page.unroute(endpoint);
     }
     expect((await request.get(`/api/agent-room/workspaces/${workspaceId}/creative-media/sequences?command=install_runtime`)).status()).toBe(405);
   } finally {
