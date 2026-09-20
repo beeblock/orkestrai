@@ -13,7 +13,7 @@ import { autonomyPolicyService } from '$lib/modules/agent-room/application/servi
 import { creativeWorkspaceGateway, type CreativeWorkspaceGateway } from '$lib/modules/agent-room/application/services/CreativeWorkspaceGateway.js';
 import { Connection } from '@beeblock/svelar/database';
 import { resolveCharacterMentions, suggestCharacterBinding } from '../../domain/character-binding.js';
-import { falModelCatalog } from './FalModelCatalogService.js';
+import { creativeModelCatalog } from './CreativeModelCatalogService.js';
 
 function inputAt(schema: ModelSchema, pointer: string): ModelSchema | null {
   let current = schema;
@@ -51,7 +51,7 @@ export class CreativeCharacterService {
     if (input.command === 'read') return this.read(workspaceId, input.id!);
     if (input.command === 'binding') {
       const character = await this.read(workspaceId, input.id!);
-      const contract = await falModelCatalog.contract(input.config!.modelId);
+      const contract = await creativeModelCatalog.contract(input.config!.modelId, input.config!.provider);
       return suggestCharacterBinding(character, contract, input.config!);
     }
     if (input.command === 'library') {

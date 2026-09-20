@@ -3,7 +3,8 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import { creativeWorkspaceGateway, type CreativeWorkspaceGateway } from '$lib/modules/agent-room/application/services/CreativeWorkspaceGateway.js';
 import { autonomyPolicyService, AutonomyGatePendingError } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { creativeMediaRepository, type CreativeMediaRepository } from '../../infrastructure/repositories/CreativeMediaRepository.js';
-import { FalVideoProvider } from '../../infrastructure/providers/FalVideoProvider.js';
+import { creativeVideoProvider } from '../../infrastructure/providers/registry.js';
+import { creativeProviderId, creativeSubmitUrl } from '../../domain/providers.js';
 import { creativeConfigSchema, creativeRunRequestSchema, creativeWorkflowSaveSchema, type CreativeRunRequest, type CreativeWorkflowSave } from '../../contracts/schemas/creative-media.schema.js';
 import { ACTIVE_CREATIVE_STATUSES, CREATIVE_CATALOG_REVISION, CREATIVE_MODELS, MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.js';
 import { CreativeMediaError, type CreativeActor, type CreativePreview, type CreativeRun, type CreativeSnapshot, type CreativeWorkflow } from '../../domain/types.js';
@@ -11,7 +12,8 @@ import type { CreativeVideoProvider, CreativeRemoteVideo } from '../ports/Creati
 import { CreativeMediaFiles, creativeOutputPath } from './CreativeMediaFiles.js';
 import { creativeProviderService, type CreativeProviderService } from './CreativeProviderService.js';
 import { withCreativeProfileLock } from './creative-profile-lock.js';
-import { falModelCatalog, validateFalParameters } from './FalModelCatalogService.js';
+import { validateFalParameters } from './FalModelCatalogService.js';
+import { creativeModelCatalog } from './CreativeModelCatalogService.js';
 import { genericFalInput } from '../../domain/model-input.js';
 import { modelPromptField, type FalModelPrice } from '../../domain/model-contract.js';
 import { creativeCharacterService } from './CreativeCharacterService.js';
@@ -26,10 +28,14 @@ export class CreativeWorkflowService {
   constructor(
     readonly repository: CreativeMediaRepository = creativeMediaRepository,
     readonly profiles: CreativeProviderService = creativeProviderService,
-    readonly provider: CreativeVideoProvider = new FalVideoProvider(),
+    readonly provider: CreativeVideoProvider = creativeVideoProvider('fal'),
     readonly workspace: CreativeWorkspaceGateway = creativeWorkspaceGateway,
     readonly files: CreativeMediaFiles = new CreativeMediaFiles(workspace),
   ) {}
+
+  providerFor(id: unknown): CreativeVideoProvider {
+    return creativeProviderId(id) === 'fal' ? this.provider : creativeVideoProvider(id);
+  }
 
   async assertActor(workspaceId: string, actor: CreativeActor, requireActive = true) {
     const workspace = await this.workspace.workspace(workspaceId);
@@ -52,7 +58,8 @@ export class CreativeWorkflowService {
       const policy = await this.repository.policy(workspaceId, profileId);
       if (!policy?.enabled || !policy.allowAgents || !policy.allowExternalMedia || modelIds.some(id => !policy.modelIds.includes(id))) throw new CreativeMediaError('creative_workspace_disabled', 403);
     }
-    if (!this.provider.prices) throw new CreativeMediaError('creative_estimate_unavailable', 503);
+    const provider = this.providerFor(profile.provider);
+    if (!provider.prices) return { prices: [], unavailable: modelIds, fetchedAt: new Date().toISOString() };
     const endpoints = [...new Set(modelIds.map(id => CREATIVE_MODELS[id as keyof typeof CREATIVE_MODELS]?.endpoint ?? id))];
     const key = (endpoint: string) => `${profileId}:${profile.revision}:${endpoint}`;
     for (const [key, item] of this.priceCache) if (item.expires <= Date.now()) this.priceCache.delete(key);
@@ -64,7 +71,7 @@ export class CreativeWorkflowService {
         if (this.priceRequests.size >= 8) throw new CreativeMediaError('creative_rate_limited', 429);
         pending = (async () => {
           const secret = await this.profiles.credential(profileId);
-          const prices = await this.provider.prices!(secret.revealInsideTrustedExecutor(), missing);
+          const prices = await provider.prices!(secret.revealInsideTrustedExecutor(), missing);
           while (this.priceCache.size + missing.length > 5000) this.priceCache.delete(this.priceCache.keys().next().value!);
           for (const endpoint of missing) this.priceCache.set(key(endpoint), { expires: Date.now() + 300000, price: prices.find(price => price.endpointId === endpoint) ?? null });
         })().finally(() => this.priceRequests.delete(requestKey));
@@ -80,14 +87,14 @@ export class CreativeWorkflowService {
     const profiles = [];
     for (const profile of await this.profiles.profiles()) {
       const policy = await this.repository.policy(workspaceId, profile.id);
-      if (profile.enabled && policy?.enabled && policy.allowExternalMedia && (actor.type !== 'agent' || policy.allowAgents)) profiles.push({ id: profile.id, name: profile.name, modelIds: policy.modelIds, maxRunCents: policy.maxRunCents, maxDayCents: policy.maxDayCents, maxConcurrentRuns: policy.maxConcurrentRuns });
+      if (profile.enabled && policy?.enabled && policy.allowExternalMedia && (actor.type !== 'agent' || policy.allowAgents)) profiles.push({ id: profile.id, name: profile.name, provider: profile.provider, modelIds: policy.modelIds, maxRunCents: policy.maxRunCents, maxDayCents: policy.maxDayCents, maxConcurrentRuns: policy.maxConcurrentRuns });
     }
     const nodes = await this.workspace.nodes(workspaceId);
     const inputs = nodes.filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => ({ id: node.id, title: node.title, type: node.type }));
     const workflows = await this.list(workspaceId);
     const persisted = new Set(workflows.map(workflow => workflow.nodeId));
     const drafts = nodes.filter(node => node.type === 'videoWorkflow' && !persisted.has(node.id)).map(node => ({ nodeId: node.id, title: node.title, config: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) }));
-    return { workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', paginated: true } };
+    return { workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', providers: ['fal', 'byteplus', 'higgsfield'], paginated: true } };
   }
 
   async read(workspaceId: string, nodeId: string) {
@@ -160,7 +167,7 @@ export class CreativeWorkflowService {
       if (typeof text !== 'string') throw new CreativeMediaError('creative_context_unavailable');
       contexts.push(text);
     }
-    const modelContract = legacyModel ? undefined : await falModelCatalog.contract(config.modelId);
+    const modelContract = legacyModel ? undefined : await creativeModelCatalog.contract(config.modelId, config.provider);
     const identities = await creativeCharacterService.resolve(workflow.workspaceId, config, modelContract);
     config = identities.config;
     const configuredPrompt = config.parameters[modelContract ? modelPromptField(modelContract.schema) ?? 'prompt' : 'prompt'];
@@ -194,6 +201,7 @@ export class CreativeWorkflowService {
     const profile = await this.repository.profile(profileId);
     const policy = await this.repository.policy(workflow.workspaceId, profileId);
     if (!profile?.enabled) throw new CreativeMediaError('creative_profile_disabled', 403);
+    if (profile.provider !== creativeProviderId(workflow.config.provider)) throw new CreativeMediaError('creative_provider_mismatch', 403);
     if (!policy?.enabled || !policy.allowExternalMedia || !policy.modelIds.includes(workflow.config.modelId) || (actor.type === 'agent' && !policy.allowAgents)) throw new CreativeMediaError('creative_workspace_disabled', 403);
     const autonomy = await autonomyPolicyService.get(workflow.workspaceId);
     if (autonomy.policy.halted) throw new CreativeMediaError('creative_workspace_halted', 403);
@@ -206,7 +214,24 @@ export class CreativeWorkflowService {
     const { profile, policy } = await this.authorize(workflow, actor);
     const snapshot = await this.snapshot(workflow);
     const credential = await this.profiles.credential(profile.id);
-    const estimate = await this.provider.estimate(credential.revealInsideTrustedExecutor(), snapshot.config, snapshot.modelContract);
+    const provider = this.providerFor(snapshot.config.provider);
+    const context = { prompt: snapshot.prompt, media: {} as Record<string, string> };
+    if (provider.estimateNeedsMedia) for (const item of snapshot.media ?? []) context.media[item.pointer] = await this.files.mediaData(workspaceId, item.reference);
+    const getEstimate = () => provider.estimate(credential.revealInsideTrustedExecutor(), snapshot.config, snapshot.modelContract, context);
+    // Some account quotes require the exact uploaded references. Apply the same
+    // outbound integration gate as generation, without submitting a paid job.
+    let estimate;
+    try {
+      estimate = provider.estimateNeedsMedia ? await autonomyPolicyService.execute({ workspaceId, capability: 'integration', operation: 'creative.video.quote', actorType: actor.type,
+        actorId: actor.type === 'agent' ? actor.nodeId : null, mutation: true, certainty: 'semantic',
+        network: { url: `https://api.higgsfield.ai/estimate/${snapshot.config.modelId}`, method: 'POST' },
+        input: { provider: snapshot.config.provider, modelId: snapshot.config.modelId, referenceCount: snapshot.media?.length ?? 0 },
+        auditOutput: () => ({ quoted: true }),
+      }, getEstimate) : await getEstimate();
+    } catch (error) {
+      if (error instanceof AutonomyGatePendingError) throw new CreativeMediaError('creative_approval_required', 409);
+      throw error;
+    }
     if (estimate.reservedCents > policy.maxRunCents || estimate.reservedCents > policy.maxDayCents) throw new CreativeMediaError('creative_budget_exceeded', 403);
     const preview: CreativePreview = { id: uuidv7(), workflowId: workflow.id, revision: workflow.revision, snapshot, profileId: profile.id, profileRevision: profile.revision, policyRevision: policy.revision, ...estimate, currency: 'USD', expiresAt: new Date(Date.now() + 300000).toISOString() };
     for (const [id, entry] of previews) if (new Date(entry.preview.expiresAt).getTime() <= Date.now()) previews.delete(id);
@@ -241,6 +266,7 @@ export class CreativeWorkflowService {
     if (command === 'close_unconfirmed' && actor.type !== 'user') throw new CreativeMediaError('creative_owner_required', 403);
     const current = await this.repository.run(workspaceId, runId);
     if (!current || (actor.type === 'agent' && (current.actor.type !== 'agent' || current.actor.nodeId !== actor.nodeId))) throw new CreativeMediaError('creative_run_not_found', 404);
+    if (command === 'cancel' && current.snapshot.config.provider === 'byteplus' && current.status !== 'queued') throw new CreativeMediaError('creative_byteplus_cancel_unavailable', 409);
     const result = await this.repository.command(workspaceId, runId, command);
     await autonomyPolicyService.recordSemanticEffect({ workspaceId, capability: 'integration', operation: `creative.run.${command}`, actorType: actor.type, actorId: actor.type === 'agent' ? actor.nodeId : null, runId, input: { command } }, { status: result.status });
     this.workspace.broadcast(workspaceId);
@@ -259,9 +285,9 @@ export class CreativeWorkflowService {
     const operation = { workspaceId: run.workspaceId, capability: 'integration' as const, operation: 'creative.video.submit',
       actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null, runId: run.id,
       mutation: true, risk: 'purchase' as const, certainty: 'semantic' as const,
-      network: { url: `https://queue.fal.run/${run.snapshot.modelContract?.id ?? CREATIVE_MODELS[run.snapshot.config.modelId as keyof typeof CREATIVE_MODELS].endpoint}`, method: 'POST' },
+      network: { url: creativeSubmitUrl(creativeProviderId(run.snapshot.config.provider), run.snapshot.modelContract?.id ?? CREATIVE_MODELS[run.snapshot.config.modelId as keyof typeof CREATIVE_MODELS].endpoint), method: 'POST' },
       filesystem: { path: outputPath, permission: 'create' as const },
-      input: { modelId: run.snapshot.config.modelId, promptDigest: createHash('sha256').update(run.snapshot.prompt).digest('hex'), reservedCents: run.reservedCents },
+      input: { provider: creativeProviderId(run.snapshot.config.provider), modelId: run.snapshot.config.modelId, promptDigest: createHash('sha256').update(run.snapshot.prompt).digest('hex'), reservedCents: run.reservedCents },
       auditOutput: () => ({ accepted: true }),
     };
     try { return await autonomyPolicyService.execute(operation, submit); }
@@ -286,7 +312,7 @@ export class CreativeWorkflowService {
         network: { url: new URL(video.url).origin, method: 'GET' },
         input: { path, outputIndex, mimeType: video.mimeType ?? 'video/mp4', size: video.size },
         auditOutput: result => { const asset = result as { path: string; sha256: string; size: number }; return { path: asset.path, sha256: asset.sha256, size: asset.size }; },
-      }, async () => this.files.store(run, video, await this.provider.download(credential, video), outputIndex));
+      }, async () => this.files.store(run, video, await this.providerFor(run.snapshot.config.provider).download(credential, video), outputIndex));
     } catch (error) {
       if (error instanceof AutonomyGatePendingError) throw new CreativeMediaError('creative_approval_required', 409);
       if (error instanceof CreativeMediaError) throw error;

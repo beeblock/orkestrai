@@ -5,6 +5,8 @@ import type { VideoMime } from '../../domain/video-format.js';
 export type CreativeRemoteHandle = {
   requestId: string; statusUrl: string; responseUrl: string; cancelUrl: string;
 };
+export type CreativeEstimateContext = { prompt: string; media: Record<string, string> };
+export type CreativeEstimate = { estimatedCents: number; reservedCents: number; priceSource?: 'account_quote' | 'public_list'; priceVerifiedAt?: string };
 export type CreativeProviderStatus = {
   status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; queuePosition: number | null;
 };
@@ -14,9 +16,10 @@ export type CreativeRemoteVideo = {
   mimeType?: VideoMime;
 };
 export interface CreativeVideoProvider {
+  readonly estimateNeedsMedia?: boolean;
   prices?(credential: string, endpoints: string[]): Promise<FalModelPrice[]>;
   prepareMedia?(credential: string, media: Record<string, string>): Promise<Record<string, string>>;
-  estimate(credential: string, config: CreativeConfig, contract?: FalModelContract): Promise<{ estimatedCents: number; reservedCents: number }>;
+  estimate(credential: string, config: CreativeConfig, contract?: FalModelContract, context?: CreativeEstimateContext): Promise<CreativeEstimate>;
   submit(credential: string, config: CreativeConfig, prompt: string, references: { start?: string; end?: string; media?: Record<string, string> }, contract?: FalModelContract): Promise<CreativeRemoteHandle>;
   status(credential: string, handle: CreativeRemoteHandle): Promise<CreativeProviderStatus>;
   cancel(credential: string, handle: CreativeRemoteHandle): Promise<'requested' | 'completed' | 'missing'>;

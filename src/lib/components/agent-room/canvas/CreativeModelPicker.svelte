@@ -12,7 +12,7 @@
   let rates = $state<Record<string, FalModelPrice | null>>({}), loading = $state(false), failed = $state(false);
   let generation = 0, expires = 0;
   const endpoint = (id: string) => CREATIVE_MODELS[id as keyof typeof CREATIVE_MODELS]?.endpoint ?? id;
-  const rateText = (price: FalModelPrice) => m['creative.model_rate']({ price: new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 }).format(price.unitPrice), unit: price.unit });
+  const rateText = (price: FalModelPrice) => m['creative.model_rate']({ price: new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 }).format(price.unitPrice), unit: price.unit === 'million tokens (720p, no video input)' ? m['creative.token_price_unit']() : price.unit });
   const details = $derived(Object.fromEntries(options.map(option => [option.value, !profileId ? m['creative.price_account_required']() : rates[endpoint(option.value)] ? rateText(rates[endpoint(option.value)]!) : m['creative.price_unavailable']()])));
   const selectedRate = $derived(rates[endpoint(value)]);
   $effect(() => { profileId; base; generation++; rates = {}; failed = false; loading = false; });
@@ -43,6 +43,7 @@
   <div class="flex items-center justify-between gap-2"><span>{m['creative.model']()}</span><Button size="icon-sm" variant="ghost" disabled={!profileId || loading} title={m['creative.refresh']()} aria-label={m['creative.refresh']()} onclick={() => { generation++; expires = 0; void prices([value]); }}><RefreshCw size={12} /></Button></div>
   <ModelCombobox {value} {options} {details} {onValueChange} onVisibleOptionsChange={prices} defaultLabel={m['creative.choose_model']()} searchPlaceholder={m['creative.search_models']()} emptyLabel={m['creative.no_models']()} ariaLabel={m['creative.model']()} />
   {#if selectedRate}<p class="font-medium" data-testid="model-unit-price">{rateText(selectedRate)}</p>{/if}
+  {#if selectedRate?.priceSource === 'public_list'}<p class="text-[var(--app-text-muted)]">{m['creative.public_rate']({ date: selectedRate.priceVerifiedAt ?? '' })}</p>{/if}
   {#if loading}<p role="status" class="text-[var(--app-text-muted)]">{m['creative.price_loading']()}</p>{:else if failed}<p role="status" class="text-[var(--app-text-muted)]">{m['creative.price_unavailable']()}</p>{/if}
   <p class="text-[var(--app-text-muted)]">{profileId ? m['creative.price_disclaimer']() : m['creative.price_account_required']()}</p>
 </div>

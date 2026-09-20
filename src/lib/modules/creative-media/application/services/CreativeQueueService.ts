@@ -37,7 +37,7 @@ export class CreativeQueueService {
   }
 
   async process(candidate: CreativeRun) {
-    const { repository, provider, profiles, workspace, files } = this.workflows;
+    const { repository, profiles, workspace, files } = this.workflows;
     const owner = uuidv7();
     const claimed = await repository.claim(candidate.workspaceId, candidate.id, owner);
     if (!claimed) return;
@@ -47,6 +47,9 @@ export class CreativeQueueService {
     let { run, remote } = claimed;
     let submitted = false;
     try {
+      const provider = this.workflows.providerFor(run.snapshot.config.provider);
+      const profile = await repository.profile(run.profileId);
+      if (!profile || profile.provider !== (run.snapshot.config.provider ?? 'fal')) throw new CreativeMediaError('creative_provider_mismatch', 403);
       if (run.status === 'submitting' || (run.status === 'cancel_requested' && !remote)) {
         await repository.transition(run.id, owner, [run.status], 'submission_uncertain', { errorCode: 'creative_submission_uncertain' });
         return;

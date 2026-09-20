@@ -2,9 +2,9 @@ import { getCsrfToken } from '@beeblock/svelar/http';
 import * as m from '$lib/paraglide/messages.js';
 import type { CreativeRunStatus } from '$lib/modules/creative-media/domain/catalog.js';
 
-export async function creativeApi<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
+export async function creativeApi<T>(url: string, method = 'GET', body?: unknown, timeout = 60000): Promise<T> {
   const csrf = getCsrfToken();
-  const response = await fetch(url, { method, signal: AbortSignal.timeout(60000), headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+  const response = await fetch(url, { method, signal: AbortSignal.timeout(timeout), headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const result = await response.json();
   if (!response.ok || result.error) throw Object.assign(new Error(result.error ?? 'creative_request_failed'), { billing: result.billing });
   return result.data;
@@ -15,6 +15,11 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_provider_mismatch') return m['creative.provider_mismatch']();
+  if (code === 'creative_provider_model_required') return m['creative.provider_choose_model']();
+  if (code === 'creative_byteplus_input_modes') return m['creative.byteplus_modes']();
+  if (code === 'creative_byteplus_video_url_required') return m['creative.byteplus_video_url']();
+  if (code === 'creative_byteplus_cancel_unavailable') return m['creative.byteplus_cancel']();
   if (code === 'creative_sequence_runtime_required') return m['sequence.error_runtime']();
   if (code === 'creative_sequence_disk_full') return m['sequence.error_disk']();
   if (code === 'creative_sequence_trim_invalid') return m['sequence.error_trim']();

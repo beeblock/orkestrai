@@ -135,7 +135,7 @@ export class CreativeRecipeService {
         items.push({ nodeId: node.id, title: node.title ?? '', kind: 'image', status: payload.status ?? 'idle', runId: payload.activeRun?.id ?? null, errorCode: payload.lastError ?? null, queuePosition: null, reservedCents: null, outputs, canCancel: payload.status === 'running', canRetryDownload: false });
       } else {
         const run = (await creativeMediaRepository.runs(workspaceId, node.id))[0];
-        items.push({ nodeId: node.id, title: node.title ?? '', kind: 'video', status: run?.status ?? 'idle', runId: run?.id ?? null, errorCode: run?.errorCode ?? null, queuePosition: run?.queuePosition ?? null, reservedCents: run?.reservedCents ?? null, outputs, canCancel: !!run && ['queued', 'submitting', 'provider_running'].includes(run.status), canRetryDownload: run?.status === 'download_failed' });
+        items.push({ nodeId: node.id, title: node.title ?? '', kind: 'video', status: run?.status ?? 'idle', runId: run?.id ?? null, errorCode: run?.errorCode ?? null, queuePosition: run?.queuePosition ?? null, reservedCents: run?.reservedCents ?? null, outputs, canCancel: !!run && ['queued', 'submitting', 'provider_running'].includes(run.status) && (run.snapshot?.config.provider !== 'byteplus' || run.status === 'queued'), canRetryDownload: run?.status === 'download_failed' });
       }
     }
     return items;

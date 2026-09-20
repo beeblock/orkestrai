@@ -201,14 +201,17 @@ common credentials redacted; normal agent output is not persisted.
   in a portable collection file. Bruno scripts deliberately stay in its official
   safe QuickJS runtime: unsafe NodeVM access to the host filesystem, processes,
   and arbitrary local modules is not enabled.
-- **Native video workflows:** search the published fal.ai video catalog,
+- **Native video workflows:** choose fal.ai, BytePlus ModelArk or Higgsfield with
+  separate encrypted accounts, reviewed model contracts and cost previews.
+  Search the published fal.ai video catalog,
   including Seedance 2.5, and configure each model's official input contract.
   Bind workspace Images, Videos, audio files and context Notes. Configure
   credentials in the desktop vault, workspace/model/agent permissions and cost
   reservations. Review outgoing data and estimates, follow persistent jobs,
   recover downloads without generating again, and play delivered workspace media
   in Canvas or Workbench. CLI/MCP agents use the same revisioned contract.
-  Video requires a funded fal account; it does not change Codex image generation.
+  Video requires a funded API account for the selected provider; it does not
+  change Codex image generation. Provider-specific limits are documented in-app.
   Approved characters keep versioned visual and voice references. Drag a character
   from the shared library into another workspace to copy its complete native
   reference bundle without granting access to credentials or paid generation.

@@ -62,11 +62,12 @@ describe('Creative video persistence and queue', () => {
       await expect(service.snapshot({ id: uuidv7(), workspaceId, nodeId, title: 'Invalid', revision: 1, config: { ...config, parameters: { duration: 30 } } })).rejects.toThrow('creative_model_parameters_invalid');
     } finally { lookup.mockRestore(); }
   });
-  async function fixture() {
+  async function fixture(provider: 'fal' | 'byteplus' | 'higgsfield' = 'fal') {
     const workspaceId = uuidv7(), nodeId = uuidv7(), profileId = uuidv7();
-    const profile = await repository.saveProfile({ id: profileId, name: 'Test fal', provider: 'fal', enabled: true, hasCredential: true });
-    const policy = await repository.savePolicy(workspaceId, profileId, creativePolicySchema.parse({ enabled: true, allowExternalMedia: true, allowAgents: true, modelIds: ['wan-2.7-text'], maxRunCents: 400, maxDayCents: 600, maxConcurrentRuns: 2 }));
-    const config = creativeConfigSchema.parse({ profileId, prompt: 'A test landscape' });
+    const profile = await repository.saveProfile({ id: profileId, name: `Test ${provider}`, provider, enabled: true, hasCredential: true });
+    const modelId = provider === 'fal' ? 'wan-2.7-text' : provider === 'byteplus' ? 'dreamina-seedance-2-5-260628' : 'minimax/h3/text-to-video';
+    const policy = await repository.savePolicy(workspaceId, profileId, creativePolicySchema.parse({ enabled: true, allowExternalMedia: true, allowAgents: true, modelIds: [modelId], maxRunCents: 400, maxDayCents: 600, maxConcurrentRuns: 2 }));
+    const config = creativeConfigSchema.parse({ provider, modelId, profileId, prompt: 'A test landscape' });
     const workflow = await repository.saveWorkflow(workspaceId, nodeId, { title: 'Test video', config });
     const preview: CreativePreview = { id: uuidv7(), workflowId: workflow.id, revision: workflow.revision, profileId, profileRevision: profile.revision, policyRevision: policy.revision, estimatedCents: 100, reservedCents: 400, currency: 'USD', expiresAt: new Date(Date.now() + 300000).toISOString(), snapshot: { config, prompt: config.prompt, revision: 1, catalogRevision: 'test', startImage: null, endImage: null } };
     const key = uuidv7();
@@ -112,7 +113,7 @@ describe('Creative video persistence and queue', () => {
     const service = { repository, provider, profiles: { credential: vi.fn(async () => ({ revealInsideTrustedExecutor: () => 'not-a-real-key' })) },
       workspace: { workspace: vi.fn(async () => ({ suspendedAt: null })), writablePath: vi.fn(async (_workspace: string, path: string) => `/workspace/${path}`), nodes: vi.fn(async () => []), createNode: vi.fn(), broadcast: vi.fn() },
       files: { store: vi.fn(async (_run?: unknown, _video?: unknown, _response?: unknown, _index?: number) => output), referenceData: vi.fn() }, authorize: vi.fn(async () => workflow), dispatch: vi.fn(async (_run, submit) => submit()),
-      download: CreativeWorkflowService.prototype.download,
+      download: CreativeWorkflowService.prototype.download, providerFor: vi.fn(() => provider),
     };
     return { service, provider, queue: new CreativeQueueService(service as unknown as CreativeWorkflowService) };
   }
@@ -285,6 +286,9 @@ describe('Creative video persistence and queue', () => {
     const service = new CreativeProviderService(repository, secrets as never);
     const input = { name: 'Account', provider: 'fal' as const, enabled: true, credential: 'test-secret-original' };
     const profile = await service.save(input);
+    const writes = secrets.set.mock.calls.length;
+    await expect(service.save({ ...input, provider: 'higgsfield', credential: 'wrong-account:private-secret', revision: profile.revision }, profile.id)).rejects.toThrow('creative_provider_mismatch');
+    expect(secrets.set).toHaveBeenCalledTimes(writes);
     expect(JSON.stringify(await service.profiles())).not.toContain(input.credential);
     expect((await service.credential(profile.id)).revealInsideTrustedExecutor()).toBe(input.credential);
     secrets.get.mockResolvedValueOnce(input.credential).mockRejectedValueOnce(new Error('vault unavailable'));
@@ -293,5 +297,26 @@ describe('Creative video persistence and queue', () => {
     expect((await repository.profile(profile.id))?.revision).toBe(1);
     await service.remove(profile.id);
     expect(vault.size).toBe(0);
+  });
+  it.each(['byteplus', 'higgsfield'] as const)('restores a %s job through the frozen provider without another submission', async providerId => {
+    const f = await fixture(providerId), first = runtime(f.workflow);
+    await first.queue.process(f.run);
+    expect(first.service.providerFor).toHaveBeenCalledWith(providerId);
+    expect(first.provider.submit).toHaveBeenCalledOnce();
+    const restored = runtime(f.workflow);
+    await restored.queue.process(await ready(f.run));
+    expect(restored.service.providerFor).toHaveBeenCalledWith(providerId);
+    expect(restored.provider.submit).not.toHaveBeenCalled();
+    expect(restored.provider.result).toHaveBeenCalledOnce();
+    expect((await repository.run(f.workspaceId, f.run.id))?.status).toBe('completed');
+  });
+  it('rejects a mismatched profile before resolving its secret or calling a provider', async () => {
+    const f = await fixture('byteplus'), otherId = uuidv7();
+    await repository.saveProfile({ id: otherId, name: 'Other account', provider: 'fal', enabled: true, hasCredential: true });
+    await repository.savePolicy(f.workspaceId, otherId, creativePolicySchema.parse({ enabled: true, allowExternalMedia: true, modelIds: [f.workflow.config.modelId] }));
+    const credential = vi.fn(), workspace = { workspace: async () => ({ suspendedAt: null }) };
+    const service = new CreativeWorkflowService(repository, { credential } as never, {} as never, workspace as never);
+    await expect(service.authorize({ ...f.workflow, config: { ...f.workflow.config, profileId: otherId } }, { type: 'user' })).rejects.toThrow('creative_provider_mismatch');
+    expect(credential).not.toHaveBeenCalled();
   });
 });

@@ -53,11 +53,19 @@ describe('servidor MCP (orkestrai mcp)', () => {
   it('keeps storyboard images on Codex and makes native video audio an explicit model capability', () => {
     const description = MCP_TOOLS.find(tool => tool.name === 'video_workflow_create')!.description;
     expect(description).toContain('image_gen.imagegen');
-    expect(description).toContain('never fal image generation');
+    expect(description).toContain('never external-provider image generation');
     expect(description).toContain('validated Image outputs');
     expect(description).toContain('native audio');
     expect(description).toContain('requested language');
     expect(description).toContain('silently substitute a mute model');
+  });
+  it('exposes provider identity in discovery and saved video configs without adding credentials', () => {
+    const models = MCP_TOOLS.find(tool => tool.name === 'video_workflow_models')!;
+    const create = MCP_TOOLS.find(tool => tool.name === 'video_workflow_create')!;
+    expect(models.inputSchema.properties.input.properties.provider.enum).toEqual(['fal', 'byteplus', 'higgsfield']);
+    expect(create.inputSchema.properties.input.properties.config.properties.provider.enum).toEqual(['fal', 'byteplus', 'higgsfield']);
+    expect(create.inputSchema.properties.input.properties.config.properties).not.toHaveProperty('credential');
+    expect(create.description).toContain('matching profile');
   });
   it.each(['characters','models','list','read','create','update','preview','run','cancel','retry_download','remove'])('routes native video %s through the same task-bound contract without credentials', async command => {
     const server = startMcp();

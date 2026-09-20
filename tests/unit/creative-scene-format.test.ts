@@ -9,4 +9,7 @@ describe('declared scene output formats', () => {
     expect(() => requestedAspectParameters({}, { ...contract, schema: { properties: {} } }, '9:16')).toThrow();
     expect(() => requestedAspectParameters({}, { ...contract, schema: { properties: { aspect_ratio: { type: 'string' }, aspectRatio: { type: 'string' } } } }, '9:16')).toThrow();
   });
+  it('uses the native BytePlus ratio field without adding fal fields', () => {
+    expect(requestedAspectParameters({ duration: 5 }, { ...contract, schema: { properties: { ratio: { type: 'string', enum: ['16:9', '9:16'] } } } }, '9:16')).toEqual({ duration: 5, ratio: '9:16' });
+  });
 });

@@ -5,6 +5,14 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Added
+
+- Add explicit BytePlus ModelArk and Higgsfield video providers alongside fal.ai, with provider-specific contracts, encrypted vault accounts and persistent queue routing. Existing fal and Codex image workflows remain compatible.
+- Select matching providers, accounts and models in Canvas, Workbench and CLI/MCP. Review dated public rates or configured Higgsfield account quotes before generating; retain budget, grant and idempotency safeguards.
+- Preserve required references and locked characters across explicit provider changes, and document provider-specific upload and cancellation limits through translated guides and onboarding.
+
 ## 0.32.0 - 2026-09-19
 
 ### Added

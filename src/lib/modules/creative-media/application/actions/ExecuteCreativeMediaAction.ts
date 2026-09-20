@@ -2,7 +2,7 @@ import { Action } from '@beeblock/svelar/actions';
 import type { CreativeMediaDto } from '../dto/CreativeMediaDto.js';
 import type { CreativeRunRequest, CreativeWorkflowSave } from '../../contracts/schemas/creative-media.schema.js';
 import { creativeWorkflowService } from '../services/CreativeWorkflowService.js';
-import { falModelCatalog } from '../services/FalModelCatalogService.js';
+import { creativeModelCatalog } from '../services/CreativeModelCatalogService.js';
 import { creativeCatalogQuerySchema } from '../../contracts/schemas/creative-media.schema.js';
 import { CreativeCharacterDto } from '../dto/CreativeCharacterDto.js';
 import { ExecuteCreativeCharacterAction } from './ExecuteCreativeCharacterAction.js';
@@ -30,9 +30,8 @@ export class ExecuteCreativeMediaAction extends Action<CreativeMediaDto, unknown
       case 'models': {
         const input = creativeCatalogQuerySchema.parse(dto.input);
         if (input.pricingIds) return service.prices(dto.workspaceId, dto.actor, input.profileId!, input.pricingIds);
-        if (input.endpoint) return falModelCatalog.contract(input.endpoint);
-        if (input.refresh) await falModelCatalog.list(true);
-        const catalog = falModelCatalog.discover();
+        if (input.endpoint) return creativeModelCatalog.contract(input.endpoint, input.provider);
+        const catalog = await creativeModelCatalog.discover(input.provider, input.refresh);
         const models = catalog.models.filter(model => `${model.id} ${model.name} ${model.category}`.toLowerCase().includes(input.query.toLowerCase()));
         return { models: models.slice(input.offset, input.offset + input.limit), total: models.length, nextOffset: input.offset + input.limit < models.length ? input.offset + input.limit : null, source: catalog.source, fetchedAt: catalog.fetchedAt };
       }

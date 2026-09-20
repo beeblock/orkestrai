@@ -34,6 +34,9 @@
   const labels: Record<string, () => string> = {
     duration: m['creative.duration'], resolution: m['creative.resolution'], aspect_ratio: m['creative.ratio'], generate_audio: m['creative.audio'],
     seed: m['creative.seed'], negative_prompt: m['creative.negative_prompt'], start_image_url: m['creative.start_image'], end_image_url: m['creative.end_image'], prompt_expansion_mode: m['creative.prompt_expansion'],
+    ratio: m['creative.ratio'], first_image_url: m['creative.start_image'], last_image_url: m['creative.end_image'],
+    image_urls: m['creative.reference_images'], video_urls: m['creative.reference_videos'], audio_urls: m['creative.reference_audio'],
+    watermark: m['creative.watermark'], return_last_frame: m['creative.return_last_frame'], output_format: m['creative.output_format'],
   };
   const label = $derived(labels[name]?.() ?? spec.title ?? name);
   function change(next: unknown) { invalidJson = false; onChange(next); }

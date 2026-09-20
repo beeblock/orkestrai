@@ -12,6 +12,7 @@
   import { Switch } from '$lib/components/ui/switch';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { CREATIVE_MODELS } from '$lib/modules/creative-media/domain/catalog.js';
+  import { CREATIVE_PROVIDERS, type CreativeProviderId } from '$lib/modules/creative-media/domain/providers.js';
   import type { FalModelSummary } from '$lib/modules/creative-media/domain/model-contract.js';
   import { creativePolicySchema, creativePolicySaveSchema, creativeProfileSaveSchema, type CreativePolicy, type CreativeProfileSave } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
   import type { CreativeProfile, CreativeWorkspacePolicy } from '$lib/modules/creative-media/domain/types.js';
@@ -21,19 +22,21 @@
   let { open = $bindable(false), workspaceId, onSaved }: { open?: boolean; workspaceId: string; onSaved: () => void | Promise<void> } = $props();
   let profiles = $state<CreativeProfile[]>([]), policies = $state<CreativeWorkspacePolicy[]>([]);
   let profileId = $state(''), name = $state('fal.ai'), credential = $state(''), enabled = $state(false);
+  let provider = $state<CreativeProviderId>('fal');
   let policy = $state(creativePolicySchema.parse({}));
   let runUsd = $state(0), dayUsd = $state(0), revision = $state<number | undefined>(), policyRevision = $state<number | undefined>();
   let busy = $state(false), error = $state(''), saved = $state(false), tab = $state('account');
   let confirmDelete = $state(false);
   let loading = $state(true), ready = $state(false), loadSequence = 0;
   let models = $state<FalModelSummary[]>([]), modelQuery = $state(''), modelError = $state(''), modelsLoading = $state(false);
-  const allModels = $derived([...Object.values(CREATIVE_MODELS).map(model => ({ id: model.id, name: model.name })), ...models]);
+  const allModels = $derived([...(provider === 'fal' ? Object.values(CREATIVE_MODELS).map(model => ({ id: model.id, name: model.name })) : []), ...models]);
   const filteredModels = $derived(allModels.filter(model => `${model.name} ${model.id}`.toLowerCase().includes(modelQuery.toLowerCase())));
   async function loadModels(refresh = false) {
+    const requested = provider;
     modelsLoading = true; modelError = '';
-    try { models = (await creativeApi<{ models: FalModelSummary[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/models?limit=5000${refresh ? '&refresh=true' : ''}`)).models; }
-    catch (cause) { modelError = (cause as Error).message; }
-    finally { modelsLoading = false; }
+    try { const result = await creativeApi<{ models: FalModelSummary[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/models?provider=${requested}&limit=5000${refresh ? '&refresh=true' : ''}`); if (provider === requested) models = result.models; }
+    catch (cause) { if (provider === requested) modelError = (cause as Error).message; }
+    finally { if (provider === requested) modelsLoading = false; }
   }
   const accountAdapter = zod(creativeProfileSaveSchema as unknown as Parameters<typeof zod>[0]);
   const policyAdapter = zod(creativePolicySaveSchema as unknown as Parameters<typeof zod>[0]);
@@ -52,6 +55,7 @@
     profileId = id; clearCredential(); error = ''; saved = false;
     accountForm.errors.set({}); policyForm.errors.set({});
     const profile = profiles.find(item => item.id === id);
+    provider = profile?.provider ?? 'fal';
     name = profile?.name ?? 'fal.ai'; enabled = profile?.enabled ?? false; revision = profile?.revision;
     const grant = policies.find(item => item.profileId === id);
     policy = creativePolicySchema.parse(grant ? { enabled: grant.enabled, allowAgents: grant.allowAgents, allowExternalMedia: grant.allowExternalMedia, modelIds: grant.modelIds, maxRunCents: grant.maxRunCents, maxDayCents: grant.maxDayCents, maxConcurrentRuns: grant.maxConcurrentRuns } : {});
@@ -73,13 +77,14 @@
   function reload() { void load().catch(cause => { error = String(cause.message); }); }
   const dialogContext = $derived(open ? workspaceId : '');
   $effect(() => {
-    if (dialogContext) untrack(() => { reload(); void loadModels(); });
+    if (dialogContext) untrack(() => { reload(); });
     else untrack(() => { loadSequence++; loading = true; ready = false; clearCredential(); });
   });
+  $effect(() => { if (open) { provider; untrack(() => { models = []; void loadModels(); }); } });
   async function saveAccount() {
     busy = true; error = ''; saved = false;
     try {
-      accountForm.form.set({ name, provider: 'fal', enabled, ...(revision ? { revision } : {}), ...(credential ? { credential } : {}) });
+      accountForm.form.set({ name, provider, enabled, ...(revision ? { revision } : {}), ...(credential ? { credential } : {}) });
       const validated = await accountForm.validateForm({ update: true });
       if (!validated.valid) return;
       if (!profileId && !credential) { accountForm.errors.set({ credential: ['required'] }); return; }
@@ -125,9 +130,12 @@
       <Tabs.List class="grid w-full shrink-0 grid-cols-2"><Tabs.Trigger value="account" class="data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">{m['creative.account']()}</Tabs.Trigger><Tabs.Trigger value="workspace" disabled={!profileId} class="data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">{m['creative.permissions']()}</Tabs.Trigger></Tabs.List>
       <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3">
         <Tabs.Content value="account" class="space-y-4">
+          <label class="block space-y-1 text-sm"><span>{m['creative.provider']()}</span><NativeSelect.Root value={provider} disabled={Boolean(profileId)} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { provider = event.currentTarget.value as CreativeProviderId; name = CREATIVE_PROVIDERS.find(item => item.id === provider)!.name; clearCredential(); }}>{#each CREATIVE_PROVIDERS as item}<option value={item.id}>{item.name}</option>{/each}</NativeSelect.Root></label>
           <label class="block space-y-1 text-sm"><span>{m['creative.account_name']()}</span><Input name="name" bind:value={name} maxlength={80} aria-invalid={Boolean($accountErrors.name)} /></label>
           {#if $accountErrors.name}<p role="alert" class="text-xs text-destructive">{m['creative.field_invalid']()}</p>{/if}
           <label class="block space-y-1 text-sm"><span>{m['creative.api_key']()}</span><Input name="credential" type="password" bind:value={credential} autocomplete="off" spellcheck={false} maxlength={512} aria-invalid={Boolean($accountErrors.credential)} /></label>
+          {#if provider === 'higgsfield'}<p class="text-xs text-muted-foreground">{m['creative.higgsfield_key_help']()}</p>{/if}
+          <a class="text-xs text-primary underline" href={CREATIVE_PROVIDERS.find(item => item.id === provider)!.url} target="_blank" rel="noreferrer">{m['creative.provider_console']()}</a>
           {#if $accountErrors.credential}<p role="alert" class="text-xs text-destructive">{m['creative.error_credential']()}</p>{/if}
           {#if profiles.find(item => item.id === profileId)?.hasCredential}<p class="text-xs text-muted-foreground">{m['creative.key_saved']()}</p>{/if}
           <label class="flex items-center justify-between gap-4 text-sm"><span>{m['creative.account_enabled']()}</span><Switch bind:checked={enabled} /></label>

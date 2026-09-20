@@ -4,7 +4,7 @@ import type { FalModelContract } from './model-contract.js';
 import type { VideoMime } from './video-format.js';
 
 export type CreativeActor = { type: 'user' } | { type: 'agent'; nodeId: string; taskId: string };
-export type CreativeProfile = { id: string; name: string; provider: 'fal'; enabled: boolean; hasCredential: boolean; revision: number };
+export type CreativeProfile = { id: string; name: string; provider: import('./providers.js').CreativeProviderId; enabled: boolean; hasCredential: boolean; revision: number };
 export type CreativeWorkspacePolicy = CreativePolicy & { id: string; workspaceId: string; profileId: string; revision: number };
 export type CreativeWorkflow = { id: string; workspaceId: string; nodeId: string; title: string; config: CreativeConfig; revision: number };
 export type CreativeReference = { nodeId: string; path: string; sha256: string; size: number; mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; width: number; height: number };
@@ -32,6 +32,7 @@ export type CreativePreview = {
   id: string; workflowId: string; revision: number; snapshot: CreativeSnapshot;
   profileId: string; profileRevision: number; policyRevision: number;
   estimatedCents: number; reservedCents: number; currency: 'USD'; expiresAt: string;
+  priceSource?: 'account_quote' | 'public_list'; priceVerifiedAt?: string;
 };
 
 export class CreativeMediaError extends Error {

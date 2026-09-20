@@ -7,7 +7,7 @@ export type ModelSchema = {
   minimum?: number; maximum?: number; minLength?: number; maxLength?: number;
   minItems?: number; maxItems?: number; [key: string]: unknown;
 };
-export type FalModelPrice = { endpointId: string; unitPrice: number; unit: string; currency: 'USD' };
+export type FalModelPrice = { endpointId: string; unitPrice: number; unit: string; currency: 'USD'; priceSource?: 'public_list'; priceVerifiedAt?: string };
 export type FalModelSummary = { id: string; name: string; category: string; status: 'active' | 'deprecated'; documentationUrl: string };
 export type FalModelContract = FalModelSummary & { schema: ModelSchema; outputSchema: ModelSchema; digest: string };
 export function concreteSchema(schema: ModelSchema): ModelSchema {

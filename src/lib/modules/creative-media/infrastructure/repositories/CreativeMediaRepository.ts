@@ -1,4 +1,5 @@
 import { Connection } from '@beeblock/svelar/database';
+import { creativeProviderId } from '../../domain/providers.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { CreativeProviderProfile } from '../../domain/models/CreativeProviderProfile.js';
 import { CreativeWorkspacePolicy as PolicyModel } from '../../domain/models/CreativeWorkspacePolicy.js';
@@ -15,7 +16,8 @@ const iso = (value: unknown) => value instanceof Date ? value.toISOString() : St
 const json = (value: unknown) => typeof value === 'string' ? JSON.parse(value) : value;
 const now = () => new Date().toISOString();
 function profile(row: CreativeProviderProfile): CreativeProfile {
-  return { id: String(row.getAttribute('id')), provider: 'fal', name: String(row.getAttribute('name')), enabled: Boolean(row.getAttribute('enabled')), hasCredential: Boolean(row.getAttribute('has_credential')), revision: Number(row.getAttribute('revision')) };
+  const provider = creativeProviderId(row.getAttribute('provider'));
+  return { id: String(row.getAttribute('id')), provider, name: String(row.getAttribute('name')), enabled: Boolean(row.getAttribute('enabled')), hasCredential: Boolean(row.getAttribute('has_credential')), revision: Number(row.getAttribute('revision')) };
 }
 function policy(row: PolicyModel): CreativeWorkspacePolicy {
   return { ...creativePolicySchema.parse(json(row.getAttribute('policy_json'))), id: String(row.getAttribute('id')), workspaceId: String(row.getAttribute('workspace_id')), profileId: String(row.getAttribute('profile_id')), revision: Number(row.getAttribute('revision')) };

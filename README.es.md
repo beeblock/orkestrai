@@ -112,7 +112,9 @@ normal de los agentes no se guarda.
   scripts Bruno permanecen deliberadamente en el runtime QuickJS seguro oficial:
   no se habilita el acceso NodeVM inseguro al filesystem, procesos ni módulos
   locales arbitrarios del equipo.
-- **Flujos nativos de vídeo:** busca el catálogo de fal.ai, incluyendo Seedance
+- **Flujos nativos de vídeo:** elige fal.ai, BytePlus ModelArk o Higgsfield,
+  con cuentas cifradas separadas, contratos revisados y presupuestos previos.
+  Busca el catálogo de fal.ai, incluyendo Seedance
   2.5, con contratos por modelo y referencias de imagen, video y audio. Cuenta, modelos,
   agentes, envío de datos y reservas requieren autorización del workspace.
   La clave permanece en la bóveda del escritorio. Ejecuciones persistentes,

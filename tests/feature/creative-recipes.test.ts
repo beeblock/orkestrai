@@ -120,4 +120,13 @@ describe('reusable native creative workflows', () => {
     vi.spyOn(creativeWorkspaceGateway, 'reconcileImageWorkflow').mockResolvedValue({ ...node, payload: { status: 'failed', lastError: 'image_workflow_interrupted' } });
     expect((await f.service.queue(f.workspace.id)).find(item => item.nodeId === node.id)).toMatchObject({ status: 'failed', canCancel: false, errorCode: 'image_workflow_interrupted' });
   });
+  it('does not offer destructive cancellation for submitted BytePlus work', async () => {
+    const f = await fixture();
+    const node = await workspaceRepository.createNode({ workspaceId: f.workspace.id, type: 'videoWorkflow', title: 'BytePlus', x: 0, y: 0, width: 200, height: 200, payload: {} });
+    const runs = vi.spyOn(creativeMediaRepository, 'runs');
+    for (const status of ['queued', 'submitting', 'provider_running']) {
+      runs.mockResolvedValue([{ id: uuidv7(), status, snapshot: { config: { provider: 'byteplus' } } }] as never);
+      expect((await f.service.queue(f.workspace.id)).find(item => item.nodeId === node.id)?.canCancel).toBe(status === 'queued');
+    }
+  });
 });

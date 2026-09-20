@@ -213,7 +213,7 @@ test.describe('native video workflows', () => {
         await page.getByRole('button', { name: /Configure access|Configurar acceso/ }).first().click();
         const dialog = page.getByRole('dialog');
         await expect(dialog).toBeVisible();
-        await expect(dialog.getByLabel(/API key|Clave API/)).toBeVisible();
+        await expect(dialog.getByLabel(/API credential|Credencial de API/)).toBeVisible();
         const overflow = await dialog.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth }));
         expect(overflow.scroll).toBeLessThanOrEqual(overflow.client + 1);
         const save = dialog.getByRole('button', { name: /Save|Guardar/, exact: true });

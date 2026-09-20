@@ -110,7 +110,9 @@ agentes não é persistida.
   arquivo portátil da coleção. Scripts Bruno permanecem deliberadamente no
   runtime QuickJS seguro oficial: o acesso NodeVM inseguro ao filesystem, aos
   processos e a módulos locais arbitrários da máquina não é habilitado.
-- **Fluxos nativos de vídeo:** pesquise o catálogo da fal.ai, incluindo Seedance
+- **Fluxos nativos de vídeo:** escolha fal.ai, BytePlus ModelArk ou Higgsfield,
+  com contas criptografadas separadas, contratos revisados e prévias de custo.
+  Pesquise o catálogo da fal.ai, incluindo Seedance
   2.5, com contratos por modelo e referências de imagem, vídeo e áudio.
   Use também Notas do Canvas como contexto. Conta, modelos, agentes,
   envio de dados e reservas de orçamento dependem de autorização do workspace.

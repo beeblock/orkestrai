@@ -38,7 +38,7 @@ function boundedExamples(value: unknown): unknown[] | undefined {
   return value;
 }
 
-function normalizeSchema(source: any, document: any, depth = 0, budget = { nodes: 0 }): ModelSchema {
+export function normalizeSchema(source: any, document: any, depth = 0, budget = { nodes: 0 }): ModelSchema {
   if (++budget.nodes > 6000 || depth > 24 || !source || typeof source !== 'object' || Array.isArray(source)) throw new CreativeMediaError('creative_model_contract_invalid');
   if (source.$ref) {
     if (typeof source.$ref !== 'string' || !/^#\/components\/schemas\/[a-zA-Z0-9_.-]+$/.test(source.$ref)) throw new CreativeMediaError('creative_model_contract_invalid');

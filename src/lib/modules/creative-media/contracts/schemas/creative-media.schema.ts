@@ -3,12 +3,15 @@ import { z } from 'zod';
 import { CREATIVE_MODEL_IDS, CREATIVE_MODELS } from '../../domain/catalog.js';
 import { FAL_ENDPOINT_PATTERN } from '../../domain/model-contract.js';
 import { shotDirectionSchema } from '../../domain/shot-direction.js';
+import { CREATIVE_PROVIDER_IDS } from '../../domain/providers.js';
 
 const id = z.string().uuid();
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-export const creativeModelIdSchema = z.string().max(240).refine(value => CREATIVE_MODEL_IDS.includes(value as typeof CREATIVE_MODEL_IDS[number]) || FAL_ENDPOINT_PATTERN.test(value), 'creative_model_not_found');
+export const creativeProviderSchema = z.enum(CREATIVE_PROVIDER_IDS);
+export const creativeModelIdSchema = z.string().max(240).refine(value => CREATIVE_MODEL_IDS.includes(value as typeof CREATIVE_MODEL_IDS[number]) || FAL_ENDPOINT_PATTERN.test(value) || /^dreamina-seedance-[a-z0-9-]{6,80}$/.test(value), 'creative_model_not_found');
 export const creativeCatalogQuerySchema = z.object({
-  endpoint: z.string().max(240).regex(FAL_ENDPOINT_PATTERN).optional(),
+  provider: creativeProviderSchema.default('fal'),
+  endpoint: creativeModelIdSchema.optional(),
   pricingIds: z.preprocess(value => typeof value === 'string' ? value.split(',') : value, z.array(creativeModelIdSchema).min(1).max(50).optional()),
   profileId: id.optional(),
   query: z.string().max(100).default(''), offset: z.coerce.number().int().min(0).max(10000).default(0), limit: z.coerce.number().int().min(1).max(5000).default(100),
@@ -29,6 +32,7 @@ export const creativePathSchema = z.string().trim().min(1).max(500).refine(
   'creative_invalid_path',
 );
 export const creativeConfigSchema = z.object({
+  provider: creativeProviderSchema.default('fal'),
   modelId: creativeModelIdSchema.default('wan-2.7-text'),
   parameters: creativeParametersSchema.default({}),
   mediaBindings: z.array(z.object({ pointer: z.string().min(1).max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/), nodeId: id.optional(), path: creativePathSchema.optional() }).strict().refine(value => Boolean(value.nodeId) !== Boolean(value.path), 'creative_reference_required')).max(50).default([]),
@@ -38,7 +42,7 @@ export const creativeConfigSchema = z.object({
     voicePointer: z.string().max(500).regex(/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/),
   }).strict()).max(8).default([]),
   requiredCharacterIds: z.array(id).max(8).default([]),
-  requiredReferenceNodeIds: z.array(id).max(20).default([]),
+  requiredReferenceNodeIds: z.array(id).max(50).default([]),
   billingUnits: z.number().finite().positive().max(1000000000).nullable().default(null),
   profileId: id.nullable().default(null),
   prompt: z.string().trim().max(50000).default(''),
@@ -61,6 +65,7 @@ export const creativeConfigSchema = z.object({
   if (new Set(aliases).size !== aliases.length) ctx.addIssue({ code: 'custom', path: ['characterBindings'], message: 'creative_duplicate_input' });
   if (new Set(pointers).size !== pointers.length || pointers.some(pointer => value.mediaBindings.some(binding => binding.pointer === pointer)) || new Set(value.characterBindings.map(binding => binding.id)).size !== value.characterBindings.length) ctx.addIssue({ code: 'custom', path: ['characterBindings'], message: 'creative_duplicate_input' });
   const model = CREATIVE_MODELS[value.modelId as keyof typeof CREATIVE_MODELS];
+  if (model && value.provider !== 'fal') ctx.addIssue({ code: 'custom', path: ['modelId'], message: 'creative_model_not_found' });
   if (!model) return;
   for (const [field, maximum] of [['prompt', model.promptLimit], ['negativePrompt', model.negativePromptLimit]] as const) {
     if (value[field].length > maximum) ctx.addIssue({ code: 'custom', path: [field], message: 'creative_prompt_too_long' });
@@ -73,7 +78,7 @@ export const creativeConfigSchema = z.object({
 });
 
 export const creativeProfileSchema = z.object({
-  name: z.string().trim().min(1).max(80), provider: z.literal('fal'),
+  name: z.string().trim().min(1).max(80), provider: creativeProviderSchema,
   enabled: z.boolean().default(false),
 }).strict();
 export const creativeProfileSaveSchema = creativeProfileSchema.extend({

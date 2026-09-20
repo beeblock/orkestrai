@@ -22,6 +22,8 @@ export class CreativeProviderService {
     return withCreativeProfileLock(profileId, async () => {
       const current = id ? await this.repository.profile(id) : null;
       if (id && !current) throw new CreativeMediaError('creative_profile_not_found', 404);
+      if (current && current.provider !== value.provider) throw new CreativeMediaError('creative_provider_mismatch', 409);
+      if (value.provider === 'higgsfield' && value.credential && !/^[\x21-\x39\x3b-\x7e]+:[\x21-\x39\x3b-\x7e]+$/.test(value.credential)) throw new CreativeMediaError('creative_credential_invalid');
       if (current && current.revision !== value.revision) throw new CreativeMediaError('creative_revision_conflict', 409);
       if (!current && value.revision !== undefined) throw new CreativeMediaError('creative_revision_conflict', 409);
       if (value.credential && await this.repository.activeForProfile(profileId)) throw new CreativeMediaError('creative_profile_busy', 409);

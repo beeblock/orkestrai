@@ -14,7 +14,7 @@ import { CreativeMediaFiles } from './CreativeMediaFiles.js';
 import { withCreativeProfileLock } from './creative-profile-lock.js';
 import { shotDirectionPrompt, requestedDurationParameters } from '../../domain/shot-direction.js';
 import { CREATIVE_MODELS } from '../../domain/catalog.js';
-import { falModelCatalog } from './FalModelCatalogService.js';
+import { creativeModelCatalog } from './CreativeModelCatalogService.js';
 import { requestedAspectParameters, SCENE_IMAGE_SIZES } from '../../domain/scene-format.js';
 
 const briefHash = (scene: StoryboardScene) => createHash('sha256').update(JSON.stringify(sceneBrief(scene))).digest('hex');
@@ -106,7 +106,7 @@ export class CreativeStoryboardService {
     if (input.kind === 'video') {
       const config = creativeConfigSchema.parse({ ...(input.config ?? {}), duration: scene.duration, aspectRatio: scene.aspectRatio, shot: scene.shot, prompt, requiredCharacterIds: scene.characterIds, requiredReferenceNodeIds: scene.referenceNodeIds });
       if (!Object.hasOwn(CREATIVE_MODELS, config.modelId)) {
-        const contract = await falModelCatalog.contract(config.modelId);
+        const contract = await creativeModelCatalog.contract(config.modelId, config.provider);
         config.parameters = requestedAspectParameters(requestedDurationParameters(config.parameters, contract, scene.duration), contract, scene.aspectRatio);
       }
       const workflow = await creativeWorkflowService.save(board.workspaceId, { title: scene.title, config }, actor, undefined, board.nodeId);
