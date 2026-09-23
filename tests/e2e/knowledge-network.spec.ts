@@ -70,13 +70,21 @@ test('live knowledge network stays interactive, scaled correctly and stable acro
     await page.waitForTimeout(600);
     expect(await page.evaluate(() => (window as any).__knowledgeDraws)).toBe(idleDraws);
     const hub = nodes[0];
-    const unrotated = await point(graph, hub.id);
+    const unrotated = await graph.locator('[data-graph-label]').evaluateAll(labels => Object.fromEntries(labels.map(el => {
+      const label = el as HTMLElement;
+      return [label.dataset.graphLabel!, { x: parseFloat(label.style.left), y: parseFloat(label.style.top) }];
+    })));
     const bounds = (await graph.getByTestId('knowledge-graph-stage').boundingBox())!;
     await page.mouse.move(bounds.x + 60, bounds.y + 35); await page.mouse.down();
     await page.mouse.move(bounds.x + 160, bounds.y + 80, { steps: 8 }); await page.mouse.up();
-    await expect.poll(async () => Math.abs((await point(graph, hub.id)).x - unrotated.x)).toBeGreaterThan(5);
+    await expect.poll(() => graph.locator('[data-graph-label]').evaluateAll((labels, previous) => Math.max(0, ...labels.map(el => {
+      const label = el as HTMLElement, before = previous[label.dataset.graphLabel!];
+      return before ? Math.hypot(parseFloat(label.style.left) - before.x, parseFloat(label.style.top) - before.y) : 0;
+    })), unrotated)).toBeGreaterThan(5);
     await graph.getByRole('button', { name: 'Fit graph', exact: true }).click();
     const before = await point(graph, hub.id);
+    await graph.locator(`[data-graph-label="node:${hub.id}"]`).hover();
+    await expect(graph.getByRole('tooltip')).toContainText('Research');
     await page.mouse.move(before.x, before.y);
     await expect(graph.getByRole('tooltip')).toContainText('Research');
     await page.mouse.click(before.x, before.y);
@@ -118,6 +126,16 @@ test('live knowledge network stays interactive, scaled correctly and stable acro
     const eg = embedded.getByTestId('knowledge-graph');
     await expect(eg).toHaveAttribute('data-arranging', 'false');
     const vp = page.getByRole('region', { name: 'Canvas', exact: true }).locator('.svelte-flow__viewport').first();
+    // Fit View animates the outer canvas; measure the embedded point only once it settles.
+    await vp.evaluate(element => new Promise<void>(resolve => {
+      let previous = '', stable = 0;
+      const sample = () => {
+        const current = element.getAttribute('style') ?? '';
+        stable = current === previous ? stable + 1 : 0; previous = current;
+        if (stable >= 5) resolve(); else requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    }));
     const transform = await vp.getAttribute('style');
     const ep = await point(eg, hub.id); await page.mouse.move(ep.x, ep.y);
     await expect(eg.getByRole('tooltip')).toContainText('Research');

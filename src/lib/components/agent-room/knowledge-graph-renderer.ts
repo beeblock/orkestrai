@@ -58,11 +58,12 @@ export class KnowledgeGraphRenderer {
     this.theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
     this.readTheme();
     this.listen(canvas, 'pointerdown', this.pointerDown, true);
-    this.listen(canvas, 'pointermove', this.pointerMove, true);
+    // Labels share the stage with the WebGL canvas and must not interrupt hover.
+    this.listen(host, 'pointermove', this.pointerMove, true);
     this.listen(canvas, 'pointerup', this.pointerUp, true);
     this.listen(canvas, 'pointercancel', this.pointerCancel, true);
     this.listen(canvas, 'lostpointercapture', this.pointerCancel, true);
-    this.listen(canvas, 'pointerleave', () => { if (!this.down) this.hover(null); });
+    this.listen(host, 'pointerleave', () => { if (!this.down) this.hover(null); });
     this.listen(canvas, 'dblclick', (event: MouseEvent) => { event.stopPropagation(); const id = this.pick(event.clientX, event.clientY); if (id) this.focus(id); });
     this.listen(canvas, 'contextmenu', (event: Event) => { event.preventDefault(); event.stopPropagation(); });
     this.listen(canvas, 'webglcontextlost', (event: Event) => { event.preventDefault(); callbacks.failed(); });
@@ -208,7 +209,11 @@ export class KnowledgeGraphRenderer {
     if (id && !touch) { this.controls.enabled = false; this.renderer.domElement.setPointerCapture(event.pointerId); event.stopImmediatePropagation(); }
   };
   private pointerMove = (event: PointerEvent) => {
-    if (!this.down) { this.hover(this.pick(event.clientX, event.clientY)); return; }
+    if (!this.down) {
+      const label = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-graph-label]')?.dataset.graphLabel : null;
+      this.hover(this.pick(event.clientX, event.clientY) ?? (this.items.some(item => item.id === label) ? label! : null));
+      return;
+    }
     if (Math.hypot(event.clientX - this.down.x, event.clientY - this.down.y) > 4) this.down.moved = true;
     if (!this.down.id || !this.down.moved || this.down.touch) return;
     this.ray.setFromCamera(new THREE.Vector2().copy(graphPointer(event.clientX, event.clientY, this.renderer.domElement.getBoundingClientRect())), this.camera);
@@ -231,6 +236,7 @@ export class KnowledgeGraphRenderer {
       }
       if (!down.moved) this.callbacks.select(down.id);
     }
+    if (!down?.touch) this.hover(this.pick(event.clientX, event.clientY));
   };
   private pointerCancel = () => { this.down = null; this.controls.enabled = true; };
 

@@ -12,7 +12,7 @@ pt-BR, English, and Spanish translations.
 ### Added
 
 - Add a native Second Brain with searchable workspace notes, tasks, sourced memories and imported documents, cited passages, tags, explicit links and a knowledge graph in Canvas and Workbench.
-- Explore knowledge as a colored 2D/3D network with force layout, draggable sources, readable hover details, neighborhood highlighting, zoom, focus, filtering and fullscreen. Apply workspace and linked-file changes live without resetting the camera or existing positions; suspend hidden views and idle rendering.
+- Explore knowledge as a colored 2D/3D network with force layout, draggable sources, readable hover details, neighborhood highlighting, zoom, focus, filtering and fullscreen. Apply workspace and linked-file changes live without resetting the camera or existing positions; keep hover details available across labels and after dragging, and suspend hidden views and idle rendering.
 - Drop PDF, Markdown, XLSX, CSV and other files onto Canvas as connectable document nodes. Preserve originals, extract supported formats locally in bounded workers, track freshness and expose unavailable or partial extraction explicitly.
 - Retain sourced procedural lessons per named agent across sessions and provider changes. Add automatic, review-first and off modes, task reflection, bounded relevant recall, revisioned owner decisions and matching CLI/MCP tools without changing roles, security grants or model weights.
 
