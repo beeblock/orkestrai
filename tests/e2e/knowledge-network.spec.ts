@@ -82,9 +82,12 @@ test('live knowledge network stays interactive, scaled correctly and stable acro
       return before ? Math.hypot(parseFloat(label.style.left) - before.x, parseFloat(label.style.top) - before.y) : 0;
     })), unrotated)).toBeGreaterThan(5);
     await graph.getByRole('button', { name: 'Fit graph', exact: true }).click();
-    const before = await point(graph, hub.id);
     await graph.locator(`[data-graph-label="node:${hub.id}"]`).hover();
     await expect(graph.getByRole('tooltip')).toContainText('Research');
+    await graph.locator(`[data-graph-label="node:${hub.id}"]`).click();
+    await expect(view.locator('aside')).toContainText('Research');
+    await view.locator('aside').getByRole('button', { name: 'Close', exact: true }).click();
+    const before = await point(graph, hub.id);
     await page.mouse.move(before.x, before.y);
     await expect(graph.getByRole('tooltip')).toContainText('Research');
     await page.mouse.click(before.x, before.y);
@@ -148,20 +151,43 @@ test('live knowledge network stays interactive, scaled correctly and stable acro
     await expect(graph).toHaveAttribute('data-arranging', 'false');
     await nonblank(graph.getByTestId('knowledge-graph-stage'));
     await graph.screenshot({ path: info.outputPath('knowledge-network-light.png') });
+    await graph.getByRole('radio', { name: '2D', exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(async () => (await graph.boundingBox())!.width).toBeLessThan(390);
     await nonblank(graph.getByTestId('knowledge-graph-stage'));
     await dialog.screenshot({ path: info.outputPath('knowledge-network-mobile.png') });
     const mobileStage = graph.getByTestId('knowledge-graph-stage');
     const touchBounds = (await mobileStage.boundingBox())!;
+    // A finger can start over a source label, not just the WebGL canvas behind it.
+    const touchOrigin = await mobileStage.locator('[data-graph-label]').evaluateAll((labels, bounds) => {
+      return labels.map(label => {
+        const rect = label.getBoundingClientRect();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      }).find(point => point.x > bounds.x + 70 && point.x < bounds.x + bounds.width - 70
+        && point.y > bounds.y + 20 && point.y < bounds.y + bounds.height - 20);
+    }, touchBounds);
+    expect(touchOrigin).toBeDefined();
+    const beforeTouch = await mobileStage.locator('[data-graph-label]').evaluateAll(labels => Object.fromEntries(labels.map(el => {
+      const label = el as HTMLElement;
+      return [label.dataset.graphLabel!, { x: parseFloat(label.style.left), y: parseFloat(label.style.top) }];
+    })));
     const beforePinch = await mobileStage.screenshot();
     const cdp = await page.context().newCDPSession(page);
-    const x = touchBounds.x + touchBounds.width / 2, y = touchBounds.y + touchBounds.height / 2;
+    const x = touchOrigin!.x + (touchOrigin!.x < touchBounds.x + touchBounds.width / 2 ? 30 : -30), y = touchOrigin!.y;
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 30, y, id: 1 }, { x: x + 30, y, id: 2 }] });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 60, y, id: 1 }, { x: x + 60, y, id: 2 }] });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await cdp.detach();
     await expect.poll(async () => (await mobileStage.screenshot()).equals(beforePinch)).toBe(false);
+    // A one-finger pan also changes pixels; only a real pinch changes pairwise distances in 2D.
+    await expect.poll(() => mobileStage.locator('[data-graph-label]').evaluateAll((labels, previous) => {
+      const points = labels.map(el => {
+        const label = el as HTMLElement;
+        return { x: parseFloat(label.style.left), y: parseFloat(label.style.top), before: previous[label.dataset.graphLabel!] };
+      }).filter(point => point.before);
+      return Math.max(0, ...points.flatMap((a, i) => points.slice(i + 1).map(b =>
+        Math.abs(Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(a.before.x - b.before.x, a.before.y - b.before.y)))));
+    }, beforeTouch)).toBeGreaterThan(10);
     expect(errors).toEqual([]);
   } finally {
     if (id) await request.delete(`/api/agent-room/workspaces/${id}`);

@@ -45,7 +45,8 @@ export class KnowledgeGraphRenderer {
     canvas.setAttribute('aria-hidden', 'true');
     host.prepend(canvas);
     this.camera.position.set(0, -260, 800);
-    this.controls = new OrbitControls(this.camera, canvas);
+    // Labels are part of the same gesture surface, including both fingers of a pinch.
+    this.controls = new OrbitControls(this.camera, host);
     this.controls.enableDamping = false;
     this.controls.minZoom = 0.08; this.controls.maxZoom = 12;
     this.controls.addEventListener('change', this.invalidate);
@@ -57,12 +58,12 @@ export class KnowledgeGraphRenderer {
     this.theme = new MutationObserver(() => { this.readTheme(); this.paint(); });
     this.theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
     this.readTheme();
-    this.listen(canvas, 'pointerdown', this.pointerDown, true);
+    this.listen(host, 'pointerdown', this.pointerDown, true);
     // Labels share the stage with the WebGL canvas and must not interrupt hover.
     this.listen(host, 'pointermove', this.pointerMove, true);
-    this.listen(canvas, 'pointerup', this.pointerUp, true);
-    this.listen(canvas, 'pointercancel', this.pointerCancel, true);
-    this.listen(canvas, 'lostpointercapture', this.pointerCancel, true);
+    this.listen(host, 'pointerup', this.pointerUp, true);
+    this.listen(host, 'pointercancel', this.pointerCancel, true);
+    this.listen(host, 'lostpointercapture', this.pointerCancel, true);
     this.listen(host, 'pointerleave', () => { if (!this.down) this.hover(null); });
     this.listen(canvas, 'dblclick', (event: MouseEvent) => { event.stopPropagation(); const id = this.pick(event.clientX, event.clientY); if (id) this.focus(id); });
     this.listen(canvas, 'contextmenu', (event: Event) => { event.preventDefault(); event.stopPropagation(); });
@@ -201,6 +202,10 @@ export class KnowledgeGraphRenderer {
   }
   private pointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
+    // Keep native label clicks/double-clicks; only touch gestures need OrbitControls here.
+    if (event.pointerType !== 'touch' && event.target instanceof Element && event.target.closest('[data-graph-label]')) {
+      event.stopImmediatePropagation(); return;
+    }
     const id = this.pick(event.clientX, event.clientY);
     const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(this.camera.getWorldDirection(new THREE.Vector3()), id ? this.point(id) : this.controls.target);
     const intersection = this.ray.ray.intersectPlane(plane, new THREE.Vector3());
@@ -236,7 +241,7 @@ export class KnowledgeGraphRenderer {
       }
       if (!down.moved) this.callbacks.select(down.id);
     }
-    if (!down?.touch) this.hover(this.pick(event.clientX, event.clientY));
+    if (event.pointerType !== 'touch') this.hover(this.pick(event.clientX, event.clientY));
   };
   private pointerCancel = () => { this.down = null; this.controls.enabled = true; };
 
