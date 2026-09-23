@@ -4,7 +4,7 @@
   import * as Popover from '$lib/components/ui/popover';
   import { Link2, X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
-  import { floatingAnchorFor } from './floating-anchor.js';
+  import { floatingAnchorFor, nodeIndexFor } from './floating-anchor.js';
 
   export type NodeConnection = {
     edgeId: string;
@@ -34,6 +34,7 @@
     onDrop?: (event: DragEvent) => void;
     /** Classe extra no wrapper (ex.: canvas-terminal) — mantida para testes/estilo. */
     class?: string;
+    deferOffscreen?: boolean;
     icon: Snippet;
     title: Snippet;
     actions?: Snippet;
@@ -56,6 +57,7 @@
     onDragLeave,
     onDrop,
     class: klass = '',
+    deferOffscreen = false,
     icon,
     title,
     actions,
@@ -87,7 +89,7 @@
   const floatingAnchor = $derived.by(() => {
     const absolute = floatingAnchorFor(id, nodesStore.current, edgesStore.current);
     if (!absolute) return null;
-    const self = nodesStore.current.find((node) => node.id === id);
+    const self = nodeIndexFor(nodesStore.current).get(id);
     if (!self) return null;
     return { x: absolute.x - self.position.x, y: absolute.y - self.position.y };
   });
@@ -139,7 +141,7 @@
     {/if}
     {#if connections.length}
       <Popover.Root>
-        <Popover.Trigger class="connections-badge nodrag" aria-label={m['shell.connections']()}>
+        <Popover.Trigger class="connections-badge nodrag inline-flex h-6 shrink-0 items-center gap-1 rounded-sm bg-[var(--app-border)] px-1.5 text-[10px] leading-none text-[var(--app-text-muted)] hover:text-[var(--accent)]" aria-label={m['shell.connections']()}>
           <Link2 size={11} />{connections.length}
         </Popover.Trigger>
         <Popover.Content class="w-56 p-1">
@@ -163,7 +165,7 @@
     {/if}
   </header>
 
-  <div class="node-body">
+  <div class="node-body {deferOffscreen ? '[content-visibility:auto] [contain-intrinsic-size:auto_300px]' : ''}">
     {@render children()}
   </div>
 </div>
@@ -247,23 +249,6 @@
     gap: 2px;
     flex: none;
     min-width: 0;
-  }
-
-  .connections-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border: none;
-    background: var(--app-border);
-    color: var(--app-text-muted);
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-
-  .connections-badge:hover {
-    color: var(--accent);
   }
 
   .connection-row {

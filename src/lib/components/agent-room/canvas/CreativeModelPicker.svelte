@@ -39,9 +39,12 @@
   }
 </script>
 
-<div class="min-w-0 space-y-1 text-xs">
-  <div class="flex items-center justify-between gap-2"><span>{m['creative.model']()}</span><Button size="icon-sm" variant="ghost" disabled={!profileId || loading} title={m['creative.refresh']()} aria-label={m['creative.refresh']()} onclick={() => { generation++; expires = 0; void prices([value]); }}><RefreshCw size={12} /></Button></div>
-  <ModelCombobox {value} {options} {details} {onValueChange} onVisibleOptionsChange={prices} defaultLabel={m['creative.choose_model']()} searchPlaceholder={m['creative.search_models']()} emptyLabel={m['creative.no_models']()} ariaLabel={m['creative.model']()} />
+<div class="min-w-0 space-y-1 text-xs" data-testid="creative-model-field">
+  <span class="flex h-5 items-center font-medium">{m['creative.model']()}</span>
+  <div class="flex min-w-0 items-center gap-1">
+    <div class="min-w-0 flex-1"><ModelCombobox {value} {options} {details} {onValueChange} onVisibleOptionsChange={prices} defaultLabel={m['creative.choose_model']()} searchPlaceholder={m['creative.search_models']()} emptyLabel={m['creative.no_models']()} ariaLabel={m['creative.model']()} /></div>
+    <Button class="size-8 shrink-0" size="icon-sm" variant="ghost" disabled={!profileId || loading} title={m['creative.refresh']()} aria-label={m['creative.refresh']()} onclick={() => { generation++; expires = 0; void prices([value]); }}><RefreshCw size={14} /></Button>
+  </div>
   {#if selectedRate}<p class="font-medium" data-testid="model-unit-price">{rateText(selectedRate)}</p>{/if}
   {#if selectedRate?.priceSource === 'public_list'}<p class="text-[var(--app-text-muted)]">{m['creative.public_rate']({ date: selectedRate.priceVerifiedAt ?? '' })}</p>{/if}
   {#if loading}<p role="status" class="text-[var(--app-text-muted)]">{m['creative.price_loading']()}</p>{:else if failed}<p role="status" class="text-[var(--app-text-muted)]">{m['creative.price_unavailable']()}</p>{/if}

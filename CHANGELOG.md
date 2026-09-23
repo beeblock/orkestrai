@@ -5,13 +5,18 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.33.0 - 2026-09-23
 
 ### Added
 
 - Add explicit BytePlus ModelArk and Higgsfield video providers alongside fal.ai, with provider-specific contracts, encrypted vault accounts and persistent queue routing. Existing fal and Codex image workflows remain compatible.
 - Select matching providers, accounts and models in Canvas, Workbench and CLI/MCP. Review dated public rates or configured Higgsfield account quotes before generating; retain budget, grant and idempotency safeguards.
 - Preserve required references and locked characters across explicit provider changes, and document provider-specific upload and cancellation limits through translated guides and onboarding.
+
+### Fixed
+
+- Stop elastic connections after settling instead of restarting their own animation. Bound non-converging physics, reuse adjacency indexes and defer offscreen image/workflow painting without unloading agents or changing source files.
+- Show named video references and previews for canvas nodes and standalone project files. Browse project media, expand a reference preview, and keep paths/API mappings under technical details without changing agent bindings. Align account/model controls.
 
 ## 0.32.0 - 2026-09-19
 

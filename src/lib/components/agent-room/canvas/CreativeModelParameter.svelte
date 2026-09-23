@@ -10,6 +10,7 @@
   import CreativeModelParameter from './CreativeModelParameter.svelte';
   import { concreteSchema, type ModelSchema } from '$lib/modules/creative-media/domain/model-contract.js';
   import * as m from '$lib/paraglide/messages.js';
+  import { mediaSlotLabel } from '../creative-media-presentation.js';
 
   let { name, schema, value, pointer, required = false, managedPointers = [], depth = 0, onChange, onValidityChange }: {
     name: string; schema: ModelSchema; value: unknown; pointer: string; required?: boolean; managedPointers?: string[]; depth?: number;
@@ -38,7 +39,8 @@
     image_urls: m['creative.reference_images'], video_urls: m['creative.reference_videos'], audio_urls: m['creative.reference_audio'],
     watermark: m['creative.watermark'], return_last_frame: m['creative.return_last_frame'], output_format: m['creative.output_format'],
   };
-  const label = $derived(labels[name]?.() ?? spec.title ?? name);
+  const label = $derived(/(?:image|video|audio|voice|mask|reference|file|frame).*url/i.test(pointer)
+    ? mediaSlotLabel(pointer) : labels[name]?.() ?? spec.title ?? name);
   function change(next: unknown) { invalidJson = false; onChange(next); }
   function json(source: string) {
     try { change(source.trim() ? JSON.parse(source) : undefined); }

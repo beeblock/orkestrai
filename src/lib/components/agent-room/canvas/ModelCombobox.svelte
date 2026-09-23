@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronsUpDown } from '@lucide/svelte';
-  import { tick, untrack } from 'svelte';
+  import { tick, untrack, type Snippet } from 'svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { Button } from '$lib/components/ui/button';
   import * as Command from '$lib/components/ui/command';
@@ -19,12 +19,13 @@
     fieldProps?: Record<string, unknown>;
     details?: Record<string, string>;
     onVisibleOptionsChange?: (ids: string[]) => void;
+    optionIcon?: Snippet<[ModelOption]>;
   };
 
-  let { value, options, defaultLabel, searchPlaceholder, emptyLabel, ariaLabel, onValueChange, fieldProps = {}, details = {}, onVisibleOptionsChange }: Props = $props();
+  let { value, options, defaultLabel, searchPlaceholder, emptyLabel, ariaLabel, onValueChange, fieldProps = {}, details = {}, onVisibleOptionsChange, optionIcon }: Props = $props();
   let open = $state(false);
   let query = $state(''), limit = $state(50);
-  const filtered = $derived(options.filter(option => `${option.label} ${option.value}`.toLowerCase().includes(query.toLowerCase())));
+  const filtered = $derived(options.filter(option => `${option.label} ${option.value} ${details[option.value] ?? ''}`.toLowerCase().includes(query.toLowerCase())));
   const visible = $derived(onVisibleOptionsChange ? filtered.slice(0, limit) : filtered);
   $effect(() => { query; open; limit = 50; });
   $effect(() => {
@@ -57,7 +58,8 @@
         aria-label={ariaLabel}
         aria-expanded={open}
       >
-        <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{currentLabel}</span>
+        {#if optionIcon && value}{@render optionIcon({ value, label: currentLabel })}{/if}
+        <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left" title={currentLabel}>{currentLabel}</span>
         <ChevronsUpDown class="size-3.5 shrink-0 opacity-50" aria-hidden="true" />
       </Button>
     {/snippet}
@@ -80,6 +82,7 @@
           </Command.Item>
           {#each visible as option (option.value)}
             <Command.Item value={option.value} keywords={[option.label]} onSelect={() => choose(option.value)}>
+              {#if optionIcon}{@render optionIcon(option)}{/if}
               <span class="min-w-0 flex-1"><span class="block truncate">{option.label}</span>{#if details[option.value]}<span class="block whitespace-normal break-words text-xs text-[var(--app-text-muted)]">{details[option.value]}</span>{/if}</span>
             </Command.Item>
           {/each}

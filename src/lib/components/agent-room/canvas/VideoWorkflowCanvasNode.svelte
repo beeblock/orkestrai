@@ -17,6 +17,8 @@
   import { creativeApi, creativeStatus, creativeError } from '../creative-media-client.js';
   import CreativeProviderDialog from '../CreativeProviderDialog.svelte';
   import CreativeCharacterBindings from '../CreativeCharacterBindings.svelte';
+  import CreativeMediaInputs from '../CreativeMediaInputs.svelte';
+  import type { CreativeMediaInput } from '../creative-media-presentation.js';
   import CreativePrompt from '../CreativePrompt.svelte';
   import CreativeShotControls from '../CreativeShotControls.svelte';
   import { switchCreativeModel, expandLegacyCreativeModel } from '$lib/modules/creative-media/domain/creative-model-switch.js';
@@ -39,7 +41,7 @@
     return binding.alias && character ? [{ alias: binding.alias, name: character.definition.name, version: character.version }] : [];
   }));
   let revision = $state<number | undefined>(), runs = $state<CreativeRun[]>([]), profiles = $state<CreativeProfile[]>([]);
-  let inputs = $state<Array<{ id: string; type: string; title: string }>>([]);
+  let inputs = $state<CreativeMediaInput[]>([]);
   let busy = $state(false), loading = $state(true), dirty = $state(false), error = $state(''), configure = $state(false), preview = $state<CreativePreview | null>(null);
   let mounted = false, refreshing = false;
   let closeRun = $state<string | null>(null);
@@ -173,7 +175,7 @@
       {#if providerPending}<p role="status" class="text-xs text-[var(--app-warning)]">{m['creative.provider_choose_model']()}</p>{/if}
       <div class="grid grid-cols-2 gap-3">
         <CreativeModelPicker {base} profileId={providerPending ? null : config.profileId} value={providerPending ? '' : config.modelId} options={modelOptions} onValueChange={chooseModel} />
-        <label class="min-w-0 space-y-1 text-xs"><span>{m['creative.account']()}</span><NativeSelect.Root disabled={providerPending} value={config.profileId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.profileId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.choose_account']()}</option>{#each profiles.filter(item => item.provider === config.provider) as profile}<option value={profile.id}>{profile.name}</option>{/each}</NativeSelect.Root></label>
+        <label class="block min-w-0 space-y-1 text-xs" data-testid="creative-account-field"><span class="flex h-5 items-center font-medium">{m['creative.account']()}</span><NativeSelect.Root aria-label={m['creative.account']()} disabled={providerPending} value={config.profileId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.profileId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.choose_account']()}</option>{#each profiles.filter(item => item.provider === config.provider) as profile}<option value={profile.id}>{profile.name}</option>{/each}</NativeSelect.Root></label>
       </div>
       {#if catalogLoading || contractLoading}<p role="status" class="text-xs text-[var(--app-text-muted)]">{m['creative.catalog_loading']()}</p>{/if}
       <div class="flex items-center justify-between gap-2 text-xs text-[var(--app-text-muted)]"><span>{m['creative.catalog_count']({ count: String(catalog.length) })}{#if catalogDate} · {new Date(catalogDate).toLocaleDateString()}{/if}</span><Button size="icon-sm" variant="ghost" disabled={catalogLoading} aria-label={m['creative.refresh_catalog']()} title={m['creative.refresh_catalog']()} onclick={() => loadCatalog(true)}><RefreshCw size={13} /></Button></div>
@@ -186,17 +188,7 @@
       <CreativeShotControls value={config.shot} disabled={busy || Boolean(active) || loading} onChange={(value) => { config.shot = value; changed(); }} />
       {#if contract}
         {#key `${config.provider}:${contract.id}`}<CreativeModelFields schema={contract.schema} value={config.parameters} managedPointers={[...config.mediaBindings.map(binding => binding.pointer), ...config.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer])]} onChange={(value) => { config.parameters = value; changed(); }} onValidityChange={(valid) => parametersValid = valid} />{/key}
-        <section class="space-y-2 border-t border-[var(--app-border)] pt-2" aria-label={m['creative.media_bindings']()}>
-          <div class="flex items-center justify-between gap-2 text-xs font-medium"><span>{m['creative.media_bindings']()}</span><Button size="icon-sm" variant="ghost" disabled={config.mediaBindings.length >= 50} title={m['creative.add_media']()} aria-label={m['creative.add_media']()} onclick={() => { config.mediaBindings = [...config.mediaBindings, { pointer: mediaSlots.find(path => !config.mediaBindings.some(binding => binding.pointer === path)) ?? '', path: '' }]; changed(); }}><Plus size={14} /></Button></div>
-          <p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['creative.upload_disclosure']()}</p>
-          {#each config.mediaBindings as binding, index}
-            <div class="space-y-2 border-l-2 border-[var(--app-border)] pl-2">
-              <div class="flex min-w-0 items-center gap-1"><div class="min-w-0 flex-1">{#if mediaSlots.length}<ModelCombobox value={binding.pointer} options={mediaSlots.map(path => ({ value: path, label: path }))} defaultLabel={m['creative.media_pointer']()} searchPlaceholder={m['creative.media_pointer']()} emptyLabel={m['creative.no_inputs']()} ariaLabel={m['creative.media_pointer']()} onValueChange={(path) => { binding.pointer = path; changed(); }} />{:else}<Input aria-label={m['creative.media_pointer']()} placeholder={m['creative.media_pointer']()} bind:value={binding.pointer} />{/if}</div><Button size="icon-sm" variant="ghost" title={m['creative.delete']()} aria-label={m['creative.delete']()} onclick={() => { config.mediaBindings = config.mediaBindings.filter((_, i) => index !== i); changed(); }}><X size={13} /></Button></div>
-              <ModelCombobox value={binding.nodeId ?? ''} options={inputs.filter(item => ['image','video'].includes(item.type)).map(item => ({ value: item.id, label: item.title || item.id }))} defaultLabel={m['creative.workspace_file']()} searchPlaceholder={m['creative.search_media']()} emptyLabel={m['creative.no_inputs']()} ariaLabel={m['creative.media_source']()} onValueChange={(nodeId) => { config.mediaBindings[index] = { pointer: binding.pointer, ...(nodeId ? { nodeId } : { path: '' }) }; changed(); }} />
-              {#if !binding.nodeId}<Input aria-label={m['creative.workspace_file']()} placeholder={m['creative.workspace_file']()} bind:value={binding.path} />{/if}
-            </div>
-          {/each}
-        </section>
+        <CreativeMediaInputs workspaceId={data.workspaceId} bindings={config.mediaBindings} slots={mediaSlots} {inputs} onOpenNode={data.onJumpToNode} onChange={(bindings) => { config.mediaBindings = bindings; changed(); }} />
       {/if}
       {#if model?.startImage}
         <div class="grid grid-cols-2 gap-3">

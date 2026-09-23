@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { EdgeLabel, useEdges, useNodes, useViewport, type EdgeProps } from '@xyflow/svelte';
   import { X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -23,7 +23,8 @@
 
   const GRAVITY = 0.35;
 
-  let rope: RopePoint[] = $state([]);
+  // Physics mutates plain points; publish one snapshot, not hundreds of reactive writes.
+  let rope: RopePoint[] = $state.raw([]);
   let rafId: number | null = null;
   let lastAnchorSig = '';
   let lastFrameAt = 0;
@@ -97,11 +98,10 @@
     const targetBox = currentTargetBox;
 
     // Verlet: gravidade + inercia
-    let movement = 0;
+    const previous = rope.map(point => ({ x: point.x, y: point.y }));
     for (const point of rope) {
       const vx = (point.x - point.px) * 0.98;
       const vy = (point.y - point.py) * 0.98;
-      movement += Math.abs(vx) + Math.abs(vy);
       point.px = point.x;
       point.py = point.y;
       point.x += vx;
@@ -143,11 +143,16 @@
       }
     }
 
+    // Measure the rendered result after constraints, excluding fixed endpoints.
+    const movement = rope.slice(1, -1).reduce((sum, point, index) => (
+      sum + Math.abs(point.x - previous[index + 1].x) + Math.abs(point.y - previous[index + 1].y)
+    ), 0) / Math.max(1, segments - 1);
     rope = [...rope];
     return movement > 0.05;
   }
 
   let settleFrames = 0;
+  let simulatedFrames = 0;
 
   function loop(timestamp: number) {
     if (profile.mode !== 'physics' || profile.fps <= 0) {
@@ -164,7 +169,9 @@
     // Para a simulacao quando a corda estabiliza — o $effect religa o rAF
     // assim que uma ancora se move (no arrastado, redimensionado etc).
     settleFrames = active ? 0 : settleFrames + 1;
-    if (settleFrames > 12) {
+    // Overlapping boxes can prevent convergence. Never spend CPU forever on decoration.
+    simulatedFrames += 1;
+    if (settleFrames > 12 || simulatedFrames >= 180) {
       rafId = null;
       return;
     }
@@ -193,20 +200,28 @@
 
   $effect(() => {
     const current = currentAnchors;
+    const mode = profile.mode;
+    const segments = profile.segments;
     if (!current) return;
-    if (profile.mode !== 'physics') {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = null;
-      rope = [];
-      lastAnchorSig = '';
-      return;
-    }
-    const sig = `${Math.round(current.ax)},${Math.round(current.ay)},${Math.round(current.bx)},${Math.round(current.by)}:${profile.segments}`;
-    if (sig !== lastAnchorSig) {
-      lastAnchorSig = sig;
-      if (rope.length !== profile.segments + 1) initRope(current.ax, current.ay, current.bx, current.by, profile.segments);
-    }
-    if (rafId === null) rafId = requestAnimationFrame(loop);
+    // Reading rope here would subscribe this effect to every simulation frame and
+    // restart it immediately after it settles.
+    untrack(() => {
+      if (mode !== 'physics') {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = null;
+        rope = [];
+        lastAnchorSig = '';
+        return;
+      }
+      const sig = `${Math.round(current.ax)},${Math.round(current.ay)},${Math.round(current.bx)},${Math.round(current.by)}:${segments}`;
+      if (sig !== lastAnchorSig) {
+        lastAnchorSig = sig;
+        settleFrames = 0;
+        simulatedFrames = 0;
+        if (rope.length !== segments + 1) initRope(current.ax, current.ay, current.bx, current.by, segments);
+        if (rafId === null) rafId = requestAnimationFrame(loop);
+      }
+    });
   });
 
   $effect(() => {

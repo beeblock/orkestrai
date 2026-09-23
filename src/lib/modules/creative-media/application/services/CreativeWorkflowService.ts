@@ -90,7 +90,13 @@ export class CreativeWorkflowService {
       if (profile.enabled && policy?.enabled && policy.allowExternalMedia && (actor.type !== 'agent' || policy.allowAgents)) profiles.push({ id: profile.id, name: profile.name, provider: profile.provider, modelIds: policy.modelIds, maxRunCents: policy.maxRunCents, maxDayCents: policy.maxDayCents, maxConcurrentRuns: policy.maxConcurrentRuns });
     }
     const nodes = await this.workspace.nodes(workspaceId);
-    const inputs = nodes.filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => ({ id: node.id, title: node.title, type: node.type }));
+    const inputs = nodes.filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => {
+      const payload = node.payload as { path?: unknown; mimeType?: unknown };
+      return { id: node.id, title: node.title, type: node.type,
+        ...(node.type !== 'note' && typeof payload.path === 'string' && payload.path.length <= 500 ? { path: payload.path } : {}),
+        ...(node.type === 'video' && typeof payload.mimeType === 'string' && /^(?:video|audio)\/[a-z0-9.+-]{1,80}$/i.test(payload.mimeType) ? { mimeType: payload.mimeType } : {}),
+      };
+    });
     const workflows = await this.list(workspaceId);
     const persisted = new Set(workflows.map(workflow => workflow.nodeId));
     const drafts = nodes.filter(node => node.type === 'videoWorkflow' && !persisted.has(node.id)).map(node => ({ nodeId: node.id, title: node.title, config: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) }));

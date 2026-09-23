@@ -13,6 +13,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
+  import { connectedEdgesFor, nodeIndexFor } from './floating-anchor.js';
 
   type ConnectedNode = NodeConnection & { targetPayload?: Record<string, unknown> };
   type Status = {
@@ -91,12 +92,11 @@
 
   const flowEdges = useEdges();
   const flowNodes = useNodes();
-  const connections = $derived.by(() => flowEdges.current
-    .filter((edge) => edge.source === id || edge.target === id)
+  const connections = $derived.by(() => connectedEdgesFor(id, flowEdges.current)
     .map((edge): ConnectedNode => {
       const outgoing = edge.source === id;
       const targetId = outgoing ? edge.target : edge.source;
-      const target = flowNodes.current.find((node) => node.id === targetId);
+      const target = nodeIndexFor(flowNodes.current).get(targetId);
       return {
         edgeId: edge.id,
         targetId,
@@ -286,6 +286,7 @@
   {id}
   {selected}
   class="canvas-image-workflow"
+  deferOffscreen
   accent="var(--app-secondary)"
   minWidth={390}
   minHeight={420}
@@ -350,7 +351,7 @@
         <div class="flex gap-1.5 overflow-x-auto pb-1">
           {#each references as reference, index (reference.edgeId)}
             <button class="group relative size-12 shrink-0 overflow-hidden border border-[var(--app-border)] bg-[var(--app-canvas)]" title={`${index + 1}. ${reference.targetTitle}`} onclick={() => data.onJumpToNode?.(reference.targetId)}>
-              {#if reference.targetPayload?.path}<img class="size-full object-cover" src={`/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(String(reference.targetPayload.path))}`} alt={reference.targetTitle} />{/if}
+              {#if reference.targetPayload?.path}<img class="size-full object-cover" loading="lazy" decoding="async" src={`/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(String(reference.targetPayload.path))}`} alt={reference.targetTitle} />{/if}
               <span class="absolute top-0 left-0 grid size-4 place-items-center bg-app-surface text-ui-xs text-app-text">{index + 1}</span>
             </button>
           {/each}

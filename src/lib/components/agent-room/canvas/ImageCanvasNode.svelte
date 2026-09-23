@@ -69,6 +69,7 @@
   {id}
   {selected}
   class="canvas-image"
+  deferOffscreen
   accent="var(--app-secondary)"
   minWidth={220}
   minHeight={160}
@@ -94,7 +95,7 @@
   <input bind:this={fileInput} type="file" accept="image/*" class="hidden-input" onchange={onFilePicked} />
   {#if imageUrl}
     <div class="image-body nodrag" onpaste={handlePaste} tabindex="-1" role="presentation">
-      <img src={imageUrl} alt={data.title || m['img.alt_fallback']()} draggable="false" />
+      <img src={imageUrl} alt={data.title || m['img.alt_fallback']()} draggable="false" loading="lazy" decoding="async" />
     </div>
   {:else}
     <button class="image-empty nodrag" onclick={() => fileInput.click()} onpaste={handlePaste}>
