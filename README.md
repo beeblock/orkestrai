@@ -26,6 +26,9 @@ common credentials redacted; normal agent output is not persisted.
 
 ## Highlights
 
+- **Native Second Brain:** drop PDF, Markdown, XLSX, CSV and other files onto Canvas as document nodes. Search cited passages alongside notes, tasks and sourced memory; follow tags, backlinks and a knowledge graph in Canvas or Workbench. Supported formats are extracted locally with explicit size, truncation and freshness states. Scanned PDFs do not receive automatic OCR.
+- **Durable agent learning:** named agents retain evidence-linked procedural lessons across sessions and provider changes. Choose automatic, review-first or off, inspect revision history, and activate, reject or archive lessons. New tasks recall bounded relevant lessons through the same CLI/MCP contracts, without modifying security grants or training model weights. See the Second Brain guide and interactive tour in How to use.
+
 - **Continuous desktop companions:** monitor an approved conversation, group
   incoming messages and let its Canvas agent reply with a consistent persona.
   Optional private memory, local voices and task-linked calendar reminders share

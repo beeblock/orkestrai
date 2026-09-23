@@ -216,7 +216,7 @@ export type AgentModelOption = {
 // Canvas / Workspaces
 // ---------------------------------------------------------------------------
 
-export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'git' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'video' | 'videoWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'toolWorkshop' | 'device' | 'computer' | 'design';
+export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'git' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'video' | 'videoWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'toolWorkshop' | 'device' | 'computer' | 'design' | 'document' | 'knowledge';
 export type CanvasEdgeStyle = 'cord' | 'circuit';
 export type WorkspaceRuntimeKind = 'native' | 'wsl';
 export type WorkspaceExecutionRuntime =

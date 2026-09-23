@@ -54,7 +54,8 @@
 {:else if type === 'controlCenter'}<Activity {size} aria-hidden="true" />
 {:else if type === 'reviewCenter'}<GitPullRequestArrow {size} aria-hidden="true" />
 {:else if type === 'workstreams'}<Route {size} aria-hidden="true" />
-{:else if type === 'memory'}<BookMarked {size} aria-hidden="true" />
+{:else if type === 'memory' || type === 'knowledge'}<BookMarked {size} aria-hidden="true" />
+{:else if type === 'document'}<FileCode2 {size} aria-hidden="true" />
 {:else if type === 'annotations'}<MessageSquareText {size} aria-hidden="true" />
 {:else if type === 'device'}<Smartphone {size} aria-hidden="true" />
 {:else if type === 'computer'}<MonitorCog {size} aria-hidden="true" />

@@ -491,6 +491,9 @@ export class WorkspaceService {
     if (existing.type === 'design' && typeof changes.title === 'string' && node.title !== existing.title) {
       await designDocumentService.renameDocument(node.workspaceId, node.id, changes.title);
     }
+    if (['note', 'document', 'image', 'design', 'codeGraph'].includes(node.type) && (changes.title !== undefined || changes.payload !== undefined)) {
+      (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast?.({ type: 'knowledgeChanged', workspaceId: node.workspaceId });
+    }
     return node;
   }
 

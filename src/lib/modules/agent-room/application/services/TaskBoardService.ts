@@ -1,4 +1,5 @@
 import { uuidv7 } from '@beeblock/svelar/support';
+import { agentLearningService } from './AgentLearningService.js';
 import { Event } from '@beeblock/svelar/events';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -42,6 +43,7 @@ export type BoardTask = {
     status: 'queued' | 'leader_offline' | 'no_leader' | 'not_needed';
     leaderTitle: string | null;
   };
+  learning?: { reflectionId: string; nodeId: string; taskId: string; instruction: string };
 };
 
 function imagesOf(model: AgentBoardTask): string[] {
@@ -88,6 +90,8 @@ function normalizeAttachments(attachments: WorkspaceAttachment[] | undefined): W
 
 async function taskBrief(task: AgentBoardTask): Promise<string> {
   const description = String(task.getAttribute('description') ?? '').trim();
+  const assignee = task.getAttribute('assignee_node_id') as string | null;
+  const learning = assignee ? await agentLearningService.context(String(task.getAttribute('workspace_id')), assignee, `${task.getAttribute('title')} ${description}`) : '';
   const images = imagesOf(task);
   const attachments = attachmentsOf(task);
   const noteId = task.getAttribute('note_node_id') as string | null;
@@ -104,6 +108,7 @@ async function taskBrief(task: AgentBoardTask): Promise<string> {
     `Descrição:\n${description || '(sem descrição)'}`,
     `Imagens de referência:\n${imageList}`,
     `Arquivos e links:\n${attachmentList}`,
+    learning,
     noteId
       ? `Spec vinculada (${note?.title ?? 'sem título'}, id ${noteId}):\n${noteContent || '(nota sem conteúdo)'}`
       : 'Spec vinculada: (nenhuma nota)',
@@ -459,6 +464,10 @@ export class TaskBoardService {
     }
     notifyWorkspaceChanged(workspaceId);
     const updated = await this.mapWithTitles(await this.requireTask(workspaceId, taskId));
+    if (!wasDone && updated.assigneeNodeId && (updated.status === 'done' || /^(blocked|error|failed)$/.test(updated.status))) {
+      const reflection = await agentLearningService.capture(workspaceId, updated.assigneeNodeId, taskId);
+      if (reflection) updated.learning = { reflectionId: reflection.id, nodeId: updated.assigneeNodeId, taskId, instruction: 'Reflect now with learning_reflect using this task and your own nodeId: record a reusable correction/procedure, its trigger and concrete evidence. No fabricated lessons. Use learning_skip with this reflectionId and revision 1 if nothing reusable was learned. Existing security gates still apply.' };
+    }
     const taskEvent = !wasDone && updated.status === 'done'
       ? 'completed'
       : input.status !== undefined && input.status !== task.getAttribute('status')

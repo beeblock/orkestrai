@@ -21,6 +21,8 @@ import { AgentAutomationIntegration } from '../../domain/models/AgentAutomationI
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { AgentBoardColumn } from '../../domain/models/AgentBoardColumn.js';
 import { AgentMemoryEntry } from '../../domain/models/AgentMemoryEntry.js';
+import { AgentKnowledgeSource } from '../../domain/models/AgentKnowledgeSource.js';
+import { AgentLearningEntry } from '../../domain/models/AgentLearningEntry.js';
 import { AgentMemorySource } from '../../domain/models/AgentMemorySource.js';
 import { AgentHuddle } from '../../domain/models/AgentHuddle.js';
 import { AgentHuddleParticipant } from '../../domain/models/AgentHuddleParticipant.js';
@@ -279,6 +281,8 @@ export class WorkspaceRepository {
       await AgentSecretRef.query().where('workspace_id', id).delete();
       await AgentMemorySource.query().where('workspace_id', id).delete();
       await AgentMemoryEntry.query().where('workspace_id', id).delete();
+      await AgentKnowledgeSource.query().where('workspace_id', id).delete();
+      await AgentLearningEntry.query().where('workspace_id', id).delete();
       await AgentHuddleTurn.query().where('workspace_id', id).delete();
       await AgentHuddleParticipant.query().where('workspace_id', id).delete();
       await AgentHuddle.query().where('workspace_id', id).delete();

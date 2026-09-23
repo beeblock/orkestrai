@@ -297,6 +297,13 @@ async function runAction(action: TourAction): Promise<void> {
         }
         break;
       }
+      case 'createKnowledge': {
+        const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
+        if (!nodes?.some((node) => node.type === 'knowledge')) await api(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+          method: 'POST', body: JSON.stringify({ type: 'knowledge', title: action.title, ...nextPosition(), width: 960, height: 620, payload: {} }),
+        });
+        break;
+      }
       case 'createCodeGraph': {
         const nodes = await api<WorkspaceSnapshot['nodes']>(`/api/agent-room/workspaces/${workspaceId}/nodes`);
         if (!nodes?.some((node) => node.type === 'codeGraph')) {

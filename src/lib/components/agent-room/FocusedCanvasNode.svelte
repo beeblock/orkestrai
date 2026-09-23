@@ -22,6 +22,8 @@
   import VideoCanvasNode from './canvas/VideoCanvasNode.svelte';
   import UsageCanvasNode from './canvas/UsageCanvasNode.svelte';
   import CodeGraphCanvasNode from './canvas/CodeGraphCanvasNode.svelte';
+  import KnowledgeCanvasNode from './canvas/KnowledgeCanvasNode.svelte';
+  import DocumentCanvasNode from './canvas/DocumentCanvasNode.svelte';
   import DesignCanvasNode from './canvas/DesignCanvasNode.svelte';
   import ComputerCanvasNode from './canvas/ComputerCanvasNode.svelte';
   import ToolWorkshopCanvasNode from './canvas/ToolWorkshopCanvasNode.svelte';
@@ -84,6 +86,8 @@
     video: VideoCanvasNode,
     usage: UsageCanvasNode,
     codeGraph: CodeGraphCanvasNode,
+    knowledge: KnowledgeCanvasNode,
+    document: DocumentCanvasNode,
     computer: ComputerCanvasNode,
     toolWorkshop: ToolWorkshopCanvasNode,
     design: DesignCanvasNode,

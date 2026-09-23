@@ -27,6 +27,9 @@ agentes não é persistida.
 
 ## Destaques
 
+- **Segundo cérebro nativo:** arraste PDF, Markdown, XLSX, CSV e outros arquivos para o Canvas como nós de documento. Pesquise trechos com fontes junto de notas, tarefas e memória; navegue por etiquetas, backlinks e grafo no Canvas ou Workbench. Extração local com limites e atualização explícitos; PDFs escaneados não recebem OCR automático.
+- **Aprendizado durável dos agentes:** preserve lições com evidências entre sessões e providers. Escolha automático, revisão ou desativado; revise histórico e ative, rejeite ou arquive lições. Novas tarefas recebem lições relevantes pelo mesmo contrato CLI/MCP, sem alterar permissões nem treinar pesos do modelo. Guia e tour em Como usar > Segundo cérebro.
+
 - **Assistentes contínuos no desktop:** monitore uma conversa autorizada, agrupe
   mensagens recebidas e deixe o agente do Canvas responder com uma persona
   consistente. Memória privada opcional, vozes locais e lembretes de calendário

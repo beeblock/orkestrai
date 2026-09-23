@@ -92,6 +92,9 @@
   import UsagePanel from '$lib/components/agent-room/canvas/UsagePanel.svelte';
   import UsageCanvasNode from '$lib/components/agent-room/canvas/UsageCanvasNode.svelte';
   import CodeGraphCanvasNode from '$lib/components/agent-room/canvas/CodeGraphCanvasNode.svelte';
+  import KnowledgeCanvasNode from '$lib/components/agent-room/canvas/KnowledgeCanvasNode.svelte';
+  import DocumentCanvasNode from '$lib/components/agent-room/canvas/DocumentCanvasNode.svelte';
+  import { uploadKnowledgeFile } from '$lib/components/agent-room/knowledge-client.js';
   import DeviceCanvasNode from '$lib/components/agent-room/canvas/DeviceCanvasNode.svelte';
   import ComputerCanvasNode from '$lib/components/agent-room/canvas/ComputerCanvasNode.svelte';
   import ToolWorkshopCanvasNode from '$lib/components/agent-room/canvas/ToolWorkshopCanvasNode.svelte';
@@ -159,6 +162,8 @@
     video: VideoCanvasNode,
     usage: UsageCanvasNode,
     codeGraph: CodeGraphCanvasNode,
+    knowledge: KnowledgeCanvasNode,
+    document: DocumentCanvasNode,
     device: DeviceCanvasNode,
     computer: ComputerCanvasNode,
     toolWorkshop: ToolWorkshopCanvasNode,
@@ -2030,14 +2035,22 @@
     const failed: string[] = [];
     let createdCount = 0;
     importingImages = true;
-    const progressToast = toast.info(m['canvas.image_drop_importing']({ count: files.length }), { duration: 0 });
+    const progressToast = toast.info(m['knowledge.importing']({ count: files.length }), { duration: 0 });
     try {
       for (const file of files) {
         let objectUrl: string | null = null;
         try {
           const supported = /^image\/(png|jpeg|webp|gif|avif|bmp|x-icon|vnd.microsoft.icon|svg\+xml)$/i.test(file.type)
             || /\.(png|jpe?g|webp|gif|avif|bmp|ico|svg)$/i.test(file.name);
-          if (!supported || file.size === 0 || file.size > MAX_WORKSPACE_ATTACHMENT_BYTES) throw new Error('invalid_image');
+          if (!supported) {
+            const position = findFreeCanvasPosition(occupied, { ...origin, width: 520, height: 460 }, { rowsPerColumn: 3 });
+            const node = await uploadKnowledgeFile(workspaceId, file, { ...position, floorId });
+            occupied.push({ x: node.x, y: node.y, width: node.width ?? 520, height: node.height ?? 460 });
+            createdCount += 1;
+            if (activeWorkspace?.id === workspaceId && visibleFloorId === floorId) nodes = [...nodes.filter(item => item.id !== node.id), toFlowNode(node)];
+            continue;
+          }
+          if (file.size === 0 || file.size > MAX_WORKSPACE_ATTACHMENT_BYTES) throw new Error('invalid_image');
           objectUrl = URL.createObjectURL(file);
           const image = new Image();
           image.src = objectUrl;
@@ -2062,7 +2075,7 @@
         }
       }
       clearWorkspaceViewCache(workspaceId);
-      if (createdCount) toast.success(m['canvas.image_drop_added']({ count: createdCount }));
+      if (createdCount) toast.success(m['knowledge.imported']({ count: createdCount }));
       if (failed.length) toast.error(m['canvas.image_drop_failed']({ files: failed.slice(0, 5).join(', '), count: failed.length }));
     } finally {
       importingImages = false;
@@ -2480,7 +2493,7 @@
     { id: 'device', label: m['canvas.palette_new_device'](), hint: m['canvas.hint_action'](), run: () => void addDevice() },
     { id: 'computer', label: m['computer.tool'](), hint: m['canvas.hint_action'](), run: () => void addComputer() },
     { id: 'council', label: m['council.open'](), hint: m['canvas.hint_action'](), run: () => (councilOpen = true) },
-    { id: 'memory', label: m['memory.title'](), hint: m['canvas.hint_view'](), run: () => (memoryOpen = true) },
+    { id: 'memory', label: m['knowledge.title'](), hint: m['canvas.hint_view'](), run: () => (memoryOpen = true) },
     { id: 'annotations', label: m['annotations.title'](), hint: m['canvas.hint_view'](), run: () => (annotationsOpen = true) },
     { id: 'huddles', label: m['huddle.title'](), hint: m['canvas.hint_action'](), run: () => (huddleOpen = true) },
     ...providers
@@ -3132,6 +3145,9 @@
             <ToolbarButton label={m['code_graph.title']()} active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
               <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}
             </ToolbarButton>
+            <ToolbarButton label={m['knowledge.title']()} active={memoryOpen} onclick={() => memoryOpen = true}>
+              <BookMarked size={15} class="tool-icon-svg" /> {m['knowledge.title']()}
+            </ToolbarButton>
             <ToolbarButton label={m['tool.diff']()} active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
               <FileDiff size={15} class="tool-icon-svg" /> {m['canvas.default_diff']()}
             </ToolbarButton>
@@ -3291,7 +3307,13 @@
     />
     {#if activeWorkspace}
       <CouncilDialog bind:open={councilOpen} workspaceId={activeWorkspace.id} source={councilSource} />
-      <WorkspaceMemoryDialog bind:open={memoryOpen} workspaceId={activeWorkspace.id} />
+      <WorkspaceMemoryDialog bind:open={memoryOpen} workspaceId={activeWorkspace.id} onJumpToNode={(nodeId) => {
+        if (nodes.some(node => node.id === nodeId)) { jumpToNode(nodeId); return; }
+        const workspaceId = activeWorkspace?.id;
+        if (workspaceId) void refreshCanvasGraph(workspaceId).then(() => {
+          if (activeWorkspace?.id === workspaceId) jumpToNode(nodeId);
+        });
+      }} />
       <AnnotationCenterDialog bind:open={annotationsOpen} workspaceId={activeWorkspace.id} />
       <HuddleDialog bind:open={huddleOpen} workspaceId={activeWorkspace.id} />
     {/if}

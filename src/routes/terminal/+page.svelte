@@ -46,7 +46,7 @@
   import ControlCenterView from '$lib/components/agent-room/ControlCenterView.svelte';
   import WorkbenchReviewCenter from '$lib/components/agent-room/WorkbenchReviewCenter.svelte';
   import WorkbenchWorkstreams from '$lib/components/agent-room/WorkbenchWorkstreams.svelte';
-  import WorkspaceMemoryView from '$lib/components/agent-room/WorkspaceMemoryView.svelte';
+  import KnowledgeView from '$lib/components/agent-room/KnowledgeView.svelte';
   import AnnotationCenterView from '$lib/components/agent-room/AnnotationCenterView.svelte';
   import HuddleView from '$lib/components/agent-room/HuddleView.svelte';
   import DeviceWorkbenchPanel from '$lib/components/agent-room/DeviceWorkbenchPanel.svelte';
@@ -181,6 +181,8 @@
     'loop',
     'usage',
     'codeGraph',
+    'knowledge',
+    'document',
     'controlCenter',
     'reviewCenter',
     'device',
@@ -223,7 +225,7 @@
   const EXPLORER_GROUPS: Array<{ id: 'agents' | 'work' | 'content' | 'tools'; types: CanvasNodeType[] }> = [
     { id: 'agents', types: ['terminal'] },
     { id: 'work', types: ['tasks', 'flow', 'loop'] },
-    { id: 'content', types: ['note', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'sequence', 'storyboard', 'design'] },
+    { id: 'content', types: ['note', 'document', 'knowledge', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'sequence', 'storyboard', 'design'] },
     { id: 'tools', types: ['portal', 'apiClient', 'device', 'computer', 'toolWorkshop', 'git', 'diff', 'usage', 'codeGraph'] },
   ];
 
@@ -260,7 +262,7 @@
       ? [createWorkbenchWorkstreamsItem(workspace, m['workstreams.title']())]
       : [];
     const memory = workspace
-      ? [createWorkbenchMemoryItem(workspace, m['memory.title']())]
+      ? [createWorkbenchMemoryItem(workspace, m['knowledge.title']())]
       : [];
     const annotations = workspace
       ? [createWorkbenchAnnotationsItem(workspace, m['annotations.title']())]
@@ -558,6 +560,17 @@
     selectNode(workspaceId, workbenchFileItemId(path), splitDirection);
   }
 
+  async function openKnowledgeSource(workspaceId: string, nodeId: string) {
+    try {
+      if (!(nodesByWorkspace[workspaceId] ?? []).some((node) => node.id === nodeId)) {
+        await loadWorkspace(workspaceId);
+      }
+      if (selectedWorkspaceId === workspaceId) selectNode(workspaceId, nodeId);
+    } catch {
+      toast.error(m['terminal_browser.load_error']());
+    }
+  }
+
   function selectOpenNode(paneId: WorkbenchPaneId, nodeId: string) {
     if (!selectedWorkspaceId || !selectedLayout) return;
     applyWorkbenchLayout(selectedWorkspaceId, activateWorkbenchNode(selectedLayout, paneId, nodeId));
@@ -703,7 +716,8 @@
     if (node.type === 'usage') return m['terminal_browser.kind_usage']();
     if (node.type === 'controlCenter') return m['control_center.title']();
     if (node.type === 'reviewCenter') return m['review_center.title']();
-    if (node.type === 'memory') return m['memory.title']();
+    if (node.type === 'memory' || node.type === 'knowledge') return m['knowledge.title']();
+    if (node.type === 'document') return m['knowledge.file']();
     if (node.type === 'annotations') return m['annotations.title']();
     if (node.type === 'automation') return m['automation.title']();
     if (node.type === 'device') return m['device.title']();
@@ -1089,7 +1103,7 @@
           {/key}
         {:else if isWorkbenchMemoryItemId(paneNode.id)}
           {#key `${pane.id}:${paneNode.id}`}
-            <WorkspaceMemoryView workspaceId={selectedWorkspace.id} />
+            <KnowledgeView workspaceId={selectedWorkspace.id} onJumpToNode={(id) => void openKnowledgeSource(selectedWorkspace.id, id)} />
           {/key}
         {:else if isWorkbenchAnnotationsItemId(paneNode.id)}
           {#key `${pane.id}:${paneNode.id}`}
@@ -1336,7 +1350,7 @@
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
                   <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchMemoryItemId(workspace.id))}>
                     <BookMarked size={13} class={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
-                    <span class="min-w-0 flex-1 truncate font-medium">{m['memory.title']()}</span>
+                    <span class="min-w-0 flex-1 truncate font-medium">{m['knowledge.title']()}</span>
                   </button>
                 </div>
                 <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>

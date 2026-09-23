@@ -12,6 +12,7 @@ import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { DESIGN_REFERENCE_TOPICS, designReference } from './design-reference.js';
 import { apiClientReference } from './api-client-reference.js';
+import { KNOWLEDGE_TOOLS, knowledgeCall } from './knowledge-reference.js';
 
 const DESIGN_LAYOUT_FIELDS = new Set([
   'layoutMode', 'layoutWrap', 'layoutGap', 'layoutRowGap', 'layoutColumnGap',
@@ -61,6 +62,8 @@ Uso:
   orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
   orkestrai graph status | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
   orkestrai memory list [consulta] [--history] [--json]
+  orkestrai knowledge <create|search|read|attach|refresh|tags> [value] [--file command.json]
+  orkestrai learning <search|reflect|skip> [--file lesson.json]
   orkestrai memory add <titulo> --content <texto> --source-label <fonte> [--kind fact|decision|preference|constraint|reference|lesson] [--source-type user|note|task|message|file|url|git|review|council|agent] [--source-id <id>] [--source-uri <path-ou-url>] [--source-excerpt <trecho>] [--tags <csv>] [--confidence <0-100>] [--pin]
   orkestrai memory revise <id> --title <titulo> --content <texto> --kind <tipo> --sources <json> --base-revision <n> --base-updated-at <iso>
   orkestrai memory archive <id>
@@ -772,6 +775,22 @@ export async function run(argv, options = {}) {
         return 0;
       }
       throw new Error('Usage: orkestrai graph <status|index|changes|contracts|quality|semantic|evidence|handoff|search|symbol|neighbors> ...');
+    }
+    case 'knowledge': case 'learning': {
+      const [action = 'search', ...values] = rest;
+      const name = `${command}_${action === 'list' ? 'search' : action}`;
+      /** @type {Record<string, unknown>} */
+      const options = { ...flags };
+      if (!KNOWLEDGE_TOOLS.some(tool => tool.name === name)) throw new Error('Usage: orkestrai knowledge <search|read|attach|refresh|tags> or learning <search|reflect|skip> [--file command.json]');
+      let args = options.file ? JSON.parse(readFileSync(resolve(cwd, String(options.file)), 'utf8')) : {};
+      if (name === 'knowledge_search') args = { ...args, query: values.join(' ') || args.query, ...(options.kind ? { kind: options.kind } : {}), ...(options.tag ? { tag: options.tag } : {}) };
+      if (name === 'knowledge_read') args.id = values[0];
+      if (name === 'knowledge_create' && options.title) args.title = options.title;
+      if (name === 'learning_search') args = { ...args, query: values.join(' ') || args.query, ...(options.limit ? { limit: Number(options.limit) } : {}) };
+      if (name === 'knowledge_attach') args = { ...args, path: values[0] ?? args.path, ...(options.title ? { title: options.title } : {}) };
+      if (name === 'knowledge_tags') args = { ...args, nodeId: values[0] ?? args.nodeId, tags: options.tags ? String(options.tags).split(',').map(tag => tag.trim()).filter(Boolean) : args.tags ?? [] };
+      out(JSON.stringify(await knowledgeCall(name, args, selfAgent, (method, path, body) => bridge(config, method, path, body)), null, 2));
+      return 0;
     }
     case 'memory': {
       const [action, idOrTitle, ...values] = rest;
@@ -1564,6 +1583,7 @@ export async function run(argv, options = {}) {
         if (handoff?.status === 'queued') out(`Tarefa marcada como concluida. Lider ${handoff.leaderTitle} avisado.`);
         else if (handoff?.status === 'leader_offline') out(`Tarefa marcada como concluida. Lider ${handoff.leaderTitle} esta offline; o quadro registra a conclusao.`);
         else out('Tarefa marcada como concluida.');
+        if (data.learning) out(JSON.stringify({ learning: data.learning }, null, 2));
         return 0;
       }
       if (action === 'assign') {

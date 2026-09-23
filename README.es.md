@@ -27,6 +27,9 @@ normal de los agentes no se guarda.
 
 ## Características Principales
 
+- **Segundo cerebro nativo:** arrastra PDF, Markdown, XLSX, CSV y otros archivos al Canvas como nodos. Busca pasajes con fuentes junto a notas, tareas y memoria; explora etiquetas, backlinks y grafo en Canvas o Workbench. Extracción local con límites y actualización explícitos; los PDF escaneados no reciben OCR automático.
+- **Aprendizaje duradero de agentes:** conserva lecciones con evidencia entre sesiones y proveedores. Elige automático, revisión o desactivado; revisa historial y activa, rechaza o archiva lecciones. Las tareas reciben lecciones relevantes mediante CLI/MCP, sin cambiar permisos ni entrenar pesos del modelo. Guía y tour en Cómo usar > Segundo cerebro.
+
 - **Asistentes continuos en el escritorio:** supervisa una conversación autorizada,
   agrupa los mensajes recibidos y deja que el agente del Canvas responda con una
   persona consistente. Memoria privada opcional, voces locales y recordatorios de

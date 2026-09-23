@@ -18,6 +18,7 @@ import { designDocumentService } from './DesignDocumentService.js';
 import { computerService } from './ComputerService.js';
 import { filesystemService } from './FilesystemService.js';
 import { workspacePathService } from './WorkspacePathService.js';
+import { knowledgeService } from './KnowledgeService.js';
 
 export class CanvasNodeTransferError extends Error {
   constructor(public readonly code: string) {
@@ -114,6 +115,14 @@ export class CanvasNodeTransferService {
         let payload = transferredNodePayload(node.type, creative ? { draftConfig: creative.config } : node.payload, ids, keepMaestro);
         if (node.type === 'note') payload = await this.copyNoteAttachments(sourceWorkspace, destinationWorkspace, payload as NoteNodePayload, destinationFiles);
         if (node.type === 'image') payload = await this.copyImage(sourceWorkspace, destinationWorkspace, destinationNodeId, payload as ImageNodePayload, destinationFiles);
+        if (node.type === 'document') {
+          const file = await knowledgeService.file(sourceWorkspace.id, node.id);
+          const path = `.orkestrai/transfers/${destinationNodeId}/${safeName(file.name)}`;
+          await this.assertWritableAsset(destinationWorkspace, path);
+          await filesystemService.writeBinary(destinationWorkspace.id, path, Buffer.from(file.bytes));
+          destinationFiles.push({ workspaceId: destinationWorkspace.id, path });
+          payload = { ...payload, path };
+        }
         if (node.type === 'video') payload = await this.copyVideo(sourceWorkspace, destinationWorkspace, destinationNodeId, payload, destinationFiles);
         let title = node.type === 'terminal' ? uniqueTerminalTitle(node.title, occupiedTerminalTitles) : node.title;
         if (node.type === 'design') {

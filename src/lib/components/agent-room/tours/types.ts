@@ -10,6 +10,7 @@ export type TourAction =
   | { kind: 'createApiClient'; title: string }
   | { kind: 'createGit'; title: string }
   | { kind: 'createCodeGraph'; title: string }
+  | { kind: 'createKnowledge'; title: string }
   | { kind: 'indexCodeGraph' }
   | { kind: 'createVideoWorkflow'; title: string; prompt: string }
   | { kind: 'createStoryboard'; title: string }
