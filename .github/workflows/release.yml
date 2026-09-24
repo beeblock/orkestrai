@@ -236,7 +236,7 @@ jobs:
           npm ci --no-audit --no-fund
 
       - name: Verify native desktop command transport
-        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts
+        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts
 
       - name: Build application
         run: npm run build

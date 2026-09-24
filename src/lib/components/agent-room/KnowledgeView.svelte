@@ -9,6 +9,7 @@
   import type { CanvasNode } from '$lib/modules/agent-room/domain/types.js';
   import KnowledgeGraph from './KnowledgeGraph.svelte';
   import DocumentPassages from './DocumentPassages.svelte';
+  import DocumentExtractionNotice from './DocumentExtractionNotice.svelte';
   import AgentLearningPanel from './AgentLearningPanel.svelte';
   import WorkspaceMemoryView from './WorkspaceMemoryView.svelte';
   import { knowledgeApi, uploadKnowledgeFile } from './knowledge-client.js';
@@ -133,7 +134,7 @@
             {#each result?.items ?? [] as item (item.id)}
               <button class="block w-full border-b border-[var(--app-border)] border-l-2 px-3 py-3 text-left hover:bg-[var(--app-hover)]" style:border-left-color={selectedId === item.id ? 'var(--app-accent)' : 'transparent'} style:background={selectedId === item.id ? 'var(--app-surface-subtle)' : undefined} aria-pressed={selectedId === item.id} onclick={() => void select(item.id)}>
                 <span class="flex gap-2 text-sm font-medium"><FileText size={15} class="mt-0.5 shrink-0" /><span class="break-words">{item.title}</span></span>
-                <span class="mt-1 block text-xs text-[var(--app-text-muted)]">{knowledgeLabel(item.kind)} · {knowledgeLabel(item.status)} · v{item.revision}</span>
+                <span class="mt-1 block text-xs text-[var(--app-text-muted)]">{knowledgeLabel(item.kind)} · {item.truncated ? m['knowledge.partial']() : knowledgeLabel(item.status)} · v{item.revision}</span>
                 <span class="mt-2 line-clamp-2 break-words text-xs">{item.excerpt}</span>
                 {#if item.tags.length}<span class="mt-1 block text-xs text-[var(--app-text-muted)]">{item.tags.map(value => `#${value}`).join(' ')}</span>{/if}
               </button>
@@ -148,6 +149,7 @@
             {#if document.nodeId && onJumpToNode}<Button size="sm" variant="outline" onclick={() => onJumpToNode?.(document!.nodeId!)}><ExternalLink size={14} />{m['knowledge.open_source']()}</Button>{/if}
             {#if document.nodeId}<form class="my-3 flex gap-1" onsubmit={(event) => { event.preventDefault(); void saveTags(); }}><Input aria-label={m['knowledge.tags']()} placeholder={m['knowledge.tags']()} bind:value={tagDraft} /><Button type="submit" variant="outline" disabled={busy}>{m['knowledge.save']()}</Button></form>{/if}
             {#if document.truncated}<p class="my-2 text-xs text-[var(--app-warning)]">{m['knowledge.truncated']()}</p>{/if}
+            <DocumentExtractionNotice extraction={document.extraction} />
             <DocumentPassages passages={document.passages} />
             <h4 class="mt-4 text-xs font-semibold">{m['knowledge.backlinks']()}</h4>
             {#each selectedLinks as link}

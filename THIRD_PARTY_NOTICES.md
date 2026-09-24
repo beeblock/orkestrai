@@ -125,6 +125,22 @@ These packages provide the local code editor and PDF preview. Their workers and
 assets are bundled with the desktop app so these surfaces remain available
 offline.
 
+## Embedded PDF OCR
+
+- `tesseract.js` and `tesseract.js-core`: Apache License 2.0.
+  Sources: <https://github.com/naptha/tesseract.js> and
+  <https://github.com/naptha/tesseract.js-core>.
+- `@tesseract.js-data/eng`, `/por`, and `/spa`: npm wrappers are MIT-licensed;
+  the upstream Tesseract trained language data is Apache-2.0.
+  Sources: <https://github.com/naptha/tessdata> and
+  <https://github.com/tesseract-ocr/tessdata_best>.
+- `@napi-rs/canvas`: MIT, with Skia and other third-party components covered by
+  its distributed notices. Source: <https://github.com/Brooooooklyn/canvas>.
+
+The OCR engine, language data and PDF rasterizer are bundled for offline document
+extraction. No document is uploaded to an OCR service. Their package license files
+and notices must remain included in the desktop distribution.
+
 ## Design Studio Vector Import
 
 - `svg-pathdata`: Copyright Mikael Engel and contributors, MIT License.

@@ -16,6 +16,10 @@ import { CanvasNodeTransferController } from '$lib/modules/agent-room/interface/
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 import { stopKnowledgeWatch } from '$lib/modules/agent-room/infrastructure/knowledge/KnowledgeFileWatch.js';
+import { knowledgeRepository } from '$lib/modules/agent-room/infrastructure/repositories/KnowledgeRepository.js';
+import { scannedPdf } from '../helpers/scanned-pdf.js';
+import { createHash } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 
 describe('Second Brain and durable agent learning', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -86,6 +90,23 @@ describe('Second Brain and durable agent learning', () => {
     expect(new TextDecoder().decode((await knowledgeService.file(ws.id, node.id)).bytes)).toBe('Research budget 450');
     expect((await knowledgeService.search(other.id, { query: '450', limit: 20 })).items[0].nodeId).toBe(copy.id);
   });
+  it('reindexes old scanned PDFs and shares cited OCR evidence with search/read without changing originals', async () => {
+    const ws = await workspace();
+    const bytes = await scannedPdf([{ text: 'Approved budget: 8721 dollars.' }]);
+    const node = await knowledgeService.upload(ws.id, new File([new Uint8Array(bytes)], 'scanned-budget.pdf'));
+    const path = String((node.payload as Record<string, unknown>).path);
+    const info = await stat(join(ws.workingDir, path));
+    const sha = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+    await knowledgeRepository.save(ws.id, { id: `node:${node.id}`, kind: 'file', title: 'scanned-budget.pdf', nodeId: node.id, path, tags: [], status: 'empty', hash: sha(bytes), fingerprint: sha(JSON.stringify([path, info.size, info.mtimeMs, info.ctimeMs])), revision: 1, indexedAt: new Date().toISOString(), truncated: false, passages: [] });
+    const hits = await knowledgeService.search(ws.id, { query: '8721', limit: 20 });
+    expect(hits.items[0]).toMatchObject({ nodeId: node.id, hash: sha(bytes), locator: 'p.1', revision: 2 });
+    const read = await knowledgeService.read(ws.id, `node:${node.id}`);
+    expect(read.trust).toBe('untrusted_source_content');
+    expect(read.document.passages[0]).toMatchObject({ page: 1, extraction: 'ocr', text: expect.stringContaining('8721') });
+    expect((await knowledgeService.read(ws.id, `node:${node.id}`)).document.revision).toBe(2);
+    expect(Buffer.from((await knowledgeService.file(ws.id, node.id)).bytes)).toEqual(bytes);
+    expect((await knowledgeService.search((await workspace()).id, { query: '8721', limit: 20 })).items).toHaveLength(0);
+  }, 30_000);
   it('does not break dispatch or completion of historical tasks after an agent is deleted', async () => {
     const { ws, node, taskId } = await agentTask();
     await workspaceRepository.deleteNode(node.id);

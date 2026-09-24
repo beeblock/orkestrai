@@ -1,5 +1,10 @@
 export type KnowledgeKind = 'note' | 'file' | 'task' | 'memory' | 'image' | 'design' | 'codeGraph';
-export type KnowledgePassage = { locator: string; text: string; page?: number; sheet?: string; row?: number; cells?: Array<{ address: string; text: string }> };
+export type KnowledgePassage = { locator: string; text: string; page?: number; sheet?: string; row?: number; cells?: Array<{ address: string; text: string }>; extraction?: 'text' | 'ocr' | 'mixed'; confidence?: number };
+export type KnowledgeExtraction = {
+  engine: 'pdfjs+tesseract-7'; languages: ['eng', 'por', 'spa'];
+  pages: number; ocrPages: number[]; failedPages: number[]; skippedPages: number[];
+  issue?: 'timeout' | 'cancelled' | 'page_error' | 'encrypted' | 'parser_error';
+};
 export type KnowledgeDocument = {
   id: string;
   kind: KnowledgeKind;
@@ -14,6 +19,7 @@ export type KnowledgeDocument = {
   indexedAt: string;
   truncated: boolean;
   passages: KnowledgePassage[];
+  extraction?: KnowledgeExtraction;
 };
 export type KnowledgeItem = Omit<KnowledgeDocument, 'passages' | 'fingerprint'> & { excerpt: string; locator: string; score: number };
 export type KnowledgeLink = { source: string; target: string; kind: 'canvas' | 'wiki' | 'source' | 'task' };

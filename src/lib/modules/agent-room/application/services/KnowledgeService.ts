@@ -10,7 +10,7 @@ import { AgentFloor } from '../../domain/models/AgentFloor.js';
 import { knowledgeRepository } from '../../infrastructure/repositories/KnowledgeRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { workspaceMemoryRepository } from '../../infrastructure/repositories/WorkspaceMemoryRepository.js';
-import { extractKnowledgeDocument } from '../../infrastructure/knowledge/DocumentExtractor.js';
+import { extractKnowledgeDocument, KNOWLEDGE_EXTRACTOR_VERSION } from '../../infrastructure/knowledge/DocumentExtractor.js';
 import { workspacePathService } from './WorkspacePathService.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import { assertKnowledgePath } from '../../domain/knowledge-files.js';
@@ -126,7 +126,7 @@ export class KnowledgeService {
     const links: KnowledgeLink[] = [];
     const put = async (input: Omit<KnowledgeDocument, 'revision' | 'indexedAt'>) => {
       const old = existing.get(input.id);
-      const unchanged = old && old.fingerprint === input.fingerprint && old.hash === input.hash && old.status === input.status && old.title === input.title && old.truncated === input.truncated && JSON.stringify(old.tags) === JSON.stringify(input.tags) && (old.passages === input.passages || JSON.stringify(old.passages) === JSON.stringify(input.passages));
+      const unchanged = old && old.fingerprint === input.fingerprint && old.hash === input.hash && old.status === input.status && old.title === input.title && old.truncated === input.truncated && JSON.stringify(old.extraction) === JSON.stringify(input.extraction) && JSON.stringify(old.tags) === JSON.stringify(input.tags) && (old.passages === input.passages || JSON.stringify(old.passages) === JSON.stringify(input.passages));
       const doc: KnowledgeDocument = unchanged ? old : { ...input, revision: (old?.revision ?? 0) + 1, indexedAt: new Date().toISOString() };
       if (!unchanged) await knowledgeRepository.save(workspaceId, doc);
       documents.push(doc);
@@ -151,7 +151,7 @@ export class KnowledgeService {
         try {
           const info = await handle.stat();
           if (!info.isFile() || info.size > MAX_KNOWLEDGE_FILE_BYTES) throw new Error();
-          const fingerprint = digest(JSON.stringify([base.path, info.size, info.mtimeMs, info.ctimeMs]));
+          const fingerprint = digest(JSON.stringify([base.path, info.size, info.mtimeMs, info.ctimeMs, KNOWLEDGE_EXTRACTOR_VERSION]));
           const old = existing.get(id);
           if (!force && old?.fingerprint === fingerprint) { await put({ ...old, ...base, tags: knowledgeTags(old.passages.map(p => p.text).join('\n'), base.tags) }); continue; }
           const bytes = Buffer.alloc(info.size + 1);

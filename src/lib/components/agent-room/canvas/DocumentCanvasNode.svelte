@@ -8,6 +8,7 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import KnowledgePdfPreview from '../KnowledgePdfPreview.svelte';
   import DocumentPassages from '../DocumentPassages.svelte';
+  import DocumentExtractionNotice from '../DocumentExtractionNotice.svelte';
   import { knowledgeApi } from '../knowledge-client.js';
   import { knowledgeLabel } from '../knowledge-labels.js';
   import type { KnowledgeDocument } from '$lib/modules/agent-room/domain/knowledge.js';
@@ -20,9 +21,12 @@
   } }>();
   let doc = $state<KnowledgeDocument | null>(null), busy = $state(false), error = $state(''), open = $state(false);
   let alive = true;
-  async function load() {
+  async function load(force = false) {
     busy = true; error = '';
-    try { const result = await knowledgeApi<{ document: KnowledgeDocument }>(data.workspaceId, `knowledge?id=${encodeURIComponent(`node:${id}`)}`); if (alive) doc = result.document; }
+    try {
+      if (force) await knowledgeApi(data.workspaceId, 'knowledge', { command: 'refresh' });
+      const result = await knowledgeApi<{ document: KnowledgeDocument }>(data.workspaceId, `knowledge?id=${encodeURIComponent(`node:${id}`)}`); if (alive) doc = result.document;
+    }
     catch { if (alive) error = m['knowledge.error'](); } finally { if (alive) busy = false; }
   }
   onMount(() => { void load(); return () => { alive = false; }; });
@@ -34,12 +38,13 @@
   <div class="nodrag nowheel flex h-full min-h-0 flex-col text-[var(--app-text)]" data-testid="document-node">
     <div class="flex items-center gap-2 border-b border-[var(--app-border)] p-2">
       <span class="min-w-0 flex-1 truncate text-xs text-[var(--app-text-muted)]" title={data.payload.path}>{data.payload.path}</span>
-      <HeaderIconButton label={m['knowledge.refresh']()} disabled={busy} onclick={() => void load()}><RefreshCw size={14} class={busy ? 'animate-spin' : ''} /></HeaderIconButton>
-      <Button size="sm" variant="outline" disabled={!doc || ['missing', 'error'].includes(doc.status)} onclick={() => open = true}><ExternalLink size={14} />{m['knowledge.open_original']()}</Button>
+      <HeaderIconButton label={m['knowledge.refresh']()} disabled={busy} onclick={() => void load(true)}><RefreshCw size={14} class={busy ? 'animate-spin' : ''} /></HeaderIconButton>
+      <Button size="sm" variant="outline" disabled={!doc || doc.status === 'missing'} onclick={() => open = true}><ExternalLink size={14} />{m['knowledge.open_original']()}</Button>
     </div>
     <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-3">
       {#if error}<p role="alert" class="text-sm text-[var(--app-danger)]">{error}</p>{/if}
       {#if doc}<p class="mb-3 text-xs text-[var(--app-text-muted)]">{knowledgeLabel(doc.status)} · v{doc.revision}</p>
+        <DocumentExtractionNotice extraction={doc.extraction} />
         {#if doc.truncated}<p class="mb-3 text-xs text-[var(--app-warning)]">{m['knowledge.truncated']()}</p>{/if}
         <DocumentPassages passages={doc.passages} />
       {:else if busy}<p class="text-sm text-[var(--app-text-muted)]">{m['knowledge.loading']()}</p>{/if}

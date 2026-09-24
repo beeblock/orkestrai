@@ -1,6 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'second-brain': 'second-brain',
+  'pdf-ocr': 'pdf-ocr',
   'creative-video-providers': 'creative-video-providers',
   'creative-reusable-workflows': 'creative-reusable-workflows',
   'creative-video-sequences': 'creative-video-sequences',

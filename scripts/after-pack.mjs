@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import extractZip from '@electron-internal/extract-zip';
 import { packageComputerRuntime } from './package-computer-runtime.mjs';
+import { packageKnowledgeRuntime } from './package-knowledge-runtime.mjs';
 
 const NODE_VERSION = 'v24.12.0';
 const WINDOWS_NODE_ARCHIVE = `node-${NODE_VERSION}-win-x64.zip`;
@@ -37,6 +38,7 @@ async function verifiedArchive(projectDir) {
 
 export default async function afterPack(context) {
   await packageComputerRuntime(context);
+  await packageKnowledgeRuntime(context);
   if (context.electronPlatformName !== 'win32') return;
   const archivePath = await verifiedArchive(context.packager.projectDir);
   const staging = await mkdtemp(join(tmpdir(), 'orkestrai-cli-runtime-'));

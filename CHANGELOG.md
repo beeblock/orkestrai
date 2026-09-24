@@ -5,7 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.35.0 - 2026-09-24
+
+### Added
+
+- Read scanned and mixed PDF pages in Second Brain with offline, embedded English, Portuguese and Spanish OCR. Preserve original documents, page citations, hashes and the same search/read tools for agents; automatically reindex previously imported scans.
+- Identify OCR passages, recognition confidence, encrypted documents and incomplete pages in Canvas and Workbench. Isolate extraction in a bounded subprocess, preserve partial results on timeout, and clean temporary language files without retaining page images.
 
 ## 0.34.0 - 2026-09-23
 

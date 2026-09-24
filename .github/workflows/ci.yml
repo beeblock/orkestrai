@@ -43,7 +43,7 @@ jobs:
           npm ci --no-audit --no-fund
 
       - name: Verify native desktop command transport
-        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts
+        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts
 
   verify:
     name: Test and build
@@ -65,6 +65,11 @@ jobs:
 
       - name: Audit all dependencies
         run: npm audit --audit-level=moderate
+
+      - name: Install Electron runtime libraries for offline OCR tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0t64 libnss3 libasound2t64 libgbm1
 
       - name: Run tests
         run: npm test

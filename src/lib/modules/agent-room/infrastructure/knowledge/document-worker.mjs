@@ -1,5 +1,9 @@
-import { parentPort, workerData } from 'node:worker_threads';
 import { Readable } from 'node:stream';
+import { extractPdf } from './pdf-extractor.mjs';
+
+process.once('disconnect', () => process.exit(0));
+const workerData = await new Promise(resolve => process.once('message', resolve));
+const send = (type, result) => { if (process.connected) process.send({ type, result }); };
 
 // No formulas, macros, scripts, remote links or external document resources run here.
 const MAX_TEXT = 250_000, MAX_PASSAGES = 200;
@@ -24,19 +28,8 @@ function append(passage) {
 try {
   const bytes = new Uint8Array(workerData.bytes);
   if (workerData.extension === 'pdf') {
-    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const task = getDocument({ data: bytes, isEvalSupported: false, useWorkerFetch: false, useSystemFonts: false, disableFontFace: true, verbosity: 0 });
-    try {
-      const doc = await task.promise;
-      truncated = doc.numPages > 200;
-      for (let page = 1; page <= Math.min(doc.numPages, 200) && length < MAX_TEXT; page++) {
-        const current = await doc.getPage(page);
-        const content = await current.getTextContent();
-        append({ locator: `p.${page}`, page, text: content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('') });
-        current.cleanup();
-        if (length >= MAX_TEXT && page < doc.numPages) truncated = true;
-      }
-    } finally { await task.destroy(); }
+    const result = await extractPdf(bytes, result => send('progress', result), workerData.directory);
+    send('complete', result);
   } else {
     const { default: ExcelJS } = await import('exceljs');
     const workbook = new ExcelJS.Workbook();
@@ -55,8 +48,8 @@ try {
       }
       truncated ||= sheet.rowCount > 2000;
     }
+    send('complete', { passages, truncated, status: passages.length ? 'ready' : 'empty' });
   }
-  parentPort.postMessage({ passages, truncated, status: passages.length ? 'ready' : 'empty' });
 } catch {
-  parentPort.postMessage({ passages: [], truncated: false, status: 'error' });
+  send('complete', { passages: [], truncated: false, status: 'error' });
 }
