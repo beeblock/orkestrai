@@ -5,61 +5,29 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.36.0 - 2026-09-24
+
+### Added
+
+- Drag creation tools from the Canvas dock to place nodes, and drag Workbench sidebar items into a chosen pane. Reorder flow steps, sequence clips, design layers/pages and collection-runner requests directly.
+- Start an empty workspace with one-click actions, see image executor readiness before generating, and drop references directly onto empty image nodes.
 
 ### Changed
 
-- Rebuild the interface foundation: menus and dialogs open smoothly and close faster, surfaces use theme-aware elevation instead of hard borders, every control shares one focus ring, UI text never drops below 11px, and all motion respects the system reduced-motion setting.
-- Redesign the Canvas sidebar with calmer 30px rows, a clear selected state, row actions that appear on hover or keyboard focus, a trash icon for deletion and inline folder creation.
-- Group Canvas tools by purpose, keep the minimap and zoom controls clear of the tool bar, and show canvas messages above the tool bar with a dismiss action.
-- Drag any creation tool from the dock onto the canvas to create the node where you drop it; the canvas highlights the drop area and tool tips explain both gestures.
-- Offer one-click starting points: create or reopen a workspace when none is open, and add an agent, note, task board, file tree or team preset when a canvas is empty.
-- Refine node frames, headers, action buttons, selection and connection handles, and rename a node from the keyboard with Enter or F2.
-- Theme toast notifications and dialogs for every app theme, and keep the dictation button quiet until it is pointed at, focused or recording.
-- Terminal voice controls gather in one compact group that appears on hover or focus and stays visible while recording; the quick prompt highlights while focused and its send button lights up when there is text.
-- Pick a note's color from a single button instead of six header dots; notes use a reading font and their frame follows the note color.
-- Move task cards with a Move to menu or Alt+Left/Right, edit titles with Enter, and reveal secondary card actions on hover or focus; columns, counts and drop zones are clearer.
-- Redesign the Workbench tree with 30px rows, neutral selection, a labeled Hubs group, hover/focus row actions and mono counts; mark the active tab with an accent line and keep its close button visible; show a readable header trail and actionable empty states.
-- Drag Workbench sidebar items straight into any pane to open them there.
-- Add mini usage meters with threshold colors to the Workbench usage footer.
-- Describe Control Center activity in plain language (for example "Status updated · Maestro") with translated categories, prominent metrics and a sliding Activity/Communications switch.
-- Give the Canvas side panels (Floors, Ports, Roles, Presets) one shared frame with an icon title, description, consistent close button and smooth entrance; tone down repeated preset actions until hover.
-- Make Settings direct to use: the navigation tracks the visible section, minimap and zoom controls are switches, font size, padding and editor font use sliders with live values, node sizes show their unit, and canvas connections and Workbench tabs use segmented selectors.
-- Calm the Provider Center: a segmented filter with counts, neutral elevated cards with status in the badge, Open Canvas as an outline row action and a profile form with clear focus.
-- Track the visible section in the How to use index and collapse long use cases behind Read more; give Skills & MCPs a stable width, elevated sections and standard tabs.
-- Give command palettes dedicated command icons, rows without repeated labels, a larger search field, a highlighted item that stays in view and a keyboard shortcut footer.
-- Rework the file tree, diff, editor, Git and portal nodes: a real search field, colored Git status chips with readable names, file actions on hover or focus, loading placeholders, empty and error states with a next step, a commit field that lights up when ready, a lighter portal header with settings on its control chip, and sliders for device dimensions.
-- Rework the creative nodes: drop an image straight onto an empty image node, see the image executor's readiness and why Generate is unavailable, reorder sequence clips by dragging, pick storyboard ratios and shape styles with segmented controls, switches and sliders, and get clear loading, empty and error states with a recovery action.
-- Give shapes a floating toolbar that frees their resize handles, and give groups a dashed frame, a raised label and keyboard rename with Enter or F2.
-- Rework the automation nodes: set loop rounds with a slider and file writing with a switch next to a clear Run button, reorder flow steps by dragging or with the arrow keys, adjust the usage threshold with a slider and the window with a segmented control, and read usage as meters with reset times.
-- Calm the API client: theme colors throughout, a request list whose actions appear on hover, empty states with an Add request action, segmented toggles, status chips with icons and drag-to-order requests in the runner.
-- Rework the code graph, Second Brain, document, device, computer and tool workshop views: a one-row code graph toolbar with Index as the single primary action, stats that appear once indexed, a slider for depth and token budget, source rows with kind icons and tags, document and device empty states that offer the next step, computer settings grouped into cards with rarely used sections folded, and tool status chips with readable executor names.
-- Rework the Workbench hubs: the Review Center gets calm file rows with stage and discard on hover, an anchored comment popover and clear loading and empty states; Workstreams, Annotations and Attention get segmented filters with counts and a proper search field; Huddles show a live chip, clickable participant rows and message avatars; Automations reveal row actions on hover and show recipes as cards; the concurrent runs limit is a slider; and the file explorer and file toolbar match the Workbench sidebar.
-- Rework the design editor chrome: grouped top bar and tool rail with shortcut hints, a pinned selection bar, drag-to-reorder layer and page rows, layer visibility and lock on hover, 28px inspector rows aligned on one label column, segmented controls for sizing, layout, alignment and text styles, an opacity slider, rarely used limits and text options behind toggles, real boolean and alignment buttons for multiple selections, swatch pickers for variable and keyframe colors, and empty states that point to the next step in every panel.
-- Give every dialog the same anatomy: a title with a one-line description, grouped fields with hints, errors in one consistent block and a footer with the primary action last. Runtimes, modes and platforms use segmented controls; agent limits use a stepper, a slider and a minutes field; workspace settings are split into sections; and themes are picked from preview cards with color swatches.
-- Show update downloads as a floating progress pill, announce tour steps to screen readers and tuck rarely used sharing options under Advanced.
-- Guide remote connections step by step: a status pill, labeled invite and device fields with helper text, relay settings under Advanced, a recovery hint for every failure and a How it works guide that follows your progress. The connected workspace uses calm sidebar rows, state-colored pills, empty states and labeled design fields, and the Share button says whether the workspace is shared and who is waiting.
+- Refresh Canvas and Workbench with consistent node frames, grouped tools, clearer navigation, readable tabs, compact usage meters and keyboard-accessible row actions.
+- Redesign the native Design editor toolbar, layer tree, selection controls and property panels, including color swatches, layout controls and multi-selection alignment/Boolean actions.
+- Unify menus, dialogs, focus indicators, theme-aware surfaces and reduced-motion behavior. Improve compact text, contrast, selected states and recovery messages across app tools.
+- Simplify Settings and Provider Center with labeled controls, live sliders, switches and segmented selectors. Improve command search and documentation navigation.
+- Refine terminal voice controls, notes, Kanban, Git, portals, API collections, creative workflows, automation nodes and Workbench hubs without changing their existing data or agent contracts.
+- Guide Remote connections with explicit steps, status and recovery hints, and keep sharing controls and connected workspace views consistent.
+- Update the website and project READMEs with real app recordings and refreshed product showcases.
 
 ### Fixed
 
-- Drop dock tools, files and characters onto the empty-workspace panel in the middle of the canvas; drops there were ignored.
-- Raise the remaining 10–10.5px counts, paths and badges to the 11px minimum, and give count pills on tinted backgrounds readable contrast in every theme.
-- Show a tooltip on icon-only segmented options and restore the highlight of selected permission, grant and huddle target chips.
-- Let the collection runner's form scroll inside its dialog, so requests further down are no longer hidden under the footer.
-- Mark the language in use as Current in the welcome flow and focus it, so the first option no longer looks selected.
-- Show "1 selected" instead of a plural label when a single node is selected.
-- Resolve surfaces and text in Computer, Integrations, Tool Workshop, Storyboard, Sequence and Knowledge views that referenced missing theme colors.
-- Remove the blue resize outline that covered the selection ring of a selected node.
-- Let the Git file list scroll instead of being cut off, stop showing editor confirmations in red and stop flashing "empty folder" before a file tree loads.
-- Keep compact interface text at its intended size when a component also sets a text color, instead of falling back to a larger default.
-- End truncated titles and descriptions with an ellipsis instead of wrapping them onto a second line.
-- Make the code graph's Index button clickable in its empty state and keep the device tools panel from being clipped in narrow nodes.
-- Translate recipe categories and security audit events, give vault fields visible labels, keep a long revision hash inside its Annotations column and show review risks with a warning icon instead of a check.
-- Show the Huddles icon in open Workbench items and tabs, and name Huddles and Workstreams in the pane header instead of their internal type.
-- Highlight the active scope tab in the terminal commands dialog, which never showed as selected.
-- Keep the remote workspace responsive when the shared workspace has a huddle, instead of freezing its tabs.
-- Show readable prototype trigger names instead of internal values, keep the design selection toolbars visible while the canvas scrolls and stop the fill opacity value from being cut off.
-- Show "no usage data reported" in a neutral tone instead of green, and make the empty API client's Add request button create a request at the top level.
+- Accept tool, file and character drops on the empty Canvas, keep Flow execution controls reachable, and restore code graph indexing controls.
+- Prevent clipped collection-runner footers, Git file lists and compact device panels; keep Design selection controls and property values visible.
+- Restore selected permission/scope states, icon-only control tooltips and readable badges across themes; distinguish unavailable usage data from healthy status.
+- Keep Remote responsive when a shared workspace contains a huddle, and correct misleading control labels, translations and empty-state actions.
 
 ## 0.35.0 - 2026-09-24
 
