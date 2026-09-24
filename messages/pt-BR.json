@@ -4993,5 +4993,6 @@
   "canvas.tool_drag_hint": "Clique e desenhe no canvas, ou arraste até lá",
   "canvas.tool_drop_hint": "Solte para criar aqui",
   "diff.empty_title": "Nada para comparar",
-  "diff.empty_hint": "Arquivo novo ou sem alterações de conteúdo. Abra no editor para ver o arquivo inteiro."
+  "diff.empty_hint": "Arquivo novo ou sem alterações de conteúdo. Abra no editor para ver o arquivo inteiro.",
+  "loop.member_role": "Papel no time"
 }

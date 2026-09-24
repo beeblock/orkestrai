@@ -4993,5 +4993,6 @@
   "canvas.tool_drag_hint": "Click and draw on the canvas, or drag it there",
   "canvas.tool_drop_hint": "Drop to create here",
   "diff.empty_title": "Nothing to compare",
-  "diff.empty_hint": "New file or no content changes. Open it in the editor to see the whole file."
+  "diff.empty_hint": "New file or no content changes. Open it in the editor to see the whole file.",
+  "loop.member_role": "Team role"
 }

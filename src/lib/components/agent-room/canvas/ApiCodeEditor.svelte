@@ -53,13 +53,16 @@
 
   function editorTheme() {
     const dark = document.documentElement.classList.contains('dark');
+    // Cores de sintaxe derivadas dos tokens do tema (as mesmas do visualizador
+    // de resposta), para acompanhar qualquer tema em vez de hex fixos.
+    const literal = 'color-mix(in oklch, var(--app-info), var(--app-danger))';
     const highlight = HighlightStyle.define([
-      { tag: [tags.keyword, tags.bool, tags.null], color: 'var(--app-secondary)' },
-      { tag: [tags.string, tags.special(tags.string)], color: dark ? '#6ee7b7' : '#047857' },
-      { tag: [tags.number, tags.integer, tags.float], color: dark ? '#fcd34d' : '#b45309' },
-      { tag: [tags.function(tags.variableName), tags.labelName], color: dark ? '#7dd3fc' : '#0369a1' },
-      { tag: [tags.typeName, tags.className, tags.namespace], color: dark ? '#5eead4' : '#0f766e' },
-      { tag: [tags.propertyName, tags.attributeName], color: dark ? '#c4b5fd' : '#6d28d9' },
+      { tag: [tags.keyword, tags.bool, tags.null], color: literal },
+      { tag: [tags.string, tags.special(tags.string)], color: 'var(--app-success)' },
+      { tag: [tags.number, tags.integer, tags.float], color: 'var(--app-warning)' },
+      { tag: [tags.function(tags.variableName), tags.labelName], color: 'var(--app-info)' },
+      { tag: [tags.typeName, tags.className, tags.namespace], color: 'color-mix(in oklch, var(--app-info), var(--app-success))' },
+      { tag: [tags.propertyName, tags.attributeName], color: 'var(--app-info)' },
       { tag: [tags.comment, tags.lineComment, tags.blockComment], color: 'var(--app-text-muted)', fontStyle: 'italic' },
       { tag: [tags.operator, tags.punctuation, tags.bracket], color: 'var(--app-text-soft)' },
       { tag: [tags.invalid], color: 'var(--app-danger)', textDecoration: 'underline' },
@@ -76,9 +79,9 @@
         '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--app-border)' },
         '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, var(--app-warning) 28%, transparent)' },
         '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'color-mix(in srgb, var(--app-accent) 38%, transparent)' },
-        '.cm-tooltip-autocomplete': { border: '1px solid var(--app-border)', backgroundColor: 'var(--app-surface)', boxShadow: '0 10px 30px color-mix(in srgb, black 25%, transparent)' },
-        '.cm-tooltip-autocomplete > ul': { fontFamily: 'JetBrains Mono Variable, ui-monospace, monospace', fontSize: '11px', maxHeight: 'min(320px, 45vh)' },
-        '.cm-tooltip-autocomplete > ul > li': { padding: '4px 8px', color: 'var(--app-text)' },
+        '.cm-tooltip-autocomplete': { border: 'none', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--app-surface-raised)', boxShadow: 'var(--app-shadow-overlay)' },
+        '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', fontSize: '11.5px', maxHeight: 'min(320px, 45vh)', padding: '4px' },
+        '.cm-tooltip-autocomplete > ul > li': { padding: '4px 8px', borderRadius: '5px', color: 'var(--app-text)' },
         '.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--app-accent-soft)', color: 'var(--app-text)' },
         '.cm-completionDetail': { color: 'var(--app-text-muted)', fontStyle: 'normal', marginLeft: '12px' },
       }, { dark }),
@@ -157,8 +160,8 @@
           }),
           EditorView.domEventHandlers({ blur: () => { onblur?.(); return false; } }),
           EditorView.theme({
-            '&': { height: '100%', fontSize: '11px' },
-            '.cm-scroller': { overflow: 'auto', fontFamily: 'JetBrains Mono Variable, ui-monospace, monospace' },
+            '&': { height: '100%', fontSize: '11.5px' },
+            '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', lineHeight: '1.6' },
             '.cm-content': { padding: '8px 0' },
             '.cm-line': { padding: '0 10px' },
           }),
@@ -171,14 +174,39 @@
   });
 </script>
 
-<div class="flex h-full min-h-0 flex-col overflow-hidden rounded border border-[var(--app-border)] bg-[var(--app-canvas)] shadow-sm transition-colors focus-within:border-[var(--app-accent)] focus-within:ring-1 focus-within:ring-[var(--app-accent)]/20">
-  <div class="flex h-8 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
-    <span class="flex min-w-0 items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Braces size={11} /><span class="truncate">{label}</span><span class="rounded bg-[var(--app-surface-raised)] px-1.5 py-0.5 font-mono text-ui-xs">{language}</span></span>
-    <div class="flex items-center gap-1">
-      {#if formatError}<span class="max-w-52 truncate text-ui-xs text-[var(--app-danger)]" title={formatError}><AlertCircle size={11} class="inline" /> {formatError}</span>{/if}
-      <Button size="icon-sm" variant={wrap ? 'secondary' : 'ghost'} class="size-6" title={m['api_client.toggle_wrap']()} aria-label={m['api_client.toggle_wrap']()} onclick={toggleWrap}><WrapText size={12} /></Button>
-      {#if language !== 'text'}<Button size="icon-sm" variant="ghost" class="size-6" disabled={formatting} title={m['api_client.format_code']()} aria-label={m['api_client.format_code']()} onclick={() => void formatCode()}>{#if formatted}<Check size={12} />{:else}<WandSparkles size={12} />{/if}</Button>{/if}
+<div class="code-frame flex h-full min-h-0 flex-col overflow-hidden">
+  <div class="flex h-[34px] items-center justify-between gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] pl-2.5 pr-1">
+    <span class="flex min-w-0 items-center gap-1.5 text-[var(--app-text-muted)]"><Braces size={12} class="shrink-0" aria-hidden="true" /><span class="section-label truncate">{label}</span><span class="code-lang">{language}</span></span>
+    <div class="flex min-w-0 items-center gap-0.5">
+      {#if formatError}<span class="flex min-w-0 max-w-52 items-center gap-1 text-[11.5px] text-[var(--app-danger)]" title={formatError} role="status"><AlertCircle size={12} class="shrink-0" aria-hidden="true" /><span class="truncate">{formatError}</span></span>{/if}
+      <Button size="icon-sm" variant="ghost" class="size-[26px] text-[var(--app-text-muted)] aria-pressed:bg-[var(--app-active)] aria-pressed:text-[var(--app-text)]" aria-pressed={wrap} title={m['api_client.toggle_wrap']()} aria-label={m['api_client.toggle_wrap']()} onclick={toggleWrap}><WrapText size={13} /></Button>
+      {#if language !== 'text'}<Button size="icon-sm" variant="ghost" class="size-[26px] text-[var(--app-text-muted)]" disabled={formatting} title={m['api_client.format_code']()} aria-label={m['api_client.format_code']()} onclick={() => void formatCode()}>{#if formatted}<Check size={13} class="text-[var(--app-success)]" />{:else}<WandSparkles size={13} />{/if}</Button>{/if}
     </div>
   </div>
   <div class="nodrag nowheel min-h-0 flex-1" bind:this={host} style={`min-height:${minHeight}px`} aria-label={label}></div>
 </div>
+
+<style>
+  /* Moldura: anel de 1px do tema em repouso; o foco acende o acento. */
+  .code-frame {
+    border-radius: 8px;
+    background: var(--app-canvas);
+    box-shadow: var(--app-shadow-border);
+    transition: box-shadow var(--duration-quick) ease-out;
+  }
+
+  .code-frame:focus-within {
+    box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
+  }
+
+  .code-lang {
+    flex-shrink: 0;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 18px;
+  }
+</style>
