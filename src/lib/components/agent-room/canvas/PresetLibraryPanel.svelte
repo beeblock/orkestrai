@@ -1,4 +1,7 @@
 <script lang="ts">
+  import SidePanel from './SidePanel.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
+  import HeaderIconButton from './HeaderIconButton.svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Select from '$lib/components/ui/select';
@@ -8,7 +11,7 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import WorkspaceIcon from '../WorkspaceIcon.svelte';
   import { localeState } from '$lib/i18n/locale.svelte.js';
-  import { ArrowRight, Download, History, Library, PackageOpen, Plus, Search, Sparkles, Upload, X } from '@lucide/svelte';
+  import { ArrowRight, Download, History, Library, PackageOpen, Plus, Search, Sparkles, Upload } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   type PresetSummary = {
@@ -140,18 +143,11 @@
   });
 </script>
 
-<aside class="flex h-full w-[380px] shrink-0 flex-col border-l border-[var(--app-border)] bg-[var(--app-sidebar)] text-[var(--app-text)] shadow-panel" data-tour="preset-library">
-  <header class="flex items-start justify-between gap-4 border-b border-[var(--app-border)] px-4 py-4">
-    <div class="min-w-0">
-      <div class="mb-1 flex items-center gap-2 text-ui-xs font-semibold uppercase tracking-wider text-[var(--app-secondary)]">
-        <Sparkles size={12} />
-        {m['preset.eyebrow']()}
-      </div>
-      <h3 class="m-0 text-base font-semibold text-[var(--app-text)]">{m['preset.title']()}</h3>
-      <p class="mt-1 text-xs leading-5 text-[var(--app-text-muted)]">{m['preset.subtitle']()}</p>
-    </div>
-    <div class="flex shrink-0 gap-1"><input bind:this={importInput} class="hidden" type="file" accept=".json,application/json" onchange={importPack} /><Button variant="ghost" size="icon-sm" aria-label={m['team_pack.import']()} onclick={() => importInput.click()}><Upload size={14} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['preset.close']()} onclick={onClose} class="text-[var(--app-text-muted)] hover:text-[var(--app-text)]"><X size={15} /></Button></div>
-  </header>
+<SidePanel tour="preset-library" flush title={m['preset.title']()} icon={Sparkles} eyebrow={m['preset.eyebrow']()} description={m['preset.subtitle']()} width={380} closeLabel={m['preset.close']()} {onClose}>
+  {#snippet actions()}
+    <input bind:this={importInput} class="hidden" type="file" accept=".json,application/json" onchange={importPack} />
+    <HeaderIconButton label={m['team_pack.import']()} class="node-action-btn" side="left" onclick={() => importInput.click()}><Upload size={14} /></HeaderIconButton>
+  {/snippet}
 
   <div class="grid gap-2 border-b border-[var(--app-border)] p-4">
     <label class="relative">
@@ -177,12 +173,12 @@
 
   <div class="flex-1 space-y-3 overflow-y-auto p-4">
     {#if errorMessage}
-      <p class="rounded-md border border-[color-mix(in_srgb,var(--app-danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--app-danger)_10%,transparent)] px-3 py-2 text-xs text-[var(--app-danger)]">{errorMessage}</p>
+      <p class="rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md text-[var(--app-danger)]" role="alert">{errorMessage}</p>
     {/if}
     {#each filtered as preset (preset.id)}
-      <article class="rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-3 transition-colors hover:border-[var(--app-border-strong)] hover:bg-[var(--app-surface-raised)]">
+      <article class="preset-card group rounded-[10px] bg-[var(--app-surface)] p-3 shadow-border transition-[box-shadow,background-color] duration-150 hover:bg-[var(--app-surface-raised)] hover:shadow-border-hover">
         <div class="flex items-start gap-3">
-          <span class="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-[var(--app-secondary)]">
+          <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--app-secondary-soft)] text-[var(--app-secondary)]">
             <WorkspaceIcon name={preset.icon} size={17} />
           </span>
           <div class="min-w-0 flex-1">
@@ -193,12 +189,12 @@
               </Badge>
               <Badge variant="outline" class="h-5 rounded px-1.5 text-ui-xs">v{preset.version}</Badge>
             </div>
-            <p class="mt-1 text-ui-sm leading-4 text-[var(--app-text-muted)]">{preset.description ?? m['preset.no_description']()}</p>
-            <p class="mt-2 text-ui-xs font-medium text-[var(--app-text-muted)]">{m['preset.agent_count']({ count: preset.agents })} · {categoryLabel(preset.category)}</p>
+            <p class="mt-1 text-ui-md leading-[1.45] text-pretty text-[var(--app-text-muted)]">{preset.description ?? m['preset.no_description']()}</p>
+            <p class="meta-mono mt-2">{m['preset.agent_count']({ count: preset.agents })} · {categoryLabel(preset.category)}</p>
           </div>
         </div>
         <div class="mt-3 flex gap-2">
-          <Button size="sm" class="min-w-0 flex-1 justify-between" onclick={() => onCreateWorkspace(preset.id)}>
+          <Button size="sm" variant="secondary" class="min-w-0 flex-1 justify-between group-hover:bg-[var(--app-accent)] group-hover:text-[var(--app-accent-contrast)]" onclick={() => onCreateWorkspace(preset.id)}>
             {m['preset.new_workspace']()}
             <ArrowRight size={14} />
           </Button>
@@ -212,12 +208,10 @@
         </div>
       </article>
     {:else}
-      <div class="grid min-h-40 place-items-center px-8 text-center text-xs leading-5 text-[var(--app-text-muted)]">
-        <div><Library class="mx-auto mb-3" size={24} />{m['preset.empty']()}</div>
-      </div>
+      <div class="grid min-h-40"><NodeEmptyState icon={Library} title={m['preset.empty']()} /></div>
     {/each}
   </div>
-</aside>
+</SidePanel>
 
 <AlertDialog.Root open={pendingPreset !== null} onOpenChange={(open) => !open && !applying && (pendingPreset = null)}>
   <AlertDialog.Content>

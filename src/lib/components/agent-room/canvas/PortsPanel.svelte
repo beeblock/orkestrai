@@ -1,6 +1,7 @@
 <script lang="ts">
+  import SidePanel from './SidePanel.svelte';
   import { onMount } from 'svelte';
-  import { CircleStop, RefreshCw, RadioTower, ShieldCheck, TriangleAlert, X } from '@lucide/svelte';
+  import { CircleStop, RefreshCw, RadioTower, ShieldCheck, TriangleAlert } from '@lucide/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -89,29 +90,18 @@
   });
 </script>
 
-<aside class="ports-panel" aria-labelledby="ports-panel-title">
-  <header class="panel-header">
-    <div class="panel-heading">
-      <RadioTower size={14} aria-hidden="true" />
-      <h3 id="ports-panel-title">{m['ports.title']()}</h3>
-    </div>
-    <div class="panel-actions">
-      <HeaderIconButton
-        label={m['ports.refresh']()}
-        class="node-action-btn"
-        side="left"
-        disabled={refreshing}
-        onclick={() => void refresh(true)}
-      >
-        <RefreshCw size={13} class={refreshing ? 'spinning' : undefined} />
-      </HeaderIconButton>
-      <HeaderIconButton label={m['ports.close']()} class="node-action-btn" side="left" onclick={onClose}>
-        <X size={13} />
-      </HeaderIconButton>
-    </div>
-  </header>
-
-  <p class="panel-description">{m['ports.description']()}</p>
+<SidePanel class="ports-panel" labelledBy="ports-panel-title" title={m['ports.title']()} icon={RadioTower} description={m['ports.description']()} closeLabel={m['ports.close']()} {onClose}>
+  {#snippet actions()}
+    <HeaderIconButton
+      label={m['ports.refresh']()}
+      class="node-action-btn"
+      side="left"
+      disabled={refreshing}
+      onclick={() => void refresh(true)}
+    >
+      <RefreshCw size={13} class={refreshing ? 'spinning' : undefined} />
+    </HeaderIconButton>
+  {/snippet}
 
   {#if loading && !ports.length}
     {#each [0, 1, 2] as index (index)}
@@ -186,7 +176,7 @@
   {/if}
 
   <footer>{m['ports.scope_note']()}</footer>
-</aside>
+</SidePanel>
 
 <AlertDialog.Root open={pendingKill !== null} onOpenChange={(open) => !open && (pendingKill = null)}>
   <AlertDialog.Content>
@@ -206,21 +196,6 @@
 </AlertDialog.Root>
 
 <style>
-  .ports-panel {
-    width: 320px;
-    flex-shrink: 0;
-    border-left: 1px solid var(--app-border);
-    background: var(--app-sidebar);
-    padding: 14px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .panel-header,
-  .panel-heading,
-  .panel-actions,
   .port-topline,
   .port-number,
   .protected-badge {
@@ -228,28 +203,10 @@
     align-items: center;
   }
 
-  .panel-header,
   .port-topline {
     justify-content: space-between;
   }
 
-  .panel-heading {
-    gap: 7px;
-    color: var(--app-text-muted);
-  }
-
-  .panel-heading h3 {
-    margin: 0;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0;
-  }
-
-  .panel-actions {
-    gap: 4px;
-  }
-
-  .panel-description,
   .refresh-error,
   footer {
     margin: 0;
