@@ -76,6 +76,13 @@
     query;
     selectedIndex = 0;
   });
+
+  // Mantem o item destacado visivel ao navegar pelas setas.
+  $effect(() => {
+    const item = items[selectedIndex];
+    if (!item || typeof document === 'undefined') return;
+    document.getElementById(`canvas-command-${item.kind}-${item.id}`)?.scrollIntoView({ block: 'nearest' });
+  });
 </script>
 
 <Dialog.Root open={true} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -86,20 +93,20 @@
   >
     <Dialog.Title class="sr-only">{m['palette.title']()}</Dialog.Title>
     <div class="relative border-b border-[var(--app-border)]">
-      <Search class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--app-text-muted)]" size={15} />
+      <Search class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--app-text-muted)]" size={16} />
       <input
         bind:this={inputEl}
         bind:value={query}
         onkeydown={handleKeydown}
         placeholder={m['ph.palette']()}
-        class="h-12 w-full border-0 bg-transparent pr-4 pl-11 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-muted)]"
+        class="h-13 w-full border-0 bg-transparent pr-4 pl-11 text-[14px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-muted)] focus-visible:outline-none"
         role="combobox"
         aria-expanded="true"
         aria-controls="canvas-command-palette-list"
         aria-activedescendant={items[selectedIndex] ? `canvas-command-${items[selectedIndex].kind}-${items[selectedIndex].id}` : undefined}
       />
     </div>
-    <ul id="canvas-command-palette-list" class="max-h-[min(420px,60dvh)] list-none overflow-y-auto p-1.5" role="listbox">
+    <ul id="canvas-command-palette-list" class="max-h-[min(420px,60dvh)] list-none overflow-y-auto p-1.5 scroll-py-1.5" role="listbox">
       {#each items as item, index (item.kind + item.id)}
         <li>
           <button
@@ -107,21 +114,25 @@
             type="button"
             role="option"
             aria-selected={index === selectedIndex}
-            class="flex min-h-10 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-ui-lg text-[var(--app-text)] transition-colors hover:bg-[var(--app-surface-raised)] focus-visible:bg-[var(--app-surface-raised)] focus-visible:outline-none"
-            class:bg-[var(--app-surface-raised)]={index === selectedIndex}
+            class="group flex min-h-10 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] text-[var(--app-text)] transition-colors duration-150 hover:bg-[var(--app-hover)] focus-visible:outline-none aria-selected:bg-[var(--app-active)]"
             onpointerenter={() => (selectedIndex = index)}
             onclick={() => choose(item)}
           >
-            <span class="grid size-6 shrink-0 place-items-center rounded bg-[var(--app-surface-subtle)] text-[var(--app-secondary)]">
-              {#if item.kind === 'node'}<Box size={12} />{:else}<Zap size={12} />{/if}
+            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-muted)] transition-colors duration-150 group-aria-selected:bg-[var(--app-accent-soft)] group-aria-selected:text-[var(--app-accent)]">
+              {#if item.kind === 'node'}<Box size={14} />{:else}<Zap size={14} />{/if}
             </span>
             <span class="min-w-0 flex-1 truncate">{item.label}</span>
-            <span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{item.hint}</span>
+            <span class="shrink-0 font-mono text-[10.5px] text-[var(--app-text-muted)]">{item.hint}</span>
           </button>
         </li>
       {:else}
-        <li class="px-3 py-8 text-center text-xs text-[var(--app-text-muted)]">{m['palette.empty']()}</li>
+        <li class="px-3 py-10 text-center text-ui-md text-[var(--app-text-muted)]">{m['palette.empty']()}</li>
       {/each}
     </ul>
+    <footer class="flex items-center gap-4 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3 py-2 text-ui-xs text-[var(--app-text-muted)]">
+      <span class="inline-flex items-center gap-1.5"><kbd>↑</kbd><kbd>↓</kbd>{m['global_search.hint_navigate']()}</span>
+      <span class="inline-flex items-center gap-1.5"><kbd>↵</kbd>{m['global_search.hint_open']()}</span>
+      <span class="ml-auto inline-flex items-center gap-1.5"><kbd>esc</kbd>{m['global_search.hint_close']()}</span>
+    </footer>
   </Dialog.Content>
 </Dialog.Root>

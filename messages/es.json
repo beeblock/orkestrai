@@ -4975,5 +4975,13 @@
   "sequence.empty_hint": "Elige un video del workspace a la izquierda y agrégalo como primer clip.",
   "sequence.drag_hint": "Arrastra los clips para cambiar el orden",
   "storyboard.empty_hint": "Planifica el video escena por escena: dirección, diálogo, encuadre y duración.",
-  "storyboard.drag_hint": "Arrastra las escenas para cambiar el orden"
+  "storyboard.drag_hint": "Arrastra las escenas para cambiar el orden",
+  "global_search.hint_navigate": "Navegar",
+  "global_search.hint_open": "Abrir",
+  "global_search.hint_side": "Abrir al lado",
+  "global_search.hint_close": "Cerrar",
+  "git.no_branches": "Aún no hay ramas",
+  "git.no_branches_hint": "Haz el primer commit para crear la rama actual.",
+  "device.start_named": "Iniciar {device}",
+  "device.more_controls": "Más controles"
 }
