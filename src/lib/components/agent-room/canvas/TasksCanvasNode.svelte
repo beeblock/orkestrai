@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { Archive, ArchiveRestore, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Columns3, History, Link2, Paperclip, Plus, Scale, SquareKanban, StickyNote, Trash2, X } from '@lucide/svelte';
+  import { Archive, ArchiveRestore, ArrowRightLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Columns3, History, Link2, Paperclip, Plus, Scale, SquareKanban, StickyNote, Trash2, X } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Dialog from '$lib/components/ui/dialog';
   import NodeShell from './NodeShell.svelte';
@@ -333,6 +333,27 @@
   }
 
   // -- Drag and drop entre colunas ----------------------------------------------
+  // Mover pelo teclado ou pelo menu usa o mesmo patch do arrastar-e-soltar.
+  function moveTaskBy(task: BoardTask, delta: number) {
+    const index = COLUMNS.findIndex((column) => column.status === task.status);
+    const next = COLUMNS[index + delta];
+    if (next) void patchTask(task.id, { status: next.status });
+  }
+
+  function onCardKeydown(event: KeyboardEvent, task: BoardTask) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === 'F2') {
+      event.preventDefault();
+      startEdit(task);
+    } else if (event.altKey && event.key === 'ArrowRight') {
+      event.preventDefault();
+      moveTaskBy(task, 1);
+    } else if (event.altKey && event.key === 'ArrowLeft') {
+      event.preventDefault();
+      moveTaskBy(task, -1);
+    }
+  }
+
   function onDragStart(event: DragEvent, task: BoardTask) {
     dragTaskId = task.id;
     event.dataTransfer?.setData('text/plain', task.id);
@@ -540,7 +561,7 @@
   {:else}
   {#if columnsOpen}
     <div class="nodrag border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2.5 py-2">
-      <div class="mb-2 flex justify-end text-ui-xs tabular-nums text-muted-foreground">{COLUMNS.length}/10</div>
+      <div class="mb-2 flex items-center justify-between"><span class="section-label">{m['tasks.column_manager']()}</span><span class="font-mono text-[10.5px] tabular-nums text-muted-foreground">{COLUMNS.length}/10</span></div>
       <div class="space-y-1.5">
         {#each COLUMNS as column, index (column.id)}
           <div class="grid grid-cols-[24px_minmax(0,1fr)_24px_24px_24px] items-center gap-1">
@@ -548,36 +569,36 @@
               type="color"
               value={column.color}
               aria-label={m['tasks.column_color']()}
-              class="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
+              class="tb-color"
               onchange={(event) => updateColumn(column, { color: (event.target as HTMLInputElement).value })}
             />
             <input
               value={column.label}
               aria-label={m['tasks.column_name']()}
-              class="h-7 min-w-0 rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 text-xs text-foreground outline-none focus:border-primary"
+              class="h-7 min-w-0 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] px-2 text-ui-md text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--app-accent)] focus:ring-3 focus:ring-[var(--app-accent)]/15"
               onchange={(event) => updateColumn(column, { name: (event.target as HTMLInputElement).value })}
             />
-            <button class="inline-flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={m['tasks.column_up']()} disabled={index === 0} onclick={() => updateColumn(column, { position: index - 1 })}><ChevronUp size={13} /></button>
-            <button class="inline-flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={m['tasks.column_down']()} disabled={index === COLUMNS.length - 1} onclick={() => updateColumn(column, { position: index + 1 })}><ChevronDown size={13} /></button>
+            <button class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-foreground disabled:opacity-30" aria-label={m['tasks.column_up']()} disabled={index === 0} onclick={() => updateColumn(column, { position: index - 1 })}><ChevronUp size={13} /></button>
+            <button class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-foreground disabled:opacity-30" aria-label={m['tasks.column_down']()} disabled={index === COLUMNS.length - 1} onclick={() => updateColumn(column, { position: index + 1 })}><ChevronDown size={13} /></button>
             {#if column.builtin}
               <span class="h-6 w-6"></span>
             {:else}
-              <button class="inline-flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-destructive" aria-label={m['tasks.column_delete']()} onclick={() => removeColumn(column)}><Trash2 size={12} /></button>
+              <button class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-[var(--app-danger-soft)] hover:text-destructive" aria-label={m['tasks.column_delete']()} onclick={() => removeColumn(column)}><Trash2 size={12} /></button>
             {/if}
           </div>
         {/each}
       </div>
       <div class="mt-2 grid grid-cols-[24px_minmax(0,1fr)_28px] items-center gap-1">
-        <input type="color" bind:value={newColumnColor} aria-label={m['tasks.column_color']()} class="h-6 w-6 cursor-pointer border-0 bg-transparent p-0" />
+        <input type="color" bind:value={newColumnColor} aria-label={m['tasks.column_color']()} class="tb-color" />
         <input
           bind:value={newColumnName}
           aria-label={m['tasks.column_name']()}
           placeholder={m['tasks.column_name_placeholder']()}
-          class="h-7 min-w-0 rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 text-xs text-foreground outline-none focus:border-primary"
+          class="h-7 min-w-0 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] px-2 text-ui-md text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--app-accent)] focus:ring-3 focus:ring-[var(--app-accent)]/15"
           disabled={COLUMNS.length >= 10}
           onkeydown={(event) => event.key === 'Enter' && addColumn()}
         />
-        <button class="inline-flex h-7 w-7 items-center justify-center rounded bg-primary text-primary-foreground disabled:opacity-30" aria-label={m['tasks.column_add']()} disabled={!newColumnName.trim() || COLUMNS.length >= 10} onclick={addColumn}><Plus size={14} /></button>
+        <button class="press inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-30" aria-label={m['tasks.column_add']()} disabled={!newColumnName.trim() || COLUMNS.length >= 10} onclick={addColumn}><Plus size={14} /></button>
       </div>
       {#if COLUMNS.length >= 10}<p class="mt-1.5 text-ui-xs text-muted-foreground">{m['tasks.column_limit']()}</p>{/if}
       {#if columnError}<p class="mt-1.5 text-ui-xs text-destructive" role="alert">{columnError}</p>{/if}
@@ -652,7 +673,7 @@
         <header class="tb-column-head">
           <span class="tb-dot"></span>
           <span class="tb-label">{column.label}</span>
-          <span class="tb-count">{tasks.filter((task) => task.status === column.status).length}</span>
+          <span class="tb-count" aria-label={String(tasks.filter((task) => task.status === column.status).length)}>{tasks.filter((task) => task.status === column.status).length}</span>
         </header>
 
         <div class="tb-cards">
@@ -662,6 +683,11 @@
               class="tb-card"
               class:dragging={dragTaskId === task.id}
               class:attachment-drop-active={attachmentDropTaskId === task.id}
+              tabindex="0"
+              aria-label={task.title}
+              aria-description={m['tasks.card_hint']()}
+              aria-keyshortcuts="Enter Alt+ArrowLeft Alt+ArrowRight"
+              onkeydown={(event) => onCardKeydown(event, task)}
               draggable="true"
               ondragstart={(event) => onDragStart(event, task)}
               ondragend={() => { dragTaskId = null; dropTarget = null; }}
@@ -695,12 +721,25 @@
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <span class="tb-title" title={undefined} ondblclick={() => startEdit(task)}>{task.title}</span>
                 {/if}
-                <div class="flex shrink-0 items-center gap-0.5">
+                <div class="tb-reveal">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger class="tb-icon-btn subtle" aria-label={m['tasks.move_to']()} title={m['tasks.move_to']()}>
+                      <ArrowRightLeft size={12} />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content class="w-44">
+                      <DropdownMenu.Label class="text-ui-xs text-[var(--app-text-muted)]">{m['tasks.move_to']()}</DropdownMenu.Label>
+                      {#each COLUMNS.filter((column) => column.status !== task.status) as column (column.id)}
+                        <DropdownMenu.Item onclick={() => patchTask(task.id, { status: column.status })}>
+                          <span class="tb-menu-dot" style:background={column.hint}></span>{column.label}
+                        </DropdownMenu.Item>
+                      {/each}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                   <HeaderIconButton label={m['council.ask_perspectives']()} class="tb-icon-btn subtle" side="top" onclick={() => openCouncil(task)}>
-                    <Scale size={11} />
+                    <Scale size={12} />
                   </HeaderIconButton>
                   <HeaderIconButton label={m['tasks.remove_task']()} class="tb-icon-btn" side="top" onclick={() => removeTask(task)}>
-                    <Trash2 size={11} />
+                    <Trash2 size={12} />
                   </HeaderIconButton>
                 </div>
               </div>
@@ -752,9 +791,11 @@
                     <span class="tb-note-chip-label">{task.noteTitle ?? m['tasks.note_fallback']()}</span>
                   </button>
                 {/if}
+                <span class="tb-spacer"></span>
+                <span class="tb-reveal">
                 <DropdownMenu.Root>
-                  <DropdownMenu.Trigger class="tb-icon-btn subtle tb-link-trigger" aria-label={m['tasks.link_note_aria']()}>
-                    <Link2 size={11} />
+                  <DropdownMenu.Trigger class="tb-icon-btn subtle tb-link-trigger" aria-label={m['tasks.link_note_aria']()} title={m['tasks.link_note_aria']()}>
+                    <Link2 size={12} />
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content class="w-52">
                     {#if task.noteId}
@@ -769,13 +810,14 @@
                   </DropdownMenu.Content>
                 </DropdownMenu.Root>
                 <HeaderIconButton label={m['attachment.add_to_task']()} class="tb-icon-btn subtle" side="top" disabled={attachmentBusy} onclick={() => pickAttachment(task)}>
-                  <Paperclip size={11} />
+                  <Paperclip size={12} />
                 </HeaderIconButton>
                 {#if task.status === 'done'}
                   <HeaderIconButton label={m['tasks.archive_task']()} class="tb-icon-btn subtle" side="top" onclick={() => archiveTask(task)}>
-                    <Archive size={11} />
+                    <Archive size={12} />
                   </HeaderIconButton>
                 {/if}
+                </span>
               </div>
             </article>
           {:else}
@@ -834,6 +876,36 @@
     display: none;
   }
 
+  /* Seletor de cor nativo apresentado como uma bolinha. */
+  .tb-color {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    margin: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 16%, transparent);
+  }
+
+  .tb-color::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .tb-color::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
+  }
+
+  .tb-color:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
   .tb-image-error {
     margin: 0 8px 6px;
     font-size: 11px;
@@ -877,14 +949,14 @@
   }
 
   .tb-history-meta {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--app-text-muted);
     font-variant-numeric: tabular-nums;
   }
 
   .tb-history-status {
     flex-shrink: 0;
-    font-size: 9.5px;
+    font-size: 10.5px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -903,16 +975,17 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    max-width: 110px;
-    padding: 2px 7px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--app-secondary) 35%, var(--app-border));
-    background: color-mix(in srgb, var(--app-secondary) 9%, transparent);
+    max-width: 120px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 6px;
+    border: 0;
+    background: var(--app-secondary-soft);
     color: var(--app-secondary);
-    font-size: 9.5px;
+    font-size: 11px;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background 120ms ease;
+    transition: background-color var(--duration-quick) ease-out;
   }
 
   .tb-note-chip:hover {
@@ -942,41 +1015,50 @@
     padding: 4px 2px;
   }
 
-  /* ---- Composer estilo Trello ---------------------------------------------- */
+  /* ---- Composer ---------------------------------------------------------- */
   .tb-add-open {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     width: 100%;
-    padding: 8px 10px;
+    min-height: 32px;
+    padding: 0 10px;
     border-radius: 8px;
-    border: 1px dashed var(--app-border-strong);
+    border: 0;
     background: transparent;
     color: var(--app-text-muted);
-    font-size: 11.5px;
+    font-size: 12.5px;
     cursor: pointer;
-    transition: color 120ms ease, border-color 120ms ease;
+    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
   }
 
   .tb-add-open:hover {
     color: var(--app-text);
-    border-color: var(--app-text-muted);
+    background: var(--app-hover);
   }
 
   .tb-composer {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    width: 100%;
     padding: 10px;
     border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--app-accent) 42%, var(--app-border));
-    background: color-mix(in srgb, var(--app-accent) 7%, var(--app-surface));
+    background: var(--app-surface-subtle);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 45%, var(--app-border)), 0 0 0 4px color-mix(in srgb, var(--app-accent) 10%, transparent);
+    animation: tb-composer-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes tb-composer-in {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--distance-micro) * -1));
+    }
   }
 
   .tb-composer.attachment-drop-active,
   .tb-card.attachment-drop-active {
-    border-color: var(--app-accent);
-    box-shadow: inset 0 0 0 1px var(--app-accent);
+    box-shadow: 0 0 0 2px var(--app-accent);
     background: color-mix(in srgb, var(--app-accent) 9%, var(--app-surface));
   }
 
@@ -986,25 +1068,32 @@
     width: 100%;
     border: 1px solid var(--app-border);
     border-radius: 7px;
-    background: var(--app-surface-subtle);
+    background: var(--app-surface);
     color: var(--app-text);
-    font-size: 12px;
+    font-size: 12.5px;
     font-family: inherit;
     padding: 6px 9px;
     outline: none;
     resize: vertical;
+    transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .tb-composer input {
+    height: 32px;
+    font-weight: 500;
   }
 
   .tb-composer input:focus,
   .tb-composer textarea:focus,
   .tb-desc-edit:focus {
     border-color: var(--app-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .tb-composer-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .tb-spacer {
@@ -1012,36 +1101,37 @@
   }
 
   .tb-cancel {
+    height: 28px;
     border: none;
     background: transparent;
     color: var(--app-text-muted);
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: 0 10px;
+    border-radius: 7px;
   }
 
   .tb-cancel:hover {
     color: var(--app-text);
-    background: var(--app-border);
+    background: var(--app-hover);
   }
 
   /* ---- Descricao markdown no cartao ------------------------------------------ */
   .tb-desc {
-    margin: 2px 6px 0;
     padding: 6px 8px;
-    border-radius: 7px;
+    border-radius: 6px;
     background: var(--app-surface-subtle);
     max-height: 130px;
     overflow-y: auto;
     cursor: text;
+    font-size: 12px;
   }
 
   .tb-add {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 10px;
+    padding: 6px 8px;
     border-bottom: 1px solid var(--app-border);
   }
 
@@ -1052,13 +1142,14 @@
     outline: none;
     background: transparent;
     color: var(--app-text);
-    font-size: 12px;
+    font-size: 12.5px;
   }
 
   .tb-add input:focus-visible {
     outline: none;
   }
 
+  /* ---- Quadro e colunas ---------------------------------------------------- */
   .tb-board {
     flex: 1;
     min-height: 0;
@@ -1070,54 +1161,65 @@
   }
 
   .tb-column {
-    flex: 1 0 120px;
-    min-width: 120px;
+    flex: 1 0 150px;
+    min-width: 150px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     border-radius: 10px;
     background: var(--app-surface-subtle);
-    border: 1px solid transparent;
     padding: 8px;
-    transition: border-color 140ms ease, background 140ms ease;
+    box-shadow: inset 0 0 0 1px transparent;
+    transition: box-shadow var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
   }
 
+  /* Coluna alvo durante o arraste: contorno na cor da coluna. */
   .tb-column.drop-target {
-    border-color: var(--column-hint, var(--app-accent));
-    background: var(--app-border);
+    background: color-mix(in srgb, var(--column-hint, var(--app-accent)) 8%, var(--app-surface-subtle));
+    box-shadow: inset 0 0 0 1.5px var(--column-hint, var(--app-accent));
   }
 
   .tb-column-head {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
+    min-height: 22px;
     padding: 0 2px;
   }
 
   .tb-dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: var(--column-hint, var(--app-accent));
   }
 
   .tb-label {
     flex: 1;
-    font-size: 10px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0;
-    color: var(--app-text-muted);
+    letter-spacing: 0.06em;
+    color: var(--app-text-soft);
   }
 
   .tb-count {
-    font-size: 10px;
-    font-weight: 600;
+    min-width: 20px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 18px;
+    text-align: center;
     font-variant-numeric: tabular-nums;
     color: var(--app-text-muted);
-    background: var(--app-border);
-    border-radius: 8px;
-    padding: 1px 7px;
+    background: var(--app-hover);
+    border-radius: 999px;
+    padding: 0 6px;
   }
 
   .tb-cards {
@@ -1127,43 +1229,93 @@
     gap: 6px;
     overflow-y: auto;
     min-height: 40px;
+    padding: 1px;
   }
 
+  /* Zona de soltar vazia: ensina o gesto sem gritar. */
   .tb-empty {
-    font-size: 11px;
+    display: grid;
+    place-items: center;
+    min-height: 64px;
+    font-size: 11.5px;
     color: var(--app-text-muted);
-    font-style: italic;
     text-align: center;
-    padding: 14px 4px;
-    border: 1px dashed var(--app-border);
+    padding: 12px 6px;
+    border: 1px dashed color-mix(in srgb, var(--app-border-strong) 70%, transparent);
     border-radius: 8px;
   }
 
+  .tb-history .tb-empty {
+    border: 0;
+  }
+
+  /* ---- Cartoes ------------------------------------------------------------- */
   .tb-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 6px;
     background: var(--app-surface);
-    border: 1px solid var(--app-border);
-    border-radius: 9px;
-    padding: 7px 8px;
+    border-radius: 8px;
+    padding: 8px 8px 7px 10px;
+    box-shadow: var(--app-shadow-border);
     cursor: grab;
-    transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+    transition: box-shadow var(--duration-quick) ease-out, opacity var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .tb-card:hover {
-    border-color: var(--app-border-strong);
-    box-shadow: var(--app-shadow-card);
+    box-shadow: var(--app-shadow-border-hover), 0 4px 12px color-mix(in srgb, #000000 12%, transparent);
   }
 
   .tb-card.dragging {
-    opacity: 0.45;
+    opacity: 0.5;
+    transform: scale(0.98);
     cursor: grabbing;
   }
 
   .tb-card:focus-visible {
     outline: 2px solid var(--app-accent);
     outline-offset: 1px;
+  }
+
+  /* Acoes secundarias do cartao aparecem ao apontar ou focar. */
+  .tb-reveal {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .tb-card:hover .tb-reveal,
+  .tb-card:focus-within .tb-reveal {
+    opacity: 1;
+  }
+
+  /* No topo, as acoes flutuam sobre o fim do titulo: nao roubam largura
+     do texto quando estao ocultas. */
+  .tb-card-top .tb-reveal {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    padding: 1px;
+    border-radius: 7px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border);
+    pointer-events: none;
+  }
+
+  .tb-card:hover .tb-card-top .tb-reveal,
+  .tb-card:focus-within .tb-card-top .tb-reveal {
+    pointer-events: auto;
+  }
+
+  .tb-menu-dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 50%;
   }
 
   .tb-cover {
@@ -1181,17 +1333,15 @@
   }
 
   .tb-thumb-btn {
-    border: 1px solid var(--app-border);
+    border: 0;
     border-radius: 6px;
     padding: 0;
     background: transparent;
     cursor: zoom-in;
     overflow: hidden;
     line-height: 0;
-  }
-
-  .tb-thumb-btn:hover {
-    border-color: var(--app-border-strong);
+    outline: 1px solid var(--app-image-outline);
+    outline-offset: -1px;
   }
 
   .tb-thumb {
@@ -1218,20 +1368,26 @@
     border-radius: 10px;
     object-fit: contain;
     background: var(--app-canvas);
+    outline: 1px solid var(--app-image-outline);
+    outline-offset: -1px;
   }
 
   .tb-viewer-nav {
+    display: grid;
+    place-items: center;
     flex-shrink: 0;
-    border: 1px solid var(--app-border);
-    background: var(--app-border);
+    width: 32px;
+    height: 48px;
+    border: 0;
+    background: var(--app-hover);
     color: var(--app-text-soft);
     border-radius: 8px;
-    padding: 8px 4px;
     cursor: pointer;
   }
 
   .tb-viewer-nav:hover:not(:disabled) {
-    background: var(--app-surface-raised);
+    background: var(--app-active);
+    color: var(--app-text);
   }
 
   .tb-viewer-nav:disabled {
@@ -1243,17 +1399,18 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid color-mix(in srgb, var(--app-danger) 40%, transparent);
-    background: color-mix(in srgb, var(--app-danger) 12%, transparent);
+    height: 30px;
+    border: 0;
+    background: var(--app-danger-soft);
     color: var(--app-danger);
-    font-size: 12px;
-    border-radius: 8px;
-    padding: 6px 12px;
+    font-size: 12.5px;
+    border-radius: 7px;
+    padding: 0 12px;
     cursor: pointer;
   }
 
   .tb-viewer-delete:hover {
-    background: color-mix(in srgb, var(--app-danger) 22%, transparent);
+    background: color-mix(in srgb, var(--app-danger) 24%, transparent);
   }
 
   .tb-card-top {
@@ -1265,8 +1422,10 @@
   .tb-title {
     flex: 1;
     min-width: 0;
-    font-size: 12px;
-    line-height: 1.4;
+    padding-top: 1px;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.45;
     color: var(--app-text);
     overflow-wrap: break-word;
     cursor: text;
@@ -1275,80 +1434,99 @@
   .tb-edit {
     flex: 1;
     min-width: 0;
-    border: none;
+    height: 26px;
+    border: 1px solid var(--app-accent);
     outline: none;
-    background: var(--app-border);
+    background: var(--app-surface-subtle);
     border-radius: 6px;
     color: var(--app-text);
-    font-size: 12px;
-    padding: 2px 6px;
+    font-size: 12.5px;
+    padding: 0 7px;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .tb-card-bottom {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    gap: 5px;
+    min-height: 22px;
   }
 
   .tb-board :global(.tb-assignee) {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
     border: none;
-    background: color-mix(in srgb, var(--app-success) 12%, transparent);
-    color: var(--app-success);
-    font-size: 10px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11px;
     border-radius: 6px;
-    padding: 2px 8px;
+    padding: 0 7px;
     cursor: pointer;
-    max-width: 110px;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
   }
 
-  .tb-board :global(.tb-icon-btn) {
-    display: inline-flex;
+  .tb-board :global(.tb-assignee:hover),
+  .tb-board :global(.tb-assignee[data-state='open']) {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .tb-board :global(.tb-icon-btn),
+  .tb-add :global(.tb-icon-btn) {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
     border: none;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
-    padding: 2px;
-    border-radius: 5px;
+    padding: 0;
+    border-radius: 6px;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
   }
 
-  .tb-board :global(.tb-icon-btn:hover) {
+  .tb-board :global(.tb-icon-btn:hover),
+  .tb-add :global(.tb-icon-btn:hover) {
     color: var(--app-danger);
-    background: var(--app-border);
+    background: var(--app-danger-soft);
   }
 
-  .tb-board :global(.tb-icon-btn.subtle:hover) {
-    color: var(--app-secondary);
+  .tb-board :global(.tb-icon-btn.subtle:hover),
+  .tb-add :global(.tb-icon-btn.subtle:hover),
+  .tb-board :global(.tb-icon-btn.subtle[data-state='open']) {
+    color: var(--app-text);
+    background: var(--app-hover);
   }
 
-  .tb-board :global(.tb-add-btn) {
-    display: inline-flex;
-    border: none;
-    background: transparent;
-    color: var(--app-success);
-    cursor: pointer;
-    padding: 2px;
-  }
-
-  .tb-board :global(.tb-add-btn:disabled) {
-    opacity: 0.3;
-    cursor: default;
-  }
-
+  .tb-board :global(.tb-add-btn),
   .tb-add :global(.tb-add-btn) {
-    display: inline-flex;
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
     border: none;
-    background: transparent;
-    color: var(--app-success);
+    border-radius: 7px;
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
     cursor: pointer;
-    padding: 2px;
+    padding: 0;
+    transition: background-color var(--duration-quick) ease-out, opacity var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
+  .tb-board :global(.tb-add-btn:active:not(:disabled)),
+  .tb-add :global(.tb-add-btn:active:not(:disabled)) {
+    transform: scale(var(--scale-press));
+  }
+
+  .tb-board :global(.tb-add-btn:disabled),
   .tb-add :global(.tb-add-btn:disabled) {
-    opacity: 0.3;
+    opacity: 0.35;
     cursor: default;
   }
 

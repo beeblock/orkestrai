@@ -15,6 +15,9 @@ pt-BR, English, and Spanish translations.
 - Offer one-click starting points: create or reopen a workspace when none is open, and add an agent, note, task board, file tree or team preset when a canvas is empty.
 - Refine node frames, headers, action buttons, selection and connection handles, and rename a node from the keyboard with Enter or F2.
 - Theme toast notifications and dialogs for every app theme, and keep the dictation button quiet until it is pointed at, focused or recording.
+- Terminal voice controls gather in one compact group that appears on hover or focus and stays visible while recording; the quick prompt highlights while focused and its send button lights up when there is text.
+- Pick a note's color from a single button instead of six header dots; notes use a reading font and their frame follows the note color.
+- Move task cards with a Move to menu or Alt+Left/Right, edit titles with Enter, and reveal secondary card actions on hover or focus; columns, counts and drop zones are clearer.
 
 ### Fixed
 

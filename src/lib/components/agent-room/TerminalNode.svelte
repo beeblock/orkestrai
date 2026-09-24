@@ -782,7 +782,7 @@
       </Tooltip.Root>
   {/if}
   {#if dictationSupported}
-    <div class="dictate-controls">
+    <div class="dictate-controls" class:busy={dictating || transcribing || checkingVoiceModels || voiceOn}>
       {#if dictating}
         <span class="dictate-rec" aria-live="polite">● {recSeconds}s</span>
       {:else if transcribing}
@@ -855,7 +855,6 @@
     width: 100%;
     height: 100%;
     background: #090820;
-    border-radius: 8px;
     overflow: hidden;
   }
 
@@ -866,110 +865,172 @@
     overscroll-behavior: contain;
   }
 
+  /*
+   * Controles sobre o terminal usam um vidro escuro neutro: legivel sobre
+   * qualquer tema de terminal (claro ou escuro) sem competir com a saida.
+   */
   .terminal-search {
     position: absolute;
-    top: 6px;
+    top: 8px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: 8px;
     z-index: 20;
-    background: rgba(23, 23, 29, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 4px 8px;
+    padding: 0 10px;
+    height: 32px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--app-surface-raised) 94%, transparent);
+    box-shadow: var(--app-shadow-overlay);
+    backdrop-filter: blur(10px);
+    animation: overlay-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, calc(var(--distance-micro) * -1)) scale(var(--scale-dropdown));
+    }
   }
 
   .terminal-search input {
     border: none;
     outline: none;
     background: transparent;
-    color: #e6e6eb;
-    font-size: 12px;
+    color: var(--app-text);
+    font-size: 12.5px;
     width: 240px;
   }
 
   .search-hint {
-    font-size: 10px;
-    color: #6d6d78;
+    font-size: 11px;
+    color: var(--app-text-muted);
+    white-space: nowrap;
   }
 
+  /*
+   * Ditado e fala: um grupo compacto no canto. Em repouso fica oculto para nao
+   * cobrir a saida; aparece ao apontar ou focar o terminal e permanece visivel
+   * enquanto grava, transcreve ou com a fala ligada.
+   */
   .dictate-controls {
     position: absolute;
     bottom: 10px;
     right: 10px;
-    display: flex;
-    gap: 4px;
     z-index: 10;
+    display: flex;
     align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: color-mix(in srgb, #0b0d10 76%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, #ffffff 9%, transparent), 0 6px 18px color-mix(in srgb, #000000 28%, transparent);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transform: translateY(var(--distance-micro));
+    pointer-events: none;
+    transition: opacity var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .terminal-node:hover .dictate-controls,
+  .terminal-node:focus-within .dictate-controls,
+  .dictate-controls.busy {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
   }
 
   :global(.dictate-lang) {
-    height: 22px;
+    height: 24px;
     min-height: 0;
     width: auto;
     gap: 2px;
-    background: rgba(23, 23, 29, 0.9);
-    border: 1px solid #2c2c36;
+    padding: 0 6px;
+    border: 0;
     border-radius: 6px;
-    color: #9a9aa5;
-    font-size: 10px;
-    padding: 2px 6px;
+    background: transparent;
+    color: color-mix(in srgb, #ffffff 72%, transparent);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
     box-shadow: none;
   }
 
+  :global(.dictate-lang:hover) {
+    background: color-mix(in srgb, #ffffff 10%, transparent);
+    color: #ffffff;
+  }
+
   :global(.dictate-btn) {
-    border: 1px solid #2c2c36;
-    background: rgba(23, 23, 29, 0.9);
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
     border-radius: 6px;
-    color: #9a9aa5;
-    font-size: 12px;
+    background: transparent;
+    color: color-mix(in srgb, #ffffff 72%, transparent);
     cursor: pointer;
-    padding: 2px 7px;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  :global(.dictate-btn:hover) {
+    background: color-mix(in srgb, #ffffff 10%, transparent);
+    color: #ffffff;
+  }
+
+  :global(.dictate-btn:active) {
+    transform: scale(var(--scale-press));
   }
 
   :global(.dictate-btn).active {
-    color: #e5484d;
-    border-color: #e5484d;
+    color: #ff6b6f;
+    background: color-mix(in srgb, #e5484d 18%, transparent);
   }
 
   .dictate-rec {
-    font-size: 10px;
-    font-weight: 700;
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    color: #e5484d;
+    color: #ff6b6f;
     animation: rec-pulse 1.2s ease-in-out infinite;
   }
 
   .dictate-transcribing {
-    font-size: 10px;
-    color: #ffc857;
+    padding: 0 6px;
+    font-size: 11px;
+    color: #ffd27a;
     animation: rec-pulse 1.2s ease-in-out infinite;
   }
 
   @keyframes rec-pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
+    50% { opacity: 0.4; }
   }
 
+  /* Ponto de "aguardando entrada": halo suave em vez de brilho. */
   .idle-dot {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 10px;
-    height: 10px;
+    top: 10px;
+    right: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: #4ca66a;
+    background: #4cc38a;
     z-index: 10;
-    box-shadow: 0 0 5px rgba(76, 166, 106, 0.55);
+    box-shadow: 0 0 0 3px color-mix(in srgb, #4cc38a 22%, transparent);
   }
 
   .terminal-status {
     margin: 0;
-    padding: 6px 10px;
+    padding: 7px 12px;
     font-size: 12px;
-    color: #FFC857;
-    background: rgba(226, 185, 61, 0.08);
+    line-height: 1.45;
+    color: var(--app-warning);
+    background: color-mix(in srgb, var(--app-warning) 10%, var(--app-surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--app-warning) 20%, transparent);
   }
 </style>

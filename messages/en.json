@@ -4878,5 +4878,9 @@
   "canvas.group_devices": "Devices and tools",
   "canvas.group_workspace": "Workspace panels",
   "canvas.toolbar_label": "Canvas tools",
-  "canvas.transfer_selected_one": "1 selected"
+  "canvas.transfer_selected_one": "1 selected",
+  "agent_runtime.sleeping_title": "Agent is asleep",
+  "note.color_picker": "Note color: {color}",
+  "tasks.move_to": "Move to",
+  "tasks.card_hint": "Enter edits the title; Alt+Left or Right arrow moves between columns."
 }
