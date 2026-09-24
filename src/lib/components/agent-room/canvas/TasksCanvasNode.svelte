@@ -1307,6 +1307,10 @@
     pointer-events: none;
   }
 
+  .tb-card-top .tb-reveal > :global(*) {
+    pointer-events: auto;
+  }
+
   .tb-card:hover .tb-card-top .tb-reveal,
   .tb-card:focus-within .tb-card-top .tb-reveal {
     pointer-events: auto;
