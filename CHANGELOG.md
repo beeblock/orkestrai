@@ -51,6 +51,7 @@ pt-BR, English, and Spanish translations.
 - Translate recipe categories and security audit events, give vault fields visible labels, keep a long revision hash inside its Annotations column and show review risks with a warning icon instead of a check.
 - Show the Huddles icon in open Workbench items and tabs, and name Huddles and Workstreams in the pane header instead of their internal type.
 - Highlight the active scope tab in the terminal commands dialog, which never showed as selected.
+- Keep the remote workspace responsive when the shared workspace has a huddle, instead of freezing its tabs.
 - Show "no usage data reported" in a neutral tone instead of green, and make the empty API client's Add request button create a request at the top level.
 
 ## 0.35.0 - 2026-09-24

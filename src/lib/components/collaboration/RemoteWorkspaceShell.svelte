@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     Activity,
     ArrowRight,
@@ -427,8 +428,12 @@
     const ids = selectedHuddle.participants
       .filter((participant) => participant.kind === "agent")
       .map((participant) => participant.participantId);
-    huddleTargets = huddleTargets.filter((id) => ids.includes(id));
-    if (!huddleTargets.length) huddleTargets = ids.slice(0, 5);
+    // untrack: ler e escrever huddleTargets no mesmo efeito entrava em loop
+    // (effect_update_depth_exceeded) e congelava o shell com huddle aberto.
+    untrack(() => {
+      huddleTargets = huddleTargets.filter((id) => ids.includes(id));
+      if (!huddleTargets.length) huddleTargets = ids.slice(0, 5);
+    });
   });
 
   function toggleHuddleAgent(id: string, checked: boolean): void {
