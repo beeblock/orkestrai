@@ -4,7 +4,7 @@ import type { DocsCatalog } from './types.js';
 export const DOCS_ES: DocsCatalog = {
   quickstart: [
     'Crea un workspace (botón + en la barra lateral) apuntando a la carpeta de tu proyecto.',
-    'Abre Agentes en la barra inferior, elige un servicio disponible y arrastra un rectángulo en el canvas — nómbralo, elige modelo/esfuerzo si quieres y marca Líder si comandará el equipo.',
+    'Abre Agentes en la barra inferior, elige un servicio disponible y arrastra un rectángulo en el canvas — nómbralo, elige modelo/esfuerzo si quieres y marca Líder si comandará el equipo. Notas, tareas, archivos y otras herramientas también se pueden arrastrar desde la barra directamente al punto del canvas donde quieres el nodo.',
     'Dibuja más agentes y conéctalos arrastrando desde la bolita (handle) de uno hasta el otro.',
     'Abre el tablero Tareas (+ Tareas), crea tarjetas y asígnalas — cada tarea cae directo en la terminal del agente.',
     'Habla con cualquier agente desde su propia terminal, o deja que el líder distribuya todo solo vía CLI orkestrai.',
