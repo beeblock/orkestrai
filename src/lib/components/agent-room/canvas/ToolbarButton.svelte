@@ -6,13 +6,25 @@
   type Props = {
     /** Texto do tooltip (obrigatorio — toda ferramenta explica o que faz). */
     label: string;
+    /** Segunda linha do tooltip (ex.: como usar a ferramenta). */
+    hint?: string;
+    /** Ferramenta de criacao: tambem pode ser arrastada ate o canvas. */
+    dragTool?: string;
     active?: boolean;
     disabled?: boolean;
     onclick?: () => void;
     children: Snippet;
   };
 
-  let { label, active = false, disabled = false, onclick, children }: Props = $props();
+  let { label, hint, dragTool, active = false, disabled = false, onclick, children }: Props = $props();
+
+  // O canvas le este tipo no drop e cria o no na posicao solta, pela mesma
+  // rotina do clique na ferramenta.
+  function startToolDrag(event: DragEvent) {
+    if (!dragTool || !event.dataTransfer) return;
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('application/x-orkestrai-tool', dragTool);
+  }
 </script>
 
 <Tooltip.Root>
@@ -28,10 +40,15 @@
         aria-label={label}
         {disabled}
         {onclick}
+        draggable={dragTool && !disabled ? 'true' : undefined}
+        ondragstart={dragTool ? startToolDrag : undefined}
       >
         {@render children()}
       </button>
     {/snippet}
   </Tooltip.Trigger>
-  <Tooltip.Content side="top">{label}</Tooltip.Content>
+  <Tooltip.Content side="top" class={hint ? 'flex-col items-start gap-0.5' : undefined}>
+    <span>{label}</span>
+    {#if hint}<span class="font-normal opacity-70">{hint}</span>{/if}
+  </Tooltip.Content>
 </Tooltip.Root>

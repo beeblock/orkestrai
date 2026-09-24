@@ -4984,5 +4984,12 @@
   "git.no_branches_hint": "Faça o primeiro commit para criar a branch atual.",
   "device.start_named": "Iniciar {device}",
   "device.more_controls": "Mais controles",
-  "onboarding.language_current": "Atual"
+  "onboarding.language_current": "Atual",
+  "api_client.body_none_hint": "Este request não envia corpo. Escolha um formato acima para adicionar um.",
+  "api_client.start_hint": "Crie um request do zero ou importe uma coleção Postman, Bruno ou OpenAPI pelo menu do nó.",
+  "computer.open_settings_short": "Abrir ajustes",
+  "computer.capture_title": "Captura de tela",
+  "computer.allowed_count": "{allowed} de {total}",
+  "canvas.tool_drag_hint": "Clique e desenhe no canvas, ou arraste até lá",
+  "canvas.tool_drop_hint": "Solte para criar aqui"
 }
