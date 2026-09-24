@@ -107,8 +107,8 @@
     {minWidth}
     {minHeight}
     onResizeEnd={(_event, params) => onResize?.(id, params)}
-    lineStyle="border-color: var(--accent)"
-    handleStyle="background: var(--accent)"
+    lineStyle="border-color: transparent"
+    handleStyle="width: 8px; height: 8px; border-radius: 3px; border: 1.5px solid var(--app-surface); background: var(--accent)"
   />
   <!-- Handle unico bidirecional (connectionMode Loose), estilo Maestri: sem
        conexoes fica na lateral direita; com conexoes flutua pela borda ate a

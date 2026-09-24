@@ -7,6 +7,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { AgentRole } from '$lib/modules/agent-room/application/services/RoleService.js';
   import NodeShell from './NodeShell.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import TerminalNode from '../TerminalNode.svelte';
   import VoiceConfirmDialog from '../VoiceConfirmDialog.svelte';
   import { appSettingsStore, getAppSettings, updateAppSettings } from '../app-settings.svelte.js';
@@ -839,15 +840,15 @@
         onToggleVoice={toggleVoice}
       />
     {:else if agentRuntimeSleeping}
-      <div class="grid h-full place-items-center p-4 text-center text-ui-sm text-[var(--app-text-muted)]" role="status">
-        <div class="space-y-2">
-          <Bot size={22} class="mx-auto" />
-          <p>{m['agent_runtime.sleeping_hint']()}</p>
-          <Button type="button" size="sm" variant="outline" class="mx-auto" disabled={agentRuntimeBusy} onclick={wakeAgent}>
-            {#if agentRuntimeBusy}<LoaderCircle size={13} class="animate-spin" />{:else}<Play size={13} />{/if}
-            {m['agent_runtime.wake']()}
-          </Button>
-        </div>
+      <div class="h-full" role="status">
+        <NodeEmptyState icon={Bot} title={m['agent_runtime.sleeping_title']()} description={m['agent_runtime.sleeping_hint']()}>
+          {#snippet actions()}
+            <Button type="button" size="sm" variant="outline" class="press gap-1.5" disabled={agentRuntimeBusy} onclick={wakeAgent}>
+              {#if agentRuntimeBusy}<LoaderCircle size={13} class="animate-spin" />{:else}<Play size={13} />{/if}
+              {m['agent_runtime.wake']()}
+            </Button>
+          {/snippet}
+        </NodeEmptyState>
       </div>
     {:else if data.payload.command && providerMetadataReady}
       {#key createSessionKey}
@@ -874,13 +875,13 @@
       {/key}
     {:else if data.payload.command}
       <div class="grid h-full place-items-center text-ui-sm text-[var(--app-text-muted)]" role="status">
-        <span class="inline-flex items-center gap-2">
-          <LoaderCircle size={14} class="animate-spin" />
+        <span class="inline-flex items-center gap-2 rounded-full bg-[var(--app-hover)] px-3 py-1.5">
+          <LoaderCircle size={14} class="animate-spin text-[var(--app-accent)]" />
           {m['term.preparing_agent']()}
         </span>
       </div>
     {:else}
-      <p class="terminal-empty">{m['term.no_command']()}</p>
+      <NodeEmptyState icon={SquareTerminal} compact title={m['term.no_command']()} />
     {/if}
   </div>
   {#if voiceError}
@@ -931,10 +932,11 @@
     <button
       class="composer-attach"
       aria-label={m['attachment.add']()}
+      title={m['attachment.add']()}
       disabled={attachmentBusy}
       onclick={() => attachmentInput.click()}
     >
-      <Paperclip size={13} aria-hidden="true" />
+      {#if attachmentBusy}<LoaderCircle size={14} class="animate-spin" aria-hidden="true" />{:else}<Paperclip size={14} aria-hidden="true" />{/if}
     </button>
     <input
       bind:this={promptInput}
@@ -945,8 +947,8 @@
       placeholder={m['ph.quick_prompt']()}
       spellcheck="false"
     />
-    <button class="composer-send" aria-label={m['term.send']()} onclick={sendPrompt} disabled={!prompt.trim()}>
-      <SendHorizontal size={13} />
+    <button class="composer-send" class:ready={Boolean(prompt.trim())} aria-label={m['term.send']()} onclick={sendPrompt} disabled={!prompt.trim()}>
+      <SendHorizontal size={14} />
     </button>
   </div>
   {#if attachmentError}<p class="attachment-error" role="status">{attachmentError}</p>{/if}
@@ -969,20 +971,25 @@
 
   .composer-attach {
     display: grid;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
     place-items: center;
     border: 0;
-    border-radius: 4px;
+    border-radius: 7px;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .composer-attach:hover:not(:disabled) {
-    background: var(--app-border);
+    background: var(--app-hover);
     color: var(--app-text);
+  }
+
+  .composer-attach:active:not(:disabled) {
+    transform: scale(var(--scale-press));
   }
 
   .composer-attach:focus-visible {
@@ -996,58 +1003,88 @@
 
   .attachment-error {
     margin: 0;
-    padding: 3px 8px 5px;
+    padding: 4px 12px 6px;
     color: var(--app-danger);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .terminal-empty {
     color: var(--app-text-muted);
     font-size: 12px;
-    padding: 10px;
+    padding: 12px;
   }
 
   .voice-error {
     margin: 0;
-    padding: 4px 10px;
-    font-size: 11px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    line-height: 1.45;
     color: var(--app-warning);
     background: color-mix(in srgb, var(--app-warning) 10%, transparent);
   }
 
+  /* Prompt rapido: barra de 40px; o foco realca a barra inteira. */
   .composer {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
+    gap: 4px;
+    min-height: 40px;
+    padding: 0 6px;
     border-top: 1px solid var(--app-border);
     background: var(--app-surface);
+    transition: background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .composer:focus-within {
+    background: var(--app-surface-subtle);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-accent) 55%, transparent);
   }
 
   .composer input {
     flex: 1;
+    min-width: 0;
+    height: 30px;
     border: none;
     outline: none;
     background: transparent;
     color: var(--app-text);
-    font-size: 12px;
+    font-size: 12.5px;
   }
 
+  .composer input::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  /* Enviar acende quando ha texto: a acao fica obvia sem ruido em repouso. */
   .composer-send {
-    display: inline-flex;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
     border: none;
+    border-radius: 7px;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
-    padding: 3px;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
-  .composer-send:hover:not(:disabled) {
-    color: var(--app-accent);
+  .composer-send.ready {
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+  }
+
+  .composer-send.ready:hover {
+    background: color-mix(in srgb, var(--app-accent) 88%, var(--app-text));
+  }
+
+  .composer-send:active:not(:disabled) {
+    transform: scale(var(--scale-press));
   }
 
   .composer-send:disabled {
-    opacity: 0.3;
+    opacity: 0.45;
     cursor: default;
   }
 
@@ -1063,17 +1100,27 @@
     background: var(--app-success);
   }
 
+  /* Raio concentrico: menu 10px com 4px de respiro -> itens 6px. */
   .mention-pop {
     position: absolute;
-    bottom: 44px;
-    left: 10px;
-    right: 10px;
+    bottom: 48px;
+    left: 8px;
+    right: 8px;
     z-index: 30;
+    display: grid;
+    gap: 1px;
+    padding: 4px;
     background: var(--app-surface-raised);
-    border: 1px solid var(--app-border);
     border-radius: 10px;
-    overflow: hidden;
     box-shadow: var(--app-shadow-overlay);
+    animation: mention-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes mention-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro)) scale(var(--scale-dropdown));
+    }
   }
 
   .mention-item {
@@ -1081,41 +1128,46 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 6px 10px;
+    min-height: 30px;
+    padding: 0 8px;
     border: none;
+    border-radius: 6px;
     background: transparent;
     color: var(--app-text-soft);
-    font-size: 12px;
+    font-size: 12.5px;
     cursor: pointer;
     text-align: left;
   }
 
-  .mention-item:hover {
-    background: var(--app-border);
+  .mention-item:hover,
+  .mention-item:focus-visible {
+    background: var(--app-hover);
+    color: var(--app-text);
+    outline: none;
   }
 
   .mention-type {
-    font-size: 9px;
-    text-transform: uppercase;
+    font-family: var(--font-mono);
+    font-size: 10px;
     color: var(--app-text-muted);
-    background: var(--app-border);
+    background: var(--app-hover);
     border-radius: 4px;
     padding: 1px 5px;
   }
 
+  /* Chips informativos (runtime, papel): neutros; cor fica para estado. */
   .terminal-status-chip {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     min-width: 0;
-    max-width: 112px;
+    max-width: 120px;
     height: 22px;
-    padding: 0 6px;
-    border: 1px solid color-mix(in srgb, var(--app-success) 30%, var(--app-border));
-    border-radius: 5px;
-    background: color-mix(in srgb, var(--app-success) 8%, transparent);
-    color: var(--app-success);
-    font-size: 10px;
+    padding: 0 7px;
+    border-radius: 6px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11px;
   }
 
   .terminal-provider-mark {

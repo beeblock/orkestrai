@@ -24,6 +24,7 @@
     neutral: { color: '#777487', label: m['note.color_neutral']() },
   };
   import NodeShell from './NodeShell.svelte';
+  import * as Popover from '$lib/components/ui/popover';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import type { NoteNodePayload, WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
 
@@ -185,7 +186,7 @@
   {id}
   {selected}
   class="canvas-note"
-  accent="var(--app-warning)"
+  accent={noteColor.color}
   minWidth={220}
   minHeight={140}
   onResize={data.onResize}
@@ -199,18 +200,31 @@
   {#snippet title()}{data.title || m['note.default_title']()}{/snippet}
   {#snippet actions()}
     <input bind:this={attachmentInput} type="file" multiple class="hidden" onchange={pickAttachments} />
-    <span class="color-swatches nodrag">
-      {#each Object.entries(NOTE_COLORS) as [name, preset]}
-        <button
-          class="swatch"
-          class:active={((data.payload as { color?: string }).color ?? 'yellow') === name}
-          style:background={preset.color}
-          style:border-color="color-mix(in srgb, {preset.color} 70%, var(--app-text))"
-          aria-label={preset.label}
-          onclick={() => setColor(name)}
-        ></button>
-      {/each}
-    </span>
+    <!-- Uma bolinha com a cor atual abre o seletor: cabecalho limpo mesmo
+         em notas estreitas; as seis cores continuam a um clique. -->
+    <Popover.Root>
+      <Popover.Trigger class="node-action-btn color-trigger nodrag" aria-label={m['note.color_picker']({ color: noteColor.label })} title={m['note.color_picker']({ color: noteColor.label })}>
+        <span class="color-dot" style:background={noteColor.color}></span>
+      </Popover.Trigger>
+      <Popover.Content align="end" class="w-auto p-1.5">
+        <div class="swatch-grid nodrag" role="radiogroup" aria-label={m['note.color_picker']({ color: noteColor.label })}>
+          {#each Object.entries(NOTE_COLORS) as [name, preset] (name)}
+            {@const active = ((data.payload as { color?: string }).color ?? 'yellow') === name}
+            <button
+              type="button"
+              class="swatch"
+              class:active
+              role="radio"
+              aria-checked={active}
+              aria-label={preset.label}
+              title={preset.label}
+              style:--swatch={preset.color}
+              onclick={() => setColor(name)}
+            ></button>
+          {/each}
+        </div>
+      </Popover.Content>
+    </Popover.Root>
     <HeaderIconButton class="node-action-btn" label={m['attachment.add']()} disabled={attachmentBusy} onclick={() => attachmentInput.click()}>
       <Paperclip size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={formatted ? m['note.edit_raw']() : m['note.view_formatted']()} onclick={toggleFormatted}>
@@ -259,12 +273,21 @@
     resize: none;
     border: none;
     outline: none;
-    padding: 10px;
+    padding: 12px 14px;
     background: color-mix(in srgb, var(--note-color, var(--app-warning)) 12%, var(--app-surface));
     color: var(--app-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-    line-height: 1.5;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+
+  .note-content::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  .note-content:focus-visible {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--note-color, var(--app-warning)) 55%, transparent);
   }
 
   .note-content.attachment-drop-active {
@@ -274,9 +297,9 @@
 
   .attachment-error {
     margin: 0;
-    padding: 3px 8px 5px;
+    padding: 4px 12px 6px;
     color: var(--app-danger);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .note-preview {
@@ -285,23 +308,56 @@
     cursor: text;
   }
 
-  .color-swatches {
-    display: inline-flex;
-    gap: 4px;
-    margin-right: 4px;
-  }
-
-  .swatch {
+  .color-dot {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    border: 1.5px solid transparent;
-    cursor: pointer;
-    padding: 0;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 18%, transparent);
   }
 
-  .swatch.active {
-    outline: 1.5px solid var(--app-text);
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 26px);
+    gap: 4px;
+  }
+
+  /* Alvo de 26px para uma cor de 16px; anel marca a cor atual. */
+  .swatch {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .swatch::after {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--swatch);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 16%, transparent);
+  }
+
+  .swatch:hover {
+    background: var(--app-hover);
+  }
+
+  .swatch:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .swatch.active::after {
+    box-shadow: 0 0 0 2px var(--app-surface-raised), 0 0 0 4px var(--swatch);
+  }
+
+  .swatch:focus-visible {
+    outline: 2px solid var(--app-accent);
     outline-offset: 1px;
   }
 
