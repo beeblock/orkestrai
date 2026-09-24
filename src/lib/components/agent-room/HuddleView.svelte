@@ -3,10 +3,12 @@
   import { toast } from '@beeblock/svelar/ui';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import {
-    Check,
+    CircleAlert,
     CircleStop,
+    Crown,
     History,
     Link2,
+    ListPlus,
     LoaderCircle,
     MessageCircleMore,
     Mic,
@@ -23,8 +25,9 @@
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
   import { Checkbox } from '$lib/components/ui/checkbox';
-  import { Badge } from '$lib/components/ui/badge';
   import { Switch } from '$lib/components/ui/switch';
+  import * as Tooltip from '$lib/components/ui/tooltip';
+  import NodeEmptyState from './canvas/NodeEmptyState.svelte';
   import { TEXT_DICTATION_COMMAND } from './text-dictation.js';
   import { speakText } from './voice-speech.js';
   import { appSettingsStore } from './app-settings.svelte.js';
@@ -241,198 +244,212 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="huddle-view">
-  <header class="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--app-border)] px-5 py-4">
-    <div>
-      <div class="flex items-center gap-2">
-        <Radio size={17} class="text-[var(--app-accent)]" />
-        <h1 class="text-[14px] font-semibold">{m['huddle.title']()}</h1>
-        {#if snapshot?.activeHuddleId}<Badge variant="secondary">{m['huddle.live']()}</Badge>{/if}
+  <header class="flex shrink-0 items-start gap-3 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-5 py-4">
+    <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]" aria-hidden="true"><Radio size={17} /></span>
+    <div class="min-w-0 flex-1">
+      <div class="flex min-w-0 items-center gap-2">
+        <h1 class="truncate font-display text-[15px] font-semibold tracking-[-0.01em]">{m['huddle.title']()}</h1>
+        {#if snapshot?.activeHuddleId}<span class="live-chip"><span class="live-dot" aria-hidden="true"></span>{m['huddle.live']()}</span>{/if}
       </div>
-      <p class="mt-1 max-w-2xl text-ui-xs leading-4 text-[var(--app-text-muted)]">
-        {m['huddle.description']()}
-      </p>
+      <p class="mt-0.5 truncate text-ui-sm text-[var(--app-text-muted)]" title={m['huddle.description']()}>{m['huddle.description']()}</p>
     </div>
     <div class="flex shrink-0 items-center gap-1">
-      <Button variant="ghost" size="icon" class="size-8" aria-label={m['huddle.refresh']()} onclick={() => void load()}
-        ><RefreshCw size={14} class={loading ? 'animate-spin' : ''} /></Button
-      >
+      <Tooltip.Root>
+        <Tooltip.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="icon-sm" aria-label={m['huddle.refresh']()} onclick={() => void load()}><RefreshCw size={14} class={loading ? 'animate-spin' : ''} /></Button>
+          {/snippet}
+        </Tooltip.Trigger>
+        <Tooltip.Content>{m['huddle.refresh']()}</Tooltip.Content>
+      </Tooltip.Root>
       {#if onClose}
-        <Button variant="ghost" size="icon" class="size-8" aria-label={m['huddle.close']()} onclick={onClose}>
-          <X size={15} />
-        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label={m['huddle.close']()} onclick={onClose}><X size={15} /></Button>
       {/if}
     </div>
   </header>
-  {#if error}<div class="m-4 border-l-2 border-[var(--app-danger)] p-3 text-ui-xs text-[var(--app-danger)]">
-      {error}
-    </div>{/if}
+  {#if error}
+    <div class="mx-5 mt-3 flex shrink-0 items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-sm text-[var(--app-text)]" role="alert">
+      <CircleAlert size={14} class="mt-0.5 shrink-0 text-[var(--app-danger)]" aria-hidden="true" />
+      <span class="min-w-0 flex-1 break-words">{error}</span>
+    </div>
+  {/if}
   <div class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[240px_minmax(0,1fr)] md:grid-rows-1 xl:grid-cols-[280px_minmax(0,1fr)]">
-    <aside class="max-h-36 min-h-0 overflow-y-auto border-b border-[var(--app-border)] p-2 md:max-h-none md:border-r md:border-b-0">
-      <div class="mb-2 flex items-center justify-between px-2">
-        <span class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"
-          ><History size={11} />{m['huddle.history']()}</span
-        >{#if !snapshot?.activeHuddleId}<Button
-            size="icon"
-            variant="ghost"
-            class="size-7"
-            aria-label={m['huddle.new']()}
-            onclick={() => ((selectedId = null), (snapshot = snapshot ? { ...snapshot, selected: null } : snapshot))}><Plus size={13} /></Button
-          >{/if}
+    <aside class="max-h-36 min-h-0 overflow-y-auto border-b border-[var(--app-border)] p-2 md:max-h-none md:border-b-0 md:border-r">
+      <div class="mb-1 flex h-8 items-center justify-between gap-2 pl-2">
+        <span class="section-label flex items-center gap-1.5"><History size={12} aria-hidden="true" />{m['huddle.history']()}</span>
+        {#if !snapshot?.activeHuddleId}
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <Button {...props} size="icon-sm" variant="ghost" aria-label={m['huddle.new']()} onclick={() => ((selectedId = null), (snapshot = snapshot ? { ...snapshot, selected: null } : snapshot))}><Plus size={14} /></Button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content>{m['huddle.new']()}</Tooltip.Content>
+          </Tooltip.Root>
+        {/if}
       </div>
-      {#each snapshot?.huddles ?? [] as huddle (huddle.id)}<button
+      {#each snapshot?.huddles ?? [] as huddle (huddle.id)}
+        <button
           type="button"
-          class="mb-1 w-full rounded-md px-2 py-2 text-left hover:bg-[var(--app-surface)]"
-          class:bg-[var(--app-accent-soft)]={selected?.id === huddle.id}
+          class="hub-row"
+          class:selected={selected?.id === huddle.id}
+          aria-current={selected?.id === huddle.id ? 'true' : undefined}
           onclick={() => {
             selectedId = huddle.id;
             void load();
           }}
-          ><span class="block truncate text-ui-xs font-medium">{huddle.title}</span><span
-            class="mt-1 flex justify-between text-ui-xs text-[var(--app-text-muted)]"
-            ><span>{huddle.participantCount} {m['huddle.people']()}</span><span>{huddle.status === 'active' ? m['huddle.live']() : m['huddle.finished']()}</span
-            ></span
-          ></button
-        >{:else}<p class="px-2 py-4 text-ui-xs leading-4 text-[var(--app-text-muted)]">
-          {m['huddle.history_empty']()}
-        </p>{/each}
+        >
+          <span class="block truncate text-ui-md font-semibold text-[var(--app-text)]">{huddle.title}</span>
+          <span class="mt-1 flex items-center justify-between gap-2 text-ui-sm text-[var(--app-text-muted)]">
+            <span class="flex items-center gap-1 tabular-nums"><Users size={11} aria-hidden="true" />{huddle.participantCount} {m['huddle.people']()}</span>
+            <span class="status-chip" class:live={huddle.status === 'active'}>{huddle.status === 'active' ? m['huddle.live']() : m['huddle.finished']()}</span>
+          </span>
+        </button>
+      {:else}
+        <p class="px-2 py-3 text-pretty text-ui-sm leading-5 text-[var(--app-text-muted)]">{m['huddle.history_empty']()}</p>
+      {/each}
     </aside>
-    {#if loading && !snapshot}<div class="grid place-items-center">
-        <LoaderCircle size={18} class="animate-spin text-[var(--app-accent)]" />
+    {#if loading && !snapshot}
+      <div class="grid place-items-center">
+        <span class="inline-flex items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1.5 text-ui-sm text-[var(--app-text-muted)] shadow-border" role="status">
+          <LoaderCircle size={13} class="animate-spin text-[var(--app-accent)]" aria-hidden="true" />{m['creative.loading']()}
+        </span>
       </div>
     {:else if !selected}
-      <div class="min-h-0 overflow-y-auto p-5">
-        <div class="mx-auto max-w-2xl space-y-5">
-          <div>
-            <h2 class="text-[14px] font-semibold">
-              {m['huddle.start_title']()}
-            </h2>
-            <p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">
-              {m['huddle.start_hint']()}
-            </p>
+      <div class="min-h-0 overflow-y-auto px-6 py-6">
+        <div class="mx-auto max-w-2xl">
+          <h2 class="text-balance font-display text-[15px] font-semibold">{m['huddle.start_title']()}</h2>
+          <p class="mt-1 text-pretty text-ui-sm leading-5 text-[var(--app-text-muted)]">{m['huddle.start_hint']()}</p>
+          <div class="mt-5 space-y-4">
+            <label class="block"
+              ><span class="mb-1.5 block text-ui-md font-medium">{m['huddle.topic']()}</span><Input
+                bind:value={title}
+                maxlength={160}
+                placeholder={m['huddle.topic_placeholder']()}
+              /></label
+            ><label class="block"
+              ><span class="mb-1.5 block text-ui-md font-medium">{m['huddle.agenda']()}</span><Textarea
+                bind:value={agenda}
+                maxlength={8000}
+                class="min-h-24 resize-y"
+                placeholder={m['huddle.agenda_placeholder']()}
+              /></label
+            >
           </div>
-          <label class="block"
-            ><span class="mb-1.5 block text-ui-xs font-medium">{m['huddle.topic']()}</span><Input
-              bind:value={title}
-              maxlength={160}
-              placeholder={m['huddle.topic_placeholder']()}
-            /></label
-          ><label class="block"
-            ><span class="mb-1.5 block text-ui-xs font-medium">{m['huddle.agenda']()}</span><Textarea
-              bind:value={agenda}
-              maxlength={8000}
-              class="min-h-24 resize-y"
-              placeholder={m['huddle.agenda_placeholder']()}
-            /></label
-          >
-          <section>
+          <section class="mt-6">
             <div class="mb-2 flex items-center justify-between">
-              <h3 class="text-ui-xs font-medium">
-                {m['huddle.choose_agents']()}
-              </h3>
-              <Badge variant="outline">{selectedAgents.length}/11</Badge>
+              <h3 class="text-ui-md font-medium">{m['huddle.choose_agents']()}</h3>
+              <span class="rounded-md bg-[var(--app-hover)] px-1.5 font-mono text-[10.5px] leading-5 tabular-nums text-[var(--app-text-soft)]">{selectedAgents.length}/11</span>
             </div>
-            <div class="divide-y divide-[var(--app-border)] border-y border-[var(--app-border)]">
-              {#each agents as agent (agent.id)}<label class="flex items-center gap-3 py-2"
-                  ><Checkbox
-                    checked={selectedAgents.includes(agent.id)}
-                    disabled={!selectedAgents.includes(agent.id) && selectedAgents.length >= 11}
-                    onCheckedChange={(value: boolean | 'indeterminate') => toggleSelected(agent.id, value === true)}
-                  /><span class="min-w-0 flex-1"
-                    ><span class="block truncate text-ui-xs font-medium">{agent.title}</span><span
-                      class="block truncate text-ui-xs text-[var(--app-text-muted)]"
-                      >{(agent.payload as { provider?: string; role?: string }).provider}{(agent.payload as { role?: string }).role
-                        ? ` · ${(agent.payload as { role?: string }).role}`
-                        : ''}</span
-                    ></span
-                  >{#if selectedAgents.includes(agent.id)}<button
-                      type="button"
-                      class="rounded px-2 py-1 text-ui-xs"
-                      class:bg-[var(--app-accent-soft)]={facilitatorNodeId === agent.id}
-                      onclick={(event) => {
-                        event.preventDefault();
-                        facilitatorNodeId = agent.id;
-                      }}>{facilitatorNodeId === agent.id ? m['huddle.facilitator']() : m['huddle.make_facilitator']()}</button
-                    >{/if}</label
-                >{/each}
-            </div>
+            {#if agents.length}
+              <div class="overflow-hidden rounded-lg bg-[var(--app-surface)] shadow-border">
+                {#each agents as agent (agent.id)}
+                  {@const chosen = selectedAgents.includes(agent.id)}
+                  <label class="agent-row" class:chosen
+                    ><Checkbox
+                      checked={chosen}
+                      disabled={!chosen && selectedAgents.length >= 11}
+                      onCheckedChange={(value: boolean | 'indeterminate') => toggleSelected(agent.id, value === true)}
+                    /><span class="min-w-0 flex-1"
+                      ><span class="block truncate text-ui-md font-medium text-[var(--app-text)]">{agent.title}</span><span
+                        class="block truncate text-ui-sm text-[var(--app-text-muted)]"
+                        ><span class="capitalize">{(agent.payload as { provider?: string; role?: string }).provider}</span>{(agent.payload as { role?: string }).role
+                          ? ` · ${(agent.payload as { role?: string }).role}`
+                          : ''}</span
+                      ></span
+                    >{#if chosen}<button
+                        type="button"
+                        class="facilitator-toggle"
+                        class:active={facilitatorNodeId === agent.id}
+                        aria-pressed={facilitatorNodeId === agent.id}
+                        onclick={(event) => {
+                          event.preventDefault();
+                          facilitatorNodeId = agent.id;
+                        }}
+                        ><Crown size={12} aria-hidden="true" />{facilitatorNodeId === agent.id ? m['huddle.facilitator']() : m['huddle.make_facilitator']()}</button
+                      >{/if}</label
+                  >
+                {/each}
+              </div>
+            {:else}
+              <div class="rounded-lg bg-[var(--app-surface)] shadow-border">
+                <NodeEmptyState compact icon={Users} title={m['control_center.no_agents']()} description={m['huddle.no_agents_hint']()} />
+              </div>
+            {/if}
           </section>
-          <Button disabled={busy || !title.trim() || !selectedAgents.length} onclick={() => void start()}
-            >{#if busy}<LoaderCircle class="animate-spin" />{:else}<Radio />{/if}{m['huddle.start']()}</Button
-          >
+          <div class="mt-6 flex justify-end">
+            <Button disabled={busy || !title.trim() || !selectedAgents.length} onclick={() => void start()}
+              >{#if busy}<LoaderCircle class="animate-spin" />{:else}<Radio />{/if}{m['huddle.start']()}</Button
+            >
+          </div>
         </div>
       </div>
     {:else}
       <div class="flex min-h-0 flex-col">
-        <div class="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[var(--app-border)] px-5 py-3">
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-ui-lg font-semibold">{selected.title}</h2>
-              <Badge variant="outline">{selected.status === 'active' ? m['huddle.live']() : m['huddle.finished']()}</Badge>{#if selected.linkedTaskId}<Badge
-                  variant="secondary"><Link2 size={10} />{m['huddle.task_linked']()}</Badge
-                >{/if}
+        <div class="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-[var(--app-border)] px-6 py-3.5">
+          <div class="min-w-0">
+            <div class="flex min-w-0 flex-wrap items-center gap-2">
+              <h2 class="truncate font-display text-[15px] font-semibold">{selected.title}</h2>
+              <span class="status-chip" class:live={selected.status === 'active'}>{selected.status === 'active' ? m['huddle.live']() : m['huddle.finished']()}</span>
+              {#if selected.linkedTaskId}<span class="status-chip inline-flex items-center gap-1"><Link2 size={11} aria-hidden="true" />{m['huddle.task_linked']()}</span>{/if}
             </div>
-            {#if selected.agenda}<p class="mt-1 max-w-3xl text-ui-xs text-[var(--app-text-muted)]">
+            {#if selected.agenda}<p class="mt-1 max-w-3xl text-pretty text-ui-sm leading-5 text-[var(--app-text-muted)]">
                 {selected.agenda}
               </p>{/if}
           </div>
           <div class="flex items-center gap-1.5">
-            {#if !selected.linkedTaskId}<Button variant="outline" size="sm" class="h-8 text-ui-xs" onclick={() => void createTask()}
-                ><Check size={12} />{m['huddle.create_task']()}</Button
-              >{/if}{#if selected.status === 'active'}<Button variant="outline" size="sm" class="h-8 text-ui-xs" onclick={() => void end()}
-                ><CircleStop size={12} />{m['huddle.end']()}</Button
+            {#if !selected.linkedTaskId}<Button variant="outline" size="sm" onclick={() => void createTask()}
+                ><ListPlus size={13} />{m['huddle.create_task']()}</Button
+              >{/if}{#if selected.status === 'active'}<Button variant="ghost" size="sm" onclick={() => void end()}
+                ><CircleStop size={13} class="text-[var(--app-danger)]" />{m['huddle.end']()}</Button
               >{/if}
           </div>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
-          <div class="mx-auto max-w-3xl space-y-3">
-            {#each selected.turns as turn (turn.id)}<article
-                class="border-l-2 py-1 pl-3"
-                class:border-[var(--app-accent)]={turn.speakerKind !== 'agent'}
-                class:border-[var(--app-border-strong)]={turn.speakerKind === 'agent'}
-              >
-                <div class="flex items-center gap-2">
-                  <strong class="text-ui-xs">{turn.speakerName}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">#{turn.sequence}</span
-                  >{#if turn.state === 'pending'}<LoaderCircle size={10} class="animate-spin text-[var(--app-accent)]" />{:else if turn.state === 'failed'}<span
-                      class="text-ui-xs text-[var(--app-danger)]">{m['huddle.reply_failed']()}</span
-                    >{/if}
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          <div class="mx-auto max-w-3xl space-y-4">
+            {#each selected.turns as turn (turn.id)}<article class="turn" class:human={turn.speakerKind !== 'agent'}>
+                <span class="turn-avatar" aria-hidden="true">{turn.speakerName.slice(0, 1).toUpperCase()}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <strong class="truncate text-ui-md font-semibold">{turn.speakerName}</strong><span class="font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">#{turn.sequence}</span
+                    >{#if turn.state === 'pending'}<LoaderCircle size={12} class="animate-spin text-[var(--app-accent)]" />{:else if turn.state === 'failed'}<span
+                        class="inline-flex items-center gap-1 text-ui-sm text-[var(--app-danger)]"><CircleAlert size={12} aria-hidden="true" />{m['huddle.reply_failed']()}</span
+                      >{/if}
+                  </div>
+                  {#if turn.text}<p class="mt-1 whitespace-pre-wrap break-words text-ui-lg leading-6 text-[var(--app-text-soft)]">
+                      {turn.text}
+                    </p>{/if}
                 </div>
-                {#if turn.text}<p class="mt-1 whitespace-pre-wrap text-ui-sm leading-5">
-                    {turn.text}
-                  </p>{/if}
-              </article>{:else}<div class="grid min-h-48 place-items-center text-center">
-                <div>
-                  <MessageCircleMore size={24} class="mx-auto text-[var(--app-text-muted)]" />
-                  <p class="mt-2 text-ui-xs text-[var(--app-text-muted)]">
-                    {m['huddle.transcript_empty']()}
-                  </p>
-                </div>
+              </article>{:else}<div class="grid min-h-48">
+                <NodeEmptyState compact icon={MessageCircleMore} title={m['huddle.transcript_empty']()} />
               </div>{/each}
           </div>
         </div>
-        {#if selected.status === 'active'}<footer class="shrink-0 border-t border-[var(--app-border)] bg-[var(--app-surface)] px-5 py-3">
+        {#if selected.status === 'active'}<footer class="shrink-0 border-t border-[var(--app-border)] bg-[var(--app-surface)] px-6 py-3">
             <div class="mx-auto max-w-3xl">
-              <div class="mb-2 flex flex-wrap items-center gap-2">
-                <span class="flex items-center gap-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"
-                  ><Users size={10} />{m['huddle.ask']()}</span
+              <div class="mb-2.5 flex flex-wrap items-center gap-1.5">
+                <span class="section-label mr-1 flex items-center gap-1"
+                  ><Users size={11} aria-hidden="true" />{m['huddle.ask']()}</span
                 >{#each participants as participant (participant.id)}<label
-                    class="flex items-center gap-1 rounded border border-[var(--app-border)] px-1.5 py-1 text-ui-xs"
+                    class="target-chip"
                     ><Checkbox
-                      class="size-3"
+                      class="size-3.5"
                       checked={targets.includes(participant.participantId)}
                       disabled={!targets.includes(participant.participantId) && targets.length >= 5}
                       onCheckedChange={(value: boolean | 'indeterminate') => toggleTarget(participant.participantId, value === true)}
                     />{participant.displayName}</label
-                  >{/each}<label class="ml-auto flex items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]"
+                  >{/each}<label class="ml-auto flex cursor-pointer items-center gap-2 text-ui-sm text-[var(--app-text-muted)]"
                   ><Switch checked={speakReplies} onCheckedChange={(value: boolean) => (speakReplies = value)} />{#if speakReplies}<Volume2
-                      size={11}
-                    />{:else}<VolumeX size={11} />{/if}{m['huddle.speak_replies']()}</label
+                      size={13}
+                      aria-hidden="true"
+                    />{:else}<VolumeX size={13} aria-hidden="true" />{/if}{m['huddle.speak_replies']()}</label
                 >
               </div>
               <div class="flex items-end gap-2">
                 <Textarea
                   bind:ref={composer}
                   bind:value={message}
-                  class="min-h-16 max-h-36 resize-y text-ui-sm"
+                  class="min-h-16 max-h-36 resize-y text-ui-lg"
                   placeholder={m['huddle.message_placeholder']()}
                   onkeydown={(event: KeyboardEvent) => {
                     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -440,16 +457,29 @@
                       void send();
                     }
                   }}
-                /><Button variant="outline" size="icon" class="size-9 shrink-0" aria-label={m['huddle.dictate']()} onclick={() => void dictate()}
-                  ><Mic size={14} /></Button
-                ><Button
-                  size="icon"
-                  class="size-9 shrink-0"
-                  disabled={busy || !message.trim() || !targets.length}
-                  aria-label={m['huddle.send']()}
-                  onclick={() => void send()}
-                  >{#if busy}<LoaderCircle size={14} class="animate-spin" />{:else}<Send size={14} />{/if}</Button
-                >
+                /><Tooltip.Root>
+                  <Tooltip.Trigger>
+                    {#snippet child({ props })}
+                      <Button {...props} variant="outline" size="icon-lg" class="shrink-0" aria-label={m['huddle.dictate']()} onclick={() => void dictate()}><Mic size={15} /></Button>
+                    {/snippet}
+                  </Tooltip.Trigger>
+                  <Tooltip.Content>{m['huddle.dictate']()}</Tooltip.Content>
+                </Tooltip.Root><Tooltip.Root>
+                  <Tooltip.Trigger>
+                    {#snippet child({ props })}
+                      <Button
+                        {...props}
+                        size="icon-lg"
+                        class="shrink-0"
+                        disabled={busy || !message.trim() || !targets.length}
+                        aria-label={m['huddle.send']()}
+                        onclick={() => void send()}
+                        >{#if busy}<LoaderCircle size={15} class="animate-spin" />{:else}<Send size={15} />{/if}</Button
+                      >
+                    {/snippet}
+                  </Tooltip.Trigger>
+                  <Tooltip.Content>{m['huddle.send']()}</Tooltip.Content>
+                </Tooltip.Root>
               </div>
             </div>
           </footer>{/if}
@@ -457,3 +487,194 @@
     {/if}
   </div>
 </section>
+
+<style>
+  /* Linha do historico: selecao neutra com indicador de acento, como no Workbench. */
+  .hub-row {
+    position: relative;
+    display: block;
+    width: 100%;
+    margin-bottom: 2px;
+    padding: 9px 10px 9px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .hub-row:hover {
+    background: var(--app-hover);
+  }
+
+  .hub-row.selected {
+    background: var(--app-active);
+  }
+
+  .hub-row.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--app-accent);
+  }
+
+  .hub-row:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .status-chip {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+
+  .status-chip.live {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .live-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--app-success-soft);
+    color: var(--app-success);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .live-dot {
+      animation: live-pulse 1.6s ease-in-out infinite;
+    }
+  }
+
+  @keyframes live-pulse {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  /* Participante: a linha inteira alterna o checkbox; facilitador vira um chip. */
+  .agent-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .agent-row + .agent-row {
+    box-shadow: inset 0 1px 0 var(--app-border);
+  }
+
+  .agent-row:hover {
+    background: var(--app-hover);
+  }
+
+  .facilitator-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .facilitator-toggle:hover {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .facilitator-toggle:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .facilitator-toggle.active {
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .facilitator-toggle:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .turn {
+    display: flex;
+    gap: 12px;
+  }
+
+  .turn-avatar {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .turn.human .turn-avatar {
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .target-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px 0 8px;
+    border-radius: 999px;
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text-soft);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .target-chip:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .target-chip:has([data-state='checked']) {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+</style>

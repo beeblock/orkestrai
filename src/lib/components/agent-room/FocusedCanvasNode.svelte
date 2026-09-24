@@ -334,13 +334,17 @@
     cursor: default;
   }
 
+  /*
+   * No em tela cheia: mesmo raio e elevacao do NodeShell no Canvas (o token ja
+   * inclui o contorno de 1px), sem sombra ad hoc.
+   */
   .focused-node-host :global(.node-shell) {
-    border-radius: 6px;
-    box-shadow: 0 8px 28px color-mix(in srgb, black 22%, transparent);
+    border-radius: 10px;
+    box-shadow: var(--app-shadow-card);
   }
 
   .focused-node-host :global(.node-header) {
-    border-radius: 5px 5px 0 0;
+    border-radius: 10px 10px 0 0;
     cursor: default;
   }
 </style>
