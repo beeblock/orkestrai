@@ -92,6 +92,8 @@
 
 	function onKeydown(event: KeyboardEvent) {
 		const enabled = options.filter((option) => !option.disabled);
+		// Tudo desabilitado (ex.: durante uma sessao): as setas nao tem para onde ir.
+		if (!enabled.length) return;
 		const index = enabled.findIndex((option) => option.value === value);
 		let next = -1;
 		if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % enabled.length;
