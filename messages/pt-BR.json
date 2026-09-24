@@ -4613,7 +4613,7 @@
   "autonomy.stopped": "Trabalho autônomo interrompido neste workspace.",
   "autonomy.new_secret": "Guardar uma credencial",
   "autonomy.vault_help": "Somente o valor criptografado é guardado pelo sistema operacional. Agentes, prompts, logs e arquivos do workspace recebem um SecretRef.",
-  "autonomy.secret_name": "Nome da credencial",
+  "autonomy.secret_name": "Credencial",
   "autonomy.secret_purpose": "Finalidade",
   "autonomy.secret_value": "Valor secreto",
   "autonomy.secret_destinations": "Destinos permitidos, um por linha",

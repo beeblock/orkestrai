@@ -503,18 +503,22 @@
             </h3>
             <p class="max-w-xl text-ui-md text-pretty text-muted-foreground">{m['dlg.code_intelligence_description']()}</p>
           </div>
-          <!-- Tres modos: controle segmentado + explicacao do modo escolhido. -->
-          <SegmentedControl
-            class="w-fit max-w-full"
-            label={m['dlg.code_intelligence_title']()}
-            value={codeIntelligenceMode}
-            onValueChange={(value) => (codeIntelligenceMode = value)}
-            options={[
-              { value: 'assisted', label: m['dlg.code_intelligence_assisted']() },
-              { value: 'manual', label: m['dlg.code_intelligence_manual']() },
-              { value: 'disabled', label: m['dlg.code_intelligence_disabled']() },
-            ]}
-          />
+          <!-- Select (e nao segmentado): os rotulos dos modos sao longos e o
+               e2e de legibilidade abre a lista de opcoes. -->
+          <Select.Root type="single" value={codeIntelligenceMode} onValueChange={(value: string) => (codeIntelligenceMode = value as CodeIntelligenceMode)}>
+            <Select.Trigger class="w-full" aria-label={m['dlg.code_intelligence_title']()}>
+              {codeIntelligenceMode === 'assisted'
+                ? m['dlg.code_intelligence_assisted']()
+                : codeIntelligenceMode === 'manual'
+                  ? m['dlg.code_intelligence_manual']()
+                  : m['dlg.code_intelligence_disabled']()}
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="assisted">{m['dlg.code_intelligence_assisted']()}</Select.Item>
+              <Select.Item value="manual">{m['dlg.code_intelligence_manual']()}</Select.Item>
+              <Select.Item value="disabled">{m['dlg.code_intelligence_disabled']()}</Select.Item>
+            </Select.Content>
+          </Select.Root>
           <p class="rounded-lg bg-[var(--app-hover)] px-3 py-2.5 text-ui-md leading-relaxed text-pretty text-[var(--app-text-soft)]" aria-live="polite">
             {codeIntelligenceMode === 'assisted'
               ? m['dlg.code_intelligence_assisted_description']()
