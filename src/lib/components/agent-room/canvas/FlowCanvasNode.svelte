@@ -364,6 +364,36 @@
       </div>
     {/if}
 
+    <!-- Barra de execucao logo apos os passos (no fluxo do corpo, nao fixa no
+         rodape: assim nunca fica escondida atras da doca do canvas). -->
+    <div class="flow-run nodrag" class:active={run?.active}>
+      {#if run?.active}
+        <div class="flow-run-status" role="status">
+          <Loader2 size={13} class="animate-spin" />
+          <span>
+            {m['flow.running_status']({ current: (run.steps.findIndex((step) => step.status === 'running' || step.status === 'waiting') + 1) || run.steps.length, total: run.steps.length })}
+            {run.iterations > 1 ? m['flow.round_suffix']({ iteration: run.iteration, total: run.iterations }) : ''}
+          </span>
+        </div>
+        <span class="flow-spacer"></span>
+        {#if run.steps.some((step) => step.status === 'waiting')}
+          <button class="flow-approve-btn press" onclick={approveStep}><Check size={13} /> {m['flow.approve']()}</button>
+        {/if}
+        <button class="flow-stop-btn press" onclick={stopRun}><Square size={12} /> {m['flow.stop']()}</button>
+      {:else}
+        <input
+          class="flow-input"
+          bind:value={flowInput}
+          placeholder={m['ph.flow_initial_input']()}
+          aria-label={m['flow.input_aria']()}
+          onkeydown={(event) => { if (event.key === 'Enter' && !event.isComposing) startRun(); }}
+        />
+        <button class="flow-run-btn press" disabled={busy} onclick={startRun}>
+          {#if busy}<Loader2 size={13} class="animate-spin" /> {m['flow.starting']()}{:else}<Play size={13} /> {m['flow.run']()}{/if}
+        </button>
+      {/if}
+    </div>
+
     {#if runs.length}
       <section class="flow-history">
         <span class="section-label">{m['flow.history_title']()}</span>
@@ -378,34 +408,6 @@
     {/if}
   </div>
 
-  <!-- Barra de execucao fixa no rodape: entrada + Rodar, como um composer. -->
-  <div class="flow-run nodrag" class:active={run?.active}>
-    {#if run?.active}
-      <div class="flow-run-status" role="status">
-        <Loader2 size={13} class="animate-spin" />
-        <span>
-          {m['flow.running_status']({ current: (run.steps.findIndex((step) => step.status === 'running' || step.status === 'waiting') + 1) || run.steps.length, total: run.steps.length })}
-          {run.iterations > 1 ? m['flow.round_suffix']({ iteration: run.iteration, total: run.iterations }) : ''}
-        </span>
-      </div>
-      <span class="flow-spacer"></span>
-      {#if run.steps.some((step) => step.status === 'waiting')}
-        <button class="flow-approve-btn press" onclick={approveStep}><Check size={13} /> {m['flow.approve']()}</button>
-      {/if}
-      <button class="flow-stop-btn press" onclick={stopRun}><Square size={12} /> {m['flow.stop']()}</button>
-    {:else}
-      <input
-        class="flow-input"
-        bind:value={flowInput}
-        placeholder={m['ph.flow_initial_input']()}
-        aria-label={m['flow.input_aria']()}
-        onkeydown={(event) => { if (event.key === 'Enter' && !event.isComposing) startRun(); }}
-      />
-      <button class="flow-run-btn press" disabled={busy} onclick={startRun}>
-        {#if busy}<Loader2 size={13} class="animate-spin" /> {m['flow.starting']()}{:else}<Play size={13} /> {m['flow.run']()}{/if}
-      </button>
-    {/if}
-  </div>
 </NodeShell>
 
 <style>
@@ -853,16 +855,16 @@
     flex-shrink: 0;
     align-items: center;
     gap: 6px;
-    min-height: 48px;
-    padding: 8px 8px 8px 12px;
-    border-top: 1px solid var(--app-border);
-    background: var(--app-surface);
+    min-height: 44px;
+    padding: 6px 6px 6px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border);
     transition: background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
   }
 
   .flow-run:focus-within {
-    background: var(--app-surface-subtle);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-accent) 55%, transparent);
+    box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .flow-run.active {
