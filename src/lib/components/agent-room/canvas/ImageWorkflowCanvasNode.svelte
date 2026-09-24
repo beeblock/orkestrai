@@ -6,6 +6,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import * as NativeSelect from '$lib/components/ui/native-select';
+  import * as Popover from '$lib/components/ui/popover';
   import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
   import { Textarea } from '$lib/components/ui/textarea';
@@ -132,6 +133,22 @@
   }));
   const history = $derived((data.payload.history ?? []) as ImageWorkflowRun[]);
   const latest = $derived(history.at(-1) ?? null);
+
+  // Leitura do estado ja existente para a interface: quem executa, se esta
+  // pronto e, quando o botao Gerar esta bloqueado, o motivo em uma linha.
+  const executorState = $derived.by((): 'missing' | 'checking' | 'ready' | 'offline' => {
+    if (!codexExecutors.length) return 'missing';
+    if (!status) return 'checking';
+    return status.executorReady ? 'ready' : 'offline';
+  });
+  const executorName = $derived(status?.executorTitle ?? codexExecutors[0]?.targetTitle ?? m['image_workflow.no_executor']());
+  const blockedHint = $derived.by(() => {
+    if (running) return null;
+    if (executorState === 'missing') return m['image_workflow.blocked_executor']();
+    if (executorState === 'offline') return m['image_workflow.blocked_offline']();
+    if (!prompt.trim()) return m['image_workflow.blocked_prompt']();
+    return null;
+  });
 
   function headers(): HeadersInit {
     const csrf = getCsrfToken();
@@ -308,109 +325,327 @@
     <HeaderIconButton class="node-action-btn" label={m['image_workflow.delete']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
 
-  <div class="nodrag nowheel flex h-full min-h-0 flex-col overflow-y-auto text-ui-sm overscroll-contain">
-    {#if running}
-      <div class="flex items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-accent-soft)] px-3 py-2 text-[var(--app-accent)]" role="status">
-        <LoaderCircle size={13} class="animate-spin" />
-        <span class="font-medium">{m['image_workflow.running']()}</span>
-        <span class="ml-auto text-ui-xs text-[var(--app-text-muted)]">{m['image_workflow.running_hint']()}</span>
-      </div>
-    {/if}
-
-    <section class="space-y-2 border-b border-[var(--app-border)] bg-[var(--app-surface-raised)] p-3">
-      <div class="flex items-center gap-2">
-        <span class="grid size-7 shrink-0 place-items-center border border-[var(--app-border)] bg-[var(--app-canvas)] text-[var(--app-accent)]"><Bot size={14} /></span>
-        <div class="min-w-0">
-          <strong class="block text-ui-xs text-[var(--app-text)]">{m['image_workflow.native_tool_title']()}</strong>
-          <p class="mt-0.5 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['image_workflow.native_tool_help']()}</p>
+  <div class="iw nodrag nowheel flex h-full min-h-0 flex-col overflow-y-auto text-ui-sm overscroll-contain">
+    <div class="flex flex-col gap-5 p-3">
+      <!-- Quem executa: um cartao com estado em vez de caixas de aviso
+           empilhadas; a explicacao da conta fica a um clique no (i). -->
+      <section class="iw-executor" data-state={executorState} aria-label={m['image_workflow.native_tool_title']()}>
+        <span class="iw-executor-tile" aria-hidden="true"><Bot size={15} /></span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1">
+            <strong class="text-ui-lg font-semibold text-[var(--app-text)]">{m['image_workflow.native_tool_title']()}</strong>
+            <Popover.Root>
+              <Popover.Trigger class="iw-info-btn" aria-label={m['image_workflow.about_executor']()} title={m['image_workflow.about_executor']()}>
+                <Info size={13} />
+              </Popover.Trigger>
+              <Popover.Content align="start" class="w-80 gap-2 text-ui-md leading-5 text-[var(--app-text-soft)]">
+                <p class="font-semibold text-[var(--app-text)]">{m['image_workflow.about_executor']()}</p>
+                <p class="text-pretty">{m['image_workflow.native_tool_help']()}</p>
+                <p class="text-pretty">{m['image_workflow.account_requirement']()}</p>
+              </Popover.Content>
+            </Popover.Root>
+          </div>
+          <p class="mt-0.5 flex min-w-0 items-center gap-1.5 text-ui-md text-[var(--app-text-soft)]">
+            <span class="iw-dot" aria-hidden="true"></span>
+            <span class="min-w-0 truncate" title={executorName}>{executorName}</span>
+            {#if executorState === 'ready'}
+              <span class="shrink-0 text-[var(--app-text-muted)]">· {m['image_workflow.executor_state_ready']()}</span>
+            {:else if executorState === 'offline'}
+              <span class="shrink-0 text-[var(--app-warning)]">· {m['image_workflow.executor_state_offline']()}</span>
+            {:else if executorState === 'checking'}
+              <span class="shrink-0 text-[var(--app-text-muted)]">· {m['image_workflow.executor_state_checking']()}</span>
+            {/if}
+          </p>
+          {#if executorState === 'missing'}
+            <p class="mt-1.5 text-ui-md leading-[1.45] text-pretty text-[var(--app-text-muted)]">{m['image_workflow.executor_required']()}</p>
+          {:else if executorState === 'offline'}
+            <p class="mt-1.5 text-ui-md leading-[1.45] text-pretty text-[var(--app-text-muted)]">{m['image_workflow.executor_offline']()}</p>
+          {/if}
         </div>
-      </div>
-      <div class="flex items-start gap-2 border border-[var(--app-accent)]/30 bg-[var(--app-accent-soft)] p-2 text-ui-xs leading-4 text-[var(--app-text)]">
-        <Info size={12} class="mt-0.5 shrink-0 text-[var(--app-accent)]" />
-        <span>{m['image_workflow.account_requirement']()}</span>
-      </div>
-      {#if !codexExecutors.length}
-        <div class="flex items-start gap-2 border border-[var(--app-warning)]/40 bg-[var(--app-warning-soft)] p-2 text-ui-xs leading-4 text-[var(--app-warning)]"><TriangleAlert size={12} class="mt-0.5 shrink-0" /><span>{m['image_workflow.executor_required']()}</span></div>
-      {:else if status && !status.executorReady}
-        <div class="flex items-start gap-2 border border-[var(--app-warning)]/40 bg-[var(--app-warning-soft)] p-2 text-ui-xs leading-4 text-[var(--app-warning)]"><TriangleAlert size={12} class="mt-0.5 shrink-0" /><span>{m['image_workflow.executor_offline']()}</span></div>
-      {/if}
-    </section>
+      </section>
 
-    <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-      <div class="flex items-center justify-between gap-2">
-        <label for={`image-prompt-${id}`} class="font-semibold text-[var(--app-text)]">{m['image_workflow.prompt']()}</label>
-        <span class="font-mono text-ui-xs text-[var(--app-text-muted)]">{prompt.length}/32000</span>
-      </div>
-      <Textarea id={`image-prompt-${id}`} value={prompt} maxlength={32000} class="min-h-24 resize-y text-ui-sm leading-4" placeholder={m['image_workflow.prompt_placeholder']()} oninput={(event) => { prompt = event.currentTarget.value; stage({ prompt }); }} onblur={() => void persist()} />
-      <div class="flex flex-wrap gap-1">
-        <span class="inline-flex h-5 items-center gap-1 border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-1.5 text-ui-xs text-[var(--app-text-muted)]"><StickyNote size={9} class="text-[var(--app-warning)]" />{m['image_workflow.context_count']({ count: String(contexts.length) })}</span>
-        <span class="inline-flex h-5 items-center gap-1 border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-1.5 text-ui-xs text-[var(--app-text-muted)]"><ImageIcon size={9} class="text-cyan-500" />{m['image_workflow.reference_count']({ count: String(references.length) })}</span>
-        <span class="inline-flex h-5 items-center gap-1 border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-1.5 text-ui-xs text-[var(--app-text-muted)]"><Bot size={9} class="text-[var(--app-accent)]" />{status?.executorTitle ?? codexExecutors[0]?.targetTitle ?? m['image_workflow.no_executor']()}</span>
-      </div>
-      {#if references.length}
-        <div class="flex gap-1.5 overflow-x-auto pb-1">
-          {#each references as reference, index (reference.edgeId)}
-            <button class="group relative size-12 shrink-0 overflow-hidden border border-[var(--app-border)] bg-[var(--app-canvas)]" title={`${index + 1}. ${reference.targetTitle}`} onclick={() => data.onJumpToNode?.(reference.targetId)}>
-              {#if reference.targetPayload?.path}<img class="size-full object-cover" loading="lazy" decoding="async" src={`/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(String(reference.targetPayload.path))}`} alt={reference.targetTitle} />{/if}
-              <span class="absolute top-0 left-0 grid size-4 place-items-center bg-app-surface text-ui-xs text-app-text">{index + 1}</span>
-            </button>
-          {/each}
+      <section class="flex flex-col gap-2">
+        <div class="flex items-baseline justify-between gap-2">
+          <label for={`image-prompt-${id}`} class="text-ui-lg font-semibold text-[var(--app-text)]">{m['image_workflow.prompt']()}</label>
+          <span class="meta-mono">{prompt.length}/32000</span>
         </div>
-      {/if}
-    </section>
-
-    <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-      <label class="block space-y-1">
-        <span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.output_size']()}</span>
-        <Select.Root type="single" value={outputPreset} onValueChange={choosePreset}>
-          <Select.Trigger class="h-8 w-full" aria-label={m['image_workflow.output_size']()}>{presetLabel(outputPreset)}</Select.Trigger>
-          <Select.Content>
-            {#each ['auto', 'instagram-square', 'instagram-portrait', 'instagram-story', 'tiktok', 'custom'] as preset}
-              <Select.Item value={preset} label={presetLabel(preset as ImageWorkflowOutputPreset)}>{presetLabel(preset as ImageWorkflowOutputPreset)}</Select.Item>
+        <Textarea id={`image-prompt-${id}`} value={prompt} maxlength={32000} class="min-h-24 resize-y text-ui-lg leading-5" placeholder={m['image_workflow.prompt_placeholder']()} oninput={(event: Event & { currentTarget: HTMLTextAreaElement }) => { prompt = event.currentTarget.value; stage({ prompt }); }} onblur={() => void persist()} />
+        <div class="flex flex-wrap gap-1.5">
+          <span class="iw-chip"><StickyNote size={12} aria-hidden="true" />{m['image_workflow.context_count']({ count: String(contexts.length) })}</span>
+          <span class="iw-chip"><ImageIcon size={12} aria-hidden="true" />{m['image_workflow.reference_count']({ count: String(references.length) })}</span>
+        </div>
+        {#if references.length}
+          <div class="flex gap-2 overflow-x-auto p-0.5 pb-1">
+            {#each references as reference, index (reference.edgeId)}
+              <button class="iw-ref" title={`${index + 1}. ${reference.targetTitle}`} aria-label={`${index + 1}. ${reference.targetTitle}`} onclick={() => data.onJumpToNode?.(reference.targetId)}>
+                {#if reference.targetPayload?.path}<img class="size-full object-cover" loading="lazy" decoding="async" src={`/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(String(reference.targetPayload.path))}`} alt={reference.targetTitle} />{:else}<ImageIcon size={16} aria-hidden="true" />{/if}
+                <span class="iw-ref-index" aria-hidden="true">{index + 1}</span>
+              </button>
             {/each}
-          </Select.Content>
-        </Select.Root>
-      </label>
-      {#if outputPreset === 'custom'}
-        <div class="grid grid-cols-2 gap-2">
-          <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.width']()}</span><Input type="number" min="256" max="3840" value={targetWidth} class="h-7" oninput={(event) => changeDimension('width', event.currentTarget.value)} onblur={() => void persist()} /></label>
-          <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.height']()}</span><Input type="number" min="256" max="3840" value={targetHeight} class="h-7" oninput={(event) => changeDimension('height', event.currentTarget.value)} onblur={() => void persist()} /></label>
-        </div>
-      {/if}
-      <p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">
-        {#if outputPreset === 'auto'}
-          {m['image_workflow.output_size_auto_help']()}
-        {:else}
-          {m['image_workflow.output_size_exact_help']({ width: String(targetWidth), height: String(targetHeight) })}
+          </div>
         {/if}
-      </p>
-    </section>
+      </section>
 
-    <section class="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-[var(--app-border)] p-3">
-      <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.count']()}</span><NativeSelect.Root size="sm" class="w-full" value={String(count)} onchange={(event) => chooseCount((event.currentTarget as HTMLSelectElement).value)}>{#each Array.from({ length: 10 }, (_, index) => index + 1) as option}<option value={String(option)}>{option}</option>{/each}</NativeSelect.Root></label>
-      <label class="flex min-w-0 items-center justify-between gap-3 border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2.5 py-2">
-        <span class="min-w-0"><strong class="block text-ui-xs text-[var(--app-text)]">{m['image_workflow.transparent']()}</strong><small class="mt-0.5 block text-ui-xs leading-3 text-[var(--app-text-muted)]">{m['image_workflow.transparent_help']()}</small></span>
-        <Switch checked={transparentBackground} onCheckedChange={(checked: boolean) => { transparentBackground = checked; void persist(); }} />
-      </label>
-    </section>
+      <section class="flex flex-col gap-2.5">
+        <h3 class="section-label">{m['image_workflow.section_delivery']()}</h3>
+        <label class="flex flex-col gap-1.5">
+          <span class="iw-field-label">{m['image_workflow.output_size']()}</span>
+          <Select.Root type="single" value={outputPreset} onValueChange={choosePreset}>
+            <Select.Trigger class="h-8 w-full" aria-label={m['image_workflow.output_size']()}>{presetLabel(outputPreset)}</Select.Trigger>
+            <Select.Content>
+              {#each ['auto', 'instagram-square', 'instagram-portrait', 'instagram-story', 'tiktok', 'custom'] as preset}
+                <Select.Item value={preset} label={presetLabel(preset as ImageWorkflowOutputPreset)}>{presetLabel(preset as ImageWorkflowOutputPreset)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </label>
+        {#if outputPreset === 'custom'}
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex flex-col gap-1.5"><span class="iw-field-label">{m['image_workflow.width']()}</span><Input type="number" min="256" max="3840" value={targetWidth} class="h-8 font-mono tabular-nums" oninput={(event: Event & { currentTarget: HTMLInputElement }) => changeDimension('width', event.currentTarget.value)} onblur={() => void persist()} /></label>
+            <label class="flex flex-col gap-1.5"><span class="iw-field-label">{m['image_workflow.height']()}</span><Input type="number" min="256" max="3840" value={targetHeight} class="h-8 font-mono tabular-nums" oninput={(event: Event & { currentTarget: HTMLInputElement }) => changeDimension('height', event.currentTarget.value)} onblur={() => void persist()} /></label>
+          </div>
+        {/if}
+        <p class="text-ui-sm leading-[1.45] text-pretty text-[var(--app-text-muted)]">
+          {#if outputPreset === 'auto'}
+            {m['image_workflow.output_size_auto_help']()}
+          {:else}
+            {m['image_workflow.output_size_exact_help']({ width: String(targetWidth), height: String(targetHeight) })}
+          {/if}
+        </p>
+        <!-- Lista agrupada: rotulo a esquerda, controle a direita. -->
+        <div class="iw-group">
+          <div class="iw-row">
+            <label for={`image-count-${id}`} class="text-ui-lg text-[var(--app-text)]">{m['image_workflow.count']()}</label>
+            <NativeSelect.Root id={`image-count-${id}`} size="sm" class="w-20 shrink-0 tabular-nums" value={String(count)} onchange={(event: Event) => chooseCount((event.currentTarget as HTMLSelectElement).value)}>{#each Array.from({ length: 10 }, (_, index) => index + 1) as option}<option value={String(option)}>{option}</option>{/each}</NativeSelect.Root>
+          </div>
+          <label class="iw-row cursor-pointer">
+            <span class="min-w-0"><span class="block text-ui-lg text-[var(--app-text)]">{m['image_workflow.transparent']()}</span><small class="mt-0.5 block text-ui-sm leading-[1.4] text-pretty text-[var(--app-text-muted)]">{m['image_workflow.transparent_help']()}</small></span>
+            <Switch checked={transparentBackground} onCheckedChange={(checked: boolean) => { transparentBackground = checked; void persist(); }} />
+          </label>
+        </div>
+      </section>
 
-    <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-      <div class="grid grid-cols-[minmax(0,1fr)_minmax(100px,.55fr)] gap-2">
-        <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.output_folder']()}</span><Input value={outputDirectory} class="h-7 font-mono text-ui-xs" oninput={(event) => { outputDirectory = event.currentTarget.value; stage({ outputDirectory }); }} onblur={() => void persist()} /></label>
-        <label class="space-y-1"><span class="text-ui-xs font-medium text-[var(--app-text-muted)]">{m['image_workflow.file_prefix']()}</span><Input value={filePrefix} class="h-7 font-mono text-ui-xs" oninput={(event) => { filePrefix = event.currentTarget.value; stage({ filePrefix }); }} onblur={() => void persist()} /></label>
+      <section class="flex flex-col gap-2.5">
+        <h3 class="section-label">{m['image_workflow.section_destination']()}</h3>
+        <div class="grid grid-cols-[minmax(0,1fr)_minmax(100px,.55fr)] gap-2">
+          <label class="flex min-w-0 flex-col gap-1.5"><span class="iw-field-label">{m['image_workflow.output_folder']()}</span><Input value={outputDirectory} class="h-8 font-mono text-ui-md md:text-ui-md" oninput={(event: Event & { currentTarget: HTMLInputElement }) => { outputDirectory = event.currentTarget.value; stage({ outputDirectory }); }} onblur={() => void persist()} /></label>
+          <label class="flex min-w-0 flex-col gap-1.5"><span class="iw-field-label">{m['image_workflow.file_prefix']()}</span><Input value={filePrefix} class="h-8 font-mono text-ui-md md:text-ui-md" oninput={(event: Event & { currentTarget: HTMLInputElement }) => { filePrefix = event.currentTarget.value; stage({ filePrefix }); }} onblur={() => void persist()} /></label>
+        </div>
+        <p class="text-ui-sm leading-[1.45] text-pretty text-[var(--app-text-muted)]">{m['image_workflow.output_help']()}</p>
+      </section>
+    </div>
+
+    <!-- Rodape fixo: a acao principal nunca some com a rolagem e, quando
+         bloqueada, diz o motivo em vez de ficar so apagada. -->
+    <footer class="iw-footer">
+      {#if errorCode}
+        <div class="iw-alert" role="alert"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span>{errorLabel(errorCode)}</span></div>
+      {/if}
+      <div class="flex items-center gap-2">
+        <span class="min-w-0 flex-1 truncate text-ui-sm text-[var(--app-text-muted)]" role="status">
+          {#if running}{m['image_workflow.running_hint']()}{:else if blockedHint}{blockedHint}{:else if latest}{m['image_workflow.last_run']({ count: String(latest.outputPaths.length) })}{:else if outputs.length}{m['image_workflow.output_count']({ count: String(outputs.length) })}{:else}{m['image_workflow.no_runs']()}{/if}
+        </span>
+        {#if running}
+          <Button size="sm" variant="ghost" onclick={() => void cancel()}>{m['image_workflow.cancel']()}</Button>
+        {/if}
+        <Button size="sm" class="shrink-0 px-3 disabled:bg-[var(--app-hover)] disabled:text-[var(--app-text-muted)] disabled:opacity-100" disabled={running || !prompt.trim() || !status?.executorReady} onclick={() => void run()}>
+          {#if running}<LoaderCircle size={13} class="animate-spin" />{:else}<Sparkles size={13} />{/if}{running ? m['image_workflow.running']() : m['image_workflow.run']()}
+        </Button>
       </div>
-      <p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['image_workflow.output_help']()}</p>
-    </section>
-
-    {#if errorCode}
-      <div class="m-3 flex items-start gap-2 border border-[var(--app-danger)]/35 bg-[var(--app-danger-soft)] p-2 text-ui-xs leading-4 text-[var(--app-danger)]" role="alert"><TriangleAlert size={12} class="mt-0.5 shrink-0" /><span>{errorLabel(errorCode)}</span></div>
-    {/if}
-
-    <section class="mt-auto flex items-center gap-2 p-3">
-      <Button class="min-w-0 flex-1" size="sm" disabled={running || !prompt.trim() || !status?.executorReady} onclick={() => void run()}>
-        {#if running}<LoaderCircle size={12} class="animate-spin" />{:else}<Sparkles size={12} />{/if}{running ? m['image_workflow.running']() : m['image_workflow.run']()}
-      </Button>
-      <span class="text-right text-ui-xs leading-3 text-[var(--app-text-muted)]">{#if latest}{m['image_workflow.last_run']({ count: String(latest.outputPaths.length) })}{:else if outputs.length}{m['image_workflow.output_count']({ count: String(outputs.length) })}{:else}{m['image_workflow.no_runs']()}{/if}</span>
-    </section>
+    </footer>
   </div>
 </NodeShell>
+
+<style>
+  .iw-executor {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .iw-executor-tile {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+  }
+
+  /* Bolinha de estado: cor so para estado, sempre acompanhada de texto. */
+  .iw-dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--app-text-muted);
+  }
+
+  [data-state='ready'] .iw-dot {
+    background: var(--app-success);
+  }
+
+  [data-state='missing'] .iw-dot,
+  [data-state='offline'] .iw-dot {
+    background: var(--app-warning);
+  }
+
+  .iw :global(.iw-info-btn) {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .iw :global(.iw-info-btn:hover),
+  .iw :global(.iw-info-btn[data-state='open']) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .iw :global(.iw-info-btn:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .iw-field-label {
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* Informacao neutra: fundo de hover e texto suave, sem cor de estado. */
+  .iw-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .iw-chip :global(svg) {
+    color: var(--app-text-muted);
+  }
+
+  .iw-ref {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--app-canvas);
+    color: var(--app-text-muted);
+    cursor: pointer;
+    outline: 1px solid var(--app-image-outline);
+    outline-offset: -1px;
+    transition: box-shadow var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .iw-ref:hover {
+    box-shadow: 0 0 0 2px var(--app-secondary);
+  }
+
+  .iw-ref:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .iw-ref:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .iw-ref-index {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--app-surface-raised) 88%, transparent);
+    color: var(--app-text);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .iw-group {
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .iw-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .iw-row + .iw-row {
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  }
+
+  .iw-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+    padding: 10px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+    background: var(--app-surface);
+  }
+
+  .iw-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+    font-size: 12px;
+    line-height: 1.45;
+    text-wrap: pretty;
+    animation: iw-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes iw-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro));
+    }
+  }
+</style>

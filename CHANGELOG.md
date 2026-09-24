@@ -29,6 +29,8 @@ pt-BR, English, and Spanish translations.
 - Track the visible section in the How to use index and collapse long use cases behind Read more; give Skills & MCPs a stable width, elevated sections and standard tabs.
 - Give command palettes dedicated command icons, rows without repeated labels, a larger search field, a highlighted item that stays in view and a keyboard shortcut footer.
 - Rework the file tree, diff, editor, Git and portal nodes: a real search field, colored Git status chips with readable names, file actions on hover or focus, loading placeholders, empty and error states with a next step, a commit field that lights up when ready, a lighter portal header with settings on its control chip, and sliders for device dimensions.
+- Rework the creative nodes: drop an image straight onto an empty image node, see the image executor's readiness and why Generate is unavailable, reorder sequence clips by dragging, pick storyboard ratios and shape styles with segmented controls, switches and sliders, and get clear loading, empty and error states with a recovery action.
+- Give shapes a floating toolbar that frees their resize handles, and give groups a dashed frame, a raised label and keyboard rename with Enter or F2.
 
 ### Fixed
 

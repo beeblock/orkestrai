@@ -2,10 +2,11 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
 
   import { NodeResizer } from '@xyflow/svelte';
-  import { CopyPlus, GripHorizontal, Settings2, X } from '@lucide/svelte';
-  import { Input } from '$lib/components/ui/input';
+  import { AlignCenter, AlignLeft, AlignRight, ArrowRight, Circle, CopyPlus, Diamond, GripHorizontal, Settings2, Square, SquareRoundCorner, X } from '@lucide/svelte';
   import * as Select from '$lib/components/ui/select';
   import { Slider } from '$lib/components/ui/slider';
+  import { Switch } from '$lib/components/ui/switch';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import * as m from '$lib/paraglide/messages.js';
 
   export type ShapeKind = 'rectangle' | 'rounded' | 'ellipse' | 'diamond' | 'arrow';
@@ -61,7 +62,23 @@
   const shape: ShapeKind = $derived(data.payload.shape ?? 'rectangle');
   const label = $derived(data.payload.label ?? data.title ?? '');
 
+  // Cores de conteudo gravadas no payload da forma (nao sao tokens do tema:
+  // o desenho precisa sair igual em qualquer tema e em exportacoes).
   const SWATCHES = ['#7C4DFF', '#00BFFF', '#FFC857', '#3dd68c', '#e5484d', '#ffffff', '#8b8c96', 'transparent'];
+
+  // Escolhas curtas viram controles diretos (icone + nome acessivel).
+  const KIND_OPTIONS = [
+    { value: 'rectangle' as ShapeKind, label: m['shape.kind_rectangle'](), icon: Square },
+    { value: 'rounded' as ShapeKind, label: m['shape.kind_rounded'](), icon: SquareRoundCorner },
+    { value: 'ellipse' as ShapeKind, label: m['shape.kind_ellipse'](), icon: Circle },
+    { value: 'diamond' as ShapeKind, label: m['shape.kind_diamond'](), icon: Diamond },
+    { value: 'arrow' as ShapeKind, label: m['shape.kind_arrow'](), icon: ArrowRight },
+  ];
+  const ALIGN_OPTIONS = [
+    { value: 'left' as const, label: m['design.align_left'](), icon: AlignLeft },
+    { value: 'center' as const, label: m['design.align_center'](), icon: AlignCenter },
+    { value: 'right' as const, label: m['design.align_right'](), icon: AlignRight },
+  ];
 
   function patch(partial: Record<string, unknown>) {
     data.onPayloadChange?.(id, partial);
@@ -285,31 +302,30 @@
   bind:clientHeight={boxHeight}
   ondblclick={editLabel}
 >
+  <!-- Alcas e anel iguais aos do NodeShell: linha invisivel, quadradinhos
+       de 8px com recorte na cor da superficie. -->
   <NodeResizer
     isVisible={selected ?? false}
     minWidth={60}
     minHeight={40}
     onResizeEnd={(_e, params) => data.onResize?.(id, params)}
-    lineStyle="border-color: var(--app-accent)"
-    handleStyle="background: var(--app-accent)"
+    lineStyle="border-color: transparent"
+    handleStyle="width: 8px; height: 8px; border-radius: 3px; border: 1.5px solid var(--app-surface); background: var(--app-accent)"
   />
   {#if selected}
-    <HeaderIconButton label={m['shape.remove']()} class="shape-delete nodrag" side="left" onclick={() => data.onDelete(id)}>
-      <X size={12} />
-    </HeaderIconButton>
-
-    <HeaderIconButton
-      label={m['shape.duplicate_shortcut']()}
-      class="shape-duplicate nodrag"
-      side="left"
-      onclick={() => data.onDuplicate?.(id)}
-    >
-      <CopyPlus size={12} />
-    </HeaderIconButton>
-
-    <button class="shape-settings nodrag" class:style-open={styleOpen} aria-label={m['shape.style_title']()} onclick={openStylePanel}>
-      <Settings2 size={12} />
-    </button>
+    <!-- Acoes agrupadas numa barra acima da forma: os cantos ficam livres
+         para as alcas de redimensionar. -->
+    <div class="shape-toolbar nodrag">
+      <HeaderIconButton label={m['shape.style_title']()} class="shape-tool shape-settings" active={styleOpen} side="top" onclick={openStylePanel}>
+        <Settings2 size={13} />
+      </HeaderIconButton>
+      <HeaderIconButton label={m['shape.duplicate_shortcut']()} class="shape-tool shape-duplicate" side="top" onclick={() => data.onDuplicate?.(id)}>
+        <CopyPlus size={13} />
+      </HeaderIconButton>
+      <HeaderIconButton label={m['shape.remove']()} class="shape-tool shape-delete" danger side="top" onclick={() => data.onDelete(id)}>
+        <X size={13} />
+      </HeaderIconButton>
+    </div>
   {/if}
 
   {#if styleOpen}
@@ -342,18 +358,7 @@
       </div>
       <div class="pop-grid">
         <span class="pop-label">{m['shape.lbl_type']()}</span>
-        <Select.Root type="single" value={shape} onValueChange={(value: string) => patch({ shape: value as ShapeKind })}>
-          <Select.Trigger class="h-7 w-full text-xs" data-slot="select-trigger">
-            {{ rectangle: m['shape.kind_rectangle'](), rounded: m['shape.kind_rounded'](), ellipse: m['shape.kind_ellipse'](), diamond: m['shape.kind_diamond'](), arrow: m['shape.kind_arrow']() }[shape]}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="rectangle">{m['shape.kind_rectangle']()}</Select.Item>
-            <Select.Item value="rounded">{m['shape.kind_rounded']()}</Select.Item>
-            <Select.Item value="ellipse">{m['shape.kind_ellipse']()}</Select.Item>
-            <Select.Item value="diamond">{m['shape.kind_diamond']()}</Select.Item>
-            <Select.Item value="arrow">{m['shape.kind_arrow']()}</Select.Item>
-          </Select.Content>
-        </Select.Root>
+        <SegmentedControl options={KIND_OPTIONS} value={shape} label={m['shape.lbl_type']()} size="sm" iconOnly fill onValueChange={(value) => patch({ shape: value })} />
 
         <span class="pop-label">{m['shape.lbl_fill']()}</span>
         <div class="swatches">
@@ -362,22 +367,28 @@
               class="swatch"
               class:active={style.fill === swatch}
               class:transparent={swatch === 'transparent'}
-              style:background={swatch === 'transparent' ? 'transparent' : swatch}
+              style:--swatch={swatch}
               aria-label={m['shape.swatch_fill']({ color: swatch })}
+              aria-pressed={style.fill === swatch}
+              title={swatch}
               onclick={() => patch({ fill: swatch })}
             ></button>
           {/each}
         </div>
 
         <span class="pop-label">{m['shape.lbl_opacity']()}</span>
-        <Slider
-          type="single"
-          value={Math.round(style.fillOpacity * 100)}
-          min={0}
-          max={100}
-          step={5}
-          onValueChange={(value: number) => patch({ fillOpacity: value / 100 })}
-        />
+        <div class="pop-row">
+          <Slider
+            type="single"
+            value={Math.round(style.fillOpacity * 100)}
+            min={0}
+            max={100}
+            step={5}
+            aria-label={m['shape.lbl_opacity']()}
+            onValueChange={(value: number) => patch({ fillOpacity: value / 100 })}
+          />
+          <span class="pop-value">{Math.round(style.fillOpacity * 100)}%</span>
+        </div>
 
         <span class="pop-label">{m['shape.lbl_stroke']()}</span>
         <div class="swatches">
@@ -385,8 +396,10 @@
             <button
               class="swatch"
               class:active={style.stroke === swatch}
-              style:background={swatch}
+              style:--swatch={swatch}
               aria-label={m['shape.swatch_stroke']({ color: swatch })}
+              aria-pressed={style.stroke === swatch}
+              title={swatch}
               onclick={() => patch({ stroke: swatch })}
             ></button>
           {/each}
@@ -400,6 +413,7 @@
             min={0}
             max={10}
             step={0.5}
+            aria-label={m['shape.lbl_stroke_width']()}
             onValueChange={(value: number) => patch({ strokeWidth: value })}
           />
           <span class="pop-value">{style.strokeWidth}px</span>
@@ -414,6 +428,7 @@
               min={6}
               max={60}
               step={1}
+              aria-label={m['shape.lbl_head']()}
               onValueChange={(value: number) => patch({ headSize: value })}
             />
             <span class="pop-value">{style.headSize ?? Math.max(10, style.strokeWidth * 5)}px</span>
@@ -421,9 +436,11 @@
         {/if}
 
         <span class="pop-label">{m['shape.lbl_dashed']()}</span>
-        <button class="mini-toggle" class:active={style.strokeDash} onclick={() => patch({ strokeDash: !style.strokeDash })}>
-          {style.strokeDash ? m['shape.yes']() : m['shape.no']()}
-        </button>
+        <div class="pop-row">
+          <Switch checked={style.strokeDash} aria-label={m['shape.lbl_dashed']()} onCheckedChange={(checked: boolean) => patch({ strokeDash: checked })} />
+        </div>
+
+        <div class="pop-divider" aria-hidden="true"></div>
 
         <span class="pop-label">{m['shape.lbl_text']()}</span>
         <div class="swatches">
@@ -431,26 +448,32 @@
             <button
               class="swatch"
               class:active={style.textColor === swatch}
-              style:background={swatch}
+              style:--swatch={swatch}
               aria-label={m['shape.swatch_text']({ color: swatch })}
+              aria-pressed={style.textColor === swatch}
+              title={swatch}
               onclick={() => patch({ textColor: swatch })}
             ></button>
           {/each}
         </div>
 
         <span class="pop-label">{m['shape.lbl_size']()}</span>
-        <Input
-          class="h-7 w-20 text-xs"
-          type="number"
-          min={8}
-          max={72}
-          value={style.fontSize}
-          oninput={(event: Event) => patch({ fontSize: Number((event.target as HTMLInputElement).value) || DEFAULTS.fontSize })}
-        />
+        <div class="pop-row">
+          <Slider
+            type="single"
+            value={style.fontSize}
+            min={8}
+            max={72}
+            step={1}
+            aria-label={m['shape.lbl_size']()}
+            onValueChange={(value: number) => patch({ fontSize: value || DEFAULTS.fontSize })}
+          />
+          <span class="pop-value">{style.fontSize}px</span>
+        </div>
 
         <span class="pop-label">{m['shape.lbl_weight']()}</span>
         <Select.Root type="single" value={String(style.fontWeight)} onValueChange={(value: string) => patch({ fontWeight: Number(value) })}>
-          <Select.Trigger class="h-7 w-full text-xs" data-slot="select-trigger">
+          <Select.Trigger class="h-7 w-full text-xs" data-slot="select-trigger" aria-label={m['shape.lbl_weight']()}>
             {{ '400': m['shape.weight_400'](), '500': m['shape.weight_500'](), '600': m['shape.weight_600'](), '700': m['shape.weight_700']() }[String(style.fontWeight)]}
           </Select.Trigger>
           <Select.Content>
@@ -462,15 +485,7 @@
         </Select.Root>
 
         <span class="pop-label">{m['shape.lbl_align']()}</span>
-        <div class="pop-row">
-          {#each (['left', 'center', 'right'] as const) as align (align)}
-            <button
-              class="mini-toggle"
-              class:active={style.textAlign === align}
-              onclick={() => patch({ textAlign: align })}
-            >{{ left: m['shape.align_left'](), center: m['shape.align_center'](), right: m['shape.align_right']() }[align]}</button>
-          {/each}
-        </div>
+        <SegmentedControl options={ALIGN_OPTIONS} value={style.textAlign} label={m['shape.lbl_align']()} size="sm" iconOnly fill onValueChange={(value) => patch({ textAlign: value })} />
 
         {#if shape === 'arrow'}
           <span class="pop-label">{m['shape.lbl_points']()}</span>
@@ -582,12 +597,21 @@
     width: 100%;
     height: 100%;
     position: relative;
+    border-radius: 4px;
+    transition: box-shadow var(--duration-quick) ease-out;
   }
 
-  /* Mesma linguagem de selecao do NodeShell. Sem border-color aqui: a caixa
-     nao tem borda e um border-width novo deslocaria o SVG em 1px. */
+  /* Mesma linguagem do NodeShell: anel fino ao apontar; na selecao, anel
+     de 1px no acento + halo de 4px. Sombra, nunca borda: uma borda nova
+     deslocaria o SVG em 1px. */
+  .canvas-shape:hover {
+    box-shadow: 0 0 0 1px var(--app-ring-hairline-strong);
+  }
+
   .canvas-shape.selected {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 18%, transparent);
+    box-shadow:
+      0 0 0 1px var(--app-accent),
+      0 0 0 4px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .shape-svg {
@@ -607,6 +631,7 @@
     stroke-width: 2;
     cursor: grab;
     pointer-events: all;
+    transition: fill var(--duration-quick) ease-out;
   }
 
   .arrow-anchor:hover {
@@ -639,86 +664,86 @@
     line-height: 1.2;
   }
 
-  :global(.shape-delete),
-  :global(.shape-duplicate) {
+  /* Barra flutuante da forma selecionada (mesma elevacao dos menus). */
+  .shape-toolbar {
     position: absolute;
-    top: -10px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 1px solid var(--app-border-strong);
-    background: var(--app-surface-raised);
-    color: var(--app-text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
+    right: 0;
+    bottom: calc(100% + 10px);
     z-index: 5;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-overlay);
   }
 
-  :global(.shape-delete) {
-    right: -10px;
+  .shape-toolbar :global(.shape-tool) {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition:
+      background-color var(--duration-quick) ease-out,
+      color var(--duration-quick) ease-out,
+      transform var(--duration-quick) var(--ease-smooth-out);
   }
 
-  :global(.shape-duplicate) {
-    right: 16px;
+  .shape-toolbar :global(.shape-tool:hover),
+  .shape-toolbar :global(.shape-tool.active) {
+    background: var(--app-hover);
+    color: var(--app-text);
   }
 
-  :global(.shape-delete):hover {
+  .shape-toolbar :global(.shape-tool.danger:hover) {
+    background: var(--app-danger-soft);
     color: var(--app-danger);
   }
 
-  :global(.shape-duplicate):hover {
-    color: var(--app-accent);
-    border-color: var(--app-accent);
+  .shape-toolbar :global(.shape-tool:active) {
+    transform: scale(var(--scale-press));
   }
 
-  :global(.shape-settings) {
-    position: absolute;
-    top: -10px;
-    left: -10px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 1px solid var(--app-border-strong);
-    background: var(--app-surface-raised);
-    color: var(--app-text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 5;
-  }
-
-  :global(.shape-settings:hover),
-  .shape-settings.style-open {
-    color: var(--app-accent);
-    border-color: var(--app-accent);
+  .shape-toolbar :global(.shape-tool:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .style-panel {
     position: fixed;
     /* z 40: acima do canvas, ABAIXO dos dropdowns (bits-ui Select ~50). */
     z-index: 40;
-    width: 264px;
-    border: 1px solid var(--app-border);
+    width: 288px;
     border-radius: 12px;
     background: var(--app-surface);
     box-shadow: var(--app-shadow-overlay);
-    padding: 10px 12px 12px;
+    padding: 0 12px 12px;
     user-select: none;
+    animation: style-panel-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes style-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro)) scale(var(--scale-dropdown));
+    }
   }
 
   .style-panel-grip {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin: -4px -6px 10px;
-    padding: 6px 6px 8px;
-    border-bottom: 1px solid var(--app-border);
+    height: 40px;
+    margin: 0 -12px 12px;
+    padding: 0 6px 0 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
     color: var(--app-text-muted);
-    font-size: 11px;
-    font-weight: 600;
     cursor: grab;
     touch-action: none;
   }
@@ -727,97 +752,132 @@
     cursor: grabbing;
   }
 
+  .style-panel-grip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+    border-radius: 12px 12px 0 0;
+  }
+
   .style-panel-grip span {
     flex: 1;
+    color: var(--app-text);
+    font-size: 12.5px;
+    font-weight: 600;
   }
 
   .style-panel-close {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
     border: none;
+    border-radius: 6px;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
-    display: inline-flex;
-    padding: 2px;
-    border-radius: 5px;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
   }
 
   .style-panel-close:hover {
-    color: var(--app-danger);
-    background: var(--app-border);
+    color: var(--app-text);
+    background: var(--app-hover);
+  }
+
+  .style-panel-close:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .pop-grid {
     display: grid;
-    grid-template-columns: 70px 1fr;
+    grid-template-columns: 72px minmax(0, 1fr);
     align-items: center;
-    gap: 8px 10px;
+    gap: 12px 12px;
   }
 
   .pop-label {
-    font-size: 11px;
     color: var(--app-text-muted);
+    font-size: 11.5px;
   }
 
   .pop-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
+    min-height: 24px;
   }
 
   .pop-value {
-    font-size: 10px;
-    color: var(--app-text-muted);
-    min-width: 28px;
+    min-width: 34px;
+    color: var(--app-text-soft);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
     text-align: right;
   }
 
   .pop-hint {
-    font-size: 10px;
     color: var(--app-text-muted);
-    line-height: 1.4;
+    font-size: 11px;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  .pop-divider {
+    grid-column: 1 / -1;
+    height: 1px;
+    margin: 2px -12px;
+    background: color-mix(in srgb, var(--app-border) 70%, transparent);
   }
 
   .swatches {
     display: flex;
-    gap: 4px;
     flex-wrap: wrap;
+    margin: -4px;
   }
 
+  /* Alvo de 22px para uma bolinha de 14px; anel marca a cor atual. */
   .swatch {
-    width: 16px;
-    height: 16px;
-    border-radius: 5px;
-    border: 1px solid var(--app-border-strong);
-    cursor: pointer;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
     padding: 0;
-  }
-
-  .swatch.transparent {
-    background: repeating-conic-gradient(
-        var(--app-surface-raised) 0% 25%,
-        var(--app-surface-subtle) 0% 50%
-      )
-      0 0 / 8px 8px;
-  }
-
-  .swatch.active {
-    outline: 2px solid var(--app-text);
-    outline-offset: 1px;
-  }
-
-  .mini-toggle {
-    border: 1px solid var(--app-border);
-    background: transparent;
-    color: var(--app-text-muted);
-    font-size: 10px;
+    border: 0;
     border-radius: 6px;
-    padding: 3px 8px;
+    background: transparent;
     cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
-  .mini-toggle.active {
-    background: var(--app-accent-soft);
-    border-color: var(--app-accent);
-    color: var(--app-text);
+  .swatch::after {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--swatch);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 18%, transparent);
+  }
+
+  .swatch.transparent::after {
+    background: repeating-conic-gradient(var(--app-surface-raised) 0% 25%, var(--app-surface-subtle) 0% 50%) 0 0 / 6px 6px;
+  }
+
+  .swatch:hover {
+    background: var(--app-hover);
+  }
+
+  .swatch:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .swatch.active::after {
+    box-shadow: 0 0 0 2px var(--app-surface), 0 0 0 3.5px var(--app-text);
+  }
+
+  .swatch:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 </style>
