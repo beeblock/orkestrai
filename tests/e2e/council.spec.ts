@@ -64,7 +64,8 @@ test.describe('Council', () => {
       ));
       expect(serious, serious.map((item) => item.id).join(', ')).toEqual([]);
     } finally {
-      await page.goto('about:blank');
+      // After a timeout the page may already be closed; settings must still be restored.
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }

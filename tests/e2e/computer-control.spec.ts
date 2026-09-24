@@ -146,7 +146,7 @@ test('Computer remains usable in Canvas and Workbench, with honest permissions a
     }
     expect(errors).toEqual([]);
   } finally {
-    await page.goto('about:blank');
+    await page.goto('about:blank').catch(() => undefined);
     await request.put('/api/agent-room/settings', { data: settings });
     await request.delete(`${root}`);
     rmSync(dir, { recursive: true, force: true });
@@ -199,7 +199,7 @@ test('calendar routines persist timezone and keep editor controls visible in bot
     }
     expect(errors).toEqual([]);
   } finally {
-    await page.goto('about:blank');
+    await page.goto('about:blank').catch(() => undefined);
     await request.put('/api/agent-room/settings', { data: settings });
     await request.delete(root);
     rmSync(dir, { recursive: true, force: true });
