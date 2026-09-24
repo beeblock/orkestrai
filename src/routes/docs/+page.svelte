@@ -371,7 +371,7 @@
             <details class="group border-t border-[var(--line)] first:border-t-0">
               <summary class="flex min-h-12 cursor-pointer list-none items-center gap-3 py-3 outline-none transition-colors hover:text-[var(--app-accent)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/45 [&::-webkit-details-marker]:hidden">
                 <span class="min-w-0 flex-1 font-['Sora_Variable'] text-xs font-semibold text-[var(--cyan)] tabular-nums">{entry.date}</span>
-                <span class="text-[10.5px] text-[var(--copy-muted)] tabular-nums">
+                <span class="text-[11px] text-[var(--copy-muted)] tabular-nums">
                   {m['docs.changelog_change_count']({ count: String(entry.items.length) })}
                 </span>
                 <ChevronDown size={14} class="shrink-0 text-[var(--copy-muted)] transition-transform duration-150 group-open:rotate-180" aria-hidden="true" />
@@ -742,7 +742,7 @@
   }
 
   .usecase-tag {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--cyan);
     background: color-mix(in srgb, var(--cyan) 12%, transparent);
@@ -791,7 +791,7 @@
   /* ---- Paleta de busca (Cmd/Ctrl+K) --------------------------------------- */
   .search-kbd {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: 11px;
     font-family: var(--font-mono);
     color: var(--copy-muted);
     background: var(--surface-raised);
@@ -877,7 +877,7 @@
 
   .palette-kind {
     flex-shrink: 0;
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -905,7 +905,7 @@
     margin: 0;
     padding: 8px 14px;
     border-top: 1px solid var(--app-border);
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--copy-muted);
   }
 

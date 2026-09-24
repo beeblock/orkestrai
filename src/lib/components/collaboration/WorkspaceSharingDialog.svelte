@@ -552,7 +552,7 @@
         <Tabs.Root bind:value={activeTab} class="flex min-h-0 flex-1 flex-col gap-0">
           <Tabs.List class="mx-5 mt-4 grid h-9 shrink-0 grid-cols-3 rounded-lg bg-[var(--app-hover)] p-0.5">
             <Tabs.Trigger value="invite" class={segmentTab}>{m["collaboration.tab_invite"]()}</Tabs.Trigger>
-            <Tabs.Trigger value="access" class={segmentTab}>{m["collaboration.tab_access"]()}{#if pendingDevices.length}<span class="min-w-4 rounded-full bg-[var(--app-warning)] px-1 font-mono text-[10.5px] leading-4 text-[var(--app-accent-contrast)] tabular-nums">{pendingDevices.length}</span>{/if}</Tabs.Trigger>
+            <Tabs.Trigger value="access" class={segmentTab}>{m["collaboration.tab_access"]()}{#if pendingDevices.length}<span class="min-w-4 rounded-full bg-[var(--app-warning)] px-1 font-mono text-[11px] leading-4 text-[var(--app-accent-contrast)] tabular-nums">{pendingDevices.length}</span>{/if}</Tabs.Trigger>
             <Tabs.Trigger value="activity" class={segmentTab}>{m["collaboration.tab_activity"]()}</Tabs.Trigger>
           </Tabs.List>
 
@@ -609,7 +609,7 @@
                     <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-warning-soft)] text-[var(--app-warning)]" aria-hidden="true"><Laptop size={15} /></span>
                     <div class="min-w-0 flex-1">
                       <p class="truncate text-ui-lg font-medium">{device.displayName}</p>
-                      <p class="mt-0.5 truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={device.fingerprint}>{device.fingerprint}</p>
+                      <p class="mt-0.5 truncate font-mono text-[11px] text-[var(--app-text-muted)]" title={device.fingerprint}>{device.fingerprint}</p>
                     </div>
                   </div>
                   <div class="flex flex-wrap items-end gap-3">
@@ -643,7 +643,7 @@
                   </div>
                 </div>
               {:else}
-                <p class="flex items-center gap-2 rounded-lg bg-[var(--app-hover)] px-3 py-2.5 text-ui-md text-[var(--app-text-muted)]"><Laptop size={14} class="shrink-0" aria-hidden="true" />{m["collaboration.no_pending"]()}</p>
+                <p class="flex items-center gap-2 rounded-lg bg-[var(--app-hover)] px-3 py-2.5 text-ui-md text-[var(--app-text-soft)]"><Laptop size={14} class="shrink-0" aria-hidden="true" />{m["collaboration.no_pending"]()}</p>
               {/each}
             </section>
             <section class="grid gap-2">
@@ -654,7 +654,7 @@
                     <span class="size-2 shrink-0 rounded-full bg-[var(--app-success)]" aria-hidden="true"></span>
                     <div class="min-w-32 flex-1">
                       <p class="truncate text-ui-lg font-medium">{device.displayName}</p>
-                      <p class="mt-0.5 truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={device.fingerprint}>{device.fingerprint}</p>
+                      <p class="mt-0.5 truncate font-mono text-[11px] text-[var(--app-text-muted)]" title={device.fingerprint}>{device.fingerprint}</p>
                     </div>
                     <Select.Root type="single" value={roleDrafts[device.id]} onValueChange={(value: string) => { roleDrafts = { ...roleDrafts, [device.id]: value as CollaborationRole }; if (value !== "administrator") { terminalDrafts = { ...terminalDrafts, [device.id]: false }; } }}>
                       <Select.Trigger size="sm" aria-label={m["collaboration.default_role"]()}><span>{roleLabel(roleDrafts[device.id] ?? device.role)}</span></Select.Trigger>
@@ -691,7 +691,7 @@
                     <Clock3 size={14} class="mt-0.5 shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
                     <div class="min-w-0 flex-1">
                       <p class="text-ui-lg font-medium">{eventLabel(event.eventType)}</p>
-                      <p class="mt-0.5 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{new Date(event.createdAt).toLocaleString(localeState.current)}</p>
+                      <p class="mt-0.5 font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">{new Date(event.createdAt).toLocaleString(localeState.current)}</p>
                     </div>
                   </li>
                 {/each}

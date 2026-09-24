@@ -407,7 +407,7 @@
     background: var(--app-hover);
   }
 
-  .permission-option:has([data-state='checked']) {
+  .permission-option:has(:global([data-state='checked'])) {
     background: var(--app-active);
     box-shadow: var(--app-shadow-border-hover);
   }

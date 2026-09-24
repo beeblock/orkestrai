@@ -162,14 +162,14 @@
     white-space: nowrap;
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
   }
 
   .doc-revision {
     flex-shrink: 0;
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -224,7 +224,7 @@
     padding: 0 10px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-size: 12px;
   }
 </style>

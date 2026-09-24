@@ -2055,9 +2055,9 @@
     padding: 0 5px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     line-height: 18px;
     text-align: center;
@@ -2213,7 +2213,7 @@
     flex-shrink: 0;
     color: var(--app-secondary);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.02em;
   }

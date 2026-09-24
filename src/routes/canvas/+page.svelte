@@ -2009,9 +2009,17 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
+  // O fundo do canvas aceita soltar; o painel do workspace vazio fica por cima
+  // dele e conta como fundo, senao arrastar para o centro nao criaria nada.
+  function isCanvasDropTarget(target: EventTarget | null): boolean {
+    return target instanceof Element
+      && Boolean(target.closest('.svelte-flow__pane, .blank-canvas'))
+      && !target.closest('.svelte-flow__node, .svelte-flow__panel');
+  }
+
   let placingCharacter = $state(false);
   function isCharacterDrop(event: DragEvent) {
-    return Boolean(activeWorkspace && !designModeNodeId && !event.defaultPrevented && event.target instanceof Element && event.target.closest('.svelte-flow__pane') && !event.target.closest('.svelte-flow__node, .svelte-flow__panel') && event.dataTransfer?.types.includes(CHARACTER_DRAG_TYPE));
+    return Boolean(activeWorkspace && !designModeNodeId && !event.defaultPrevented && isCanvasDropTarget(event.target) && event.dataTransfer?.types.includes(CHARACTER_DRAG_TYPE));
   }
   async function placeCharacter(input: { id: string; sourceWorkspaceId: string }, position?: { x: number; y: number }) {
     if (!activeWorkspace || placingCharacter) return;
@@ -2032,9 +2040,7 @@
   }
   function isCanvasFileDrop(event: DragEvent): boolean {
     return Boolean(activeWorkspace && !designModeNodeId && !event.defaultPrevented
-      && event.target instanceof Element
-      && event.target.closest('.svelte-flow__pane')
-      && !event.target.closest('.svelte-flow__node, .svelte-flow__panel')
+      && isCanvasDropTarget(event.target)
       && event.dataTransfer && (event.dataTransfer.files.length || Array.from(event.dataTransfer.types).includes('Files')));
   }
 
@@ -2045,9 +2051,7 @@
   function isToolDrop(event: DragEvent): boolean {
     return Boolean(activeWorkspace && !designModeNodeId && event.dataTransfer
       && Array.from(event.dataTransfer.types).includes(TOOL_DRAG_TYPE)
-      && event.target instanceof Element
-      && event.target.closest('.svelte-flow__pane')
-      && !event.target.closest('.svelte-flow__node, .svelte-flow__panel'));
+      && isCanvasDropTarget(event.target));
   }
 
   function handleCanvasFileDragOver(event: DragEvent) {
@@ -3692,9 +3696,9 @@
     padding: 0 5px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     letter-spacing: 0;
     line-height: 16px;
@@ -3719,7 +3723,7 @@
     border-radius: 8px;
     border: 1px solid transparent;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     flex-shrink: 0;
     transition: border-color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
   }
@@ -3953,7 +3957,7 @@
 
   .ws-group-count {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--app-text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -4191,12 +4195,6 @@
     color: var(--app-accent-contrast);
   }
 
-  .empty {
-    color: var(--app-text-muted);
-    font-size: 12px;
-    padding: 8px;
-  }
-
   .workspace-list li.empty-card {
     display: grid;
     justify-items: start;
@@ -4206,17 +4204,6 @@
     border-radius: 10px;
     background: var(--app-surface-subtle);
     box-shadow: var(--app-shadow-border);
-  }
-
-  .empty-card .empty-icon {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    margin-bottom: 4px;
-    border-radius: 8px;
-    background: var(--app-accent-soft);
-    color: var(--app-accent);
   }
 
   .empty-card strong {
@@ -4617,6 +4604,7 @@
     place-items: center;
     padding: 24px 24px 96px;
     pointer-events: none;
+    transition: opacity var(--duration-fast) var(--ease-smooth-out);
   }
 
   .blank-card {
@@ -4630,6 +4618,10 @@
     backdrop-filter: blur(10px);
     pointer-events: auto;
     animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
+  }
+
+  .canvas-area.tool-drop .blank-canvas {
+    opacity: 0.4;
   }
 
   .blank-card h2 {

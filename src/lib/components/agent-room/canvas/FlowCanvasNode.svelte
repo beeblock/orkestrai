@@ -434,9 +434,9 @@
     padding: 0 6px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 18px;
     text-align: center;
     font-variant-numeric: tabular-nums;

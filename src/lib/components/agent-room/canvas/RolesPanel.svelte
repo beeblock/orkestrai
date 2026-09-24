@@ -344,7 +344,7 @@
 
   .role-info small {
     color: var(--app-text-muted);
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .empty {
@@ -402,7 +402,7 @@
     border: none;
     background: transparent;
     color: var(--app-text-muted);
-    font-size: 10px;
+    font-size: 11px;
     padding: 3px 10px;
     cursor: pointer;
   }

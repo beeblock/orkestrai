@@ -14,6 +14,40 @@ test.describe('canvas de workspaces', () => {
     expect(pageErrors).toEqual([]);
   });
 
+  test('aceita ferramenta e arquivo soltos sobre o painel do workspace vazio', async ({ page, request }) => {
+    const created = await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E blank drop ${Date.now()}`, workingDir: '/tmp' },
+    });
+    const workspace = (await created.json()).data as { id: string };
+
+    try {
+      await page.goto(`/canvas?workspace=${workspace.id}`);
+      const blank = page.locator('.blank-card');
+      await expect(blank).toBeVisible();
+
+      // Regressão: o painel fica no centro, por cima do fundo do canvas; soltar
+      // uma ferramenta do dock ali tem que criar o nó como no resto do canvas.
+      await page.getByRole('button', { name: 'Nota markdown compartilhada com os agentes (specs, briefings)' }).dragTo(blank);
+      await expect(page.locator('.svelte-flow__node')).toHaveCount(1);
+      await expect(blank).toBeHidden();
+
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}/nodes/${(await page.locator('.svelte-flow__node').getAttribute('data-id'))}`);
+      await page.reload();
+      await expect(blank).toBeVisible();
+
+      // Arquivo local solto no mesmo ponto vira um documento no canvas.
+      const dataTransfer = await page.evaluateHandle(() => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(['# Brief\n\nCheckout review.'], 'brief.md', { type: 'text/markdown' }));
+        return transfer;
+      });
+      await blank.dispatchEvent('drop', { dataTransfer });
+      await expect(page.locator('.svelte-flow__node')).toHaveCount(1, { timeout: 15_000 });
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    }
+  });
+
   test('mantém ações do terminal clicáveis quando um cliente de API sobrepõe sua borda', async ({ page, request }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -157,10 +191,30 @@ test.describe('canvas de workspaces', () => {
       expect((footerBox?.y ?? 0) + (footerBox?.height ?? 0)).toBeLessThanOrEqual((dialogBox?.y ?? 0) + (dialogBox?.height ?? 0) + 1);
       expect((footerBox?.y ?? 0) + (footerBox?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
       await runnerDialog.getByRole('button', { name: 'Salvar runners' }).click();
-      await expect.poll(async () => {
+      const runnerOrder = async () => {
         const result = await (await request.get(`/api/agent-room/workspaces/${workspace.id}/nodes`)).json();
-        return (result.data as Array<{ id: string; payload: any }>).find((node) => node.id === apiNode.id)!.payload.runners?.length ?? 0;
-      }).toBe(1);
+        return ((result.data as Array<{ id: string; payload: any }>).find((node) => node.id === apiNode.id)!.payload.runners ?? [])
+          .map((runner: { requestIds: string[] }) => runner.requestIds);
+      };
+      await expect.poll(async () => (await runnerOrder()).length).toBe(1);
+      const [initialOrder] = await runnerOrder();
+      expect(initialOrder).toHaveLength(2);
+
+      // Arrastar o puxador do primeiro request sobre o segundo inverte a ordem salva.
+      await client.getByRole('button', { name: 'Runners da coleção' }).click();
+      const runnerRows = runnerDialog.locator('.runner-request');
+      await expect(runnerRows).toHaveCount(2);
+      // A lista rola dentro do painel do runner, sem ficar presa sob o rodapé.
+      await runnerRows.nth(1).scrollIntoViewIfNeeded();
+      const gripBox = await runnerRows.nth(0).getByRole('button', { name: 'Arraste para reordenar o request' }).boundingBox();
+      const secondRowBox = await runnerRows.nth(1).boundingBox();
+      if (!gripBox || !secondRowBox) throw new Error('Runner drag geometry is unavailable');
+      await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(secondRowBox.x + secondRowBox.width / 2, secondRowBox.y + secondRowBox.height / 2, { steps: 8 });
+      await page.mouse.up();
+      await runnerDialog.getByRole('button', { name: 'Salvar runners' }).click();
+      await expect.poll(runnerOrder).toEqual([[initialOrder[1], initialOrder[0]]]);
 
       await client.getByTestId(`api-folder-${folderId}`).click({ button: 'right' });
       await expect(page.getByRole('menuitem', { name: 'Executar pasta' })).toBeVisible();

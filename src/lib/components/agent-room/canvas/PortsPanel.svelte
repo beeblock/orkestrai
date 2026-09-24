@@ -265,7 +265,7 @@
   }
 
   .status-label {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--app-text-muted);
   }
 
@@ -279,7 +279,7 @@
     border: 1px solid color-mix(in srgb, var(--app-secondary) 32%, var(--app-border));
     border-radius: 999px;
     color: var(--app-secondary);
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
   }

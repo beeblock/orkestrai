@@ -120,7 +120,7 @@
         <Select.Item value={preset.id} class="py-1.5">
           <div class="flex min-w-0 flex-1 items-center justify-between gap-5">
             <span>{preset.label}</span>
-            <span class="font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{preset.width} × {preset.height}</span>
+            <span class="font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">{preset.width} × {preset.height}</span>
           </div>
         </Select.Item>
       {/each}

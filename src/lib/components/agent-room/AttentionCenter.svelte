@@ -179,7 +179,7 @@
           {#if actionable.length}<BellRing size={15} />{:else}<Bell size={15} />{/if}
           {#if actionable.length}
             <!-- Contador so com tokens (texto na cor da pagina contrasta nos dois temas); anel separa do icone. -->
-            <span class="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--app-danger)] px-1 font-mono text-[10.5px] font-semibold leading-4 tabular-nums text-[var(--app-page)] ring-2 ring-[var(--app-sidebar)]">
+            <span class="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--app-danger)] px-1 font-mono text-[11px] font-semibold leading-4 tabular-nums text-[var(--app-page)] ring-2 ring-[var(--app-sidebar)]">
               {actionable.length > 99 ? '99+' : actionable.length}
             </span>
           {/if}

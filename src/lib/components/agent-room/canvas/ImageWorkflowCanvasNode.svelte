@@ -588,7 +588,7 @@
     background: color-mix(in srgb, var(--app-surface-raised) 88%, transparent);
     color: var(--app-text);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 16px;
     text-align: center;
     font-variant-numeric: tabular-nums;

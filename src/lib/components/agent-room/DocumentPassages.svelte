@@ -28,9 +28,9 @@
     padding: 1px 6px;
     border-radius: 5px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     line-height: 1.6;
     font-variant-numeric: tabular-nums;
@@ -72,7 +72,7 @@
     background: var(--app-surface-subtle);
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     text-align: left;
     border-bottom: 1px solid var(--app-border);

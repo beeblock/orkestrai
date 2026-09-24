@@ -42,6 +42,10 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Drop dock tools, files and characters onto the empty-workspace panel in the middle of the canvas; drops there were ignored.
+- Raise the remaining 10–10.5px counts, paths and badges to the 11px minimum, and give count pills on tinted backgrounds readable contrast in every theme.
+- Show a tooltip on icon-only segmented options and restore the highlight of selected permission, grant and huddle target chips.
+- Let the collection runner's form scroll inside its dialog, so requests further down are no longer hidden under the footer.
 - Mark the language in use as Current in the welcome flow and focus it, so the first option no longer looks selected.
 - Show "1 selected" instead of a plural label when a single node is selected.
 - Resolve surfaces and text in Computer, Integrations, Tool Workshop, Storyboard, Sequence and Knowledge views that referenced missing theme colors.

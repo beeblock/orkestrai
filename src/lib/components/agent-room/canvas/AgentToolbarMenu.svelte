@@ -180,7 +180,7 @@
 
   :global(.provider-menu-copy small) {
     color: var(--app-text-muted);
-    font-size: 10.5px;
+    font-size: 11px;
   }
 
   :global(.provider-setup-icon) {

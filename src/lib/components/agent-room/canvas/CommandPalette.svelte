@@ -118,11 +118,11 @@
             onpointerenter={() => (selectedIndex = index)}
             onclick={() => choose(item)}
           >
-            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-muted)] transition-colors duration-150 group-aria-selected:bg-[var(--app-accent-soft)] group-aria-selected:text-[var(--app-accent)]">
+            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-soft)] transition-colors duration-150 group-aria-selected:bg-[var(--app-accent-soft)] group-aria-selected:text-[var(--app-accent)]">
               {#if item.kind === 'node'}<Box size={14} />{:else}<Zap size={14} />{/if}
             </span>
             <span class="min-w-0 flex-1 truncate">{item.label}</span>
-            <span class="shrink-0 font-mono text-[10.5px] text-[var(--app-text-muted)]">{item.hint}</span>
+            <span class="shrink-0 font-mono text-[11px] text-[var(--app-text-muted)]">{item.hint}</span>
           </button>
         </li>
       {:else}

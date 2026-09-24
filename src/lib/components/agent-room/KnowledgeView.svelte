@@ -166,7 +166,7 @@
           <aside class="kv-detail absolute inset-y-0 right-0 z-30 w-80 max-w-[90%] overflow-auto overscroll-contain bg-[var(--app-surface)] p-4 @min-[760px]/knowledge:static @min-[760px]/knowledge:shrink-0">
             <div class="flex items-start gap-2"><h3 class="min-w-0 flex-1 pt-1 text-ui-lg leading-snug font-semibold break-words">{document.title}</h3><Button variant="ghost" size="icon-sm" aria-label={m['knowledge.close']()} onclick={() => { document = null; selectedId = null; selectionSequence++; }}><X size={14} /></Button></div>
             <p class="mt-1.5 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-sm text-[var(--app-text-muted)]"><span class="kv-chip" class:kv-chip-warn={document.status === 'missing' || document.status === 'error'}>{knowledgeLabel(document.status)}</span><span class="kv-mono">v{document.revision} · {new Date(document.indexedAt).toLocaleString()}</span></p>
-            {#if document.path}<p class="mb-3 font-mono text-[10.5px] leading-relaxed break-all text-[var(--app-text-muted)]">{document.path}</p>{/if}
+            {#if document.path}<p class="mb-3 font-mono text-[11px] leading-relaxed break-all text-[var(--app-text-muted)]">{document.path}</p>{/if}
             {#if document.nodeId && onJumpToNode}<Button size="sm" variant="outline" onclick={() => onJumpToNode?.(document!.nodeId!)}><ExternalLink size={14} />{m['knowledge.open_source']()}</Button>{/if}
             {#if document.nodeId}<form class="mt-3 mb-4 flex gap-1.5" onsubmit={(event) => { event.preventDefault(); void saveTags(); }}><Input class="h-8" aria-label={m['knowledge.tags']()} placeholder={m['knowledge.tags']()} bind:value={tagDraft} /><Button type="submit" size="sm" variant="outline" class="h-8" disabled={busy}>{m['knowledge.save']()}</Button></form>{/if}
             {#if document.truncated}<p class="kv-alert kv-alert-warn mx-0"><TriangleAlert size={13} aria-hidden="true" /><span>{m['knowledge.truncated']()}</span></p>{/if}
@@ -404,7 +404,7 @@
 
   .kv-mono {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -423,7 +423,7 @@
     padding: 0 10px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-size: 12px;
   }
 

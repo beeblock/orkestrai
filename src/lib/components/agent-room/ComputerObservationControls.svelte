@@ -281,7 +281,7 @@
   .oc-value,
   .oc-count {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -299,7 +299,7 @@
     padding: 0 7px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     line-height: 18px;
     white-space: nowrap;
   }

@@ -531,8 +531,8 @@
   .provider-status-line.status-major, .provider-status-line.status-critical { color: var(--app-danger); }
   .provider-status-line.status-unavailable { color: var(--app-text-muted); }
   .capabilities { min-height: 24px; margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .capabilities span { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--app-hover); color: var(--app-text-muted); font-size: 11px; }
-  .capabilities .version { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 10.5px; }
+  .capabilities span { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--app-hover); color: var(--app-text-soft); font-size: 11px; }
+  .capabilities .version { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; }
   .provider-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 
   .setup-panel { position: relative; padding: 18px 18px 18px 70px; border-top: 1px solid var(--app-border); background: var(--app-surface-subtle); display: grid; gap: 15px; }

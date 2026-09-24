@@ -383,7 +383,7 @@
   }
 
   .landing-preview pre {
-    font-size: 10px;
+    font-size: 11px;
     overflow-x: auto;
     background: var(--app-canvas);
     padding: 6px;
@@ -421,7 +421,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--app-text-muted);
   }
 </style>

@@ -956,7 +956,7 @@
     background: transparent;
     color: color-mix(in srgb, #ffffff 72%, transparent);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     box-shadow: none;
   }
 
@@ -996,7 +996,7 @@
   .dictate-rec {
     padding: 0 6px;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: #ff6b6f;

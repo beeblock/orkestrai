@@ -1348,7 +1348,7 @@
   .speed-control > span {
     width: 40px;
     flex: 0 0 40px;
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
     color: var(--app-text-muted);
   }

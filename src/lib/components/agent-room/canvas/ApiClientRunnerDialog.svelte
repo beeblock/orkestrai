@@ -182,7 +182,7 @@
       <Dialog.Description>{m['api_client.runners_description']()}</Dialog.Description>
     </Dialog.Header>
 
-    <div class="grid min-h-0 grid-cols-[220px_minmax(0,1fr)] max-[700px]:grid-cols-1 max-[700px]:grid-rows-[170px_minmax(0,1fr)]">
+    <div class="grid min-h-0 grid-cols-[220px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] max-[700px]:grid-cols-1 max-[700px]:grid-rows-[170px_minmax(0,1fr)]">
       <aside class="min-h-0 overflow-y-auto border-r border-border bg-[var(--app-surface-subtle)] p-2 max-[700px]:border-b max-[700px]:border-r-0">
         <Button size="sm" variant="outline" class="mb-2 w-full justify-start" onclick={newRunner}><Plus />{m['api_client.add_runner']()}</Button>
         {#each drafts as runner (runner.id)}
@@ -351,9 +351,9 @@
     padding: 0 5px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 18px;
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -427,7 +427,7 @@
     flex-shrink: 0;
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
@@ -437,7 +437,7 @@
     flex-shrink: 0;
     color: var(--app-secondary);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
   }
 

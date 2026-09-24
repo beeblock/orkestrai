@@ -238,7 +238,7 @@
         <div class="sticky top-0 z-10 flex h-9 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4">
           <Users size={13} class="text-[var(--app-text-muted)]" aria-hidden="true" />
           <h3 id="control-center-agents" class="section-label">{m['control_center.agents']()}</h3>
-          <span class="ml-auto font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{snapshot?.agents.length ?? 0}</span>
+          <span class="ml-auto font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">{snapshot?.agents.length ?? 0}</span>
         </div>
         {#if snapshot?.agents.length}
           <div class="divide-y divide-[var(--app-border)]">
@@ -250,8 +250,8 @@
                 <div class="min-w-0">
                   <div class="flex min-w-0 items-center gap-2">
                     <h4 class="truncate text-[13px] font-semibold text-[var(--app-text)]">{agent.title}</h4>
-                    <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]">{agent.provider ?? m['control_center.shell']()}</span>
-                    {#if agent.floorName}<span class="inline-flex min-w-0 items-center gap-1 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]"><Layers size={11} class="shrink-0" /><span class="truncate">{agent.floorName}</span></span>{/if}
+                    <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-soft)]">{agent.provider ?? m['control_center.shell']()}</span>
+                    {#if agent.floorName}<span class="inline-flex min-w-0 items-center gap-1 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-soft)]"><Layers size={11} class="shrink-0" /><span class="truncate">{agent.floorName}</span></span>{/if}
                     {#if agent.role}<span class="min-w-0 truncate text-ui-xs text-[var(--app-text-muted)]">{agent.role}</span>{/if}
                   </div>
                   <p class="mt-1 truncate text-ui-sm text-[var(--app-text-soft)]">{agent.currentTask?.title ?? actionLabel(agent)}</p>

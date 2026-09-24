@@ -561,7 +561,7 @@
   {:else}
   {#if columnsOpen}
     <div class="nodrag border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2.5 py-2">
-      <div class="mb-2 flex items-center justify-between"><span class="section-label">{m['tasks.column_manager']()}</span><span class="font-mono text-[10.5px] tabular-nums text-muted-foreground">{COLUMNS.length}/10</span></div>
+      <div class="mb-2 flex items-center justify-between"><span class="section-label">{m['tasks.column_manager']()}</span><span class="font-mono text-[11px] tabular-nums text-muted-foreground">{COLUMNS.length}/10</span></div>
       <div class="space-y-1.5">
         {#each COLUMNS as column, index (column.id)}
           <div class="grid grid-cols-[24px_minmax(0,1fr)_24px_24px_24px] items-center gap-1">
@@ -957,7 +957,7 @@
 
   .tb-history-status {
     flex-shrink: 0;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -1212,12 +1212,12 @@
   .tb-count {
     min-width: 20px;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     line-height: 18px;
     text-align: center;
     font-variant-numeric: tabular-nums;
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     background: var(--app-hover);
     border-radius: 999px;
     padding: 0 6px;

@@ -1478,13 +1478,13 @@
           <span class="min-w-0 truncate text-[12.5px] font-medium text-[var(--app-text)]">{selectedNode.title || nodeTypeLabel(selectedNode)}</span>
           {@const typeLabel = isWorkbenchFileItemId(selectedNode.id) ? m['workbench_files.file']() : nodeTypeLabel(selectedNode)}
           {#if typeLabel !== (selectedNode.title || nodeTypeLabel(selectedNode))}
-            <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--app-text-muted)]">{typeLabel}</span>
+            <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--app-text-soft)]">{typeLabel}</span>
           {/if}
         {/if}
         <span class="ml-auto"></span>
         <div class="flex shrink-0 items-center gap-0.5">
           <span
-            class="px-1.5 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]"
+            class="px-1.5 font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]"
             aria-label={m['workbench.pane_count']({ current: visiblePanes.length, max: MAX_WORKBENCH_PANES })}
             title={visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : undefined}
             data-testid="workbench-pane-count"
@@ -1683,7 +1683,7 @@
     margin-left: auto;
     min-width: 18px;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     letter-spacing: 0;
     text-align: right;
@@ -1699,7 +1699,7 @@
     background: var(--app-warning-soft);
     color: var(--app-warning);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 18px;
     text-align: center;

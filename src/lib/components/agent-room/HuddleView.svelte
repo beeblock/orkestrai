@@ -339,7 +339,7 @@
           <section class="mt-6">
             <div class="mb-2 flex items-center justify-between">
               <h3 class="text-ui-md font-medium">{m['huddle.choose_agents']()}</h3>
-              <span class="rounded-md bg-[var(--app-hover)] px-1.5 font-mono text-[10.5px] leading-5 tabular-nums text-[var(--app-text-soft)]">{selectedAgents.length}/11</span>
+              <span class="rounded-md bg-[var(--app-hover)] px-1.5 font-mono text-[11px] leading-5 tabular-nums text-[var(--app-text-soft)]">{selectedAgents.length}/11</span>
             </div>
             {#if agents.length}
               <div class="overflow-hidden rounded-lg bg-[var(--app-surface)] shadow-border">
@@ -411,7 +411,7 @@
                 <span class="turn-avatar" aria-hidden="true">{turn.speakerName.slice(0, 1).toUpperCase()}</span>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
-                    <strong class="truncate text-ui-md font-semibold">{turn.speakerName}</strong><span class="font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">#{turn.sequence}</span
+                    <strong class="truncate text-ui-md font-semibold">{turn.speakerName}</strong><span class="font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">#{turn.sequence}</span
                     >{#if turn.state === 'pending'}<LoaderCircle size={12} class="animate-spin text-[var(--app-accent)]" />{:else if turn.state === 'failed'}<span
                         class="inline-flex items-center gap-1 text-ui-sm text-[var(--app-danger)]"><CircleAlert size={12} aria-hidden="true" />{m['huddle.reply_failed']()}</span
                       >{/if}
@@ -673,7 +673,7 @@
     color: var(--app-text);
   }
 
-  .target-chip:has([data-state='checked']) {
+  .target-chip:has(:global([data-state='checked'])) {
     background: var(--app-active);
     color: var(--app-text);
   }

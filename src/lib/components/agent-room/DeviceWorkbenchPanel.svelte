@@ -415,7 +415,7 @@
       <div class="flex min-w-0 flex-1 items-center gap-2 pl-1">
         <span class="size-1.5 shrink-0 rounded-full bg-[var(--app-success)] shadow-[0_0_0_3px_var(--app-success-soft)]" aria-hidden="true"></span>
         <span class="truncate text-xs font-medium">{session.deviceName}</span>
-        <span class="hidden truncate font-mono text-[10.5px] text-[var(--app-text-muted)] sm:inline">{devices.find((device) => device.id === session.deviceId)?.runtime ?? session.platform}</span>
+        <span class="hidden truncate font-mono text-[11px] text-[var(--app-text-muted)] sm:inline">{devices.find((device) => device.id === session.deviceId)?.runtime ?? session.platform}</span>
       </div>
       <!-- Navegacao do aparelho sempre a mao; gestos raros e recuperacao do stream no menu. -->
       <Tooltip.Root>
@@ -589,7 +589,7 @@
             <div class="mb-3 flex items-center justify-between gap-2"><span class="section-label">{m['device.screenshots']()}</span><Button variant="outline" size="sm" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'screenshot' })}><Camera size={12} />{m['device.capture']()}</Button></div>
             {#if screenshotPath}
               <img class="img-outline w-full rounded-lg bg-black object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(screenshotPath)}`} alt={m['device.latest_screenshot']()} />
-              <p class="mt-2 break-all font-mono text-[10.5px] leading-relaxed text-[var(--app-text-muted)]">{screenshotPath}</p>
+              <p class="mt-2 break-all font-mono text-[11px] leading-relaxed text-[var(--app-text-muted)]">{screenshotPath}</p>
             {:else}
               <div class="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-[var(--app-border)] px-4 text-center text-ui-md text-[var(--app-text-muted)]">{m['device.no_screenshots']()}</div>
             {/if}
@@ -664,7 +664,7 @@
     padding: 0 12px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-size: 12px;
     white-space: nowrap;
   }
