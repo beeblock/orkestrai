@@ -63,7 +63,7 @@ test.describe('Review Center', () => {
       await center.getByRole('button', { name: 'Refresh source control' }).click();
       expect(pageErrors).toEqual([]);
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });

@@ -52,7 +52,7 @@ test.describe('workbench accessibility', () => {
         expect(layout.fitsWidth).toBe(true);
       }
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', {
         data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'vertical' },
       });

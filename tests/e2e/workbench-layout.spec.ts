@@ -52,6 +52,36 @@ test.describe('Workbench layout and search', () => {
     }
   });
 
+  test('opens a tree item in the pane it is dropped on', async ({ page, request }) => {
+    const runId = Date.now();
+    const workspace = (await (await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E tree drop ${runId}`, workingDir: '/tmp' },
+    })).json()).data as { id: string };
+    const root = `/api/agent-room/workspaces/${workspace.id}/nodes`;
+    const opened = (await (await request.post(root, {
+      data: { type: 'note', title: `Open note ${runId}`, x: 100, y: 100, width: 360, height: 260, payload: { content: 'Already open' } },
+    })).json()).data as { id: string };
+    const droppedTitle = `Dropped note ${runId}`;
+    await request.post(root, {
+      data: { type: 'note', title: droppedTitle, x: 520, y: 100, width: 360, height: 260, payload: { content: 'Opened by drag' } },
+    });
+
+    try {
+      await page.goto(`/terminal?workspace=${workspace.id}&node=${opened.id}`);
+      await page.getByTestId('workbench-split-right').click();
+      const panes = page.locator('section[data-pane-id]');
+      await expect(panes).toHaveCount(2);
+      const target = panes.nth(1);
+      await expect(target).not.toContainText(droppedTitle);
+
+      // Arrastar a linha da árvore até um painel abre o item ali.
+      await page.locator('.wb-row').filter({ hasText: droppedTitle }).dragTo(target);
+      await expect(target).toContainText(droppedTitle);
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    }
+  });
+
   test('finds a newly created artifact through the global palette', async ({ page, request }) => {
     const runId = Date.now();
     const title = `Universal note ${runId}`;

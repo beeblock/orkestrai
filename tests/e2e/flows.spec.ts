@@ -203,3 +203,28 @@ test.describe('nó de fluxo (pipeline)', () => {
     await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
   });
 });
+
+test('reorders flow steps by dragging the grip', async ({ page, request }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'orkestrai-flow-drag-'));
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `Flow drag ${Date.now()}`, workingDir: dir } })).json()).data;
+  const root = `/api/agent-room/workspaces/${workspace.id}`;
+  const steps = [
+    { kind: 'agent', target: 'Frontend', prompt: 'first' },
+    { kind: 'agent', target: 'Frontend', prompt: 'second' },
+    { kind: 'agent', target: 'Frontend', prompt: 'third' },
+  ];
+  const node = (await (await request.post(`${root}/nodes`, { data: { type: 'flow', title: 'Flow drag', x: 80, y: 60, width: 560, height: 640, payload: { steps, iterations: 1 } } })).json()).data;
+  const prompts = async () => ((await (await request.get(`${root}/nodes`)).json()).data as Array<{ id: string; payload: { steps: Array<{ prompt?: string }> } }>)
+    .find((item) => item.id === node.id)!.payload.steps.map((step) => step.prompt);
+  try {
+    await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}`);
+    const flow = page.locator('.canvas-flow').first();
+    await expect(flow.locator('.flow-step')).toHaveCount(3);
+    // Soltar o primeiro passo sobre o segundo troca os dois e salva a nova ordem.
+    await flow.locator('[data-step-grip="0"]').dragTo(flow.locator('.flow-step').nth(1));
+    await expect.poll(prompts).toEqual(['second', 'first', 'third']);
+  } finally {
+    await request.delete(root);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

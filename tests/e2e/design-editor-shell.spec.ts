@@ -78,7 +78,7 @@ test.describe('Design editor shell', () => {
       expect(viewportBox?.width).toBe(700);
       expect(panelBox?.width).toBeLessThanOrEqual(320);
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
@@ -157,7 +157,7 @@ test.describe('Design editor shell', () => {
         return body.data.elements.length;
       }).toBe(4);
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
@@ -222,7 +222,7 @@ test.describe('Design editor shell', () => {
         { id: elementIds[2], x: 80, y: 168 },
       ]);
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
@@ -332,7 +332,7 @@ test.describe('Design editor shell', () => {
         return body.data.elements.find((element: { id: string }) => element.id === textId).fontFamily;
       }).toBe('JetBrains Mono');
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
@@ -399,7 +399,7 @@ test.describe('Design editor shell', () => {
       await page.getByRole('button', { name: 'Open quality and history' }).click();
       await expect(page.getByTestId('design-quality-drawer')).toBeVisible();
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });

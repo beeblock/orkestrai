@@ -242,7 +242,7 @@ test.describe('code graph UI', () => {
       await expect(page.getByRole('option', { name: 'Assisted (recommended)' })).toBeVisible();
       await expect(page.getByRole('option', { name: 'Disabled' })).toBeVisible();
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(directory, { recursive: true, force: true });

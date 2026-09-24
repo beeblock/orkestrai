@@ -109,7 +109,7 @@ test.describe('Canvas and design visual baseline', () => {
         }
       }
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
@@ -195,7 +195,7 @@ test.describe('Canvas and design visual baseline', () => {
         }
       }
     } finally {
-      await page.goto('about:blank');
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', { data: originalSettings });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
