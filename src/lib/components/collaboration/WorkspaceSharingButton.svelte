@@ -19,6 +19,21 @@
   let online = $state(false);
   let pending = $state(0);
 
+  // Resumo do estado para tooltip e leitor de tela: o icone sozinho nao diz
+  // se o workspace esta compartilhado, quantos entraram ou quem espera.
+  const statusLines = $derived(
+    active
+      ? [
+          online ? m["collaboration.status_connected"]() : m["collaboration.status_offline"](),
+          peers > 0 ? `${m["collaboration.connected_peers"]()}: ${peers}` : null,
+          pending > 0 ? `${m["collaboration.pending"]()}: ${pending}` : null,
+        ].filter((line): line is string => Boolean(line))
+      : [m["collaboration.not_shared"]()],
+  );
+  const title = $derived(active ? m["collaboration.active"]() : m["collaboration.share_workspace"]());
+  // Cor so para estado: verde online, ambar quando alguem espera ou o relay caiu.
+  const tone = $derived(pending > 0 || !online ? "warning" : "success");
+
   async function refresh(): Promise<void> {
     if (!workspaceId) {
       active = false;
@@ -65,35 +80,130 @@
         {...props}
         type="button"
         disabled={!workspaceId}
-        class={variant === "toolbar"
-          ? `relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-ui-sm transition-[color,background-color,border-color] ${active ? "border-[var(--app-accent)]/45 bg-[var(--app-accent-soft)] text-[var(--app-accent)]" : "border-transparent text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`
-          : `relative grid size-8 shrink-0 place-items-center rounded-md border transition-[color,background-color,border-color] ${active ? "border-[var(--app-accent)]/45 bg-[var(--app-accent-soft)] text-[var(--app-accent)]" : "border-[var(--app-border)] text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]"}`}
-        aria-label={m["collaboration.share_workspace"]()}
+        class="share-btn"
+        class:toolbar={variant === "toolbar"}
+        class:shared={active}
+        aria-label={[m["collaboration.share_workspace"](), ...statusLines].join(", ")}
         data-tour="workspace-sharing"
         onclick={onOpen}
       >
         <Share2 size={15} aria-hidden="true" />
-        {#if variant === "toolbar"}<span
+        {#if variant === "toolbar"}<span class="share-label"
             >{m["collaboration.share_workspace"]()}</span
           >{/if}
-        {#if active}
-          <span
-            class={`absolute right-0.5 top-0.5 size-1.5 rounded-full ring-2 ring-[var(--app-canvas)] ${pending > 0 || !online ? "bg-[var(--app-warning)]" : "bg-[var(--app-success)]"}`}
-          ></span>
-          {#if peers > 0 && variant === "toolbar"}<span
-              class="ml-0.5 text-ui-xs tabular-nums">{peers}</span
-            >{/if}
-        {/if}
-        {#if pending > 0}<span
-            class={variant === "toolbar"
-              ? "ml-0.5 rounded bg-[var(--app-warning)] px-1 text-ui-xs font-semibold text-black"
-              : "absolute -right-1.5 -bottom-1 grid size-4 place-items-center rounded-full bg-[var(--app-warning)] text-ui-xs font-bold text-black"}
-            >{pending}</span
+        {#if active && peers > 0 && variant === "toolbar"}<span
+            class="share-peers">{peers}</span
           >{/if}
+        {#if pending > 0}
+          <span class="share-badge" aria-hidden="true">{pending > 9 ? "9+" : pending}</span>
+        {:else if active}
+          <span class="share-dot" data-tone={tone} aria-hidden="true"></span>
+        {/if}
       </button>
     {/snippet}
   </Tooltip.Trigger>
-  <Tooltip.Content side="bottom"
-    >{m["collaboration.share_workspace"]()}</Tooltip.Content
-  >
+  <Tooltip.Content side="bottom" class="flex-col items-start gap-0.5">
+    <span>{title}</span>
+    {#each statusLines as line}<span class="font-normal tabular-nums opacity-70">{line}</span>{/each}
+  </Tooltip.Content>
 </Tooltip.Root>
+
+<style>
+  /* Mesmo vocabulario do ToolbarButton do canvas: sem borda, hover neutro,
+     e o tom de destaque so quando o workspace esta de fato compartilhado. */
+  .share-btn {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text-soft);
+    cursor: pointer;
+    transition-property: background-color, color, transform;
+    transition-duration: var(--duration-quick);
+    transition-timing-function: var(--ease-smooth-out);
+  }
+
+  .share-btn.toolbar {
+    display: inline-flex;
+    gap: 6px;
+    width: auto;
+    height: 30px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .share-btn:hover:not(:disabled) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .share-btn:active:not(:disabled) {
+    transform: scale(var(--scale-press));
+  }
+
+  .share-btn:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .share-btn:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  .share-btn.shared {
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .share-btn.shared:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--app-accent) 22%, transparent);
+    color: var(--app-accent);
+  }
+
+  .share-peers {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Ponto de estado dentro do proprio botao: nao depende da cor do fundo
+     do container (dock do canvas ou sidebar do workbench). */
+  .share-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--app-success);
+  }
+
+  .share-dot[data-tone='warning'] {
+    background: var(--app-warning);
+  }
+
+  .share-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--app-warning);
+    color: var(--app-accent-contrast);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

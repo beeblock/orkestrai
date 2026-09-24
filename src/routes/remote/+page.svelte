@@ -3,13 +3,14 @@
   import { getCsrfToken } from "@beeblock/svelar/http";
   import { toast } from "@beeblock/svelar/ui";
   import {
-    ArrowRight,
+    Check,
+    ChevronRight,
+    CircleAlert,
     LoaderCircle,
     LogOut,
     MonitorUp,
-    RadioTower,
     ShieldCheck,
-    XCircle,
+    WifiOff,
   } from "@lucide/svelte";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
@@ -282,6 +283,51 @@
     return labels[status]();
   }
 
+  const failedStatuses: RemoteState["status"][] = ["rejected", "expired", "incompatible", "revoked", "error"];
+  const failed = $derived(failedStatuses.includes(remoteState.status));
+  let inviteInput = $state<HTMLInputElement | null>(null);
+
+  // Proximo passo concreto para cada falha: o usuario nao precisa adivinhar
+  // se deve esperar, atualizar o app ou pedir outro convite.
+  function recoveryHint(status: RemoteState["status"]): string {
+    if (status === "rejected") return m["remote.recover_rejected"]();
+    if (status === "expired") return m["remote.recover_expired"]();
+    if (status === "incompatible") return m["remote.recover_incompatible"]();
+    if (status === "revoked") return m["remote.recover_revoked"]();
+    return m["remote.recover_error"]();
+  }
+
+  // Rotulo curto para a pilula de estado da tela de espera.
+  function shortStatus(status: RemoteState["status"]): string {
+    if (status === "connecting") return m["collaboration.status_connecting"]();
+    if (status === "reconnecting") return m["collaboration.status_reconnecting"]();
+    if (status === "offline") return m["collaboration.status_offline"]();
+    if (status === "connected") return m["remote.status_connected"]();
+    return m["collaboration.pending"]();
+  }
+
+  function focusInvite(): void {
+    inviteInput?.focus();
+    inviteInput?.select();
+  }
+
+  const steps = [
+    { title: m["remote.step_invite_title"], body: m["remote.step_invite_body"] },
+    { title: m["remote.step_request_title"], body: m["remote.step_request_body"] },
+    { title: m["remote.step_approve_title"], body: m["remote.step_approve_body"] },
+  ];
+
+  // Passo atual do fluxo guiado: so apresentacao, derivado do estado que ja existe.
+  const currentStep = $derived(
+    remoteState.status === "connecting"
+      ? 1
+      : ["waiting_approval", "reconnecting", "offline", "connected"].includes(remoteState.status)
+        ? 2
+        : inviteUri.trim()
+          ? 1
+          : 0,
+  );
+
   onMount(() => {
     displayName = `${m["remote.device_default"]()} (${desktop?.platform ?? platformFromNavigator()})`;
     void refresh().then(consumeInvite);
@@ -299,154 +345,211 @@
 
 <svelte:head><title>{m["remote.title"]()} - Orkestrai</title></svelte:head>
 
+{#snippet stepList(compact: boolean)}
+  <ol class="rp-steps" class:compact>
+    {#each steps as step, index}
+      {@const state = index < currentStep ? "done" : index === currentStep ? "current" : "upcoming"}
+      <li class="rp-step" data-state={state} aria-current={state === "current" ? "step" : undefined}>
+        <span class="rp-step-marker" aria-hidden="true">
+          {#if state === "done"}<Check size={12} strokeWidth={2.5} />{:else}{index + 1}{/if}
+        </span>
+        <div class="min-w-0">
+          <p class="rp-step-title">{step.title()}</p>
+          {#if !compact}<p class="rp-step-body">{step.body()}</p>{/if}
+        </div>
+      </li>
+    {/each}
+  </ol>
+{/snippet}
+
 {#if !desktopAvailable}
   <main
     data-dictation-hidden
     class="grid h-full place-items-center bg-[var(--app-canvas)] p-6 text-[var(--app-text)]"
   >
-    <div class="max-w-md text-center">
-      <MonitorUp size={34} class="mx-auto text-[var(--app-accent)]" />
-      <h1 class="mt-4 text-xl font-semibold">
+    <div class="rp-enter grid max-w-md justify-items-center text-center">
+      <span class="grid size-11 place-items-center rounded-xl bg-[var(--app-hover)] text-[var(--app-text-soft)]">
+        <MonitorUp size={20} aria-hidden="true" />
+      </span>
+      <h1 class="mt-4 font-display text-[20px] font-semibold tracking-[-0.015em] text-balance">
         {m["remote.desktop_required_title"]()}
       </h1>
-      <p
-        class="mt-2 text-sm leading-6 text-pretty text-[var(--app-text-muted)]"
-      >
+      <p class="mt-2 text-sm leading-6 text-pretty text-[var(--app-text-muted)]">
         {m["remote.desktop_required_body"]()}
       </p>
     </div>
   </main>
 {:else if loading}
   <main data-dictation-hidden class="grid h-full place-items-center bg-[var(--app-canvas)]">
-    <LoaderCircle size={24} class="animate-spin text-[var(--app-accent)]" />
+    <span class="rp-pill" data-tone="neutral" role="status">
+      <LoaderCircle size={13} class="animate-spin" aria-hidden="true" />{m["remote.loading"]()}
+    </span>
   </main>
-{:else if remoteState.status === "idle" || ["rejected", "expired", "incompatible", "revoked", "error"].includes(remoteState.status)}
+{:else if remoteState.status === "idle" || failed}
   <main
     data-dictation-hidden
-    class="grid h-full overflow-y-auto bg-[var(--app-canvas)] p-5 text-[var(--app-text)] lg:grid-cols-[minmax(320px,560px)_minmax(280px,1fr)] lg:items-center lg:gap-12 lg:p-12"
+    class="h-full overflow-y-auto bg-[var(--app-canvas)] text-[var(--app-text)]"
   >
-    <section class="mx-auto w-full max-w-xl">
-      <div
-        class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--app-accent)]"
-      >
-        <RadioTower size={14} />{m["remote.eyebrow"]()}
-      </div>
-      <h1 class="mt-3 text-2xl font-semibold leading-tight text-balance">
-        {m["remote.join_title"]()}
-      </h1>
-      <p
-        class="mt-3 max-w-lg text-sm leading-6 text-pretty text-[var(--app-text-muted)]"
-      >
-        {m["remote.join_body"]()}
-      </p>
-      {#if remoteState.status !== "idle"}<div
-          class="mt-4 flex items-center gap-2 rounded-lg border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-3 text-xs text-[var(--app-danger)]"
+    <div
+      class="mx-auto grid min-h-full w-full max-w-[1040px] content-center gap-10 px-5 py-10 sm:px-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-center lg:gap-16 lg:px-10"
+    >
+      <section class="rp-enter min-w-0" aria-labelledby="remote-join-title">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span class="flex items-center gap-2 text-ui-md font-medium text-[var(--app-text-soft)]">
+            <span class="rp-brand" aria-hidden="true"><img src="/brand/icon.svg" width="13" height="13" alt="" /></span>{m["remote.eyebrow"]()}
+          </span>
+          <span class="rp-pill" data-tone={failed ? "danger" : "neutral"} role="status">
+            <span class="rp-pill-dot" aria-hidden="true"></span>{statusLabel(remoteState.status)}
+          </span>
+        </div>
+        <h1
+          id="remote-join-title"
+          class="mt-5 font-display text-[26px] font-semibold leading-tight tracking-[-0.02em] text-balance"
         >
-          <XCircle size={15} />{statusLabel(remoteState.status)}
-        </div>{/if}
-      <form
-        class="mt-6 space-y-4"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void connect();
-        }}
-      >
-        <label class="grid gap-1.5 text-xs font-medium"
-          >{m["remote.invite_link"]()}<Input
-            type="password"
-            bind:value={inviteUri}
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="orkestrai://join/..."
-          /></label
+          {m["remote.join_title"]()}
+        </h1>
+        <p class="mt-2 text-sm leading-6 text-pretty text-[var(--app-text-muted)]">
+          {m["remote.join_body"]()}
+        </p>
+
+        {#if failed}
+          <div class="rp-alert mt-5">
+            <CircleAlert size={16} class="mt-px shrink-0 text-[var(--app-danger)]" aria-hidden="true" />
+            <p class="min-w-0 flex-1 text-xs leading-5 text-pretty text-[var(--app-text-soft)]">
+              {recoveryHint(remoteState.status)}
+            </p>
+            <Button variant="outline" size="sm" class="shrink-0" onclick={focusInvite}>
+              {m["remote.use_new_invite"]()}
+            </Button>
+          </div>
+        {/if}
+
+        <form
+          class="rp-card mt-6 grid gap-4 p-4"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void connect();
+          }}
         >
-        <div class="grid gap-4 sm:grid-cols-2">
-          <label class="grid gap-1.5 text-xs font-medium"
-            >{m["remote.device_name"]()}<Input
-              bind:value={displayName}
-              maxlength="80"
-            /></label
-          ><label class="grid gap-1.5 text-xs font-medium"
-            >{m["collaboration.relay"]()}<Input
-              bind:value={relayUrl}
+          <div class="grid gap-1.5">
+            <label for="remote-invite" class="text-ui-md font-medium">{m["remote.invite_link"]()}</label>
+            <Input
+              id="remote-invite"
+              type="password"
+              bind:ref={inviteInput}
+              bind:value={inviteUri}
               autocomplete="off"
               spellcheck="false"
-            /></label
-          >
-        </div>
-        <Button
-          type="submit"
-          disabled={busy || !inviteUri.trim() || !displayName.trim()}
-          >{#if busy}<LoaderCircle class="animate-spin" />{:else}<ShieldCheck
-            />{/if}{m["remote.connect"]()}<ArrowRight /></Button
-        >
-      </form>
-    </section>
-    <section class="mx-auto mt-10 w-full max-w-lg lg:mt-0">
-      <div
-        class="relative aspect-[4/3] overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] shadow-xl"
-      >
-        <div
-          class="flex h-10 items-center gap-2 border-b border-[var(--app-border)] px-3"
-        >
-          <span class="size-2 rounded-full bg-[var(--app-danger)]"></span><span
-            class="size-2 rounded-full bg-[var(--app-warning)]"
-          ></span><span class="size-2 rounded-full bg-[var(--app-success)]"
-          ></span><span class="ml-2 text-ui-xs text-[var(--app-text-muted)]"
-            >{m["remote.preview_title"]()}</span
-          >
-        </div>
-        <div class="grid h-[calc(100%-40px)] grid-cols-[34%_1fr]">
-          <div class="border-r border-[var(--app-border)] p-3">
-            <div class="mb-4 h-2 w-2/3 rounded bg-[var(--app-accent)]/30"></div>
-            {#each [1, 2, 3, 4] as item}<div
-                class="mb-2 h-7 rounded bg-[var(--app-surface-raised)]"
-                style:opacity={1 - item * 0.12}
-              ></div>{/each}
+              placeholder="orkestrai://join/..."
+              aria-describedby="remote-invite-help"
+              class="font-mono text-[12px] md:text-[12px]"
+            />
+            <p id="remote-invite-help" class="text-ui-sm leading-snug text-pretty text-[var(--app-text-muted)]">
+              {m["remote.invite_help"]()}
+            </p>
           </div>
-          <div class="grid grid-cols-2 gap-3 p-4">
-            {#each [1, 2, 3, 4] as item}<div
-                class="rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-3"
-              >
-                <div class="h-2 w-1/2 rounded bg-[var(--app-accent)]/35"></div>
-                <div
-                  class="mt-3 h-1.5 w-full rounded bg-[var(--app-border)]"
-                ></div>
-                <div
-                  class="mt-2 h-1.5 w-3/4 rounded bg-[var(--app-border)]"
-                ></div>
-              </div>{/each}
+          <div class="grid gap-1.5">
+            <label for="remote-device" class="text-ui-md font-medium">{m["remote.device_name"]()}</label>
+            <Input
+              id="remote-device"
+              bind:value={displayName}
+              maxlength="80"
+              aria-describedby="remote-device-help"
+            />
+            <p id="remote-device-help" class="text-ui-sm leading-snug text-pretty text-[var(--app-text-muted)]">
+              {m["remote.device_help"]()}
+            </p>
           </div>
-        </div>
-      </div>
-    </section>
+          <!-- Relay raramente muda: fica recolhido, como no dialogo de compartilhamento. -->
+          <details class="rp-advanced group">
+            <summary>
+              <ChevronRight
+                size={14}
+                class="shrink-0 text-[var(--app-text-muted)] transition-transform duration-150 group-open:rotate-90"
+                aria-hidden="true"
+              />{m["collaboration.advanced"]()}
+            </summary>
+            <div class="grid gap-1.5 px-3 pb-3">
+              <label for="remote-relay" class="text-ui-md font-medium">{m["collaboration.relay"]()}</label>
+              <Input
+                id="remote-relay"
+                bind:value={relayUrl}
+                autocomplete="off"
+                spellcheck="false"
+                aria-describedby="remote-relay-help"
+                class="font-mono text-[12px] md:text-[12px]"
+              />
+              <p id="remote-relay-help" class="text-ui-sm leading-snug text-pretty text-[var(--app-text-muted)]">
+                {m["collaboration.relay_help"]()}
+              </p>
+            </div>
+          </details>
+          <Button
+            type="submit"
+            class="h-9 w-full"
+            disabled={busy || !inviteUri.trim() || !displayName.trim()}
+            >{#if busy}<LoaderCircle class="animate-spin" aria-hidden="true" />{:else}<ShieldCheck
+                aria-hidden="true"
+              />{/if}{m["remote.connect"]()}</Button
+          >
+        </form>
+        <p class="mt-3 flex items-center gap-1.5 text-ui-sm text-[var(--app-text-muted)]">
+          <ShieldCheck size={13} class="shrink-0 text-[var(--app-success)]" aria-hidden="true" />{m[
+            "remote.encrypted_connection"
+          ]()}
+        </p>
+      </section>
+
+      <aside class="rp-enter rp-enter-late min-w-0 lg:border-l lg:border-[var(--app-border)] lg:pl-12">
+        <h2 class="section-label">{m["remote.how_title"]()}</h2>
+        <div class="mt-4">{@render stepList(false)}</div>
+      </aside>
+    </div>
   </main>
 {:else if remoteState.status !== "connected" || !snapshot}
   <main
     data-dictation-hidden
-    class="grid h-full place-items-center bg-[var(--app-canvas)] p-6 text-[var(--app-text)]"
+    class="grid h-full place-items-center overflow-y-auto bg-[var(--app-canvas)] p-6 text-[var(--app-text)]"
   >
-    <div class="max-w-md text-center">
-      <span
-        class="mx-auto grid size-14 place-items-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)]"
-        ><LoaderCircle
-          size={25}
-          class={remoteState.status === "waiting_approval" ||
-          remoteState.status === "connecting" ||
-          remoteState.status === "reconnecting"
-            ? "animate-spin text-[var(--app-accent)]"
-            : "text-[var(--app-text-muted)]"}
-        /></span
-      >
-      <h1 class="mt-4 text-lg font-semibold">
-        {statusLabel(remoteState.status)}
-      </h1>
-      <p class="mt-2 text-sm leading-6 text-[var(--app-text-muted)]">
-        {m["remote.waiting_body"]()}
-      </p>
-      <Button variant="ghost" class="mt-5" onclick={leave}
-        ><LogOut />{m["remote.leave"]()}</Button
-      >
+    <div class="rp-enter w-full max-w-[420px]">
+      <div class="rp-card grid justify-items-center p-6 text-center">
+        <span
+          class={`grid size-11 place-items-center rounded-xl ${remoteState.status === "offline" ? "bg-[var(--app-danger-soft)]" : "bg-[var(--app-hover)]"}`}
+        >
+          {#if remoteState.status === "offline"}
+            <WifiOff size={19} class="text-[var(--app-danger)]" aria-hidden="true" />
+          {:else}
+            <LoaderCircle size={19} class="animate-spin text-[var(--app-text-soft)]" aria-hidden="true" />
+          {/if}
+        </span>
+        <span
+          class="rp-pill mt-4"
+          data-tone={remoteState.status === "offline" ? "danger" : remoteState.status === "connected" ? "success" : "warning"}
+          role="status"
+        >
+          <span class="rp-pill-dot" aria-hidden="true"></span>{shortStatus(remoteState.status)}
+        </span>
+        <h1 class="mt-3 font-display text-[20px] font-semibold tracking-[-0.015em] text-balance">
+          {statusLabel(remoteState.status)}
+        </h1>
+        <p class="mt-2 text-sm leading-6 text-pretty text-[var(--app-text-muted)]">
+          {m["remote.waiting_body"]()}
+        </p>
+        {#if remoteState.displayName}
+          <p class="mt-4 flex max-w-full items-center gap-1.5 text-ui-md text-[var(--app-text-muted)]">
+            {m["remote.device_name"]()}
+            <span class="rp-chip truncate" title={remoteState.displayName}>{remoteState.displayName}</span>
+          </p>
+        {/if}
+        <div class="mt-5 w-full border-t border-[var(--app-border)] pt-4 text-left">
+          {@render stepList(true)}
+        </div>
+      </div>
+      <div class="mt-3 flex justify-center">
+        <Button variant="ghost" size="sm" onclick={leave}
+          ><LogOut aria-hidden="true" />{m["remote.leave"]()}</Button
+        >
+      </div>
     </div>
   </main>
 {:else}
@@ -484,17 +587,17 @@
       ></Dialog.Header
     >
     <div class="space-y-4">
-      <label class="grid gap-1.5 text-xs font-medium"
+      <label class="grid gap-1.5 text-ui-md font-medium"
         >{m["remote.task_title"]()}<Input
           bind:value={taskTitle}
           maxlength="180"
         /></label
-      ><label class="grid gap-1.5 text-xs font-medium"
+      ><label class="grid gap-1.5 text-ui-md font-medium"
         >{m["remote.task_description"]()}<Textarea
           bind:value={taskDescription}
           class="min-h-28 resize-y"
         /></label
-      ><label class="grid gap-1.5 text-xs font-medium"
+      ><label class="grid gap-1.5 text-ui-md font-medium"
         >{m["remote.task_column"]()}<Select.Root type="single" bind:value={taskStatus}
           ><Select.Trigger class="w-full"
             ><span
@@ -513,10 +616,249 @@
       ><Button variant="ghost" onclick={() => (taskDialogOpen = false)}
         >{m["settings.cancel"]()}</Button
       ><Button disabled={busy || !taskTitle.trim()} onclick={createTask}
-        >{#if busy}<LoaderCircle class="animate-spin" />{/if}{m[
+        >{#if busy}<LoaderCircle class="animate-spin" aria-hidden="true" />{/if}{m[
           "remote.create_task"
         ]()}</Button
       ></Dialog.Footer
     ></Dialog.Content
   >
 </Dialog.Root>
+
+<style>
+  /* Pilula de estado: a cor aparece so no ponto e no tom, nunca como enfeite. */
+  .rp-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    max-width: 100%;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+
+  .rp-pill-dot {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--app-text-muted);
+  }
+
+  .rp-pill[data-tone='success'] {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .rp-pill[data-tone='success'] .rp-pill-dot {
+    background: var(--app-success);
+  }
+
+  .rp-pill[data-tone='warning'] {
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+  }
+
+  .rp-pill[data-tone='warning'] .rp-pill-dot {
+    background: var(--app-warning);
+  }
+
+  .rp-pill[data-tone='danger'] {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .rp-pill[data-tone='danger'] .rp-pill-dot {
+    background: var(--app-danger);
+  }
+
+  /* Marca sobre fundo escuro fixo: o simbolo tem partes brancas que somem no tema claro. */
+  .rp-brand {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    background: #10101d;
+  }
+
+  .rp-chip {
+    display: inline-block;
+    min-width: 0;
+    padding: 1px 8px;
+    border-radius: 6px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-weight: 500;
+  }
+
+  .rp-card {
+    border-radius: 12px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  /* Erro com a acao de recuperacao ao lado, em vez de uma faixa vermelha. */
+  .rp-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px 10px 12px;
+    border-radius: 10px;
+    background: var(--app-danger-soft);
+  }
+
+  .rp-advanced {
+    border-radius: 8px;
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .rp-advanced summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 0 12px;
+    list-style: none;
+    border-radius: 8px;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--duration-quick) ease-out;
+  }
+
+  .rp-advanced summary:hover {
+    color: var(--app-text);
+  }
+
+  .rp-advanced summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rp-advanced summary:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  /* Passos do fluxo: concluido (verde), atual (texto forte) e proximos (mudos). */
+  .rp-steps {
+    position: relative;
+    display: grid;
+    gap: 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .rp-steps.compact {
+    gap: 12px;
+  }
+
+  .rp-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  /* Linha que liga um passo ao seguinte. */
+  .rp-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 11.5px;
+    top: 28px;
+    bottom: -14px;
+    width: 1px;
+    background: var(--app-border);
+  }
+
+  .compact .rp-step:not(:last-child)::after {
+    bottom: -8px;
+  }
+
+  .rp-step[data-state='done']:not(:last-child)::after {
+    background: color-mix(in srgb, var(--app-success) 45%, var(--app-border));
+  }
+
+  .rp-step-marker {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition-property: background-color, color, box-shadow;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-smooth-out);
+  }
+
+  .rp-step[data-state='current'] .rp-step-marker {
+    background: var(--app-surface-raised);
+    color: var(--app-text);
+    box-shadow: 0 0 0 1px var(--app-border-strong);
+  }
+
+  .rp-step[data-state='done'] .rp-step-marker {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .rp-step-title {
+    margin: 2px 0 0;
+    color: var(--app-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+    transition: color var(--duration-fast) ease-out;
+  }
+
+  .compact .rp-step-title {
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .rp-step[data-state='current'] .rp-step-title {
+    color: var(--app-text);
+  }
+
+  .rp-step[data-state='done'] .rp-step-title {
+    color: var(--app-text-soft);
+  }
+
+  .rp-step-body {
+    max-width: 44ch;
+    margin: 2px 0 0;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  /* Entrada da tela: opacidade + 6px, uma vez; o guard global de movimento reduzido cobre. */
+  .rp-enter {
+    animation: rp-enter var(--duration-slow) var(--ease-smooth-out) both;
+  }
+
+  .rp-enter-late {
+    animation-delay: 100ms;
+  }
+
+  @keyframes rp-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+</style>

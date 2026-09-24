@@ -37,6 +37,7 @@ pt-BR, English, and Spanish translations.
 - Rework the Workbench hubs: the Review Center gets calm file rows with stage and discard on hover, an anchored comment popover and clear loading and empty states; Workstreams, Annotations and Attention get segmented filters with counts and a proper search field; Huddles show a live chip, clickable participant rows and message avatars; Automations reveal row actions on hover and show recipes as cards; the concurrent runs limit is a slider; and the file explorer and file toolbar match the Workbench sidebar.
 - Give every dialog the same anatomy: a title with a one-line description, grouped fields with hints, errors in one consistent block and a footer with the primary action last. Runtimes, modes, platforms and code intelligence use segmented controls; agent limits use a stepper, a slider and a minutes field; workspace settings are split into sections; and themes are picked from preview cards with color swatches.
 - Show update downloads as a floating progress pill, announce tour steps to screen readers and tuck rarely used sharing options under Advanced.
+- Guide remote connections step by step: a status pill, labeled invite and device fields with helper text, relay settings under Advanced, a recovery hint for every failure and a How it works guide that follows your progress. The connected workspace uses calm sidebar rows, state-colored pills, empty states and labeled design fields, and the Share button says whether the workspace is shared and who is waiting.
 
 ### Fixed
 
