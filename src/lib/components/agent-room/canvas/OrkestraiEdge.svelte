@@ -319,7 +319,7 @@
 
 <style>
   .edge-line {
-    transition: stroke 120ms ease;
+    transition: stroke var(--duration-quick) ease-out;
   }
 
   .edge-line.animated {
@@ -333,13 +333,14 @@
   }
 
   .edge-delete {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    border: 1px solid var(--app-border-strong);
+    border: 0;
     background: color-mix(in srgb, var(--app-surface-raised) 94%, transparent);
     backdrop-filter: blur(4px);
     box-shadow: var(--app-shadow-panel);
@@ -347,8 +348,16 @@
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+    transition: opacity var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
     padding: 0;
+  }
+
+  /* Alvo de clique maior que o circulo visivel. */
+  .edge-delete::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
   }
 
   .edge-delete.visible {
@@ -358,8 +367,15 @@
 
   .edge-delete:hover {
     background: var(--app-danger);
-    border-color: var(--app-danger);
     color: #fff;
-    transform: scale(1.1);
+  }
+
+  .edge-delete:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .edge-delete:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
   }
 </style>
