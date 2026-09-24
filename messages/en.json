@@ -4994,5 +4994,7 @@
   "canvas.tool_drop_hint": "Drop to create here",
   "diff.empty_title": "Nothing to compare",
   "diff.empty_hint": "New file or no content changes. Open it in the editor to see the whole file.",
-  "loop.member_role": "Team role"
+  "loop.member_role": "Team role",
+  "code_graph.loading": "Loading the graph…",
+  "tool_workshop.tools": "Tools"
 }

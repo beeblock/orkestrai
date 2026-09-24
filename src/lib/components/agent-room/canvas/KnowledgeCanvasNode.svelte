@@ -15,6 +15,6 @@
 <NodeShell {id} {selected} minWidth={520} minHeight={420} onResize={data.onResize} connections={data.connections} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection} titleText={data.title} onRename={data.onRename}>
   {#snippet icon()}<BookOpen size={14} />{/snippet}
   {#snippet title()}{data.title}{/snippet}
-  {#snippet actions()}<HeaderIconButton label={m['knowledge.close']()} onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
+  {#snippet actions()}<HeaderIconButton label={m['knowledge.close']()} class="node-action-btn danger" side="left" onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
   <KnowledgeView workspaceId={data.workspaceId} onJumpToNode={data.onJumpToNode} embedded />
 </NodeShell>
