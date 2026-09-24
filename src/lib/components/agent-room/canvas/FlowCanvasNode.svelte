@@ -267,6 +267,36 @@
       </div>
     {/if}
 
+    <!-- Entrada + Rodar no topo do corpo: a primeira acao do fluxo nunca fica
+         escondida atras da doca do canvas, com ou sem passos. -->
+    <div class="flow-run nodrag" class:active={run?.active}>
+      {#if run?.active}
+        <div class="flow-run-status" role="status">
+          <Loader2 size={13} class="animate-spin" />
+          <span>
+            {m['flow.running_status']({ current: (run.steps.findIndex((step) => step.status === 'running' || step.status === 'waiting') + 1) || run.steps.length, total: run.steps.length })}
+            {run.iterations > 1 ? m['flow.round_suffix']({ iteration: run.iteration, total: run.iterations }) : ''}
+          </span>
+        </div>
+        <span class="flow-spacer"></span>
+        {#if run.steps.some((step) => step.status === 'waiting')}
+          <button class="flow-approve-btn press" onclick={approveStep}><Check size={13} /> {m['flow.approve']()}</button>
+        {/if}
+        <button class="flow-stop-btn press" onclick={stopRun}><Square size={12} /> {m['flow.stop']()}</button>
+      {:else}
+        <input
+          class="flow-input"
+          bind:value={flowInput}
+          placeholder={m['ph.flow_initial_input']()}
+          aria-label={m['flow.input_aria']()}
+          onkeydown={(event) => { if (event.key === 'Enter' && !event.isComposing) startRun(); }}
+        />
+        <button class="flow-run-btn press" disabled={busy} onclick={startRun}>
+          {#if busy}<Loader2 size={13} class="animate-spin" /> {m['flow.starting']()}{:else}<Play size={13} /> {m['flow.run']()}{/if}
+        </button>
+      {/if}
+    </div>
+
     {#if steps.length}
       <div class="flow-section-head">
         <span class="section-label">{m['flow.steps_title']()}</span>
@@ -363,36 +393,6 @@
         </NodeEmptyState>
       </div>
     {/if}
-
-    <!-- Barra de execucao logo apos os passos (no fluxo do corpo, nao fixa no
-         rodape: assim nunca fica escondida atras da doca do canvas). -->
-    <div class="flow-run nodrag" class:active={run?.active}>
-      {#if run?.active}
-        <div class="flow-run-status" role="status">
-          <Loader2 size={13} class="animate-spin" />
-          <span>
-            {m['flow.running_status']({ current: (run.steps.findIndex((step) => step.status === 'running' || step.status === 'waiting') + 1) || run.steps.length, total: run.steps.length })}
-            {run.iterations > 1 ? m['flow.round_suffix']({ iteration: run.iteration, total: run.iterations }) : ''}
-          </span>
-        </div>
-        <span class="flow-spacer"></span>
-        {#if run.steps.some((step) => step.status === 'waiting')}
-          <button class="flow-approve-btn press" onclick={approveStep}><Check size={13} /> {m['flow.approve']()}</button>
-        {/if}
-        <button class="flow-stop-btn press" onclick={stopRun}><Square size={12} /> {m['flow.stop']()}</button>
-      {:else}
-        <input
-          class="flow-input"
-          bind:value={flowInput}
-          placeholder={m['ph.flow_initial_input']()}
-          aria-label={m['flow.input_aria']()}
-          onkeydown={(event) => { if (event.key === 'Enter' && !event.isComposing) startRun(); }}
-        />
-        <button class="flow-run-btn press" disabled={busy} onclick={startRun}>
-          {#if busy}<Loader2 size={13} class="animate-spin" /> {m['flow.starting']()}{:else}<Play size={13} /> {m['flow.run']()}{/if}
-        </button>
-      {/if}
-    </div>
 
     {#if runs.length}
       <section class="flow-history">

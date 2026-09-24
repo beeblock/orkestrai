@@ -40,14 +40,6 @@
     min-height: 0;
     padding: 20px 18px;
     text-align: center;
-    animation: node-empty-in var(--duration-slow) var(--ease-smooth-out) both;
-  }
-
-  @keyframes node-empty-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--distance-micro));
-    }
   }
 
   .node-empty.compact {
