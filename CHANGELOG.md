@@ -37,6 +37,7 @@ pt-BR, English, and Spanish translations.
 - Resolve surfaces and text in Computer, Integrations, Tool Workshop, Storyboard, Sequence and Knowledge views that referenced missing theme colors.
 - Remove the blue resize outline that covered the selection ring of a selected node.
 - Let the Git file list scroll instead of being cut off, stop showing editor confirmations in red and stop flashing "empty folder" before a file tree loads.
+- Keep compact interface text at its intended size when a component also sets a text color, instead of falling back to a larger default.
 
 ## 0.35.0 - 2026-09-24
 
