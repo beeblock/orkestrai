@@ -107,9 +107,10 @@
   }
 
   .brand strong {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
-    font-size: 11px;
+    font-family: var(--font-display);
+    font-size: 12px;
     font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   nav,
@@ -121,19 +122,25 @@
   }
 
   :global(.menu-trigger) {
-    height: 28px;
+    height: 26px;
     border: 0;
-    border-radius: 5px;
+    border-radius: 6px;
     padding: 0 9px;
     background: transparent;
     color: var(--app-text-soft);
-    font-size: 11px;
+    font-size: 12px;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
   }
 
   :global(.menu-trigger:hover),
   :global(.menu-trigger[data-state='open']) {
-    background: var(--app-accent-soft);
+    background: var(--app-hover);
     color: var(--app-text);
+  }
+
+  :global(.menu-trigger:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
   }
 
   :global(.titlebar-menu) {
