@@ -6,17 +6,20 @@
     ArrowUpFromLine,
     Check,
     CheckCircle2,
+    CircleAlert,
     CircleDot,
     FileCode2,
+    FlaskConical,
     GitBranch,
     GitCommitHorizontal,
+    LoaderCircle,
     MessageSquarePlus,
     Minus,
     Plus,
     RefreshCw,
     RotateCcw,
     ShieldAlert,
-    X,
+    TriangleAlert,
     XCircle,
   } from '@lucide/svelte';
   import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -29,9 +32,13 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import { Button } from '$lib/components/ui/button';
+  import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
+  import * as Popover from '$lib/components/ui/popover';
+  import { Skeleton } from '$lib/components/ui/skeleton';
   import { Textarea } from '$lib/components/ui/textarea';
   import * as Tooltip from '$lib/components/ui/tooltip';
+  import NodeEmptyState from './canvas/NodeEmptyState.svelte';
   import type { GitChange, GitFileDiff } from '$lib/modules/agent-room/application/services/GitService.js';
   import {
     createAgentReviewSchema,
@@ -361,10 +368,18 @@
   }
 
   function statusTone(status: ReviewStatus): string {
-    if (status === 'approved') return 'text-[var(--app-success)] bg-[color-mix(in_srgb,var(--app-success)_12%,transparent)]';
-    if (status === 'rejected') return 'text-[var(--app-danger)] bg-[color-mix(in_srgb,var(--app-danger)_12%,transparent)]';
-    if (status === 'changes_requested') return 'text-[var(--app-warning)] bg-[color-mix(in_srgb,var(--app-warning)_12%,transparent)]';
-    return 'text-[var(--app-accent)] bg-[var(--app-accent-soft)]';
+    if (status === 'approved') return 'text-[var(--app-success)] bg-[var(--app-success-soft)]';
+    if (status === 'rejected') return 'text-[var(--app-danger)] bg-[var(--app-danger-soft)]';
+    if (status === 'changes_requested') return 'text-[var(--app-warning)] bg-[var(--app-warning-soft)]';
+    return 'text-[var(--app-text-soft)] bg-[var(--app-hover)]';
+  }
+
+  function fileName(path: string): string {
+    return path.split('/').at(-1) ?? path;
+  }
+
+  function fileDir(path: string): string {
+    return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   }
 
   $effect(() => {
@@ -411,119 +426,207 @@
   });
 </script>
 
-<section class="@container flex h-full min-h-0 flex-col bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="review-center">
-  <header class="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3">
-    <GitBranch size={14} class="text-[var(--app-accent)]" aria-hidden="true" />
-    <span class="max-w-44 truncate text-xs font-semibold">{snapshot?.git.branch ?? m['review_center.no_branch']()}</span>
-    {#if snapshot?.git.upstream}
-      <span class="hidden truncate text-ui-xs text-[var(--app-text-muted)] @min-[700px]:inline">{snapshot.git.upstream}</span>
-    {/if}
-    <span class="flex items-center gap-1 text-ui-xs tabular-nums text-[var(--app-text-muted)]" title={m['review_center.sync_state']()}>
-      <ArrowUpFromLine size={11} /> {snapshot?.git.ahead ?? 0}
-      <ArrowDownToLine size={11} /> {snapshot?.git.behind ?? 0}
+<section class="@container relative flex h-full min-h-0 flex-col bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="review-center">
+  <header class="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3">
+    <span class="inline-flex min-w-0 items-center gap-1.5 rounded-md bg-[var(--app-hover)] px-2 py-1">
+      <GitBranch size={13} class="shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
+      <span class="max-w-44 truncate font-mono text-ui-sm font-medium">{snapshot?.git.branch ?? m['review_center.no_branch']()}</span>
     </span>
-    <span class="ml-auto text-ui-xs text-[var(--app-text-muted)]">{m['review_center.change_count']({ count: changes.length })}</span>
-    <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy} aria-label={m['review_center.pull']()} onclick={() => gitAction('pull', {}, m['review_center.pull_done']())}><ArrowDownToLine size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['review_center.pull']()}</Tooltip.Content></Tooltip.Root>
-    <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy} aria-label={m['review_center.push']()} onclick={() => gitAction('push', {}, m['review_center.push_done']())}><ArrowUpFromLine size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['review_center.push']()}</Tooltip.Content></Tooltip.Root>
-    <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy} aria-label={m['review_center.refresh']()} onclick={() => refresh()}><RefreshCw size={14} class={loading ? 'animate-spin' : ''} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['review_center.refresh']()}</Tooltip.Content></Tooltip.Root>
-    <Button size="sm" onclick={beginReview} disabled={!changes.length || busy}><CircleDot size={13} />{m['review_center.new_review']()}</Button>
+    {#if snapshot?.git.upstream}
+      <span class="hidden truncate font-mono text-[10.5px] text-[var(--app-text-muted)] @min-[700px]:inline">{snapshot.git.upstream}</span>
+    {/if}
+    <span class="flex shrink-0 items-center gap-1 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]" title={m['review_center.sync_state']()}>
+      <ArrowUpFromLine size={11} aria-hidden="true" />{snapshot?.git.ahead ?? 0}
+      <ArrowDownToLine size={11} class="ml-1" aria-hidden="true" />{snapshot?.git.behind ?? 0}
+    </span>
+    <span class="ml-auto shrink-0 text-ui-sm tabular-nums text-[var(--app-text-muted)]">{m['review_center.change_count']({ count: changes.length })}</span>
+    <div class="flex shrink-0 items-center gap-0.5">
+      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy} aria-label={m['review_center.pull']()} onclick={() => gitAction('pull', {}, m['review_center.pull_done']())}><ArrowDownToLine size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['review_center.pull']()}</Tooltip.Content></Tooltip.Root>
+      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy} aria-label={m['review_center.push']()} onclick={() => gitAction('push', {}, m['review_center.push_done']())}><ArrowUpFromLine size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['review_center.push']()}</Tooltip.Content></Tooltip.Root>
+      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" disabled={busy} aria-label={m['review_center.refresh']()} onclick={() => refresh()}><RefreshCw size={14} class={loading ? 'animate-spin' : ''} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['review_center.refresh']()}</Tooltip.Content></Tooltip.Root>
+    </div>
+    <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+    <!-- Acao principal so enquanto nao ha revisao; depois a decisao assume o destaque. -->
+    <Button size="sm" class="shrink-0" variant={snapshot?.reviews.length ? 'outline' : 'default'} onclick={beginReview} disabled={!changes.length || busy}><CircleDot size={13} />{m['review_center.new_review']()}</Button>
   </header>
 
-  {#if errorMessage}<div class="shrink-0 border-b border-[color-mix(in_srgb,var(--app-danger)_35%,var(--app-border))] bg-[color-mix(in_srgb,var(--app-danger)_10%,transparent)] px-3 py-1.5 text-ui-sm text-[var(--app-danger)]" role="alert">{errorMessage}</div>{/if}
-  {#if statusMessage}<div class="shrink-0 border-b border-[color-mix(in_srgb,var(--app-success)_35%,var(--app-border))] bg-[color-mix(in_srgb,var(--app-success)_10%,transparent)] px-3 py-1.5 text-ui-sm text-[var(--app-success)]" role="status">{statusMessage}</div>{/if}
+  {#if errorMessage}
+    <div class="flex shrink-0 items-start gap-2 border-b border-[var(--app-border)] bg-[var(--app-danger-soft)] px-3 py-2 text-ui-sm text-[var(--app-text)]" role="alert">
+      <CircleAlert size={14} class="mt-0.5 shrink-0 text-[var(--app-danger)]" aria-hidden="true" />
+      <span class="min-w-0 flex-1 break-words">{errorMessage}</span>
+    </div>
+  {/if}
+  <!-- Regiao de status estavel: o texto muda dentro dela para ser anunciado. -->
+  <div class="pointer-events-none absolute left-1/2 top-14 z-30 -translate-x-1/2" role="status" aria-live="polite">
+    {#if statusMessage}
+      <span class="status-pill"><Check size={13} class="text-[var(--app-success)]" aria-hidden="true" />{statusMessage}</span>
+    {/if}
+  </div>
 
   <div class="review-grid grid min-h-0 flex-1">
-    <aside class="min-h-0 overflow-y-auto border-r border-[var(--app-border)] bg-[var(--app-surface)]" aria-label={m['review_center.source_control']()}>
+    <aside class="flex min-h-0 flex-col overflow-y-auto border-r border-[var(--app-border)] bg-[var(--app-surface)]" aria-label={m['review_center.source_control']()}>
       {#if loading}
-        <p class="px-3 py-4 text-xs text-[var(--app-text-muted)]">{m['review_center.loading']()}</p>
+        <div class="space-y-1.5 p-2" role="status" aria-label={m['review_center.loading']()}>
+          {#each [0, 1, 2, 3, 4] as row (row)}<Skeleton class="h-6 rounded-md bg-[var(--app-hover)]" style={`width:${92 - row * 8}%`} />{/each}
+        </div>
       {:else if !snapshot?.git.isRepo}
-        <div class="px-3 py-5 text-center"><ShieldAlert class="mx-auto mb-2 text-[var(--app-warning)]" size={22} /><p class="text-xs font-medium">{m['review_center.not_repo']()}</p></div>
+        <div class="grid min-h-48 flex-1"><NodeEmptyState compact tone="warning" icon={ShieldAlert} title={m['review_center.not_repo']()} /></div>
       {:else if !changes.length}
-        <div class="px-3 py-5 text-center"><CheckCircle2 class="mx-auto mb-2 text-[var(--app-success)]" size={22} /><p class="text-xs font-medium">{m['review_center.clean']()}</p></div>
+        <div class="grid min-h-48 flex-1"><NodeEmptyState compact icon={CheckCircle2} title={m['review_center.clean']()} /></div>
       {:else}
-        {#each [{ label: m['review_center.staged'](), items: stagedChanges }, { label: m['review_center.changes'](), items: unstagedChanges }] as group (group.label)}
-          <div class="sticky top-0 z-10 flex h-7 items-center border-y border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
-            {group.label}<span class="ml-auto tabular-nums">{group.items.length}</span>
-          </div>
-          {#each group.items.slice(0, 500) as change (change.id)}
-            <div class={`group flex h-8 items-center ${selectedChangeId === change.id ? 'bg-[var(--app-accent-soft)]' : 'hover:bg-[var(--app-surface-raised)]'}`}>
-              <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" onclick={() => (selectedChangeId = change.id)}>
-                <span class={`w-3 shrink-0 text-center font-mono text-ui-xs font-semibold ${change.status === 'D' ? 'text-[var(--app-danger)]' : change.status === '?' || change.status === 'A' ? 'text-[var(--app-success)]' : 'text-[var(--app-warning)]'}`}>{change.status}</span>
-                <span class="min-w-0 flex-1 truncate" title={change.path}>{change.path.split('/').at(-1)}</span>
-                <span class="max-w-16 truncate text-ui-xs text-[var(--app-text-muted)]">{change.path.includes('/') ? change.path.slice(0, change.path.lastIndexOf('/')) : ''}</span>
-              </button>
-              <button class="mr-0.5 grid size-6 shrink-0 place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-text)] focus-visible:opacity-100 group-hover:opacity-100" aria-label={change.staged ? m['review_center.unstage_file']({ file: change.path }) : m['review_center.stage_file']({ file: change.path })} onclick={() => gitAction(change.staged ? 'unstage' : 'stage', { path: change.path })}>{#if change.staged}<Minus size={12} />{:else}<Plus size={12} />{/if}</button>
-              {#if !change.staged && change.status !== '?'}<button class="mr-1 grid size-6 shrink-0 place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 hover:bg-[color-mix(in_srgb,var(--app-danger)_12%,transparent)] hover:text-[var(--app-danger)] focus-visible:opacity-100 group-hover:opacity-100" aria-label={m['review_center.discard_file']({ file: change.path })} onclick={() => (discardChange = change)}><RotateCcw size={12} /></button>{/if}
+        <div class="flex-1 pb-2">
+          {#each [{ label: m['review_center.staged'](), items: stagedChanges }, { label: m['review_center.changes'](), items: unstagedChanges }] as group (group.label)}
+            <div class="section-label sticky top-0 z-10 flex h-8 items-center bg-[var(--app-surface)] px-3 shadow-[inset_0_-1px_0_var(--app-border)]">
+              <span class="truncate">{group.label}</span><span class="ml-auto font-mono text-[10.5px] font-medium tracking-normal tabular-nums">{group.items.length}</span>
+            </div>
+            <div class="px-1.5 pt-1">
+              {#each group.items.slice(0, 500) as change (change.id)}
+                <div class="rc-row" class:selected={selectedChangeId === change.id}>
+                  <button class="rc-row-button" onclick={() => (selectedChangeId = change.id)}>
+                    <span class={`w-3 shrink-0 text-center font-mono text-ui-xs font-semibold ${change.status === 'D' ? 'text-[var(--app-danger)]' : change.status === '?' || change.status === 'A' ? 'text-[var(--app-success)]' : 'text-[var(--app-warning)]'}`}>{change.status}</span>
+                    <span class="min-w-0 flex-1 truncate" title={change.path}>{fileName(change.path)}</span>
+                    <span class="max-w-20 shrink-0 truncate font-mono text-[10.5px] text-[var(--app-text-muted)]">{fileDir(change.path)}</span>
+                  </button>
+                  <!-- Acoes da linha aparecem ao apontar/focar, sem roubar largura do nome. -->
+                  <div class="rc-row-actions">
+                    <Tooltip.Root>
+                      <Tooltip.Trigger>
+                        {#snippet child({ props })}
+                          <button {...props} class="rc-action" aria-label={change.staged ? m['review_center.unstage_file']({ file: change.path }) : m['review_center.stage_file']({ file: change.path })} onclick={() => gitAction(change.staged ? 'unstage' : 'stage', { path: change.path })}>{#if change.staged}<Minus size={13} />{:else}<Plus size={13} />{/if}</button>
+                        {/snippet}
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>{change.staged ? m['review_center.unstage_file']({ file: fileName(change.path) }) : m['review_center.stage_file']({ file: fileName(change.path) })}</Tooltip.Content>
+                    </Tooltip.Root>
+                    {#if !change.staged && change.status !== '?'}
+                      <Tooltip.Root>
+                        <Tooltip.Trigger>
+                          {#snippet child({ props })}
+                            <button {...props} class="rc-action danger" aria-label={m['review_center.discard_file']({ file: change.path })} onclick={() => (discardChange = change)}><RotateCcw size={13} /></button>
+                          {/snippet}
+                        </Tooltip.Trigger>
+                        <Tooltip.Content>{m['review_center.discard_file']({ file: fileName(change.path) })}</Tooltip.Content>
+                      </Tooltip.Root>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+              {#if group.items.length > 500}<p class="flex items-start gap-1.5 px-2 py-2 text-ui-sm text-[var(--app-text-soft)]"><TriangleAlert size={13} class="mt-0.5 shrink-0 text-[var(--app-warning)]" aria-hidden="true" />{m['review_center.file_limit']({ count: group.items.length - 500 })}</p>{/if}
             </div>
           {/each}
-          {#if group.items.length > 500}<p class="px-3 py-2 text-ui-xs text-[var(--app-warning)]">{m['review_center.file_limit']({ count: group.items.length - 500 })}</p>{/if}
-        {/each}
+        </div>
       {/if}
       {#if stagedChanges.length}
         <div class="sticky bottom-0 border-t border-[var(--app-border)] bg-[var(--app-surface)] p-2">
-          <Textarea class="min-h-16 resize-none text-xs" bind:value={commitMessage} placeholder={m['review_center.commit_placeholder']()} />
+          <Textarea class="min-h-16 resize-none text-ui-md" bind:value={commitMessage} placeholder={m['review_center.commit_placeholder']()} aria-label={m['review_center.commit_placeholder']()} />
           <Button class="mt-2 w-full" size="sm" disabled={!commitMessage.trim() || busy} onclick={commit}><GitCommitHorizontal size={13} />{m['review_center.commit']()}</Button>
         </div>
       {/if}
     </aside>
 
     <main class="relative min-h-0 min-w-0 bg-[var(--app-canvas)]">
-      <div class="flex h-9 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2">
-        <FileCode2 size={13} class="text-[var(--app-text-muted)]" />
-        <span class="min-w-0 flex-1 truncate text-ui-sm font-medium">{selectedChange?.path ?? m['review_center.select_file']()}</span>
-        {#if diff?.truncated}<span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_12%,transparent)] px-1.5 py-0.5 text-ui-xs font-medium text-[var(--app-warning)]">{m['review_center.truncated']()}</span>{/if}
-        <Button variant="ghost" size="sm" disabled={!selectedChange || !activeReview} onclick={() => (commentOpen = !commentOpen)}><MessageSquarePlus size={13} />{m['review_center.comment']()}</Button>
+      <div class="flex h-9 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] pl-3 pr-1.5">
+        <FileCode2 size={13} class="shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
+        {#if selectedChange}
+          <span class="min-w-0 flex-1 truncate text-ui-md" title={selectedChange.path}>{#if fileDir(selectedChange.path)}<span class="text-[var(--app-text-muted)]">{fileDir(selectedChange.path)}/</span>{/if}<span class="font-medium">{fileName(selectedChange.path)}</span></span>
+        {:else}
+          <span class="min-w-0 flex-1 truncate text-ui-md text-[var(--app-text-muted)]">{m['review_center.select_file']()}</span>
+        {/if}
+        {#if diff?.truncated}<span class="shrink-0 rounded-md bg-[var(--app-warning-soft)] px-1.5 py-0.5 text-ui-xs font-medium text-[var(--app-warning)]">{m['review_center.truncated']()}</span>{/if}
+        <Popover.Root bind:open={commentOpen}>
+          <Popover.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} variant="ghost" size="sm" class="shrink-0" disabled={!selectedChange || !activeReview}><MessageSquarePlus size={13} />{m['review_center.comment']()}</Button>
+            {/snippet}
+          </Popover.Trigger>
+          <!-- Fica no fluxo do painel e nao fecha ao clicar no diff: o usuario escolhe a linha com o popover aberto. -->
+          <Popover.Content align="end" sideOffset={6} class="w-[min(360px,calc(100vw-24px))] gap-0 p-3" portalProps={{ disabled: true }} interactOutsideBehavior="ignore" trapFocus={false}>
+            {#if selectedChange && activeReview}
+              <div class="mb-2 flex items-center gap-2">
+                <MessageSquarePlus size={13} class="text-[var(--app-text-muted)]" aria-hidden="true" />
+                <strong class="text-ui-md font-semibold">{selectedLine ? m['review_center.comment_line']({ line: selectedLine }) : m['review_center.comment_file']()}</strong>
+              </div>
+              <Textarea class="min-h-24 resize-none text-ui-md" bind:value={commentBody} placeholder={m['review_center.comment_placeholder']()} aria-label={m['review_center.comment']()} />
+              <div class="mt-2 flex justify-end gap-2"><Button variant="ghost" size="sm" onclick={() => (commentOpen = false)}>{m['settings.cancel']()}</Button><Button size="sm" disabled={!commentBody.trim() || busy} onclick={addComment}>{m['review_center.add_comment']()}</Button></div>
+            {/if}
+          </Popover.Content>
+        </Popover.Root>
       </div>
-      {#if commentOpen && selectedChange && activeReview}
-        <div class="absolute right-3 top-12 z-20 w-[min(360px,calc(100%-24px))] border border-[var(--app-border-strong)] bg-[var(--app-surface-raised)] p-3 shadow-xl">
-          <div class="mb-2 flex items-center gap-2"><MessageSquarePlus size={13} /><strong class="text-ui-sm">{selectedLine ? m['review_center.comment_line']({ line: selectedLine }) : m['review_center.comment_file']()}</strong><button class="ml-auto" aria-label={m['settings.cancel']()} onclick={() => (commentOpen = false)}><X size={14} /></button></div>
-          <Textarea class="min-h-24 resize-none text-xs" bind:value={commentBody} placeholder={m['review_center.comment_placeholder']()} />
-          <div class="mt-2 flex justify-end gap-2"><Button variant="outline" size="sm" onclick={() => (commentOpen = false)}>{m['settings.cancel']()}</Button><Button size="sm" disabled={!commentBody.trim() || busy} onclick={addComment}>{m['review_center.add_comment']()}</Button></div>
+      {#if diffLoading}
+        <div class="absolute inset-x-0 bottom-0 top-9 z-10 grid place-items-center bg-[color-mix(in_srgb,var(--app-canvas)_70%,transparent)]">
+          <span class="inline-flex items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1.5 text-ui-sm text-[var(--app-text-muted)] shadow-border"><LoaderCircle size={13} class="animate-spin text-[var(--app-accent)]" aria-hidden="true" />{m['creative.loading']()}</span>
         </div>
       {/if}
-      {#if diffLoading}<div class="absolute inset-9 z-10 grid place-items-center bg-[color-mix(in_srgb,var(--app-canvas)_75%,transparent)]"><RefreshCw size={20} class="animate-spin text-[var(--app-accent)]" /></div>{/if}
-      {#if diff?.binary}<div class="absolute inset-9 grid place-items-center text-center"><div><FileCode2 class="mx-auto mb-2 text-[var(--app-text-muted)]" size={26} /><p class="text-xs font-medium">{m['review_center.binary']()}</p><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{m['review_center.binary_desc']()}</p></div></div>{/if}
+      {#if diff?.binary}<div class="absolute inset-x-0 bottom-0 top-9 grid"><NodeEmptyState icon={FileCode2} title={m['review_center.binary']()} description={m['review_center.binary_desc']()} /></div>{/if}
       <div bind:this={diffHost} class={`diff-host absolute inset-x-0 bottom-0 top-9 ${diff?.binary || !selectedChange ? 'invisible' : ''}`}></div>
-      {#if !selectedChange && !loading}<div class="absolute inset-9 grid place-items-center"><p class="text-xs text-[var(--app-text-muted)]">{m['review_center.select_file_hint']()}</p></div>{/if}
+      {#if !selectedChange && !loading}<div class="absolute inset-x-0 bottom-0 top-9 grid"><NodeEmptyState icon={FileCode2} title={m['review_center.select_file']()} description={m['review_center.select_file_hint']()} /></div>{/if}
     </main>
 
-    <aside class="min-h-0 overflow-y-auto border-l border-[var(--app-border)] bg-[var(--app-surface)] p-3" aria-label={m['review_center.review_details']()}>
-      <div class="mb-3 flex items-center gap-2"><h2 class="text-xs font-semibold">{m['review_center.reviews']()}</h2><span class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]">{snapshot?.reviews.length ?? 0}</span></div>
-      {#if snapshot?.reviews.length}
-        <NativeSelect.Root class="mb-3 w-full" size="sm" bind:value={activeReviewId} aria-label={m['review_center.select_review']()}>
-          {#each snapshot.reviews as review (review.id)}<NativeSelect.Option value={review.id}>{review.title}</NativeSelect.Option>{/each}
-        </NativeSelect.Root>
-      {:else}
-        <p class="mb-4 text-ui-sm leading-5 text-[var(--app-text-muted)]">{m['review_center.no_reviews']()}</p>
-      {/if}
+    <aside class="flex min-h-0 flex-col overflow-y-auto border-l border-[var(--app-border)] bg-[var(--app-surface)]" aria-label={m['review_center.review_details']()}>
+      <div class="flex-1 p-3">
+        <div class="mb-2 flex h-6 items-center gap-2"><h2 class="section-label">{m['review_center.reviews']()}</h2><span class="ml-auto font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{snapshot?.reviews.length ?? 0}</span></div>
+        {#if snapshot?.reviews.length}
+          <NativeSelect.Root class="mb-4 w-full" size="sm" bind:value={activeReviewId} aria-label={m['review_center.select_review']()}>
+            {#each snapshot.reviews as review (review.id)}<NativeSelect.Option value={review.id}>{review.title}</NativeSelect.Option>{/each}
+          </NativeSelect.Root>
+        {:else}
+          <div class="rounded-lg bg-[var(--app-surface-subtle)] shadow-border"><NodeEmptyState compact icon={CircleDot} title={m['review_center.no_reviews']()} /></div>
+        {/if}
+
+        {#if activeReview}
+          <div class="mb-3 flex items-start gap-2">
+            <div class="min-w-0 flex-1">
+              <h3 class="text-balance break-words font-display text-[14px] font-semibold leading-snug">{activeReview.title}</h3>
+              <p class="mt-1 text-ui-sm text-[var(--app-text-muted)]">{activeReview.taskTitle ?? m['review_center.no_task']()} · {activeReview.assigneeTitle ?? m['review_center.no_assignee']()}</p>
+            </div>
+            <span class={`shrink-0 rounded-md px-1.5 py-0.5 text-ui-xs font-semibold ${statusTone(activeReview.status)}`}>{statusLabel(activeReview.status)}</span>
+          </div>
+          {#if activeReview.summary}<p class="mb-4 whitespace-pre-wrap text-pretty text-ui-md leading-5 text-[var(--app-text-soft)]">{activeReview.summary}</p>{/if}
+          {#each [{ id: 'evidence', label: m['review_center.evidence'](), items: activeReview.evidence }, { id: 'tests', label: m['review_center.tests'](), items: activeReview.tests }, { id: 'risks', label: m['review_center.risks'](), items: activeReview.risks }] as section (section.id)}
+            {#if section.items.length}
+              <div class="mb-3">
+                <h4 class="section-label mb-1.5">{section.label}</h4>
+                {#each section.items as item}
+                  <p class="mb-1 flex gap-1.5 text-ui-sm leading-[1.45] text-[var(--app-text-soft)]">
+                    {#if section.id === 'risks'}<TriangleAlert size={12} class="mt-0.5 shrink-0 text-[var(--app-warning)]" aria-hidden="true" />
+                    {:else if section.id === 'tests'}<FlaskConical size={12} class="mt-0.5 shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
+                    {:else}<Check size={12} class="mt-0.5 shrink-0 text-[var(--app-success)]" aria-hidden="true" />{/if}{item}
+                  </p>
+                {/each}
+              </div>
+            {/if}
+          {/each}
+          <div class="my-4 h-px bg-[var(--app-border)]"></div>
+          <div class="mb-2 flex items-center"><h4 class="section-label">{m['review_center.comments']()}</h4><span class="ml-auto font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{openCommentCount}</span></div>
+          {#each [...new Set(activeReview.comments.map((comment) => comment.filePath))] as filePath (filePath)}
+            <div class="mb-3">
+              <button class="file-link mb-1.5 max-w-full truncate text-left font-mono text-ui-xs font-medium" title={filePath} onclick={() => { const match = changes.find((change) => change.path === filePath); if (match) selectedChangeId = match.id; }}>{filePath}</button>
+              {#each activeReview.comments.filter((comment) => comment.filePath === filePath) as comment (comment.id)}
+                <div class={`mb-1.5 rounded-md bg-[var(--app-surface-subtle)] px-2.5 py-2 shadow-border ${comment.status === 'resolved' ? 'opacity-60' : ''}`}>
+                  <div class="flex items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
+                    <span class="rounded bg-[var(--app-hover)] px-1 font-mono text-[10.5px] tabular-nums">{comment.lineNumber ? `L${comment.lineNumber}` : m['review_center.whole_file']()}</span>
+                    {#if comment.stale}<span class="inline-flex items-center gap-1 text-[var(--app-warning)]"><TriangleAlert size={11} aria-hidden="true" />{m['review_center.stale']()}</span>{/if}
+                    <Button variant="ghost" size="xs" class="-my-1 ml-auto text-ui-xs text-[var(--app-text-soft)]" onclick={() => resolveComment(activeReview.id, comment.id, comment.status !== 'resolved')}>{#if comment.status === 'resolved'}<RotateCcw size={11} />{:else}<Check size={11} />{/if}{comment.status === 'resolved' ? m['review_center.reopen']() : m['review_center.resolve']()}</Button>
+                  </div>
+                  <p class="mt-1 break-words text-ui-sm leading-[1.45]">{comment.body}</p>
+                </div>
+              {/each}
+            </div>
+          {/each}
+          {#if !activeReview.comments.length}<p class="mb-4 text-ui-sm text-[var(--app-text-muted)]">{m['review_center.no_comments']()}</p>{/if}
+          {#if activeReview.decisionNote}<div class="mt-3 rounded-md bg-[var(--app-surface-subtle)] px-2.5 py-2 shadow-border"><span class="section-label">{m['review_center.last_decision']()}</span><p class="mt-1 whitespace-pre-wrap text-ui-sm leading-[1.45] text-[var(--app-text-soft)]">{activeReview.decisionNote}</p></div>{/if}
+        {/if}
+      </div>
 
       {#if activeReview}
-        <div class="mb-3 flex items-start gap-2"><div class="min-w-0 flex-1"><h3 class="break-words text-sm font-semibold">{activeReview.title}</h3><p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">{activeReview.taskTitle ?? m['review_center.no_task']()} · {activeReview.assigneeTitle ?? m['review_center.no_assignee']()}</p></div><span class={`shrink-0 rounded-[3px] px-1.5 py-1 text-ui-xs font-semibold ${statusTone(activeReview.status)}`}>{statusLabel(activeReview.status)}</span></div>
-        {#if activeReview.summary}<p class="mb-4 whitespace-pre-wrap text-ui-sm leading-5 text-[var(--app-text-soft)]">{activeReview.summary}</p>{/if}
-        {#each [{ label: m['review_center.evidence'](), items: activeReview.evidence }, { label: m['review_center.tests'](), items: activeReview.tests }, { label: m['review_center.risks'](), items: activeReview.risks }] as section (section.label)}
-          {#if section.items.length}<div class="mb-3"><h4 class="mb-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{section.label}</h4>{#each section.items as item}<p class="mb-1 flex gap-1.5 text-ui-xs leading-4"><Check size={11} class="mt-0.5 shrink-0 text-[var(--app-success)]" />{item}</p>{/each}</div>{/if}
-        {/each}
-        <div class="my-3 border-t border-[var(--app-border)]"></div>
-        <div class="mb-2 flex items-center"><h4 class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['review_center.comments']()}</h4><span class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]">{openCommentCount}</span></div>
-        {#each [...new Set(activeReview.comments.map((comment) => comment.filePath))] as filePath (filePath)}
-          <div class="mb-3"><button class="mb-1 max-w-full truncate text-left font-mono text-ui-xs font-medium text-[var(--app-accent)]" title={filePath} onclick={() => { const match = changes.find((change) => change.path === filePath); if (match) selectedChangeId = match.id; }}>{filePath}</button>
-            {#each activeReview.comments.filter((comment) => comment.filePath === filePath) as comment (comment.id)}
-              <div class={`mb-1.5 border-l-2 py-1 pl-2 ${comment.status === 'resolved' ? 'border-[var(--app-border-strong)] opacity-55' : comment.stale ? 'border-[var(--app-warning)]' : 'border-[var(--app-accent)]'}`}>
-                <div class="flex items-center gap-1 text-ui-xs text-[var(--app-text-muted)]"><span>{comment.lineNumber ? `L${comment.lineNumber}` : m['review_center.whole_file']()}</span>{#if comment.stale}<span class="text-[var(--app-warning)]">{m['review_center.stale']()}</span>{/if}<button class="ml-auto text-[var(--app-accent)] hover:underline" onclick={() => resolveComment(activeReview.id, comment.id, comment.status !== 'resolved')}>{comment.status === 'resolved' ? m['review_center.reopen']() : m['review_center.resolve']()}</button></div>
-                <p class="mt-1 break-words text-ui-xs leading-4">{comment.body}</p>
-              </div>
-            {/each}
+        <!-- Decisao fixa no rodape: a acao principal nao some ao rolar os comentarios. -->
+        <div class="sticky bottom-0 border-t border-[var(--app-border)] bg-[var(--app-surface)] p-3">
+          <Textarea class="min-h-16 resize-none text-ui-md" bind:value={decisionNote} placeholder={m['review_center.decision_placeholder']()} aria-label={m['review_center.decision_placeholder']()} />
+          <div class="mt-2 grid grid-cols-3 gap-1.5">
+            <Button size="sm" class="min-w-0 px-1.5" disabled={busy} onclick={() => decide('approved')}><CheckCircle2 size={13} />{m['review_center.approve']()}</Button>
+            <Button size="sm" variant="outline" class="min-w-0 px-1.5" disabled={busy} onclick={() => decide('changes_requested')}><ShieldAlert size={13} class="text-[var(--app-warning)]" />{m['review_center.request_changes']()}</Button>
+            <Button size="sm" variant="outline" class="min-w-0 px-1.5" disabled={busy} onclick={() => decide('rejected')}><XCircle size={13} class="text-[var(--app-danger)]" />{m['review_center.reject']()}</Button>
           </div>
-        {/each}
-        {#if !activeReview.comments.length}<p class="mb-4 text-ui-xs text-[var(--app-text-muted)]">{m['review_center.no_comments']()}</p>{/if}
-
-        <Textarea class="min-h-20 resize-none text-xs" bind:value={decisionNote} placeholder={m['review_center.decision_placeholder']()} />
-        <div class="mt-2 grid grid-cols-3 gap-1.5">
-          <Button size="sm" class="min-w-0 px-1 text-ui-xs" disabled={busy} onclick={() => decide('approved')}><CheckCircle2 size={12} />{m['review_center.approve']()}</Button>
-          <Button size="sm" variant="outline" class="min-w-0 px-1 text-ui-xs text-[var(--app-warning)]" disabled={busy} onclick={() => decide('changes_requested')}><ShieldAlert size={12} />{m['review_center.request_changes']()}</Button>
-          <Button size="sm" variant="outline" class="min-w-0 px-1 text-ui-xs text-[var(--app-danger)]" disabled={busy} onclick={() => decide('rejected')}><XCircle size={12} />{m['review_center.reject']()}</Button>
         </div>
-        {#if activeReview.decisionNote}<div class="mt-3 border-l-2 border-[var(--app-border-strong)] pl-2"><span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['review_center.last_decision']()}</span><p class="mt-1 whitespace-pre-wrap text-ui-xs leading-4">{activeReview.decisionNote}</p></div>{/if}
       {/if}
     </aside>
   </div>
@@ -532,25 +635,184 @@
 <Dialog.Root bind:open={reviewDialogOpen}>
   <Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
     <Dialog.Header><Dialog.Title>{m['review_center.create_title']()}</Dialog.Title><Dialog.Description>{m['review_center.create_description']()}</Dialog.Description></Dialog.Header>
-    <div class="grid gap-3 py-2 sm:grid-cols-2">
-      <label class="sm:col-span-2"><span class="mb-1 block text-xs font-medium">{m['review_center.title_field']()}</span><Input bind:value={reviewTitle} maxlength={160} /></label>
-      <label><span class="mb-1 block text-xs font-medium">{m['review_center.task_field']()}</span><NativeSelect.Root class="w-full" bind:value={reviewTaskId}><NativeSelect.Option value="">{m['review_center.no_task']()}</NativeSelect.Option>{#each snapshot?.tasks ?? [] as task (task.id)}<NativeSelect.Option value={task.id}>{task.title}</NativeSelect.Option>{/each}</NativeSelect.Root></label>
-      <label><span class="mb-1 block text-xs font-medium">{m['review_center.assignee_field']()}</span><NativeSelect.Root class="w-full" bind:value={reviewAssigneeId}><NativeSelect.Option value="">{m['review_center.no_assignee']()}</NativeSelect.Option>{#each snapshot?.agents ?? [] as agent (agent.id)}<NativeSelect.Option value={agent.id}>{agent.title}</NativeSelect.Option>{/each}</NativeSelect.Root></label>
-      <label class="sm:col-span-2"><span class="mb-1 block text-xs font-medium">{m['review_center.summary_field']()}</span><Textarea class="min-h-20 resize-y" bind:value={reviewSummary} /></label>
-      <label><span class="mb-1 block text-xs font-medium">{m['review_center.evidence']()}</span><Textarea class="min-h-20 resize-y text-xs" bind:value={reviewEvidence} placeholder={m['review_center.one_per_line']()} /></label>
-      <label><span class="mb-1 block text-xs font-medium">{m['review_center.tests']()}</span><Textarea class="min-h-20 resize-y text-xs" bind:value={reviewTests} placeholder={m['review_center.one_per_line']()} /></label>
-      <label class="sm:col-span-2"><span class="mb-1 block text-xs font-medium">{m['review_center.risks']()}</span><Textarea class="min-h-20 resize-y text-xs" bind:value={reviewRisks} placeholder={m['review_center.one_per_line']()} /></label>
-      <fieldset class="sm:col-span-2"><legend class="mb-1 text-xs font-medium">{m['review_center.files_field']()}</legend><div class="max-h-32 overflow-y-auto border border-[var(--app-border)] bg-[var(--app-surface)] p-2">{#each [...new Set(changes.map((change) => change.path))] as path (path)}<label class="flex min-h-7 items-center gap-2 text-ui-sm"><input type="checkbox" checked={reviewPaths.includes(path)} onchange={(event) => reviewPaths = (event.currentTarget as HTMLInputElement).checked ? [...reviewPaths, path] : reviewPaths.filter((item) => item !== path)} /><span class="min-w-0 truncate">{path}</span></label>{/each}</div></fieldset>
+    <div class="grid gap-4 py-2 sm:grid-cols-2">
+      <label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.title_field']()}</span><Input bind:value={reviewTitle} maxlength={160} /></label>
+      <label><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.task_field']()}</span><NativeSelect.Root class="w-full" bind:value={reviewTaskId}><NativeSelect.Option value="">{m['review_center.no_task']()}</NativeSelect.Option>{#each snapshot?.tasks ?? [] as task (task.id)}<NativeSelect.Option value={task.id}>{task.title}</NativeSelect.Option>{/each}</NativeSelect.Root></label>
+      <label><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.assignee_field']()}</span><NativeSelect.Root class="w-full" bind:value={reviewAssigneeId}><NativeSelect.Option value="">{m['review_center.no_assignee']()}</NativeSelect.Option>{#each snapshot?.agents ?? [] as agent (agent.id)}<NativeSelect.Option value={agent.id}>{agent.title}</NativeSelect.Option>{/each}</NativeSelect.Root></label>
+      <label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.summary_field']()}</span><Textarea class="min-h-20 resize-y" bind:value={reviewSummary} /></label>
+      <label><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.evidence']()}</span><Textarea class="min-h-20 resize-y text-ui-md" bind:value={reviewEvidence} placeholder={m['review_center.one_per_line']()} /></label>
+      <label><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.tests']()}</span><Textarea class="min-h-20 resize-y text-ui-md" bind:value={reviewTests} placeholder={m['review_center.one_per_line']()} /></label>
+      <label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['review_center.risks']()}</span><Textarea class="min-h-20 resize-y text-ui-md" bind:value={reviewRisks} placeholder={m['review_center.one_per_line']()} /></label>
+      <fieldset class="sm:col-span-2">
+        <legend class="mb-1.5 flex w-full items-center text-ui-md font-medium">{m['review_center.files_field']()}<span class="ml-auto font-mono text-[10.5px] font-normal tabular-nums text-[var(--app-text-muted)]">{reviewPaths.length}</span></legend>
+        <div class="max-h-36 overflow-y-auto rounded-lg bg-[var(--app-surface-subtle)] p-1 shadow-border">
+          {#each [...new Set(changes.map((change) => change.path))] as path (path)}
+            <label class="flex min-h-8 cursor-pointer items-center gap-2.5 rounded-md px-2 text-ui-md transition-colors hover:bg-[var(--app-hover)]"><Checkbox checked={reviewPaths.includes(path)} onCheckedChange={(checked: boolean | 'indeterminate') => reviewPaths = checked === true ? [...reviewPaths, path] : reviewPaths.filter((item) => item !== path)} /><span class="min-w-0 truncate font-mono text-ui-sm" title={path}>{path}</span></label>
+          {/each}
+        </div>
+      </fieldset>
     </div>
-    <Dialog.Footer><Button variant="outline" onclick={() => (reviewDialogOpen = false)}>{m['settings.cancel']()}</Button><Button disabled={busy || !reviewTitle.trim()} onclick={createReview}>{m['review_center.create_review']()}</Button></Dialog.Footer>
+    <Dialog.Footer><Button variant="ghost" onclick={() => (reviewDialogOpen = false)}>{m['settings.cancel']()}</Button><Button disabled={busy || !reviewTitle.trim()} onclick={createReview}>{m['review_center.create_review']()}</Button></Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
 
 <AlertDialog.Root open={Boolean(discardChange)} onOpenChange={(open) => !open && (discardChange = null)}>
-  <AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['review_center.discard_title']()}</AlertDialog.Title><AlertDialog.Description>{m['review_center.discard_description']({ file: discardChange?.path ?? '' })}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['settings.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => { if (discardChange) void gitAction('discard', { path: discardChange.path }, m['review_center.discard_done']()); discardChange = null; }}>{m['review_center.discard_confirm']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
+  <AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['review_center.discard_title']()}</AlertDialog.Title><AlertDialog.Description>{m['review_center.discard_description']({ file: discardChange?.path ?? '' })}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['settings.cancel']()}</AlertDialog.Cancel><AlertDialog.Action variant="destructive" onclick={() => { if (discardChange) void gitAction('discard', { path: discardChange.path }, m['review_center.discard_done']()); discardChange = null; }}>{m['review_center.discard_confirm']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content>
 </AlertDialog.Root>
 
 <style>
+  /*
+   * Linhas de arquivo no idioma do Workbench: 28px, hover neutro, selecao
+   * neutra com indicador de acento e acoes reveladas ao apontar ou focar.
+   */
+  .rc-row {
+    --rc-row-bg: var(--app-surface);
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 28px;
+    margin-bottom: 1px;
+    border-radius: 6px;
+    color: var(--app-text-soft);
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .rc-row:hover {
+    --rc-row-bg: color-mix(in srgb, var(--app-text) 8%, var(--app-surface));
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .rc-row.selected {
+    --rc-row-bg: color-mix(in srgb, var(--app-text) 12%, var(--app-surface));
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .rc-row.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--app-accent);
+  }
+
+  .rc-row-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 100%;
+    flex: 1;
+    padding: 0 8px 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .rc-row-button:focus-visible,
+  .file-link:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .rc-row-actions {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding-left: 12px;
+    border-radius: 0 6px 6px 0;
+    background: linear-gradient(to right, transparent, var(--rc-row-bg) 12px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .rc-row:hover .rc-row-actions,
+  .rc-row:focus-within .rc-row-actions {
+    opacity: 1;
+  }
+
+  .rc-action {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  /* So os botoes recebem clique; a faixa de degrade continua selecionando o arquivo. */
+  .rc-row-actions .rc-action {
+    pointer-events: auto;
+  }
+
+  .rc-action:hover {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .rc-action.danger:hover {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .rc-action:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .file-link {
+    display: block;
+    border-radius: 4px;
+    color: var(--app-text-soft);
+    cursor: pointer;
+    transition: color var(--duration-quick) ease-out;
+  }
+
+  .file-link:hover {
+    color: var(--app-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-overlay);
+    color: var(--app-text);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    animation: status-pill-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes status-pill-in {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--distance-micro) * -1));
+    }
+  }
+
   .review-grid { grid-template-columns: minmax(180px, 230px) minmax(360px, 1fr) minmax(260px, 320px); }
   @container (max-width: 980px) {
     .review-grid { grid-template-columns: minmax(180px, 220px) minmax(360px, 1fr); grid-template-rows: minmax(360px, 1fr) minmax(220px, 38%); }

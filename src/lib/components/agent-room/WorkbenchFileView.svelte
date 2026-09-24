@@ -5,18 +5,22 @@
     Braces,
     ChevronLeft,
     ChevronRight,
+    CircleAlert,
     Code2,
+    ExternalLink,
     Eye,
     FileArchive,
     FileText,
     Focus,
     ListTree,
+    LoaderCircle,
     Maximize2,
     MessageSquareQuote,
     Minus,
     Plus,
     RefreshCw,
     Save,
+    TriangleAlert,
     WrapText,
   } from '@lucide/svelte';
   import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -27,6 +31,7 @@
   import PdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
   import type { editor } from 'monaco-editor';
   import MarkdownView from './MarkdownView.svelte';
+  import NodeEmptyState from './canvas/NodeEmptyState.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { appSettingsStore, getAppSettings } from './app-settings.svelte.js';
@@ -465,39 +470,48 @@
   });
 </script>
 
-<div class="grid h-full min-h-0 grid-rows-[38px_minmax(0,1fr)_24px] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="workbench-file-view">
-  <header class="flex min-w-0 items-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
-    <div class="flex min-w-0 flex-1 items-center overflow-hidden text-ui-sm text-[var(--app-text-muted)]" aria-label={m['workbench_editor.breadcrumbs']()}>
+<div class="grid h-full min-h-0 grid-rows-[38px_minmax(0,1fr)_26px] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="workbench-file-view">
+  <header class="flex min-w-0 items-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] pl-3 pr-1.5">
+    <div class="flex min-w-0 flex-1 items-center overflow-hidden text-ui-md text-[var(--app-text-muted)]" aria-label={m['workbench_editor.breadcrumbs']()}>
       {#each breadcrumbs as crumb, index (index)}
-        {#if index > 0}<ChevronRight size={11} class="mx-0.5 shrink-0 opacity-50" aria-hidden="true" />{/if}
+        {#if index > 0}<ChevronRight size={12} class="mx-0.5 shrink-0 opacity-60" aria-hidden="true" />{/if}
         <span class={index === breadcrumbs.length - 1 ? 'truncate font-medium text-[var(--app-text)]' : 'max-w-32 truncate'}>{crumb}</span>
       {/each}
-      {#if dirty}<span class="ml-2 size-1.5 shrink-0 rounded-full bg-[var(--app-warning)]" title={m['editor.unsaved']()}></span>{/if}
+      {#if dirty}<span class="ml-2 size-2 shrink-0 rounded-full bg-[var(--app-warning)]" title={m['editor.unsaved']()}></span>{/if}
     </div>
 
     {#if inspection?.kind === 'markdown'}
-      <div class="mr-1 flex items-center rounded-[5px] border border-[var(--app-border)] bg-[var(--app-surface)] p-0.5">
-        <button class={`grid size-6 place-items-center rounded-[3px] ${sourceMode ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)]' : 'text-[var(--app-text-muted)]'}`} aria-label={m['workbench_editor.source']()} onclick={() => (sourceMode = true)}><Code2 size={12} /></button>
-        <button class={`grid size-6 place-items-center rounded-[3px] ${!sourceMode ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)]' : 'text-[var(--app-text-muted)]'}`} aria-label={m['workbench_editor.preview']()} onclick={() => (sourceMode = false)}><Eye size={12} /></button>
+      <!-- Codigo/Visualizacao: trilho no mesmo desenho do SegmentedControl, mantendo botoes. -->
+      <div class="fv-toggle mr-1" role="group" aria-label={m['workbench_editor.preview']()}>
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<button {...props} class="fv-toggle-item" aria-pressed={sourceMode} aria-label={m['workbench_editor.source']()} onclick={() => (sourceMode = true)}><Code2 size={13} /></button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.source']()}</Tooltip.Content></Tooltip.Root>
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<button {...props} class="fv-toggle-item" aria-pressed={!sourceMode} aria-label={m['workbench_editor.preview']()} onclick={() => (sourceMode = false)}><Eye size={13} /></button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.preview']()}</Tooltip.Content></Tooltip.Root>
       </div>
     {/if}
 
     {#if inspection && (inspection.kind === 'text' || inspection.kind === 'markdown')}
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-xs" aria-label={m['workbench_editor.outline']()} onclick={showOutline}><ListTree size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.outline']()}</Tooltip.Content></Tooltip.Root>
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant={wordWrap ? 'secondary' : 'ghost'} size="icon-xs" aria-label={m['workbench_editor.wrap']()} onclick={toggleWrap}><WrapText size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.wrap']()}</Tooltip.Content></Tooltip.Root>
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant={minimap ? 'secondary' : 'ghost'} size="icon-xs" aria-label={m['workbench_editor.minimap']()} onclick={toggleMinimap}><Focus size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.minimap']()}</Tooltip.Content></Tooltip.Root>
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-xs" aria-label={m['workbench_editor.format']()} onclick={formatDocument}><Braces size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.format']()}</Tooltip.Content></Tooltip.Root>
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-xs" aria-label={m['editor.cite_tooltip']()} onclick={citeSelection}><MessageSquareQuote size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['editor.cite_tooltip']()}</Tooltip.Content></Tooltip.Root>
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-xs" disabled={dirty} aria-label={m['editor.reload']()} onclick={reload}><RefreshCw size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{dirty ? m['workbench_editor.reload_dirty']() : m['editor.reload']()}</Tooltip.Content></Tooltip.Root>
-      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-xs" disabled={!dirty || saving || buffer?.truncated} aria-label={m['editor.save']()} onclick={save}><Save size={13} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['editor.save']()}</Tooltip.Content></Tooltip.Root>
+      <div class="flex items-center gap-0.5">
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="fv-tool" aria-label={m['workbench_editor.outline']()} onclick={showOutline}><ListTree size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.outline']()}</Tooltip.Content></Tooltip.Root>
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="fv-tool" aria-pressed={wordWrap} aria-label={m['workbench_editor.wrap']()} onclick={toggleWrap}><WrapText size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.wrap']()}</Tooltip.Content></Tooltip.Root>
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="fv-tool" aria-pressed={minimap} aria-label={m['workbench_editor.minimap']()} onclick={toggleMinimap}><Focus size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.minimap']()}</Tooltip.Content></Tooltip.Root>
+      </div>
+      <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+      <div class="flex items-center gap-0.5">
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="fv-tool" aria-label={m['workbench_editor.format']()} onclick={formatDocument}><Braces size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['workbench_editor.format']()}</Tooltip.Content></Tooltip.Root>
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="fv-tool" aria-label={m['editor.cite_tooltip']()} onclick={citeSelection}><MessageSquareQuote size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['editor.cite_tooltip']()}</Tooltip.Content></Tooltip.Root>
+        <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="fv-tool" disabled={dirty} aria-label={m['editor.reload']()} onclick={reload}><RefreshCw size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{dirty ? m['workbench_editor.reload_dirty']() : m['editor.reload']()}</Tooltip.Content></Tooltip.Root>
+      </div>
+      <!-- Salvar ganha destaque so quando ha alteracoes pendentes. -->
+      <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant={dirty && !buffer?.truncated ? 'default' : 'ghost'} size="icon-sm" class={dirty && !buffer?.truncated ? 'ml-1' : 'fv-tool ml-1'} disabled={!dirty || saving || buffer?.truncated} aria-label={m['editor.save']()} onclick={save}>{#if saving}<LoaderCircle size={14} class="animate-spin" />{:else}<Save size={14} />{/if}</Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['editor.save']()}</Tooltip.Content></Tooltip.Root>
     {/if}
   </header>
 
   <section class="relative min-h-0 min-w-0 overflow-hidden">
     {#if loading}
-      <div class="flex h-full items-center justify-center text-xs text-[var(--app-text-muted)]">{m['workbench_editor.loading']()}</div>
+      <div class="grid h-full place-items-center">
+        <span class="inline-flex items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1.5 text-ui-sm text-[var(--app-text-muted)] shadow-border" role="status"><LoaderCircle size={13} class="animate-spin text-[var(--app-accent)]" aria-hidden="true" />{m['workbench_editor.loading']()}</span>
+      </div>
     {:else if errorMessage}
-      <div class="flex h-full items-center justify-center p-8"><p class="max-w-md text-center text-xs leading-5 text-[var(--app-danger)]">{errorMessage}</p></div>
+      <NodeEmptyState icon={CircleAlert} tone="danger" title={errorMessage} />
     {:else if inspection && (inspection.kind === 'text' || inspection.kind === 'markdown')}
       <div class="h-full min-h-0" class:hidden={inspection.kind === 'markdown' && !sourceMode} bind:this={editorHost}></div>
       {#if inspection.kind === 'markdown' && !sourceMode}
@@ -506,8 +520,8 @@
         </div>
       {/if}
       {#if buffer?.truncated}
-        <div class="absolute inset-x-3 bottom-3 rounded-[6px] border border-[color-mix(in_srgb,var(--app-warning)_45%,var(--app-border))] bg-[var(--app-surface-raised)] px-3 py-2 text-xs text-[var(--app-warning)] shadow-lg">
-          {m['workbench_editor.truncated_readonly']()}
+        <div class="absolute bottom-3 left-1/2 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--app-surface-raised)] px-3.5 py-2 text-ui-md text-[var(--app-text)] shadow-[var(--app-shadow-panel)]">
+          <TriangleAlert size={14} class="shrink-0 text-[var(--app-warning)]" aria-hidden="true" /><span class="min-w-0 truncate">{m['workbench_editor.truncated_readonly']()}</span>
         </div>
       {/if}
     {:else if inspection?.kind === 'image'}
@@ -516,63 +530,109 @@
           src={rawUrl}
           alt={inspection.name}
           draggable="false"
-          class="max-h-[88%] max-w-[88%] select-none object-contain shadow-[0_10px_34px_rgba(0,0,0,.22)]"
+          class="img-outline max-h-[88%] max-w-[88%] select-none rounded-[2px] object-contain shadow-[var(--app-shadow-card)]"
           style:transform={`translate(${imageX}px, ${imageY}px) scale(${imageZoom})`}
           onload={captureImageDimensions}
         />
-        <div class="absolute right-3 top-3 flex items-center gap-1 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-          <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_out']()} onclick={() => (imageZoom = Math.max(0.25, imageZoom - 0.25))}><Minus size={13} /></Button>
-          <span class="w-11 text-center text-ui-xs tabular-nums">{Math.round(imageZoom * 100)}%</span>
-          <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_in']()} onclick={() => (imageZoom = Math.min(4, imageZoom + 0.25))}><Plus size={13} /></Button>
-          <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.reset_view']()} onclick={resetImage}><Maximize2 size={13} /></Button>
+        <div class="absolute right-3 top-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--app-surface-raised)] p-1 shadow-[var(--app-shadow-panel)]">
+          <Button variant="ghost" size="icon-sm" aria-label={m['workbench_editor.zoom_out']()} onclick={() => (imageZoom = Math.max(0.25, imageZoom - 0.25))}><Minus size={14} /></Button>
+          <span class="w-11 text-center font-mono text-[11px] tabular-nums text-[var(--app-text-soft)]">{Math.round(imageZoom * 100)}%</span>
+          <Button variant="ghost" size="icon-sm" aria-label={m['workbench_editor.zoom_in']()} onclick={() => (imageZoom = Math.min(4, imageZoom + 0.25))}><Plus size={14} /></Button>
+          <span class="mx-0.5 h-4 w-px bg-[var(--app-border)]" aria-hidden="true"></span>
+          <Button variant="ghost" size="icon-sm" aria-label={m['workbench_editor.reset_view']()} onclick={resetImage}><Maximize2 size={14} /></Button>
         </div>
       </div>
     {:else if inspection?.kind === 'audio'}
-      <div class="flex h-full min-h-0 flex-col items-center justify-center gap-4 overflow-auto bg-[var(--app-surface-subtle)] p-5"><p class="max-w-full break-words text-sm font-medium">{inspection.name}</p><audio controls preload="metadata" class="w-full max-w-lg" src={rawUrl} aria-label={inspection.name}></audio></div>
+      <div class="flex h-full min-h-0 flex-col items-center justify-center gap-4 overflow-auto bg-[var(--app-surface-subtle)] p-5"><p class="max-w-full break-words font-display text-[14px] font-semibold">{inspection.name}</p><audio controls preload="metadata" class="w-full max-w-lg" src={rawUrl} aria-label={inspection.name}></audio></div>
     {:else if inspection?.kind === 'pdf'}
       <div class="flex h-full min-h-0 flex-col bg-[var(--app-surface-subtle)]">
-        <div class="flex h-9 shrink-0 items-center justify-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface)]">
-          <Button variant="ghost" size="icon-xs" disabled={pdfPage <= 1} aria-label={m['workbench_editor.previous_page']()} onclick={() => changePdfPage(-1)}><ChevronLeft size={13} /></Button>
-          <span class="min-w-20 text-center text-ui-xs tabular-nums">{m['workbench_editor.page_count']({ current: pdfPage, total: pdfPages })}</span>
-          <Button variant="ghost" size="icon-xs" disabled={pdfPage >= pdfPages} aria-label={m['workbench_editor.next_page']()} onclick={() => changePdfPage(1)}><ChevronRight size={13} /></Button>
-          <span class="mx-1 h-4 w-px bg-[var(--app-border)]"></span>
-          <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_out']()} onclick={() => changePdfZoom(-0.15)}><Minus size={13} /></Button>
-          <span class="w-11 text-center text-ui-xs tabular-nums">{Math.round(pdfZoom * 100)}%</span>
-          <Button variant="ghost" size="icon-xs" aria-label={m['workbench_editor.zoom_in']()} onclick={() => changePdfZoom(0.15)}><Plus size={13} /></Button>
+        <div class="flex h-9 shrink-0 items-center justify-center gap-0.5 border-b border-[var(--app-border)] bg-[var(--app-surface)]">
+          <Button variant="ghost" size="icon-sm" disabled={pdfPage <= 1} aria-label={m['workbench_editor.previous_page']()} onclick={() => changePdfPage(-1)}><ChevronLeft size={14} /></Button>
+          <span class="min-w-20 text-center text-ui-sm tabular-nums text-[var(--app-text-soft)]">{m['workbench_editor.page_count']({ current: pdfPage, total: pdfPages })}</span>
+          <Button variant="ghost" size="icon-sm" disabled={pdfPage >= pdfPages} aria-label={m['workbench_editor.next_page']()} onclick={() => changePdfPage(1)}><ChevronRight size={14} /></Button>
+          <span class="mx-1.5 h-4 w-px bg-[var(--app-border)]" aria-hidden="true"></span>
+          <Button variant="ghost" size="icon-sm" aria-label={m['workbench_editor.zoom_out']()} onclick={() => changePdfZoom(-0.15)}><Minus size={14} /></Button>
+          <span class="w-11 text-center font-mono text-[11px] tabular-nums text-[var(--app-text-soft)]">{Math.round(pdfZoom * 100)}%</span>
+          <Button variant="ghost" size="icon-sm" aria-label={m['workbench_editor.zoom_in']()} onclick={() => changePdfZoom(0.15)}><Plus size={14} /></Button>
         </div>
-        <div class="min-h-0 flex-1 overflow-auto p-5 text-center"><canvas bind:this={pdfCanvas} class="mx-auto bg-white shadow-[0_10px_34px_rgba(0,0,0,.2)]"></canvas></div>
+        <div class="min-h-0 flex-1 overflow-auto p-5 text-center"><canvas bind:this={pdfCanvas} class="mx-auto bg-white shadow-[var(--app-shadow-card)]"></canvas></div>
       </div>
     {:else if inspection}
-      <div class="flex h-full items-center justify-center p-8">
-        <div class="max-w-sm text-center">
-          <span class="mx-auto mb-4 grid size-12 place-items-center rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text-muted)]">
-            {#if inspection.kind === 'binary'}<FileArchive size={22} strokeWidth={1.5} />{:else}<FileText size={22} strokeWidth={1.5} />{/if}
-          </span>
-          <h2 class="truncate text-sm font-semibold">{inspection.name}</h2>
-          <p class="mt-1 text-xs text-[var(--app-text-muted)]">{inspection.contentType} · {formatBytes(inspection.size)}</p>
-          <Button class="mt-4" size="sm" variant="outline" onclick={openExternally}>{m['workbench_editor.open_external']()}</Button>
-        </div>
-      </div>
+      <NodeEmptyState icon={inspection.kind === 'binary' ? FileArchive : FileText} title={inspection.name} description={`${inspection.contentType} · ${formatBytes(inspection.size)}`}>
+        {#snippet actions()}<Button size="sm" variant="outline" onclick={openExternally}><ExternalLink size={13} />{m['workbench_editor.open_external']()}</Button>{/snippet}
+      </NodeEmptyState>
     {/if}
   </section>
 
-  <footer class="flex min-w-0 items-center gap-3 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2.5 text-ui-xs text-[var(--app-text-muted)]">
+  <footer class="flex min-w-0 items-center gap-3 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">
     {#if inspection}
       <span class="truncate">{inspection.contentType}</span>
-      <span>{formatBytes(inspection.size)}</span>
-      {#if inspection.kind === 'image' && imageWidth && imageHeight}<span class="tabular-nums">{imageWidth} × {imageHeight}</span>{/if}
-      <span class="min-w-0 truncate">{modifiedLabel}</span>
+      <span class="shrink-0">{formatBytes(inspection.size)}</span>
+      {#if inspection.kind === 'image' && imageWidth && imageHeight}<span class="shrink-0">{imageWidth} × {imageHeight}</span>{/if}
+      <span class="min-w-0 truncate font-sans text-[11px]">{modifiedLabel}</span>
       {#if inspection.kind === 'text' || inspection.kind === 'markdown'}
-        <span class="ml-auto tabular-nums">{m['workbench_editor.cursor_position']({ line: cursorLine, column: cursorColumn })}</span>
-        <span>{m['workbench_editor.encoding']()}</span>
-        {#if autoSave}<span>{m['workbench_editor.autosave_on']()}</span>{/if}
+        <span class="ml-auto shrink-0">{m['workbench_editor.cursor_position']({ line: cursorLine, column: cursorColumn })}</span>
+        <span class="shrink-0">{m['workbench_editor.encoding']()}</span>
+        {#if autoSave}<span class="shrink-0">{m['workbench_editor.autosave_on']()}</span>{/if}
       {/if}
     {/if}
-    {#if statusMessage}<span class="ml-auto truncate text-[var(--app-text-soft)]">{statusMessage}</span>{/if}
+    {#if statusMessage}<span class="ml-auto truncate font-sans text-[11px] text-[var(--app-text-soft)]" role="status">{statusMessage}</span>{/if}
   </footer>
 </div>
 
 <style>
+  /* Trilho de alternancia com pilula ativa (mesmo desenho do SegmentedControl). */
+  .fv-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .fv-toggle-item {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .fv-toggle-item:hover {
+    color: var(--app-text);
+  }
+
+  .fv-toggle-item[aria-pressed='true'] {
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-accent);
+  }
+
+  .fv-toggle-item:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* Ferramentas liga/desliga: estado ativo neutro com icone em acento. */
+  :global(.fv-tool) {
+    color: var(--app-text-muted);
+  }
+
+  :global(.fv-tool:hover:not(:disabled)) {
+    color: var(--app-text);
+  }
+
+  :global(.fv-tool[aria-pressed='true']) {
+    background: var(--app-active);
+    color: var(--app-accent);
+  }
+
   .image-stage {
     background-image:
       linear-gradient(45deg, color-mix(in srgb, var(--app-border) 45%, transparent) 25%, transparent 25%),
