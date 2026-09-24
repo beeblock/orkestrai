@@ -23,6 +23,14 @@
     StickyNote,
     UserRoundCog,
     Workflow,
+    Cable,
+    CircleHelp,
+    GitPullRequestArrow,
+    MessageCircleMore,
+    MessageSquareText,
+    Route,
+    Scale,
+    Settings,
   } from '@lucide/svelte';
   import * as Command from '$lib/components/ui/command';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -89,6 +97,8 @@
   function activeWorkspaceId(): string | null {
     return typeof localStorage === 'undefined' ? null : localStorage.getItem('orkestrai.activeWorkspaceId');
   }
+
+  const shortcutModifier = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
 
   const commands = $derived.by<PaletteItem[]>(() => {
     const workspaceId = commandWorkspaceId;
@@ -384,6 +394,27 @@
 
 <svelte:window onkeydown={handleDialogKeydown} />
 
+{#snippet commandIcon(id: string)}
+  {@const key = id.replace(/^command:/, '')}
+  {#if key === 'canvas'}<Network size={15} aria-hidden="true" />
+  {:else if key === 'workbench'}<SquareTerminal size={15} aria-hidden="true" />
+  {:else if key === 'attention'}<BellRing size={15} aria-hidden="true" />
+  {:else if key === 'council'}<Scale size={15} aria-hidden="true" />
+  {:else if key === 'control-center'}<Activity size={15} aria-hidden="true" />
+  {:else if key === 'workstreams'}<Route size={15} aria-hidden="true" />
+  {:else if key === 'memory'}<BookMarked size={15} aria-hidden="true" />
+  {:else if key === 'annotations'}<MessageSquareText size={15} aria-hidden="true" />
+  {:else if key === 'huddles'}<MessageCircleMore size={15} aria-hidden="true" />
+  {:else if key === 'review-center'}<GitPullRequestArrow size={15} aria-hidden="true" />
+  {:else if key === 'automations'}<Workflow size={15} aria-hidden="true" />
+  {:else if key === 'settings'}<Settings size={15} aria-hidden="true" />
+  {:else if key === 'providers'}<Cable size={15} aria-hidden="true" />
+  {:else if key === 'docs'}<CircleHelp size={15} aria-hidden="true" />
+  {:else if key === 'skills'}<Blocks size={15} aria-hidden="true" />
+  {:else}<Search size={15} aria-hidden="true" />
+  {/if}
+{/snippet}
+
 {#snippet itemIcon(kind: PaletteKind)}
   {#if kind === 'workspace'}<Network size={15} aria-hidden="true" />
   {:else if kind === 'documentation'}<BookOpen size={15} aria-hidden="true" />
@@ -409,16 +440,16 @@
     keywords={[item.title, item.subtitle, item.preview ?? '', kindLabel(item.kind)]}
     onSelect={() => void openItem(item)}
     onpointermove={() => (selectedId = item.id)}
-    class="h-[42px] min-w-0 gap-2 px-2.5"
+    class="group/result h-[42px] min-w-0 gap-2.5 px-2"
   >
-    <span class="grid size-6 shrink-0 place-items-center rounded-[4px] bg-[var(--app-surface-raised)] text-[var(--app-text-muted)]">
-      {@render itemIcon(item.kind)}
+    <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-muted)] transition-colors duration-150 group-data-selected/result:bg-[var(--app-accent-soft)] group-data-selected/result:text-[var(--app-accent)]">
+      {#if item.kind === 'command'}{@render commandIcon(item.id)}{:else}{@render itemIcon(item.kind)}{/if}
     </span>
     <span class="min-w-0 flex-1">
-      <span class="block truncate text-xs font-medium text-[var(--app-text)]">{item.title}</span>
-      <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{item.subtitle}</span>
+      <span class="block truncate text-[13px] font-medium text-[var(--app-text)]">{item.title}</span>
+      {#if item.kind !== 'command' && item.subtitle}<span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{item.subtitle}</span>{/if}
     </span>
-    <span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{kindLabel(item.kind)}</span>
+    {#if item.kind !== 'command'}<span class="shrink-0 font-mono text-[10.5px] text-[var(--app-text-muted)]">{kindLabel(item.kind)}</span>{/if}
   </Command.Item>
 {/snippet}
 
@@ -428,7 +459,7 @@
   shouldFilter={false}
   title={m['global_search.title']()}
   description={m['global_search.description']()}
-  class="top-[12vh] w-[min(900px,calc(100vw-32px))]! max-w-none! translate-y-0 border-[var(--app-border)] bg-[var(--app-surface)] shadow-2xl"
+  class="top-[12vh] w-[min(900px,calc(100vw-32px))]! max-w-none! translate-y-0 bg-[var(--app-surface)]"
 >
   <Command.Input bind:value={query} placeholder={m['global_search.placeholder']()} autofocus autocomplete="off" />
   <div class="grid min-h-0 grid-cols-[minmax(0,1fr)_300px] border-t border-[var(--app-border)] max-[760px]:grid-cols-1">
@@ -487,12 +518,12 @@
     <aside class="flex min-h-[360px] min-w-0 flex-col bg-[var(--app-canvas)] p-4 max-[760px]:hidden" aria-label={m['global_search.results']()}>
       {#if selectedItem}
         <div class="flex items-start gap-3">
-          <span class="grid size-8 shrink-0 place-items-center rounded-md border border-[var(--app-border)] bg-[var(--app-surface-raised)] text-[var(--app-text-soft)]">
-            {@render itemIcon(selectedItem.kind)}
+          <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]">
+            {#if selectedItem.kind === 'command'}{@render commandIcon(selectedItem.id)}{:else}{@render itemIcon(selectedItem.kind)}{/if}
           </span>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold text-[var(--app-text)]">{selectedItem.title}</p>
-            <p class="mt-0.5 truncate text-ui-xs text-[var(--app-text-muted)]">{selectedItem.subtitle}</p>
+            {#if selectedItem.kind !== 'command'}<p class="mt-0.5 truncate text-ui-xs text-[var(--app-text-muted)]">{selectedItem.subtitle}</p>{/if}
           </div>
           <Tooltip.Root>
             <Tooltip.Trigger>
@@ -545,4 +576,10 @@
       </p>
     </aside>
   </div>
+  <footer class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3 py-2 text-ui-xs text-[var(--app-text-muted)]">
+    <span class="inline-flex items-center gap-1.5"><kbd>↑</kbd><kbd>↓</kbd>{m['global_search.hint_navigate']()}</span>
+    <span class="inline-flex items-center gap-1.5"><kbd>↵</kbd>{m['global_search.hint_open']()}</span>
+    <span class="inline-flex items-center gap-1.5"><kbd>{shortcutModifier}</kbd><kbd>↵</kbd>{m['global_search.hint_side']()}</span>
+    <span class="ml-auto inline-flex items-center gap-1.5"><kbd>esc</kbd>{m['global_search.hint_close']()}</span>
+  </footer>
 </Command.Dialog>

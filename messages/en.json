@@ -4975,5 +4975,13 @@
   "sequence.empty_hint": "Pick a workspace video on the left and add it as the first clip.",
   "sequence.drag_hint": "Drag clips to change the order",
   "storyboard.empty_hint": "Plan the video scene by scene: direction, dialogue, framing and duration.",
-  "storyboard.drag_hint": "Drag scenes to change the order"
+  "storyboard.drag_hint": "Drag scenes to change the order",
+  "global_search.hint_navigate": "Navigate",
+  "global_search.hint_open": "Open",
+  "global_search.hint_side": "Open beside",
+  "global_search.hint_close": "Close",
+  "git.no_branches": "No branches yet",
+  "git.no_branches_hint": "Make the first commit to create the current branch.",
+  "device.start_named": "Start {device}",
+  "device.more_controls": "More controls"
 }

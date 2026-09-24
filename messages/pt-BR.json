@@ -4975,5 +4975,13 @@
   "sequence.empty_hint": "Escolha um vídeo do workspace à esquerda e adicione-o como primeiro clipe.",
   "sequence.drag_hint": "Arraste os clipes para mudar a ordem",
   "storyboard.empty_hint": "Planeje o vídeo cena a cena: direção, diálogo, enquadramento e duração.",
-  "storyboard.drag_hint": "Arraste as cenas para mudar a ordem"
+  "storyboard.drag_hint": "Arraste as cenas para mudar a ordem",
+  "global_search.hint_navigate": "Navegar",
+  "global_search.hint_open": "Abrir",
+  "global_search.hint_side": "Abrir ao lado",
+  "global_search.hint_close": "Fechar",
+  "git.no_branches": "Nenhuma branch ainda",
+  "git.no_branches_hint": "Faça o primeiro commit para criar a branch atual.",
+  "device.start_named": "Iniciar {device}",
+  "device.more_controls": "Mais controles"
 }
