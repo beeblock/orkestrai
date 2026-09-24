@@ -22,7 +22,7 @@
 		data-slot="hover-card-content"
 		{align}
 		{sideOffset}
-		class={cn("w-64 rounded-lg bg-popover p-2.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 z-50 origin-(--transform-origin) outline-hidden", className)}
+		class={cn("w-64 rounded-xl bg-popover p-3 text-sm text-popover-foreground shadow-overlay duration-250 ease-smooth-out data-closed:duration-150 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-97 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-99 z-50 origin-(--transform-origin) outline-hidden", className)}
 		{...restProps}
 	/>
 </HoverCardPortal>

@@ -123,7 +123,17 @@
   {/if}
 </Tooltip.Provider>
 
-<Toaster position="bottom-right" />
+<Toaster
+  position="bottom-right"
+  class="orkestrai-toaster"
+  variants={{
+    success: { iconClass: 'text-[var(--app-success)] bg-[var(--app-success-soft)] ring-transparent', borderClass: '', progressClass: 'bg-[var(--app-success)]' },
+    error: { iconClass: 'text-[var(--app-danger)] bg-[var(--app-danger-soft)] ring-transparent', borderClass: '', progressClass: 'bg-[var(--app-danger)]' },
+    warning: { iconClass: 'text-[var(--app-warning)] bg-[var(--app-warning-soft)] ring-transparent', borderClass: '', progressClass: 'bg-[var(--app-warning)]' },
+    info: { iconClass: 'text-[var(--app-info)] bg-[var(--app-info-soft)] ring-transparent', borderClass: '', progressClass: 'bg-[var(--app-info)]' },
+    default: { borderClass: '', progressClass: 'bg-[var(--app-text-muted)]' },
+  }}
+/>
 <UpdateNotifier />
 
 <style>

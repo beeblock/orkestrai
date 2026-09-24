@@ -5,6 +5,22 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Changed
+
+- Rebuild the interface foundation: menus and dialogs open smoothly and close faster, surfaces use theme-aware elevation instead of hard borders, every control shares one focus ring, UI text never drops below 11px, and all motion respects the system reduced-motion setting.
+- Redesign the Canvas sidebar with calmer 30px rows, a clear selected state, row actions that appear on hover or keyboard focus, a trash icon for deletion and inline folder creation.
+- Group Canvas tools by purpose, keep the minimap and zoom controls clear of the tool bar, and show canvas messages above the tool bar with a dismiss action.
+- Offer one-click starting points: create or reopen a workspace when none is open, and add an agent, note, task board, file tree or team preset when a canvas is empty.
+- Refine node frames, headers, action buttons, selection and connection handles, and rename a node from the keyboard with Enter or F2.
+- Theme toast notifications and dialogs for every app theme, and keep the dictation button quiet until it is pointed at, focused or recording.
+
+### Fixed
+
+- Show "1 selected" instead of a plural label when a single node is selected.
+- Resolve surfaces and text in Computer, Integrations, Tool Workshop, Storyboard, Sequence and Knowledge views that referenced missing theme colors.
+
 ## 0.35.0 - 2026-09-24
 
 ### Added

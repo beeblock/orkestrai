@@ -52,6 +52,7 @@
   import WorkspaceSharingButton from '$lib/components/collaboration/WorkspaceSharingButton.svelte';
   import WorkspaceSharingDialog from '$lib/components/collaboration/WorkspaceSharingDialog.svelte';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
+  import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import WorkspaceModeSwitch from '$lib/components/agent-room/WorkspaceModeSwitch.svelte';
   import AttentionCenter from '$lib/components/agent-room/AttentionCenter.svelte';
   import WorkspaceMemoryDialog from '$lib/components/agent-room/WorkspaceMemoryDialog.svelte';
@@ -123,7 +124,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -291,6 +292,26 @@
 
   async function loadWorkspaceGroups() {
     workspaceGroups = await api<WorkspaceGroup[]>('/api/agent-room/workspace-groups').catch(() => []);
+  }
+
+  // Criar pasta: botao discreto que vira campo inline (Enter cria, Esc cancela).
+  let creatingFolder = $state(false);
+
+  function startCreateFolder() {
+    newFolderName = '';
+    creatingFolder = true;
+  }
+
+  function cancelCreateFolder() {
+    newFolderName = '';
+    creatingFolder = false;
+  }
+
+  async function commitCreateFolder() {
+    if (!creatingFolder) return;
+    creatingFolder = false;
+    if (newFolderName.trim()) await createWorkspaceGroup();
+    newFolderName = '';
   }
 
   async function createWorkspaceGroup() {
@@ -1408,6 +1429,7 @@
       ]);
       if (requestId !== selectionRequestId) return;
       activeWorkspace = workspace;
+      graphLoadedFor = workspace.id;
       workspaces = workspaces.map((item) => item.id === workspace.id ? workspace : item);
       writeWorkspaceListCache(workspaces);
       localStorage.setItem('orkestrai.activeWorkspaceId', workspace.id);
@@ -1518,6 +1540,16 @@
   let unloading = $state(false);
   let unloadMessage = $state('');
   let workspacesLoaded = $state(false);
+  // Workspace cujo grafo ja chegou do servidor: evita piscar o "canvas em
+  // branco" enquanto os nos ainda estao carregando.
+  let graphLoadedFor = $state<string | null>(null);
+  const modKey = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
+  const quickProviders = $derived(
+    providers.filter((provider) => provider.installed && provider.tui && providerIcons[provider.id]).slice(0, 4)
+  );
+  const showBlankCanvas = $derived(
+    Boolean(activeWorkspace) && graphLoadedFor === activeWorkspace?.id && nodes.length === 0 && drawTool === null && !designModeNodeId
+  );
 
   async function unloadActiveWorkspace() {
     if (!activeWorkspace) return;
@@ -2775,7 +2807,7 @@
         <img src="/brand/icon.svg" width="22" height="22" alt="Orkestrai" />
         <span class="brand-name">Orkestrai</span>
       </div>
-      <div class="flex items-center justify-between gap-2 px-3 pb-2">
+      <div class="mode-row">
         <WorkspaceModeSwitch
           active="canvas"
           workspaceId={activeWorkspace?.id ?? null}
@@ -2786,14 +2818,17 @@
     {/if}
       <div class="sidebar-header">
         {#if !sidebarCollapsed}
-          <h2>{m['canvas.workspaces']()}</h2>
+          <h2>
+            {m['canvas.workspaces']()}
+            {#if workspacesLoaded && workspaces.length > 0}<span class="section-count" aria-label={m['canvas.workspace_count']({ count: workspaces.length })}>{workspaces.length}</span>{/if}
+          </h2>
         {/if}
         <div class="sidebar-header-actions">
           {#if !sidebarCollapsed}
           <HeaderIconButton label={m['tool.presets']()} side="bottom" onclick={() => toggleSidePanel('presets')}>
             <LayoutTemplate size={14} />
           </HeaderIconButton>
-          <HeaderIconButton class="icon-btn !bg-[var(--app-accent)] !text-[var(--app-accent-contrast)] hover:!brightness-110" label={m['canvas.new_ws']()} side="bottom" onclick={() => { initialPresetId = ''; showWorkspaceForm = !showWorkspaceForm; }}>
+          <HeaderIconButton class="icon-btn primary" label={m['canvas.new_ws']()} side="bottom" onclick={() => { initialPresetId = ''; showWorkspaceForm = !showWorkspaceForm; }}>
             <Plus size={15} />
           </HeaderIconButton>
           <DropdownMenu.Root>
@@ -2894,24 +2929,38 @@
             {@render workspaceListItem(workspace)}
           {/each}
           {#if workspaces.length === 0 && workspaceGroups.length === 0}
-            <li class="empty">{m['canvas.no_ws']()}</li>
+            <li class="empty-card">
+              <strong>{m['canvas.no_ws_title']()}</strong>
+              <p>{m['canvas.no_ws_body']()}</p>
+            </li>
           {/if}
         {/if}
       </ul>
 
-      <div class="new-folder-row">
-        <FolderPlus size={13} aria-hidden="true" />
-        <input
-          bind:value={newFolderName}
-          placeholder={m['canvas.folder_name_placeholder']()}
-          aria-label={m['canvas.new_folder']()}
-          autocomplete="off"
-          spellcheck="false"
-          onkeydown={(event) => event.key === 'Enter' && createWorkspaceGroup()}
-        />
-        <HeaderIconButton label={m['canvas.new_folder']()} side="bottom" onclick={createWorkspaceGroup}>
-          <Plus size={13} />
-        </HeaderIconButton>
+      <div class="sidebar-footer">
+        {#if creatingFolder}
+          <div class="new-folder-row">
+            <FolderPlus size={13} aria-hidden="true" />
+            <!-- svelte-ignore a11y_autofocus -->
+            <input
+              bind:value={newFolderName}
+              placeholder={m['canvas.folder_name_placeholder']()}
+              aria-label={m['canvas.new_folder']()}
+              autocomplete="off"
+              spellcheck="false"
+              autofocus
+              onblur={() => void commitCreateFolder()}
+              onkeydown={(event) => {
+                if (event.key === 'Enter') void commitCreateFolder();
+                if (event.key === 'Escape') cancelCreateFolder();
+              }}
+            />
+          </div>
+        {:else}
+          <button type="button" class="new-folder-button press" onclick={startCreateFolder}>
+            <FolderPlus size={13} aria-hidden="true" />{m['canvas.new_folder']()}
+          </button>
+        {/if}
       </div>
     {/if}
 
@@ -2922,23 +2971,25 @@
       ondragstart={(event) => handleDragStartWorkspace(event, workspace)}
       ondragend={handleDragEnd}
     >
-      <button class="workspace-item" onclick={() => selectWorkspace(workspace.id)}>
+      <button class="workspace-item" aria-current={activeWorkspace?.id === workspace.id ? 'true' : undefined} onclick={() => selectWorkspace(workspace.id)}>
         <span class="workspace-icon">
           <WorkspaceIcon name={workspace.icon} size={14} />
         </span>
-        <span class="workspace-name">{workspace.name}</span>
+        <span class="workspace-name" title={workspace.name}>{workspace.name}</span>
         {#if workspace.suspendedAt}
-          <Power size={11} class="text-[var(--app-text-muted)]" aria-label={m['canvas.ws_suspended']({ name: workspace.name })} />
+          <Power size={11} class="row-status text-[var(--app-text-muted)]" aria-label={m['canvas.ws_suspended']({ name: workspace.name })} />
         {:else if activity[workspace.id]}
-          <span class="live-dot" role="status" aria-label={m['canvas.active_sessions_aria']({ count: activity[workspace.id] })}></span>
+          <span class="live-dot row-status" role="status" aria-label={m['canvas.active_sessions_aria']({ count: activity[workspace.id] })}></span>
         {/if}
       </button>
-      <HeaderIconButton label={m['canvas.edit_ws']()} side="right" onclick={() => (editingWorkspace = workspace)}>
-        <Pencil size={13} />
-      </HeaderIconButton>
-      <HeaderIconButton label={m['canvas.delete_ws']()} side="right" danger onclick={() => (deletingWorkspace = workspace)}>
-        <X size={13} />
-      </HeaderIconButton>
+      <span class="row-actions">
+        <HeaderIconButton label={m['canvas.edit_ws']()} side="right" onclick={() => (editingWorkspace = workspace)}>
+          <Pencil size={13} />
+        </HeaderIconButton>
+        <HeaderIconButton label={m['canvas.delete_ws']()} side="right" danger onclick={() => (deletingWorkspace = workspace)}>
+          <Trash2 size={13} />
+        </HeaderIconButton>
+      </span>
     </li>
   {/snippet}
 
@@ -2982,6 +3033,9 @@
             ondblclick={() => startRenameGroup(node.group)}
             onkeydown={(event) => event.key === 'Enter' && startRenameGroup(node.group)}
           >{node.group.name}</span>
+          {#if node.group.collapsed && (node.workspaces.length + node.children.length) > 0}
+            <span class="ws-group-count">{node.workspaces.length + node.children.length}</span>
+          {/if}
         {/if}
         <span class="ws-group-actions">
           <HeaderIconButton label={m['canvas.new_ws_here']()} side="right" onclick={() => { initialPresetId = ''; pendingWorkspaceGroupId = node.group.id; showWorkspaceForm = true; }}>
@@ -3093,9 +3147,12 @@
         {/if}
         {#if selectedTransferNodeIds.length > 0}
           <Panel position="top-center">
-            <div class="flex h-9 items-center gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] px-2 shadow-lg">
-              <span class="whitespace-nowrap text-ui-sm font-medium text-[var(--app-text-muted)]">{m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}</span>
-              <Button size="sm" class="h-7 gap-1.5 px-2 text-xs" onclick={() => (transferOpen = true)}>
+            <div class="selection-bar flex h-9 items-center gap-1 rounded-[10px] bg-[var(--app-surface)] py-1 pr-1 pl-3 shadow-overlay">
+              <span class="whitespace-nowrap text-ui-sm font-medium text-[var(--app-text-soft)] tabular-nums">
+                {selectedTransferNodeIds.length === 1 ? m['canvas.transfer_selected_one']() : m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}
+              </span>
+              <span class="mx-1 h-4 w-px bg-[var(--app-border)]" aria-hidden="true"></span>
+              <Button size="sm" variant="ghost" class="h-7 gap-1.5 rounded-md px-2 text-xs text-[var(--app-text-soft)] hover:text-[var(--app-text)]" onclick={() => (transferOpen = true)}>
                 <Copy size={13} />{m['canvas.transfer_open']()}
               </Button>
             </div>
@@ -3108,99 +3165,115 @@
                 <ChevronLeft size={14} />
               </button>
             {/if}
-            <div class="toolbar" bind:this={toolbarEl} onscroll={updateToolbarScroll}>
-            <ToolbarButton label={m['tool.shell']()} active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
-              <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
-            </ToolbarButton>
-            <AgentToolbarMenu
-              {providers}
-              {pinnedProviderIds}
-              activeProviderId={drawTool === 'terminal' ? (drawProvider?.id ?? null) : null}
-              allowUnavailableSelection={canChooseAlternateRuntime}
-              onSelect={(provider) => toggleDrawTool('terminal', provider)}
-              onTogglePin={togglePinnedProvider}
-              onOpenProviderCenter={() => void goto('/providers')}
-            />
-            <ToolbarButton label={m['council.open']()} active={councilOpen} onclick={() => (councilOpen = true)}>
-              <Scale size={15} class="tool-icon-svg" /> {m['council.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['huddle.title']()} active={huddleOpen} onclick={() => (huddleOpen = true)}>
-              <MessageCircleMore size={15} class="tool-icon-svg" /> {m['huddle.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
-              <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
-            </ToolbarButton>
-            <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
-            <DesignToolbarMenu
-              active={drawTool === 'design' || designExplorationOpen}
-              onBlank={() => toggleDrawTool('design')}
-              onExploration={() => (designExplorationOpen = true)}
-            />
-            <ToolbarButton label={m['tool.files']()} active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
-              <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.git']()} active={drawTool === 'git'} onclick={() => toggleDrawTool('git')}>
-              <GitFork size={15} class="tool-icon-svg" /> {m['canvas.default_git']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['code_graph.title']()} active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
-              <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['knowledge.title']()} active={memoryOpen} onclick={() => memoryOpen = true}>
-              <BookMarked size={15} class="tool-icon-svg" /> {m['knowledge.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.diff']()} active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
-              <FileDiff size={15} class="tool-icon-svg" /> {m['canvas.default_diff']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.portal']()} active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
-              <img src="/images/portal.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_portal']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['api_client.tool']()} active={drawTool === 'apiClient'} onclick={() => toggleDrawTool('apiClient')}>
-              <Braces size={15} class="tool-icon-svg" /> {m['api_client.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.device']()} active={drawTool === 'device'} onclick={() => toggleDrawTool('device')}>
-              <Smartphone size={15} class="tool-icon-svg" /> {m['device.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['computer.tool']()} active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
-              <MonitorCog size={15} class="tool-icon-svg" /> {m['computer.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool_workshop.title']()} active={drawTool === 'toolWorkshop'} onclick={() => toggleDrawTool('toolWorkshop')}>
-              <Wrench size={15} class="tool-icon-svg" /> {m['tool_workshop.title']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.loop']()} active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
-              <img src="/images/loop.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.label_loop']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.tasks']()} active={drawTool === 'tasks'} onclick={() => toggleDrawTool('tasks')}>
-              <SquareKanban size={15} class="tool-icon-svg" /> {m['canvas.default_tasks']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.flow']()} active={drawTool === 'flow'} onclick={() => toggleDrawTool('flow')}>
-              <Workflow size={15} class="tool-icon-svg" /> {m['canvas.default_flow']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.shape']()} active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
-              <Shapes size={15} class="tool-icon-svg" /> {m['canvas.label_shape']()}
-            </ToolbarButton>
-            <span class="toolbar-sep"></span>
-            <ToolbarButton label={m['tool.organize']()} onclick={() => void organizeCanvas()}>
-              <LayoutGrid size={15} class="tool-icon-svg" /> {m['canvas.label_organize']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.presets']()} active={showPresetPanel} onclick={() => toggleSidePanel('presets')}>
-              <LayoutTemplate size={15} class="tool-icon-svg" /> {m['canvas.label_presets']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.floors']()} active={showFloorPanel} onclick={() => toggleSidePanel('floors')}>
-              <Layers size={15} class="tool-icon-svg" /> {m['canvas.label_floors']()}{floors.length ? ` (${floors.length})` : ''}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.routines']()} active={showRoutinePanel} onclick={() => toggleSidePanel('routines')}>
-              <CalendarClock size={15} class="tool-icon-svg" /> {m['canvas.label_routines']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.roles']()} active={showRolesPanel} onclick={() => toggleSidePanel('roles')}>
-              <BadgeCheck size={15} class="tool-icon-svg" /> {m['canvas.label_roles']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.usage']()} active={showUsagePanel} onclick={() => toggleSidePanel('usage')}>
-              <Gauge size={15} class="tool-icon-svg" /> {m['canvas.label_usage']()}
-            </ToolbarButton>
-            <ToolbarButton label={m['tool.ports']()} active={showPortsPanel} onclick={() => toggleSidePanel('ports')}>
-              <RadioTower size={15} class="tool-icon-svg" /> {m['canvas.label_ports']()}
-            </ToolbarButton>
-            <WorkspaceSharingButton variant="icon" workspaceId={activeWorkspace?.id ?? null} onOpen={() => (sharingOpen = true)} />
+            <div class="toolbar" role="toolbar" aria-label={m['canvas.toolbar_label']()} bind:this={toolbarEl} onscroll={updateToolbarScroll}>
+              <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
+              <ToolbarButton label={m['tool.shell']()} active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
+                <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
+              </ToolbarButton>
+              <AgentToolbarMenu
+                {providers}
+                {pinnedProviderIds}
+                activeProviderId={drawTool === 'terminal' ? (drawProvider?.id ?? null) : null}
+                allowUnavailableSelection={canChooseAlternateRuntime}
+                onSelect={(provider) => toggleDrawTool('terminal', provider)}
+                onTogglePin={togglePinnedProvider}
+                onOpenProviderCenter={() => void goto('/providers')}
+              />
+              <ToolbarButton label={m['council.open']()} active={councilOpen} onclick={() => (councilOpen = true)}>
+                <Scale size={15} class="tool-icon-svg" /> {m['council.title']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['huddle.title']()} active={huddleOpen} onclick={() => (huddleOpen = true)}>
+                <MessageCircleMore size={15} class="tool-icon-svg" /> {m['huddle.title']()}
+              </ToolbarButton>
+              </div>
+              <span class="toolbar-sep" aria-hidden="true"></span>
+              <div class="tool-group" role="group" aria-label={m['canvas.group_plan']()}>
+              <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
+                <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.tasks']()} active={drawTool === 'tasks'} onclick={() => toggleDrawTool('tasks')}>
+                <SquareKanban size={15} class="tool-icon-svg" /> {m['canvas.default_tasks']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.flow']()} active={drawTool === 'flow'} onclick={() => toggleDrawTool('flow')}>
+                <Workflow size={15} class="tool-icon-svg" /> {m['canvas.default_flow']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.loop']()} active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
+                <img src="/images/loop.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.label_loop']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.shape']()} active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
+                <Shapes size={15} class="tool-icon-svg" /> {m['canvas.label_shape']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['knowledge.title']()} active={memoryOpen} onclick={() => memoryOpen = true}>
+                <BookMarked size={15} class="tool-icon-svg" /> {m['knowledge.title']()}
+              </ToolbarButton>
+              </div>
+              <span class="toolbar-sep" aria-hidden="true"></span>
+              <div class="tool-group" role="group" aria-label={m['canvas.group_code']()}>
+              <ToolbarButton label={m['tool.files']()} active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
+                <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.git']()} active={drawTool === 'git'} onclick={() => toggleDrawTool('git')}>
+                <GitFork size={15} class="tool-icon-svg" /> {m['canvas.default_git']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.diff']()} active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
+                <FileDiff size={15} class="tool-icon-svg" /> {m['canvas.default_diff']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['code_graph.title']()} active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
+                <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['api_client.tool']()} active={drawTool === 'apiClient'} onclick={() => toggleDrawTool('apiClient')}>
+                <Braces size={15} class="tool-icon-svg" /> {m['api_client.title']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.portal']()} active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
+                <img src="/images/portal.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_portal']()}
+              </ToolbarButton>
+              </div>
+              <span class="toolbar-sep" aria-hidden="true"></span>
+              <div class="tool-group" role="group" aria-label={m['canvas.group_creative']()}>
+              <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
+              <DesignToolbarMenu
+                active={drawTool === 'design' || designExplorationOpen}
+                onBlank={() => toggleDrawTool('design')}
+                onExploration={() => (designExplorationOpen = true)}
+              />
+              </div>
+              <span class="toolbar-sep" aria-hidden="true"></span>
+              <div class="tool-group" role="group" aria-label={m['canvas.group_devices']()}>
+              <ToolbarButton label={m['tool.device']()} active={drawTool === 'device'} onclick={() => toggleDrawTool('device')}>
+                <Smartphone size={15} class="tool-icon-svg" /> {m['device.title']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['computer.tool']()} active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
+                <MonitorCog size={15} class="tool-icon-svg" /> {m['computer.title']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool_workshop.title']()} active={drawTool === 'toolWorkshop'} onclick={() => toggleDrawTool('toolWorkshop')}>
+                <Wrench size={15} class="tool-icon-svg" /> {m['tool_workshop.title']()}
+              </ToolbarButton>
+              </div>
+              <span class="toolbar-sep" aria-hidden="true"></span>
+              <div class="tool-group" role="group" aria-label={m['canvas.group_workspace']()}>
+              <ToolbarButton label={m['tool.organize']()} onclick={() => void organizeCanvas()}>
+                <LayoutGrid size={15} class="tool-icon-svg" /> {m['canvas.label_organize']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.presets']()} active={showPresetPanel} onclick={() => toggleSidePanel('presets')}>
+                <LayoutTemplate size={15} class="tool-icon-svg" /> {m['canvas.label_presets']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.floors']()} active={showFloorPanel} onclick={() => toggleSidePanel('floors')}>
+                <Layers size={15} class="tool-icon-svg" /> {m['canvas.label_floors']()}{floors.length ? ` (${floors.length})` : ''}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.routines']()} active={showRoutinePanel} onclick={() => toggleSidePanel('routines')}>
+                <CalendarClock size={15} class="tool-icon-svg" /> {m['canvas.label_routines']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.roles']()} active={showRolesPanel} onclick={() => toggleSidePanel('roles')}>
+                <BadgeCheck size={15} class="tool-icon-svg" /> {m['canvas.label_roles']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.usage']()} active={showUsagePanel} onclick={() => toggleSidePanel('usage')}>
+                <Gauge size={15} class="tool-icon-svg" /> {m['canvas.label_usage']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['tool.ports']()} active={showPortsPanel} onclick={() => toggleSidePanel('ports')}>
+                <RadioTower size={15} class="tool-icon-svg" /> {m['canvas.label_ports']()}
+              </ToolbarButton>
+              <WorkspaceSharingButton variant="icon" workspaceId={activeWorkspace?.id ?? null} onOpen={() => (sharingOpen = true)} />
+              </div>
             </div>
             {#if canScrollRight}
               <button class="toolbar-arrow" aria-label={m['canvas.scroll_right']()} onclick={() => scrollToolbar(1)}>
@@ -3210,11 +3283,85 @@
           </div>
         </Panel>
       </SvelteFlow>
+      {#if showBlankCanvas}
+        <div class="blank-canvas" role="region" aria-label={m['canvas.blank_title']()}>
+          <div class="blank-card">
+            <h2>{m['canvas.blank_title']()}</h2>
+            <p>{m['canvas.blank_body']()}</p>
+            {#if quickProviders.length}
+              <span class="section-label">{m['canvas.blank_agents']()}</span>
+              <div class="quick-row">
+                {#each quickProviders as provider (provider.id)}
+                  <button type="button" class="quick-tile press" aria-label={m['canvas.palette_new_agent']({ name: provider.displayName })} onclick={() => (pendingAgentCreation = { provider })}>
+                    <img src={providerIcons[provider.id]} width="16" height="16" alt="" class="app-logo-plate" />
+                    <span>{provider.displayName}</span>
+                  </button>
+                {/each}
+                <button type="button" class="quick-tile press" aria-label={m['canvas.palette_new_shell']()} onclick={() => (pendingAgentCreation = { provider: null })}>
+                  <img src="/images/cli.svg" width="16" height="16" alt="" />
+                  <span>{m['canvas.quick_shell']()}</span>
+                </button>
+              </div>
+            {/if}
+            <span class="section-label">{m['canvas.blank_content']()}</span>
+            <div class="quick-row">
+              <button type="button" class="quick-tile press" aria-label={m['canvas.palette_new_note']()} onclick={() => addNote()}>
+                <StickyNote size={16} /><span>{m['canvas.quick_note']()}</span>
+              </button>
+              <button type="button" class="quick-tile press" aria-label={m['canvas.palette_new_tasks']()} onclick={() => addTasksNode()}>
+                <SquareKanban size={16} /><span>{m['canvas.quick_tasks']()}</span>
+              </button>
+              <button type="button" class="quick-tile press" aria-label={m['canvas.palette_new_files']()} onclick={() => addFileTree()}>
+                <FolderTree size={16} /><span>{m['canvas.quick_files']()}</span>
+              </button>
+              <button type="button" class="quick-tile press" aria-label={m['tool.presets']()} onclick={() => toggleSidePanel('presets')}>
+                <LayoutTemplate size={16} /><span>{m['canvas.label_presets']()}</span>
+              </button>
+            </div>
+            <div class="empty-hints">
+              <span><kbd>{modKey}</kbd><kbd>P</kbd>{m['canvas.all_commands']()}</span>
+              <span><kbd>{modKey}</kbd><kbd>K</kbd>{m['canvas.search_everything']()}</span>
+            </div>
+          </div>
+        </div>
+      {/if}
       </div>
     {:else}
       <div class="canvas-empty">
-        <img src="/brand/icon.svg" width="56" height="56" alt="" />
-        <p>{m['canvas.empty']()}</p>
+        {#if workspacesLoaded}
+          <div class="empty-hero">
+            <img src="/brand/icon.svg" width="40" height="40" alt="" class="empty-mark" />
+            <h1>{workspaces.length ? m['canvas.empty_title_pick']() : m['canvas.empty_title_new']()}</h1>
+            <p>{workspaces.length ? m['canvas.empty_body_pick']() : m['canvas.empty_body_new']()}</p>
+            <div class="empty-actions">
+              <Button class="press h-9 gap-1.5 px-3.5" onclick={() => { initialPresetId = ''; showWorkspaceForm = true; }}>
+                <Plus size={15} />{m['canvas.new_ws']()}
+              </Button>
+              <Button variant="outline" class="press h-9 gap-1.5 px-3.5" onclick={() => toggleSidePanel('presets')}>
+                <LayoutTemplate size={15} />{m['canvas.start_with_preset']()}
+              </Button>
+            </div>
+            {#if workspaces.length}
+              <div class="empty-recent">
+                <span class="section-label">{m['canvas.recent_workspaces']()}</span>
+                <div class="recent-grid">
+                  {#each workspaces.slice(0, 6) as workspace (workspace.id)}
+                    <button type="button" class="recent-card press" onclick={() => selectWorkspace(workspace.id)}>
+                      <span class="recent-icon"><WorkspaceIcon name={workspace.icon} size={15} /></span>
+                      <span class="recent-name">{workspace.name}</span>
+                      {#if activity[workspace.id]}<span class="live-dot" aria-hidden="true"></span>{/if}
+                      <ChevronRight size={14} class="recent-arrow" aria-hidden="true" />
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+            <div class="empty-hints">
+              <span><kbd>{modKey}</kbd><kbd>K</kbd>{m['canvas.search_everything']()}</span>
+              <button type="button" class="hint-link" onclick={() => void goto('/docs')}><CircleHelp size={13} />{m['canvas.how_to_use']()}</button>
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
     {#if showCharacterLibrary && activeWorkspace && !designModeNodeId}
@@ -3401,10 +3548,17 @@
         <WorkspacePermissionNotice workingDir={permissionWorkspace.workingDir} onRetry={retryWorkspaceAccess} />
       </div>
     {:else if errorMessage}
-      <p class="error-banner">{errorMessage}</p>
+      <div class="canvas-banner error" role="alert">
+        <CircleAlert size={15} class="banner-icon" aria-hidden="true" />
+        <p>{errorMessage}</p>
+        <button type="button" class="banner-close" aria-label={m['canvas.dismiss_message']()} onclick={() => (errorMessage = '')}><X size={13} /></button>
+      </div>
     {/if}
     {#if unloadMessage}
-      <p class="notice-banner">{unloadMessage}</p>
+      <div class="canvas-banner notice" role="status">
+        <CircleCheck size={15} class="banner-icon" aria-hidden="true" />
+        <p>{unloadMessage}</p>
+      </div>
     {/if}
     </SvelteFlowProvider>
   </section>
@@ -3418,6 +3572,11 @@
     color: var(--app-text);
   }
 
+  /*
+   * Barra lateral: linhas densas de altura fixa (30px), selecao neutra com
+   * indicador de acento, acoes de linha que aparecem ao apontar ou focar
+   * (sem empurrar o nome) e a cor de acento reservada para a acao principal.
+   */
   .sidebar:has(.workspace-list.collapsed) {
     width: 54px;
   }
@@ -3435,66 +3594,111 @@
     width: 288px;
     flex-shrink: 0;
     border-right: 1px solid var(--app-border);
-    padding: 12px 10px;
+    background: var(--app-sidebar);
+    padding: 10px 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     /* A lista de workspaces rola; o cabecalho nunca encolhe (flex-shrink do
        flex container esmagava o cabecalho em 2 linhas sobre a lista). */
     overflow: hidden;
-  }
-
-  .sidebar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    min-height: 34px;
-    flex-shrink: 0;
-  }
-
-  .sidebar-header h2 {
-    font-size: 10px;
-    font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0;
-    color: var(--app-text-muted);
-    margin: 0;
-    white-space: nowrap;
   }
 
   .brand-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 34px;
-    padding: 0 3px 9px;
-    border-bottom: 1px solid var(--app-border);
+    min-height: 32px;
+    padding: 0 6px;
   }
 
   .brand-name {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
-    font-size: 15px;
-    font-weight: 650;
-    letter-spacing: 0;
+    font-family: var(--font-display);
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     color: var(--app-text);
+  }
+
+  .mode-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 2px 6px;
+  }
+
+  .mode-row > :global(nav) {
+    flex: 1;
+  }
+
+  .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 32px;
+    padding: 4px 2px 0 8px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-header h2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-text-muted);
+    white-space: nowrap;
+  }
+
+  .section-count {
+    min-width: 18px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sidebar-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
   }
 
   .workspace-filter {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 6px 9px;
-    min-height: 34px;
-    border-radius: 6px;
-    border: 1px solid var(--app-border);
-    background: color-mix(in srgb, var(--app-canvas) 60%, transparent);
+    margin: 0 2px;
+    padding: 0 9px;
+    min-height: 32px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--app-hover);
     color: var(--app-text-muted);
     flex-shrink: 0;
-    transition: border-color 140ms ease;
+    transition: border-color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
+  }
+
+  .workspace-filter:hover {
+    background: var(--app-active);
   }
 
   .workspace-filter:focus-within {
     border-color: var(--app-accent);
+    background: var(--app-surface-subtle);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .workspace-filter input {
@@ -3504,7 +3708,11 @@
     outline: none;
     background: transparent;
     color: var(--app-text);
-    font-size: 12px;
+    font-size: 12.5px;
+  }
+
+  .workspace-filter input::placeholder {
+    color: var(--app-text-muted);
   }
 
   .workspace-filter input:focus-visible {
@@ -3512,19 +3720,18 @@
   }
 
   .empty-filter {
-    padding: 8px;
+    padding: 8px 10px;
     font-size: 12px;
     color: var(--app-text-muted);
-    font-style: italic;
   }
 
   .workspace-list {
     list-style: none;
     margin: 0;
-    padding: 0;
+    padding: 2px 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -3532,21 +3739,89 @@
   }
 
   .workspace-list li {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 2px;
-    min-height: 34px;
+    min-height: 30px;
     border-radius: 6px;
     padding-right: 2px;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .workspace-list li:not(.ws-group):not(.empty-card):not(.ws-skeleton):hover {
+    background: var(--app-hover);
   }
 
   .workspace-list li.active {
-    background: var(--app-accent-soft);
-    box-shadow: inset 2px 0 0 var(--app-accent);
+    background: var(--app-active);
+  }
+
+  /* Indicador de selecao: barra curta de acento dentro da linha. */
+  .workspace-list li.active:not(.ws-group)::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--app-accent);
+  }
+
+  .workspace-list li.active :global(.workspace-icon) {
+    color: var(--app-accent);
+  }
+
+  .workspace-list li.active :global(.workspace-name) {
+    color: var(--app-text);
+    font-weight: 500;
   }
 
   .workspace-list.collapsed li {
     justify-content: center;
+  }
+
+  .workspace-list.collapsed li.active::before {
+    top: 7px;
+    bottom: 7px;
+  }
+
+  /*
+   * Acoes da linha (editar/apagar) ficam sobre o fim do nome e aparecem ao
+   * apontar ou focar; o fundo acompanha o da linha para nao cortar texto.
+   */
+  .row-actions {
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding-left: 14px;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--row-bg, var(--app-sidebar)) 14px);
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .workspace-list li:hover {
+    --row-bg: color-mix(in srgb, var(--app-sidebar), var(--app-text) 8%);
+  }
+
+  .workspace-list li.active {
+    --row-bg: color-mix(in srgb, var(--app-sidebar), var(--app-text) 12%);
+  }
+
+  .workspace-list li:hover > .row-actions,
+  .workspace-list li:focus-within > .row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .workspace-list li:focus-within:not(:hover) {
+    --row-bg: var(--app-sidebar);
   }
 
   .ws-skeleton {
@@ -3562,7 +3837,7 @@
   .workspace-list.drag-over-root {
     outline: 1px dashed var(--app-accent);
     outline-offset: -2px;
-    border-radius: 6px;
+    border-radius: 8px;
   }
 
   .workspace-list li.ws-group {
@@ -3575,17 +3850,19 @@
   }
 
   .ws-group-header {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    min-height: 32px;
-    padding: 0 4px 0 2px;
+    gap: 5px;
+    min-height: 30px;
+    padding: 0 4px 0 4px;
     border-radius: 6px;
     cursor: grab;
+    transition: background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
   }
 
   .ws-group-header:hover {
-    background: color-mix(in srgb, var(--app-border) 55%, transparent);
+    background: var(--app-hover);
   }
 
   .ws-group.drag-over > .ws-group-header {
@@ -3597,17 +3874,22 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
     border: none;
+    border-radius: 4px;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
   }
 
+  .ws-group-toggle:hover {
+    color: var(--app-text);
+  }
+
   .ws-group-toggle :global(svg) {
-    transition: transform 120ms ease;
+    transition: transform var(--duration-fast) var(--ease-smooth-out);
   }
 
   .ws-group-toggle :global(svg.expanded) {
@@ -3625,82 +3907,125 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 500;
-    color: var(--app-text);
+    color: var(--app-text-soft);
+  }
+
+  .ws-group-count {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
   .ws-group-rename {
     flex: 1;
     min-width: 0;
+    height: 24px;
     border: 1px solid var(--app-accent);
-    border-radius: 4px;
-    background: var(--app-canvas);
+    border-radius: 5px;
+    background: var(--app-surface-subtle);
     color: var(--app-text);
-    font-size: 12px;
-    padding: 2px 5px;
+    font-size: 12.5px;
+    padding: 0 6px;
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .ws-group-actions {
-    display: none;
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    display: flex;
     align-items: center;
     gap: 1px;
-    flex-shrink: 0;
+    padding-left: 14px;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, color-mix(in srgb, var(--app-sidebar), var(--app-text) 8%) 14px);
+    transition: opacity var(--duration-quick) ease-out;
   }
 
-  .ws-group-header:hover .ws-group-actions {
-    display: flex;
+  .ws-group-header:hover .ws-group-actions,
+  .ws-group-header:focus-within .ws-group-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ws-group-header:focus-within:not(:hover) .ws-group-actions {
+    background: linear-gradient(to right, transparent, var(--app-sidebar) 14px);
   }
 
   .ws-group-children {
     list-style: none;
-    margin: 0;
-    padding: 0 0 0 17px;
+    margin: 1px 0 0 13px;
+    padding: 0 0 0 6px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
+    box-shadow: inset 1px 0 0 var(--app-border);
   }
 
   .ws-group-empty {
     padding: 4px 8px;
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--app-text-muted);
-    font-style: italic;
+  }
+
+  .sidebar-footer {
+    flex-shrink: 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .new-folder-button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .new-folder-button:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
   }
 
   .new-folder-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 8px;
+    gap: 7px;
+    padding: 0 10px;
     min-height: 30px;
     border-radius: 6px;
-    border: 1px dashed var(--app-border);
+    border: 1px solid var(--app-accent);
+    background: var(--app-surface-subtle);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
     color: var(--app-text-muted);
-    flex-shrink: 0;
   }
 
   .ws-subfolder-create {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 6px;
+    padding: 0 8px;
     min-height: 28px;
     border-radius: 6px;
-    border: 1px dashed var(--app-border);
+    border: 1px solid var(--app-accent);
+    background: var(--app-surface-subtle);
     color: var(--app-text-muted);
   }
 
-  .ws-subfolder-create input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--app-text);
-    font-size: 12px;
-  }
-
+  .ws-subfolder-create input,
   .new-folder-row input {
     flex: 1;
     min-width: 0;
@@ -3708,14 +4033,7 @@
     outline: none;
     background: transparent;
     color: var(--app-text);
-    font-size: 12px;
-  }
-
-  .sidebar-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    margin-left: auto;
+    font-size: 12.5px;
   }
 
   .hidden-input {
@@ -3727,14 +4045,21 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 8px;
+    gap: 9px;
+    min-height: 30px;
+    padding: 0 8px 0 10px;
     border: none;
+    border-radius: 6px;
     background: transparent;
-    color: inherit;
+    color: var(--app-text-soft);
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12.5px;
     text-align: left;
+  }
+
+  .canvas-page :global(.workspace-item:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
   }
 
   .canvas-page :global(.workspace-icon) {
@@ -3745,17 +4070,16 @@
     position: relative;
   }
 
-  /* Bolinha verde = workspace com sessoes vivas em background. */
+  /* Ponto verde = workspace com sessoes vivas em background. */
   .live-dot {
     display: inline-block;
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--app-success);
-    box-shadow: 0 0 6px color-mix(in srgb, var(--app-success) 80%, transparent);
-    margin-left: 6px;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-success) 18%, transparent);
+    margin-left: auto;
     flex-shrink: 0;
-    animation: live-pulse 2s ease-in-out infinite;
   }
 
   .live-dot.rail {
@@ -3767,20 +4091,9 @@
     height: 6px;
   }
 
-  @keyframes live-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.45;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .live-dot {
-      animation: none;
-    }
+  .canvas-page :global(.row-status) {
+    margin-left: auto;
+    flex-shrink: 0;
   }
 
   .canvas-page :global(.workspace-emoji) {
@@ -3801,27 +4114,79 @@
     color: var(--app-text-muted);
     cursor: pointer;
     font-size: 15px;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     display: grid;
     place-items: center;
     padding: 0;
     border-radius: 6px;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .canvas-page :global(.icon-btn:hover) {
     color: var(--app-text);
-    background: var(--app-border);
+    background: var(--app-active);
+  }
+
+  .canvas-page :global(.icon-btn:active) {
+    transform: scale(var(--scale-press));
   }
 
   .canvas-page :global(.icon-btn.danger:hover) {
     color: var(--app-danger);
+    background: var(--app-danger-soft);
+  }
+
+  /* Acao principal da barra (novo workspace): unico ponto de acento. */
+  .canvas-page :global(.icon-btn.primary) {
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+  }
+
+  .canvas-page :global(.icon-btn.primary:hover) {
+    background: color-mix(in srgb, var(--app-accent) 88%, var(--app-text));
+    color: var(--app-accent-contrast);
   }
 
   .empty {
     color: var(--app-text-muted);
     font-size: 12px;
     padding: 8px;
+  }
+
+  .workspace-list li.empty-card {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    margin: 6px 2px;
+    padding: 14px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .empty-card .empty-icon {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .empty-card strong {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--app-text);
+  }
+
+  .empty-card p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--app-text-muted);
   }
 
   .canvas-area {
@@ -3839,29 +4204,54 @@
     background: var(--app-canvas);
   }
 
+  /*
+   * Minimapa e zoom flutuam acima da linha do dock (nunca por baixo da barra
+   * de ferramentas), com a mesma superficie elevada dos outros flutuantes.
+   */
   .canvas-area :global(.svelte-flow__minimap) {
+    bottom: 64px;
+    width: 176px;
+    height: 116px;
     background: var(--app-surface);
-    border: 1px solid var(--app-border);
-    border-radius: 7px;
+    border: 0;
+    border-radius: 10px;
+    box-shadow: var(--app-shadow-panel);
     overflow: hidden;
   }
 
+  .canvas-area :global(.svelte-flow__minimap svg) {
+    width: 100%;
+    height: 100%;
+  }
 
   .canvas-area :global(.svelte-flow__controls) {
-    border: 1px solid var(--app-border);
-    border-radius: 7px;
-    overflow: hidden;
+    bottom: 64px;
+    padding: 3px;
+    gap: 2px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--app-surface);
     box-shadow: var(--app-shadow-panel);
+    overflow: hidden;
   }
 
   .canvas-area :global(.svelte-flow__controls-button) {
-    background: var(--app-surface);
-    border-bottom: 1px solid var(--app-border);
+    width: 28px;
+    height: 28px;
+    padding: 6px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
     color: var(--app-text-soft);
+    transition: background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .canvas-area :global(.svelte-flow__controls-button:hover) {
-    background: var(--app-surface-raised);
+    background: var(--app-hover);
+  }
+
+  .canvas-area :global(.svelte-flow__controls-button:active) {
+    transform: scale(var(--scale-press));
   }
 
   .canvas-area :global(.svelte-flow__controls-button svg) {
@@ -3929,17 +4319,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
-    border-radius: 6px;
-    border: 1px solid var(--app-border);
-    background: color-mix(in srgb, var(--app-surface-raised) 92%, transparent);
+    border: 0;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--app-surface-raised) 94%, transparent);
     color: var(--app-text-soft);
     cursor: pointer;
     backdrop-filter: blur(12px);
     box-shadow: var(--app-shadow-panel);
-    transition: color 120ms ease, background 120ms ease;
+    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .toolbar-arrow:hover {
@@ -3947,18 +4337,26 @@
     color: var(--app-text);
   }
 
+  .toolbar-arrow:active {
+    transform: scale(var(--scale-press));
+  }
+
+  /*
+   * Dock de ferramentas: grupos por categoria separados por divisores finos.
+   * Raio concentrico: dock 12px com 4px de respiro -> botoes 8px.
+   */
   .toolbar {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 2px;
     padding: 4px;
-    border-radius: 8px;
+    border-radius: 12px;
     background: color-mix(in srgb, var(--app-surface) 94%, transparent);
-    border: 1px solid var(--app-border);
     box-shadow: var(--app-shadow-overlay);
     backdrop-filter: blur(12px);
     /* Muitos botoes (providers + paineis): rola em vez de cortar fora da tela.
        O painel do xyflow nao tem largura propria — limita pelo viewport
-       (sidebar 332 + painel lateral 300 + setas 58 + margens). */
+       (sidebar 288 + setas + margens). */
     max-width: max(320px, calc(100vw - 360px));
     overflow-x: auto;
     scrollbar-width: none;
@@ -3968,61 +4366,353 @@
     display: none;
   }
 
-  .toolbar-sep {
-    width: 1px;
-    background: var(--app-border);
-    margin: 3px 2px;
+  .tool-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
   }
 
+  .toolbar-sep {
+    width: 1px;
+    height: 18px;
+    flex-shrink: 0;
+    margin: 0 4px;
+    background: var(--app-border);
+  }
+
+  /* Sem workspace aberto: ponto de partida com a acao principal a vista. */
   .canvas-empty {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
+    display: grid;
+    place-items: center;
     height: 100%;
+    padding: 32px 24px;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle, color-mix(in srgb, var(--app-grid) 70%, transparent) 1px, transparent 1px) 0 0 / 20px 20px,
+      var(--app-canvas);
+  }
+
+  .empty-hero {
+    width: min(560px, 100%);
+    display: grid;
+    justify-items: center;
+    gap: 12px;
     text-align: center;
+    animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
+  }
+
+  @keyframes hero-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-base));
+    }
+  }
+
+  .empty-mark {
+    margin-bottom: 4px;
+  }
+
+  .empty-hero h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--app-text);
+  }
+
+  .empty-hero > p {
+    max-width: 44ch;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
     color: var(--app-text-muted);
   }
 
-  .canvas-empty img {
-    opacity: 0.55;
+  .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
   }
 
-  .error-banner {
-    position: absolute;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: color-mix(in srgb, var(--app-danger) 15%, transparent);
-    border: 1px solid var(--app-danger);
-    color: var(--app-danger);
-    padding: 6px 14px;
-    border-radius: 8px;
+  .empty-recent {
+    width: 100%;
+    display: grid;
+    gap: 8px;
+    margin-top: 20px;
+    text-align: left;
+  }
+
+  .recent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 6px;
+  }
+
+  .recent-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: box-shadow var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .recent-card:hover {
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border-hover);
+  }
+
+  .recent-icon {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border-radius: 7px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+  }
+
+  .recent-name {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recent-card :global(.recent-arrow) {
+    color: var(--app-text-muted);
+    flex-shrink: 0;
+    transition: transform var(--duration-quick) var(--ease-smooth-out), color var(--duration-quick) ease-out;
+  }
+
+  .recent-card:hover :global(.recent-arrow) {
+    color: var(--app-text);
+    transform: translateX(2px);
+  }
+
+  .empty-hints {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 18px;
+    margin-top: 18px;
     font-size: 12px;
+    color: var(--app-text-muted);
+  }
+
+  .empty-hints > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .empty-hints kbd:last-of-type {
+    margin-right: 4px;
+  }
+
+  .hint-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    background: transparent;
+    padding: 2px 0;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .hint-link:hover {
+    color: var(--app-text);
+  }
+
+  /* Canvas aberto, mas sem nenhum no: acoes de um clique no centro. */
+  .blank-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: grid;
+    place-items: center;
+    padding: 24px 24px 96px;
+    pointer-events: none;
+  }
+
+  .blank-card {
+    width: min(460px, 100%);
+    display: grid;
+    gap: 10px;
+    padding: 22px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+    box-shadow: var(--app-shadow-panel);
+    backdrop-filter: blur(10px);
+    pointer-events: auto;
+    animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
+  }
+
+  .blank-card h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--app-text);
+  }
+
+  .blank-card > p {
+    margin: 0 0 6px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--app-text-muted);
+  }
+
+  .blank-card .section-label {
+    margin-top: 4px;
+  }
+
+  .quick-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 6px;
+  }
+
+  /* Raio concentrico: cartao 16px com 22px de respiro -> tiles 10px. */
+  .quick-tile {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    padding: 12px 8px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .quick-tile:hover {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .quick-tile:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .quick-tile img {
+    width: 22px;
+    height: 22px;
+    padding: 3px;
+    border-radius: 6px;
+  }
+
+  .quick-tile :global(svg) {
+    width: 22px;
+    height: 22px;
+    padding: 3px;
+    color: var(--app-accent);
+  }
+
+  .blank-card .empty-hints {
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  /*
+   * Mensagens do canvas ficam acima da barra de ferramentas (nunca por cima
+   * dela), em superficie elevada com o icone carregando a cor semantica.
+   */
+  .canvas-banner {
+    position: absolute;
+    z-index: 30;
+    bottom: 84px;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    max-width: min(560px, calc(100% - 32px));
+    padding: 8px 8px 8px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-overlay);
+    color: var(--app-text);
+    font-size: 12.5px;
+    transform: translateX(-50%);
+    animation: banner-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes banner-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, var(--distance-base));
+    }
+  }
+
+  .canvas-banner p {
+    margin: 0;
+    line-height: 1.45;
+  }
+
+  .canvas-banner.error :global(.banner-icon) {
+    color: var(--app-danger);
+    flex-shrink: 0;
+  }
+
+  .canvas-banner.notice {
+    padding-right: 14px;
+  }
+
+  .canvas-banner.notice :global(.banner-icon) {
+    color: var(--app-success);
+    flex-shrink: 0;
+  }
+
+  .banner-close {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+  }
+
+  .banner-close:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
   }
 
   .permission-banner {
     position: absolute;
     z-index: 30;
-    bottom: 12px;
+    bottom: 84px;
     left: 50%;
     width: min(520px, calc(100% - 24px));
     transform: translateX(-50%);
   }
 
-  .notice-banner {
-    position: absolute;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: color-mix(in srgb, var(--app-success) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--app-success) 55%, transparent);
-    color: var(--app-success);
-    padding: 6px 14px;
-    border-radius: 8px;
-    font-size: 12px;
-  }
 
 </style>

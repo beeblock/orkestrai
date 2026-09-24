@@ -46,7 +46,7 @@ get along, so we shut typescript up by casting `value` to `never`.
 				data-slot="slider-thumb"
 				index={thumb.index}
 				aria-label={restProps['aria-label']}
-				class="relative size-3 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
+				class="relative size-3.5 rounded-full border border-ring bg-white shadow-sm ring-ring/35 transition-[box-shadow,transform] duration-150 ease-smooth-out after:absolute after:-inset-2.5 hover:ring-4 focus-visible:ring-4 active:scale-110 focus-visible:outline-hidden active:ring-3 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
 			/>
 		{/each}
 	{/snippet}

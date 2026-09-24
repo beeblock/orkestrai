@@ -14,7 +14,7 @@
       {#snippet child({ props })}
         <DropdownMenu.Trigger
           {...props}
-          class={cn('group relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-[var(--app-text-muted)] outline-none transition-[color,background-color,box-shadow] duration-150 hover:bg-[var(--app-border)] hover:text-[var(--app-text)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/45 data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-accent)]', active && 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]')}
+          class={cn('group relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-[var(--app-text-muted)] outline-none transition-[color,background-color,box-shadow,transform] duration-150 ease-smooth-out active:scale-[0.96] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/45 data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-accent)]', active && 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]')}
           aria-label={m['image_workflow.menu']()}
         >
           <ImageIcon size={15} aria-hidden="true" />

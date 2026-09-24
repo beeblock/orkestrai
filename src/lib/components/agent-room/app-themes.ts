@@ -152,8 +152,23 @@ export function duplicateAppTheme(theme: AppTheme, id = `custom-${crypto.randomU
 function derivedThemeVariables(theme: AppTheme): Record<string, string> {
   const token = theme.tokens;
   const ink = theme.dark ? '#000000' : token.text;
+  // Anel de 1px no lugar de borda de elevacao: branco translucido no escuro,
+  // preto translucido no claro (adapta a qualquer superficie por baixo).
+  const hairline = theme.dark ? 'color-mix(in srgb, #ffffff 8%, transparent)' : 'color-mix(in srgb, #000000 7%, transparent)';
+  const hairlineStrong = theme.dark ? 'color-mix(in srgb, #ffffff 13%, transparent)' : 'color-mix(in srgb, #000000 11%, transparent)';
   return {
     '--app-hover': `color-mix(in srgb, ${token.text} 8%, transparent)`,
+    '--app-active': `color-mix(in srgb, ${token.text} 12%, transparent)`,
+    '--app-secondary-soft': `color-mix(in srgb, ${token.secondary} 16%, transparent)`,
+    '--app-ring-hairline': hairline,
+    '--app-ring-hairline-strong': hairlineStrong,
+    '--app-image-outline': theme.dark ? 'color-mix(in srgb, #ffffff 10%, transparent)' : 'color-mix(in srgb, #000000 10%, transparent)',
+    '--app-shadow-border': theme.dark
+      ? `0 0 0 1px ${hairline}`
+      : `0 0 0 1px ${hairline}, 0 1px 2px -1px color-mix(in srgb, #000000 6%, transparent), 0 2px 4px color-mix(in srgb, #000000 4%, transparent)`,
+    '--app-shadow-border-hover': theme.dark
+      ? `0 0 0 1px ${hairlineStrong}`
+      : `0 0 0 1px ${hairlineStrong}, 0 1px 2px -1px color-mix(in srgb, #000000 8%, transparent), 0 2px 4px color-mix(in srgb, #000000 6%, transparent)`,
     '--app-info': token.secondary,
     '--app-info-soft': `color-mix(in srgb, ${token.secondary} 16%, transparent)`,
     '--app-danger-soft': `color-mix(in srgb, ${token.danger} 16%, transparent)`,
@@ -169,14 +184,14 @@ function derivedThemeVariables(theme: AppTheme): Record<string, string> {
     // Elevacao: preta no escuro, tingida com a cor de texto no claro (sombra
     // preta pura vira borrao cinza sobre fundo claro).
     '--app-shadow-card': theme.dark
-      ? `0 1px 2px color-mix(in srgb, ${ink} 28%, transparent), 0 10px 28px color-mix(in srgb, ${ink} 24%, transparent)`
-      : `0 1px 2px color-mix(in srgb, ${ink} 6%, transparent), 0 8px 24px color-mix(in srgb, ${ink} 7%, transparent)`,
+      ? `0 0 0 1px ${hairline}, 0 1px 2px color-mix(in srgb, ${ink} 28%, transparent), 0 10px 28px color-mix(in srgb, ${ink} 24%, transparent)`
+      : `0 0 0 1px ${hairline}, 0 1px 2px color-mix(in srgb, ${ink} 6%, transparent), 0 8px 24px color-mix(in srgb, ${ink} 7%, transparent)`,
     '--app-shadow-panel': theme.dark
-      ? `0 8px 24px color-mix(in srgb, ${ink} 24%, transparent)`
-      : `0 8px 24px color-mix(in srgb, ${ink} 9%, transparent)`,
+      ? `0 0 0 1px ${hairline}, 0 8px 24px color-mix(in srgb, ${ink} 24%, transparent)`
+      : `0 0 0 1px ${hairline}, 0 8px 24px color-mix(in srgb, ${ink} 9%, transparent)`,
     '--app-shadow-overlay': theme.dark
-      ? `0 14px 38px color-mix(in srgb, ${ink} 30%, transparent)`
-      : `0 14px 38px color-mix(in srgb, ${ink} 12%, transparent)`,
+      ? `0 0 0 1px ${hairline}, 0 14px 38px color-mix(in srgb, ${ink} 30%, transparent)`
+      : `0 0 0 1px ${hairline}, 0 14px 38px color-mix(in srgb, ${ink} 12%, transparent)`,
   };
 }
 
@@ -261,6 +276,14 @@ export function applyAppTheme(settings: Record<string, string>, root?: HTMLEleme
   const target = root ?? (typeof document !== 'undefined' ? document.documentElement : undefined);
   if (!target) return theme;
   const variables = appThemeCssVariables(theme);
+  // Trocar de tema muda cor/fundo/borda/sombra de quase tudo ao mesmo tempo;
+  // com as transicoes ligadas a troca "escorre" elemento por elemento.
+  // Desliga as transicoes por um quadro so quando o tema realmente mudou.
+  const themeChanged = Boolean(target.dataset.appTheme) && target.dataset.appTheme !== theme.id;
+  if (themeChanged && typeof requestAnimationFrame !== 'undefined') {
+    target.classList.add('theme-switching');
+    requestAnimationFrame(() => requestAnimationFrame(() => target.classList.remove('theme-switching')));
+  }
   target.dataset.appTheme = theme.id;
   // `dark` e o gatilho da variante dark: do Tailwind; `light` da ao tema claro
   // uma casa em CSS (:root.light em app.css) para antes da hidratacao.
