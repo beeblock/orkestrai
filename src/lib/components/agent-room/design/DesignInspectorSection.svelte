@@ -6,12 +6,15 @@
   let {
     id,
     title,
+    meta,
     actions,
     children,
     defaultOpen = true,
   }: {
     id: string;
     title: string;
+    /** Resumo curto ao lado do titulo (valor atual, contagem) para ler sem abrir. */
+    meta?: string;
     actions?: Snippet;
     children: Snippet;
     defaultOpen?: boolean;
@@ -44,15 +47,18 @@
   });
 </script>
 
+<!-- Cabecalho de 32px e conteudo com linhas de 28px espacadas 6px: o mesmo
+     ritmo em todas as secoes do inspector, abertas ou recolhidas. -->
 <Collapsible.Root bind:open class="border-b border-[var(--app-border)]">
-  <div class="flex h-8 items-center gap-1 px-3">
-    <Collapsible.Trigger class="flex min-w-0 flex-1 items-center gap-1.5 text-left text-ui-sm font-semibold text-[var(--app-text-soft)]">
-      <ChevronDown size={12} class={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+  <div class="flex h-8 items-center gap-1 pr-2 pl-1.5">
+    <Collapsible.Trigger class="group/section flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left text-ui-sm font-semibold text-[var(--app-text)] outline-none transition-colors duration-150 hover:bg-[var(--app-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]">
+      <ChevronDown size={12} class={`shrink-0 text-[var(--app-text-muted)] transition-transform duration-150 ease-out group-hover/section:text-[var(--app-text-soft)] ${open ? '' : '-rotate-90'}`} />
       <span class="truncate">{title}</span>
+      {#if meta}<span class="ml-auto shrink-0 truncate pl-2 text-ui-xs font-normal tabular-nums text-[var(--app-text-muted)]">{meta}</span>{/if}
     </Collapsible.Trigger>
-    {#if actions}{@render actions()}{/if}
+    {#if actions}<div class="flex shrink-0 items-center gap-0.5">{@render actions()}</div>{/if}
   </div>
-  <Collapsible.Content class="px-3 pb-3">
+  <Collapsible.Content class="space-y-1.5 px-3 pb-3 empty:hidden">
     {@render children()}
   </Collapsible.Content>
 </Collapsible.Root>

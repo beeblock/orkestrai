@@ -15,26 +15,32 @@
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
     ArrowDown,
+    ArrowRight,
     ArrowUp,
     Blend,
-    Braces,
+    CaseLower,
+    CaseSensitive,
+    CaseUpper,
     ChevronDown,
     Circle,
     ClipboardCopy,
     Combine,
     CornerDownRight,
-    Diamond,
     Download,
     Frame,
     Group,
     Hand,
+    Image as ImageIcon,
     ImagePlus,
+    Italic,
     Layers3,
     LayoutGrid,
     Link2,
+    LoaderCircle,
     MoveDiagonal2,
     Magnet,
     Maximize2,
+    Minus,
     MousePointer2,
     PenTool,
     Palette,
@@ -53,13 +59,24 @@
     Ungroup,
     Unlink2,
     SlidersHorizontal,
+    Square,
+    SquaresExclude,
+    SquaresIntersect,
+    SquaresSubtract,
+    SquaresUnite,
+    Strikethrough,
+    TriangleAlert,
+    Underline,
     UsersRound,
-    Workflow,
     ZoomIn,
     ZoomOut,
   } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
+  import { Kbd } from '$lib/components/ui/kbd';
+  import { SegmentedControl, type SegmentedOption } from '$lib/components/ui/segmented';
+  import { Skeleton } from '$lib/components/ui/skeleton';
+  import { Slider } from '$lib/components/ui/slider';
   import { Switch } from '$lib/components/ui/switch';
   import { Textarea } from '$lib/components/ui/textarea';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -112,6 +129,7 @@
   import { defaultPrototypeFlow, exportMotionCss, prototypeFrames } from '$lib/modules/agent-room/domain/design-prototype.js';
   import * as m from '$lib/paraglide/messages.js';
   import { eventTargetMatches } from '$lib/components/agent-room/event-target.js';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import DesignColorControl from './DesignColorControl.svelte';
   import DesignColorTools from './DesignColorTools.svelte';
   import DesignCollaborationPanel from './DesignCollaborationPanel.svelte';
@@ -165,6 +183,17 @@
   type SelectionMarquee = { start: { x: number; y: number }; current: { x: number; y: number } };
   type PrototypeConnectionDraft = { sourceId: string; start: { x: number; y: number }; current: { x: number; y: number } };
   const resizeHandles: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+  const toolGroups: Array<Array<{ id: Tool; icon: typeof Combine; shortcut: string }>> = [
+    [{ id: 'select', icon: MousePointer2, shortcut: 'V' }, { id: 'hand', icon: Hand, shortcut: 'H' }],
+    [{ id: 'frame', icon: Frame, shortcut: 'F' }, { id: 'rectangle', icon: RectangleHorizontal, shortcut: 'R' }, { id: 'ellipse', icon: Circle, shortcut: 'O' }],
+    [{ id: 'text', icon: Type, shortcut: 'T' }, { id: 'path', icon: PenTool, shortcut: 'P' }],
+  ];
+  const booleanOperations: Array<{ operation: DesignBooleanOperation; icon: typeof Combine }> = [
+    { operation: 'union', icon: SquaresUnite },
+    { operation: 'subtract', icon: SquaresSubtract },
+    { operation: 'intersect', icon: SquaresIntersect },
+    { operation: 'exclude', icon: SquaresExclude },
+  ];
 
   let document = $state<DesignDocument | null>(null);
   let selectedIds = $state<string[]>([]);
@@ -482,6 +511,102 @@
     if (value === 'text') return m['design.text']();
     if (value === 'path') return m['design.pen']();
     return m['design.select']();
+  }
+
+  // --- Apresentacao do inspector (so UI: nenhum destes altera o documento) ---
+  // Limites min/max e opcoes raras de texto ficam recolhidos, mas abrem
+  // sozinhos quando a camada ja usa algum desses valores.
+  let sizeLimitsOpen = $state(false);
+  let typographyMoreOpen = $state(false);
+  const inspectorSelect = 'w-full [&_select]:text-ui-md';
+  const sizeLimitsVisible = $derived(sizeLimitsOpen || Boolean(selected && [selected.minWidth, selected.maxWidth, selected.minHeight, selected.maxHeight].some((value) => value !== null)));
+  const sizeLimitsLocked = $derived(Boolean(selected && [selected.minWidth, selected.maxWidth, selected.minHeight, selected.maxHeight].some((value) => value !== null)));
+  const typographyMoreLocked = $derived(Boolean(selected?.type === 'text' && (selected.paragraphSpacing !== 0 || selected.textDecoration !== 'none' || selected.textTransform !== 'none')));
+  const typographyMoreVisible = $derived(typographyMoreOpen || typographyMoreLocked);
+
+  function elementTypeLabel(element: DesignElement): string {
+    if (element.type === 'frame') return m['design.frame']();
+    if (element.type === 'group') return m['design.group']();
+    if (element.type === 'rectangle') return m['design.rectangle']();
+    if (element.type === 'ellipse') return m['design.ellipse']();
+    if (element.type === 'text') return m['design.text']();
+    if (element.type === 'path') return m['design.pen']();
+    return m['design.image']();
+  }
+
+  function layerIcon(element: DesignElement): typeof Combine {
+    if (element.type === 'frame') return Frame;
+    if (element.type === 'group') return Group;
+    if (element.type === 'rectangle') return RectangleHorizontal;
+    if (element.type === 'ellipse') return Circle;
+    if (element.type === 'text') return Type;
+    if (element.type === 'path') return PenTool;
+    return ImageIcon;
+  }
+
+  function sizingOptions(): SegmentedOption<DesignElement['widthSizing']>[] {
+    return [
+      { value: 'fixed', label: m['design.sizing_fixed']() },
+      { value: 'hug', label: m['design.sizing_hug_short']() },
+      { value: 'fill', label: m['design.sizing_fill_short']() },
+    ];
+  }
+
+  function layoutModeOptions(): SegmentedOption<DesignElement['layoutMode']>[] {
+    return [
+      { value: 'none', label: m['design.layout_none'](), icon: Square },
+      { value: 'horizontal', label: m['design.layout_horizontal'](), icon: ArrowRight },
+      { value: 'vertical', label: m['design.layout_vertical'](), icon: ArrowDown },
+      { value: 'grid', label: m['design.layout_grid'](), icon: LayoutGrid },
+    ];
+  }
+
+  function textAlignOptions(): SegmentedOption<DesignElement['textAlign']>[] {
+    return [
+      { value: 'left', label: m['design.align_left'](), icon: AlignLeft },
+      { value: 'center', label: m['design.align_center'](), icon: AlignCenter },
+      { value: 'right', label: m['design.align_right'](), icon: AlignRight },
+    ];
+  }
+
+  function verticalAlignOptions(): SegmentedOption<DesignElement['textVerticalAlign']>[] {
+    return [
+      { value: 'top', label: m['design.align_top'](), icon: AlignVerticalJustifyStart },
+      { value: 'middle', label: m['design.align_center'](), icon: AlignVerticalJustifyCenter },
+      { value: 'bottom', label: m['design.align_bottom'](), icon: AlignVerticalJustifyEnd },
+    ];
+  }
+
+  function fontStyleOptions(): SegmentedOption<DesignElement['fontStyle']>[] {
+    return [
+      { value: 'normal', label: m['design.font_style_normal'](), icon: Type },
+      { value: 'italic', label: m['design.font_style_italic'](), icon: Italic },
+    ];
+  }
+
+  function decorationOptions(): SegmentedOption<DesignElement['textDecoration']>[] {
+    return [
+      { value: 'none', label: m['design.none'](), icon: Minus },
+      { value: 'underline', label: m['design.underline'](), icon: Underline },
+      { value: 'line-through', label: m['design.strikethrough'](), icon: Strikethrough },
+    ];
+  }
+
+  function caseOptions(): SegmentedOption<DesignElement['textTransform']>[] {
+    return [
+      { value: 'none', label: m['design.none'](), icon: Minus },
+      { value: 'uppercase', label: m['design.uppercase'](), icon: CaseUpper },
+      { value: 'lowercase', label: m['design.lowercase'](), icon: CaseLower },
+      { value: 'capitalize', label: m['design.capitalize'](), icon: CaseSensitive },
+    ];
+  }
+
+  function imageFitOptions(): SegmentedOption<DesignElement['imageFit']>[] {
+    return [
+      { value: 'cover', label: m['design.fit_cover']() },
+      { value: 'contain', label: m['design.fit_contain']() },
+      { value: 'fill', label: m['design.fit_fill']() },
+    ];
   }
 
   function switchTool(next: Tool) {
@@ -3387,6 +3512,29 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
   });
 </script>
 
+{#snippet panelTabs(items: Array<{ id: string; label: string; active: boolean; select: () => void }>)}
+  <!-- Abas como trilha segmentada. Continuam botoes com aria-pressed (e nao
+       radios): e o papel que os testes e leitores de tela ja conhecem. -->
+  <div class="flex gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+    {#each items as item (item.id)}
+      <button type="button" class={`flex h-7 min-w-0 flex-auto items-center justify-center rounded-md px-1.5 text-ui-sm font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)] ${item.active ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-[var(--app-shadow-border)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={item.active} title={item.label} onclick={item.select}><span class="truncate">{item.label}</span></button>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet menuTrigger(label: string, Icon: typeof Group, disabled: boolean = false, compact: boolean = false)}
+  <!-- Gatilho de menu da barra: mesmo hover/estado aberto dos botoes simples,
+       com a seta discreta indicando que abre opcoes. -->
+  <Tooltip.Root delayDuration={250}>
+    <Tooltip.Trigger>
+      {#snippet child({ props })}
+        <DropdownMenu.Trigger {...props} class={`inline-flex shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] outline-none transition-[background-color,color,scale] duration-150 ease-out hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)] active:scale-[0.96] disabled:pointer-events-none disabled:opacity-40 data-[state=open]:bg-[var(--app-active)] data-[state=open]:text-[var(--app-text)] ${compact ? 'h-7 w-9' : 'h-8 w-10'}`} {disabled} aria-label={label}><Icon size={compact ? 15 : 16} /><ChevronDown size={11} class="opacity-60" /></DropdownMenu.Trigger>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{label}</Tooltip.Content>
+  </Tooltip.Root>
+{/snippet}
+
 <!-- 11px e a base do editor, como no Figma: sem isto tudo que nao declara um
      tamanho herdava os 16px do app e a coluna de propriedades misturava seis
      tamanhos diferentes. -->
@@ -3400,17 +3548,19 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
     tabindex="-1"
     onpointerdowncapture={focusEditor}
   >
-    <header class="col-span-3 flex min-w-0 items-center gap-1 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2" data-testid="design-toolbar">
+    <!-- Barra superior em grupos: arquivo | historico | arranjo | visualizacao
+         | revisao. O separador so aparece entre grupos, nao entre botoes. -->
+    <header class="col-span-3 flex min-w-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2 [scrollbar-width:none]" data-testid="design-toolbar">
       <DesignToolbarButton label={leftPanelVisible ? m['design.hide_left_panel']() : m['design.show_left_panel']()} active={leftPanelVisible} pressed={leftPanelVisible} onclick={toggleLeftPanel}><Layers3 size={16} /></DesignToolbarButton>
-      <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]"></span>
+      <span class="mx-1.5 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
       <DesignToolbarButton label={m['design.import_artwork']()} onclick={() => assetInput?.click()}><ImagePlus size={16} /></DesignToolbarButton>
       <input bind:this={assetInput} class="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" multiple onchange={(event: Event) => void importFiles(Array.from((event.currentTarget as HTMLInputElement).files ?? []))} />
-      <span class="mx-1 h-5 w-px bg-[var(--app-border)]"></span>
-      <DesignToolbarButton label={m['design.undo']()} disabled={!undoStack.length || saving} onclick={() => void undo()}><Undo2 size={16} /></DesignToolbarButton>
-      <DesignToolbarButton label={m['design.redo']()} disabled={!redoStack.length || saving} onclick={() => void redo()}><Redo2 size={16} /></DesignToolbarButton>
+      <DesignToolbarButton label={m['design.undo']()} shortcut="⌘Z" disabled={!undoStack.length || saving} onclick={() => void undo()}><Undo2 size={16} /></DesignToolbarButton>
+      <DesignToolbarButton label={m['design.redo']()} shortcut="⇧⌘Z" disabled={!redoStack.length || saving} onclick={() => void redo()}><Redo2 size={16} /></DesignToolbarButton>
+      <span class="mx-1.5 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
 
       <DropdownMenu.Root>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.grouping']()}><Group size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.grouping']()}</Tooltip.Content></Tooltip.Root>
+        {@render menuTrigger(m['design.grouping'](), Group)}
         <DropdownMenu.Content align="start" class="z-[120] w-56">
           <DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void groupSelection()}><Group size={14} />{m['design.group_selection']()}<DropdownMenu.Shortcut>⌘G</DropdownMenu.Shortcut></DropdownMenu.Item>
           <DropdownMenu.Item disabled={!selectedElements.some((element) => element.type === 'group')} onclick={() => void ungroupSelection()}><Ungroup size={14} />{m['design.ungroup_selection']()}<DropdownMenu.Shortcut>⇧⌘G</DropdownMenu.Shortcut></DropdownMenu.Item>
@@ -3418,7 +3568,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       </DropdownMenu.Root>
 
       <DropdownMenu.Root bind:open={colorMenuOpen}>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" disabled={!selected} aria-label={m['design.color_tools']()}><Palette size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.color_tools']()}</Tooltip.Content></Tooltip.Root>
+        {@render menuTrigger(m['design.color_tools'](), Palette, !selected)}
         <DropdownMenu.Content align="start" class="z-[120] w-64">
           <DropdownMenu.Item disabled={!primaryColor(selected, 'fill')} onclick={() => { const color = primaryColor(selected, 'fill'); if (color) selectMatchingColor('fill', color); }}>{m['design.select_same_fill']()}</DropdownMenu.Item>
           <DropdownMenu.Item disabled={!primaryColor(selected, 'stroke')} onclick={() => { const color = primaryColor(selected, 'stroke'); if (color) selectMatchingColor('stroke', color); }}>{m['design.select_same_stroke']()}</DropdownMenu.Item>
@@ -3426,7 +3576,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       </DropdownMenu.Root>
 
       <DropdownMenu.Root>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.alignment']()}><AlignCenter size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.alignment']()}</Tooltip.Content></Tooltip.Root>
+        {@render menuTrigger(m['design.alignment'](), AlignCenter)}
         <DropdownMenu.Content align="start" class="z-[120] w-56">
           <DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={14} />{m['design.align_left']()}</DropdownMenu.Item>
           <DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={14} />{m['design.align_horizontal_center']()}</DropdownMenu.Item>
@@ -3444,9 +3594,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       </DropdownMenu.Root>
 
       <DropdownMenu.Root>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.boolean']()}><Combine size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.boolean']()}</Tooltip.Content></Tooltip.Root>
+        {@render menuTrigger(m['design.boolean'](), Combine)}
         <DropdownMenu.Content align="start" class="z-[120] w-52">
-          {#each ['union', 'subtract', 'intersect', 'exclude'] as operation}<DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void combineSelection(operation as DesignBooleanOperation)}>{booleanLabel(operation as DesignBooleanOperation)}</DropdownMenu.Item>{/each}
+          {#each booleanOperations as item (item.operation)}<DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void combineSelection(item.operation)}><item.icon size={14} />{booleanLabel(item.operation)}</DropdownMenu.Item>{/each}
           <DropdownMenu.Separator />
           <DropdownMenu.Item disabled={selectedElements.length < 2} onclick={() => void createMask()}>{m['design.mask']()}</DropdownMenu.Item>
           <DropdownMenu.Item disabled={!selectedElements.some((element) => element.maskId)} onclick={() => void releaseMasks()}>{m['design.release_mask']()}</DropdownMenu.Item>
@@ -3454,7 +3604,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
       </DropdownMenu.Root>
 
       <DropdownMenu.Root>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.rulers']()}><Ruler size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.rulers']()}</Tooltip.Content></Tooltip.Root>
+        {@render menuTrigger(m['design.rulers'](), Ruler)}
         <DropdownMenu.Content align="start" class="z-[120] w-56">
           <DropdownMenu.CheckboxItem checked={rulersVisible} onCheckedChange={(checked: boolean) => (rulersVisible = checked)} closeOnSelect={false}>{m['design.rulers']()}</DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={snapEnabled} onCheckedChange={(checked: boolean) => (snapEnabled = checked)} closeOnSelect={false}><Magnet size={14} />{m['design.snap']()}</DropdownMenu.CheckboxItem>
@@ -3464,22 +3614,27 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
         </DropdownMenu.Content>
       </DropdownMenu.Root>
 
-      <div class="min-w-0 flex-1"></div>
-      {#if document}<span class="hidden text-ui-xs text-[var(--app-text-muted)] xl:inline">{m['design.revision']({ revision: document.revision })}</span>{/if}
-      <DesignToolbarButton label={m['design.zoom_out']()} onclick={() => void zoomAt(zoom - 0.1)}><ZoomOut size={16} /></DesignToolbarButton>
-      <span class="w-10 shrink-0 text-center text-ui-xs tabular-nums text-[var(--app-text-muted)]">{Math.round(zoom * 100)}%</span>
-      <DesignToolbarButton label={m['design.zoom_in']()} onclick={() => void zoomAt(zoom + 0.1)}><ZoomIn size={16} /></DesignToolbarButton>
+      <div class="min-w-4 flex-1"></div>
+      {#if document}<span class="mr-2 hidden shrink-0 text-ui-xs text-[var(--app-text-muted)] xl:inline">{m['design.revision']({ revision: document.revision })}</span>{/if}
+      <!-- Zoom agrupado numa trilha: reduzir, valor, ampliar e enquadrar leem
+           como um unico controle. O valor segue como o ultimo span tabular. -->
+      <div class="flex shrink-0 items-center gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+        <DesignToolbarButton compact label={m['design.zoom_out']()} onclick={() => void zoomAt(zoom - 0.1)}><ZoomOut size={15} /></DesignToolbarButton>
+        <span class="w-10 shrink-0 text-center text-ui-sm font-medium tabular-nums text-[var(--app-text-soft)]">{Math.round(zoom * 100)}%</span>
+        <DesignToolbarButton compact label={m['design.zoom_in']()} onclick={() => void zoomAt(zoom + 0.1)}><ZoomIn size={15} /></DesignToolbarButton>
+        <DropdownMenu.Root>
+          {@render menuTrigger(m['design.fit'](), Maximize2, false, true)}
+          <DropdownMenu.Content align="end" class="z-[120] w-48">
+            <DropdownMenu.Item onclick={() => void fitPage()}>{m['design.fit_all']()}</DropdownMenu.Item>
+            <DropdownMenu.Item disabled={!selectedElements.length} onclick={() => void fitSelection()}>{m['design.fit_selection']()}</DropdownMenu.Item>
+            <DropdownMenu.Item onclick={() => void zoomAt(1)}>{m['design.zoom_actual_size']()}</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </div>
+      <span class="mx-1.5 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+      <DesignToolbarButton label={m['design.prototype_play']()} disabled={!document?.prototypeFlows.length} onclick={() => openPrototype()}><Play size={15} fill="currentColor" /></DesignToolbarButton>
       <DropdownMenu.Root>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" aria-label={m['design.fit']()}><Maximize2 size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.fit']()}</Tooltip.Content></Tooltip.Root>
-        <DropdownMenu.Content align="end" class="z-[120] w-48">
-          <DropdownMenu.Item onclick={() => void fitPage()}>{m['design.fit_all']()}</DropdownMenu.Item>
-          <DropdownMenu.Item disabled={!selectedElements.length} onclick={() => void fitSelection()}>{m['design.fit_selection']()}</DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => void zoomAt(1)}>{m['design.zoom_actual_size']()}</DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-      <DesignToolbarButton label={m['design.prototype_play']()} disabled={!document?.prototypeFlows.length} onclick={() => openPrototype()}><Play size={16} fill="currentColor" /></DesignToolbarButton>
-      <DropdownMenu.Root>
-        <Tooltip.Root delayDuration={250}><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} class="inline-flex h-8 w-10 shrink-0 items-center justify-center gap-0.5 rounded-md text-[var(--app-text-soft)] hover:bg-[var(--app-border)] data-[state=open]:bg-[var(--app-accent-soft)] data-[state=open]:text-[var(--app-text)]" disabled={exporting} aria-label={m['design.export']()}><Download size={15} /><ChevronDown size={10} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content class="z-[120]" side="bottom" sideOffset={6}>{m['design.export']()}</Tooltip.Content></Tooltip.Root>
+        {@render menuTrigger(m['design.export'](), Download, exporting)}
         <DropdownMenu.Content align="end" class="z-[120]">
           <DropdownMenu.Item disabled={!selectedIds.length} onclick={() => void copyDesign('svg')}><ClipboardCopy size={14} />{m['design.copy_svg']()}</DropdownMenu.Item>
           <DropdownMenu.Item disabled={!selectedIds.length} onclick={() => void copyDesign('png')}><ClipboardCopy size={14} />{m['design.copy_png']()}</DropdownMenu.Item>
@@ -3491,9 +3646,9 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
           <DropdownMenu.Item onclick={() => void exportDesign('pdf')}>{m['design.export_pdf']()}</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
-      <span class="mx-1 h-5 w-px shrink-0 bg-[var(--app-border)]"></span>
+      <span class="mx-1.5 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
       <DesignToolbarButton label={m['design.open_agents_reviews']()} active={contextualDrawer === 'collaboration'} pressed={contextualDrawer === 'collaboration'} onclick={() => (contextualDrawer = contextualDrawer === 'collaboration' ? null : 'collaboration')}>
-        <span class="relative"><UsersRound size={16} />{#if collaborationAttentionCount > 0}<span class="absolute -top-2 -right-2 grid min-w-3.5 place-items-center rounded-full bg-[var(--app-accent)] px-0.5 text-ui-xs font-bold leading-3.5 text-[var(--app-accent-contrast)]">{Math.min(collaborationAttentionCount, 99)}</span>{/if}</span>
+        <span class="relative"><UsersRound size={16} />{#if collaborationAttentionCount > 0}<span class="absolute -top-1.5 -right-2 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--app-accent)] px-1 text-[10.5px] font-semibold leading-none [font-variant-numeric:tabular-nums] text-[var(--app-accent-contrast)] shadow-[0_0_0_2px_var(--app-surface)]">{Math.min(collaborationAttentionCount, 99)}</span>{/if}</span>
       </DesignToolbarButton>
       <DesignToolbarButton label={m['design.open_quality_history']()} active={contextualDrawer === 'quality'} pressed={contextualDrawer === 'quality'} onclick={() => (contextualDrawer = contextualDrawer === 'quality' ? null : 'quality')}><ShieldCheck size={16} /></DesignToolbarButton>
       <DesignToolbarButton label={rightPanelVisible ? m['design.hide_right_panel']() : m['design.show_right_panel']()} active={rightPanelVisible} pressed={rightPanelVisible} onclick={toggleRightPanel}><SlidersHorizontal size={16} /></DesignToolbarButton>
@@ -3505,18 +3660,24 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 
     {#if leftPanelVisible}
     <aside
-      class={`flex min-h-0 flex-col overflow-hidden border-r border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] bottom-0 left-0 z-40 w-[min(320px,calc(100%-48px))] shadow-2xl' : 'col-start-1 row-start-2'}`}
+      class={`flex min-h-0 flex-col overflow-hidden border-r border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] bottom-0 left-0 z-40 w-[min(320px,calc(100%-48px))] shadow-[var(--app-shadow-panel)]' : 'col-start-1 row-start-2'}`}
       data-testid="design-left-panel"
     >
-      <div class="grid grid-cols-3 border-b border-[var(--app-border)] p-1">
-        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-ui-xs font-medium ${leftPanel === 'layers' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'layers'} onclick={() => (leftPanel = 'layers')}><Layers3 size={12} />{m['design.layers']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-ui-xs font-medium ${leftPanel === 'variables' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'variables'} onclick={() => (leftPanel = 'variables')}><Braces size={12} />{m['design.variables']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1.5 rounded text-ui-xs font-medium ${leftPanel === 'components' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={leftPanel === 'components'} onclick={() => (leftPanel = 'components')}><Diamond size={12} />{m['design.components']()}</button>
+      <div class="shrink-0 border-b border-[var(--app-border)] p-2">
+        {@render panelTabs([
+          { id: 'layers', label: m['design.layers'](), active: leftPanel === 'layers', select: () => (leftPanel = 'layers') },
+          { id: 'variables', label: m['design.variables'](), active: leftPanel === 'variables', select: () => (leftPanel = 'variables') },
+          { id: 'components', label: m['design.components'](), active: leftPanel === 'components', select: () => (leftPanel = 'components') },
+        ])}
       </div>
       {#if leftPanel === 'layers'}
         <div class="grid min-h-0 flex-1 grid-rows-[minmax(260px,1fr)_190px]">
           {#if loading}
-            <p class="p-3 text-xs text-[var(--app-text-muted)]">{m['design.loading']()}</p>
+            <div class="space-y-2 p-3" role="status" aria-label={m['design.loading']()}>
+              <Skeleton class="h-7 w-full" />
+              <Skeleton class="h-7 w-full" />
+              {#each [88, 72, 80, 64, 76] as width}<Skeleton class="h-6" style={`width: ${width}%`} />{/each}
+            </div>
           {:else if document}
             <DesignFilePanel
               pages={document.pages}
@@ -3544,19 +3705,25 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               onMoveLayer={moveLayer}
             />
           {/if}
-          <section class="min-h-0 overflow-y-auto border-t border-[var(--app-border)]">
-            <div class="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><span>{m['design.assets']()}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.import_asset']()} onclick={() => assetInput?.click()}><Plus size={12} /></Button></div>
-            {#if !document?.assets.length}<p class="p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.assets_empty']()}</p>{:else}
-              <div class="grid grid-cols-2 gap-1.5 p-2">
+          <section class="flex min-h-0 flex-col border-t border-[var(--app-border)]" aria-label={m['design.assets']()}>
+            <div class="flex h-9 shrink-0 items-center justify-between pr-1.5 pl-3"><span class="section-label">{m['design.assets']()}</span>{#if document?.assets.length}<span class="meta-mono mr-auto ml-2">{document.assets.length}</span>{/if}<Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-soft)] hover:text-[var(--app-text)]" aria-label={m['design.import_asset']()} title={m['design.import_asset']()} onclick={() => assetInput?.click()}><Plus size={14} /></Button></div>
+            <div class="min-h-0 flex-1 overflow-y-auto">
+            {#if !document?.assets.length}
+              <NodeEmptyState compact icon={ImagePlus} title={m['design.assets_empty_title']()} description={m['design.assets_empty']()} />
+            {:else}
+              <div class="grid grid-cols-2 gap-2 px-2 pb-2">
                 {#each document.assets as asset (asset.id)}
-                  <div class="group relative overflow-hidden border border-[var(--app-border)] bg-[var(--app-canvas)]">
-                    <button class="block aspect-square w-full" title={m['design.insert_asset']()} onclick={() => void insertAsset(asset)}><img class="h-full w-full object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(asset.path)}`} alt={asset.name} /></button>
-                    <span class="block truncate border-t border-[var(--app-border)] px-1.5 py-1 text-ui-xs">{asset.name}</span>
-                    {#if !document.elements.some((element) => element.assetId === asset.id)}<button class="absolute top-1 right-1 grid size-6 place-items-center bg-[var(--app-surface)] text-[var(--app-danger)] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100" aria-label={m['design.delete']()} onclick={() => void deleteAsset(asset)}><Trash2 size={11} /></button>{/if}
+                  <!-- Miniatura inteira e o alvo de insercao; excluir so aparece no
+                       hover/foco e apenas para assets que nenhuma camada usa. -->
+                  <div class="group/asset relative overflow-hidden rounded-lg bg-[var(--app-canvas)] shadow-[var(--app-shadow-border)] transition-shadow duration-150 hover:shadow-[var(--app-shadow-border-hover)]">
+                    <button type="button" class="block aspect-square w-full p-1.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--app-accent)]" title={m['design.insert_asset']()} onclick={() => void insertAsset(asset)}><img class="h-full w-full object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(asset.path)}`} alt={asset.name} /></button>
+                    <span class="block truncate border-t border-[var(--app-border)] px-2 py-1 text-ui-xs text-[var(--app-text-soft)]" title={asset.name}>{asset.name}</span>
+                    {#if !document.elements.some((element) => element.assetId === asset.id)}<button type="button" class="absolute top-1 right-1 grid size-6 place-items-center rounded-md bg-[var(--app-surface-raised)] text-[var(--app-text-muted)] opacity-0 shadow-[var(--app-shadow-border)] transition-[opacity,color] duration-150 group-hover/asset:opacity-100 hover:text-[var(--app-danger)] focus-visible:opacity-100" aria-label={m['design.delete']()} title={m['design.delete']()} onclick={() => void deleteAsset(asset)}><Trash2 size={12} /></button>{/if}
                   </div>
                 {/each}
               </div>
             {/if}
+            </div>
           </section>
         </div>
       {:else if leftPanel === 'variables' && document}
@@ -3569,48 +3736,14 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
 
     <main class={`design-canvas-ground relative col-start-2 row-start-2 min-h-0 min-w-0 overflow-auto [overflow-anchor:none] bg-[var(--app-canvas)] ${panning ? 'cursor-grabbing select-none' : tool === 'hand' || spacePressed ? 'cursor-grab' : ''}`} bind:this={viewport} data-testid="design-viewport" onpointerdowncapture={startViewportPan} onscroll={handleViewportScroll} onwheel={handleViewportWheel} ondragover={(event) => event.preventDefault()} ondrop={handleDrop}>
       {#if errorMessage}
-        <div class="grid h-full place-items-center p-8 text-center"><div><p class="text-sm text-[var(--app-danger)]">{errorMessage}</p><Button class="mt-3" variant="outline" size="sm" onclick={() => void load()}>{m['workspace_access.retry']()}</Button></div></div>
+        <NodeEmptyState tone="danger" icon={TriangleAlert} title={m['design.load_error_title']()} description={errorMessage}>
+          {#snippet actions()}<Button variant="outline" size="sm" onclick={() => void load()}>{m['workspace_access.retry']()}</Button>{/snippet}
+        </NodeEmptyState>
       {:else if loading || !document || !page}
-        <div class="grid h-full place-items-center text-xs text-[var(--app-text-muted)]">{m['design.loading']()}</div>
+        <div class="grid h-full place-items-center" role="status">
+          <span class="inline-flex items-center gap-2 rounded-full bg-[var(--app-surface-raised)] px-3 py-1.5 text-ui-sm text-[var(--app-text-soft)] shadow-[var(--app-shadow-border)]"><LoaderCircle size={14} class="animate-spin text-[var(--app-accent)]" />{m['design.loading']()}</span>
+        </div>
       {:else}
-        {#if vectorEditing && selected?.type === 'path'}
-          <div class="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-            <span class="whitespace-nowrap px-2 text-ui-xs font-medium text-[var(--app-text-soft)]">{m['design.vector_edit']()}</span>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.path_corner']()} active={selectedPathPointMode === 'corner'} pressed={selectedPathPointMode === 'corner'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('corner')}><CornerDownRight size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.path_mirrored']()} active={selectedPathPointMode === 'mirrored'} pressed={selectedPathPointMode === 'mirrored'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('mirrored')}><Spline size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.path_asymmetric']()} active={selectedPathPointMode === 'asymmetric'} pressed={selectedPathPointMode === 'asymmetric'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('asymmetric')}><MoveDiagonal2 size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.path_disconnected']()} active={selectedPathPointMode === 'disconnected'} pressed={selectedPathPointMode === 'disconnected'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('disconnected')}><Unlink2 size={15} /></DesignToolbarButton>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.path_add_point']()} disabled={!pathPointSelections.length} onclick={() => void addPathPointAfterSelection()}><Plus size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.path_delete_point']()} disabled={!pathPointSelections.length} onclick={() => void deleteSelectedPathPoint()}><Trash2 size={15} /></DesignToolbarButton>
-            <span class="min-w-7 px-1 text-center text-ui-xs tabular-nums text-[var(--app-text-muted)]" aria-label={m['design.vector_selection_count']({ count: String(pathPointSelections.length) })}>{pathPointSelections.length}</span>
-          </div>
-        {:else if selectedElements.length > 1}
-          <div class="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-            <span class="whitespace-nowrap px-2 text-ui-xs font-medium text-[var(--app-text-soft)]">{m['design.layers_count']({ count: String(selectedElements.length) })}</span>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.align_left']()} onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.align_horizontal_center']()} onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.align_right']()} onclick={() => void alignSelection('right')}><AlignHorizontalJustifyEnd size={15} /></DesignToolbarButton>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.align_top']()} onclick={() => void alignSelection('top')}><AlignVerticalJustifyStart size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.align_vertical_center']()} onclick={() => void alignSelection('vcenter')}><AlignVerticalJustifyCenter size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.align_bottom']()} onclick={() => void alignSelection('bottom')}><AlignVerticalJustifyEnd size={15} /></DesignToolbarButton>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.distribute_horizontal']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-x')}><AlignHorizontalDistributeCenter size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.distribute_vertical']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={15} /></DesignToolbarButton>
-            <DesignToolbarButton label={m['design.tidy_up']()} onclick={() => void alignSelection('tidy')}><LayoutGrid size={15} /></DesignToolbarButton>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.group_selection']()} onclick={() => void groupSelection()}><Group size={15} /></DesignToolbarButton>
-          </div>
-        {:else if selected?.type === 'group'}
-          <div class="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-lg">
-            <span class="max-w-48 truncate px-2 text-ui-xs font-medium text-[var(--app-text-soft)]">{selected.name}</span>
-            <span class="h-5 w-px bg-[var(--app-border)]"></span>
-            <DesignToolbarButton label={m['design.ungroup_selection']()} onclick={() => void ungroupSelection()}><Ungroup size={15} /></DesignToolbarButton>
-          </div>
-        {/if}
         <div class="relative min-h-full min-w-full p-12" style:width={`${Math.max(viewport?.clientWidth ?? 0, (sceneBounds?.width ?? page.width) * zoom + 96)}px`} style:height={`${Math.max(viewport?.clientHeight ?? 0, (sceneBounds?.height ?? page.height) * zoom + 96)}px`}>
           <svg
             bind:this={pageSvg}
@@ -3864,273 +3997,452 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               </foreignObject>
             {/if}
           </svg>
-          {#if tool === 'path' && penPoints.length}<div class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 bg-[var(--app-surface)] px-3 py-1.5 text-ui-xs text-[var(--app-text-soft)] shadow-md">{m['design.finish_path']()}</div>{/if}
         </div>
       {/if}
     </main>
 
-    <div class="pointer-events-none z-30 col-start-2 row-start-2 flex items-end justify-center p-3" data-testid="design-primary-tools">
-      <div class="pointer-events-auto flex items-center gap-1 rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-1 shadow-xl">
-        {#each [
-          { id: 'select' as const, icon: MousePointer2, shortcut: 'V' },
-          { id: 'hand' as const, icon: Hand, shortcut: 'H' },
-          { id: 'frame' as const, icon: Frame, shortcut: 'F' },
-          { id: 'rectangle' as const, icon: RectangleHorizontal, shortcut: 'R' },
-          { id: 'ellipse' as const, icon: Circle, shortcut: 'O' },
-          { id: 'text' as const, icon: Type, shortcut: 'T' },
-          { id: 'path' as const, icon: PenTool, shortcut: 'P' },
-        ] as item (item.id)}
-          <DesignToolbarButton
-            label={toolLabel(item.id)}
-            hint={item.id === 'path'
-              ? `${item.shortcut} · ${m['design.pen_hint']()}`
-              : item.id === 'hand'
-                ? `${item.shortcut} · ${m['design.pan_hint']()}`
-                : item.shortcut}
-            active={tool === item.id}
-            pressed={tool === item.id}
-            side="top"
-            onclick={() => switchTool(item.id)}
-          >
-            <item.icon size={16} />
-          </DesignToolbarButton>
+    <!-- Barras contextuais ficam fora do <main> rolavel: dentro dele elas
+         rolavam junto com a prancheta e sumiam do topo ao dar pan/zoom. -->
+    {#if !errorMessage && !loading && document && page && ((vectorEditing && selected?.type === 'path') || selectedElements.length > 1 || selected?.type === 'group')}
+      <div class="pointer-events-none z-30 col-start-2 row-start-2 flex items-start justify-center px-3 pt-3">
+        {#if vectorEditing && selected?.type === 'path'}
+          <div class="design-float-in pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[10px] bg-[var(--app-surface-raised)] p-1 shadow-[var(--app-shadow-panel)] [scrollbar-width:none]">
+            <span class="whitespace-nowrap px-2 text-ui-sm font-medium text-[var(--app-text-soft)]">{m['design.vector_edit']()}</span>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.path_corner']()} active={selectedPathPointMode === 'corner'} pressed={selectedPathPointMode === 'corner'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('corner')}><CornerDownRight size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.path_mirrored']()} active={selectedPathPointMode === 'mirrored'} pressed={selectedPathPointMode === 'mirrored'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('mirrored')}><Spline size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.path_asymmetric']()} active={selectedPathPointMode === 'asymmetric'} pressed={selectedPathPointMode === 'asymmetric'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('asymmetric')}><MoveDiagonal2 size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.path_disconnected']()} active={selectedPathPointMode === 'disconnected'} pressed={selectedPathPointMode === 'disconnected'} disabled={!pathPointSelections.length} onclick={() => void setSelectedPathPointMode('disconnected')}><Unlink2 size={15} /></DesignToolbarButton>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.path_add_point']()} disabled={!pathPointSelections.length} onclick={() => void addPathPointAfterSelection()}><Plus size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.path_delete_point']()} disabled={!pathPointSelections.length} onclick={() => void deleteSelectedPathPoint()}><Trash2 size={15} /></DesignToolbarButton>
+            <span class="min-w-7 px-1.5 text-center text-ui-sm tabular-nums text-[var(--app-text-muted)]" aria-label={m['design.vector_selection_count']({ count: String(pathPointSelections.length) })}>{pathPointSelections.length}</span>
+          </div>
+        {:else if selectedElements.length > 1}
+          <div class="design-float-in pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[10px] bg-[var(--app-surface-raised)] p-1 shadow-[var(--app-shadow-panel)] [scrollbar-width:none]">
+            <span class="whitespace-nowrap px-2 text-ui-sm font-medium text-[var(--app-text-soft)]">{m['design.layers_count']({ count: String(selectedElements.length) })}</span>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.align_left']()} onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.align_horizontal_center']()} onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.align_right']()} onclick={() => void alignSelection('right')}><AlignHorizontalJustifyEnd size={15} /></DesignToolbarButton>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.align_top']()} onclick={() => void alignSelection('top')}><AlignVerticalJustifyStart size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.align_vertical_center']()} onclick={() => void alignSelection('vcenter')}><AlignVerticalJustifyCenter size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.align_bottom']()} onclick={() => void alignSelection('bottom')}><AlignVerticalJustifyEnd size={15} /></DesignToolbarButton>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.distribute_horizontal']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-x')}><AlignHorizontalDistributeCenter size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.distribute_vertical']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={15} /></DesignToolbarButton>
+            <DesignToolbarButton label={m['design.tidy_up']()} onclick={() => void alignSelection('tidy')}><LayoutGrid size={15} /></DesignToolbarButton>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.group_selection']()} onclick={() => void groupSelection()}><Group size={15} /></DesignToolbarButton>
+          </div>
+        {:else if selected?.type === 'group'}
+          <div class="design-float-in pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[10px] bg-[var(--app-surface-raised)] p-1 shadow-[var(--app-shadow-panel)] [scrollbar-width:none]">
+            <span class="max-w-48 truncate px-2 text-ui-sm font-medium text-[var(--app-text-soft)]" title={selected.name}>{selected.name}</span>
+            <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+            <DesignToolbarButton label={m['design.ungroup_selection']()} onclick={() => void ungroupSelection()}><Ungroup size={15} /></DesignToolbarButton>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="pointer-events-none z-30 col-start-2 row-start-2 flex flex-col items-center justify-end gap-2 p-3" data-testid="design-primary-tools">
+      {#if tool === 'path' && penPoints.length}<div class="design-float-in rounded-full bg-[var(--app-surface-raised)] px-3 py-1.5 text-ui-sm text-[var(--app-text-soft)] shadow-[var(--app-shadow-panel)]" role="status">{m['design.finish_path']()}</div>{/if}
+      <!-- Trilho de ferramentas agrupado: navegar | formas | conteudo. O atalho
+           de teclado aparece no tooltip de cada ferramenta. -->
+      <div class="pointer-events-auto flex items-center gap-0.5 rounded-[10px] bg-[var(--app-surface-raised)] p-1 shadow-[var(--app-shadow-panel)]" role="group" aria-label={m['design.tools_label']()}>
+        {#each toolGroups as group, groupIndex (groupIndex)}
+          {#if groupIndex > 0}<span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>{/if}
+          {#each group as item (item.id)}
+            <DesignToolbarButton
+              label={toolLabel(item.id)}
+              shortcut={item.shortcut}
+              hint={item.id === 'path' ? m['design.pen_hint']() : item.id === 'hand' ? m['design.pan_hint']() : undefined}
+              active={tool === item.id}
+              pressed={tool === item.id}
+              tone="accent"
+              side="top"
+              onclick={() => switchTool(item.id)}
+            >
+              <item.icon size={16} />
+            </DesignToolbarButton>
+          {/each}
         {/each}
       </div>
     </div>
 
     {#if !loading && document && page && !renderedElements.length}
-      <div class="pointer-events-none z-20 col-start-2 row-start-2 grid place-items-center p-16 text-center">
-        <span class="max-w-sm rounded-md border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-4 py-2 text-xs leading-5 text-[var(--app-text-muted)] shadow-sm">{m['design.empty']()}</span>
+      <div class="pointer-events-none z-20 col-start-2 row-start-2 grid place-items-center p-16">
+        <div class="w-full max-w-72 rounded-xl bg-[var(--app-surface-raised)] shadow-[var(--app-shadow-panel)]">
+          <NodeEmptyState icon={Frame} title={m['design.empty_page_title']()} description={m['design.empty']()}>
+            {#snippet actions()}
+              <span class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-ui-sm text-[var(--app-text-muted)]">
+                {#each [{ key: 'F', id: 'frame' as const }, { key: 'R', id: 'rectangle' as const }, { key: 'T', id: 'text' as const }] as hint (hint.id)}
+                  <span class="inline-flex items-center gap-1.5"><Kbd class="bg-[var(--app-hover)] font-mono text-ui-xs text-[var(--app-text-soft)] shadow-[var(--app-shadow-border)]">{hint.key}</Kbd>{toolLabel(hint.id)}</span>
+                {/each}
+              </span>
+            {/snippet}
+          </NodeEmptyState>
+        </div>
       </div>
     {/if}
 
     {#if rightPanelVisible}
     <aside
-      class={`flex min-h-0 flex-col overflow-hidden border-l border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] right-0 bottom-0 z-40 w-[min(320px,calc(100%-48px))] shadow-2xl' : 'col-start-3 row-start-2'}`}
+      class={`flex min-h-0 flex-col overflow-hidden border-l border-[var(--app-border)] bg-[var(--app-surface)] ${panelsOverlay ? 'absolute top-[42px] right-0 bottom-0 z-40 w-[min(320px,calc(100%-48px))] shadow-[var(--app-shadow-panel)]' : 'col-start-3 row-start-2'}`}
       data-testid="design-right-panel"
     >
-      <div class="grid grid-cols-3 gap-0.5 border-b border-[var(--app-border)] p-1">
-        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-ui-xs font-medium ${rightPanel === 'design' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.properties']()} aria-pressed={rightPanel === 'design'} onclick={() => (rightPanel = 'design')}><SlidersHorizontal size={12} />{m['design.properties']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-ui-xs font-medium ${rightPanel === 'prototype' ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.prototype']()} aria-pressed={rightPanel === 'prototype'} onclick={() => (rightPanel = 'prototype')}><Workflow size={12} />{m['design.prototype']()}</button>
-        <button class={`flex h-8 items-center justify-center gap-1 rounded px-1 text-ui-xs font-medium ${rightPanel === 'inspect' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.inspect']()} aria-pressed={rightPanel === 'inspect'} onclick={() => (rightPanel = 'inspect')}><Braces size={12} />{m['design.inspect']()}</button>
+      <div class="shrink-0 border-b border-[var(--app-border)] p-2">
+        {@render panelTabs([
+          { id: 'design', label: m['design.properties'](), active: rightPanel === 'design', select: () => (rightPanel = 'design') },
+          { id: 'prototype', label: m['design.prototype'](), active: rightPanel === 'prototype', select: () => (rightPanel = 'prototype') },
+          { id: 'inspect', label: m['design.inspect'](), active: rightPanel === 'inspect', select: () => (rightPanel = 'inspect') },
+        ])}
       </div>
       {#if rightPanel === 'prototype' && document}
         <div class="min-h-0 flex-1"><DesignPrototypePanel {document} {selected} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onPreview={openPrototype} onShare={sharePrototype} /></div>
       {:else if rightPanel === 'inspect' && document}
         <div class="min-h-0 flex-1"><DesignInspectPanel {document} {selectedIds} {saving} makeId={uuidv7} onApply={(operations, summary, inverse) => apply(operations, summary, { inverse })} onSelectElements={(elementIds) => { selectedIds = elementIds; vectorEditId = null; pathPointSelections = []; }} onDocumentChange={(nextDocument) => { document = nextDocument; selectedIds = []; undoStack = []; redoStack = []; }} onCaptureDesign={captureDesignDataUrl} /></div>
       {:else if selected && document}
+        {@const SelectedIcon = layerIcon(selected)}
         <div class="min-h-0 flex-1 overflow-y-auto">
-        <div class="text-ui-sm">
-          <div class="border-b border-[var(--app-border)] p-3"><label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.name']()}</span><Input class="h-8" value={selected.name} onchange={(event: Event) => void updateSelected({ name: (event.currentTarget as HTMLInputElement).value })} /></label></div>
+          <!-- Identidade da camada: tipo + nome editavel, antes de qualquer numero. -->
+          <div class="flex items-center gap-2 border-b border-[var(--app-border)] px-3 py-2.5">
+            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-soft)]" title={elementTypeLabel(selected)}><SelectedIcon size={14} /></span>
+            <Input class="h-7 min-w-0 flex-1 text-ui-md font-medium md:text-ui-md" value={selected.name} aria-label={m['design.name']()} onchange={(event: Event) => void updateSelected({ name: (event.currentTarget as HTMLInputElement).value })} />
+          </div>
+
           <DesignInspectorSection id="transform" title={m['design.position']()}>
-            <div class="grid grid-cols-2 gap-1.5">
+            <div class="grid grid-cols-3 gap-1.5">
               <DesignNumericInput label="X" value={selected.x} onCommit={(value) => { if (value !== null) void updateSelected({ x: value }); }} />
               <DesignNumericInput label="Y" value={selected.y} onCommit={(value) => { if (value !== null) void updateSelected({ y: value }); }} />
-              <div class="col-span-2"><DesignNumericInput label="°" value={selected.rotation} step={1} min={-3600} max={3600} onCommit={(value) => { if (value !== null) void updateSelected({ rotation: value }); }} /></div>
+              <DesignNumericInput label="°" value={selected.rotation} step={1} min={-3600} max={3600} onCommit={(value) => { if (value !== null) void updateSelected({ rotation: value }); }} />
             </div>
           </DesignInspectorSection>
+
           <DesignInspectorSection id="size" title={m['design.size']()}>
-            <div class="grid grid-cols-[1fr_1fr_32px] gap-1.5">
+            <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_28px] gap-1.5">
               <DesignNumericInput label="W" value={selected.width} min={1} onCommit={(value) => { if (value !== null) void updateSelectedSize('width', value); }} />
               <DesignNumericInput label="H" value={selected.height} min={1} onCommit={(value) => { if (value !== null) void updateSelectedSize('height', value); }} />
-              <Button variant={aspectLocked ? 'secondary' : 'ghost'} size="icon-sm" class="size-8" aria-label={m['design.lock_aspect_ratio']()} aria-pressed={aspectLocked} onclick={() => (aspectLocked = !aspectLocked)}><Link2 size={13} /></Button>
+              <Button variant="ghost" size="icon-sm" class={`size-7 ${aspectLocked ? 'bg-[var(--app-active)] text-[var(--app-text)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={m['design.lock_aspect_ratio']()} title={m['design.lock_aspect_ratio']()} aria-pressed={aspectLocked} onclick={() => (aspectLocked = !aspectLocked)}><Link2 size={14} /></Button>
             </div>
-            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-              <NativeSelect.Root class="h-8 w-full" value={selected.widthSizing} aria-label={m['design.width_sizing']()} onchange={(event: Event) => void updateSelected({ widthSizing: (event.currentTarget as HTMLSelectElement).value as DesignElement['widthSizing'] })}><NativeSelect.Option value="fixed">{m['design.sizing_fixed']()}</NativeSelect.Option><NativeSelect.Option value="hug">{m['design.sizing_hug']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.sizing_fill']()}</NativeSelect.Option></NativeSelect.Root>
-              <NativeSelect.Root class="h-8 w-full" value={selected.heightSizing} aria-label={m['design.height_sizing']()} onchange={(event: Event) => void updateSelected({ heightSizing: (event.currentTarget as HTMLSelectElement).value as DesignElement['heightSizing'] })}><NativeSelect.Option value="fixed">{m['design.sizing_fixed']()}</NativeSelect.Option><NativeSelect.Option value="hug">{m['design.sizing_hug']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.sizing_fill']()}</NativeSelect.Option></NativeSelect.Root>
+            <!-- Dimensionamento como segmentos: tres opcoes visiveis de uma vez,
+                 um clique para trocar, em vez de abrir uma lista. -->
+            <div class="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+              <span class="text-ui-xs font-medium text-[var(--app-text-muted)]" aria-hidden="true">W</span>
+              <SegmentedControl size="sm" fill label={m['design.width_sizing']()} value={selected.widthSizing} options={sizingOptions()} onValueChange={(value) => void updateSelected({ widthSizing: value })} />
+              <span class="text-ui-xs font-medium text-[var(--app-text-muted)]" aria-hidden="true">H</span>
+              <SegmentedControl size="sm" fill label={m['design.height_sizing']()} value={selected.heightSizing} options={sizingOptions()} onValueChange={(value) => void updateSelected({ heightSizing: value })} />
             </div>
-            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-              <DesignNumericInput label={m['design.min_width_short']()} value={selected.minWidth} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ minWidth: value })} />
-              <DesignNumericInput label={m['design.max_width_short']()} value={selected.maxWidth} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ maxWidth: value })} />
-              <DesignNumericInput label={m['design.min_height_short']()} value={selected.minHeight} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ minHeight: value })} />
-              <DesignNumericInput label={m['design.max_height_short']()} value={selected.maxHeight} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ maxHeight: value })} />
-            </div>
+            {#if sizeLimitsVisible}
+              <div class="grid grid-cols-2 gap-1.5">
+                <DesignNumericInput label={m['design.min_width_short']()} value={selected.minWidth} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ minWidth: value })} />
+                <DesignNumericInput label={m['design.max_width_short']()} value={selected.maxWidth} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ maxWidth: value })} />
+                <DesignNumericInput label={m['design.min_height_short']()} value={selected.minHeight} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ minHeight: value })} />
+                <DesignNumericInput label={m['design.max_height_short']()} value={selected.maxHeight} min={1} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ maxHeight: value })} />
+              </div>
+            {/if}
+            {#if !sizeLimitsLocked}
+              <button type="button" class="flex h-6 items-center gap-1 rounded-md px-1 text-ui-xs text-[var(--app-text-muted)] transition-colors duration-150 hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]" aria-expanded={sizeLimitsVisible} onclick={() => (sizeLimitsOpen = !sizeLimitsOpen)}>
+                <ChevronDown size={12} class={`transition-transform duration-150 ease-out ${sizeLimitsVisible ? '' : '-rotate-90'}`} />{m['design.size_limits']()}
+              </button>
+            {/if}
           </DesignInspectorSection>
+
           {#if selected.type === 'frame'}
-            <DesignInspectorSection id="auto-layout" title={m['design.auto_layout']()}>
-              <NativeSelect.Root class="h-8 w-full" value={selected.layoutMode} aria-label={m['design.auto_layout']()} onchange={(event: Event) => void updateSelected({ layoutMode: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutMode'] })}><NativeSelect.Option value="none">{m['design.layout_none']()}</NativeSelect.Option><NativeSelect.Option value="horizontal">{m['design.layout_horizontal']()}</NativeSelect.Option><NativeSelect.Option value="vertical">{m['design.layout_vertical']()}</NativeSelect.Option><NativeSelect.Option value="grid">{m['design.layout_grid']()}</NativeSelect.Option></NativeSelect.Root>
+            <DesignInspectorSection id="auto-layout" title={m['design.auto_layout']()} meta={layoutModeOptions().find((option) => option.value === selected.layoutMode)?.label}>
+              <SegmentedControl size="sm" fill iconOnly label={m['design.auto_layout']()} value={selected.layoutMode} options={layoutModeOptions()} onValueChange={(value) => void updateSelected({ layoutMode: value })} />
               {#if selected.layoutMode !== 'none'}
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                  <NativeSelect.Root class="h-8 w-full" value={selected.layoutAlign} aria-label={m['design.primary_alignment']()} onchange={(event: Event) => void updateSelected({ layoutAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="space-between">{m['design.space_between']()}</NativeSelect.Option></NativeSelect.Root>
-                  <NativeSelect.Root class="h-8 w-full" value={selected.layoutCrossAlign} aria-label={m['design.cross_alignment']()} onchange={(event: Event) => void updateSelected({ layoutCrossAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutCrossAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="stretch">{m['design.stretch']()}</NativeSelect.Option></NativeSelect.Root>
-                </div>
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                  {#if selected.layoutMode === 'grid'}
+                <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                  <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.primary_alignment']()}>{m['design.main_axis']()}</span>
+                  <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.layoutAlign} aria-label={m['design.primary_alignment']()} onchange={(event: Event) => void updateSelected({ layoutAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="space-between">{m['design.space_between']()}</NativeSelect.Option></NativeSelect.Root>
+                </label>
+                <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                  <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.cross_alignment']()}>{m['design.cross_axis']()}</span>
+                  <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.layoutCrossAlign} aria-label={m['design.cross_alignment']()} onchange={(event: Event) => void updateSelected({ layoutCrossAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['layoutCrossAlign'] })}><NativeSelect.Option value="start">{m['design.align_start']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="end">{m['design.align_end']()}</NativeSelect.Option><NativeSelect.Option value="stretch">{m['design.stretch']()}</NativeSelect.Option></NativeSelect.Root>
+                </label>
+                {#if selected.layoutMode === 'grid'}
+                  <div class="grid grid-cols-3 gap-1.5">
                     <DesignNumericInput label={m['design.row_gap_short']()} value={selected.layoutRowGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutRowGap: value }); }} />
                     <DesignNumericInput label={m['design.column_gap_short']()} value={selected.layoutColumnGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutColumnGap: value }); }} />
                     <DesignNumericInput label={m['design.columns_short']()} value={selected.layoutGridColumns} min={1} max={64} onCommit={(value) => { if (value !== null) void updateSelected({ layoutGridColumns: Math.round(value) }); }} />
-                  {:else}
+                  </div>
+                {:else}
+                  <div class="grid grid-cols-2 gap-1.5">
                     <DesignNumericInput label={m['design.gap_short']()} value={selected.layoutGap} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutGap: value }); }} />
-                  {/if}
-                </div>
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                  </div>
+                {/if}
+                <p class="pt-1 text-ui-xs font-medium text-[var(--app-text-muted)]">{m['design.padding']()}</p>
+                <div class="grid grid-cols-2 gap-1.5">
                   <DesignNumericInput label={m['design.padding_top_short']()} value={selected.layoutPaddingTop} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingTop: value }); }} />
                   <DesignNumericInput label={m['design.padding_right_short']()} value={selected.layoutPaddingRight} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingRight: value }); }} />
                   <DesignNumericInput label={m['design.padding_bottom_short']()} value={selected.layoutPaddingBottom} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingBottom: value }); }} />
                   <DesignNumericInput label={m['design.padding_left_short']()} value={selected.layoutPaddingLeft} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ layoutPaddingLeft: value }); }} />
                 </div>
-                <div class="mt-2 space-y-2">
-                  <label class="flex items-center justify-between gap-3"><span>{m['design.wrap']()}</span><Switch size="sm" checked={selected.layoutWrap} onCheckedChange={(checked: boolean) => void updateSelected({ layoutWrap: checked })} /></label>
-                  <label class="flex items-center justify-between gap-3"><span>{m['design.clip_content']()}</span><Switch size="sm" checked={selected.clipContent} onCheckedChange={(checked: boolean) => void updateSelected({ clipContent: checked })} /></label>
-                </div>
-                <Button class="mt-2 w-full" variant="outline" size="sm" disabled={saving} onclick={() => void applyAutoLayout()}><Sparkles size={13} />{m['design.apply_layout']()}</Button>
+                <label class="flex h-7 items-center justify-between gap-3"><span class="text-ui-sm text-[var(--app-text-soft)]">{m['design.wrap']()}</span><Switch size="sm" checked={selected.layoutWrap} onCheckedChange={(checked: boolean) => void updateSelected({ layoutWrap: checked })} /></label>
+                <label class="flex h-7 items-center justify-between gap-3"><span class="text-ui-sm text-[var(--app-text-soft)]">{m['design.clip_content']()}</span><Switch size="sm" checked={selected.clipContent} onCheckedChange={(checked: boolean) => void updateSelected({ clipContent: checked })} /></label>
+                <Button class="w-full" variant="outline" size="sm" disabled={saving} onclick={() => void applyAutoLayout()}><Sparkles size={13} />{m['design.apply_layout']()}</Button>
               {/if}
             </DesignInspectorSection>
           {/if}
+
           {#if selected.parentId}
             <DesignInspectorSection id="constraints" title={m['design.constraints']()}>
-              <label class="mb-2 flex items-center justify-between gap-3"><span>{m['design.absolute_position']()}</span><Switch size="sm" checked={selected.layoutItemAbsolute} onCheckedChange={(checked: boolean) => void updateSelected({ layoutItemAbsolute: checked })} /></label>
-              <div class="grid grid-cols-2 gap-1.5">
-                <NativeSelect.Root class="h-8 w-full" value={selected.constraintHorizontal} aria-label={m['design.horizontal']()} onchange={(event: Event) => void updateSelected({ constraintHorizontal: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintHorizontal'] })}><NativeSelect.Option value="left">{m['design.align_left']()}</NativeSelect.Option><NativeSelect.Option value="right">{m['design.align_right']()}</NativeSelect.Option><NativeSelect.Option value="left-right">{m['design.constraint_left_right']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8 w-full" value={selected.constraintVertical} aria-label={m['design.vertical']()} onchange={(event: Event) => void updateSelected({ constraintVertical: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintVertical'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option><NativeSelect.Option value="top-bottom">{m['design.constraint_top_bottom']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
-              </div>
+              <label class="flex h-7 items-center justify-between gap-3"><span class="text-ui-sm text-[var(--app-text-soft)]">{m['design.absolute_position']()}</span><Switch size="sm" checked={selected.layoutItemAbsolute} onCheckedChange={(checked: boolean) => void updateSelected({ layoutItemAbsolute: checked })} /></label>
+              <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                <span class="truncate text-ui-xs text-[var(--app-text-muted)]">{m['design.horizontal']()}</span>
+                <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.constraintHorizontal} aria-label={m['design.horizontal']()} onchange={(event: Event) => void updateSelected({ constraintHorizontal: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintHorizontal'] })}><NativeSelect.Option value="left">{m['design.align_left']()}</NativeSelect.Option><NativeSelect.Option value="right">{m['design.align_right']()}</NativeSelect.Option><NativeSelect.Option value="left-right">{m['design.constraint_left_right']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
+              </label>
+              <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                <span class="truncate text-ui-xs text-[var(--app-text-muted)]">{m['design.vertical']()}</span>
+                <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.constraintVertical} aria-label={m['design.vertical']()} onchange={(event: Event) => void updateSelected({ constraintVertical: (event.currentTarget as HTMLSelectElement).value as DesignElement['constraintVertical'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option><NativeSelect.Option value="top-bottom">{m['design.constraint_top_bottom']()}</NativeSelect.Option><NativeSelect.Option value="center">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="scale">{m['design.constraint_scale']()}</NativeSelect.Option></NativeSelect.Root>
+              </label>
             </DesignInspectorSection>
           {/if}
+
           <DesignInspectorSection id="appearance" title={m['design.appearance']()}>
-            <div class="grid grid-cols-2 gap-1.5">
-              <DesignNumericInput label={m['design.stroke_short']()} value={selected.strokeWidth} min={0} max={100} onCommit={(value) => { if (value !== null) void updateSelected({ strokeWidth: value }); }} />
-              <DesignNumericInput label={m['design.radius_short']()} value={selected.cornerRadius} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ cornerRadius: value }); }} />
-              <div class="col-span-2"><DesignNumericInput label="%" value={Math.round(selected.opacity * 100)} min={0} max={100} percentBase={100} onCommit={(value) => { if (value !== null) void updateSelected({ opacity: value / 100 }); }} /></div>
+            <!-- Opacidade tem faixa natural 0-100: arrastar e o gesto principal,
+                 o campo ao lado continua aceitando valor exato. -->
+            <div class="grid grid-cols-[84px_minmax(0,1fr)_60px] items-center gap-2">
+              <span class="truncate text-ui-xs text-[var(--app-text-muted)]">{m['design.opacity']()}</span>
+              <Slider type="single" class="[&_[data-slot=slider-range]]:bg-[var(--app-text-soft)]" value={Math.round(selected.opacity * 100)} min={0} max={100} step={1} aria-label={m['design.opacity']()} onValueCommit={(value: number) => void updateSelected({ opacity: value / 100 })} />
+              <DesignNumericInput label="%" value={Math.round(selected.opacity * 100)} min={0} max={100} percentBase={100} onCommit={(value) => { if (value !== null) void updateSelected({ opacity: value / 100 }); }} />
             </div>
-            <NativeSelect.Root class="mt-1.5 h-8 w-full" value={selected.blendMode} aria-label={m['design.blend_mode']()} onchange={(event: Event) => void updateSelected({ blendMode: (event.currentTarget as HTMLSelectElement).value as DesignElement['blendMode'] })}><NativeSelect.Option value="normal">{m['design.blend_normal']()}</NativeSelect.Option><NativeSelect.Option value="multiply">{m['design.blend_multiply']()}</NativeSelect.Option><NativeSelect.Option value="screen">{m['design.blend_screen']()}</NativeSelect.Option><NativeSelect.Option value="overlay">{m['design.blend_overlay']()}</NativeSelect.Option><NativeSelect.Option value="darken">{m['design.blend_darken']()}</NativeSelect.Option><NativeSelect.Option value="lighten">{m['design.blend_lighten']()}</NativeSelect.Option></NativeSelect.Root>
+            <div class="grid grid-cols-2 gap-1.5">
+              <DesignNumericInput label={m['design.radius_short']()} value={selected.cornerRadius} min={0} onCommit={(value) => { if (value !== null) void updateSelected({ cornerRadius: value }); }} />
+              <DesignNumericInput label={m['design.stroke_short']()} value={selected.strokeWidth} min={0} max={100} onCommit={(value) => { if (value !== null) void updateSelected({ strokeWidth: value }); }} />
+            </div>
+            <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+              <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.blend_mode']()}>{m['design.blend_short']()}</span>
+              <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.blendMode} aria-label={m['design.blend_mode']()} onchange={(event: Event) => void updateSelected({ blendMode: (event.currentTarget as HTMLSelectElement).value as DesignElement['blendMode'] })}><NativeSelect.Option value="normal">{m['design.blend_normal']()}</NativeSelect.Option><NativeSelect.Option value="multiply">{m['design.blend_multiply']()}</NativeSelect.Option><NativeSelect.Option value="screen">{m['design.blend_screen']()}</NativeSelect.Option><NativeSelect.Option value="overlay">{m['design.blend_overlay']()}</NativeSelect.Option><NativeSelect.Option value="darken">{m['design.blend_darken']()}</NativeSelect.Option><NativeSelect.Option value="lighten">{m['design.blend_lighten']()}</NativeSelect.Option></NativeSelect.Root>
+            </label>
           </DesignInspectorSection>
+
           {#if selected.type !== 'image' && selected.type !== 'group'}
-            <DesignPaintEditor id="fill" title={m['design.fill']()} paints={selected.fills} fallbackColor={selected.fill} {documentColors} variables={colorVariables} onBindVariable={(variableId) => void bindSelectedVariable('fill', variableId)} onChange={(fills: DesignPaint[]) => void updateSelected({ fills, fill: 'transparent' })} />
-            <div class="border-b border-[var(--app-border)] px-3 pb-2"><DesignColorTools role="fill" color={primaryColor(selected, 'fill')} matches={matchingColorLayers('fill', primaryColor(selected, 'fill'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selected, 'fill'); if (color) selectMatchingColor('fill', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('fill', color)} onReplaceMatches={(color) => { const from = primaryColor(selected, 'fill'); if (from) void replaceMatchingColor('fill', from, color); }} /></div>
+            <DesignPaintEditor id="fill" title={m['design.fill']()} paints={selected.fills} fallbackColor={selected.fill} {documentColors} variables={colorVariables} onBindVariable={(variableId) => void bindSelectedVariable('fill', variableId)} onChange={(fills: DesignPaint[]) => void updateSelected({ fills, fill: 'transparent' })}>
+              {#snippet headerActions()}
+                <DesignColorTools compact role="fill" color={primaryColor(selected, 'fill')} matches={matchingColorLayers('fill', primaryColor(selected, 'fill'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selected, 'fill'); if (color) selectMatchingColor('fill', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('fill', color)} onReplaceMatches={(color) => { const from = primaryColor(selected, 'fill'); if (from) void replaceMatchingColor('fill', from, color); }} />
+              {/snippet}
+            </DesignPaintEditor>
           {/if}
           {#if selected.type !== 'group'}
-            <DesignPaintEditor id="stroke" title={m['design.stroke']()} paints={selected.strokes} fallbackColor={selected.stroke} {documentColors} variables={colorVariables} onBindVariable={(variableId) => void bindSelectedVariable('stroke', variableId)} onChange={(strokes: DesignPaint[]) => void updateSelected({ strokes, stroke: 'transparent', strokeWidth: strokes.length && !selected.strokeWidth ? 1 : selected.strokeWidth })} />
-            <div class="border-b border-[var(--app-border)] px-3 pb-2"><DesignColorTools role="stroke" color={primaryColor(selected, 'stroke')} matches={matchingColorLayers('stroke', primaryColor(selected, 'stroke'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selected, 'stroke'); if (color) selectMatchingColor('stroke', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('stroke', color)} onReplaceMatches={(color) => { const from = primaryColor(selected, 'stroke'); if (from) void replaceMatchingColor('stroke', from, color); }} /></div>
+            <DesignPaintEditor id="stroke" title={m['design.stroke']()} paints={selected.strokes} fallbackColor={selected.stroke} {documentColors} variables={colorVariables} onBindVariable={(variableId) => void bindSelectedVariable('stroke', variableId)} onChange={(strokes: DesignPaint[]) => void updateSelected({ strokes, stroke: 'transparent', strokeWidth: strokes.length && !selected.strokeWidth ? 1 : selected.strokeWidth })}>
+              {#snippet headerActions()}
+                <DesignColorTools compact role="stroke" color={primaryColor(selected, 'stroke')} matches={matchingColorLayers('stroke', primaryColor(selected, 'stroke'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selected, 'stroke'); if (color) selectMatchingColor('stroke', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('stroke', color)} onReplaceMatches={(color) => { const from = primaryColor(selected, 'stroke'); if (from) void replaceMatchingColor('stroke', from, color); }} />
+              {/snippet}
+            </DesignPaintEditor>
           {/if}
-          <DesignInspectorSection id="effects" title={m['design.effects']()} defaultOpen={false}>
+
+          <DesignInspectorSection id="effects" title={m['design.effects']()} meta={selected.effects.length ? String(selected.effects.length) : undefined} defaultOpen={false}>
             {#snippet actions()}
-              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-ui-xs" onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'drop-shadow', color: '#00000040', x: 0, y: 4, blur: 12, spread: 0, visible: true }] })}>{m['design.add_shadow']()}</Button>
-              <Button variant="ghost" size="sm" class="h-6 px-1.5 text-ui-xs" onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'layer-blur', blur: 8, visible: true }] })}>{m['design.add_blur']()}</Button>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class="grid size-7 place-items-center rounded-md text-[var(--app-text-soft)] outline-none transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)] data-[state=open]:bg-[var(--app-active)]" aria-label={m['design.add_effect']()} title={m['design.add_effect']()}><Plus size={14} /></DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" class="z-[120] w-48">
+                  <DropdownMenu.Item onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'drop-shadow', color: '#00000040', x: 0, y: 4, blur: 12, spread: 0, visible: true }] })}>{m['design.add_shadow']()}</DropdownMenu.Item>
+                  <DropdownMenu.Item onclick={() => void updateSelected({ effects: [...selected.effects, { type: 'layer-blur', blur: 8, visible: true }] })}>{m['design.add_blur']()}</DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
             {/snippet}
-            <div class="space-y-1.5">
-              {#each selected.effects as effect, index}
-                <div class="grid grid-cols-[1fr_84px_26px] items-center gap-1.5 rounded border border-[var(--app-border)] p-1.5">
-                  <span class="truncate">{effect.type === 'drop-shadow' || effect.type === 'inner-shadow' ? m['design.shadow']() : m['design.blur']()}</span>
-                  <DesignNumericInput label={m['design.blur']()} value={effect.blur} min={0} onCommit={(value) => { if (value === null) return; const effects = selected.effects.map((item, itemIndex) => itemIndex === index ? { ...item, blur: value } as DesignEffect : item); void updateSelected({ effects }); }} />
-                  <Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.delete']()} onclick={() => void updateSelected({ effects: selected.effects.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={11} /></Button>
-                </div>
-              {/each}
-            </div>
+            {#if !selected.effects.length}
+              <p class="text-ui-sm leading-5 text-[var(--app-text-muted)] [text-wrap:pretty]">{m['design.effects_empty']()}</p>
+            {/if}
+            {#each selected.effects as effect, index}
+              <div class="group/effect grid grid-cols-[minmax(0,1fr)_104px_28px] items-center gap-1.5 rounded-lg bg-[var(--app-hover)] p-1 pl-2.5">
+                <span class="truncate text-ui-sm text-[var(--app-text-soft)]">{effect.type === 'drop-shadow' || effect.type === 'inner-shadow' ? m['design.shadow']() : m['design.blur']()}</span>
+                <DesignNumericInput label={m['design.blur']()} value={effect.blur} min={0} onCommit={(value) => { if (value === null) return; const effects = selected.effects.map((item, itemIndex) => itemIndex === index ? { ...item, blur: value } as DesignEffect : item); void updateSelected({ effects }); }} />
+                <Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-muted)] opacity-60 transition-[opacity,color] duration-150 hover:text-[var(--app-danger)] group-focus-within/effect:opacity-100 group-hover/effect:opacity-100" aria-label={m['design.delete']()} title={m['design.delete']()} onclick={() => void updateSelected({ effects: selected.effects.filter((_, itemIndex) => itemIndex !== index) })}><Minus size={13} /></Button>
+              </div>
+            {/each}
           </DesignInspectorSection>
+
           {#if selected.type === 'text'}
             <DesignInspectorSection id="typography" title={m['design.typography']()}>
-              <Textarea class="min-h-20 text-xs" value={selected.text} aria-label={m['design.content']()} onchange={(event: Event) => void updateSelected({ text: (event.currentTarget as HTMLTextAreaElement).value })} />
-              <Input class="mt-1.5 h-8" value={selected.fontFamily} aria-label={m['design.font_family']()} onchange={(event: Event) => void updateSelected({ fontFamily: (event.currentTarget as HTMLInputElement).value })} />
-              <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+              <Textarea class="min-h-16 resize-y text-ui-md md:text-ui-md" value={selected.text} aria-label={m['design.content']()} onchange={(event: Event) => void updateSelected({ text: (event.currentTarget as HTMLTextAreaElement).value })} />
+              <Input class="h-7 text-ui-md md:text-ui-md" value={selected.fontFamily} aria-label={m['design.font_family']()} title={m['design.font_family']()} onchange={(event: Event) => void updateSelected({ fontFamily: (event.currentTarget as HTMLInputElement).value })} />
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5">
+                <NativeSelect.Root size="sm" class={inspectorSelect} value={String(selected.fontWeight)} aria-label={m['design.font_weight']()} onchange={(event: Event) => void updateSelected({ fontWeight: Number((event.currentTarget as HTMLSelectElement).value) })}>{#if ![100, 200, 300, 400, 500, 600, 700, 800, 900].includes(selected.fontWeight)}<NativeSelect.Option value={String(selected.fontWeight)}>{selected.fontWeight}</NativeSelect.Option>{/if}{#each [100, 200, 300, 400, 500, 600, 700, 800, 900] as weight}<NativeSelect.Option value={String(weight)}>{weight}</NativeSelect.Option>{/each}</NativeSelect.Root>
+                <SegmentedControl size="sm" iconOnly label={m['design.font_style']()} value={selected.fontStyle} options={fontStyleOptions()} onValueChange={(value) => void updateSelected({ fontStyle: value })} />
+              </div>
+              <div class="grid grid-cols-3 gap-1.5">
                 <DesignNumericInput label={m['design.font_size_short']()} value={selected.fontSize} min={4} max={1000} onCommit={(value) => { if (value !== null) void updateSelected({ fontSize: value }); }} />
                 <DesignNumericInput label={m['design.line_height_short']()} value={selected.lineHeight} min={4} max={2000} allowEmpty placeholder={m['design.auto_value']()} onCommit={(value) => void updateSelected({ lineHeight: value })} />
                 <DesignNumericInput label={m['design.letter_spacing_short']()} value={selected.letterSpacing} min={-100} max={1000} step={0.1} onCommit={(value) => { if (value !== null) void updateSelected({ letterSpacing: value }); }} />
-                <DesignNumericInput label={m['design.paragraph_spacing_short']()} value={selected.paragraphSpacing} min={0} max={10000} onCommit={(value) => { if (value !== null) void updateSelected({ paragraphSpacing: value }); }} />
               </div>
-              <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                <NativeSelect.Root class="h-8 w-full" value={String(selected.fontWeight)} aria-label={m['design.font_weight']()} onchange={(event: Event) => void updateSelected({ fontWeight: Number((event.currentTarget as HTMLSelectElement).value) })}>{#each [100, 200, 300, 400, 500, 600, 700, 800, 900] as weight}<NativeSelect.Option value={String(weight)}>{weight}</NativeSelect.Option>{/each}</NativeSelect.Root>
-                <NativeSelect.Root class="h-8 w-full" value={selected.fontStyle} aria-label={m['design.font_style']()} onchange={(event: Event) => void updateSelected({ fontStyle: (event.currentTarget as HTMLSelectElement).value as DesignElement['fontStyle'] })}><NativeSelect.Option value="normal">{m['design.font_style_normal']()}</NativeSelect.Option><NativeSelect.Option value="italic">{m['design.font_style_italic']()}</NativeSelect.Option></NativeSelect.Root>
+              <div class="grid grid-cols-2 gap-1.5">
+                <SegmentedControl size="sm" fill iconOnly label={m['design.text_alignment']()} value={selected.textAlign} options={textAlignOptions()} onValueChange={(value) => void updateSelected({ textAlign: value })} />
+                <SegmentedControl size="sm" fill iconOnly label={m['design.vertical_alignment']()} value={selected.textVerticalAlign} options={verticalAlignOptions()} onValueChange={(value) => void updateSelected({ textVerticalAlign: value })} />
               </div>
-              <div class="mt-1.5 grid grid-cols-3 gap-1">{#each [{ value: 'left' as const, icon: AlignLeft, label: m['design.align_left']() }, { value: 'center' as const, icon: AlignCenter, label: m['design.align_center']() }, { value: 'right' as const, icon: AlignRight, label: m['design.align_right']() }] as alignment}<Button variant={selected.textAlign === alignment.value ? 'secondary' : 'outline'} size="sm" aria-label={alignment.label} onclick={() => void updateSelected({ textAlign: alignment.value })}><alignment.icon size={14} /></Button>{/each}</div>
-              <div class="mt-1.5 grid grid-cols-2 gap-1.5">
-                <NativeSelect.Root class="h-8 w-full" value={selected.textVerticalAlign} aria-label={m['design.vertical_alignment']()} onchange={(event: Event) => void updateSelected({ textVerticalAlign: (event.currentTarget as HTMLSelectElement).value as DesignElement['textVerticalAlign'] })}><NativeSelect.Option value="top">{m['design.align_top']()}</NativeSelect.Option><NativeSelect.Option value="middle">{m['design.align_center']()}</NativeSelect.Option><NativeSelect.Option value="bottom">{m['design.align_bottom']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8 w-full" value={selected.textAutoResize} aria-label={m['design.text_resize']()} onchange={(event: Event) => void updateSelected({ textAutoResize: (event.currentTarget as HTMLSelectElement).value as DesignElement['textAutoResize'] })}><NativeSelect.Option value="fixed">{m['design.text_resize_fixed']()}</NativeSelect.Option><NativeSelect.Option value="height">{m['design.text_resize_height']()}</NativeSelect.Option><NativeSelect.Option value="width-height">{m['design.text_resize_both']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8 w-full" value={selected.textDecoration} aria-label={m['design.text_decoration']()} onchange={(event: Event) => void updateSelected({ textDecoration: (event.currentTarget as HTMLSelectElement).value as DesignElement['textDecoration'] })}><NativeSelect.Option value="none">{m['design.none']()}</NativeSelect.Option><NativeSelect.Option value="underline">{m['design.underline']()}</NativeSelect.Option><NativeSelect.Option value="line-through">{m['design.strikethrough']()}</NativeSelect.Option></NativeSelect.Root>
-                <NativeSelect.Root class="h-8 w-full" value={selected.textTransform} aria-label={m['design.text_transform']()} onchange={(event: Event) => void updateSelected({ textTransform: (event.currentTarget as HTMLSelectElement).value as DesignElement['textTransform'] })}><NativeSelect.Option value="none">{m['design.none']()}</NativeSelect.Option><NativeSelect.Option value="uppercase">{m['design.uppercase']()}</NativeSelect.Option><NativeSelect.Option value="lowercase">{m['design.lowercase']()}</NativeSelect.Option><NativeSelect.Option value="capitalize">{m['design.capitalize']()}</NativeSelect.Option></NativeSelect.Root>
-              </div>
+              <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.text_resize']()}>{m['design.size']()}</span>
+                <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.textAutoResize} aria-label={m['design.text_resize']()} onchange={(event: Event) => void updateSelected({ textAutoResize: (event.currentTarget as HTMLSelectElement).value as DesignElement['textAutoResize'] })}><NativeSelect.Option value="fixed">{m['design.text_resize_fixed']()}</NativeSelect.Option><NativeSelect.Option value="height">{m['design.text_resize_height']()}</NativeSelect.Option><NativeSelect.Option value="width-height">{m['design.text_resize_both']()}</NativeSelect.Option></NativeSelect.Root>
+              </label>
+              {#if typographyMoreVisible}
+                <div class="grid grid-cols-2 gap-1.5">
+                  <DesignNumericInput label={m['design.paragraph_spacing_short']()} value={selected.paragraphSpacing} min={0} max={10000} onCommit={(value) => { if (value !== null) void updateSelected({ paragraphSpacing: value }); }} />
+                </div>
+                <div class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                  <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.text_decoration']()}>{m['design.text_decoration']()}</span>
+                  <SegmentedControl size="sm" fill iconOnly label={m['design.text_decoration']()} value={selected.textDecoration} options={decorationOptions()} onValueChange={(value) => void updateSelected({ textDecoration: value })} />
+                  <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.text_transform']()}>{m['design.text_transform']()}</span>
+                  <SegmentedControl size="sm" fill iconOnly label={m['design.text_transform']()} value={selected.textTransform} options={caseOptions()} onValueChange={(value) => void updateSelected({ textTransform: value })} />
+                </div>
+              {/if}
+              {#if !typographyMoreLocked}
+                <button type="button" class="flex h-6 items-center gap-1 rounded-md px-1 text-ui-xs text-[var(--app-text-muted)] transition-colors duration-150 hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]" aria-expanded={typographyMoreVisible} onclick={() => (typographyMoreOpen = !typographyMoreOpen)}>
+                  <ChevronDown size={12} class={`transition-transform duration-150 ease-out ${typographyMoreVisible ? '' : '-rotate-90'}`} />{m['design.more_options']()}
+                </button>
+              {/if}
             </DesignInspectorSection>
           {/if}
+
           {#if selected.type === 'path'}
-            <DesignInspectorSection id="path-points" title={m['design.path_points']()}>
-              {#snippet actions()}<span class="tabular-nums text-[var(--app-text-muted)]">{pathPointSelections.length}/{pathSubpaths(selected).reduce((total, points) => total + points.length, 0)}</span>{/snippet}
+            <DesignInspectorSection id="path-points" title={m['design.path_points']()} meta={`${pathPointSelections.length}/${pathSubpaths(selected).reduce((total, points) => total + points.length, 0)}`}>
               {#if !vectorEditing}
                 <Button class="w-full" variant="outline" size="sm" onclick={() => enterVectorEdit(selected)}><Spline size={13} />{m['design.vector_edit']()}</Button>
               {:else if pathPointSelections.length}
-                <div class="grid grid-cols-4 gap-1">
-                  <Button variant={selectedPathPointMode === 'corner' ? 'secondary' : 'outline'} size="icon-sm" aria-label={m['design.path_corner']()} title={m['design.path_corner']()} onclick={() => void setSelectedPathPointMode('corner')}><CornerDownRight size={13} /></Button>
-                  <Button variant={selectedPathPointMode === 'mirrored' ? 'secondary' : 'outline'} size="icon-sm" aria-label={m['design.path_mirrored']()} title={m['design.path_mirrored']()} onclick={() => void setSelectedPathPointMode('mirrored')}><Spline size={13} /></Button>
-                  <Button variant={selectedPathPointMode === 'asymmetric' ? 'secondary' : 'outline'} size="icon-sm" aria-label={m['design.path_asymmetric']()} title={m['design.path_asymmetric']()} onclick={() => void setSelectedPathPointMode('asymmetric')}><MoveDiagonal2 size={13} /></Button>
-                  <Button variant={selectedPathPointMode === 'disconnected' ? 'secondary' : 'outline'} size="icon-sm" aria-label={m['design.path_disconnected']()} title={m['design.path_disconnected']()} onclick={() => void setSelectedPathPointMode('disconnected')}><Unlink2 size={13} /></Button>
+                <!-- Modos do ponto como trilha de botoes (aria-pressed): mesmo gesto
+                     de um segmentado, mantendo o papel de botao. -->
+                <div class="grid grid-cols-4 gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+                  {#each [{ mode: 'corner' as const, icon: CornerDownRight, label: m['design.path_corner']() }, { mode: 'mirrored' as const, icon: Spline, label: m['design.path_mirrored']() }, { mode: 'asymmetric' as const, icon: MoveDiagonal2, label: m['design.path_asymmetric']() }, { mode: 'disconnected' as const, icon: Unlink2, label: m['design.path_disconnected']() }] as option (option.mode)}
+                    <button type="button" class={`grid h-6 place-items-center rounded-md transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)] ${selectedPathPointMode === option.mode ? 'bg-[var(--app-surface-raised)] text-[var(--app-accent)] shadow-[var(--app-shadow-border)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-label={option.label} aria-pressed={selectedPathPointMode === option.mode} title={option.label} onclick={() => void setSelectedPathPointMode(option.mode)}><option.icon size={14} /></button>
+                  {/each}
                 </div>
                 {#if selectedPathPoint}
-                  <div class="grid grid-cols-2 gap-2">
+                  <div class="grid grid-cols-2 gap-1.5">
                     <DesignNumericInput label="X" value={selectedPathPoint.x} step={0.1} onCommit={(value) => { if (value !== null) void updateSelectedPathPointPosition('x', value); }} />
                     <DesignNumericInput label="Y" value={selectedPathPoint.y} step={0.1} onCommit={(value) => { if (value !== null) void updateSelectedPathPointPosition('y', value); }} />
                   </div>
                 {/if}
                 <div class="grid grid-cols-2 gap-1.5">
-                  <Button variant="outline" size="sm" onclick={() => void addPathPointAfterSelection()}><Plus size={12} />{m['design.path_add_point']()}</Button>
-                  <Button variant="outline" size="sm" onclick={() => void deleteSelectedPathPoint()}><Trash2 size={12} />{m['design.path_delete_point']()}</Button>
+                  <Button variant="outline" size="sm" onclick={() => void addPathPointAfterSelection()}><Plus size={13} />{m['design.path_add_point']()}</Button>
+                  <Button variant="outline" size="sm" onclick={() => void deleteSelectedPathPoint()}><Trash2 size={13} />{m['design.path_delete_point']()}</Button>
                 </div>
               {/if}
-              <label class="flex items-center justify-between gap-3"><span>{m['design.close_path']()}</span><Switch size="sm" checked={selected.pathClosed} onCheckedChange={(checked: boolean) => void updateSelected({ pathClosed: checked })} /></label>
+              <label class="flex h-7 items-center justify-between gap-3"><span class="text-ui-sm text-[var(--app-text-soft)]">{m['design.close_path']()}</span><Switch size="sm" checked={selected.pathClosed} onCheckedChange={(checked: boolean) => void updateSelected({ pathClosed: checked })} /></label>
             </DesignInspectorSection>
           {/if}
-          {#if selected.type === 'image'}<section class="space-y-2 border-b border-[var(--app-border)] px-3 py-3"><h3 class="font-semibold text-[var(--app-text-soft)]">{m['design.image_fit']()}</h3><NativeSelect.Root class="w-full" value={selected.imageFit} onchange={(event: Event) => void updateSelected({ imageFit: (event.currentTarget as HTMLSelectElement).value as DesignElement['imageFit'] })}><NativeSelect.Option value="cover">{m['design.fit_cover']()}</NativeSelect.Option><NativeSelect.Option value="contain">{m['design.fit_contain']()}</NativeSelect.Option><NativeSelect.Option value="fill">{m['design.fit_fill']()}</NativeSelect.Option></NativeSelect.Root></section>{/if}
-          <div class="px-3"><DesignVariableBindings document={document} element={selected} onBind={(property, variableId) => void bindSelectedVariable(property, variableId)} onOpenVariables={() => (leftPanel = 'variables')} /></div>
+
+          {#if selected.type === 'image'}
+            <DesignInspectorSection id="image-fit" title={m['design.image_fit']()}>
+              <SegmentedControl size="sm" fill label={m['design.image_fit']()} value={selected.imageFit} options={imageFitOptions()} onValueChange={(value) => void updateSelected({ imageFit: value })} />
+            </DesignInspectorSection>
+          {/if}
+
+          <DesignVariableBindings document={document} element={selected} onBind={(property, variableId) => void bindSelectedVariable(property, variableId)} onOpenVariables={() => (leftPanel = 'variables')} />
+
           <DesignInspectorSection id="accessibility" title={m['design.accessibility']()} defaultOpen={false}>
-            <label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_role']()}</span><NativeSelect.Root class="w-full" value={selected.accessibilityRole} onchange={(event: Event) => void updateSelected({ accessibilityRole: (event.currentTarget as HTMLSelectElement).value as DesignElement['accessibilityRole'] })}><NativeSelect.Option value="none">{m['design.accessibility_role_none']()}</NativeSelect.Option><NativeSelect.Option value="button">{m['design.accessibility_role_button']()}</NativeSelect.Option><NativeSelect.Option value="link">{m['design.accessibility_role_link']()}</NativeSelect.Option><NativeSelect.Option value="heading">{m['design.accessibility_role_heading']()}</NativeSelect.Option><NativeSelect.Option value="image">{m['design.accessibility_role_image']()}</NativeSelect.Option><NativeSelect.Option value="text">{m['design.accessibility_role_text']()}</NativeSelect.Option><NativeSelect.Option value="input">{m['design.accessibility_role_input']()}</NativeSelect.Option><NativeSelect.Option value="navigation">{m['design.accessibility_role_navigation']()}</NativeSelect.Option><NativeSelect.Option value="region">{m['design.accessibility_role_region']()}</NativeSelect.Option></NativeSelect.Root></label>
-            <label class="block space-y-1"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_label']()}</span><Input value={selected.accessibilityLabel ?? ''} placeholder={m['design.accessibility_label_placeholder']()} onchange={(event: Event) => void updateSelected({ accessibilityLabel: (event.currentTarget as HTMLInputElement).value.trim() || null })} /></label>
-            <label class="flex items-center justify-between gap-3"><span class="text-[var(--app-text-muted)]">{m['design.decorative']()}</span><Switch checked={selected.decorative} onCheckedChange={(checked: boolean) => void updateSelected({ decorative: checked })} /></label>
+            <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+              <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.accessibility_role']()}>{m['design.accessibility_role']()}</span>
+              <NativeSelect.Root size="sm" class={inspectorSelect} value={selected.accessibilityRole} onchange={(event: Event) => void updateSelected({ accessibilityRole: (event.currentTarget as HTMLSelectElement).value as DesignElement['accessibilityRole'] })}><NativeSelect.Option value="none">{m['design.accessibility_role_none']()}</NativeSelect.Option><NativeSelect.Option value="button">{m['design.accessibility_role_button']()}</NativeSelect.Option><NativeSelect.Option value="link">{m['design.accessibility_role_link']()}</NativeSelect.Option><NativeSelect.Option value="heading">{m['design.accessibility_role_heading']()}</NativeSelect.Option><NativeSelect.Option value="image">{m['design.accessibility_role_image']()}</NativeSelect.Option><NativeSelect.Option value="text">{m['design.accessibility_role_text']()}</NativeSelect.Option><NativeSelect.Option value="input">{m['design.accessibility_role_input']()}</NativeSelect.Option><NativeSelect.Option value="navigation">{m['design.accessibility_role_navigation']()}</NativeSelect.Option><NativeSelect.Option value="region">{m['design.accessibility_role_region']()}</NativeSelect.Option></NativeSelect.Root>
+            </label>
+            <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+              <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.accessibility_label']()}>{m['design.accessibility_label']()}</span>
+              <Input class="h-7 text-ui-md md:text-ui-md" value={selected.accessibilityLabel ?? ''} placeholder={m['design.accessibility_label_placeholder']()} onchange={(event: Event) => void updateSelected({ accessibilityLabel: (event.currentTarget as HTMLInputElement).value.trim() || null })} />
+            </label>
+            <label class="flex h-7 items-center justify-between gap-3"><span class="text-ui-sm text-[var(--app-text-soft)]">{m['design.decorative']()}</span><Switch size="sm" checked={selected.decorative} onCheckedChange={(checked: boolean) => void updateSelected({ decorative: checked })} /></label>
           </DesignInspectorSection>
-          {#if selected.type === 'group'}<div class="p-3"><Button class="w-full" variant="outline" size="sm" onclick={() => void ungroupSelection()}><Ungroup size={13} />{m['design.ungroup_selection']()}</Button></div>{/if}
-          <div class="flex items-center gap-1 border-t border-[var(--app-border)] p-3"><Button variant="outline" size="icon-sm" aria-label={m['design.move_down']()} onclick={() => void reorder(-1)}><ArrowDown /></Button><Button variant="outline" size="icon-sm" aria-label={m['design.move_up']()} onclick={() => void reorder(1)}><ArrowUp /></Button><div class="flex-1"></div><Button variant="destructive" size="icon-sm" disabled={selected.locked} aria-label={m['design.delete']()} onclick={() => void removeSelected()}><Trash2 /></Button></div>
-        </div></div>
+
+          <!-- Acoes da camada no rodape: ordem (discretas) e excluir, sem
+               vermelho cheio competindo com as propriedades acima. -->
+          <div class="flex items-center gap-1 px-3 py-2.5">
+            {#if selected.type === 'group'}<Button variant="outline" size="sm" onclick={() => void ungroupSelection()}><Ungroup size={13} />{m['design.ungroup_selection']()}</Button>{/if}
+            <DesignToolbarButton compact label={m['design.move_down']()} side="top" onclick={() => void reorder(-1)}><ArrowDown size={14} /></DesignToolbarButton>
+            <DesignToolbarButton compact label={m['design.move_up']()} side="top" onclick={() => void reorder(1)}><ArrowUp size={14} /></DesignToolbarButton>
+            <div class="flex-1"></div>
+            <Button variant="ghost" size="sm" class="min-w-0 text-ui-md text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" disabled={selected.locked} onclick={() => void removeSelected()}><Trash2 size={13} /><span class="truncate">{m['design.delete']()}</span></Button>
+          </div>
+        </div>
       {:else if selectedElements.length > 1}
-        <div class="min-h-0 flex-1 overflow-y-auto"><div class="space-y-4 p-3">
-          <p class="text-xs font-medium">{m['design.multiple_selection']({ count: String(selectedElements.length) })}</p>
-          <section class="space-y-2">
-            <h3 class="text-ui-sm font-semibold text-[var(--app-text-soft)]">{m['design.alignment']()}</h3>
-            <div class="grid grid-cols-4 gap-1">
-              <Button variant="outline" size="icon-sm" title={m['design.align_left']()} aria-label={m['design.align_left']()} onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.align_horizontal_center']()} aria-label={m['design.align_horizontal_center']()} onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.align_right']()} aria-label={m['design.align_right']()} onclick={() => void alignSelection('right')}><AlignHorizontalJustifyEnd size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.distribute_horizontal']()} aria-label={m['design.distribute_horizontal']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-x')}><AlignHorizontalDistributeCenter size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.align_top']()} aria-label={m['design.align_top']()} onclick={() => void alignSelection('top')}><AlignVerticalJustifyStart size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.align_vertical_center']()} aria-label={m['design.align_vertical_center']()} onclick={() => void alignSelection('vcenter')}><AlignVerticalJustifyCenter size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.align_bottom']()} aria-label={m['design.align_bottom']()} onclick={() => void alignSelection('bottom')}><AlignVerticalJustifyEnd size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.distribute_vertical']()} aria-label={m['design.distribute_vertical']()} disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={14} /></Button>
-              <Button variant="outline" size="icon-sm" title={m['design.tidy_up']()} aria-label={m['design.tidy_up']()} onclick={() => void alignSelection('tidy')}><LayoutGrid size={14} /></Button>
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <div class="flex items-center gap-2 border-b border-[var(--app-border)] px-3 py-2.5">
+            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-soft)]"><Layers3 size={14} /></span>
+            <p class="min-w-0 truncate text-ui-md font-medium">{m['design.multiple_selection']({ count: String(selectedElements.length) })}</p>
+          </div>
+          <DesignInspectorSection id="multi-alignment" title={m['design.alignment']()}>
+            <!-- Alinhar em duas trilhas (horizontal | vertical) e distribuir numa
+                 terceira: o mesmo agrupamento mental das ferramentas de desenho. -->
+            <div class="grid grid-cols-2 gap-1.5">
+              <div class="flex justify-between rounded-lg bg-[var(--app-hover)] p-0.5">
+                <DesignToolbarButton compact label={m['design.align_left']()} side="top" onclick={() => void alignSelection('left')}><AlignHorizontalJustifyStart size={15} /></DesignToolbarButton>
+                <DesignToolbarButton compact label={m['design.align_horizontal_center']()} side="top" onclick={() => void alignSelection('hcenter')}><AlignHorizontalJustifyCenter size={15} /></DesignToolbarButton>
+                <DesignToolbarButton compact label={m['design.align_right']()} side="top" onclick={() => void alignSelection('right')}><AlignHorizontalJustifyEnd size={15} /></DesignToolbarButton>
+              </div>
+              <div class="flex justify-between rounded-lg bg-[var(--app-hover)] p-0.5">
+                <DesignToolbarButton compact label={m['design.align_top']()} side="top" onclick={() => void alignSelection('top')}><AlignVerticalJustifyStart size={15} /></DesignToolbarButton>
+                <DesignToolbarButton compact label={m['design.align_vertical_center']()} side="top" onclick={() => void alignSelection('vcenter')}><AlignVerticalJustifyCenter size={15} /></DesignToolbarButton>
+                <DesignToolbarButton compact label={m['design.align_bottom']()} side="top" onclick={() => void alignSelection('bottom')}><AlignVerticalJustifyEnd size={15} /></DesignToolbarButton>
+              </div>
             </div>
-          </section>
-          <section class="space-y-2">
-            <h3 class="text-ui-sm font-semibold text-[var(--app-text-soft)]">{m['design.color_tools']()}</h3>
+            <div class="flex items-center gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+              <DesignToolbarButton compact label={m['design.distribute_horizontal']()} side="top" disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-x')}><AlignHorizontalDistributeCenter size={15} /></DesignToolbarButton>
+              <DesignToolbarButton compact label={m['design.distribute_vertical']()} side="top" disabled={selectedElements.length < 3} onclick={() => void alignSelection('distribute-y')}><AlignVerticalDistributeCenter size={15} /></DesignToolbarButton>
+              <span class="mx-1 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
+              <DesignToolbarButton compact label={m['design.tidy_up']()} side="top" onclick={() => void alignSelection('tidy')}><LayoutGrid size={15} /></DesignToolbarButton>
+            </div>
+          </DesignInspectorSection>
+          <DesignInspectorSection id="multi-boolean" title={m['design.boolean']()}>
+            <div class="flex items-center gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+              {#each booleanOperations as item (item.operation)}
+                <DesignToolbarButton compact label={booleanLabel(item.operation)} side="top" onclick={() => void combineSelection(item.operation)}><item.icon size={15} /></DesignToolbarButton>
+              {/each}
+            </div>
+            <Button variant="outline" size="sm" class="w-full justify-start" onclick={() => void createMask()}><span class="truncate">{m['design.mask']()}</span></Button>
+            {#if selectedElements.some((element) => element.maskId)}<Button variant="outline" size="sm" class="w-full justify-start" onclick={() => void releaseMasks()}><span class="truncate">{m['design.release_mask']()}</span></Button>{/if}
+          </DesignInspectorSection>
+          <DesignInspectorSection id="multi-color" title={m['design.color_tools']()}>
             <DesignColorTools role="fill" color={primaryColor(selectedElements[0], 'fill')} matches={matchingColorLayers('fill', primaryColor(selectedElements[0], 'fill'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selectedElements[0], 'fill'); if (color) selectMatchingColor('fill', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('fill', color)} onReplaceMatches={(color) => { const from = primaryColor(selectedElements[0], 'fill'); if (from) void replaceMatchingColor('fill', from, color); }} />
             <DesignColorTools role="stroke" color={primaryColor(selectedElements[0], 'stroke')} matches={matchingColorLayers('stroke', primaryColor(selectedElements[0], 'stroke'))} selectionCount={selectedElements.length} onSelectMatches={() => { const color = primaryColor(selectedElements[0], 'stroke'); if (color) selectMatchingColor('stroke', color); }} onSelectLayer={(id) => (selectedIds = [id])} onApplySelection={(color) => void applyColorToSelection('stroke', color)} onReplaceMatches={(color) => { const from = primaryColor(selectedElements[0], 'stroke'); if (from) void replaceMatchingColor('stroke', from, color); }} />
-          </section>
-          <section class="space-y-2">
-            <h3 class="text-ui-sm font-semibold text-[var(--app-text-soft)]">{m['design.common_properties']()}</h3>
+          </DesignInspectorSection>
+          <DesignInspectorSection id="multi-common" title={m['design.common_properties']()}>
             <div class="grid grid-cols-2 gap-1.5">
               <DesignNumericInput label="%" value={commonNumber('opacity') === null ? null : Math.round(commonNumber('opacity')! * 100)} min={0} max={100} placeholder={m['design.mixed_value']()} onCommit={(value) => { if (value !== null) void updateMultiple({ opacity: value / 100 }); }} />
               <DesignNumericInput label={m['design.radius_short']()} value={commonNumber('cornerRadius')} min={0} placeholder={m['design.mixed_value']()} onCommit={(value) => { if (value !== null) void updateMultiple({ cornerRadius: value }); }} />
             </div>
-          </section>
-          <Button variant="outline" size="sm" class="w-full" onclick={() => void groupSelection()}><Group size={13} />{m['design.group_selection']()}</Button>
-          <p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.boolean']()} · {m['design.mask']()}</p>
-          <Button variant="destructive" size="sm" class="w-full" onclick={() => void removeSelected()}><Trash2 size={13} />{m['design.delete']()}</Button>
-        </div></div>
+          </DesignInspectorSection>
+          <div class="flex items-center gap-1.5 px-3 py-2.5">
+            <Button variant="outline" size="sm" class="min-w-0 flex-1 text-ui-md" onclick={() => void groupSelection()}><Group size={13} /><span class="truncate">{m['design.group_selection']()}</span></Button>
+            <Tooltip.Root delayDuration={250}>
+              <Tooltip.Trigger>
+                {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['design.delete']()} onclick={() => void removeSelected()}><Trash2 size={14} /></Button>{/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content class="z-[120]" side="top" sideOffset={6}>{m['design.delete']()}</Tooltip.Content>
+            </Tooltip.Root>
+          </div>
+        </div>
       {:else}
-        <div class="min-h-0 flex-1 overflow-y-auto text-ui-sm">
+        <div class="min-h-0 flex-1 overflow-y-auto">
           {#if page}
             <DesignInspectorSection id="page" title={m['design.page_settings']()}>
-              <Input class="h-8" value={page.name} aria-label={m['design.page_name']()} onchange={(event: Event) => void updateActivePage({ name: (event.currentTarget as HTMLInputElement).value })} />
-              <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+              <Input class="h-7 text-ui-md font-medium md:text-ui-md" value={page.name} aria-label={m['design.page_name']()} onchange={(event: Event) => void updateActivePage({ name: (event.currentTarget as HTMLInputElement).value })} />
+              <div class="grid grid-cols-2 gap-1.5">
                 <DesignNumericInput label="W" value={page.width} min={1} onCommit={(value) => { if (value !== null) void updateActivePage({ width: value }); }} />
                 <DesignNumericInput label="H" value={page.height} min={1} onCommit={(value) => { if (value !== null) void updateActivePage({ height: value }); }} />
               </div>
-              <div class="mt-2 flex items-center justify-between gap-2">
-                <span class="text-[var(--app-text-muted)]">{m['design.page_background']()}</span>
-                <DesignColorControl color={page.background} opacity={1} {documentColors} onChange={(color) => void updateActivePage({ background: color })} />
+              <div class="grid grid-cols-[84px_28px_minmax(0,1fr)] items-center gap-2">
+                <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={m['design.page_background']()}>{m['design.background_short']()}</span>
+                <DesignColorControl color={page.background} opacity={1} {documentColors} label={m['design.page_background']()} onChange={(color) => void updateActivePage({ background: color })} />
+                <span class="truncate font-mono text-ui-sm uppercase text-[var(--app-text-soft)]">{page.background}</span>
               </div>
-              <div class="mt-2 grid grid-cols-3 gap-1 border-t border-[var(--app-border)] pt-2 text-center"><div><strong class="block text-xs text-[var(--app-text)]">{pageElements.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.layers']()}</span></div><div><strong class="block text-xs text-[var(--app-text)]">{document?.components.length ?? 0}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.components']()}</span></div><div><strong class="block text-xs text-[var(--app-text)]">{document?.variables.length ?? 0}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['design.variables']()}</span></div></div>
+              <div class="grid grid-cols-3 gap-1.5 pt-1.5">
+                {#each [{ value: pageElements.length, label: m['design.layers']() }, { value: document?.components.length ?? 0, label: m['design.components']() }, { value: document?.variables.length ?? 0, label: m['design.variables']() }] as stat (stat.label)}
+                  <div class="rounded-lg bg-[var(--app-hover)] px-1 py-1.5 text-center"><strong class="block text-ui-lg font-semibold tabular-nums text-[var(--app-text)]">{stat.value}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]" title={stat.label}>{stat.label}</span></div>
+                {/each}
+              </div>
             </DesignInspectorSection>
           {/if}
           {#if document?.guides.length}
-            <DesignInspectorSection id="guides" title={m['design.rulers']()}>
-              <div class="space-y-1.5">{#each document.guides as guide}<div class="grid grid-cols-[1fr_28px] items-center gap-1.5"><DesignNumericInput label={guide.axis.toUpperCase()} value={guide.position} onCommit={(value) => { if (value !== null) void apply([{ kind: 'update-guide', guideId: guide.id, position: value }], m['design.operation_guide'](), { inverse: [{ kind: 'update-guide', guideId: guide.id, position: guide.position }] }); }} /><Button variant="ghost" size="icon-sm" class="size-7" aria-label={m['design.remove_guide']()} onclick={() => void removeGuide(guide.id)}><Trash2 size={11} /></Button></div>{/each}</div>
+            <DesignInspectorSection id="guides" title={m['design.rulers']()} meta={String(document.guides.length)}>
+              {#each document.guides as guide}
+                <div class="group/guide grid grid-cols-[minmax(0,1fr)_28px] items-center gap-1.5">
+                  <DesignNumericInput label={guide.axis.toUpperCase()} value={guide.position} onCommit={(value) => { if (value !== null) void apply([{ kind: 'update-guide', guideId: guide.id, position: value }], m['design.operation_guide'](), { inverse: [{ kind: 'update-guide', guideId: guide.id, position: guide.position }] }); }} />
+                  <Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" aria-label={m['design.remove_guide']()} title={m['design.remove_guide']()} onclick={() => void removeGuide(guide.id)}><Minus size={13} /></Button>
+                </div>
+              {/each}
             </DesignInspectorSection>
           {/if}
-          <p class="p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.no_selection_page_hint']()}</p>
+          <div class="h-auto py-4">
+            <NodeEmptyState compact icon={MousePointer2} title={m['design.no_selection_title']()} description={m['design.no_selection_page_hint']()} />
+          </div>
         </div>
       {/if}
     </aside>
@@ -4181,5 +4493,18 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
   .design-canvas-ground::-webkit-scrollbar {
     width: 0;
     height: 0;
+  }
+
+  /* Barras flutuantes entram com opacidade e 4px de deslocamento; o guard
+     global de movimento reduzido zera a animacao. */
+  .design-float-in {
+    animation: design-float-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes design-float-in {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--distance-micro) * -1));
+    }
   }
 </style>

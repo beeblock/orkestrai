@@ -28,6 +28,11 @@
 
   let draft = $state('');
   let focused = $state(false);
+  // Tres larguras de rotulo: simbolo (X, %), abreviacao (Tam.) e palavra
+  // inteira (Desfoque) - o valor nunca fica escondido atras do rotulo.
+  const labelLength = $derived([...label].length);
+  const compact = $derived(labelLength <= 2);
+  const wide = $derived(labelLength > 6);
 
   $effect(() => {
     if (!focused) draft = value === null ? '' : String(Math.round(value * 1_000) / 1_000);
@@ -95,13 +100,14 @@
   <button
     type="button"
     tabindex="-1"
-    class="absolute inset-y-0 left-0 z-10 flex w-11 cursor-ew-resize select-none items-center justify-center px-1 text-ui-xs font-medium text-[var(--app-text-muted)]"
+    class={`absolute inset-y-0 left-0 z-10 flex cursor-ew-resize select-none items-center overflow-hidden pl-2 text-ui-xs font-medium whitespace-nowrap text-[var(--app-text-muted)] transition-colors duration-150 hover:text-[var(--app-text)] disabled:cursor-default disabled:hover:text-[var(--app-text-muted)] ${compact ? 'w-6' : wide ? 'w-16' : 'w-11'}`}
     aria-label={label}
+    title={compact ? undefined : label}
     {disabled}
     onpointerdown={startScrub}
-  >{label}</button>
+  ><span class="truncate">{label}</span></button>
   <Input
-    class="h-8 pl-11 text-ui-sm tabular-nums"
+    class={`h-7 pr-1.5 text-ui-md tabular-nums md:text-ui-md ${compact ? 'pl-6' : wide ? 'pl-16' : 'pl-11'}`}
     value={draft}
     {disabled}
     aria-label={label}
