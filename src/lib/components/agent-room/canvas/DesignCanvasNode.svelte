@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { AlertTriangle, CheckCircle2, Clock3, Maximize2, MessageSquareWarning, Palette, RefreshCw, ScanEye, X } from '@lucide/svelte';
+  import { AlertTriangle, CheckCircle2, Clock3, LoaderCircle, Maximize2, MessageSquareWarning, Palette, RefreshCw, ScanEye, X } from '@lucide/svelte';
+  import { Button } from '$lib/components/ui/button';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import DesignRenderer from '../design/DesignRenderer.svelte';
   import type { DesignDocument } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
   import { designDeliveryReadiness, type DesignDeliveryRequirement } from '$lib/modules/agent-room/domain/design-delivery-readiness.js';
@@ -144,17 +146,29 @@
   {#snippet icon()}<Palette size={14} />{/snippet}
   {#snippet title()}{data.title}{/snippet}
   {#snippet actions()}
-    <HeaderIconButton label={m['design.edit']()} class="node-action-btn" side="left" onclick={() => data.onOpenWorkbench?.(id)}><Maximize2 size={12} /></HeaderIconButton>
-    <HeaderIconButton label={m['usage.refresh']()} class="node-action-btn" side="left" onclick={() => void load()}><RefreshCw size={12} /></HeaderIconButton>
-    <HeaderIconButton label={m['settings.delete']()} class="node-action-btn danger" side="left" onclick={() => data.onDelete(id)}><X size={12} /></HeaderIconButton>
+    <HeaderIconButton label={m['design.edit']()} class="node-action-btn" side="left" onclick={() => data.onOpenWorkbench?.(id)}><Maximize2 size={13} /></HeaderIconButton>
+    <HeaderIconButton label={m['usage.refresh']()} class="node-action-btn" side="left" onclick={() => void load()}><RefreshCw size={13} /></HeaderIconButton>
+    <HeaderIconButton label={m['settings.delete']()} class="node-action-btn" danger side="left" onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
 
-  <button class="nodrag nowheel relative block h-full min-h-0 w-full overflow-hidden bg-[var(--app-canvas)] text-left" ondblclick={() => data.onOpenWorkbench?.(id)} aria-label={m['design.edit']()}>
-    {#if loading}
-      <span class="absolute inset-0 grid place-items-center text-xs text-[var(--app-text-muted)]">{m['design.loading']()}</span>
-    {:else if failed || !document || !page}
-      <span class="absolute inset-0 grid place-items-center text-xs text-[var(--app-danger)]">{m['design.error_load']()}</span>
-    {:else}
+  {#if loading || failed || !document || !page}
+    <!-- Carregando/erro: mesmo duplo-clique para abrir o editor, mas sem
+         botao envolvendo a acao de recuperacao. -->
+    <div class="nodrag nowheel relative h-full min-h-0 w-full bg-[var(--app-canvas)]" ondblclick={() => data.onOpenWorkbench?.(id)} role="presentation">
+      {#if loading}
+        <span class="absolute inset-0 grid place-items-center"><span class="dn-pill" role="status"><LoaderCircle size={13} class="animate-spin" />{m['design.loading']()}</span></span>
+      {:else}
+        <NodeEmptyState icon={AlertTriangle} tone="danger" title={m['design.error_load']()}>
+          {#snippet actions()}<Button size="sm" variant="outline" onclick={() => void load()}><RefreshCw size={13} />{m['portal.retry']()}</Button>{/snippet}
+        </NodeEmptyState>
+      {/if}
+    </div>
+  {:else}
+  {@const stats = `${m['design.layers_count']({ count: elements.length })} · ${document.components.length} ${m['design.components']()} · ${document.variables.length} ${m['design.tokens']()} · ${document.codeArtifacts.length} ${m['design.delivery_artifacts']()} · ${m['design.revision']({ revision: document.revision })}`}
+  <!-- Miniatura ocupa o espaco; metadados ficam num rodape proprio em vez
+       de flutuar por cima do desenho. -->
+  <button class="dn-preview nodrag nowheel flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--app-canvas)] text-left" ondblclick={() => data.onOpenWorkbench?.(id)} aria-label={m['design.edit']()}>
+    <span class="relative block min-h-0 w-full flex-1">
       {#if !thumbnailFailed}
         <img
           class="h-full w-full object-contain p-4"
@@ -169,44 +183,95 @@
       {/if}
       {#if explorationStatus}
         {@const StatusIcon = explorationStatus.icon}
-        <span
-          class="absolute top-2 left-2 inline-flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded border px-2 py-1 text-ui-xs font-medium shadow-sm backdrop-blur-sm"
-          class:border-[color-mix(in_srgb,var(--app-success)_45%,var(--app-border))]={explorationStatus.tone === 'success'}
-          class:bg-[color-mix(in_srgb,var(--app-success)_14%,var(--app-surface))]={explorationStatus.tone === 'success'}
-          class:text-[var(--app-success)]={explorationStatus.tone === 'success'}
-          class:border-[color-mix(in_srgb,var(--app-warning)_45%,var(--app-border))]={explorationStatus.tone === 'warning'}
-          class:bg-[color-mix(in_srgb,var(--app-warning)_14%,var(--app-surface))]={explorationStatus.tone === 'warning'}
-          class:text-[var(--app-warning)]={explorationStatus.tone === 'warning'}
-          class:border-[color-mix(in_srgb,var(--app-danger)_45%,var(--app-border))]={explorationStatus.tone === 'danger'}
-          class:bg-[color-mix(in_srgb,var(--app-danger)_14%,var(--app-surface))]={explorationStatus.tone === 'danger'}
-          class:text-[var(--app-danger)]={explorationStatus.tone === 'danger'}
-          class:border-[color-mix(in_srgb,var(--app-info)_45%,var(--app-border))]={explorationStatus.tone === 'info'}
-          class:bg-[color-mix(in_srgb,var(--app-info)_14%,var(--app-surface))]={explorationStatus.tone === 'info'}
-          class:text-[var(--app-info)]={explorationStatus.tone === 'info'}
-          class:border-[color-mix(in_srgb,var(--app-secondary)_45%,var(--app-border))]={explorationStatus.tone === 'active'}
-          class:bg-[color-mix(in_srgb,var(--app-secondary)_14%,var(--app-surface))]={explorationStatus.tone === 'active'}
-          class:text-[var(--app-secondary)]={explorationStatus.tone === 'active'}
-          class:border-[var(--app-border)]={explorationStatus.tone === 'muted'}
-          class:bg-[var(--app-surface)]={explorationStatus.tone === 'muted'}
-          class:text-[var(--app-text-muted)]={explorationStatus.tone === 'muted'}
-        >
-          <StatusIcon size={11} class="shrink-0" />
+        <span class="dn-status absolute top-2 left-2" data-tone={explorationStatus.tone}>
+          <StatusIcon size={11} class="shrink-0" aria-hidden="true" />
           <span class="truncate">{explorationStatus.label}</span>
         </span>
       {/if}
-      {#if delivery}
-        <span
-          class="absolute right-2 bottom-8 left-2 flex items-center gap-2 rounded border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-2 py-1 text-ui-xs shadow-sm backdrop-blur-sm"
-          title={delivery.missing.length ? m['design.delivery_missing']({ items: delivery.missing.map(deliveryRequirementLabel).join(', ') }) : m['design.delivery_complete']()}
-        >
-          <span class="shrink-0 font-medium text-[var(--app-text)]">{m['design.delivery_progress']({ completed: String(delivery.completed.length), total: String(delivery.total) })}</span>
-          <span class="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--app-surface-subtle)]"><span class={`block h-full ${delivery.deliveryComplete ? 'bg-[var(--app-success)]' : 'bg-[var(--app-warning)]'}`} style:width={`${delivery.completed.length / delivery.total * 100}%`}></span></span>
-          {#if delivery.missing.length}<span class="min-w-0 truncate text-[var(--app-text-muted)]">{deliveryRequirementLabel(delivery.missing[0])}</span>{:else}<CheckCircle2 size={11} class="shrink-0 text-[var(--app-success)]" />{/if}
-        </span>
-      {/if}
-      <span class="absolute right-2 bottom-2 left-2 truncate rounded bg-[var(--app-surface)]/90 px-1.5 py-1 text-ui-xs text-[var(--app-text-muted)] shadow-sm">
-        {m['design.layers_count']({ count: elements.length })} · {document.components.length} {m['design.components']()} · {document.variables.length} {m['design.tokens']()} · {document.codeArtifacts.length} {m['design.delivery_artifacts']()} · {m['design.revision']({ revision: document.revision })}
+    </span>
+    {#if delivery}
+      <span
+        class="dn-bar flex items-center gap-2"
+        title={delivery.missing.length ? m['design.delivery_missing']({ items: delivery.missing.map(deliveryRequirementLabel).join(', ') }) : m['design.delivery_complete']()}
+      >
+        <span class="shrink-0 font-medium text-[var(--app-text)] tabular-nums">{m['design.delivery_progress']({ completed: String(delivery.completed.length), total: String(delivery.total) })}</span>
+        <span class="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--app-hover)]"><span class={`block h-full rounded-full ${delivery.deliveryComplete ? 'bg-[var(--app-success)]' : 'bg-[var(--app-warning)]'}`} style:width={`${delivery.completed.length / delivery.total * 100}%`}></span></span>
+        {#if delivery.missing.length}<span class="min-w-0 truncate text-[var(--app-text-muted)]">{deliveryRequirementLabel(delivery.missing[0])}</span>{:else}<CheckCircle2 size={12} class="shrink-0 text-[var(--app-success)]" aria-hidden="true" />{/if}
       </span>
     {/if}
+    <span class="dn-bar block truncate text-[var(--app-text-muted)] tabular-nums" title={stats}>{stats}</span>
   </button>
+  {/if}
 </NodeShell>
+
+<style>
+  .dn-preview:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .dn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 12px;
+  }
+
+  .dn-bar {
+    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    padding: 7px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+    background: var(--app-surface);
+    font-size: 11px;
+    line-height: 16px;
+  }
+
+  .dn-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 1rem);
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--app-surface-raised) 90%, transparent);
+    box-shadow: var(--app-shadow-border);
+    backdrop-filter: blur(6px);
+    color: var(--app-text-muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .dn-status[data-tone='success'] {
+    background: color-mix(in srgb, var(--app-success) 16%, var(--app-surface-raised));
+    color: var(--app-success);
+  }
+
+  .dn-status[data-tone='warning'] {
+    background: color-mix(in srgb, var(--app-warning) 16%, var(--app-surface-raised));
+    color: var(--app-warning);
+  }
+
+  .dn-status[data-tone='danger'] {
+    background: color-mix(in srgb, var(--app-danger) 16%, var(--app-surface-raised));
+    color: var(--app-danger);
+  }
+
+  .dn-status[data-tone='info'] {
+    background: color-mix(in srgb, var(--app-info) 16%, var(--app-surface-raised));
+    color: var(--app-info);
+  }
+
+  .dn-status[data-tone='active'] {
+    background: color-mix(in srgb, var(--app-secondary) 16%, var(--app-surface-raised));
+    color: var(--app-secondary);
+  }
+</style>

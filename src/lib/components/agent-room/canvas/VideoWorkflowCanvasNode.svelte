@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { Film, Settings2, Save, Play, RefreshCw, Square, RotateCcw, X, Download, Plus } from '@lucide/svelte';
+  import { Film, Settings2, Save, Play, RefreshCw, Square, RotateCcw, X, Download, Plus, LoaderCircle, TriangleAlert, ChevronRight, ExternalLink, History } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
@@ -25,6 +25,7 @@
   import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import ModelCombobox from './ModelCombobox.svelte';
   import CreativeModelFields from './CreativeModelFields.svelte';
   import CreativeModelPicker from './CreativeModelPicker.svelte';
@@ -156,6 +157,14 @@
     try { await creativeApi(`${base}/runs`, 'POST', { runId, command }); await refresh(); }
     catch (cause) { error = (cause as Error).message; } finally { busy = false; }
   }
+  // Tom do estado da execucao: cor so para estado, sempre com o rotulo.
+  function runTone(status: CreativeRun['status']): 'active' | 'success' | 'danger' | 'warning' | 'neutral' {
+    if (status === 'completed') return 'success';
+    if (status === 'failed' || status === 'download_failed') return 'danger';
+    if (status === 'submission_uncertain' || status === 'closed_unconfirmed') return 'warning';
+    if (ACTIVE_CREATIVE_STATUSES.includes(status) && status !== 'cancel_requested') return 'active';
+    return 'neutral';
+  }
   function noteChecked(noteId: string, checked: boolean) { config.contextNodeIds = checked ? [...config.contextNodeIds, noteId] : config.contextNodeIds.filter(value => value !== noteId); changed(); }
 </script>
 
@@ -163,26 +172,26 @@
   {#snippet icon()}<Film size={14} />{/snippet}
   {#snippet title()}{data.title || m['creative.title']()}{/snippet}
   {#snippet actions()}
-    <HeaderIconButton label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={14} /></HeaderIconButton>
-    <HeaderIconButton label={m['creative.refresh']()} onclick={() => void refresh(true).catch(cause => error = cause.message)}><RefreshCw size={14} /></HeaderIconButton>
-    <HeaderIconButton label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['creative.refresh']()} onclick={() => void refresh(true).catch(cause => error = cause.message)}><RefreshCw size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
-  <div data-testid="video-workflow" class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-3 text-[var(--app-text)] [&_[data-slot=native-select-wrapper]]:w-full">
-    {#if loading}<p role="status" class="text-xs text-[var(--app-text-muted)]">{m['creative.loading']()}</p>{/if}
-    {#if config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id)) || config.requiredReferenceNodeIds.some(id => ![config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)].includes(id))}<p role="status" class="mb-3 border-l-2 border-[var(--app-warning)] pl-2 text-xs text-[var(--app-text)]">{m['storyboard.bind_required']()}</p>{/if}
-    <fieldset disabled={loading || busy || Boolean(active) || contractLoading} class="min-w-0 space-y-3 disabled:opacity-70" oninput={changed} onchange={changed}>
-      <label class="block space-y-1 text-xs"><span>{m['creative.provider']()}</span><NativeSelect.Root value={catalogProvider} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { catalogProvider = event.currentTarget.value as CreativeProviderId; catalog = []; preview = null; void loadCatalog(); }}>{#each CREATIVE_PROVIDERS as item}<option value={item.id}>{item.name}</option>{/each}</NativeSelect.Root></label>
-      {#if providerPending}<p role="status" class="text-xs text-[var(--app-warning)]">{m['creative.provider_choose_model']()}</p>{/if}
+  <div data-testid="video-workflow" class="vw nodrag nowheel flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-3 text-[var(--app-text)] [&_[data-slot=native-select-wrapper]]:w-full">
+    {#if loading}<p role="status" class="vw-pill mb-3 self-start"><LoaderCircle size={12} class="animate-spin" />{m['creative.loading']()}</p>{/if}
+    {#if config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id)) || config.requiredReferenceNodeIds.some(id => ![config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)].includes(id))}<p role="status" class="vw-callout warning mb-3"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span>{m['storyboard.bind_required']()}</span></p>{/if}
+    <fieldset disabled={loading || busy || Boolean(active) || contractLoading} class="min-w-0 space-y-4 disabled:opacity-70" oninput={changed} onchange={changed}>
+      <label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.provider']()}</span><NativeSelect.Root value={catalogProvider} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { catalogProvider = event.currentTarget.value as CreativeProviderId; catalog = []; preview = null; void loadCatalog(); }}>{#each CREATIVE_PROVIDERS as item}<option value={item.id}>{item.name}</option>{/each}</NativeSelect.Root></label>
+      {#if providerPending}<p role="status" class="vw-callout warning"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span>{m['creative.provider_choose_model']()}</span></p>{/if}
       <div class="grid grid-cols-2 gap-3">
         <CreativeModelPicker {base} profileId={providerPending ? null : config.profileId} value={providerPending ? '' : config.modelId} options={modelOptions} onValueChange={chooseModel} />
         <label class="block min-w-0 space-y-1 text-xs" data-testid="creative-account-field"><span class="flex h-5 items-center font-medium">{m['creative.account']()}</span><NativeSelect.Root aria-label={m['creative.account']()} disabled={providerPending} value={config.profileId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.profileId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.choose_account']()}</option>{#each profiles.filter(item => item.provider === config.provider) as profile}<option value={profile.id}>{profile.name}</option>{/each}</NativeSelect.Root></label>
       </div>
-      {#if catalogLoading || contractLoading}<p role="status" class="text-xs text-[var(--app-text-muted)]">{m['creative.catalog_loading']()}</p>{/if}
-      <div class="flex items-center justify-between gap-2 text-xs text-[var(--app-text-muted)]"><span>{m['creative.catalog_count']({ count: String(catalog.length) })}{#if catalogDate} · {new Date(catalogDate).toLocaleDateString()}{/if}</span><Button size="icon-sm" variant="ghost" disabled={catalogLoading} aria-label={m['creative.refresh_catalog']()} title={m['creative.refresh_catalog']()} onclick={() => loadCatalog(true)}><RefreshCw size={13} /></Button></div>
-      {#if catalogError}<p role="alert" class="text-xs text-destructive">{creativeError(catalogError)}</p>{/if}
+      {#if catalogLoading || contractLoading}<p role="status" class="vw-pill self-start"><LoaderCircle size={12} class="animate-spin" />{m['creative.catalog_loading']()}</p>{/if}
+      <div class="-my-1 flex items-center justify-between gap-2 text-ui-sm text-[var(--app-text-muted)] tabular-nums"><span>{m['creative.catalog_count']({ count: String(catalog.length) })}{#if catalogDate} · {new Date(catalogDate).toLocaleDateString()}{/if}</span><Button size="icon-sm" variant="ghost" class="text-[var(--app-text-muted)]" disabled={catalogLoading} aria-label={m['creative.refresh_catalog']()} title={m['creative.refresh_catalog']()} onclick={() => loadCatalog(true)}><RefreshCw size={13} class={catalogLoading ? 'animate-spin' : ''} /></Button></div>
+      {#if catalogError}<p role="alert" class="vw-callout danger"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span>{creativeError(catalogError)}</span></p>{/if}
       {#if !providerPending}
       {#if model}<Button size="sm" variant="outline" title={m['creative.full_contract_help']()} onclick={expandContract}>{m['creative.full_contract']()}</Button>{/if}
-      {#if contract}<a class="block break-all text-xs text-[var(--app-accent)] underline" href={contract.documentationUrl} target="_blank" rel="noreferrer">{contract.id}</a>{/if}
+      {#if contract}<a class="vw-link" href={contract.documentationUrl} target="_blank" rel="noreferrer"><ExternalLink size={12} class="shrink-0" aria-hidden="true" />{contract.id}</a>{/if}
       <CreativeCharacterBindings workspaceId={data.workspaceId} {config} {contract} disabled={busy || Boolean(active) || loading || contractLoading} onRecords={(value) => characters = value} onChange={(value) => { config.characterBindings = value; changed(); }} />
       {#if model || promptField}<CreativePrompt value={config.prompt} references={promptReferences} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} onChange={(value) => { config.prompt = value; changed(); }} />{/if}
       <CreativeShotControls value={config.shot} disabled={busy || Boolean(active) || loading} onChange={(value) => { config.shot = value; changed(); }} />
@@ -192,54 +201,59 @@
       {/if}
       {#if model?.startImage}
         <div class="grid grid-cols-2 gap-3">
-          <label class="min-w-0 space-y-1 text-xs"><span>{m['creative.start_image']()}</span><NativeSelect.Root value={config.startImageNodeId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.startImageNodeId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.none']()}</option>{#each images as image}<option value={image.id}>{image.title || image.id.slice(0,8)}</option>{/each}</NativeSelect.Root></label>
-          <label class="min-w-0 space-y-1 text-xs"><span>{m['creative.end_image']()}</span><NativeSelect.Root value={config.endImageNodeId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.endImageNodeId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.none']()}</option>{#each images as image}<option value={image.id}>{image.title || image.id.slice(0,8)}</option>{/each}</NativeSelect.Root></label>
+          <label class="min-w-0 space-y-1.5 text-xs font-medium"><span>{m['creative.start_image']()}</span><NativeSelect.Root value={config.startImageNodeId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.startImageNodeId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.none']()}</option>{#each images as image}<option value={image.id}>{image.title || image.id.slice(0,8)}</option>{/each}</NativeSelect.Root></label>
+          <label class="min-w-0 space-y-1.5 text-xs font-medium"><span>{m['creative.end_image']()}</span><NativeSelect.Root value={config.endImageNodeId ?? ''} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { config.endImageNodeId = event.currentTarget.value || null; changed(); }}><option value="">{m['creative.none']()}</option>{#each images as image}<option value={image.id}>{image.title || image.id.slice(0,8)}</option>{/each}</NativeSelect.Root></label>
         </div>
       {/if}
       {#if model}<div class="grid grid-cols-3 gap-2">
-        <label class="min-w-0 space-y-1 text-xs"><span>{m['creative.duration']()}</span><Input type="number" min={model.minDuration} max={model.maxDuration} step={1} bind:value={config.duration} /></label>
-        {#if model.aspectRatios.length}<label class="min-w-0 space-y-1 text-xs"><span>{m['creative.ratio']()}</span><NativeSelect.Root bind:value={config.aspectRatio}>{#each model.aspectRatios as ratio}<option value={ratio}>{ratio}</option>{/each}</NativeSelect.Root></label>{/if}
-        {#if model.resolutions.length}<label class="min-w-0 space-y-1 text-xs"><span>{m['creative.resolution']()}</span><NativeSelect.Root bind:value={config.resolution}>{#each model.resolutions as resolution}<option value={resolution}>{resolution}</option>{/each}</NativeSelect.Root></label>{/if}
+        <label class="min-w-0 space-y-1.5 text-xs font-medium"><span>{m['creative.duration']()}</span><Input type="number" min={model.minDuration} max={model.maxDuration} step={1} bind:value={config.duration} /></label>
+        {#if model.aspectRatios.length}<label class="min-w-0 space-y-1.5 text-xs font-medium"><span>{m['creative.ratio']()}</span><NativeSelect.Root bind:value={config.aspectRatio}>{#each model.aspectRatios as ratio}<option value={ratio}>{ratio}</option>{/each}</NativeSelect.Root></label>{/if}
+        {#if model.resolutions.length}<label class="min-w-0 space-y-1.5 text-xs font-medium"><span>{m['creative.resolution']()}</span><NativeSelect.Root bind:value={config.resolution}>{#each model.resolutions as resolution}<option value={resolution}>{resolution}</option>{/each}</NativeSelect.Root></label>{/if}
       </div>
-      {#if model.audioToggle}<label class="flex items-center justify-between gap-3 text-xs"><span>{m['creative.audio']()}</span><Switch checked={config.generateAudio} onCheckedChange={(value: boolean) => { config.generateAudio = value; changed(); }} /></label><p class="text-xs leading-4 text-[var(--app-text-muted)]">{m['creative.audio_help']()}</p>{:else}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.wan_audio']()}</p>{/if}{/if}
-      <details class="border-t border-[var(--app-border)] pt-2"><summary class="cursor-pointer py-1 text-xs font-medium">{m['creative.notes']()} ({config.contextNodeIds.length})</summary><div class="max-h-36 space-y-2 overflow-y-auto py-2">{#each notes as note}<label class="flex items-center gap-2 text-xs"><Checkbox checked={config.contextNodeIds.includes(note.id)} disabled={config.contextNodeIds.length >= 8 && !config.contextNodeIds.includes(note.id)} onCheckedChange={(checked: boolean | 'indeterminate') => noteChecked(note.id, checked === true)} /><span class="break-words">{note.title || note.id.slice(0,8)}</span></label>{/each}{#if !notes.length}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.no_inputs']()}</p>{/if}</div></details>
-      <details class="border-t border-[var(--app-border)] pt-2"><summary class="cursor-pointer py-1 text-xs font-medium">{m['creative.advanced']()}</summary><div class="space-y-3 py-2">
-        {#if model}<label class="block space-y-1 text-xs"><span>{m['creative.negative_prompt']()}</span><Textarea bind:value={config.negativePrompt} maxlength={model.negativePromptLimit} class="min-h-16" /></label>{/if}
-        {#if model?.seed}<label class="block space-y-1 text-xs"><span>{m['creative.seed']()}</span><Input type="number" min={0} max={2147483647} step={1} value={config.seed ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => config.seed = event.currentTarget.value === '' ? null : Number(event.currentTarget.value)} /></label>{/if}
-        {#if config.provider === 'fal'}<label class="block space-y-1 text-xs"><span>{m['creative.billing_units']()}</span><Input type="number" min={0.000001} max={1000000000} step="any" value={config.billingUnits ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => config.billingUnits = event.currentTarget.value ? Number(event.currentTarget.value) : null} /></label><p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['creative.billing_units_help']()}</p>{/if}
-        <label class="block space-y-1 text-xs"><span>{m['creative.output_directory']()}</span><Input bind:value={config.outputDirectory} maxlength={500} /></label>
-        <label class="block space-y-1 text-xs"><span>{m['creative.file_prefix']()}</span><Input bind:value={config.filePrefix} maxlength={80} /></label>
+      {#if model.audioToggle}<label class="flex min-h-8 items-center justify-between gap-3 text-xs font-medium"><span>{m['creative.audio']()}</span><Switch checked={config.generateAudio} onCheckedChange={(value: boolean) => { config.generateAudio = value; changed(); }} /></label><p class="text-xs leading-4 text-[var(--app-text-muted)]">{m['creative.audio_help']()}</p>{:else}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.wan_audio']()}</p>{/if}{/if}
+      <div class="flex flex-col">
+      <details class="vw-details"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.notes']()}</span><span class="vw-count">{config.contextNodeIds.length}</span></summary><div class="max-h-36 space-y-0.5 overflow-y-auto pb-2">{#each notes as note}<label class="vw-check"><Checkbox checked={config.contextNodeIds.includes(note.id)} disabled={config.contextNodeIds.length >= 8 && !config.contextNodeIds.includes(note.id)} onCheckedChange={(checked: boolean | 'indeterminate') => noteChecked(note.id, checked === true)} /><span class="break-words">{note.title || note.id.slice(0,8)}</span></label>{/each}{#if !notes.length}<p class="py-1 text-ui-sm text-[var(--app-text-muted)]">{m['creative.no_inputs']()}</p>{/if}</div></details>
+      <details class="vw-details"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.advanced']()}</span></summary><div class="space-y-3 pb-2">
+        {#if model}<label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.negative_prompt']()}</span><Textarea bind:value={config.negativePrompt} maxlength={model.negativePromptLimit} class="min-h-16" /></label>{/if}
+        {#if model?.seed}<label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.seed']()}</span><Input type="number" min={0} max={2147483647} step={1} value={config.seed ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => config.seed = event.currentTarget.value === '' ? null : Number(event.currentTarget.value)} /></label>{/if}
+        {#if config.provider === 'fal'}<label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.billing_units']()}</span><Input type="number" min={0.000001} max={1000000000} step="any" value={config.billingUnits ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => config.billingUnits = event.currentTarget.value ? Number(event.currentTarget.value) : null} /></label><p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['creative.billing_units_help']()}</p>{/if}
+        <label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.output_directory']()}</span><Input bind:value={config.outputDirectory} maxlength={500} /></label>
+        <label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.file_prefix']()}</span><Input bind:value={config.filePrefix} maxlength={80} /></label>
       </div></details>
+      </div>
       {/if}
     </fieldset>
-    {#if error}<div role="alert" class="my-3 break-words text-xs leading-5 text-[var(--app-danger)]">{creativeError(error)}<span class="block break-all font-mono">{error.startsWith('creative_') ? error : ''}</span></div>{/if}
-    {#if billing}<div class="space-y-2 border-y border-[var(--app-border)] py-3 text-xs"><p>{m['creative.billing_rate']({ price: String(billing.unitPrice), unit: billing.unit })}</p><label class="block space-y-1"><span>{m['creative.billing_units']()}</span><Input type="number" min={0.000001} max={1000000000} step="any" value={config.billingUnits ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => { config.billingUnits = event.currentTarget.value ? Number(event.currentTarget.value) : null; changed(); }} /></label></div>{/if}
-    {#if preview}<div class="my-3 border-y border-[var(--app-border)] py-3 text-xs leading-5"><strong>{m['creative.estimate_value']({ estimate: usd(preview.estimatedCents), reservation: usd(preview.reservedCents) })}</strong><p class="mt-1 text-[var(--app-text-muted)]">{m['creative.budget_help']()}</p>
+    {#if error}<div role="alert" class="vw-callout danger mt-4"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{creativeError(error)}<span class="block font-mono text-[10.5px] break-all opacity-80">{error.startsWith('creative_') ? error : ''}</span></span></div>{/if}
+    {#if billing}<div class="vw-card mt-4 space-y-2 text-xs"><p>{m['creative.billing_rate']({ price: String(billing.unitPrice), unit: billing.unit })}</p><label class="block space-y-1"><span>{m['creative.billing_units']()}</span><Input type="number" min={0.000001} max={1000000000} step="any" value={config.billingUnits ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => { config.billingUnits = event.currentTarget.value ? Number(event.currentTarget.value) : null; changed(); }} /></label></div>{/if}
+    {#if preview}<div class="vw-card mt-4 text-xs leading-5"><strong class="tabular-nums">{m['creative.estimate_value']({ estimate: usd(preview.estimatedCents), reservation: usd(preview.reservedCents) })}</strong><p class="mt-1 text-[var(--app-text-muted)]">{m['creative.budget_help']()}</p>
       {#if preview.priceSource === 'public_list'}<p>{m['creative.quote_public']({ date: preview.priceVerifiedAt ?? '' })}</p>{:else if preview.priceSource === 'account_quote'}<p>{m['creative.quote_account']()}</p>{/if}
-      <details class="mt-2"><summary class="cursor-pointer font-medium">{m['creative.outgoing_data']()}</summary><p class="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">{preview.snapshot.prompt}</p>{#each [preview.snapshot.startImage, preview.snapshot.endImage].filter(Boolean) as reference}<p class="mt-2 break-all font-mono">{reference?.path} ({reference?.width} × {reference?.height})</p>{/each}{#if preview.snapshot.modelContract}<pre class="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(preview.snapshot.config.parameters, null, 2)}</pre>{#each preview.snapshot.media ?? [] as item}<p class="break-all font-mono">{item.pointer}: {item.reference.path}</p>{/each}{/if}</details>
+      <details class="vw-details mt-2"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.outgoing_data']()}</span></summary><p class="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">{preview.snapshot.prompt}</p>{#each [preview.snapshot.startImage, preview.snapshot.endImage].filter(Boolean) as reference}<p class="mt-2 break-all font-mono">{reference?.path} ({reference?.width} × {reference?.height})</p>{/each}{#if preview.snapshot.modelContract}<pre class="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(preview.snapshot.config.parameters, null, 2)}</pre>{#each preview.snapshot.media ?? [] as item}<p class="break-all font-mono">{item.pointer}: {item.reference.path}</p>{/each}{/if}</details>
     </div>{/if}
-    <div class="my-3 flex flex-wrap items-center gap-2">
+    <!-- Barra de acoes fixa no rodape da rolagem: salvar/estimar/gerar
+         continuam ao alcance mesmo com o formulario longo. -->
+    <div class="vw-actions">
       <Button size="sm" variant="outline" disabled={providerPending || loading || busy || Boolean(active) || contractLoading || !parametersValid} onclick={() => execute('save')}><Save size={14} />{m['creative.save']()}</Button>
-      {#if preview}<Button size="sm" disabled={providerPending || loading || busy || Boolean(active) || !parametersValid || contractLoading} onclick={() => execute('run')}><Play size={14} />{m['creative.generate']()}</Button>{:else}<Button size="sm" disabled={providerPending || loading || busy || Boolean(active) || !config.profileId || !parametersValid || contractLoading || (!model && !contract)} onclick={() => execute('estimate')}><Film size={14} />{m['creative.estimate']()}</Button>{/if}
-      <Button size="icon" variant="ghost" title={m['creative.configure']()} aria-label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={15} /></Button>
-      {#if dirty}<span class="text-xs text-[var(--app-text-muted)]">{m['creative.dirty']()}</span>{/if}
+      {#if preview}<Button size="sm" class="vw-primary" disabled={providerPending || loading || busy || Boolean(active) || !parametersValid || contractLoading} onclick={() => execute('run')}><Play size={14} />{m['creative.generate']()}</Button>{:else}<Button size="sm" class="vw-primary" disabled={providerPending || loading || busy || Boolean(active) || !config.profileId || !parametersValid || contractLoading || (!model && !contract)} onclick={() => execute('estimate')}><Film size={14} />{m['creative.estimate']()}</Button>{/if}
+      <Button size="icon-sm" variant="ghost" class="text-[var(--app-text-muted)]" title={m['creative.configure']()} aria-label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={15} /></Button>
+      {#if dirty}<span class="vw-dirty"><span class="vw-dirty-dot" aria-hidden="true"></span>{m['creative.dirty']()}</span>{/if}
     </div>
-    <section class="border-t border-[var(--app-border)] pt-3" aria-label={m['creative.history']()}>
-      <h3 class="mb-2 text-xs font-semibold">{m['creative.history']()}</h3>
-      {#if !runs.length}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.no_runs']()}</p>{/if}
+    <section class="mt-4 flex flex-col gap-2" aria-label={m['creative.history']()}>
+      <h3 class="section-label">{m['creative.history']()}</h3>
+      {#if !runs.length}<NodeEmptyState compact icon={History} title={m['creative.no_runs']()} class="vw-empty" />{/if}
       {#each runs as run (run.id)}
-        <div class="space-y-1 border-b border-[var(--app-border)] py-3 text-xs">
-          <div class="flex items-start justify-between gap-2"><strong class="min-w-0 break-words">{creativeStatus(run.status)}</strong><time class="shrink-0 text-[var(--app-text-muted)]">{new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
-          <div class="break-words text-[var(--app-text-muted)]">{run.snapshot.modelContract?.name ?? CREATIVE_MODELS[run.snapshot.config.modelId as CreativeModelId]?.name ?? run.snapshot.config.modelId} · {usd(run.reservedCents)}</div>
+        {@const tone = runTone(run.status)}
+        <div class="vw-run space-y-1.5 text-xs">
+          <div class="flex items-center justify-between gap-2"><span class="vw-status" data-tone={tone}>{#if tone === 'active'}<LoaderCircle size={11} class="animate-spin" aria-hidden="true" />{/if}<span class="min-w-0 break-words">{creativeStatus(run.status)}</span></span><time class="shrink-0 font-mono text-[10.5px] text-[var(--app-text-muted)] tabular-nums">{new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
+          <div class="break-words text-[var(--app-text-muted)] tabular-nums">{run.snapshot.modelContract?.name ?? CREATIVE_MODELS[run.snapshot.config.modelId as CreativeModelId]?.name ?? run.snapshot.config.modelId} · {usd(run.reservedCents)}</div>
           {#if run.snapshot.characters?.length}<p class="break-words">{run.snapshot.characters.map(character => `${character.name} · v${character.version}`).join(', ')}</p>{#if run.status === 'completed'}<p class="text-[var(--app-text-muted)]">{m['creative.character_review_required']()}</p>{/if}{/if}
           {#if run.errorCode}<p class="break-words leading-5 text-[var(--app-danger)]">{creativeError(run.errorCode)}</p>{/if}
-          <div class="flex flex-wrap items-center gap-2 pt-1">
+          <div class="flex flex-wrap items-center gap-2 empty:hidden">
             {#if ACTIVE_CREATIVE_STATUSES.includes(run.status) && !['submission_uncertain', 'cancel_requested'].includes(run.status)}
               {#if run.snapshot.config.provider === 'byteplus' && run.status !== 'queued'}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.byteplus_cancel']()}</p>{:else}<Button size="sm" variant="outline" disabled={busy} onclick={() => command(run.id, 'cancel')}><Square size={12} />{m['creative.cancel']()}</Button>{/if}
             {/if}
             {#if run.status === 'download_failed'}<Button size="sm" variant="outline" disabled={busy} onclick={() => command(run.id, 'retry_download')}><RotateCcw size={12} />{m['creative.retry_download']()}</Button>{/if}
             {#if ['submission_uncertain', 'download_failed'].includes(run.status)}<Button size="sm" variant="outline" disabled={busy} onclick={() => closeRun = run.id}>{m['creative.close_unconfirmed']()}</Button>{/if}
-            {#if run.output}<a class="inline-flex items-center gap-1 py-1 text-[var(--app-accent)] underline" href={`/api/agent-room/workspaces/${data.workspaceId}/creative-media/videos/${run.id}`} download><Download size={12} />{m['creative.download']()}</a>{/if}
+            {#if run.output}<Button size="sm" variant="ghost" class="text-[var(--app-text-soft)]" href={`/api/agent-room/workspaces/${data.workspaceId}/creative-media/videos/${run.id}`} download><Download size={12} />{m['creative.download']()}</Button>{/if}
           </div>
         </div>
       {/each}
@@ -259,3 +273,226 @@
     <AlertDialog.Footer><AlertDialog.Cancel>{m['dlg.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => { const runId = closeRun; closeRun = null; if (runId) void command(runId, 'close_unconfirmed'); }}>{m['creative.close_unconfirmed']()}</AlertDialog.Action></AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  .vw-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+  }
+
+  /* Avisos com icone e fundo suave, sem paredes de texto colorido. */
+  .vw-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  .vw-callout.warning {
+    background: var(--app-warning-soft);
+    color: var(--app-text);
+  }
+
+  .vw-callout.warning :global(svg) {
+    color: var(--app-warning);
+  }
+
+  .vw-callout.danger {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .vw-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    color: var(--app-text-soft);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    word-break: break-all;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+    text-underline-offset: 3px;
+    transition: color var(--duration-quick) ease-out;
+  }
+
+  .vw-link:hover {
+    color: var(--app-text);
+  }
+
+  .vw-details {
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  }
+
+  .vw-summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    margin: 0 -6px;
+    padding: 0 6px;
+    border-radius: 6px;
+    color: var(--app-text);
+    font-size: 12px;
+    font-weight: 500;
+    list-style: none;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .vw-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .vw-summary:hover {
+    background: var(--app-hover);
+  }
+
+  .vw-summary:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .vw-summary :global(.vw-chevron) {
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+    transition: transform var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  details[open] > .vw-summary :global(.vw-chevron) {
+    transform: rotate(90deg);
+  }
+
+  .vw-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .vw-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    padding: 0 6px;
+    margin-inline: -6px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .vw-check:hover {
+    background: var(--app-hover);
+  }
+
+  .vw-card {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  /* O sticky respeita o padding do scroll (12px): -12px cola no fundo real. */
+  .vw-actions {
+    position: sticky;
+    bottom: -12px;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 16px -12px 0;
+    padding: 10px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+    background: var(--app-surface);
+  }
+
+  /* Primaria indisponivel fica neutra, nao um dourado desbotado. */
+  .vw :global(.vw-primary:disabled) {
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    opacity: 1;
+  }
+
+  .vw-dirty {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .vw-dirty-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--app-warning);
+  }
+
+  .vw :global(.vw-empty) {
+    height: auto;
+    padding: 16px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+  }
+
+  .vw-run {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .vw-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 22px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .vw-status[data-tone='active'] {
+    background: var(--app-info-soft);
+    color: var(--app-info);
+  }
+
+  .vw-status[data-tone='success'] {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .vw-status[data-tone='danger'] {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .vw-status[data-tone='warning'] {
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+  }
+</style>
