@@ -190,7 +190,8 @@
 		border: 0;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--app-text-muted);
+		/* soft (nao muted): sobre o trilho, muted fica abaixo de 4.5:1 no tema claro. */
+		color: var(--app-text-soft);
 		font-size: 12px;
 		font-weight: 500;
 		white-space: nowrap;

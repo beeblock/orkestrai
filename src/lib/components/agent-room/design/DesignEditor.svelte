@@ -4380,7 +4380,7 @@ function interaction(e,type){const el=e.target.closest?.('[data-design-element]'
               <DesignToolbarButton compact label={m['design.tidy_up']()} side="top" onclick={() => void alignSelection('tidy')}><LayoutGrid size={15} /></DesignToolbarButton>
             </div>
           </DesignInspectorSection>
-          <DesignInspectorSection id="multi-boolean" title={m['design.boolean']()}>
+          <DesignInspectorSection id="multi-boolean" title={m['design.combine_shapes']()}>
             <div class="flex items-center gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
               {#each booleanOperations as item (item.operation)}
                 <DesignToolbarButton compact label={booleanLabel(item.operation)} side="top" onclick={() => void combineSelection(item.operation)}><item.icon size={15} /></DesignToolbarButton>
