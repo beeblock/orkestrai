@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowDown, ArrowUp, Copy, ListChecks, Play, Plus, Save, Trash2 } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, Copy, GripVertical, ListChecks, Play, Plus, Save, Trash2 } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
@@ -9,6 +9,7 @@
   import type { ApiClientRequest, ApiClientRunner } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
   import ApiCodeEditor from './ApiCodeEditor.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
 
   let {
     open,
@@ -141,6 +142,27 @@
     updateCurrent({ requestIds: next });
   }
 
+  // Arrastar reordena os requests marcados trocando com o vizinho a cada
+  // linha cruzada — a mesma acao das setas (moveRequest).
+  let draggedRequestId = $state<string | null>(null);
+
+  function onRequestDragOver(event: DragEvent, requestId: string) {
+    if (!draggedRequestId || !current || !current.requestIds.includes(requestId)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (requestId === draggedRequestId) return;
+    const from = current.requestIds.indexOf(draggedRequestId);
+    const to = current.requestIds.indexOf(requestId);
+    if (from < 0 || to < 0) return;
+    moveRequest(draggedRequestId, to < from ? -1 : 1);
+  }
+
+  function onGripKeydown(event: KeyboardEvent, requestId: string) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    moveRequest(requestId, event.key === 'ArrowUp' ? -1 : 1);
+  }
+
   function saveAndClose() {
     onSave($state.snapshot(drafts), currentId);
     onClose();
@@ -161,26 +183,19 @@
     </Dialog.Header>
 
     <div class="grid min-h-0 grid-cols-[220px_minmax(0,1fr)] max-[700px]:grid-cols-1 max-[700px]:grid-rows-[170px_minmax(0,1fr)]">
-      <aside class="min-h-0 overflow-y-auto border-r border-border bg-muted/25 p-2 max-[700px]:border-b max-[700px]:border-r-0">
+      <aside class="min-h-0 overflow-y-auto border-r border-border bg-[var(--app-surface-subtle)] p-2 max-[700px]:border-b max-[700px]:border-r-0">
         <Button size="sm" variant="outline" class="mb-2 w-full justify-start" onclick={newRunner}><Plus />{m['api_client.add_runner']()}</Button>
         {#each drafts as runner (runner.id)}
           <button
             type="button"
-            class="mb-1 flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors"
-            class:border-primary={runner.id === currentId}
-            class:bg-primary={runner.id === currentId}
-            class:text-primary-foreground={runner.id === currentId}
-            class:border-transparent={runner.id !== currentId}
-            class:hover:bg-muted={runner.id !== currentId}
+            class="runner-item"
             aria-pressed={runner.id === currentId}
             onclick={() => selectRunner(runner)}
           >
-            <ListChecks class="size-4 shrink-0" />
-            <span class="min-w-0 flex-1 truncate text-xs font-medium">{runner.name}</span>
-            <span class="text-ui-xs tabular-nums opacity-70">{runner.requestIds.length}</span>
+            <ListChecks size={14} class="shrink-0" aria-hidden="true" />
+            <span class="min-w-0 flex-1 truncate">{runner.name}</span>
+            <span class="runner-count">{runner.requestIds.length}</span>
           </button>
-        {:else}
-          <p class="px-3 py-8 text-center text-xs leading-5 text-muted-foreground">{m['api_client.no_runners']()}</p>
         {/each}
       </aside>
 
@@ -229,16 +244,42 @@
               <h3 class="text-xs font-semibold">{m['api_client.runner_requests']()}</h3>
               <span class="text-ui-sm text-muted-foreground">{m['api_client.runner_selected']({ selected: current.requestIds.length, total: requests.length })}</span>
             </div>
-            <div class="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border p-1.5">
+            <div class="runner-requests max-h-72 overflow-y-auto p-1" role="list">
               {#each runnerRequests as request (request.id)}
                 {@const checked = current.requestIds.includes(request.id)}
-                <div class="flex min-w-0 items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/60">
-                  <Checkbox {checked} onCheckedChange={(value: boolean) => toggleRequest(request.id, value)} aria-label={request.name} />
-                  <span class="w-10 shrink-0 text-ui-xs font-bold text-[var(--app-secondary)]">{request.method}</span>
-                  <span class="min-w-0 flex-1 truncate text-xs">{request.name}</span>
+                {@const order = current.requestIds.indexOf(request.id)}
+                <div
+                  class="runner-request"
+                  class:unchecked={!checked}
+                  class:dragging={draggedRequestId === request.id}
+                  role="listitem"
+                  ondragover={(event) => onRequestDragOver(event, request.id)}
+                  ondrop={(event) => { event.preventDefault(); draggedRequestId = null; }}
+                >
                   {#if checked}
-                    <Button size="icon-sm" variant="ghost" disabled={current.requestIds[0] === request.id} aria-label={m['api_client.move_up']()} onclick={() => moveRequest(request.id, -1)}><ArrowUp /></Button>
-                    <Button size="icon-sm" variant="ghost" disabled={current.requestIds.at(-1) === request.id} aria-label={m['api_client.move_down']()} onclick={() => moveRequest(request.id, 1)}><ArrowDown /></Button>
+                    <button
+                      type="button"
+                      class="runner-grip"
+                      draggable="true"
+                      aria-label={m['api_client.reorder_request']()}
+                      title={m['api_client.reorder_request']()}
+                      aria-keyshortcuts="ArrowUp ArrowDown"
+                      ondragstart={(event) => { draggedRequestId = request.id; if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', request.id); const row = (event.currentTarget as HTMLElement).closest('.runner-request'); if (row instanceof HTMLElement) event.dataTransfer.setDragImage(row, 16, 16); } }}
+                      ondragend={() => (draggedRequestId = null)}
+                      onkeydown={(event) => onGripKeydown(event, request.id)}
+                    ><GripVertical size={13} /></button>
+                  {:else}
+                    <span class="runner-grip-space" aria-hidden="true"></span>
+                  {/if}
+                  <Checkbox {checked} onCheckedChange={(value: boolean) => toggleRequest(request.id, value)} aria-label={request.name} />
+                  <span class="runner-order" aria-hidden="true">{checked ? order + 1 : ''}</span>
+                  <span class="runner-method">{request.method}</span>
+                  <span class="min-w-0 flex-1 truncate text-[12.5px]" title={request.name}>{request.name}</span>
+                  {#if checked}
+                    <span class="runner-arrows">
+                      <Button size="icon-sm" variant="ghost" class="size-7" disabled={current.requestIds[0] === request.id} aria-label={m['api_client.move_up']()} onclick={() => moveRequest(request.id, -1)}><ArrowUp /></Button>
+                      <Button size="icon-sm" variant="ghost" class="size-7" disabled={current.requestIds.at(-1) === request.id} aria-label={m['api_client.move_down']()} onclick={() => moveRequest(request.id, 1)}><ArrowDown /></Button>
+                    </span>
                   {/if}
                 </div>
               {/each}
@@ -246,7 +287,9 @@
           </div>
         </section>
       {:else}
-        <div class="grid place-items-center p-8 text-center text-sm text-muted-foreground">{m['api_client.no_runners']()}</div>
+        <div class="grid place-items-center p-8">
+          <NodeEmptyState icon={ListChecks} title={m['api_client.no_runners']()} description={m['api_client.runners_description']()} />
+        </div>
       {/if}
     </div>
 
@@ -265,3 +308,153 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  .runner-item {
+    display: flex;
+    width: 100%;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 12.5px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .runner-item:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  /* Selecionado: fundo ativo + barra de acento, sem pintar o item inteiro. */
+  .runner-item[aria-pressed='true'] {
+    background: var(--app-active);
+    box-shadow: inset 2px 0 0 var(--app-accent);
+    color: var(--app-text);
+  }
+
+  .runner-item:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .runner-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .runner-requests {
+    border-radius: 8px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .runner-request {
+    display: flex;
+    min-width: 0;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px 0 2px;
+    border-radius: 6px;
+    transition: background-color var(--duration-quick) ease-out, opacity var(--duration-quick) ease-out;
+  }
+
+  .runner-request:hover {
+    background: var(--app-hover);
+  }
+
+  .runner-request.unchecked {
+    color: var(--app-text-muted);
+  }
+
+  .runner-request.dragging {
+    opacity: 0.45;
+  }
+
+  .runner-grip,
+  .runner-grip-space {
+    width: 18px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .runner-grip {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: grab;
+    opacity: 0.5;
+    transition: opacity var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .runner-request:hover .runner-grip,
+  .runner-grip:focus-visible {
+    opacity: 1;
+  }
+
+  .runner-grip:active {
+    cursor: grabbing;
+  }
+
+  .runner-grip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -1px;
+  }
+
+  .runner-order {
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .runner-method {
+    width: 48px;
+    flex-shrink: 0;
+    color: var(--app-secondary);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+
+  .runner-request.unchecked .runner-method {
+    opacity: 0.6;
+  }
+
+  /* Setas continuam para teclado, mas so aparecem ao apontar/focar. */
+  .runner-arrows {
+    display: inline-flex;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .runner-request:hover .runner-arrows,
+  .runner-request:focus-within .runner-arrows {
+    opacity: 1;
+  }
+</style>

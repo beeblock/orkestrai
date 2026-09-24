@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Braces, Check, ChevronDown, ChevronRight, Copy, Download, ExternalLink, FileCode2, FileJson2, Folder, FolderOpen, FolderPlus, GripVertical, History, ListChecks, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, RefreshCw, Send, Trash2, X } from '@lucide/svelte';
+  import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpFromLine, Braces, Check, ChevronDown, CircleCheck, CircleX, Copy, Download, ExternalLink, FileCode2, FileJson2, Folder, FolderOpen, FolderPlus, GripVertical, History, ListChecks, LoaderCircle, MoreHorizontal, Pencil, Play, Plus, RefreshCw, Send, Trash2, X } from '@lucide/svelte';
   import { stringify as stringifyYaml } from 'yaml';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -11,7 +11,9 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import * as Tabs from '$lib/components/ui/tabs';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import NodeShell from './NodeShell.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import ApiClientRunnerDialog from './ApiClientRunnerDialog.svelte';
   import ApiResponseViewer from './ApiResponseViewer.svelte';
@@ -1319,11 +1321,14 @@
     </DropdownMenu.Root>
   {/snippet}
 
-  <div class="grid h-full min-h-0 grid-cols-[180px_minmax(0,1fr)] overflow-hidden bg-[var(--app-surface)]">
-    <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-surface-subtle)]">
-      <div class="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--app-border)] px-2">
+  <div class="grid h-full min-h-0 grid-cols-[196px_minmax(0,1fr)] overflow-hidden bg-[var(--app-surface)]">
+    <aside class="api-side flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-surface-subtle)]">
+      <div class="api-side-head">
         <ContextMenu.Root>
-          <ContextMenu.Trigger class="nodrag min-w-0 flex-1 truncate text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['api_client.requests']()} <span class="tabular-nums opacity-70">{requests.length}</span></ContextMenu.Trigger>
+          <ContextMenu.Trigger class="api-side-title nodrag">
+            <span class="section-label truncate">{m['api_client.requests']()}</span>
+            <span class="api-count">{requests.length}</span>
+          </ContextMenu.Trigger>
           <ContextMenu.Content class="w-48">
             <ContextMenu.Item onclick={() => void runCollection()}><Play />{m['api_client.run_collection']()}</ContextMenu.Item>
             <ContextMenu.Item onclick={() => addRequest()}><Plus />{m['api_client.add_request']()}</ContextMenu.Item>
@@ -1331,10 +1336,10 @@
             <ContextMenu.Item onclick={() => (runnerDialogOpen = true)}><ListChecks />{m['api_client.runners']()}</ContextMenu.Item>
           </ContextMenu.Content>
         </ContextMenu.Root>
-        <button class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]" aria-label={m['api_client.runners']()} title={m['api_client.runners']()} onclick={() => (runnerDialogOpen = true)}><ListChecks size={13} aria-hidden="true" /></button>
+        <HeaderIconButton class="api-icon-btn nodrag" label={m['api_client.runners']()} side="bottom" onclick={() => (runnerDialogOpen = true)}><ListChecks size={14} aria-hidden="true" /></HeaderIconButton>
         <DropdownMenu.Root>
-          <DropdownMenu.Trigger class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]" aria-label={m['api_client.add_item']()} title={m['api_client.add_item']()}>
-            <Plus size={13} aria-hidden="true" />
+          <DropdownMenu.Trigger class="api-icon-btn nodrag" aria-label={m['api_client.add_item']()} title={m['api_client.add_item']()}>
+            <Plus size={14} aria-hidden="true" />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" class="w-44">
             <DropdownMenu.Item onclick={() => addRequest()}><Plus />{m['api_client.add_request']()}</DropdownMenu.Item>
@@ -1343,12 +1348,12 @@
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       </div>
-      <div class="nodrag min-h-0 flex-1 overflow-y-auto p-1.5" role="list" ondragover={(event) => { event.preventDefault(); if (event.target === event.currentTarget) dropIndicator = null; }} ondrop={(event) => { event.preventDefault(); dropItem(null); }}>
+      <div class="api-tree nodrag min-h-0 flex-1 overflow-y-auto p-1.5" role="list" ondragover={(event) => { event.preventDefault(); if (event.target === event.currentTarget) dropIndicator = null; }} ondrop={(event) => { event.preventDefault(); dropItem(null); }}>
         {#each treeRows as row (row.id)}
           {#if row.kind === 'folder'}
             <ContextMenu.Root>
               <ContextMenu.Trigger
-                class={`nodrag group/folder relative mb-0.5 flex min-w-0 items-center rounded hover:bg-[var(--app-surface-raised)] ${dropIndicator?.id === row.id && dropIndicator.placement === 'inside' ? 'bg-[var(--app-accent)]/10 ring-1 ring-inset ring-[var(--app-accent)]' : ''}`}
+                class={`api-row folder nodrag ${dropIndicator?.id === row.id && dropIndicator.placement === 'inside' ? 'drop-inside' : ''} ${draggedItem?.id === row.id ? 'dragging' : ''}`}
                 data-testid={`api-folder-${row.folder.id}`}
                 style={`padding-left: ${row.depth * 12}px`}
                 ondragover={(event) => { event.preventDefault(); event.stopPropagation(); updateDropIndicator(event, row); }}
@@ -1356,29 +1361,30 @@
               >
                 {#if dropIndicator?.id === row.id && dropIndicator.placement !== 'inside'}
                   <span
-                    class={`pointer-events-none absolute inset-x-0 z-20 h-0.5 rounded-full bg-[var(--app-accent)] shadow-[0_0_0_1px_var(--app-surface),0_0_8px_var(--app-accent)] ${dropIndicator.placement === 'before' ? 'top-0 -translate-y-1/2' : 'bottom-0 translate-y-1/2'}`}
+                    class={`api-drop-line ${dropIndicator.placement === 'before' ? 'before' : 'after'}`}
                     data-testid={`api-drop-${dropIndicator.placement}-${row.id}`}
                     aria-hidden="true"
                   ></span>
                 {/if}
                 <button
                   type="button"
-                  class="nodrag grid size-6 shrink-0 cursor-grab place-items-center text-[var(--app-text-muted)] opacity-50"
+                  class="api-grip nodrag"
                   draggable="true"
                   data-testid={`api-folder-drag-${row.folder.id}`}
                   aria-label={m['api_client.reorder_folder']()}
+                  title={m['api_client.reorder_folder']()}
                   onpointerdown={(event) => event.stopPropagation()}
                   ondragstart={(event) => { event.stopPropagation(); draggedItem = { kind: 'folder', id: row.folder.id }; dropIndicator = null; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }}
                   ondragend={finishDrag}
                 ><GripVertical size={12} /></button>
-                <button type="button" class="nodrag flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-1 text-left" onclick={() => toggleFolder(row.folder.id)}>
-                  {#if collapsedFolderIds.has(row.folder.id)}<ChevronRight size={12} class="shrink-0" />{:else}<ChevronDown size={12} class="shrink-0" />{/if}
-                  <Folder size={12} class="shrink-0 text-[var(--app-secondary)]" />
-                  <span class="min-w-0 flex-1 truncate text-ui-sm font-medium text-[var(--app-text)]">{row.folder.name}</span>
-                  <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{requestsInFolder(row.folder.id).length}</span>
+                <button type="button" class="api-row-main nodrag" aria-expanded={!collapsedFolderIds.has(row.folder.id)} onclick={() => toggleFolder(row.folder.id)}>
+                  <span class="api-chevron" class:collapsed={collapsedFolderIds.has(row.folder.id)} aria-hidden="true"><ChevronDown size={12} /></span>
+                  <Folder size={13} class="api-folder-icon" aria-hidden="true" />
+                  <span class="api-row-name folder">{row.folder.name}</span>
+                  <span class="api-row-count">{requestsInFolder(row.folder.id).length}</span>
                 </button>
                 <DropdownMenu.Root>
-                  <DropdownMenu.Trigger class="nodrag grid size-6 shrink-0 place-items-center rounded text-[var(--app-text-muted)] opacity-0 hover:bg-[var(--app-border)] group-hover/folder:opacity-100 focus:opacity-100" aria-label={m['api_client.folder_actions']()}><MoreHorizontal size={12} /></DropdownMenu.Trigger>
+                  <DropdownMenu.Trigger class="api-row-more nodrag" aria-label={m['api_client.folder_actions']()}><MoreHorizontal size={13} /></DropdownMenu.Trigger>
                   <DropdownMenu.Content align="start" class="w-48">
                     <DropdownMenu.Item onclick={() => void runFolder(row.folder.id)}><Play />{m['api_client.run_folder']()}</DropdownMenu.Item>
                     <DropdownMenu.Item onclick={() => addRequest(row.folder.id)}><Plus />{m['api_client.add_request']()}</DropdownMenu.Item>
@@ -1402,7 +1408,7 @@
             {@const request = row.request}
             <ContextMenu.Root>
               <ContextMenu.Trigger
-                class={`nodrag group/request relative mb-0.5 flex min-w-0 items-center rounded hover:bg-[var(--app-surface-raised)] ${request.id === selectedRequestId ? 'bg-[var(--app-surface-raised)] ring-1 ring-[var(--app-accent)]/30' : ''}`}
+                class={`api-row request nodrag ${request.id === selectedRequestId ? 'selected' : ''} ${draggedItem?.id === request.id ? 'dragging' : ''}`}
                 data-testid={`api-request-${request.id}`}
                 style={`padding-left: ${row.depth * 12}px`}
                 role="listitem"
@@ -1411,32 +1417,33 @@
               >
                 {#if dropIndicator?.id === row.id}
                   <span
-                    class={`pointer-events-none absolute inset-x-0 z-20 h-0.5 rounded-full bg-[var(--app-accent)] shadow-[0_0_0_1px_var(--app-surface),0_0_8px_var(--app-accent)] ${dropIndicator.placement === 'before' ? 'top-0 -translate-y-1/2' : 'bottom-0 translate-y-1/2'}`}
+                    class={`api-drop-line ${dropIndicator.placement === 'before' ? 'before' : 'after'}`}
                     data-testid={`api-drop-${dropIndicator.placement}-${row.id}`}
                     aria-hidden="true"
                   ></span>
                 {/if}
                 <button
                   type="button"
-                  class="nodrag grid size-6 shrink-0 cursor-grab place-items-center text-[var(--app-text-muted)] opacity-50"
+                  class="api-grip nodrag"
                   draggable="true"
                   data-testid={`api-request-drag-${request.id}`}
                   aria-label={m['api_client.reorder_request']()}
+                  title={m['api_client.reorder_request']()}
                   onpointerdown={(event) => event.stopPropagation()}
                   ondragstart={(event) => { event.stopPropagation(); draggedItem = { kind: 'request', id: request.id }; dropIndicator = null; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }}
                   ondragend={finishDrag}
                 ><GripVertical size={12} /></button>
-                <button class="nodrag flex min-w-0 flex-1 items-center gap-2 px-0 py-1.5 text-left focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]" aria-current={request.id === selectedRequestId ? 'true' : undefined} onclick={() => chooseRequest(request.id)}>
-                  <span class="w-9 shrink-0 text-ui-xs font-bold text-[var(--app-secondary)]">{request.protocol === 'graphql' ? 'GQL' : request.protocol === 'websocket' ? 'WS' : request.protocol === 'grpc' ? 'RPC' : request.method}</span>
-                  <span class="min-w-0 flex-1 truncate text-ui-sm text-[var(--app-text)]">{request.name}</span>
+                <button class="api-row-main nodrag" aria-current={request.id === selectedRequestId ? 'true' : undefined} title={request.name} onclick={() => chooseRequest(request.id)}>
+                  <span class="api-method" data-method={request.protocol === 'http' || !request.protocol ? request.method : request.protocol}>{request.protocol === 'graphql' ? 'GQL' : request.protocol === 'websocket' ? 'WS' : request.protocol === 'grpc' ? 'RPC' : request.method}</span>
+                  <span class="api-row-name">{request.name}</span>
                 </button>
                 <DropdownMenu.Root>
-                  <DropdownMenu.Trigger class="nodrag grid size-6 shrink-0 place-items-center rounded text-[var(--app-text-muted)] opacity-0 hover:bg-[var(--app-border)] group-hover/request:opacity-100 focus:opacity-100" aria-label={m['api_client.request_actions']()}><MoreHorizontal size={12} /></DropdownMenu.Trigger>
+                  <DropdownMenu.Trigger class="api-row-more nodrag" aria-label={m['api_client.request_actions']()}><MoreHorizontal size={13} /></DropdownMenu.Trigger>
                   <DropdownMenu.Content align="start" class="w-44">
                     <DropdownMenu.Item onclick={() => void executeRequest(request)}><Play />{m['api_client.run_request']()}</DropdownMenu.Item>
                     <DropdownMenu.Item onclick={() => duplicateRequest(request.id)}><Copy />{m['api_client.duplicate_request']()}</DropdownMenu.Item>
-                    <DropdownMenu.Item onclick={() => moveRequest(request.id, -1)}>{m['api_client.move_up']()}</DropdownMenu.Item>
-                    <DropdownMenu.Item onclick={() => moveRequest(request.id, 1)}>{m['api_client.move_down']()}</DropdownMenu.Item>
+                    <DropdownMenu.Item onclick={() => moveRequest(request.id, -1)}><ArrowUp />{m['api_client.move_up']()}</DropdownMenu.Item>
+                    <DropdownMenu.Item onclick={() => moveRequest(request.id, 1)}><ArrowDown />{m['api_client.move_down']()}</DropdownMenu.Item>
                     <DropdownMenu.Separator />
                     <DropdownMenu.Item variant="destructive" onclick={() => deleteRequest(request.id)}><Trash2 />{m['api_client.delete_request']()}</DropdownMenu.Item>
                   </DropdownMenu.Content>
@@ -1445,21 +1452,16 @@
               <ContextMenu.Content class="w-44">
                 <ContextMenu.Item onclick={() => void executeRequest(request)}><Play />{m['api_client.run_request']()}</ContextMenu.Item>
                 <ContextMenu.Item onclick={() => duplicateRequest(request.id)}><Copy />{m['api_client.duplicate_request']()}</ContextMenu.Item>
-                <ContextMenu.Item onclick={() => moveRequest(request.id, -1)}>{m['api_client.move_up']()}</ContextMenu.Item>
-                <ContextMenu.Item onclick={() => moveRequest(request.id, 1)}>{m['api_client.move_down']()}</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => moveRequest(request.id, -1)}><ArrowUp />{m['api_client.move_up']()}</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => moveRequest(request.id, 1)}><ArrowDown />{m['api_client.move_down']()}</ContextMenu.Item>
                 <ContextMenu.Separator />
                 <ContextMenu.Item variant="destructive" onclick={() => deleteRequest(request.id)}><Trash2 />{m['api_client.delete_request']()}</ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>
           {/if}
         {:else}
-          <div class="grid h-full place-items-center p-4 text-center text-ui-sm leading-5 text-[var(--app-text-muted)]">
-            <div>
-              <Braces size={24} class="mx-auto mb-2 opacity-40" aria-hidden="true" />
-              <p>{m['api_client.empty']()}</p>
-              <Button size="sm" variant="outline" class="mt-3 h-7 text-ui-sm" onclick={addRequest}><Plus size={13} /> {m['api_client.add_request']()}</Button>
-            </div>
-          </div>
+          <!-- A chamada principal fica no painel ao lado; aqui so o estado. -->
+          <p class="api-side-empty">{m['api_client.empty']()}</p>
         {/each}
       </div>
     </aside>
@@ -1467,16 +1469,16 @@
     {#if selectedRequest}
       <section class="flex min-h-0 min-w-0 flex-col">
         {#if compatibilityWarnings.length}
-          <div class="flex shrink-0 items-start gap-2 border-b border-amber-500/25 bg-amber-500/10 px-3 py-2 text-ui-xs leading-4 text-[var(--app-text-soft)]" role="status" data-testid="api-client-compatibility-warning">
-            <AlertTriangle size={13} class="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />
+          <div class="api-compat" role="status" data-testid="api-client-compatibility-warning">
+            <AlertTriangle size={14} class="api-compat-icon" aria-hidden="true" />
             <div class="min-w-0 flex-1">
-              <strong class="block text-[var(--app-text)]">{m['api_client.compat_title']()}</strong>
-              <span>{compatibilityWarnings.map(compatibilityWarningLabel).join(' ')}</span>
+              <strong class="block text-ui-md font-semibold text-[var(--app-text)]">{m['api_client.compat_title']()}</strong>
+              <span class="block text-ui-sm leading-[1.5] text-[var(--app-text-soft)] [text-wrap:pretty]">{compatibilityWarnings.map(compatibilityWarningLabel).join(' ')}</span>
             </div>
-            <button class="grid size-6 shrink-0 place-items-center rounded text-[var(--app-text-muted)] hover:bg-amber-500/15 hover:text-[var(--app-text)]" aria-label={m['api_client.compat_dismiss']()} title={m['api_client.compat_dismiss']()} onclick={dismissCompatibilityWarnings}><X size={12} /></button>
+            <HeaderIconButton class="api-icon-btn" label={m['api_client.compat_dismiss']()} side="left" onclick={dismissCompatibilityWarnings}><X size={13} /></HeaderIconButton>
           </div>
         {/if}
-        <div class="flex shrink-0 gap-1.5 border-b border-[var(--app-border)] p-2">
+        <div class="flex shrink-0 gap-1.5 border-b border-[var(--app-border)] px-2.5 py-2">
           <NativeSelect.Root class="w-[104px] shrink-0" size="sm" aria-label={m['api_client.protocol']()} value={selectedRequest.protocol ?? 'http'} onchange={(event: Event) => changeProtocol(inputValue(event) as ApiClientProtocol)}>
             <NativeSelect.Option value="http">HTTP</NativeSelect.Option>
             <NativeSelect.Option value="graphql">GraphQL</NativeSelect.Option>
@@ -1484,7 +1486,7 @@
             <NativeSelect.Option value="grpc">gRPC</NativeSelect.Option>
           </NativeSelect.Root>
           {#if selectedRequest.protocol === 'websocket' || selectedRequest.protocol === 'grpc'}
-            <div class="grid h-8 w-[58px] shrink-0 place-items-center rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] font-mono text-ui-xs font-bold text-[var(--app-secondary)]">{selectedRequest.protocol === 'websocket' ? 'WS' : 'RPC'}</div>
+            <div class="grid h-7 w-[58px] shrink-0 place-items-center rounded-md bg-[var(--app-secondary-soft)] font-mono text-[11px] font-semibold text-[var(--app-secondary)]">{selectedRequest.protocol === 'websocket' ? 'WS' : 'RPC'}</div>
           {:else}
             <NativeSelect.Root
               class="w-[76px] shrink-0 [&_select]:font-bold [&_select]:text-[var(--app-secondary)]"
@@ -1522,7 +1524,7 @@
             name="request-name"
             autocomplete="off"
             aria-label={m['api_client.request_name']()}
-            class="h-7 min-w-0 flex-1 border-transparent bg-transparent px-1 text-ui-md font-semibold hover:border-[var(--app-border)]"
+            class="api-name-input h-7 min-w-0 flex-1 border-transparent bg-transparent px-1.5 hover:border-[var(--app-border)]"
             oninput={(event: Event) => updateRequest({ name: inputValue(event) })}
             onblur={() => persist()}
           />
@@ -1538,20 +1540,20 @@
               {#each folders as folder (folder.id)}<NativeSelect.Option value={folder.id}>{apiClientFolderPath(folders, folder.id)}</NativeSelect.Option>{/each}
             </NativeSelect.Root>
           </div>
-          <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)] focus-visible:ring-2 focus-visible:ring-[var(--app-danger)]" aria-label={m['api_client.delete_request']()} onclick={() => deleteRequest()}>
-            <Trash2 size={13} aria-hidden="true" />
-          </button>
+          <HeaderIconButton class="api-icon-btn danger" label={m['api_client.delete_request']()} side="left" onclick={() => deleteRequest()}>
+            <Trash2 size={14} aria-hidden="true" />
+          </HeaderIconButton>
         </div>
 
         <Tabs.Root bind:value={activeTab} class="flex min-h-0 flex-1 flex-col">
           <Tabs.List class="h-8 max-w-full shrink-0 justify-start overflow-x-auto rounded-none border-b border-[var(--app-border)] bg-transparent px-2 [&_[data-state=active]]:bg-[var(--app-surface-raised)] [&_[data-state=active]]:text-[var(--app-text)] [&_[data-state=active]]:shadow-[inset_0_-2px_0_var(--app-accent)]">
-            <Tabs.Trigger value="params" class="h-7 flex-none text-ui-xs">{m['api_client.params']()} <span class="tabular-nums">{selectedRequest.params?.filter((item) => item.enabled).length ?? 0}</span></Tabs.Trigger>
-            <Tabs.Trigger value="headers" class="h-7 flex-none text-ui-xs">{m['api_client.headers']()} <span class="tabular-nums">{selectedRequest.headers.filter((header) => header.enabled).length}</span></Tabs.Trigger>
+            <Tabs.Trigger value="params" class="h-7 flex-none text-ui-xs">{m['api_client.params']()} <span class="api-tab-count">{selectedRequest.params?.filter((item) => item.enabled).length ?? 0}</span></Tabs.Trigger>
+            <Tabs.Trigger value="headers" class="h-7 flex-none text-ui-xs">{m['api_client.headers']()} <span class="api-tab-count">{selectedRequest.headers.filter((header) => header.enabled).length}</span></Tabs.Trigger>
             <Tabs.Trigger value="body" class="h-7 flex-none text-ui-xs">{selectedRequest.protocol === 'graphql' ? 'GraphQL' : selectedRequest.protocol === 'websocket' || selectedRequest.protocol === 'grpc' ? m['api_client.messages']() : m['api_client.body']()}</Tabs.Trigger>
             <Tabs.Trigger value="auth" class="h-7 flex-none text-ui-xs">{m['api_client.auth']()}</Tabs.Trigger>
             <Tabs.Trigger value="variables" class="h-7 flex-none text-ui-xs">{m['api_client.variables']()}</Tabs.Trigger>
             <Tabs.Trigger value="scripts" class="h-7 flex-none text-ui-xs">{m['api_client.scripts']()}</Tabs.Trigger>
-            <Tabs.Trigger value="tests" class="h-7 flex-none text-ui-xs">{m['api_client.tests']()} <span class="tabular-nums">{selectedRequest.assertions?.length ?? 0}</span></Tabs.Trigger>
+            <Tabs.Trigger value="tests" class="h-7 flex-none text-ui-xs">{m['api_client.tests']()} <span class="api-tab-count">{selectedRequest.assertions?.length ?? 0}</span></Tabs.Trigger>
             <Tabs.Trigger value="network" class="h-7 flex-none text-ui-xs">{m['api_client.network']()}</Tabs.Trigger>
             <Tabs.Trigger value="sync" class="h-7 flex-none text-ui-xs" onclick={() => void synchronize('status')}>{m['api_client.sync']()}</Tabs.Trigger>
             <Tabs.Trigger value="docs" class="h-7 flex-none text-ui-xs">{m['api_client.docs']()}</Tabs.Trigger>
@@ -1561,10 +1563,10 @@
           <Tabs.Content value="params" class="m-0 min-h-0 flex-1 overflow-auto p-2">
             {#each selectedRequest.params ?? [] as param (param.id)}
               <div class="mb-1 grid grid-cols-[24px_minmax(90px,0.8fr)_minmax(120px,1.2fr)_28px] gap-1">
-                <button class="grid size-7 place-items-center rounded border border-[var(--app-border)] text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)]" aria-label={param.enabled ? m['api_client.disable_param']() : m['api_client.enable_param']()} onclick={() => updateKeyValue('params', param.id, { enabled: !param.enabled }, true)}>{#if param.enabled}<Check size={12} />{/if}</button>
+                <button class="kv-toggle" aria-pressed={param.enabled} aria-label={param.enabled ? m['api_client.disable_param']() : m['api_client.enable_param']()} onclick={() => updateKeyValue('params', param.id, { enabled: !param.enabled }, true)}><Check size={11} strokeWidth={3} /></button>
                 <Input value={param.name} name="param-name" autocomplete="off" spellcheck="false" aria-label={m['api_client.param_name']()} placeholder={m['api_client.param_name']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateKeyValue('params', param.id, { name: inputValue(event) })} onblur={() => persist()} />
                 <Input value={param.value} name="param-value" autocomplete="off" spellcheck="false" aria-label={m['api_client.param_value']()} placeholder={m['api_client.param_value']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateKeyValue('params', param.id, { value: inputValue(event) })} onblur={() => persist()} />
-                <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_param']()} onclick={() => removeKeyValue('params', param.id)}><Trash2 size={12} /></button>
+                <button class="kv-remove" aria-label={m['api_client.remove_param']()} onclick={() => removeKeyValue('params', param.id)}><Trash2 size={12} /></button>
               </div>
             {/each}
             <Button size="sm" variant="outline" class="mt-1 h-7 text-ui-xs" onclick={() => addKeyValue('params')}><Plus size={12} /> {m['api_client.add_param']()}</Button>
@@ -1586,11 +1588,11 @@
               </div>
               {#each selectedRequest.websocket?.messages ?? [] as message (message.id)}
                 <div class="mb-2 grid grid-cols-[24px_120px_90px_minmax(140px,1fr)_28px] items-start gap-1">
-                  <button class="grid size-7 place-items-center rounded border border-[var(--app-border)] text-[var(--app-text-muted)]" aria-label={message.enabled ? m['api_client.disable_message']() : m['api_client.enable_message']()} onclick={() => updateProtocolMessage('websocket', message.id, { enabled: !message.enabled }, true)}>{#if message.enabled}<Check size={12} />{/if}</button>
+                  <button class="kv-toggle" aria-pressed={message.enabled} aria-label={message.enabled ? m['api_client.disable_message']() : m['api_client.enable_message']()} onclick={() => updateProtocolMessage('websocket', message.id, { enabled: !message.enabled }, true)}><Check size={11} strokeWidth={3} /></button>
                   <Input value={message.name} class="h-7 text-ui-xs" aria-label={m['api_client.message_name']()} oninput={(event: Event) => updateProtocolMessage('websocket', message.id, { name: inputValue(event) })} onblur={() => persist()} />
                   <NativeSelect.Root size="sm" value={message.type} aria-label={m['api_client.message_type']()} onchange={(event: Event) => updateProtocolMessage('websocket', message.id, { type: inputValue(event) as ApiClientMessage['type'] }, true)}><NativeSelect.Option value="text">{m['api_client.message_text']()}</NativeSelect.Option><NativeSelect.Option value="json">JSON</NativeSelect.Option><NativeSelect.Option value="binary">{m['api_client.message_binary']()}</NativeSelect.Option></NativeSelect.Root>
                   <ApiCodeEditor value={message.content} language={message.type === 'json' ? 'json' : 'text'} label={m['api_client.message_content']()} minHeight={96} onchange={(value) => updateProtocolMessage('websocket', message.id, { content: value })} onblur={() => persist()} />
-                  <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_message']()} onclick={() => removeProtocolMessage('websocket', message.id)}><Trash2 size={12} /></button>
+                  <button class="kv-remove" aria-label={m['api_client.remove_message']()} onclick={() => removeProtocolMessage('websocket', message.id)}><Trash2 size={12} /></button>
                 </div>
               {/each}
               <Button size="sm" variant="outline" class="h-7 text-ui-xs" onclick={() => addProtocolMessage('websocket')}><Plus size={12} />{m['api_client.add_message']()}</Button>
@@ -1607,26 +1609,30 @@
               </div>
               {#each selectedRequest.grpc?.messages ?? [] as message (message.id)}
                 <div class="mb-2 grid grid-cols-[24px_130px_minmax(180px,1fr)_28px] items-start gap-1">
-                  <button class="grid size-7 place-items-center rounded border border-[var(--app-border)] text-[var(--app-text-muted)]" aria-label={message.enabled ? m['api_client.disable_message']() : m['api_client.enable_message']()} onclick={() => updateProtocolMessage('grpc', message.id, { enabled: !message.enabled }, true)}>{#if message.enabled}<Check size={12} />{/if}</button>
+                  <button class="kv-toggle" aria-pressed={message.enabled} aria-label={message.enabled ? m['api_client.disable_message']() : m['api_client.enable_message']()} onclick={() => updateProtocolMessage('grpc', message.id, { enabled: !message.enabled }, true)}><Check size={11} strokeWidth={3} /></button>
                   <Input value={message.name} class="h-7 text-ui-xs" aria-label={m['api_client.message_name']()} oninput={(event: Event) => updateProtocolMessage('grpc', message.id, { name: inputValue(event) })} onblur={() => persist()} />
                   <ApiCodeEditor value={message.content} language="json" label={m['api_client.message_content']()} minHeight={96} onchange={(value) => updateProtocolMessage('grpc', message.id, { content: value })} onblur={() => persist()} />
-                  <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_message']()} onclick={() => removeProtocolMessage('grpc', message.id)}><Trash2 size={12} /></button>
+                  <button class="kv-remove" aria-label={m['api_client.remove_message']()} onclick={() => removeProtocolMessage('grpc', message.id)}><Trash2 size={12} /></button>
                 </div>
               {/each}
               <Button size="sm" variant="outline" class="h-7 text-ui-xs" onclick={() => addProtocolMessage('grpc')}><Plus size={12} />{m['api_client.add_message']()}</Button>
             {:else}
-              <div class="mb-2 flex items-center gap-1">
+              <!-- Botoes com aria-pressed (contrato de teste) no visual de controle segmentado. -->
+              <div class="api-seg mb-3" role="group" aria-label={m['api_client.body']()}>
                 {#each ['none', 'json', 'text', 'xml', 'form', 'multipart'] as mode}
-                  <button aria-pressed={selectedRequest.bodyMode === mode} class={`rounded border px-2 py-1 text-ui-xs transition-colors ${selectedRequest.bodyMode === mode ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => updateRequest({ bodyMode: mode as ApiClientRequest['bodyMode'] }, true)}>{bodyModeLabel(mode)}</button>
+                  <button type="button" aria-pressed={selectedRequest.bodyMode === mode} class="api-seg-btn" onclick={() => updateRequest({ bodyMode: mode as ApiClientRequest['bodyMode'] }, true)}>{bodyModeLabel(mode)}</button>
                 {/each}
               </div>
+              {#if selectedRequest.bodyMode === 'none'}
+                <p class="text-ui-md text-[var(--app-text-muted)]">{m['api_client.body_none_hint']()}</p>
+              {/if}
               {#if selectedRequest.bodyMode === 'form' || selectedRequest.bodyMode === 'multipart'}
               {#each selectedRequest.formFields ?? [] as field (field.id)}
                 <div class="mb-1 grid grid-cols-[24px_minmax(90px,0.8fr)_minmax(120px,1.2fr)_28px] gap-1">
-                  <button class="grid size-7 place-items-center rounded border border-[var(--app-border)] text-[var(--app-text-muted)]" aria-label={field.enabled ? m['api_client.disable_field']() : m['api_client.enable_field']()} onclick={() => updateKeyValue('formFields', field.id, { enabled: !field.enabled }, true)}>{#if field.enabled}<Check size={12} />{/if}</button>
+                  <button class="kv-toggle" aria-pressed={field.enabled} aria-label={field.enabled ? m['api_client.disable_field']() : m['api_client.enable_field']()} onclick={() => updateKeyValue('formFields', field.id, { enabled: !field.enabled }, true)}><Check size={11} strokeWidth={3} /></button>
                   <Input value={field.name} name="form-name" autocomplete="off" aria-label={m['api_client.field_name']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateKeyValue('formFields', field.id, { name: inputValue(event) })} onblur={() => persist()} />
                   <Input value={field.value} name="form-value" autocomplete="off" aria-label={m['api_client.field_value']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateKeyValue('formFields', field.id, { value: inputValue(event) })} onblur={() => persist()} />
-                  <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_field']()} onclick={() => removeKeyValue('formFields', field.id)}><Trash2 size={12} /></button>
+                  <button class="kv-remove" aria-label={m['api_client.remove_field']()} onclick={() => removeKeyValue('formFields', field.id)}><Trash2 size={12} /></button>
                 </div>
               {/each}
               <Button size="sm" variant="outline" class="mt-1 h-7 text-ui-xs" onclick={() => addKeyValue('formFields')}><Plus size={12} />{m['api_client.add_field']()}</Button>
@@ -1645,10 +1651,10 @@
           <Tabs.Content value="headers" class="m-0 min-h-0 flex-1 overflow-auto p-2">
             {#each selectedRequest.headers as header (header.id)}
               <div class="mb-1 grid grid-cols-[24px_minmax(90px,0.8fr)_minmax(120px,1.2fr)_28px] gap-1">
-                <button class="grid size-7 place-items-center rounded border border-[var(--app-border)] text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)]" aria-label={header.enabled ? m['api_client.disable_header']() : m['api_client.enable_header']()} onclick={() => updateHeader(header.id, { enabled: !header.enabled }, true)}>{#if header.enabled}<Check size={12} />{/if}</button>
+                <button class="kv-toggle" aria-pressed={header.enabled} aria-label={header.enabled ? m['api_client.disable_header']() : m['api_client.enable_header']()} onclick={() => updateHeader(header.id, { enabled: !header.enabled }, true)}><Check size={11} strokeWidth={3} /></button>
                 <Input value={header.name} name="header-name" autocomplete="off" spellcheck="false" aria-label={m['api_client.header_name']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateHeader(header.id, { name: inputValue(event) })} onblur={() => persist()} />
                 <Input value={header.value} name="header-value" autocomplete="off" spellcheck="false" aria-label={m['api_client.header_value']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateHeader(header.id, { value: inputValue(event) })} onblur={() => persist()} />
-                <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_header']()} onclick={() => removeHeader(header.id)}><Trash2 size={12} /></button>
+                <button class="kv-remove" aria-label={m['api_client.remove_header']()} onclick={() => removeHeader(header.id)}><Trash2 size={12} /></button>
               </div>
             {/each}
             <Button size="sm" variant="outline" class="mt-1 h-7 text-ui-xs" onclick={addHeader}><Plus size={12} /> {m['api_client.add_header']()}</Button>
@@ -1713,7 +1719,7 @@
                 {/if}
                 <div class="flex flex-wrap items-center gap-2">
                   <Button size="sm" class="h-8 text-ui-xs" disabled={oauthAuthorizing || !oauth.tokenUrl || (oauth.grantType === 'authorization_code' && !oauth.authorizationUrl)} onclick={() => void authorizeOAuth()}>{#if oauthAuthorizing}<LoaderCircle size={12} class="animate-spin" />{:else}<ExternalLink size={12} />{/if}{oauth.accessToken ? m['api_client.oauth_refresh']() : m['api_client.oauth_get_token']()}</Button>
-                  {#if oauth.accessToken}<span class="text-ui-xs text-emerald-500">{m['api_client.oauth_token_ready']()}{oauth.expiresAt ? ` · ${new Date(oauth.expiresAt).toLocaleString()}` : ''}</span><Button size="sm" variant="ghost" class="h-7 text-ui-xs" onclick={() => updateRequest({ auth: { ...selectedRequest.auth, oauth2: { ...oauth, accessToken: '', refreshToken: '', expiresAt: null } } }, true)}>{m['api_client.oauth_clear_token']()}</Button>{/if}
+                  {#if oauth.accessToken}<span class="api-status ok subtle"><CircleCheck size={13} aria-hidden="true" />{m['api_client.oauth_token_ready']()}{oauth.expiresAt ? ` · ${new Date(oauth.expiresAt).toLocaleString()}` : ''}</span><Button size="sm" variant="ghost" class="h-7 text-ui-xs" onclick={() => updateRequest({ auth: { ...selectedRequest.auth, oauth2: { ...oauth, accessToken: '', refreshToken: '', expiresAt: null } } }, true)}>{m['api_client.oauth_clear_token']()}</Button>{/if}
                 </div>
               </div>
             {/if}
@@ -1729,16 +1735,20 @@
               <Button size="sm" variant="outline" class="h-8" disabled={!newEnvironmentName.trim()} onclick={addEnvironment}><Plus size={12} />{m['api_client.add_environment']()}</Button>
               {#if activeEnvironment}<Button size="sm" variant="ghost" class="h-8 text-[var(--app-danger)]" onclick={deleteEnvironment}><Trash2 size={12} />{m['api_client.delete_environment']()}</Button>{/if}
             </div>
-            <div class="mb-3 flex flex-wrap items-center gap-1" role="group" aria-label={m['api_client.variable_scope']()}>
-              {#each [
-                { id: 'collection', label: m['api_client.collection_variables']() },
-                { id: 'environment', label: m['api_client.environment_variables']() },
-                { id: 'globals', label: m['api_client.global_variables']() },
-                { id: 'runtime', label: m['api_client.runtime_variables']() },
-                { id: 'vault', label: m['api_client.vault_variables']() },
-              ] as scope}
-                <button disabled={scope.id === 'environment' && !activeEnvironment} aria-pressed={variableEditorScope === scope.id} class={`rounded border px-2 py-1 text-ui-xs transition-colors disabled:opacity-40 ${variableEditorScope === scope.id ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => (variableEditorScope = scope.id as typeof variableEditorScope)}>{scope.label}</button>
-              {/each}
+            <div class="mb-3 max-w-full overflow-x-auto">
+              <SegmentedControl
+                size="sm"
+                label={m['api_client.variable_scope']()}
+                value={variableEditorScope}
+                onValueChange={(value) => (variableEditorScope = value)}
+                options={[
+                  { value: 'collection', label: m['api_client.collection_variables']() },
+                  { value: 'environment', label: m['api_client.environment_variables'](), disabled: !activeEnvironment },
+                  { value: 'globals', label: m['api_client.global_variables']() },
+                  { value: 'runtime', label: m['api_client.runtime_variables']() },
+                  { value: 'vault', label: m['api_client.vault_variables']() },
+                ]}
+              />
             </div>
             {#if variableEditorScope === 'vault'}
               <div class="mb-3 grid grid-cols-[minmax(100px,0.8fr)_minmax(120px,1.2fr)_auto] gap-1">
@@ -1749,7 +1759,7 @@
               {#each vaultKeys as name (name)}
                 <div class="mb-1 grid grid-cols-[minmax(100px,0.8fr)_minmax(120px,1.2fr)_28px] items-center gap-1">
                   <code class="truncate px-2 text-ui-xs">{name}</code><span class="px-2 font-mono text-ui-xs text-[var(--app-text-muted)]">••••••••</span>
-                  <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_variable']()} onclick={() => void removeVaultVariable(name)}><Trash2 size={12} /></button>
+                  <button class="kv-remove" aria-label={m['api_client.remove_variable']()} onclick={() => void removeVaultVariable(name)}><Trash2 size={12} /></button>
                 </div>
               {/each}
               {#if !desktop?.saveAutomationSecret}<p class="text-ui-xs text-[var(--app-warning)]">{m['api_client.vault_desktop_required']()}</p>{/if}
@@ -1758,7 +1768,7 @@
                 <div class="mb-1 grid grid-cols-[minmax(100px,0.8fr)_minmax(120px,1.2fr)_28px] gap-1">
                   <Input value={name} name="variable-name" autocomplete="off" spellcheck="false" aria-label={m['api_client.variable_name']()} class="h-7 font-mono text-ui-xs" onblur={(event: Event) => renameVariable(name, inputValue(event))} />
                   <Input value={value} name="variable-value" autocomplete="off" spellcheck="false" aria-label={m['api_client.variable_value']()} class="h-7 font-mono text-ui-xs" oninput={(event: Event) => updateVariable(name, inputValue(event))} onblur={() => persist()} />
-                  <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_variable']()} onclick={() => removeVariable(name)}><Trash2 size={12} /></button>
+                  <button class="kv-remove" aria-label={m['api_client.remove_variable']()} onclick={() => removeVariable(name)}><Trash2 size={12} /></button>
                 </div>
               {/each}
               <Button size="sm" variant="outline" class="mt-1 h-7 text-ui-xs" onclick={addVariable}><Plus size={12} /> {m['api_client.add_variable']()}</Button>
@@ -1766,8 +1776,16 @@
           </Tabs.Content>
           <Tabs.Content value="scripts" class="m-0 min-h-0 flex-1 overflow-auto p-2">
             <div class="mb-2 flex flex-wrap items-center gap-1 border-b border-[var(--app-border)] pb-2">
-              <button aria-pressed={scriptScope === 'request'} class={`rounded border px-2 py-1 text-ui-xs transition-colors ${scriptScope === 'request' ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => (scriptScope = 'request')}>{m['api_client.request_scripts']()}</button>
-              <button aria-pressed={scriptScope === 'collection'} class={`rounded border px-2 py-1 text-ui-xs transition-colors ${scriptScope === 'collection' ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => (scriptScope = 'collection')}>{m['api_client.collection_scripts']()}</button>
+              <SegmentedControl
+                size="sm"
+                label={m['api_client.scripts']()}
+                value={scriptScope}
+                onValueChange={(value) => (scriptScope = value)}
+                options={[
+                  { value: 'request', label: m['api_client.request_scripts']() },
+                  { value: 'collection', label: m['api_client.collection_scripts']() },
+                ]}
+              />
               <label class="ml-auto flex items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"><span>{m['api_client.script_runtime']()}</span><NativeSelect.Root class="w-32" size="sm" value={scriptDialect} onchange={(event: Event) => { scriptDialect = inputValue(event) as typeof scriptDialect; persist(); }}><NativeSelect.Option value="orkestrai">Orkestrai</NativeSelect.Option><NativeSelect.Option value="postman">Postman</NativeSelect.Option><NativeSelect.Option value="bruno">Bruno</NativeSelect.Option></NativeSelect.Root></label>
             </div>
             <div class="grid h-full min-h-[260px] grid-cols-2 auto-rows-fr gap-2 max-[720px]:grid-cols-1">
@@ -1783,14 +1801,22 @@
           </Tabs.Content>
           <Tabs.Content value="tests" class="m-0 min-h-0 flex-1 overflow-auto p-2">
             <div class="mb-2 flex items-center gap-1 border-b border-[var(--app-border)] pb-2">
-              <button aria-pressed={testEditorMode === 'assertions'} class={`rounded border px-2 py-1 text-ui-xs transition-colors ${testEditorMode === 'assertions' ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => (testEditorMode = 'assertions')}>{m['api_client.assertions']()}</button>
-              <button aria-pressed={testEditorMode === 'javascript'} class={`rounded border px-2 py-1 text-ui-xs transition-colors ${testEditorMode === 'javascript' ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => (testEditorMode = 'javascript')}>{m['api_client.javascript_tests']()}</button>
-              <span class="ml-auto rounded bg-[var(--app-surface-raised)] px-2 py-1 font-mono text-ui-xs uppercase text-[var(--app-text-muted)]">{scriptDialect}</span>
+              <SegmentedControl
+                size="sm"
+                label={m['api_client.tests']()}
+                value={testEditorMode}
+                onValueChange={(value) => (testEditorMode = value)}
+                options={[
+                  { value: 'assertions', label: m['api_client.assertions']() },
+                  { value: 'javascript', label: m['api_client.javascript_tests']() },
+                ]}
+              />
+              <span class="api-chip ml-auto">{scriptDialect === 'postman' ? 'Postman' : scriptDialect === 'bruno' ? 'Bruno' : 'Orkestrai'}</span>
             </div>
             {#if testEditorMode === 'assertions'}
               {#each selectedRequest.assertions ?? [] as assertion (assertion.id)}
                 <div class="mb-1 grid grid-cols-[24px_105px_minmax(90px,1fr)_110px_minmax(90px,1fr)_28px] gap-1">
-                  <button class="grid size-7 place-items-center rounded border border-[var(--app-border)] text-[var(--app-text-muted)]" aria-label={assertion.enabled ? m['api_client.disable_test']() : m['api_client.enable_test']()} onclick={() => updateAssertion(assertion.id, { enabled: !assertion.enabled }, true)}>{#if assertion.enabled}<Check size={12} />{/if}</button>
+                  <button class="kv-toggle" aria-pressed={assertion.enabled} aria-label={assertion.enabled ? m['api_client.disable_test']() : m['api_client.enable_test']()} onclick={() => updateAssertion(assertion.id, { enabled: !assertion.enabled }, true)}><Check size={11} strokeWidth={3} /></button>
                   <NativeSelect.Root size="sm" aria-label={m['api_client.test_source']()} value={assertion.source} onchange={(event: Event) => updateAssertion(assertion.id, { source: inputValue(event) as ApiClientAssertion['source'] }, true)}>
                     {#each ['status', 'body', 'header', 'responseTime'] as source}<NativeSelect.Option value={source}>{testSourceLabel(source)}</NativeSelect.Option>{/each}
                   </NativeSelect.Root>
@@ -1799,7 +1825,7 @@
                     {#each ['equals', 'notEquals', 'contains', 'exists', 'matches', 'lt', 'lte', 'gt', 'gte'] as operator}<NativeSelect.Option value={operator}>{testOperatorLabel(operator)}</NativeSelect.Option>{/each}
                   </NativeSelect.Root>
                   <Input value={assertion.expected} name="assertion-expected" aria-label={m['api_client.test_expected']()} placeholder={m['api_client.test_expected']()} class="h-7 font-mono text-ui-xs" disabled={assertion.operator === 'exists'} oninput={(event: Event) => updateAssertion(assertion.id, { expected: inputValue(event) })} onblur={() => persist()} />
-                  <button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_test']()} onclick={() => removeAssertion(assertion.id)}><Trash2 size={12} /></button>
+                  <button class="kv-remove" aria-label={m['api_client.remove_test']()} onclick={() => removeAssertion(assertion.id)}><Trash2 size={12} /></button>
                 </div>
               {/each}
               <Button size="sm" variant="outline" class="mt-1 h-7 text-ui-xs" onclick={addAssertion}><Plus size={12} />{m['api_client.add_test']()}</Button>
@@ -1818,7 +1844,7 @@
               {#if network.cookies.length}
                 <div class="max-h-36 divide-y divide-[var(--app-border)] overflow-auto rounded border border-[var(--app-border)]">
                   {#each network.cookies as cookie, index (`${cookie.domain}-${cookie.path}-${cookie.key}`)}
-                    <div class="grid grid-cols-[minmax(90px,0.7fr)_minmax(120px,1.3fr)_28px] items-center gap-2 px-2 py-1.5 text-ui-xs"><strong class="truncate font-mono text-[var(--app-text-soft)]" title={cookie.key}>{cookie.key}</strong><span class="truncate font-mono text-[var(--app-text-muted)]" title={`${cookie.domain}${cookie.path}`}>{cookie.domain}{cookie.path}</span><button class="grid size-7 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['api_client.remove_cookie']({ name: cookie.key })} onclick={() => { network = { ...network, cookies: network.cookies.filter((_, candidate) => candidate !== index) }; persist(); }}><Trash2 size={11} /></button></div>
+                    <div class="grid grid-cols-[minmax(90px,0.7fr)_minmax(120px,1.3fr)_28px] items-center gap-2 px-2 py-1.5 text-ui-xs"><strong class="truncate font-mono text-[var(--app-text-soft)]" title={cookie.key}>{cookie.key}</strong><span class="truncate font-mono text-[var(--app-text-muted)]" title={`${cookie.domain}${cookie.path}`}>{cookie.domain}{cookie.path}</span><button class="kv-remove" aria-label={m['api_client.remove_cookie']({ name: cookie.key })} onclick={() => { network = { ...network, cookies: network.cookies.filter((_, candidate) => candidate !== index) }; persist(); }}><Trash2 size={11} /></button></div>
                   {/each}
                 </div>
               {/if}
@@ -1849,8 +1875,8 @@
                 </div>
                 {#if syncStatus}
                   <div class="flex flex-wrap gap-1.5">
-                    <span class={`rounded px-2 py-1 text-ui-xs font-medium ${syncStatus.conflict ? 'bg-red-500/10 text-red-500' : syncStatus.sourceChanged || syncStatus.localChanged ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'}`}>{syncStatus.conflict ? m['api_client.sync_conflict']() : syncStatus.sourceChanged ? m['api_client.sync_source_changed']() : syncStatus.localChanged ? m['api_client.sync_local_changed']() : m['api_client.sync_current']()}</span>
-                    {#if !syncStatus.writable}<span class="rounded bg-[var(--app-surface-raised)] px-2 py-1 text-ui-xs text-[var(--app-text-muted)]">{m['api_client.sync_read_only']()}</span>{/if}
+                    <span class="api-status" class:ok={!syncStatus.conflict && !syncStatus.sourceChanged && !syncStatus.localChanged} class:warn={!syncStatus.conflict && (syncStatus.sourceChanged || syncStatus.localChanged)}>{syncStatus.conflict ? m['api_client.sync_conflict']() : syncStatus.sourceChanged ? m['api_client.sync_source_changed']() : syncStatus.localChanged ? m['api_client.sync_local_changed']() : m['api_client.sync_current']()}</span>
+                    {#if !syncStatus.writable}<span class="api-chip">{m['api_client.sync_read_only']()}</span>{/if}
                   </div>
                 {/if}
                 <label class="flex items-center justify-between gap-4 border-b border-[var(--app-border)] pb-3"><span><strong class="block text-ui-sm">{m['api_client.sync_watch']()}</strong><span class="block text-ui-xs text-[var(--app-text-muted)]">{m['api_client.sync_watch_hint']()}</span></span><Switch checked={sync.mode === 'watch'} onCheckedChange={(checked: boolean) => { sync = { ...sync, mode: checked ? 'watch' : 'manual' }; persist(); }} /></label>
@@ -1863,7 +1889,7 @@
                 {#if sync.lastSyncedAt}<p class="text-ui-xs text-[var(--app-text-muted)]">{m['api_client.sync_last']({ date: new Date(sync.lastSyncedAt).toLocaleString() })}</p>{/if}
               </div>
             {:else}
-              <div class="grid min-h-52 place-items-center text-center"><div><RefreshCw size={22} class="mx-auto mb-2 text-[var(--app-text-muted)]" /><strong class="block text-ui-sm">{m['api_client.sync_not_linked']()}</strong><p class="mt-1 max-w-sm text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['api_client.sync_not_linked_hint']()}</p></div></div>
+              <div class="grid min-h-52 place-items-center"><NodeEmptyState icon={RefreshCw} title={m['api_client.sync_not_linked']()} description={m['api_client.sync_not_linked_hint']()} /></div>
             {/if}
           </Tabs.Content>
           <Tabs.Content value="docs" class="m-0 min-h-0 flex-1 overflow-auto p-2">
@@ -1875,17 +1901,24 @@
           </Tabs.Content>
           <Tabs.Content value="response" class="m-0 min-h-0 flex-1 overflow-auto p-2">
             {#if response}
-              <div class="mb-2 flex flex-wrap items-center gap-2 text-ui-xs text-[var(--app-text-muted)]">
-                <strong class:text-emerald-500={response.ok} class:text-red-500={!response.ok}>{response.status} {response.statusText}</strong>
-                <span class="tabular-nums">{response.durationMs} ms</span>
-                <span class="tabular-nums">{new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(response.size / 1024)} KB</span>
-                <span class="truncate">{response.contentType}</span>
-                {#if response.tests.length}<span class:text-emerald-500={response.tests.every((test) => test.passed)} class:text-red-500={response.tests.some((test) => !test.passed)}>{response.tests.filter((test) => test.passed).length}/{response.tests.length} {m['api_client.tests_passed']()}</span>{/if}
+              <div class="api-response-meta">
+                <span class="api-status" class:ok={response.ok}>{#if response.ok}<CircleCheck size={13} aria-hidden="true" />{:else}<CircleX size={13} aria-hidden="true" />{/if}{response.status} {response.statusText}</span>
+                <span class="api-meta">{response.durationMs} ms</span>
+                <span class="api-meta">{new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(response.size / 1024)} KB</span>
+                {#if response.tests.length}<span class="api-status subtle" class:ok={response.tests.every((test) => test.passed)}>{response.tests.filter((test) => test.passed).length}/{response.tests.length} {m['api_client.tests_passed']()}</span>{/if}
+                <span class="api-meta truncate" title={response.contentType}>{response.contentType}</span>
               </div>
-              <div class="mb-2 flex items-center gap-1 border-b border-[var(--app-border)] pb-2">
-                {#each ['body', ...(response.visualizations?.length ? ['visualizer'] : []), ...(response.messages?.length ? ['messages'] : []), 'headers', 'tests', 'console'] as view}
-                  <button aria-pressed={responseView === view} class={`rounded border px-2 py-1 text-ui-xs transition-colors ${responseView === view ? 'border-[var(--app-accent)]/35 bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent)]' : 'border-transparent text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)]'}`} onclick={() => (responseView = view as typeof responseView)}>{view === 'body' ? m['api_client.response_body']() : view === 'visualizer' ? m['api_client.visualizer']() : view === 'messages' ? m['api_client.messages']() : view === 'headers' ? m['api_client.response_headers']() : view === 'tests' ? m['api_client.tests']() : m['api_client.script_console']()}</button>
-                {/each}
+              <div class="mb-2 max-w-full overflow-x-auto">
+                <SegmentedControl
+                  size="sm"
+                  label={m['api_client.response']()}
+                  value={responseView}
+                  onValueChange={(value) => (responseView = value)}
+                  options={(['body', ...(response.visualizations?.length ? ['visualizer'] : []), ...(response.messages?.length ? ['messages'] : []), 'headers', 'tests', 'console'] as Array<typeof responseView>).map((view) => ({
+                    value: view,
+                    label: view === 'body' ? m['api_client.response_body']() : view === 'visualizer' ? m['api_client.visualizer']() : view === 'messages' ? m['api_client.messages']() : view === 'headers' ? m['api_client.response_headers']() : view === 'tests' ? m['api_client.tests']() : m['api_client.script_console'](),
+                  }))}
+                />
               </div>
               {#if responseView === 'body'}
                 {#if response.binary}<p class="text-ui-sm text-[var(--app-text-muted)]">{m['api_client.binary_response']()}</p>{:else}<ApiResponseViewer body={response.body} contentType={response.contentType} />{/if}
@@ -1905,8 +1938,8 @@
               {:else if responseView === 'messages'}
                 <div class="space-y-1.5">
                   {#each response.messages ?? [] as message}
-                    <div class={`grid grid-cols-[72px_minmax(0,1fr)_78px] gap-2 rounded border px-2 py-1.5 font-mono text-ui-xs ${message.direction === 'sent' ? 'border-sky-500/25 bg-sky-500/5' : 'border-emerald-500/25 bg-emerald-500/5'}`}>
-                      <strong class={message.direction === 'sent' ? 'text-sky-500' : 'text-emerald-500'}>{message.direction === 'sent' ? m['api_client.message_sent']() : m['api_client.message_received']()}</strong>
+                    <div class="api-message" class:sent={message.direction === 'sent'}>
+                      <strong class="api-message-dir">{message.direction === 'sent' ? m['api_client.message_sent']() : m['api_client.message_received']()}</strong>
                       <pre class="whitespace-pre-wrap break-all text-[var(--app-text)]">{message.content}</pre>
                       <time class="text-right text-[var(--app-text-muted)]">{new Date(message.at).toLocaleTimeString()}</time>
                     </div>
@@ -1915,29 +1948,35 @@
               {:else if responseView === 'headers'}
                 <div class="divide-y divide-[var(--app-border)] rounded border border-[var(--app-border)]">{#each Object.entries(response.headers) as [name, value]}<div class="grid grid-cols-[minmax(110px,0.7fr)_minmax(0,1.3fr)] gap-3 px-2 py-1.5 font-mono text-ui-xs"><strong class="break-all text-[var(--app-text-soft)]">{name}</strong><span class="break-all text-[var(--app-text-muted)]">{value}</span></div>{/each}</div>
               {:else if responseView === 'tests'}
-                {#each response.tests as test (test.id)}<div class="mb-1 grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded border border-[var(--app-border)] px-2 py-1.5 text-ui-xs"><span class={test.passed ? 'text-emerald-500' : 'text-red-500'}>{test.passed ? '✓' : '×'}</span><span class="truncate">{test.label}</span><code class="max-w-52 truncate text-[var(--app-text-muted)]">{test.actual} → {test.expected}</code></div>{:else}<p class="text-ui-sm text-[var(--app-text-muted)]">{m['api_client.no_tests']()}</p>{/each}
+                {#each response.tests as test (test.id)}<div class="api-test-row" class:failed={!test.passed}><span class="api-test-icon">{#if test.passed}<CircleCheck size={14} aria-hidden="true" />{:else}<CircleX size={14} aria-hidden="true" />{/if}</span><span class="truncate" title={test.label}>{test.label}</span><code class="api-test-values" title={`${test.actual} → ${test.expected}`}>{test.actual} → {test.expected}</code></div>{:else}<p class="api-muted-note">{m['api_client.no_tests']()}</p>{/each}
               {:else}
-                {#each response.scriptLogs as log, index (`${index}-${log}`)}<pre class="mb-1 whitespace-pre-wrap break-words font-mono text-ui-xs text-[var(--app-text-soft)]">{log}</pre>{:else}<p class="text-ui-sm text-[var(--app-text-muted)]">{m['api_client.no_script_logs']()}</p>{/each}
+                {#each response.scriptLogs as log, index (`${index}-${log}`)}<pre class="mb-1 whitespace-pre-wrap break-words font-mono text-ui-xs text-[var(--app-text-soft)]">{log}</pre>{:else}<p class="api-muted-note">{m['api_client.no_script_logs']()}</p>{/each}
               {/if}
             {:else}
-              <div class="grid h-full place-items-center text-ui-sm text-[var(--app-text-muted)]">{m['api_client.no_response']()}</div>
+              <NodeEmptyState compact icon={Send} title={m['api_client.no_response']()} />
             {/if}
           </Tabs.Content>
           <Tabs.Content value="history" class="m-0 min-h-0 flex-1 overflow-auto p-2">
-            <div class="mb-2 flex items-center justify-between"><span class="text-ui-xs text-[var(--app-text-muted)]">{m['api_client.history_hint']()}</span>{#if history.length}<Button size="sm" variant="ghost" class="h-7 text-ui-xs" onclick={() => { history = []; persist(); }}><Trash2 size={12} />{m['api_client.clear_history']()}</Button>{/if}</div>
+            {#if history.length}
+              <div class="mb-2 flex items-center justify-between gap-2"><span class="text-ui-sm text-[var(--app-text-muted)]">{m['api_client.history_hint']()}</span><Button size="sm" variant="ghost" class="h-7 shrink-0" onclick={() => { history = []; persist(); }}><Trash2 size={12} />{m['api_client.clear_history']()}</Button></div>
+            {/if}
             {#each history as entry (entry.id)}
-              <button class="mb-1 grid w-full grid-cols-[42px_minmax(0,1fr)_52px_62px_64px] items-center gap-2 rounded border border-[var(--app-border)] px-2 py-1.5 text-left text-ui-xs hover:bg-[var(--app-surface-raised)]" onclick={() => chooseRequest(entry.requestId)}>
-                <strong class="text-[var(--app-secondary)]">{entry.method}</strong><span class="truncate">{entry.requestName}</span><span class={entry.ok ? 'text-emerald-500' : 'text-red-500'}>{entry.status}</span><span class="tabular-nums text-[var(--app-text-muted)]">{entry.durationMs} ms</span><span class="tabular-nums text-[var(--app-text-muted)]">{entry.testPassed}/{entry.testPassed + entry.testFailed}</span>
+              <button class="api-history-row" onclick={() => chooseRequest(entry.requestId)}>
+                <span class="api-method">{entry.method}</span><span class="truncate text-[var(--app-text)]">{entry.requestName}</span><span class="api-history-status" class:ok={entry.ok}>{entry.status}</span><span class="api-meta">{entry.durationMs} ms</span><span class="api-meta">{entry.testPassed}/{entry.testPassed + entry.testFailed}</span>
               </button>
-            {:else}<div class="grid h-36 place-items-center text-ui-sm text-[var(--app-text-muted)]"><History size={22} class="mb-2 opacity-40" />{m['api_client.no_history']()}</div>{/each}
+            {:else}<NodeEmptyState compact icon={History} title={m['api_client.no_history']()} description={m['api_client.history_hint']()} />{/each}
           </Tabs.Content>
         </Tabs.Root>
-        {#if running}<div class="shrink-0 border-t border-[var(--app-border)] px-3 py-1.5 text-ui-xs text-[var(--app-text-muted)]">{m['api_client.running_progress']({ completed: runProgress.completed, total: runProgress.total, failed: runProgress.failed })}</div>{/if}
-        {#if error}<p class="shrink-0 border-t border-red-500/20 bg-red-500/10 px-3 py-2 text-ui-xs text-red-500" aria-live="polite">{error}</p>{/if}
+        {#if running}<div class="api-foot" role="status"><LoaderCircle size={13} class="animate-spin" aria-hidden="true" /><span>{m['api_client.running_progress']({ completed: runProgress.completed, total: runProgress.total, failed: runProgress.failed })}</span></div>{/if}
+        {#if error}<p class="api-foot error" aria-live="polite"><AlertTriangle size={13} aria-hidden="true" /><span>{error}</span></p>{/if}
       </section>
     {:else}
-      <section class="grid min-h-0 place-items-center p-6 text-center text-ui-sm text-[var(--app-text-muted)]">
-        <div><Braces size={28} class="mx-auto mb-3 opacity-40" /><p>{m['api_client.select_or_create']()}</p></div>
+      <section class="grid min-h-0 place-items-center p-6">
+        <NodeEmptyState icon={Braces} title={m['api_client.select_or_create']()} description={m['api_client.start_hint']()}>
+          {#snippet actions()}
+            <Button size="sm" onclick={() => addRequest()}><Plus size={13} />{m['api_client.add_request']()}</Button>
+          {/snippet}
+        </NodeEmptyState>
       </section>
     {/if}
   </div>
@@ -1982,3 +2021,605 @@
   onRun={runRunner}
   onClose={() => (runnerDialogOpen = false)}
 />
+
+<style>
+  /*
+   * Os estilos das linhas/gatilhos que passam por componentes (ContextMenu,
+   * DropdownMenu, HeaderIconButton) precisam de :global — ficam presos ao
+   * wrapper .canvas-api-client para nao vazar para outros nos.
+   */
+
+  /* ---- Coluna de requests ------------------------------------------------ */
+  .api-side-head {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 2px;
+    height: 40px;
+    padding: 0 6px 0 12px;
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  :global(.canvas-api-client .api-side-title) {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .api-count,
+  .api-tab-count,
+  .api-row-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .api-tab-count {
+    margin-left: 2px;
+  }
+
+  .api-row-count {
+    flex-shrink: 0;
+    background: transparent;
+  }
+
+  :global(.canvas-api-client .api-icon-btn) {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  :global(.canvas-api-client .api-icon-btn:hover),
+  :global(.canvas-api-client .api-icon-btn[data-state='open']) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  :global(.canvas-api-client .api-icon-btn.danger:hover) {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  :global(.canvas-api-client .api-icon-btn:active) {
+    transform: scale(var(--scale-press));
+  }
+
+  :global(.canvas-api-client .api-icon-btn:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* Linhas da arvore: 30px, selecao com barra de acento a esquerda. */
+  :global(.canvas-api-client .api-row) {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 30px;
+    align-items: center;
+    margin-bottom: 1px;
+    border-radius: 6px;
+    transition: background-color var(--duration-quick) ease-out, opacity var(--duration-quick) ease-out;
+  }
+
+  :global(.canvas-api-client .api-row:hover) {
+    background: var(--app-hover);
+  }
+
+  :global(.canvas-api-client .api-row.selected) {
+    background: var(--app-active);
+    box-shadow: inset 2px 0 0 var(--app-accent);
+  }
+
+  :global(.canvas-api-client .api-row.drop-inside) {
+    background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+    box-shadow: inset 0 0 0 1px var(--app-accent);
+  }
+
+  :global(.canvas-api-client .api-row.dragging) {
+    opacity: 0.5;
+  }
+
+  /* Puxador aparece ao apontar/focar a linha. */
+  .api-grip {
+    display: grid;
+    width: 18px;
+    height: 28px;
+    flex-shrink: 0;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: grab;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  :global(.canvas-api-client .api-row:hover) .api-grip,
+  .api-grip:focus-visible {
+    opacity: 1;
+  }
+
+  .api-grip:hover {
+    color: var(--app-text);
+  }
+
+  .api-grip:active {
+    cursor: grabbing;
+  }
+
+  .api-grip:focus-visible,
+  .api-row-main:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .api-row-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 2px 0 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-soft);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .api-chevron {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    color: var(--app-text-muted);
+    transition: transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .api-chevron.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  :global(.canvas-api-client .api-folder-icon) {
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+  }
+
+  .api-method {
+    width: 44px;
+    flex-shrink: 0;
+    color: var(--app-secondary);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .api-row-name {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .api-row-name.folder,
+  :global(.canvas-api-client .api-row.selected) .api-row-name {
+    color: var(--app-text);
+    font-weight: 500;
+  }
+
+  /* Menu da linha flutua sobre o fim do nome: nao rouba largura oculto. */
+  :global(.canvas-api-client .api-row-more) {
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text-muted);
+    opacity: 0;
+    translate: 0 -50%;
+    transition: opacity var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  :global(.canvas-api-client .api-row:hover .api-row-more),
+  :global(.canvas-api-client .api-row:focus-within .api-row-more),
+  :global(.canvas-api-client .api-row-more[data-state='open']) {
+    opacity: 1;
+  }
+
+  :global(.canvas-api-client .api-row-more:hover) {
+    color: var(--app-text);
+  }
+
+  :global(.canvas-api-client .api-row-more:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /*
+   * Campos tecnicos (chave/valor, URL, selects compactos): o Input do shadcn
+   * traz md:text-sm e o cn() nao reconhece text-ui-*, entao o tamanho fica
+   * fixo aqui para manter a densidade do cliente.
+   */
+  :global(.canvas-api-client input[data-slot='input']),
+  :global(.canvas-api-client select[data-slot='native-select'][data-size='sm']) {
+    font-size: 12px;
+  }
+
+  :global(.canvas-api-client input[data-slot='input'].api-name-input) {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .api-side-empty {
+    margin: 0;
+    padding: 20px 12px;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  .api-drop-line {
+    position: absolute;
+    right: 6px;
+    left: 6px;
+    z-index: 20;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--app-accent);
+    pointer-events: none;
+  }
+
+  .api-drop-line.before {
+    top: -1.5px;
+  }
+
+  .api-drop-line.after {
+    bottom: -1.5px;
+  }
+
+  /* ---- Avisos e rodapes -------------------------------------------------- */
+  .api-compat {
+    display: flex;
+    flex-shrink: 0;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 8px 10px 12px;
+    border-bottom: 1px solid var(--app-border);
+    background: var(--app-warning-soft);
+  }
+
+  :global(.canvas-api-client .api-compat-icon) {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--app-warning);
+  }
+
+  .api-foot {
+    display: flex;
+    flex-shrink: 0;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 12px;
+    border-top: 1px solid var(--app-border);
+    color: var(--app-text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .api-foot :global(svg) {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .api-foot.error {
+    border-top-color: transparent;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  /* ---- Pares chave/valor ------------------------------------------------- */
+  .kv-toggle,
+  .kv-remove {
+    position: relative;
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  /* Caixa de 16px dentro de um alvo de 28px. */
+  .kv-toggle::before {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1.5px var(--app-border-strong);
+    transition: background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .kv-toggle:hover::before {
+    box-shadow: inset 0 0 0 1.5px var(--app-text-muted);
+  }
+
+  .kv-toggle[aria-pressed='true']::before {
+    background: var(--app-accent);
+    box-shadow: none;
+  }
+
+  .kv-toggle :global(svg) {
+    position: relative;
+    color: var(--app-accent-contrast);
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .kv-toggle[aria-pressed='true'] :global(svg) {
+    opacity: 1;
+  }
+
+  .kv-remove {
+    color: var(--app-text-muted);
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .kv-remove:hover {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .kv-toggle:focus-visible,
+  .kv-remove:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* ---- Controle segmentado com botoes (formato do body) ----------------- */
+  .api-seg {
+    display: inline-flex;
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .api-seg-btn {
+    height: 24px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .api-seg-btn:hover {
+    color: var(--app-text);
+  }
+
+  .api-seg-btn[aria-pressed='true'] {
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text);
+  }
+
+  .api-seg-btn:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* ---- Chips e estados --------------------------------------------------- */
+  .api-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .api-status {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .api-status.ok {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .api-status.warn {
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+  }
+
+  .api-status.subtle {
+    font-weight: 500;
+  }
+
+  .api-response-meta {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-bottom: 10px;
+  }
+
+  .api-meta {
+    min-width: 0;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .api-muted-note {
+    margin: 0;
+    color: var(--app-text-muted);
+    font-size: 12px;
+  }
+
+  /* ---- Resposta: mensagens, testes e historico -------------------------- */
+  .api-message {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) 78px;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--app-success) 7%, transparent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .api-message.sent {
+    background: color-mix(in srgb, var(--app-info) 7%, transparent);
+  }
+
+  .api-message-dir {
+    color: var(--app-success);
+  }
+
+  .api-message.sent .api-message-dir {
+    color: var(--app-info);
+  }
+
+  .api-test-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    min-height: 32px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text);
+    font-size: 12px;
+  }
+
+  .api-test-icon {
+    display: grid;
+    color: var(--app-success);
+  }
+
+  .api-test-row.failed .api-test-icon {
+    color: var(--app-danger);
+  }
+
+  .api-test-values {
+    max-width: 13rem;
+    overflow: hidden;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .api-history-row {
+    display: grid;
+    width: 100%;
+    min-height: 32px;
+    grid-template-columns: 52px minmax(0, 1fr) 40px 64px 40px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .api-history-row:hover {
+    background: var(--app-hover);
+  }
+
+  .api-history-row:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .api-history-row .api-meta {
+    text-align: right;
+  }
+
+  .api-history-status {
+    color: var(--app-danger);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .api-history-status.ok {
+    color: var(--app-success);
+  }
+</style>

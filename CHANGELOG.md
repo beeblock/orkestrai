@@ -31,6 +31,8 @@ pt-BR, English, and Spanish translations.
 - Rework the file tree, diff, editor, Git and portal nodes: a real search field, colored Git status chips with readable names, file actions on hover or focus, loading placeholders, empty and error states with a next step, a commit field that lights up when ready, a lighter portal header with settings on its control chip, and sliders for device dimensions.
 - Rework the creative nodes: drop an image straight onto an empty image node, see the image executor's readiness and why Generate is unavailable, reorder sequence clips by dragging, pick storyboard ratios and shape styles with segmented controls, switches and sliders, and get clear loading, empty and error states with a recovery action.
 - Give shapes a floating toolbar that frees their resize handles, and give groups a dashed frame, a raised label and keyboard rename with Enter or F2.
+- Rework the automation nodes: set loop rounds with a slider and file writing with a switch next to a clear Run button, reorder flow steps by dragging or with the arrow keys, adjust the usage threshold with a slider and the window with a segmented control, and read usage as meters with reset times.
+- Calm the API client: theme colors throughout, a request list whose actions appear on hover, empty states with an Add request action, segmented toggles, status chips with icons and drag-to-order requests in the runner.
 
 ### Fixed
 
@@ -40,6 +42,7 @@ pt-BR, English, and Spanish translations.
 - Remove the blue resize outline that covered the selection ring of a selected node.
 - Let the Git file list scroll instead of being cut off, stop showing editor confirmations in red and stop flashing "empty folder" before a file tree loads.
 - Keep compact interface text at its intended size when a component also sets a text color, instead of falling back to a larger default.
+- Show "no usage data reported" in a neutral tone instead of green, and make the empty API client's Add request button create a request at the top level.
 
 ## 0.35.0 - 2026-09-24
 

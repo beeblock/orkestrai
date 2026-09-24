@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { Bot, ExternalLink, Gauge, RefreshCw, Route, TriangleAlert, X } from '@lucide/svelte';
+  import { Bot, CircleCheck, ExternalLink, Gauge, Info, RefreshCw, Route, TriangleAlert, X } from '@lucide/svelte';
   import * as Select from '$lib/components/ui/select';
   import { Switch } from '$lib/components/ui/switch';
+  import { Slider } from '$lib/components/ui/slider';
+  import { Skeleton } from '$lib/components/ui/skeleton';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -138,6 +141,51 @@
     return seconds < 5 ? m['usage.just_now']() : m['usage.seconds_ago']({ seconds });
   }
 
+  // Limiar: o slider mostra o valor ao arrastar e so grava ao soltar (mesmo
+  // persist que o range nativo fazia no change).
+  let thresholdDrag = $state<number | null>(null);
+  const thresholdValue = $derived(thresholdDrag ?? policy.thresholdPercent);
+
+  function commitThreshold(value: number) {
+    thresholdDrag = null;
+    if (value !== policy.thresholdPercent) persist({ thresholdPercent: value });
+  }
+
+  const windowOptions = $derived([
+    { value: '5h' as UsageWindowKind, label: m['usage.window_5h'](), disabled: !policy.enabled },
+    { value: 'weekly' as UsageWindowKind, label: m['usage.window_weekly'](), disabled: !policy.enabled },
+    { value: 'monthly' as UsageWindowKind, label: m['usage.window_monthly'](), disabled: !policy.enabled },
+  ]);
+
+  // Diagnosticos longos ficam recolhidos em 3 linhas; o usuario expande.
+  let expandedDiagnostics = $state<Set<string>>(new Set());
+
+  function toggleDiagnostic(routingId: string) {
+    const next = new Set(expandedDiagnostics);
+    if (next.has(routingId)) next.delete(routingId);
+    else next.add(routingId);
+    expandedDiagnostics = next;
+  }
+
+  // "Ler mais" so aparece quando o texto realmente foi cortado.
+  let clampedDiagnostics = $state<Set<string>>(new Set());
+
+  function trackClamp(node: HTMLElement, key: string) {
+    const check = () => {
+      if (expandedDiagnostics.has(key)) return;
+      const cut = node.scrollHeight > node.clientHeight + 1;
+      if (cut === clampedDiagnostics.has(key)) return;
+      const next = new Set(clampedDiagnostics);
+      if (cut) next.add(key);
+      else next.delete(key);
+      clampedDiagnostics = next;
+    };
+    const observer = new ResizeObserver(check);
+    observer.observe(node);
+    check();
+    return { destroy: () => observer.disconnect() };
+  }
+
   onMount(() => {
     const release = retainUsageFeed();
     const ticker = setInterval(() => (clock += 1), 5_000);
@@ -166,10 +214,10 @@
   {#snippet title()}{data.title}{/snippet}
   {#snippet actions()}
     <HeaderIconButton label={m['usage.refresh']()} class="node-action-btn" side="left" onclick={() => void refreshUsage(true)}>
-      <RefreshCw size={12} class={loading ? 'spin' : undefined} />
+      <RefreshCw size={14} class={loading ? 'animate-spin' : undefined} />
     </HeaderIconButton>
     <HeaderIconButton label={m['settings.delete']()} class="node-action-btn danger" side="left" onclick={() => data.onDelete(id)}>
-      <X size={12} />
+      <X size={14} />
     </HeaderIconButton>
   {/snippet}
 
@@ -182,9 +230,12 @@
     tabindex="0"
     onwheel={(event) => event.stopPropagation()}
   >
-    <section class="routing-policy">
+    <section class="routing-policy" class:off={!policy.enabled}>
       <header>
-        <div class="routing-title"><Route size={13} aria-hidden="true" /><strong>{m['usage.routing_title']()}</strong></div>
+        <div class="routing-title">
+          <span class="routing-icon" aria-hidden="true"><Route size={14} /></span>
+          <strong>{m['usage.routing_title']()}</strong>
+        </div>
         <label class="routing-toggle">
           <span>{policy.enabled ? m['usage.routing_enabled']() : m['usage.routing_disabled']()}</span>
           <Switch
@@ -196,8 +247,8 @@
       </header>
 
       <div class="routing-fields" class:disabled={!policy.enabled}>
-        <label>
-          <span>{m['usage.routing_source']()}</span>
+        <label class="routing-field">
+          <span class="field-label">{m['usage.routing_source']()}</span>
           <Select.Root type="single" value={policy.sourceProvider} disabled={!policy.enabled} onValueChange={changeSource}>
             <Select.Trigger size="sm" class="routing-select">{providerName(policy.sourceProvider)}</Select.Trigger>
             <Select.Content>
@@ -205,8 +256,8 @@
             </Select.Content>
           </Select.Root>
         </label>
-        <label>
-          <span>{m['usage.routing_fallback']()}</span>
+        <label class="routing-field">
+          <span class="field-label">{m['usage.routing_fallback']()}</span>
           <Select.Root type="single" value={policy.fallbackProvider} disabled={!policy.enabled} onValueChange={changeFallback}>
             <Select.Trigger size="sm" class="routing-select">{providerName(policy.fallbackProvider)}</Select.Trigger>
             <Select.Content>
@@ -214,48 +265,51 @@
             </Select.Content>
           </Select.Root>
         </label>
-        <label>
-          <span>{m['usage.routing_window']()}</span>
-          <Select.Root
-            type="single"
+        <div class="routing-field window-field">
+          <span class="field-label">{m['usage.routing_window']()}</span>
+          <SegmentedControl
+            options={windowOptions}
             value={policy.windowKind}
-            disabled={!policy.enabled}
-            onValueChange={(value: string) => persist({ windowKind: value as UsageWindowKind })}
-          >
-            <Select.Trigger size="sm" class="routing-select">{windowKindLabel(policy.windowKind)}</Select.Trigger>
-            <Select.Content>
-              <Select.Item value="5h">{m['usage.window_5h']()}</Select.Item>
-              <Select.Item value="weekly">{m['usage.window_weekly']()}</Select.Item>
-              <Select.Item value="monthly">{m['usage.window_monthly']()}</Select.Item>
-            </Select.Content>
-          </Select.Root>
-        </label>
-        <label class="threshold-field">
-          <span>{m['usage.routing_threshold']({ percent: policy.thresholdPercent })}</span>
-          <input
-            type="range"
-            min="50"
-            max="100"
-            step="5"
-            value={policy.thresholdPercent}
-            aria-label={m['usage.routing_threshold']({ percent: policy.thresholdPercent })}
-            onchange={(event) => persist({ thresholdPercent: Number(event.currentTarget.value) })}
+            onValueChange={(value: UsageWindowKind) => persist({ windowKind: value })}
+            label={m['usage.routing_window']()}
+            size="sm"
+            fill
           />
-        </label>
+        </div>
+        <div class="routing-field threshold-field">
+          <span class="field-label threshold-label">{m['usage.routing_threshold']({ percent: thresholdValue })}</span>
+          <Slider
+            type="single"
+            min={50}
+            max={100}
+            step={5}
+            value={thresholdValue}
+            disabled={!policy.enabled}
+            aria-label={m['usage.routing_threshold']({ percent: thresholdValue })}
+            onValueChange={(value: number) => (thresholdDrag = value)}
+            onValueCommit={commitThreshold}
+            class="threshold-slider"
+          />
+        </div>
       </div>
 
       {#if policy.enabled}
         {@const sourceReport = report.providers.find((provider) => provider.routingId === policy.sourceProvider)}
-        <p class:recommendation={report.shouldFallback || sourceReport?.status === 'near_limit' || sourceReport?.status === 'exhausted'} class="routing-result">
-          {#if report.shouldFallback}
-            {m['usage.routing_recommendation']({ source: providerName(policy.sourceProvider), fallback: providerName(report.recommendedProvider ?? policy.fallbackProvider) })}
-          {:else if sourceReport?.status === 'unavailable'}
-            {m['usage.routing_window_unavailable']({ source: providerName(policy.sourceProvider), window: windowKindLabel(policy.windowKind) })}
-          {:else if sourceReport?.status === 'near_limit' || sourceReport?.status === 'exhausted'}
-            {m['usage.routing_no_fallback']({ source: providerName(policy.sourceProvider), fallback: providerName(policy.fallbackProvider), window: windowKindLabel(policy.windowKind) })}
-          {:else}
-            {m['usage.routing_healthy']({ source: providerName(policy.sourceProvider) })}
-          {/if}
+        {@const warn = report.shouldFallback || sourceReport?.status === 'near_limit' || sourceReport?.status === 'exhausted'}
+        {@const unknown = !report.shouldFallback && sourceReport?.status === 'unavailable'}
+        <p class:recommendation={warn} class:unknown class="routing-result">
+          {#if warn}<TriangleAlert size={14} aria-hidden="true" />{:else if unknown}<Info size={14} aria-hidden="true" />{:else}<CircleCheck size={14} aria-hidden="true" />{/if}
+          <span>
+            {#if report.shouldFallback}
+              {m['usage.routing_recommendation']({ source: providerName(policy.sourceProvider), fallback: providerName(report.recommendedProvider ?? policy.fallbackProvider) })}
+            {:else if sourceReport?.status === 'unavailable'}
+              {m['usage.routing_window_unavailable']({ source: providerName(policy.sourceProvider), window: windowKindLabel(policy.windowKind) })}
+            {:else if sourceReport?.status === 'near_limit' || sourceReport?.status === 'exhausted'}
+              {m['usage.routing_no_fallback']({ source: providerName(policy.sourceProvider), fallback: providerName(policy.fallbackProvider), window: windowKindLabel(policy.windowKind) })}
+            {:else}
+              {m['usage.routing_healthy']({ source: providerName(policy.sourceProvider) })}
+            {/if}
+          </span>
         </p>
       {/if}
     </section>
@@ -263,36 +317,55 @@
     <div class="provider-list" aria-live="polite">
       {#if loading && !report.providers.length}
         {#each PROVIDERS as provider (provider.id)}
-          <div class="provider-row loading-row">
-            <span class="loading-dot"></span>
-            <span class="loading-line"></span>
+          <div class="provider-row loading-row" aria-hidden="true">
+            <div class="provider-head">
+              <Skeleton class="size-6 rounded-md bg-[var(--app-surface-raised)]" />
+              <Skeleton class="h-3.5 w-24 bg-[var(--app-surface-raised)]" />
+            </div>
+            <Skeleton class="h-1.5 w-full bg-[var(--app-surface-raised)]" />
+            <Skeleton class="h-1.5 w-2/3 bg-[var(--app-surface-raised)]" />
           </div>
         {/each}
       {/if}
 
       {#each report.providers as provider (provider.routingId)}
         {@const meta = usageProviderDefinition(provider.provider)}
-        <section class="provider-row">
+        {@const fullName = provider.profileName ? `${meta.name} · ${provider.profileName}` : meta.name}
+        <section class="provider-row" data-status={provider.status}>
           <div class="provider-head">
-            {#if meta.icon}<img class="app-logo-plate" src={meta.icon} width="18" height="18" alt="" />{:else}<Bot size={18} aria-hidden="true" />{/if}
-            <strong>{meta.name}{#if provider.profileName} · {provider.profileName}{/if}</strong>
-            {#if provider.plan}<span class="plan">{provider.plan}</span>{/if}
-            <span class="status" style:color={statusColor(provider.status)}>{statusLabel(provider.status)}</span>
+            {#if meta.icon}<img class="app-logo-plate" src={meta.icon} width="18" height="18" alt="" />{:else}<span class="provider-fallback" aria-hidden="true"><Bot size={16} /></span>{/if}
+            <span class="provider-name">
+              <strong title={fullName}>{fullName}</strong>
+              <span class="provider-sub">
+                <span class="status" style:--status-color={statusColor(provider.status)}>{statusLabel(provider.status)}</span>
+                {#if provider.plan}<span class="plan" title={provider.plan}>{provider.plan}</span>{/if}
+              </span>
+            </span>
           </div>
           {#if provider.error}
-            <p class="provider-error"><TriangleAlert size={11} aria-hidden="true" /> {usageErrorText(provider.error, meta.name)}</p>
+            <p class="provider-error"><TriangleAlert size={13} aria-hidden="true" /><span>{usageErrorText(provider.error, meta.name)}</span></p>
           {:else if provider.diagnostic}
-            <p class="provider-error diagnostic">
-              <span>{diagnosticText(provider.diagnostic)}</span>
-              {#if provider.helpUrl}<a href={provider.helpUrl} target="_blank" rel="noreferrer" aria-label={m['usage.official_docs']()}><ExternalLink size={11} /></a>{/if}
-            </p>
+            {@const open = expandedDiagnostics.has(provider.routingId)}
+            <div class="provider-diagnostic">
+              <p class:clamped={!open} use:trackClamp={provider.routingId}>{diagnosticText(provider.diagnostic)}</p>
+              <div class="diagnostic-actions">
+                {#if open || clampedDiagnostics.has(provider.routingId)}
+                  <button type="button" class="diagnostic-toggle" aria-expanded={open} onclick={() => toggleDiagnostic(provider.routingId)}>
+                    {open ? m['docs.read_less']() : m['docs.read_more']()}
+                  </button>
+                {/if}
+                {#if provider.helpUrl}
+                  <a href={provider.helpUrl} target="_blank" rel="noreferrer">{m['usage.official_docs']()}<ExternalLink size={12} aria-hidden="true" /></a>
+                {/if}
+              </div>
+            </div>
           {:else}
             <div class="windows">
               {#each provider.windows as window (window.kind)}
                 <div class="window">
                   <div class="window-label">
                     <span>{windowLabel(window)}</span>
-                    <strong>{window.usedPercent}%</strong>
+                    <strong style:color={barColor(window.usedPercent)}>{window.usedPercent}%</strong>
                   </div>
                   <div
                     class="bar"
@@ -302,7 +375,7 @@
                     aria-valuemax="100"
                     aria-valuenow={window.usedPercent}
                   >
-                    <span style:width={`${window.usedPercent}%`} style:background={barColor(window.usedPercent)}></span>
+                    <span style:width={`${Math.min(100, Math.max(0, window.usedPercent))}%`} style:background={barColor(window.usedPercent)}></span>
                   </div>
                   {#if window.resetsAt}<small>{resetText(window.resetsAt)}</small>{/if}
                 </div>
@@ -326,7 +399,7 @@
     min-height: 0;
     max-height: 100%;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -334,7 +407,7 @@
     scrollbar-width: thin;
     scrollbar-color: var(--app-border-strong) transparent;
     touch-action: pan-y;
-    padding: 10px;
+    padding: 12px;
     color: var(--app-text);
   }
 
@@ -358,152 +431,75 @@
     background-clip: padding-box;
   }
 
-  .provider-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-    border-block: 1px solid var(--app-border);
-  }
-
-  .provider-row {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 8px;
-    padding: 9px;
-    border-bottom: 1px solid var(--app-border);
-  }
-
-  .provider-head,
-  .window-label,
-  .routing-policy header,
-  .routing-title,
-  .routing-toggle,
-  .routing-fields {
-    display: flex;
-    align-items: center;
-  }
-
-  .provider-head {
-    gap: 7px;
-    min-width: 0;
-  }
-
-  .provider-head img {
-    box-sizing: content-box;
-    padding: 3px;
-    border-radius: 4px;
-    /* Placa fixa escura de proposito: os SVGs em /images sao preenchidos com
-       branco, entao um token de superficie apagaria a marca no tema claro.
-       Mesmo valor da Central de Providers (.provider-icon) e do no Terminal. */
-    background: var(--app-logo-plate);
-  }
-
-  .provider-head strong {
-    font-size: 12px;
-  }
-
-  .plan {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 9px;
-    color: var(--app-text-muted);
-  }
-
-  .status {
-    margin-left: auto;
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .windows {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-  }
-
-  .window {
-    display: grid;
-    gap: 3px;
-  }
-
-  .window-label {
-    justify-content: space-between;
-    font-size: 10px;
-    color: var(--app-text-muted);
-  }
-
-  .window-label strong {
-    color: var(--app-text-soft);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .bar {
-    height: 5px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--app-surface-raised);
-  }
-
-  .bar span {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    transition: width 400ms ease;
-  }
-
-  .window small {
-    font-size: 9px;
-    color: var(--app-text-muted);
-  }
-
-  .provider-error {
-    display: flex;
-    align-items: flex-start;
-    gap: 5px;
-    margin: 0;
-    color: var(--app-warning);
-    font-size: 10px;
-    line-height: 1.4;
-    text-wrap: pretty;
-  }
-
+  /* ---- Politica de roteamento ------------------------------------------- */
   .routing-policy {
+    container-type: inline-size;
     display: flex;
     flex: none;
     flex-direction: column;
-    gap: 9px;
-    padding: 10px;
-    border: 1px solid color-mix(in srgb, var(--app-warning) 32%, var(--app-border));
-    border-radius: 6px;
-    background: color-mix(in srgb, var(--app-warning) 5%, var(--app-surface-subtle));
+    gap: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
   }
 
   .routing-policy header {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: 10px;
-  }
-
-  .routing-title,
-  .routing-toggle {
-    gap: 6px;
+    gap: 12px;
   }
 
   .routing-title {
-    color: var(--app-text-soft);
-    font-size: 11px;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
   }
 
-  .routing-toggle {
-    font-size: 10px;
+  .routing-icon {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .routing-policy.off .routing-icon {
+    background: var(--app-hover);
     color: var(--app-text-muted);
   }
 
+  .routing-title strong {
+    overflow: hidden;
+    color: var(--app-text);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .routing-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* 2 colunas por padrao (origem|fallback, janela|limiar); 4 quando cabe. */
   .routing-fields {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    transition: opacity var(--duration-quick) ease-out;
   }
 
   .routing-fields.disabled {
@@ -511,117 +507,341 @@
     pointer-events: none;
   }
 
-  .routing-fields label {
+  .routing-field {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
-  .routing-fields label > span {
+  .field-label {
     overflow: hidden;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 9px;
-    color: var(--app-text-muted);
   }
 
-  :global(.routing-select) {
+  .threshold-label {
+    color: var(--app-text-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .routing-fields :global(.routing-select) {
     width: 100%;
     min-width: 0;
+    height: 28px;
     border-color: var(--app-border);
-    background: var(--app-surface-subtle);
+    background: var(--app-surface);
     color: var(--app-text);
-    font-size: 10px;
+    font-size: 12px;
   }
 
-  .threshold-field input {
-    width: 100%;
-    accent-color: var(--app-accent);
+  /* Slider alinhado ao centro da altura dos selects (28px). */
+  .threshold-field :global(.threshold-slider) {
+    height: 28px;
   }
 
   .routing-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     margin: 0;
-    padding: 7px 9px;
-    border-left: 2px solid var(--app-success);
-    background: color-mix(in srgb, var(--app-success) 8%, transparent);
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--app-success-soft);
     color: var(--app-text-soft);
-    font-size: 10px;
-    line-height: 1.45;
+    font-size: 12px;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  .routing-result :global(svg) {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--app-success);
   }
 
   .routing-result.recommendation {
-    border-left-color: var(--app-warning);
-    background: color-mix(in srgb, var(--app-warning) 9%, transparent);
+    background: var(--app-warning-soft);
+    color: var(--app-text);
+  }
+
+  .routing-result.recommendation :global(svg) {
     color: var(--app-warning);
   }
 
-  .provider-error.diagnostic {
-    align-items: flex-start;
-    justify-content: space-between;
+  /* Sem dado reportado nao e "saudavel": tom neutro, nao verde. */
+  .routing-result.unknown {
+    background: var(--app-hover);
+  }
+
+  .routing-result.unknown :global(svg) {
     color: var(--app-text-muted);
   }
 
-  .provider-error.diagnostic a {
+  /* ---- Providers ---------------------------------------------------------- */
+  .provider-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+  }
+
+  .provider-row {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .provider-head {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .provider-head img,
+  .provider-fallback {
+    box-sizing: content-box;
+    flex-shrink: 0;
+    padding: 3px;
+    border-radius: 6px;
+    /* Placa fixa escura de proposito: os SVGs em /images sao preenchidos com
+       branco, entao um token de superficie apagaria a marca no tema claro.
+       Mesmo valor da Central de Providers (.provider-icon) e do no Terminal. */
+    background: var(--app-logo-plate);
+  }
+
+  .provider-fallback {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    color: var(--app-text-muted);
+  }
+
+  .provider-name {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .provider-name strong {
+    overflow: hidden;
+    color: var(--app-text);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .provider-sub {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .plan {
+    overflow: hidden;
+    color: var(--app-text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .plan::before {
+    content: '·';
+    margin-right: 6px;
+  }
+
+  /* Estado com ponto colorido + rotulo legivel (cor nunca e o unico sinal). */
+  .status {
     display: inline-flex;
-    flex: 0 0 auto;
-    color: var(--app-accent);
+    flex-shrink: 0;
+    align-items: center;
+    gap: 5px;
+    color: var(--status-color);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .windows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .window {
+    display: grid;
+    gap: 4px;
+  }
+
+  .window-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--app-text-soft);
+    font-size: 12px;
+  }
+
+  .window-label strong {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--app-hover);
+  }
+
+  .bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    transition: width var(--duration-slow) var(--ease-smooth-out);
+  }
+
+  .window small {
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .provider-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    color: var(--app-warning);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+
+  .provider-error :global(svg) {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .provider-diagnostic {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .provider-diagnostic p {
+    margin: 0;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+
+  .provider-diagnostic p.clamped {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .diagnostic-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+  }
+
+  .diagnostic-toggle,
+  .provider-diagnostic a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color var(--duration-quick) ease-out;
+  }
+
+  .provider-diagnostic a {
+    color: var(--app-secondary);
+  }
+
+  .diagnostic-toggle:hover {
+    color: var(--app-text);
+  }
+
+  .provider-diagnostic a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .diagnostic-toggle:focus-visible,
+  .provider-diagnostic a:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
   }
 
   footer {
     margin-top: auto;
-    text-align: right;
-    font-size: 9px;
     color: var(--app-text-muted);
+    font-size: 11px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 
   .loading-row {
-    flex-direction: row;
-    align-items: center;
+    gap: 10px;
   }
 
-  .loading-dot,
-  .loading-line {
-    display: block;
-    background: var(--app-surface-raised);
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  .loading-dot {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-  }
-
-  .loading-line {
-    width: 80px;
-    height: 8px;
-    border-radius: 3px;
-  }
-
-  :global(.spin) {
-    animation: spin 900ms linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse { 50% { opacity: 0.45; } }
-
-  @media (max-width: 520px) {
+  @container (min-width: 760px) {
     .routing-fields {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
+  }
 
+  /* No estreito, janela (3 segmentos) e limiar ocupam a linha inteira. */
+  @container (max-width: 420px) {
+    .window-field,
     .threshold-field {
       grid-column: 1 / -1;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .bar span,
-    .loading-dot,
-    .loading-line,
-    :global(.spin) {
-      animation: none;
+    .bar span {
       transition: none;
     }
   }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy } from '@lucide/svelte';
+  import { Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -112,34 +112,183 @@
   }
 </script>
 
-<div class="min-h-36 overflow-hidden rounded border border-[var(--app-border)] bg-[var(--app-canvas)]">
-  <div class="flex h-8 items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
-    <span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{parsed.kind === 'json' ? 'JSON' : parsed.kind === 'xml' ? 'XML' : m['api_client.response_text']()}</span>
-    <div class="flex items-center gap-1">
+<div class="api-viewer min-h-36 overflow-hidden">
+  <div class="api-viewer-head">
+    <span class="section-label">{parsed.kind === 'json' ? 'JSON' : parsed.kind === 'xml' ? 'XML' : m['api_client.response_text']()}</span>
+    <div class="flex items-center gap-0.5">
       {#if parsed.kind === 'json' || parsed.kind === 'xml'}
-        <Button size="icon-sm" variant="ghost" class="size-6" title={m['api_client.expand_all']()} aria-label={m['api_client.expand_all']()} onclick={expandAll}><ChevronsUpDown size={12} /></Button>
-        <Button size="icon-sm" variant="ghost" class="size-6" title={m['api_client.collapse_all']()} aria-label={m['api_client.collapse_all']()} onclick={() => (expanded = new Set())}><ChevronsDownUp size={12} /></Button>
+        <Button size="icon-sm" variant="ghost" class="size-[26px] text-[var(--app-text-muted)]" title={m['api_client.expand_all']()} aria-label={m['api_client.expand_all']()} onclick={expandAll}><ChevronsUpDown size={13} /></Button>
+        <Button size="icon-sm" variant="ghost" class="size-[26px] text-[var(--app-text-muted)]" title={m['api_client.collapse_all']()} aria-label={m['api_client.collapse_all']()} onclick={() => (expanded = new Set())}><ChevronsDownUp size={13} /></Button>
       {/if}
-      <Button size="icon-sm" variant="ghost" class="size-6" title={m['api_client.copy_response']()} aria-label={m['api_client.copy_response']()} onclick={() => void copyBody()}>{#if copied}<Check size={12} />{:else}<Copy size={12} />{/if}</Button>
+      <Button size="icon-sm" variant="ghost" class="size-[26px] text-[var(--app-text-muted)]" title={m['api_client.copy_response']()} aria-label={m['api_client.copy_response']()} onclick={() => void copyBody()}>
+        <span class="copy-swap" class:copied aria-hidden="true"><Copy size={13} class="copy-icon" /><Check size={13} class="check-icon" /></span>
+      </Button>
     </div>
   </div>
   {#if parsed.kind === 'json' || parsed.kind === 'xml'}
-    <div class="max-h-[420px] overflow-auto py-1 font-mono text-ui-xs leading-5" role="tree" aria-label={m['api_client.structured_response']()}>
+    <div class="api-viewer-tree max-h-[420px] overflow-auto py-1.5" role="tree" aria-label={m['api_client.structured_response']()}>
       {#each rows as row (row.path)}
-        <div class="flex min-w-max items-start pr-3 hover:bg-[var(--app-surface-raised)]" style={`padding-left:${6 + row.depth * 16}px`} role="treeitem" aria-selected="false" aria-expanded={row.kind === 'value' ? undefined : expanded.has(row.path)}>
+        <div class="api-viewer-row" style={`padding-left:${6 + row.depth * 16}px`} role="treeitem" aria-selected="false" aria-expanded={row.kind === 'value' ? undefined : expanded.has(row.path)}>
           {#if row.kind !== 'value' && row.kind !== 'close'}
-            <button class="grid size-5 shrink-0 place-items-center text-[var(--app-text-muted)]" aria-label={expanded.has(row.path) ? m['api_client.collapse_item']() : m['api_client.expand_item']()} onclick={() => toggle(row.path)}>{#if expanded.has(row.path)}<ChevronDown size={11} />{:else}<ChevronRight size={11} />{/if}</button>
+            <button class="api-viewer-toggle" aria-label={expanded.has(row.path) ? m['api_client.collapse_item']() : m['api_client.expand_item']()} onclick={() => toggle(row.path)}><span class="chevron" class:open={expanded.has(row.path)}><ChevronRight size={11} /></span></button>
           {:else}<span class="block size-5 shrink-0"></span>{/if}
-          {#if row.key && row.kind !== 'element' && row.kind !== 'close'}<span class="text-sky-600 dark:text-sky-400">{JSON.stringify(row.key)}</span><span class="mr-1 text-[var(--app-text-muted)]">:</span>{/if}
-          {#if row.kind === 'object'}<span class="text-[var(--app-text-soft)]">{'{'}<span class="ml-1 text-[var(--app-text-muted)]">{row.count} {m['api_client.response_items']()}</span>{expanded.has(row.path) ? '' : ' }'}</span>
-          {:else if row.kind === 'array'}<span class="text-[var(--app-text-soft)]">[<span class="ml-1 text-[var(--app-text-muted)]">{row.count} {m['api_client.response_items']()}</span>{expanded.has(row.path) ? '' : ' ]'}</span>
-          {:else if row.kind === 'element'}<span class="text-sky-600 dark:text-sky-400">&lt;{row.key}{#each row.attributes ?? [] as attribute} <span class="text-violet-600 dark:text-violet-400">{attribute[0]}</span>=<span class="text-emerald-600 dark:text-emerald-400">{JSON.stringify(attribute[1])}</span>{/each}&gt;{expanded.has(row.path) ? '' : `…</${row.key}>`}</span>
-          {:else if row.kind === 'close'}<span class="text-[var(--app-text-soft)]">{parsed.kind === 'xml' ? `</${row.key}>` : row.value}</span>
-          {:else}<span class:text-emerald-600={row.valueKind === 'string'} class:text-amber-600={row.valueKind === 'number'} class:text-violet-600={row.valueKind === 'boolean'} class:text-[var(--app-text-muted)]={row.valueKind === 'null'} class="whitespace-pre-wrap break-all dark:brightness-125">{row.value}</span>{/if}
+          {#if row.key && row.kind !== 'element' && row.kind !== 'close'}<span class="syn-key">{JSON.stringify(row.key)}</span><span class="syn-punct mr-1">:</span>{/if}
+          {#if row.kind === 'object'}<span class="syn-punct">{'{'}<span class="syn-count">{row.count} {m['api_client.response_items']()}</span>{expanded.has(row.path) ? '' : ' }'}</span>
+          {:else if row.kind === 'array'}<span class="syn-punct">[<span class="syn-count">{row.count} {m['api_client.response_items']()}</span>{expanded.has(row.path) ? '' : ' ]'}</span>
+          {:else if row.kind === 'element'}<span class="syn-tag">&lt;{row.key}{#each row.attributes ?? [] as attribute} <span class="syn-attr">{attribute[0]}</span>=<span class="syn-string">{JSON.stringify(attribute[1])}</span>{/each}&gt;{expanded.has(row.path) ? '' : `…</${row.key}>`}</span>
+          {:else if row.kind === 'close'}<span class="syn-punct">{parsed.kind === 'xml' ? `</${row.key}>` : row.value}</span>
+          {:else}<span class="syn-value whitespace-pre-wrap break-all" data-kind={row.valueKind}>{row.value}</span>{/if}
         </div>
       {/each}
     </div>
   {:else}
-    <pre class="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-ui-xs leading-5 text-[var(--app-text)]">{parsed.value}</pre>
+    <pre class="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11.5px] leading-5 text-[var(--app-text)]">{parsed.value}</pre>
   {/if}
 </div>
+
+<style>
+  /* Moldura do visualizador: elevacao por sombra (anel de 1px do tema). */
+  .api-viewer {
+    border-radius: 8px;
+    background: var(--app-canvas);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .api-viewer-head {
+    display: flex;
+    height: 34px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px 0 10px;
+    border-bottom: 1px solid var(--app-border);
+    background: var(--app-surface-subtle);
+  }
+
+  .api-viewer-tree {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 20px;
+  }
+
+  .api-viewer-row {
+    display: flex;
+    min-width: max-content;
+    align-items: flex-start;
+    padding-right: 12px;
+  }
+
+  .api-viewer-row:hover {
+    background: var(--app-hover);
+  }
+
+  .api-viewer-toggle {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+  }
+
+  .api-viewer-toggle:hover {
+    color: var(--app-text);
+  }
+
+  .api-viewer-toggle:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -1px;
+  }
+
+  .chevron {
+    display: grid;
+    transition: transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .chevron.open {
+    transform: rotate(90deg);
+  }
+
+  /*
+   * Sintaxe a partir dos tokens do tema (os mesmos do editor de codigo), para
+   * acompanhar qualquer tema do app. O violeta nasce da mistura info+perigo.
+   */
+  .api-viewer {
+    --syn-key: var(--app-info);
+    --syn-string: var(--app-success);
+    --syn-number: var(--app-warning);
+    --syn-literal: color-mix(in oklch, var(--app-info), var(--app-danger));
+  }
+
+  .syn-key,
+  .syn-tag {
+    color: var(--syn-key);
+  }
+
+  .syn-attr {
+    color: var(--syn-literal);
+  }
+
+  .syn-string,
+  .syn-value[data-kind='string'] {
+    color: var(--syn-string);
+  }
+
+  .syn-value[data-kind='number'] {
+    color: var(--syn-number);
+  }
+
+  .syn-value[data-kind='boolean'] {
+    color: var(--syn-literal);
+  }
+
+  .syn-value[data-kind='null'],
+  .syn-count {
+    color: var(--app-text-muted);
+  }
+
+  .syn-punct {
+    color: var(--app-text-soft);
+  }
+
+  .syn-count {
+    margin-left: 4px;
+  }
+
+  /* Copiar -> confirmado: troca cruzada de icones (opacidade, escala, blur). */
+  .copy-swap {
+    position: relative;
+    display: grid;
+    width: 13px;
+    height: 13px;
+  }
+
+  .copy-swap :global(svg) {
+    position: absolute;
+    inset: 0;
+    transition: opacity var(--duration-fast) cubic-bezier(0.2, 0, 0, 1), scale var(--duration-fast) cubic-bezier(0.2, 0, 0, 1), filter var(--duration-fast) cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .copy-swap :global(.check-icon) {
+    color: var(--app-success);
+    opacity: 0;
+    scale: 0.25;
+    filter: blur(4px);
+  }
+
+  .copy-swap.copied :global(.copy-icon) {
+    opacity: 0;
+    scale: 0.25;
+    filter: blur(4px);
+  }
+
+  .copy-swap.copied :global(.check-icon) {
+    opacity: 1;
+    scale: 1;
+    filter: blur(0);
+  }
+</style>
