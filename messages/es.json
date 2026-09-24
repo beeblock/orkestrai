@@ -4984,5 +4984,12 @@
   "git.no_branches_hint": "Haz el primer commit para crear la rama actual.",
   "device.start_named": "Iniciar {device}",
   "device.more_controls": "Más controles",
-  "onboarding.language_current": "Actual"
+  "onboarding.language_current": "Actual",
+  "api_client.body_none_hint": "Esta solicitud no envía cuerpo. Elige un formato arriba para agregar uno.",
+  "api_client.start_hint": "Crea una solicitud desde cero o importa una colección de Postman, Bruno u OpenAPI desde el menú del nodo.",
+  "computer.open_settings_short": "Abrir ajustes",
+  "computer.capture_title": "Captura de pantalla",
+  "computer.allowed_count": "{allowed} de {total}",
+  "canvas.tool_drag_hint": "Haz clic y dibuja en el canvas, o arrástralo hasta allí",
+  "canvas.tool_drop_hint": "Suelta para crear aquí"
 }

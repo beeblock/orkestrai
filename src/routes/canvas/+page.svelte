@@ -2038,13 +2038,45 @@
       && event.dataTransfer && (event.dataTransfer.files.length || Array.from(event.dataTransfer.types).includes('Files')));
   }
 
+  // Ferramenta arrastada do dock: soltar no fundo do canvas cria o no ali.
+  const TOOL_DRAG_TYPE = 'application/x-orkestrai-tool';
+  let toolDragOver = $state(false);
+
+  function isToolDrop(event: DragEvent): boolean {
+    return Boolean(activeWorkspace && !designModeNodeId && event.dataTransfer
+      && Array.from(event.dataTransfer.types).includes(TOOL_DRAG_TYPE)
+      && event.target instanceof Element
+      && event.target.closest('.svelte-flow__pane')
+      && !event.target.closest('.svelte-flow__node, .svelte-flow__panel'));
+  }
+
   function handleCanvasFileDragOver(event: DragEvent) {
+    if (isToolDrop(event)) {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      toolDragOver = true;
+      return;
+    }
+    toolDragOver = false;
     if (!isCanvasFileDrop(event) && !isCharacterDrop(event)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
   }
 
   async function handleCanvasFileDrop(event: DragEvent) {
+    toolDragOver = false;
+    if (isToolDrop(event) && event.dataTransfer && zoomApi) {
+      event.preventDefault();
+      event.stopPropagation();
+      const tool = event.dataTransfer.getData(TOOL_DRAG_TYPE) as DrawTool;
+      if (!(tool in DRAW_CREATORS)) return;
+      const point = zoomApi.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      drawTool = null;
+      drawProvider = null;
+      // Mesmo contrato do clique simples: tamanho padrao, centrado no ponto.
+      await DRAW_CREATORS[tool]({ x: point.x - 200, y: point.y - 120, width: 0, height: 0 }, null);
+      return;
+    }
     if (isCharacterDrop(event) && event.dataTransfer && zoomApi) {
       event.preventDefault(); event.stopPropagation();
       try {
@@ -3087,7 +3119,8 @@
   {/snippet}
   </aside>
 
-  <section class="canvas-area" class:drawing={drawTool !== null} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondrop={handleCanvasFileDrop}>
+  <section class="canvas-area" class:drawing={drawTool !== null} class:tool-drop={toolDragOver} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondragleave={(event) => { if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) toolDragOver = false; }} ondrop={handleCanvasFileDrop}>
+    {#if toolDragOver}<div class="tool-drop-hint" aria-hidden="true">{m['canvas.tool_drop_hint']()}</div>{/if}
     <SvelteFlowProvider>
     {#if activeWorkspace}
       {#if designModeNodeId}
@@ -3167,7 +3200,7 @@
             {/if}
             <div class="toolbar" role="toolbar" aria-label={m['canvas.toolbar_label']()} bind:this={toolbarEl} onscroll={updateToolbarScroll}>
               <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
-              <ToolbarButton label={m['tool.shell']()} active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
+              <ToolbarButton label={m['tool.shell']()} hint={m['canvas.tool_drag_hint']()} dragTool="terminal" active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
                 <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
               </ToolbarButton>
               <AgentToolbarMenu
@@ -3188,19 +3221,19 @@
               </div>
               <span class="toolbar-sep" aria-hidden="true"></span>
               <div class="tool-group" role="group" aria-label={m['canvas.group_plan']()}>
-              <ToolbarButton label={m['tool.note']()} active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
+              <ToolbarButton label={m['tool.note']()} hint={m['canvas.tool_drag_hint']()} dragTool="note" active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
                 <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.tasks']()} active={drawTool === 'tasks'} onclick={() => toggleDrawTool('tasks')}>
+              <ToolbarButton label={m['tool.tasks']()} hint={m['canvas.tool_drag_hint']()} dragTool="tasks" active={drawTool === 'tasks'} onclick={() => toggleDrawTool('tasks')}>
                 <SquareKanban size={15} class="tool-icon-svg" /> {m['canvas.default_tasks']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.flow']()} active={drawTool === 'flow'} onclick={() => toggleDrawTool('flow')}>
+              <ToolbarButton label={m['tool.flow']()} hint={m['canvas.tool_drag_hint']()} dragTool="flow" active={drawTool === 'flow'} onclick={() => toggleDrawTool('flow')}>
                 <Workflow size={15} class="tool-icon-svg" /> {m['canvas.default_flow']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.loop']()} active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
+              <ToolbarButton label={m['tool.loop']()} hint={m['canvas.tool_drag_hint']()} dragTool="loop" active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
                 <img src="/images/loop.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.label_loop']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.shape']()} active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
+              <ToolbarButton label={m['tool.shape']()} hint={m['canvas.tool_drag_hint']()} dragTool="shape" active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
                 <Shapes size={15} class="tool-icon-svg" /> {m['canvas.label_shape']()}
               </ToolbarButton>
               <ToolbarButton label={m['knowledge.title']()} active={memoryOpen} onclick={() => memoryOpen = true}>
@@ -3209,22 +3242,22 @@
               </div>
               <span class="toolbar-sep" aria-hidden="true"></span>
               <div class="tool-group" role="group" aria-label={m['canvas.group_code']()}>
-              <ToolbarButton label={m['tool.files']()} active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
+              <ToolbarButton label={m['tool.files']()} hint={m['canvas.tool_drag_hint']()} dragTool="fileTree" active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
                 <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.git']()} active={drawTool === 'git'} onclick={() => toggleDrawTool('git')}>
+              <ToolbarButton label={m['tool.git']()} hint={m['canvas.tool_drag_hint']()} dragTool="git" active={drawTool === 'git'} onclick={() => toggleDrawTool('git')}>
                 <GitFork size={15} class="tool-icon-svg" /> {m['canvas.default_git']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.diff']()} active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
+              <ToolbarButton label={m['tool.diff']()} hint={m['canvas.tool_drag_hint']()} dragTool="diff" active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
                 <FileDiff size={15} class="tool-icon-svg" /> {m['canvas.default_diff']()}
               </ToolbarButton>
-              <ToolbarButton label={m['code_graph.title']()} active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
+              <ToolbarButton label={m['code_graph.title']()} hint={m['canvas.tool_drag_hint']()} dragTool="codeGraph" active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
                 <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}
               </ToolbarButton>
-              <ToolbarButton label={m['api_client.tool']()} active={drawTool === 'apiClient'} onclick={() => toggleDrawTool('apiClient')}>
+              <ToolbarButton label={m['api_client.tool']()} hint={m['canvas.tool_drag_hint']()} dragTool="apiClient" active={drawTool === 'apiClient'} onclick={() => toggleDrawTool('apiClient')}>
                 <Braces size={15} class="tool-icon-svg" /> {m['api_client.title']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.portal']()} active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
+              <ToolbarButton label={m['tool.portal']()} hint={m['canvas.tool_drag_hint']()} dragTool="portal" active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
                 <img src="/images/portal.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_portal']()}
               </ToolbarButton>
               </div>
@@ -3239,13 +3272,13 @@
               </div>
               <span class="toolbar-sep" aria-hidden="true"></span>
               <div class="tool-group" role="group" aria-label={m['canvas.group_devices']()}>
-              <ToolbarButton label={m['tool.device']()} active={drawTool === 'device'} onclick={() => toggleDrawTool('device')}>
+              <ToolbarButton label={m['tool.device']()} hint={m['canvas.tool_drag_hint']()} dragTool="device" active={drawTool === 'device'} onclick={() => toggleDrawTool('device')}>
                 <Smartphone size={15} class="tool-icon-svg" /> {m['device.title']()}
               </ToolbarButton>
-              <ToolbarButton label={m['computer.tool']()} active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
+              <ToolbarButton label={m['computer.tool']()} hint={m['canvas.tool_drag_hint']()} dragTool="computer" active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
                 <MonitorCog size={15} class="tool-icon-svg" /> {m['computer.title']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool_workshop.title']()} active={drawTool === 'toolWorkshop'} onclick={() => toggleDrawTool('toolWorkshop')}>
+              <ToolbarButton label={m['tool_workshop.title']()} hint={m['canvas.tool_drag_hint']()} dragTool="toolWorkshop" active={drawTool === 'toolWorkshop'} onclick={() => toggleDrawTool('toolWorkshop')}>
                 <Wrench size={15} class="tool-icon-svg" /> {m['tool_workshop.title']()}
               </ToolbarButton>
               </div>
@@ -4297,6 +4330,28 @@
 
   .canvas-area.drawing :global(.svelte-flow__pane) {
     cursor: crosshair;
+  }
+
+  /* Arrastando uma ferramenta do dock: a area de soltar fica evidente. */
+  .canvas-area.tool-drop :global(.svelte-flow) {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--app-accent) 55%, transparent);
+  }
+
+  .tool-drop-hint {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    z-index: 30;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: var(--app-shadow-panel);
+    transform: translateX(-50%);
+    pointer-events: none;
+    animation: banner-in var(--duration-fast) var(--ease-smooth-out) both;
   }
 
   .draw-ghost {
