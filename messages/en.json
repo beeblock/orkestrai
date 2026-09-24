@@ -5014,5 +5014,13 @@
   "autonomy.event_cancelled": "Cancelled",
   "autonomy.no_secrets": "No stored credentials",
   "autonomy.no_audit": "No audited events yet",
-  "huddle.no_agents_hint": "Add agents on the Canvas to invite them to a huddle."
+  "huddle.no_agents_hint": "Add agents on the Canvas to invite them to a huddle.",
+  "term.commands_empty_hint": "Save shortcuts you run often, like npm run dev.",
+  "agent_runtime.idle_label": "Idle timeout",
+  "agent_runtime.usage_label": "Usage limit",
+  "agent_runtime.limits": "Limits",
+  "council.no_agents": "No agents in this workspace",
+  "council.no_agents_hint": "Add agents to the canvas to compare perspectives.",
+  "collaboration.advanced": "Advanced",
+  "creative_recipe.empty_hint": "Save a storyboard as a workflow to reuse its script and inputs."
 }

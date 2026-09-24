@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Copy, MoveRight, Network, RotateCcw, ShieldCheck } from '@lucide/svelte';
+  import { CircleAlert, Copy, LoaderCircle, MoveRight, Network, RotateCcw, ShieldCheck, TriangleAlert } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Select from '$lib/components/ui/select';
   import * as Tabs from '$lib/components/ui/tabs';
@@ -16,6 +16,9 @@
     onTransfer: (destinationWorkspaceId: string, mode: CanvasNodeTransferMode) => Promise<void>;
     onClose: () => void;
   } = $props();
+
+  // Abas com o visual do SegmentedControl (trilho neutro, pilula elevada).
+  const segmentTab = 'h-8 gap-2 rounded-md text-[13px] data-[state=active]:bg-[var(--app-surface-raised)] data-[state=active]:text-[var(--app-text)] data-[state=active]:shadow-[var(--app-shadow-border)] dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-[var(--app-surface-raised)] dark:data-[state=active]:text-[var(--app-text)]';
 
   let destinationWorkspaceId = $state('');
   let mode = $state<CanvasNodeTransferMode>('copy');
@@ -66,48 +69,52 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-  <Dialog.Content class="sm:max-w-lg">
+  <Dialog.Content class="sm:max-w-[500px]">
     <Dialog.Header>
       <Dialog.Title>{m['canvas.transfer_title']()}</Dialog.Title>
       <Dialog.Description>{m['canvas.transfer_description']({ count: nodeCount })}</Dialog.Description>
     </Dialog.Header>
 
-    <div class="space-y-4">
-      <Tabs.Root value={mode} onValueChange={(value: string) => (mode = value as CanvasNodeTransferMode)}>
-        <Tabs.List class="grid h-auto w-full grid-cols-2 p-1">
-          <Tabs.Trigger value="copy" class="h-10 gap-2"><Copy size={15} />{m['canvas.transfer_copy']()}</Tabs.Trigger>
-          <Tabs.Trigger value="move" class="h-10 gap-2"><MoveRight size={15} />{m['canvas.transfer_move']()}</Tabs.Trigger>
-        </Tabs.List>
-      </Tabs.Root>
+    <div class="grid gap-5">
+      <div class="grid gap-3">
+        <!-- Copiar/mover: abas com o visual do controle segmentado. -->
+        <Tabs.Root value={mode} onValueChange={(value: string) => (mode = value as CanvasNodeTransferMode)}>
+          <Tabs.List class="grid h-9 w-full grid-cols-2 rounded-lg bg-[var(--app-hover)] p-0.5">
+            <Tabs.Trigger value="copy" class={segmentTab}><Copy size={14} aria-hidden="true" />{m['canvas.transfer_copy']()}</Tabs.Trigger>
+            <Tabs.Trigger value="move" class={segmentTab}><MoveRight size={14} aria-hidden="true" />{m['canvas.transfer_move']()}</Tabs.Trigger>
+          </Tabs.List>
+        </Tabs.Root>
 
-      <div class="space-y-2">
-        <label for="canvas-transfer-destination" class="text-xs font-medium text-[var(--app-text)]">{m['canvas.transfer_destination']()}</label>
-        <Select.Root type="single" value={destinationWorkspaceId} onValueChange={(value: string) => (destinationWorkspaceId = value)}>
-          <Select.Trigger id="canvas-transfer-destination" class="w-full">
-            {destination?.name ?? m['canvas.transfer_destination_placeholder']()}
-          </Select.Trigger>
-          <Select.Content>
-            {#each destinations as workspace (workspace.id)}
-              <Select.Item value={workspace.id}>{workspace.name}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
+        <div class="grid gap-1.5">
+          <label for="canvas-transfer-destination" class="text-ui-lg font-medium">{m['canvas.transfer_destination']()}</label>
+          <Select.Root type="single" value={destinationWorkspaceId} onValueChange={(value: string) => (destinationWorkspaceId = value)}>
+            <Select.Trigger id="canvas-transfer-destination" class="w-full" disabled={destinations.length === 0}>
+              <span class="truncate">{destination?.name ?? m['canvas.transfer_destination_placeholder']()}</span>
+            </Select.Trigger>
+            <Select.Content>
+              {#each destinations as workspace (workspace.id)}
+                <Select.Item value={workspace.id}>{workspace.name}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
       </div>
 
-      <div class="grid gap-2 rounded-md border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-xs text-[var(--app-text-muted)]">
-        <p class="flex items-start gap-2"><Network size={14} class="mt-0.5 shrink-0 text-[var(--app-secondary)]" /><span>{m['canvas.transfer_connections']({ count: connectionCount })}</span></p>
-        <p class="flex items-start gap-2"><RotateCcw size={14} class="mt-0.5 shrink-0 text-[var(--app-warning)]" /><span>{m['canvas.transfer_runtime_reset']()}</span></p>
-        <p class="flex items-start gap-2"><ShieldCheck size={14} class="mt-0.5 shrink-0 text-[var(--app-success)]" /><span>{m['canvas.transfer_security']()}</span></p>
-      </div>
+      <!-- O que acontece: lista neutra; a cor fica so no icone. -->
+      <ul class="grid gap-2.5 text-ui-md leading-snug text-[var(--app-text-soft)]">
+        <li class="flex items-start gap-2.5"><Network size={14} class="mt-px shrink-0 text-[var(--app-secondary)]" aria-hidden="true" /><span class="text-pretty">{m['canvas.transfer_connections']({ count: connectionCount })}</span></li>
+        <li class="flex items-start gap-2.5"><RotateCcw size={14} class="mt-px shrink-0 text-[var(--app-warning)]" aria-hidden="true" /><span class="text-pretty">{m['canvas.transfer_runtime_reset']()}</span></li>
+        <li class="flex items-start gap-2.5"><ShieldCheck size={14} class="mt-px shrink-0 text-[var(--app-success)]" aria-hidden="true" /><span class="text-pretty">{m['canvas.transfer_security']()}</span></li>
+      </ul>
 
-      {#if destinations.length === 0}<p class="text-xs text-[var(--app-warning)]" role="status">{m['canvas.transfer_no_destination']()}</p>{/if}
-      {#if errorMessage}<p class="text-sm text-destructive" role="alert">{errorMessage}</p>{/if}
+      {#if destinations.length === 0}<p class="flex items-start gap-2 rounded-lg bg-[var(--app-warning-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-text)]" role="status"><TriangleAlert size={14} class="mt-px shrink-0 text-[var(--app-warning)]" aria-hidden="true" /><span>{m['canvas.transfer_no_destination']()}</span></p>{/if}
+      {#if errorMessage}<p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{errorMessage}</span></p>{/if}
     </div>
 
     <Dialog.Footer>
       <Button type="button" variant="outline" onclick={onClose}>{m['dlg.cancel']()}</Button>
       <Button type="button" disabled={busy || !destinationWorkspaceId} onclick={submit}>
-        {#if mode === 'copy'}<Copy size={15} />{:else}<MoveRight size={15} />{/if}
+        {#if busy}<LoaderCircle class="animate-spin" aria-hidden="true" />{:else if mode === 'copy'}<Copy size={15} aria-hidden="true" />{:else}<MoveRight size={15} aria-hidden="true" />{/if}
         {busy ? m['canvas.transfer_working']() : mode === 'copy' ? m['canvas.transfer_copy_action']() : m['canvas.transfer_move_action']()}
       </Button>
     </Dialog.Footer>

@@ -3,7 +3,7 @@
   import { zod } from 'sveltekit-superforms/adapters';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
-  import { Boxes, Check, Code2, Gauge, LoaderCircle, Palette, Play, ScanLine, ShieldCheck, Sparkles, SwatchBook, UserRound, Users } from '@lucide/svelte';
+  import { Boxes, Check, CircleAlert, Code2, Gauge, LoaderCircle, Palette, Play, ScanLine, ShieldCheck, Sparkles, SwatchBook, UserRound, Users } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Form from '$lib/components/ui/form';
   import * as Select from '$lib/components/ui/select';
@@ -11,6 +11,7 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import { localeState } from '$lib/i18n/locale.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
   import {
@@ -115,15 +116,6 @@
     $formData.leaderNodeId = mode === 'leader' ? leader?.id ?? null : null;
   }
 
-  function platformLabel(platform: CreateDesignExplorationInput['platform']): string {
-    switch (platform) {
-      case 'desktop': return m['design.exploration_platform_desktop']();
-      case 'mobile-web': return m['design.exploration_platform_mobile_web']();
-      case 'native-mobile': return m['design.exploration_platform_native_mobile']();
-      default: return m['design.exploration_platform_responsive_web']();
-    }
-  }
-
   function codeTargetLabel(target: CreateDesignExplorationInput['codeTarget']): string {
     switch (target) {
       case 'svelte': return m['design.exploration_code_svelte']();
@@ -153,147 +145,164 @@
   }
 </script>
 
+{#snippet fieldError({ errors, errorProps }: { errors: string[]; errorProps: Record<string, unknown> })}
+  {#each errors as error (error)}
+    <p {...errorProps} class="flex items-center gap-1.5 text-ui-md text-[var(--app-danger)]"><CircleAlert size={13} class="shrink-0" aria-hidden="true" />{error}</p>
+  {/each}
+{/snippet}
+
 <Dialog.Root {open} onOpenChange={(next) => !next && !submitting && onClose()}>
-  <Dialog.Content class="grid max-h-[min(92dvh,860px)] w-[min(1040px,calc(100vw-1.5rem))]! max-w-none! grid-rows-[auto_minmax(0,1fr)] gap-0! overflow-hidden rounded-lg p-0!">
-    <Dialog.Header class="border-b border-border/70 px-5 py-4 pr-12">
-      <Dialog.Title class="text-pretty">{m['design.exploration_title']()}</Dialog.Title>
-      <Dialog.Description class="max-w-3xl text-pretty">{m['design.exploration_description']()}</Dialog.Description>
+  <Dialog.Content class="flex max-h-[min(92dvh,860px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1000px]">
+    <Dialog.Header class="shrink-0 border-b border-border/70 px-5 pt-5 pb-4 pr-12">
+      <Dialog.Title class="text-balance">{m['design.exploration_title']()}</Dialog.Title>
+      <Dialog.Description class="max-w-3xl">{m['design.exploration_description']()}</Dialog.Description>
     </Dialog.Header>
 
-    <form method="POST" use:enhance class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-      <div class="grid min-h-0 overflow-y-auto overscroll-contain lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] lg:overflow-hidden">
-        <div class="space-y-4 px-5 py-4 lg:overflow-y-auto lg:overscroll-contain">
-          <Form.Field {form} name="title">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['design.exploration_field_title']()}</Form.Label>
-                <Input {...props} bind:value={$formData.title} autocomplete="off" />
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-          </Form.Field>
-
-          <Form.Field {form} name="objective">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['design.exploration_field_objective']()}</Form.Label>
-                <Textarea {...props} bind:value={$formData.objective} autocomplete="off" rows={4} class="min-h-24 resize-y" placeholder={m['design.exploration_objective_placeholder']()} />
-              {/snippet}
-            </Form.Control>
-            <Form.Description>{m['design.exploration_objective_hint']()}</Form.Description>
-            <Form.FieldErrors />
-          </Form.Field>
-
-          <Form.Field {form} name="audience">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['design.exploration_field_audience']()}</Form.Label>
-                <Input {...props} bind:value={$formData.audience} autocomplete="off" placeholder={m['design.exploration_audience_placeholder']()} />
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-          </Form.Field>
-
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="space-y-2">
-              <label class="text-sm font-medium leading-none" for="exploration-platform">{m['design.exploration_field_platform']()}</label>
-              <Select.Root type="single" value={$formData.platform} onValueChange={selectPlatform}>
-                <Select.Trigger id="exploration-platform" class="w-full">{platformLabel($formData.platform)}</Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="responsive-web">{m['design.exploration_platform_responsive_web']()}</Select.Item>
-                  <Select.Item value="desktop">{m['design.exploration_platform_desktop']()}</Select.Item>
-                  <Select.Item value="mobile-web">{m['design.exploration_platform_mobile_web']()}</Select.Item>
-                  <Select.Item value="native-mobile">{m['design.exploration_platform_native_mobile']()}</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium leading-none" for="exploration-code-target">{m['design.exploration_field_code_target']()}</label>
-              <Select.Root type="single" value={$formData.codeTarget} onValueChange={selectCodeTarget}>
-                <Select.Trigger id="exploration-code-target" class="w-full">{codeTargetLabel($formData.codeTarget)}</Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="svelar">{m['design.exploration_code_svelar']()}</Select.Item>
-                  <Select.Item value="svelte">{m['design.exploration_code_svelte']()}</Select.Item>
-                  <Select.Item value="react">{m['design.exploration_code_react']()}</Select.Item>
-                  <Select.Item value="next">{m['design.exploration_code_next']()}</Select.Item>
-                  <Select.Item value="vue">{m['design.exploration_code_vue']()}</Select.Item>
-                  <Select.Item value="html">{m['design.exploration_code_html']()}</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </div>
-          </div>
-
-          <div class="grid gap-4 sm:grid-cols-2">
-            <Form.Field {form} name="constraints">
+    <form method="POST" use:enhance class="flex min-h-0 flex-1 flex-col">
+      <div class="grid min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:overflow-hidden">
+        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6 px-5 py-5 lg:overflow-y-auto lg:overscroll-contain">
+          <!-- Grupo 1: o problema (nome e objetivo). -->
+          <div class="grid gap-4">
+            <Form.Field {form} name="title" class="space-y-1.5">
               <Form.Control>
                 {#snippet children({ props })}
-                  <Form.Label>{m['design.exploration_field_constraints']()}</Form.Label>
-                  <Textarea {...props} bind:value={$formData.constraints} autocomplete="off" rows={3} class="min-h-20 resize-y" placeholder={m['design.exploration_constraints_placeholder']()} />
+                  <Form.Label class="text-[13px]">{m['design.exploration_field_title']()}</Form.Label>
+                  <Input {...props} bind:value={$formData.title} autocomplete="off" />
                 {/snippet}
               </Form.Control>
-              <Form.FieldErrors />
+              <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
             </Form.Field>
-            <Form.Field {form} name="references">
+
+            <Form.Field {form} name="objective" class="space-y-1.5">
               <Form.Control>
                 {#snippet children({ props })}
-                  <Form.Label>{m['design.exploration_field_references']()}</Form.Label>
-                  <Textarea {...props} bind:value={$formData.references} autocomplete="off" rows={3} class="min-h-20 resize-y" placeholder={m['design.exploration_references_placeholder']()} />
+                  <Form.Label class="text-[13px]">{m['design.exploration_field_objective']()}</Form.Label>
+                  <Textarea {...props} bind:value={$formData.objective} autocomplete="off" rows={4} class="min-h-24 resize-y" placeholder={m['design.exploration_objective_placeholder']()} />
                 {/snippet}
               </Form.Control>
-              <Form.FieldErrors />
+              <Form.Description class="text-[12px] text-pretty">{m['design.exploration_objective_hint']()}</Form.Description>
+              <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
             </Form.Field>
           </div>
 
-          <label class="flex cursor-pointer items-start gap-3 border-y border-border/70 py-3">
-            <Checkbox checked={$formData.includeDarkMode} onCheckedChange={(value: boolean | 'indeterminate') => ($formData.includeDarkMode = value === true)} />
-            <span class="min-w-0"><span class="block text-sm font-medium">{m['design.exploration_dark_mode']()}</span><span class="mt-1 block text-xs leading-5 text-muted-foreground">{m['design.exploration_dark_mode_hint']()}</span></span>
-          </label>
+          <!-- Grupo 2: para quem, onde roda e em que codigo. -->
+          <div class="grid gap-4">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <Form.Field {form} name="audience" class="space-y-1.5">
+                <Form.Control>
+                  {#snippet children({ props })}
+                    <Form.Label class="text-[13px]">{m['design.exploration_field_audience']()}</Form.Label>
+                    <Input {...props} bind:value={$formData.audience} autocomplete="off" placeholder={m['design.exploration_audience_placeholder']()} />
+                  {/snippet}
+                </Form.Control>
+                <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+              </Form.Field>
+              <div class="grid content-start gap-1.5">
+                <label class="text-ui-lg font-medium" for="exploration-code-target">{m['design.exploration_field_code_target']()}</label>
+                <Select.Root type="single" value={$formData.codeTarget} onValueChange={selectCodeTarget}>
+                  <Select.Trigger id="exploration-code-target" class="w-full"><span class="truncate">{codeTargetLabel($formData.codeTarget)}</span></Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="svelar">{m['design.exploration_code_svelar']()}</Select.Item>
+                    <Select.Item value="svelte">{m['design.exploration_code_svelte']()}</Select.Item>
+                    <Select.Item value="react">{m['design.exploration_code_react']()}</Select.Item>
+                    <Select.Item value="next">{m['design.exploration_code_next']()}</Select.Item>
+                    <Select.Item value="vue">{m['design.exploration_code_vue']()}</Select.Item>
+                    <Select.Item value="html">{m['design.exploration_code_html']()}</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+              </div>
+            </div>
+            <div class="grid gap-1.5">
+              <span class="text-ui-lg font-medium">{m['design.exploration_field_platform']()}</span>
+              <SegmentedControl
+                class="max-w-full self-start justify-self-start"
+                label={m['design.exploration_field_platform']()}
+                value={$formData.platform}
+                onValueChange={selectPlatform}
+                options={[
+                  { value: 'responsive-web', label: m['design.exploration_platform_responsive_web']() },
+                  { value: 'desktop', label: m['design.exploration_platform_desktop']() },
+                  { value: 'mobile-web', label: m['design.exploration_platform_mobile_web']() },
+                  { value: 'native-mobile', label: m['design.exploration_platform_native_mobile']() },
+                ]}
+              />
+            </div>
+          </div>
 
-          <fieldset class="space-y-2">
-            <legend class="text-sm font-medium">{m['design.exploration_execution']()}</legend>
+          <!-- Grupo 3: limites e referencias. -->
+          <div class="grid gap-4">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <Form.Field {form} name="constraints" class="space-y-1.5">
+                <Form.Control>
+                  {#snippet children({ props })}
+                    <Form.Label class="text-[13px]">{m['design.exploration_field_constraints']()}</Form.Label>
+                    <Textarea {...props} bind:value={$formData.constraints} autocomplete="off" rows={3} class="min-h-20 resize-y" placeholder={m['design.exploration_constraints_placeholder']()} />
+                  {/snippet}
+                </Form.Control>
+                <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+              </Form.Field>
+              <Form.Field {form} name="references" class="space-y-1.5">
+                <Form.Control>
+                  {#snippet children({ props })}
+                    <Form.Label class="text-[13px]">{m['design.exploration_field_references']()}</Form.Label>
+                    <Textarea {...props} bind:value={$formData.references} autocomplete="off" rows={3} class="min-h-20 resize-y" placeholder={m['design.exploration_references_placeholder']()} />
+                  {/snippet}
+                </Form.Control>
+                <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+              </Form.Field>
+            </div>
+            <label class="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2.5 shadow-[var(--app-shadow-border)] transition-[background-color] duration-150 hover:bg-[var(--app-hover)]">
+              <Checkbox class="mt-px" checked={$formData.includeDarkMode} onCheckedChange={(value: boolean | 'indeterminate') => ($formData.includeDarkMode = value === true)} />
+              <span class="min-w-0"><span class="block text-ui-lg font-medium leading-snug">{m['design.exploration_dark_mode']()}</span><span class="mt-0.5 block text-ui-md leading-snug text-pretty text-muted-foreground">{m['design.exploration_dark_mode_hint']()}</span></span>
+            </label>
+          </div>
+
+          <!-- Grupo 4: quem executa. Cartoes de escolha em vez de select. -->
+          <fieldset class="grid gap-2">
+            <legend class="mb-2 text-ui-lg font-medium">{m['design.exploration_execution']()}</legend>
             <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={m['design.exploration_execution']()}>
-              <button type="button" role="radio" aria-checked={$formData.executionMode === 'manual'} class={$formData.executionMode === 'manual' ? 'flex min-h-20 items-start gap-3 rounded-md border border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : 'flex min-h-20 items-start gap-3 rounded-md border border-border bg-transparent p-3 text-left transition-[background-color,border-color] hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'} onclick={() => selectExecution('manual')}>
-                <UserRound size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><span><strong class="block text-xs">{m['design.exploration_manual']()}</strong><span class="mt-1 block text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_manual_hint']()}</span></span>
+              <button type="button" role="radio" aria-checked={$formData.executionMode === 'manual'} class="choice-card" onclick={() => selectExecution('manual')}>
+                <span class="choice-icon" aria-hidden="true"><UserRound size={15} /></span><span class="min-w-0"><strong class="block text-ui-lg font-medium">{m['design.exploration_manual']()}</strong><span class="mt-0.5 block text-ui-md leading-snug text-pretty text-muted-foreground">{m['design.exploration_manual_hint']()}</span></span>
               </button>
-              <button type="button" role="radio" aria-checked={$formData.executionMode === 'leader'} disabled={!leader} class={$formData.executionMode === 'leader' ? 'flex min-h-20 items-start gap-3 rounded-md border border-[var(--app-accent)] bg-[var(--app-accent-soft)] p-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : 'flex min-h-20 items-start gap-3 rounded-md border border-border bg-transparent p-3 text-left transition-[background-color,border-color] hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45'} onclick={() => selectExecution('leader')}>
-                <Users size={16} class="mt-0.5 shrink-0" aria-hidden="true" /><span><strong class="block text-xs">{m['design.exploration_leader']()}</strong><span class="mt-1 block text-ui-sm leading-4 text-muted-foreground">{leader ? m['design.exploration_leader_hint']({ leader: leader.title, provider: leader.provider }) : m['design.exploration_no_leader']()}</span></span>
+              <button type="button" role="radio" aria-checked={$formData.executionMode === 'leader'} disabled={!leader} class="choice-card" onclick={() => selectExecution('leader')}>
+                <span class="choice-icon" aria-hidden="true"><Users size={15} /></span><span class="min-w-0"><strong class="block text-ui-lg font-medium">{m['design.exploration_leader']()}</strong><span class="mt-0.5 block text-ui-md leading-snug text-pretty text-muted-foreground">{leader ? m['design.exploration_leader_hint']({ leader: leader.title, provider: leader.provider }) : m['design.exploration_no_leader']()}</span></span>
               </button>
             </div>
           </fieldset>
 
-          {#if submitError}<p class="text-sm text-destructive" role="alert" aria-live="polite">{submitError}</p>{/if}
+          {#if submitError}<p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{submitError}</span></p>{/if}
         </div>
 
-        <aside class="border-t border-border/70 bg-muted/15 px-5 py-4 lg:overflow-y-auto lg:overscroll-contain lg:border-t-0 lg:border-l">
+        <aside class="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6 border-t border-border/70 bg-[var(--app-surface-subtle)]/50 px-5 py-5 lg:overflow-y-auto lg:overscroll-contain lg:border-t-0 lg:border-l">
           <section>
-            <h3 class="text-xs font-semibold uppercase text-muted-foreground">{m['design.exploration_directions']()}</h3>
-            <div class="mt-3 divide-y divide-border/70 border-y border-border/70">
-              <div class="flex gap-3 py-3"><ScanLine size={16} class="mt-0.5 shrink-0 text-[var(--app-info)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_clarity']()}</strong><p class="mt-1 text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_direction_clarity_hint']()}</p></div></div>
-              <div class="flex gap-3 py-3"><Sparkles size={16} class="mt-0.5 shrink-0 text-[var(--app-accent)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_expressive']()}</strong><p class="mt-1 text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_direction_expressive_hint']()}</p></div></div>
-              <div class="flex gap-3 py-3"><Gauge size={16} class="mt-0.5 shrink-0 text-[var(--app-success)]" aria-hidden="true" /><div><strong class="text-xs">{m['design.exploration_direction_efficient']()}</strong><p class="mt-1 text-ui-sm leading-4 text-muted-foreground">{m['design.exploration_direction_efficient_hint']()}</p></div></div>
-            </div>
-          </section>
-
-          <section class="mt-5">
-            <h3 class="text-xs font-semibold uppercase text-muted-foreground">{m['design.exploration_every_direction_delivers']()}</h3>
-            <ul class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-ui-sm">
-              <li class="flex items-center gap-2"><Palette size={14} aria-hidden="true" />{m['design.exploration_output_brand']()}</li>
-              <li class="flex items-center gap-2"><Palette size={14} aria-hidden="true" />{m['design.exploration_output_design']()}</li>
-              <li class="flex items-center gap-2"><SwatchBook size={14} aria-hidden="true" />{m['design.exploration_output_tokens']()}</li>
-              <li class="flex items-center gap-2"><Boxes size={14} aria-hidden="true" />{m['design.exploration_output_components']()}</li>
-              <li class="flex items-center gap-2"><Play size={14} aria-hidden="true" />{m['design.exploration_output_prototype']()}</li>
-              <li class="flex items-center gap-2"><Code2 size={14} aria-hidden="true" />{m['design.exploration_output_code']()}</li>
-              <li class="flex items-center gap-2"><ShieldCheck size={14} aria-hidden="true" />{m['design.exploration_output_validation']()}</li>
+            <h3 class="section-label">{m['design.exploration_directions']()}</h3>
+            <ul class="mt-3 grid gap-2">
+              <li class="direction-row"><span class="direction-icon text-[var(--app-info)]" aria-hidden="true"><ScanLine size={15} /></span><div><strong class="text-ui-lg font-medium">{m['design.exploration_direction_clarity']()}</strong><p class="mt-0.5 text-ui-md leading-snug text-pretty text-muted-foreground">{m['design.exploration_direction_clarity_hint']()}</p></div></li>
+              <li class="direction-row"><span class="direction-icon text-[var(--app-accent)]" aria-hidden="true"><Sparkles size={15} /></span><div><strong class="text-ui-lg font-medium">{m['design.exploration_direction_expressive']()}</strong><p class="mt-0.5 text-ui-md leading-snug text-pretty text-muted-foreground">{m['design.exploration_direction_expressive_hint']()}</p></div></li>
+              <li class="direction-row"><span class="direction-icon text-[var(--app-success)]" aria-hidden="true"><Gauge size={15} /></span><div><strong class="text-ui-lg font-medium">{m['design.exploration_direction_efficient']()}</strong><p class="mt-0.5 text-ui-md leading-snug text-pretty text-muted-foreground">{m['design.exploration_direction_efficient_hint']()}</p></div></li>
             </ul>
           </section>
 
-          <section class="mt-5 border-l-2 border-[var(--app-warning)] bg-[var(--app-warning)]/6 px-3 py-2.5">
-            <div class="flex items-start gap-2"><Check size={14} class="mt-0.5 shrink-0 text-[var(--app-warning)]" aria-hidden="true" /><p class="text-ui-sm leading-5">{m['design.exploration_human_gate']()}</p></div>
+          <section>
+            <h3 class="section-label">{m['design.exploration_every_direction_delivers']()}</h3>
+            <ul class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-ui-lg text-[var(--app-text-soft)]">
+              <li class="flex items-center gap-2"><Palette size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_brand']()}</li>
+              <li class="flex items-center gap-2"><Palette size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_design']()}</li>
+              <li class="flex items-center gap-2"><SwatchBook size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_tokens']()}</li>
+              <li class="flex items-center gap-2"><Boxes size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_components']()}</li>
+              <li class="flex items-center gap-2"><Play size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_prototype']()}</li>
+              <li class="flex items-center gap-2"><Code2 size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_code']()}</li>
+              <li class="flex items-center gap-2"><ShieldCheck size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['design.exploration_output_validation']()}</li>
+            </ul>
           </section>
+
+          <p class="flex items-start gap-2.5 rounded-lg bg-[var(--app-warning-soft)] px-3 py-2.5 text-ui-md leading-relaxed text-pretty text-[var(--app-text)]">
+            <Check size={14} class="mt-0.5 shrink-0 text-[var(--app-warning)]" aria-hidden="true" />{m['design.exploration_human_gate']()}
+          </p>
         </aside>
       </div>
 
-      <Dialog.Footer class="m-0! rounded-none rounded-b-lg border-t border-border/70 px-5 py-3">
+      <Dialog.Footer class="m-0 shrink-0">
         <Button type="button" variant="outline" disabled={submitting} onclick={onClose}>{m['settings.cancel']()}</Button>
         <Button type="submit" disabled={submitting}>
           {#if submitting}<LoaderCircle size={14} class="animate-spin" aria-hidden="true" />{/if}
@@ -303,3 +312,70 @@
     </form>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  /* Cartao de escolha: contorno por sombra; selecionado ganha anel de acento. */
+  .choice-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-height: 72px;
+    padding: 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-quick) ease-out,
+      box-shadow var(--duration-quick) ease-out;
+  }
+
+  .choice-card:hover:not(:disabled) {
+    background: var(--app-hover);
+  }
+
+  .choice-card[aria-checked='true'] {
+    background: var(--app-accent-soft);
+    box-shadow: inset 0 0 0 1px var(--app-accent);
+  }
+
+  .choice-card:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .choice-card:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .choice-icon,
+  .direction-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .choice-icon {
+    color: var(--app-text-soft);
+  }
+
+  .choice-card[aria-checked='true'] .choice-icon {
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+  }
+
+  .direction-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+  }
+</style>

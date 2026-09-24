@@ -7,7 +7,8 @@
   import { Input } from '$lib/components/ui/input';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
-  import { Label } from '$lib/components/ui/label';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
+  import { CircleAlert, CircleCheck, LoaderCircle } from '@lucide/svelte';
   import ModelCombobox from './ModelCombobox.svelte';
   import { createAgentNodeSchema } from '$lib/modules/agent-room/contracts/schemas/schemas.js';
   import type { AgentProviderInfo, ProviderProfile, Workspace, WorkspaceExecutionRuntime } from '$lib/modules/agent-room/domain/types.js';
@@ -211,8 +212,15 @@
   }
 </script>
 
+<!-- Erros de campo com o mesmo desenho em todos os dialogos: icone + mensagem. -->
+{#snippet fieldError({ errors, errorProps }: { errors: string[]; errorProps: Record<string, unknown> })}
+  {#each errors as error (error)}
+    <p {...errorProps} class="flex items-center gap-1.5 text-ui-md text-[var(--app-danger)]"><CircleAlert size={13} class="shrink-0" aria-hidden="true" />{error}</p>
+  {/each}
+{/snippet}
+
 <Dialog.Root {open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
-  <Dialog.Content class="sm:max-w-md">
+  <Dialog.Content class={provider ? 'sm:max-w-[560px]' : 'sm:max-w-[420px]'}>
     <Dialog.Header>
       <Dialog.Title>{provider ? m['dlg.new_agent_title']({ provider: provider.displayName }) : m['dlg.new_terminal_title']()}</Dialog.Title>
       <Dialog.Description>
@@ -220,161 +228,197 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    <form method="POST" use:enhance class="space-y-4">
-        <Form.Field {form} name="title">
+    <form method="POST" use:enhance class="grid gap-5">
+      <Form.Field {form} name="title" class="space-y-1.5">
+        <Form.Control>
+          {#snippet children({ props })}
+            <Form.Label class="text-[13px]">{m['dlg.name']()}</Form.Label>
+            <Input {...props} bind:value={$formData!.title} placeholder={m['ph.agent_title']()} autocomplete="off" autofocus />
+          {/snippet}
+        </Form.Control>
+        <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+      </Form.Field>
+
+      {#if provider && (modelOptions.length || supportsEffort || supportsProfiles)}
+        <!-- Modelo, esforco e perfil formam um grupo: o "como" o agente pensa. -->
+        <div class="grid gap-3">
+          {#if modelOptions.length || supportsEffort}
+            <div class="grid gap-3 sm:grid-cols-2">
+              {#if modelOptions.length}
+                <Form.Field {form} name="model" class="min-w-0 space-y-1.5">
+                  <Form.Control>
+                    {#snippet children({ props })}
+                      <Form.Label class="text-[13px]">{m['dlg.model']()}</Form.Label>
+                      <ModelCombobox
+                        fieldProps={props}
+                        value={String($formData!.model ?? '')}
+                        options={modelOptions}
+                        defaultLabel={m['dlg.provider_default']()}
+                        searchPlaceholder={m['dlg.search_models']()}
+                        emptyLabel={m['dlg.no_models']()}
+                        ariaLabel={m['dlg.model']()}
+                        onValueChange={(value) => ($formData!.model = value)}
+                      />
+                    {/snippet}
+                  </Form.Control>
+                  <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+                </Form.Field>
+              {/if}
+
+              {#if supportsEffort}
+                <Form.Field {form} name="effort" class="min-w-0 space-y-1.5">
+                  <Form.Control>
+                    {#snippet children({ props })}
+                      <Form.Label class="text-[13px]">{m['dlg.effort_label']()}</Form.Label>
+                      <Select.Root type="single" value={$formData!.effort || '__default__'} onValueChange={(value) => ($formData!.effort = (value === '__default__' ? null : value) as AgentCreation['effort'])}>
+                        <Select.Trigger {...props} class="w-full">
+                          <span class="truncate">{$formData!.effort ? (EFFORT_LABELS[$formData!.effort] ?? $formData!.effort) : m['dlg.provider_default']()}</span>
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="__default__" label={m['dlg.provider_default']()} />
+                          {#each effortOptions as option (option.value)}
+                            <Select.Item value={option.value} label={option.label} />
+                          {/each}
+                        </Select.Content>
+                      </Select.Root>
+                    {/snippet}
+                  </Form.Control>
+                  <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+                </Form.Field>
+              {/if}
+            </div>
+          {/if}
+
+          {#if supportsProfiles}
+            <Form.Field {form} name="profileId" class="space-y-1.5">
+              <Form.Control>
+                {#snippet children({ props })}
+                  <Form.Label class="text-[13px]">{m['dlg.profile_label']()}</Form.Label>
+                  <Select.Root type="single" value={$formData!.profileId || '__default__'} onValueChange={(value: string) => ($formData!.profileId = value === '__default__' ? null : value)}>
+                    <Select.Trigger {...props} class="w-full">
+                      <span class="truncate">{$formData!.profileId ? (profiles.find((item) => item.id === $formData!.profileId)?.name ?? $formData!.profileId) : m['term.profile_default']()}</span>
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="__default__" label={m['term.profile_default']()} />
+                      {#each profiles as profileOption (profileOption.id)}
+                        <Select.Item value={profileOption.id} label={profileOption.name} />
+                      {/each}
+                    </Select.Content>
+                  </Select.Root>
+                {/snippet}
+              </Form.Control>
+              <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+              {#if profilesLoading}
+                <p class="flex items-center gap-1.5 text-ui-md text-muted-foreground"><LoaderCircle size={12} class="animate-spin" aria-hidden="true" />{m['dlg.profile_loading']()}</p>
+              {:else if !profiles.length}
+                <p class="text-ui-md text-muted-foreground">{m['term.profile_empty']()}</p>
+              {/if}
+            </Form.Field>
+          {/if}
+        </div>
+      {/if}
+
+      {#if provider}
+        <!-- Linha inteira clicavel: o rotulo aponta para o checkbox. -->
+        <Form.Field {form} name="leader" class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 space-y-0 rounded-lg px-3 py-2.5 shadow-[var(--app-shadow-border)] transition-[background-color] duration-150 hover:bg-[var(--app-hover)]">
           <Form.Control>
             {#snippet children({ props })}
-              <Form.Label>{m['dlg.name']()}</Form.Label>
-              <Input {...props} bind:value={$formData!.title} placeholder={m['ph.agent_title']()} autofocus />
+              <Checkbox {...props} class="row-span-2 mt-px" checked={Boolean($formData!.leader)} onCheckedChange={(checked) => ($formData!.leader = checked === true)} />
+              <Form.Label class="cursor-pointer text-[13px] leading-snug">{m['dlg.leader_label']()}</Form.Label>
             {/snippet}
           </Form.Control>
-          <Form.FieldErrors />
+          <Form.Description class="col-start-2 text-[12px] leading-relaxed text-pretty">{m['dlg.leader_desc']()}</Form.Description>
+          <Form.FieldErrors class="col-start-2 text-[12px] font-normal" children={fieldError} />
         </Form.Field>
+      {/if}
 
-        {#if provider && modelOptions.length}
-          <Form.Field {form} name="model">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['dlg.model']()}</Form.Label>
-                <ModelCombobox
-                  fieldProps={props}
-                  value={String($formData!.model ?? '')}
-                  options={modelOptions}
-                  defaultLabel={m['dlg.provider_default']()}
-                  searchPlaceholder={m['dlg.search_models']()}
-                  emptyLabel={m['dlg.no_models']()}
-                  ariaLabel={m['dlg.model']()}
-                  onValueChange={(value) => ($formData!.model = value)}
-                />
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-          </Form.Field>
-        {/if}
-
-        {#if provider && supportsEffort}
-          <Form.Field {form} name="effort">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['dlg.effort_label']()}</Form.Label>
-                <Select.Root type="single" value={$formData!.effort || '__default__'} onValueChange={(value) => ($formData!.effort = (value === '__default__' ? null : value) as AgentCreation['effort'])}>
-                  <Select.Trigger {...props} class="w-full">
-                    {$formData!.effort ? (EFFORT_LABELS[$formData!.effort] ?? $formData!.effort) : m['dlg.provider_default']()}
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="__default__" label={m['dlg.provider_default']()} />
-                    {#each effortOptions as option (option.value)}
-                      <Select.Item value={option.value} label={option.label} />
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-          </Form.Field>
-        {/if}
-
-        {#if provider && supportsProfiles}
-          <Form.Field {form} name="profileId">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['dlg.profile_label']()}</Form.Label>
-                <Select.Root type="single" value={$formData!.profileId || '__default__'} onValueChange={(value: string) => ($formData!.profileId = value === '__default__' ? null : value)}>
-                  <Select.Trigger {...props} class="w-full">
-                    {$formData!.profileId ? (profiles.find((item) => item.id === $formData!.profileId)?.name ?? $formData!.profileId) : m['term.profile_default']()}
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="__default__" label={m['term.profile_default']()} />
-                    {#each profiles as profileOption (profileOption.id)}
-                      <Select.Item value={profileOption.id} label={profileOption.name} />
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-            {#if profilesLoading}
-              <p class="text-xs text-muted-foreground">{m['dlg.profile_loading']()}</p>
-            {:else if !profiles.length}
-              <p class="text-xs text-muted-foreground">{m['term.profile_empty']()}</p>
-            {/if}
-          </Form.Field>
-        {/if}
-
-        {#if provider}
-          <Form.Field {form} name="leader">
-            <Form.Control>
-              {#snippet children({ props })}
-                <div class="flex items-center gap-2">
-                  <Checkbox {...props} checked={Boolean($formData!.leader)} onCheckedChange={(checked) => ($formData!.leader = checked === true)} />
-                  <Label class="cursor-pointer" onclick={() => ($formData!.leader = !$formData!.leader)}>
-                    {m['dlg.leader_label']()}
-                  </Label>
-                </div>
-              {/snippet}
-            </Form.Control>
-            <Form.Description>{m['dlg.leader_desc']()}</Form.Description>
-            <Form.FieldErrors />
-          </Form.Field>
-        {/if}
-
-        {#if workspace && wsl.supported}
-          <div class="space-y-2 rounded-md border border-border/70 bg-muted/20 p-3">
-            <label class="text-sm font-medium" for="new-agent-runtime">{m['dlg.runtime_label']()}</label>
-            <Select.Root type="single" value={runtimeMode} onValueChange={(value: string) => (runtimeMode = value as typeof runtimeMode)}>
-              <Select.Trigger id="new-agent-runtime" class="w-full">
-                {runtimeMode === 'default'
-                  ? m['term.runtime_default_option']({ runtime: defaultRuntimeLabel })
-                  : runtimeMode === 'wsl'
-                    ? m['dlg.runtime_wsl']()
-                    : m['dlg.runtime_native']()}
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="default">{m['term.runtime_default_option']({ runtime: defaultRuntimeLabel })}</Select.Item>
-                <Select.Item value="native">{m['dlg.runtime_native']()}</Select.Item>
-                <Select.Item value="wsl">{m['dlg.runtime_wsl']()}</Select.Item>
-              </Select.Content>
-            </Select.Root>
-
-            {#if runtimeMode === 'wsl'}
-              <label class="text-sm font-medium" for="new-agent-wsl-distribution">{m['dlg.wsl_distribution']()}</label>
-              <Select.Root type="single" value={wslDistribution} onValueChange={(value: string) => (wslDistribution = value)}>
-                <Select.Trigger id="new-agent-wsl-distribution" class="w-full">
-                  {wslDistribution || m['dlg.wsl_distribution_placeholder']()}
-                </Select.Trigger>
-                <Select.Content>
-                  {#each wsl.distributions as distribution (distribution.name)}
-                    <Select.Item value={distribution.name}>{distribution.name}</Select.Item>
-                  {/each}
-                </Select.Content>
-              </Select.Root>
-              {#if !wsl.distributions.length}
-                <p class="text-xs text-destructive" role="alert">{wsl.error || m['dlg.wsl_unavailable']()}</p>
-              {/if}
-              <label class="text-sm font-medium" for="new-agent-wsl-path">{m['dlg.wsl_working_dir']()}</label>
-              <Input id="new-agent-wsl-path" bind:value={wslWorkingDir} placeholder="/home/user/project" autocomplete="off" />
-              <p class="text-xs text-muted-foreground">{m['term.runtime_path_hint']()}</p>
-            {/if}
+      {#if workspace && wsl.supported}
+        <section class="grid gap-3 border-t border-[var(--app-border)] pt-4" aria-labelledby="new-agent-runtime-label">
+          <div class="grid gap-1.5">
+            <span id="new-agent-runtime-label" class="text-ui-lg font-medium">{m['dlg.runtime_label']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['dlg.runtime_label']()}
+              value={runtimeMode}
+              onValueChange={(value) => (runtimeMode = value)}
+              options={[
+                { value: 'default', label: m['term.runtime_default_option']({ runtime: defaultRuntimeLabel }) },
+                { value: 'native', label: m['dlg.runtime_native']() },
+                { value: 'wsl', label: m['dlg.runtime_wsl']() },
+              ]}
+            />
           </div>
-        {/if}
 
-        {#if provider}
-          <p class:text-destructive={!selectedProvider?.installed} class="text-xs text-muted-foreground" role="status">
+          {#if runtimeMode === 'wsl'}
+            <div class="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+              <div class="grid min-w-0 content-start gap-1.5">
+                <label class="text-ui-lg font-medium" for="new-agent-wsl-distribution">{m['dlg.wsl_distribution']()}</label>
+                <Select.Root type="single" value={wslDistribution} onValueChange={(value: string) => (wslDistribution = value)}>
+                  <Select.Trigger id="new-agent-wsl-distribution" class="w-full">
+                    <span class="truncate">{wslDistribution || m['dlg.wsl_distribution_placeholder']()}</span>
+                  </Select.Trigger>
+                  <Select.Content>
+                    {#each wsl.distributions as distribution (distribution.name)}
+                      <Select.Item value={distribution.name}>{distribution.name}</Select.Item>
+                    {/each}
+                  </Select.Content>
+                </Select.Root>
+              </div>
+              <div class="grid min-w-0 content-start gap-1.5">
+                <label class="text-ui-lg font-medium" for="new-agent-wsl-path">{m['dlg.wsl_working_dir']()}</label>
+                <Input id="new-agent-wsl-path" bind:value={wslWorkingDir} placeholder="/home/user/project" autocomplete="off" spellcheck={false} class="font-mono text-[13px]" />
+              </div>
+              <p class="text-ui-md text-muted-foreground sm:col-span-2">{m['term.runtime_path_hint']()}</p>
+            </div>
+            {#if !wsl.distributions.length}
+              <p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{wsl.error || m['dlg.wsl_unavailable']()}</span></p>
+            {/if}
+          {/if}
+        </section>
+      {/if}
+
+      {#if provider}
+        <!-- Disponibilidade do provider: estado com icone, nao so cor. -->
+        <p
+          class="flex items-start gap-2 text-ui-md leading-snug"
+          class:text-muted-foreground={runtimeChecking || selectedProvider?.installed}
+          class:provider-missing={!runtimeChecking && !selectedProvider?.installed}
+          role="status"
+        >
+          {#if runtimeChecking}
+            <LoaderCircle size={14} class="mt-px shrink-0 animate-spin" aria-hidden="true" />
+          {:else if selectedProvider?.installed}
+            <CircleCheck size={14} class="mt-px shrink-0 text-[var(--app-success)]" aria-hidden="true" />
+          {:else}
+            <CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" />
+          {/if}
+          <span class="text-pretty">
             {runtimeChecking
               ? m['term.runtime_checking_provider']({ provider: provider.displayName })
               : selectedProvider?.installed
                 ? m['term.runtime_provider_ready']({ provider: provider.displayName })
                 : m['term.runtime_provider_missing']({ provider: provider.displayName })}
-          </p>
-        {/if}
+          </span>
+        </p>
+      {/if}
 
-        <Dialog.Footer>
-          <Button type="button" variant="outline" onclick={onCancel}>{m['dlg.cancel']()}</Button>
-          <Button
-            type="submit"
-            disabled={(runtimeMode === 'wsl' && !wslDistribution) || Boolean(provider && (runtimeChecking || !selectedProvider?.installed))}
-          >{m['dlg.create_agent']()}</Button>
-        </Dialog.Footer>
-      </form>
+      <Dialog.Footer>
+        <Button type="button" variant="outline" onclick={onCancel}>{m['dlg.cancel']()}</Button>
+        <Button
+          type="submit"
+          disabled={(runtimeMode === 'wsl' && !wslDistribution) || Boolean(provider && (runtimeChecking || !selectedProvider?.installed))}
+        >{m['dlg.create_agent']()}</Button>
+      </Dialog.Footer>
+    </form>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  /* Provider ausente bloqueia a criacao: mesmo bloco de alerta dos dialogos. */
+  .provider-missing {
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+</style>

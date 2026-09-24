@@ -4,6 +4,7 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { getAppSettings, invalidateAppSettings } from './app-settings.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
+  import { CircleAlert, Download, HardDrive, LoaderCircle, RotateCcw } from '@lucide/svelte';
 
   type Props = {
     open: boolean;
@@ -145,7 +146,7 @@
 </script>
 
 <AlertDialog.Root bind:open>
-  <AlertDialog.Content>
+  <AlertDialog.Content class="sm:max-w-[440px]">
     <AlertDialog.Header>
       <AlertDialog.Title>
         {#if phase === 'downloading'}{m['voice.downloading_title']()}
@@ -164,62 +165,87 @@
     </AlertDialog.Header>
 
     {#if phase === 'downloading'}
+      <!-- Progresso: barra + percentual tabular; etapa atual logo abaixo. -->
       <div class="download-state">
-        <Progress value={percent} max={100} />
-        <span class="download-percent">{percent}%</span>
+        <div class="download-row">
+          <Progress value={percent} max={100} aria-label={m['voice.downloading_title']()} />
+          <span class="download-percent">{percent}%</span>
+        </div>
+        <p class="download-stage" aria-live="polite">
+          <LoaderCircle size={12} class="shrink-0 animate-spin" aria-hidden="true" />
+          <span>{stage ? stageLabel(stage) : m['voice.downloading_title']()}</span>
+        </p>
       </div>
-      {#if stage}
-        <p class="download-stage">{stageLabel(stage)}</p>
-      {/if}
     {:else if phase === 'error'}
-      <p class="download-error">{errorMessage}</p>
+      <p class="download-alert" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{errorMessage}</span></p>
     {:else if insufficient}
-      <p class="download-error">
-        {m['voice.insufficient_space']({ free: formatGb(freeBytes ?? 0), required: formatGb(requiredBytes) })}
+      <p class="download-alert" role="alert">
+        <HardDrive size={14} class="mt-px shrink-0" aria-hidden="true" />
+        <span>{m['voice.insufficient_space']({ free: formatGb(freeBytes ?? 0), required: formatGb(requiredBytes) })}</span>
       </p>
     {/if}
 
-    <AlertDialog.Footer>
-      {#if phase === 'confirm'}
-        <AlertDialog.Cancel onclick={cancel}>{m['voice.not_now']()}</AlertDialog.Cancel>
-        <AlertDialog.Action disabled={insufficient} onclick={confirm}>{m['voice.download_continue']()}</AlertDialog.Action>
-      {:else if phase === 'error'}
-        <AlertDialog.Cancel onclick={cancel}>{m['onboarding.close']()}</AlertDialog.Cancel>
-        <AlertDialog.Action onclick={retry}>{m['voice.retry']()}</AlertDialog.Action>
-      {/if}
-    </AlertDialog.Footer>
+    {#if phase !== 'downloading'}
+      <AlertDialog.Footer>
+        {#if phase === 'confirm'}
+          <AlertDialog.Cancel onclick={cancel}>{m['voice.not_now']()}</AlertDialog.Cancel>
+          <AlertDialog.Action disabled={insufficient} onclick={confirm}><Download aria-hidden="true" />{m['voice.download_continue']()}</AlertDialog.Action>
+        {:else if phase === 'error'}
+          <AlertDialog.Cancel onclick={cancel}>{m['onboarding.close']()}</AlertDialog.Cancel>
+          <AlertDialog.Action onclick={retry}><RotateCcw aria-hidden="true" />{m['voice.retry']()}</AlertDialog.Action>
+        {/if}
+      </AlertDialog.Footer>
+    {/if}
   </AlertDialog.Content>
 </AlertDialog.Root>
 
 <style>
   .download-state {
+    display: grid;
+    gap: 8px;
+  }
+
+  .download-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 6px;
   }
 
-  .download-state :global([data-slot='progress']) {
+  .download-row :global([data-slot='progress']) {
     flex: 1;
+    height: 6px;
   }
 
   .download-percent {
+    min-width: 40px;
+    font-family: var(--font-mono);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-    color: var(--muted-foreground, #8b8c96);
-    min-width: 36px;
     text-align: right;
+    color: var(--app-text-soft);
   }
 
   .download-stage {
-    margin: 8px 0 0;
-    font-size: 11.5px;
-    color: var(--muted-foreground, #8b8c96);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 12px;
+    color: var(--app-text-muted);
   }
 
-  .download-error {
-    margin: 6px 0 0;
+  /* Mesmo bloco de alerta usado nos demais dialogos. */
+  .download-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
     font-size: 12px;
-    color: var(--app-danger, #e6545d);
+    line-height: 1.45;
+    text-wrap: pretty;
   }
 </style>
