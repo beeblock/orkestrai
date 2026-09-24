@@ -4983,5 +4983,6 @@
   "git.no_branches": "Aún no hay ramas",
   "git.no_branches_hint": "Haz el primer commit para crear la rama actual.",
   "device.start_named": "Iniciar {device}",
-  "device.more_controls": "Más controles"
+  "device.more_controls": "Más controles",
+  "onboarding.language_current": "Actual"
 }

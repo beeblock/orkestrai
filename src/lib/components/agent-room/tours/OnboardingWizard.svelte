@@ -146,18 +146,22 @@
         <h2 class="wizard-title">{m['onboarding.language_title']()}</h2>
         <p class="wizard-sub">{m['onboarding.language_body']()}</p>
         <div class="language-grid" aria-busy={languageSaving !== null}>
-          <button class="language-option" disabled={languageSaving !== null} onclick={() => chooseLanguage('en')}>
-            <span class="language-code">EN</span>
-            <span>{m['language.name_en']()}</span>
-          </button>
-          <button class="language-option" disabled={languageSaving !== null} onclick={() => chooseLanguage('pt-BR')}>
-            <span class="language-code">PT</span>
-            <span>{m['language.name_pt_br']()}</span>
-          </button>
-          <button class="language-option" disabled={languageSaving !== null} onclick={() => chooseLanguage('es')}>
-            <span class="language-code">ES</span>
-            <span>{m['language.name_es']()}</span>
-          </button>
+          {#each [{ id: 'en', code: 'EN', label: m['language.name_en']() }, { id: 'pt-BR', code: 'PT', label: m['language.name_pt_br']() }, { id: 'es', code: 'ES', label: m['language.name_es']() }] as option (option.id)}
+            {@const current = localeState.current === option.id}
+            <!-- svelte-ignore a11y_autofocus -->
+            <button
+              class="language-option"
+              class:current
+              aria-current={current ? 'true' : undefined}
+              autofocus={current}
+              disabled={languageSaving !== null}
+              onclick={() => chooseLanguage(option.id as UiLanguage)}
+            >
+              <span class="language-code">{option.code}</span>
+              <span>{option.label}</span>
+              {#if current}<span class="language-current">{m['onboarding.language_current']()}</span>{/if}
+            </button>
+          {/each}
         </div>
         {#if languageSaving}<p class="language-saving">{m['onboarding.language_saving']()}</p>{/if}
       </div>
@@ -297,27 +301,50 @@
   }
 
   .language-option {
-    min-height: 92px;
+    position: relative;
+    min-height: 96px;
     padding: 12px 8px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 9px;
-    border: 1px solid var(--app-border);
-    border-radius: 8px;
+    gap: 8px;
+    border: 0;
+    border-radius: 12px;
     background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
     color: var(--app-text);
     font: inherit;
-    font-size: 12px;
+    font-size: 12.5px;
     cursor: pointer;
-    transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    transition: box-shadow var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .language-option:hover:not(:disabled) {
-    border-color: var(--app-accent);
+    background: var(--app-hover);
+    box-shadow: var(--app-shadow-border-hover);
+  }
+
+  .language-option:active:not(:disabled) {
+    transform: scale(var(--scale-press));
+  }
+
+  /* Idioma em uso: e o estado real, nao so o foco inicial do dialogo. */
+  .language-option.current {
     background: var(--app-accent-soft);
-    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 60%, transparent);
+  }
+
+  .language-current {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+    font-size: 10.5px;
+    font-weight: 600;
   }
 
   .language-option:focus-visible {
