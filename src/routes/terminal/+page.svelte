@@ -731,6 +731,8 @@
     if (node.type === 'usage') return m['terminal_browser.kind_usage']();
     if (node.type === 'controlCenter') return m['control_center.title']();
     if (node.type === 'reviewCenter') return m['review_center.title']();
+    if (node.type === 'workstreams') return m['workstreams.title']();
+    if (node.type === 'huddles') return m['huddle.title']();
     if (node.type === 'memory' || node.type === 'knowledge') return m['knowledge.title']();
     if (node.type === 'document') return m['knowledge.file']();
     if (node.type === 'annotations') return m['annotations.title']();
