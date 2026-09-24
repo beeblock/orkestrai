@@ -42,7 +42,7 @@
   let mediaStream: MediaStream | null = null;
   let recordingTarget: Editable | null = null;
   const PLACEMENT_KEY = 'orkestrai.dictation-placement';
-  const BUTTON_SIZE = 48;
+  const BUTTON_SIZE = 40;
   const EDGE_GAP = 14;
   let trigger = $state<HTMLButtonElement | null>(null);
   let placement = $state({ x: 0, y: 56, pinned: true });
@@ -457,7 +457,7 @@
 
 {#if supported && placementReady && !hiddenBySurface}
   <div
-    class="fixed z-30 size-12"
+    class="fixed z-30 size-10"
     data-dictation-trigger
     style:left={`${displayedPlacement.x}px`}
     style:top={`${displayedPlacement.y}px`}
@@ -469,9 +469,10 @@
             {...props}
             bind:this={trigger}
             type="button"
-            class="dictation-trigger absolute inset-0 grid size-12 place-items-center rounded-full border-0 p-[3px] text-white disabled:cursor-wait"
+            class="dictation-trigger absolute inset-0 grid size-10 place-items-center rounded-full border-0 p-[2px] disabled:cursor-wait"
             class:movable={!placement.pinned}
-            class:animate-pulse={status === 'recording'}
+            class:active={status !== 'idle'}
+            class:recording={status === 'recording'}
             aria-label={`${label()}. ${placementStatus()}. ${placementShortcut()}`}
             aria-pressed={status === 'recording'}
             onpointerdown={startDrag}
@@ -479,8 +480,8 @@
             onpointerup={stopDrag}
             onclick={triggerClick}
           >
-            <span class="grid size-full place-items-center rounded-full border border-white/15 bg-[#11102f]">
-              {#if status === 'recording'}<Square size={14} fill="currentColor" />{:else if status === 'starting' || status === 'transcribing'}<X size={18} />{:else}<Mic size={18} />{/if}
+            <span class="dictation-face grid size-full place-items-center rounded-full">
+              {#if status === 'recording'}<Square size={13} fill="currentColor" />{:else if status === 'starting' || status === 'transcribing'}<X size={16} />{:else}<Mic size={16} />{/if}
             </span>
           </button>
         {/snippet}
@@ -504,14 +505,14 @@
           <button
             {...props}
             type="button"
-            class={`placement-trigger absolute -right-1 -bottom-1 z-10 grid size-6 cursor-pointer place-items-center rounded-full border-2 border-[var(--app-page)] bg-[var(--app-surface-raised)] shadow-sm transition-[color,transform,background-color] duration-150 hover:scale-105 hover:bg-[var(--app-accent-soft)] active:scale-95 ${placement.pinned ? 'text-[var(--app-accent)]' : 'text-[var(--app-success)]'}`}
+            class={`placement-trigger absolute -right-1.5 -bottom-1.5 z-10 grid size-5 cursor-pointer place-items-center rounded-full border-2 border-[var(--app-page)] bg-[var(--app-surface-raised)] shadow-sm transition-[color,transform,background-color] duration-150 hover:bg-[var(--app-accent-soft)] active:scale-[0.96] ${placement.pinned ? 'text-[var(--app-accent)]' : 'text-[var(--app-success)]'}`}
             aria-label={`${placementStatus()}. ${m['dictation.position_menu']()}`}
             aria-haspopup="menu"
             aria-expanded={placementMenuOpen}
             aria-controls="dictation-placement-menu"
             onclick={() => (placementMenuOpen = !placementMenuOpen)}
           >
-            {#if placement.pinned}<Pin size={10} fill="currentColor" />{:else}<Move size={11} />{/if}
+            {#if placement.pinned}<Pin size={9} fill="currentColor" />{:else}<Move size={10} />{/if}
           </button>
         {/snippet}
       </Tooltip.Trigger>
@@ -542,17 +543,63 @@
 <VoiceConfirmDialog bind:open={voiceConfirmOpen} onConfirm={() => void toggleTextDictation()} onCancel={() => {}} />
 
 <style>
+  /*
+   * Em repouso o ditado e discreto (superficie do tema + anel fino); o anel
+   * colorido da marca aparece so quando a pessoa aponta, foca ou esta ditando.
+   */
   .dictation-trigger {
     touch-action: none;
-    background: conic-gradient(from 25deg, #58d6ff, #9674ff, #f05fb4, #ffb45e, #61e5a7, #58d6ff);
-    box-shadow: 0 8px 24px rgba(5, 4, 26, 0.36);
-    transition: transform 150ms ease, box-shadow 150ms ease;
+    isolation: isolate;
+    background: var(--app-border-strong);
+    box-shadow: var(--app-shadow-panel);
+    transition: transform var(--duration-quick) var(--ease-smooth-out), box-shadow var(--duration-quick) ease-out;
   }
 
-  .dictation-trigger:hover {
-    transform: translateY(-1px) scale(1.03);
-    box-shadow: 0 10px 28px rgba(5, 4, 26, 0.46);
+  .dictation-trigger::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: conic-gradient(from 25deg, #58d6ff, #9674ff, #f05fb4, #ffb45e, #61e5a7, #58d6ff);
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
   }
+
+  .dictation-trigger:hover::before,
+  .dictation-trigger:focus-visible::before,
+  .dictation-trigger.active::before {
+    opacity: 1;
+  }
+
+  .dictation-trigger:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .dictation-trigger.recording {
+    animation: dictation-halo 1.6s ease-in-out infinite;
+  }
+
+  @keyframes dictation-halo {
+    0%, 100% { box-shadow: var(--app-shadow-panel), 0 0 0 0 color-mix(in srgb, var(--app-danger) 40%, transparent); }
+    50% { box-shadow: var(--app-shadow-panel), 0 0 0 6px color-mix(in srgb, var(--app-danger) 0%, transparent); }
+  }
+
+  .dictation-face {
+    background: var(--app-surface-raised);
+    color: var(--app-text-soft);
+    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
+  }
+
+  .dictation-trigger:hover .dictation-face,
+  .dictation-trigger:focus-visible .dictation-face {
+    color: var(--app-text);
+  }
+
+  .dictation-trigger.recording .dictation-face {
+    color: var(--app-danger);
+  }
+
 
   .dictation-trigger.movable {
     cursor: grab;
@@ -560,7 +607,6 @@
 
   .dictation-trigger.movable:active {
     cursor: grabbing;
-    transform: scale(0.98);
   }
 
   .placement-menu {

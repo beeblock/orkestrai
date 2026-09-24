@@ -136,12 +136,19 @@
         class:renamable={Boolean(onRename)}
         aria-label={onRename ? m['shell.rename_hint']() : undefined}
         ondblclick={startRename}
+        onkeydown={(event) => {
+          if (onRename && (event.key === 'Enter' || event.key === 'F2')) {
+            event.preventDefault();
+            startRename();
+          }
+        }}
         role={onRename ? 'button' : undefined}
+        tabindex={onRename ? 0 : undefined}
       >{@render title()}</span>
     {/if}
     {#if connections.length}
       <Popover.Root>
-        <Popover.Trigger class="connections-badge nodrag inline-flex h-6 shrink-0 items-center gap-1 rounded-sm bg-[var(--app-border)] px-1.5 text-[10px] leading-none text-[var(--app-text-muted)] hover:text-[var(--accent)]" aria-label={m['shell.connections']()}>
+        <Popover.Trigger class="connections-badge nodrag inline-flex h-[22px] shrink-0 items-center gap-1 rounded-md bg-[var(--app-hover)] px-1.5 font-mono text-[10.5px] leading-none text-[var(--app-text-muted)] tabular-nums transition-[color,background-color] duration-150 hover:bg-[var(--app-active)] hover:text-[var(--app-text)] data-[state=open]:bg-[var(--app-active)] data-[state=open]:text-[var(--app-text)]" aria-label={m['shell.connections']()}>
           <Link2 size={11} />{connections.length}
         </Popover.Trigger>
         <Popover.Content class="w-56 p-1">
@@ -171,14 +178,18 @@
 </div>
 
 <style>
+  /*
+   * Chassi dos nos: elevacao por sombra (anel de 1px do tema + profundidade),
+   * cabecalho de altura fixa e acoes de 26px iguais em todos os tipos.
+   * Raio concentrico: moldura 10px; cabecalho e corpo seguem o mesmo raio.
+   */
   .node-shell {
     position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
-    border-radius: 8px;
-    border: 1px solid var(--app-border);
+    border-radius: 10px;
     background: var(--app-surface);
     box-shadow: var(--app-shadow-card);
     /* overflow visivel: os handles ficam a cavalo da borda (estilo Maestri)
@@ -186,24 +197,32 @@
        cargo do header/body. */
     overflow: visible;
     overscroll-behavior: contain;
-    transition: border-color 120ms ease;
+    transition: box-shadow var(--duration-quick) ease-out;
+  }
+
+  .node-shell:hover {
+    box-shadow: 0 0 0 1px var(--app-ring-hairline-strong), var(--app-shadow-card);
   }
 
   .node-shell.selected {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent), var(--app-shadow-overlay);
+    box-shadow:
+      0 0 0 1px var(--accent),
+      0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent),
+      var(--app-shadow-overlay);
   }
 
   .node-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 10px;
-    background: var(--app-surface-raised);
-    border-bottom: 1px solid var(--app-border);
-    border-radius: 7px 7px 0 0;
-    color: var(--app-text-soft);
-    font-size: 12px;
+    height: 34px;
+    flex-shrink: 0;
+    padding: 0 5px 0 10px;
+    background: color-mix(in srgb, var(--app-surface-raised) 55%, var(--app-surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+    border-radius: 10px 10px 0 0;
+    color: var(--app-text);
+    font-size: 12.5px;
     font-weight: 500;
     cursor: grab;
     user-select: none;
@@ -215,7 +234,13 @@
 
   .node-icon {
     display: inline-flex;
+    flex-shrink: 0;
     color: var(--accent);
+  }
+
+  .node-icon :global(svg) {
+    width: 14px;
+    height: 14px;
   }
 
   .node-title {
@@ -224,29 +249,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    border-radius: 4px;
   }
 
   .node-title.renamable {
     cursor: text;
   }
 
+  .node-title.renamable:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
   .node-title-input {
     flex: 1;
     min-width: 0;
-    border: none;
+    height: 24px;
+    border: 1px solid var(--app-accent);
     outline: none;
-    background: var(--app-border);
+    background: var(--app-surface-subtle);
     border-radius: 6px;
     color: var(--app-text);
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 500;
-    padding: 2px 6px;
+    padding: 0 6px;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
   .node-actions {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
     flex: none;
     min-width: 0;
   }
@@ -254,25 +287,32 @@
   .connection-row {
     display: flex;
     align-items: center;
+    border-radius: 6px;
+  }
+
+  .connection-row:hover {
+    background: var(--app-hover);
   }
 
   .connection-jump {
     flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 7px;
+    gap: 7px;
+    min-height: 30px;
+    padding: 0 8px;
     border: none;
     border-radius: 6px;
     background: transparent;
     color: var(--app-text-soft);
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     text-align: left;
   }
 
   .connection-jump:hover {
-    background: var(--app-border);
+    color: var(--app-text);
   }
 
   .connection-dir {
@@ -281,6 +321,7 @@
 
   .connection-title {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -288,19 +329,26 @@
 
   .connection-type {
     color: var(--app-text-muted);
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
   }
 
   .connection-remove {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
     border: none;
+    border-radius: 6px;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
-    padding: 4px;
   }
 
   .connection-remove:hover {
     color: var(--app-danger);
+    background: var(--app-danger-soft);
   }
 
   .node-body {
@@ -309,30 +357,36 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-radius: 0 0 7px 7px;
+    border-radius: 0 0 10px 10px;
   }
 
   .node-shell :global(.node-action-btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 6px;
     background: transparent;
     color: var(--app-text-muted);
     cursor: pointer;
     padding: 0;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .node-shell :global(.node-action-btn:hover) {
-    background: var(--app-border);
+    background: var(--app-hover);
     color: var(--app-text);
+  }
+
+  .node-shell :global(.node-action-btn:active) {
+    transform: scale(var(--scale-press));
   }
 
   .node-shell :global(.node-action-btn.danger:hover) {
     color: var(--app-danger);
+    background: var(--app-danger-soft);
   }
 
   .node-shell :global(.node-action-btn.active) {
@@ -340,21 +394,23 @@
   }
 
   .node-shell :global(.node-handle) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     z-index: 20;
     background: var(--accent);
-    border: 2.5px solid var(--app-accent-contrast);
+    border: 2px solid var(--app-surface);
     /* O anel nao e elevacao: e um recorte na cor do fundo para a bolinha
        nao encostar nas cordas que passam por baixo. */
-    box-shadow: 0 0 0 3px var(--app-canvas), 0 0 8px var(--accent);
+    box-shadow: 0 0 0 2px var(--app-canvas), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
     opacity: 0.95;
-    transition: transform 130ms ease, box-shadow 130ms ease;
+    /* `scale` (propriedade propria) compoe com o transform de posicionamento
+       do xyflow e com o translate inline do handle flutuante. */
+    transition: scale var(--duration-quick) var(--ease-smooth-out), box-shadow var(--duration-quick) ease-out;
   }
 
   .node-shell :global(.node-handle:hover) {
-    transform: scale(1.45);
-    box-shadow: 0 0 0 4px var(--app-canvas), 0 0 14px var(--accent);
+    scale: 1.25;
+    box-shadow: 0 0 0 2px var(--app-canvas), 0 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent);
   }
 
   /* area de clique um pouco maior que a bolinha para iniciar conexoes —
@@ -362,7 +418,7 @@
   .node-shell :global(.node-handle::after) {
     content: '';
     position: absolute;
-    inset: -4px;
+    inset: -5px;
     border-radius: 50%;
   }
 </style>

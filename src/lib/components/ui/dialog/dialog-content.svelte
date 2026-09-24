@@ -5,6 +5,7 @@
 	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 	import * as Dialog from "./index.js";
 	import DialogPortal from "./dialog-portal.svelte";
+	import * as m from '$lib/paraglide/messages.js';
 	import type { Snippet } from "svelte";
 	import type { ComponentProps } from "svelte";
 
@@ -28,7 +29,7 @@
 		bind:ref
 		data-slot="dialog-content"
 		class={cn(
-			"grid max-w-[calc(100%-2rem)] gap-4 rounded-lg border border-border bg-popover p-5 text-sm text-popover-foreground shadow-[0_24px_80px_rgba(0,0,0,0.42)] duration-100 sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none",
+			"grid max-w-[calc(100%-2rem)] gap-4 rounded-xl bg-popover p-5 text-sm text-popover-foreground shadow-overlay duration-250 ease-smooth-out data-closed:duration-150 sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-96 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-96 fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none",
 			className
 		)}
 		{...restProps}
@@ -39,7 +40,7 @@
 				{#snippet child({ props })}
 					<Button variant="ghost" class="absolute top-2 right-2" size="icon-sm" {...props}>
 						<XIcon  />
-						<span class="sr-only">Close</span>
+						<span class="sr-only">{m['ui.close']()}</span>
 					</Button>
 				{/snippet}
 			</DialogPrimitive.Close>
