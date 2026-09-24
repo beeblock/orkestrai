@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { SegmentedControl } from '$lib/components/ui/segmented';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { onMount } from 'svelte';
   import {
     Activity,
@@ -241,11 +243,16 @@
         <p>{m['providers.local_note']()}</p>
       </div>
     </div>
-    <div class="filters" role="group" aria-label={m['providers.title']()}>
-      <button class:active={filter === 'all'} onclick={() => (filter = 'all')}>{m['providers.filter_all']()}</button>
-      <button class:active={filter === 'ready'} onclick={() => (filter = 'ready')}>{m['providers.filter_ready']()}</button>
-      <button class:active={filter === 'setup'} onclick={() => (filter = 'setup')}>{m['providers.filter_setup']()}</button>
-    </div>
+    <SegmentedControl
+      class="filters"
+      label={m['providers.title']()}
+      bind:value={filter}
+      options={[
+        { value: 'all', label: m['providers.filter_all'](), count: providers.length },
+        { value: 'ready', label: m['providers.filter_ready'](), count: readyCount },
+        { value: 'setup', label: m['providers.filter_setup'](), count: providers.length - readyCount },
+      ]}
+    />
   </section>
 
   {#if loading}
@@ -306,11 +313,12 @@
             </div>
             <div class="provider-actions">
               {#if provider.installed}
-                <Button size="sm" href="/canvas">{m['providers.open_canvas']()}</Button>
+                <Button size="sm" variant="outline" class="press" href="/canvas">{m['providers.open_canvas']()}</Button>
               {/if}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
+                class="press gap-1 text-[var(--app-text-soft)]"
                 aria-expanded={expanded}
                 onclick={() => {
                   if (expanded && profileFormOpen === provider.id) closeProfileForm();
@@ -437,7 +445,7 @@
       {/each}
     </div>
   {:else}
-    <div class="empty-state"><SquareTerminal size={22} /><p>{m['providers.empty']()}</p></div>
+    <div class="empty-state"><NodeEmptyState icon={SquareTerminal} title={m['providers.empty']()} /></div>
   {/if}
 </main>
 
@@ -475,7 +483,7 @@
   }
 
   .header-titles { min-width: 0; }
-  .header-titles h1 { margin: 0; font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif; font-size: 22px; font-weight: 650; }
+  .header-titles h1 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
   .header-titles p { margin: 5px 0 0; color: var(--app-text-muted); font-size: 13px; line-height: 1.5; }
   .header-spacer { flex: 1; }
 
@@ -487,9 +495,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 18px;
-    border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: 12px;
     background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
   }
 
   .overview-copy { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -501,34 +509,30 @@
     color: var(--app-accent);
     background: var(--app-accent-soft);
   }
-  .overview-icon { width: 36px; height: 36px; border-radius: 7px; }
+  .overview-icon { width: 36px; height: 36px; border-radius: 9px; }
   .overview strong { font-size: 13px; }
   .overview p { margin: 3px 0 0; color: var(--app-text-muted); font-size: 12px; }
 
-  .filters { display: inline-flex; padding: 3px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface-subtle); }
-  .filters button { min-height: 30px; padding: 0 11px; border: 0; border-radius: 5px; background: transparent; color: var(--app-text-muted); font: inherit; font-size: 12px; cursor: pointer; }
-  .filters button:hover { color: var(--app-text); }
-  .filters button.active { background: var(--app-accent-soft); color: var(--app-accent); }
 
-  .provider-list { width: min(1100px, 100%); margin: 0 auto; display: grid; gap: 9px; }
-  .provider-row { border: 1px solid var(--app-border); border-radius: 8px; background: color-mix(in srgb, var(--app-surface) 82%, transparent); overflow: hidden; transition: border-color 140ms ease, background-color 140ms ease; }
-  .provider-row:hover { border-color: var(--app-border-strong); background: var(--app-surface); }
-  .provider-row.available { border-color: color-mix(in srgb, var(--app-success) 36%, var(--app-border)); }
+  .provider-list { width: min(1100px, 100%); margin: 0 auto; display: grid; gap: 10px; }
+  /* Estado fica no selo; o cartao em si e neutro e ganha elevacao no hover. */
+  .provider-row { border-radius: 12px; background: var(--app-surface); box-shadow: var(--app-shadow-border); overflow: hidden; transition: box-shadow var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out; }
+  .provider-row:hover { box-shadow: var(--app-shadow-border-hover); }
   .provider-main { min-height: 108px; padding: 14px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 14px; }
-  .provider-icon { width: 38px; height: 38px; border-radius: 7px; background: var(--app-logo-plate); }
+  .provider-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--app-logo-plate); }
   .provider-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
-  .provider-copy h2 { margin: 0; font-size: 15px; font-weight: 650; }
-  .provider-copy > p { max-width: 680px; margin: 7px 0 0; color: var(--app-text-soft); font-size: 12px; line-height: 1.55; }
-  .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--app-warning) 12%, transparent); color: var(--app-warning); font-size: 10px; font-weight: 600; }
-  .status-badge.ready { background: color-mix(in srgb, var(--app-success) 12%, transparent); color: var(--app-success); }
+  .provider-copy h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .provider-copy > p { max-width: 680px; margin: 6px 0 0; color: var(--app-text-soft); font-size: 12.5px; line-height: 1.55; text-wrap: pretty; }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--app-warning-soft); color: var(--app-warning); font-size: 11px; font-weight: 600; }
+  .status-badge.ready { background: var(--app-success-soft); color: var(--app-success); }
   .provider-status-line { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; color: var(--app-success); font-size: 11px; font-weight: 600; text-decoration: none; }
   .provider-status-line:hover { text-decoration: underline; }
   .provider-status-line.status-minor { color: var(--app-warning); }
   .provider-status-line.status-major, .provider-status-line.status-critical { color: var(--app-danger); }
   .provider-status-line.status-unavailable { color: var(--app-text-muted); }
   .capabilities { min-height: 24px; margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .capabilities span { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 5px; background: var(--app-surface-raised); color: var(--app-text-muted); font-size: 10px; }
-  .capabilities .version { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .capabilities span { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--app-hover); color: var(--app-text-muted); font-size: 11px; }
+  .capabilities .version { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 10.5px; }
   .provider-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 
   .setup-panel { position: relative; padding: 18px 18px 18px 70px; border-top: 1px solid var(--app-border); background: var(--app-surface-subtle); display: grid; gap: 15px; }
@@ -537,8 +541,8 @@
   .step-copy h3 { margin: 1px 0 3px; font-size: 12px; font-weight: 650; }
   .step-copy p { margin: 0; color: var(--app-text-muted); font-size: 12px; line-height: 1.55; }
   .setup-note { margin-top: 7px !important; color: var(--app-accent) !important; }
-  .command-row { max-width: 700px; margin-top: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 34px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-page); overflow: hidden; }
-  .command-row code { padding: 9px 11px; overflow-x: auto; color: var(--app-text-soft); font-size: 11px; white-space: nowrap; }
+  .command-row { max-width: 700px; margin-top: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 36px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-page); overflow: hidden; }
+  .command-row code { padding: 9px 11px; overflow-x: auto; color: var(--app-text-soft); font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; border: 0; background: transparent; }
   .command-row button { border: 0; border-left: 1px solid var(--app-border); background: transparent; color: var(--app-text-muted); cursor: pointer; }
   .command-row button:hover { color: var(--app-accent); background: var(--app-accent-soft); }
   .guide-link { position: absolute; right: 18px; bottom: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--app-accent); font-size: 12px; font-weight: 600; text-decoration: none; }
@@ -549,16 +553,17 @@
   .profile-list li { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-page); }
   .profile-list .profile-empty { color: var(--app-text-muted); font-size: 12px; border-style: dashed; }
   .profile-name { font-weight: 600; font-size: 12px; }
-  .profile-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  .profile-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text-muted); font-family: var(--font-mono); font-size: 11px; }
   .profile-remove { flex: 0 0 auto; border: 0; background: transparent; color: var(--app-text-muted); cursor: pointer; }
   .profile-remove:hover { color: var(--app-danger, #d94b4b); }
   .profile-form { display: grid; gap: 7px; max-width: 420px; margin-top: 8px; }
-  .profile-form input { min-height: 32px; padding: 0 9px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface); color: var(--app-text); font: inherit; font-size: 12px; }
+  .profile-form input { min-height: 32px; padding: 0 10px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface); color: var(--app-text); font: inherit; font-size: 12.5px; outline: none; transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out; }
+  .profile-form input:hover { border-color: var(--app-border-strong); }
+  .profile-form input:focus-visible { border-color: var(--app-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent); }
   .profile-form-error { margin: 0; color: var(--app-danger, #d94b4b); font-size: 12px; }
   .profile-form-actions { display: flex; gap: 8px; }
 
-  .empty-state { width: min(1100px, 100%); min-height: 180px; margin: 0 auto; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--app-border); border-radius: 8px; color: var(--app-text-muted); }
-  .empty-state p { margin: 0; font-size: 12px; }
+  .empty-state { width: min(1100px, 100%); min-height: 180px; margin: 0 auto; display: grid; border-radius: 12px; background: var(--app-surface-subtle); box-shadow: var(--app-shadow-border); }
   :global(.provider-refresh-spin) { animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -570,8 +575,7 @@
     .header-spacer { display: none; }
     .page-header > :global(button) { margin-left: auto; }
     .overview { align-items: stretch; flex-direction: column; }
-    .filters { align-self: stretch; }
-    .filters button { flex: 1; }
+    .overview :global(.filters) { align-self: stretch; }
     .provider-main { grid-template-columns: auto minmax(0, 1fr); }
     .provider-actions { grid-column: 1 / -1; justify-content: flex-start; padding-left: 52px; }
     .setup-panel { padding: 16px; padding-bottom: 52px; }
