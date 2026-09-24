@@ -604,6 +604,19 @@
     applyWorkbenchLayout(selectedWorkspaceId, moveWorkbenchNode(selectedLayout, nodeId, paneId));
   }
 
+  // Itens da arvore tambem podem ser arrastados para um painel: usam o mesmo
+  // tipo de dado das abas e abrem pelo mesmo moveOpenNode. So do workspace
+  // selecionado, para nao misturar layouts.
+  function startTreeDrag(event: DragEvent, workspaceId: string, nodeId: string): void {
+    if (workspaceId !== selectedWorkspaceId || !event.dataTransfer) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-orkestrai-workbench-node', nodeId);
+    event.dataTransfer.setData('text/plain', nodeId);
+  }
+
   function handlePaneDragOver(event: DragEvent, paneId: WorkbenchPaneId): void {
     if (!event.dataTransfer?.types.includes('application/x-orkestrai-workbench-node')) return;
     event.preventDefault();
@@ -1376,7 +1389,15 @@
                       <span class="wb-count">{groupedItems.length}</span>
                     </div>
                     {#each groupedItems as item (item.id)}
-                      <div data-testid={item.type === 'terminal' ? 'workbench-agent-item' : undefined} class="wb-row group" class:agent={item.type === 'terminal'} class:selected={selectedNodeId === item.id}>
+                      <div
+                        data-testid={item.type === 'terminal' ? 'workbench-agent-item' : undefined}
+                        class="wb-row group"
+                        class:agent={item.type === 'terminal'}
+                        class:selected={selectedNodeId === item.id}
+                        role="group"
+                        draggable={selectedWorkspaceId === workspace.id ? 'true' : undefined}
+                        ondragstart={(event) => startTreeDrag(event, workspace.id, item.id)}
+                      >
                         <button
                           class="wb-row-button" class:multiline={item.type === 'terminal'}
                           aria-current={selectedNodeId === item.id ? 'page' : undefined}
