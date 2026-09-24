@@ -659,6 +659,7 @@
     {/if}
   </div>
 
+  <span id={`tb-card-hint-${id}`} class="sr-only">{m['tasks.card_hint']()}</span>
   <div class="tb-board nodrag nowheel">
     {#each COLUMNS as column (column.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -685,7 +686,7 @@
               class:attachment-drop-active={attachmentDropTaskId === task.id}
               tabindex="0"
               aria-label={task.title}
-              aria-description={m['tasks.card_hint']()}
+              aria-describedby={`tb-card-hint-${id}`}
               aria-keyshortcuts="Enter Alt+ArrowLeft Alt+ArrowRight"
               onkeydown={(event) => onCardKeydown(event, task)}
               draggable="true"
