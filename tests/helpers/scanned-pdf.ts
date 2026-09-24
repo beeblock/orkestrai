@@ -2,7 +2,8 @@ import PDFDocument from 'pdfkit';
 import { createCanvas } from '@napi-rs/canvas';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
+import { pdfResourceOptions } from '../../src/lib/modules/agent-room/infrastructure/knowledge/pdf-extractor.mjs';
 
 function collect(pdf: InstanceType<typeof PDFDocument>) {
   const chunks: Buffer[] = [];
@@ -32,7 +33,7 @@ export async function scannedPdf(pages: Array<{ text?: string; header?: string; 
     const sourceBytes = collect(source);
     source.fontSize(24).text(page.text, 20, 40); source.end();
     const root = dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
-    const task = getDocument({ data: new Uint8Array(await sourceBytes), useSystemFonts: false, disableFontFace: true, useWorkerFetch: false, standardFontDataUrl: join(root, 'standard_fonts/'), verbosity: 0 });
+    const task = getDocument({ data: new Uint8Array(await sourceBytes), useSystemFonts: false, disableFontFace: true, useWorkerFetch: false, ...pdfResourceOptions(root), verbosity: 0 });
     try {
       const doc = await task.promise, sourcePage = await doc.getPage(1);
       const viewport = sourcePage.getViewport({ scale: 2 });

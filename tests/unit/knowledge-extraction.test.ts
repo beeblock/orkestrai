@@ -5,9 +5,23 @@ import { extractKnowledgeDocument, knowledgeParserEnvironment } from '$lib/modul
 import { knowledgeWikiLinks, knowledgeTags, knowledgeTerms } from '$lib/modules/agent-room/domain/knowledge.js';
 import { KNOWLEDGE_TOOLS, knowledgeCall } from '../../packages/orkestrai-cli/src/knowledge-reference.js';
 import { scannedPdf } from '../helpers/scanned-pdf.js';
-import { rasterSize, combinePageText } from '../../src/lib/modules/agent-room/infrastructure/knowledge/pdf-extractor.mjs';
+import { rasterSize, combinePageText, pdfResourceOptions } from '../../src/lib/modules/agent-room/infrastructure/knowledge/pdf-extractor.mjs';
+import { join } from 'node:path';
 
 describe('bounded knowledge extraction', () => {
+  it('keeps PDF asset directories as filesystem paths with the required forward slash on every OS', () => {
+    for (const root of ['/Applications/Orkestrai.app/PDF assets #1', 'C:\\Program Files\\Orkestrai\\PDF assets #1', '\\\\server\\share\\PDF assets']) {
+      expect(pdfResourceOptions(root)).toEqual({
+        standardFontDataUrl: join(root, 'standard_fonts') + '/',
+        cMapUrl: join(root, 'cmaps') + '/', cMapPacked: true,
+        wasmUrl: join(root, 'wasm') + '/',
+      });
+      for (const value of Object.values(pdfResourceOptions(root))) if (typeof value === 'string') {
+        expect(value.endsWith('/')).toBe(true);
+        expect(value).not.toMatch(/^file:/);
+      }
+    }
+  });
   it('does not pass application secrets or runtime injection flags to the document parser', () => {
     expect(knowledgeParserEnvironment({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows', APP_KEY: 'private', FAL_KEY: 'private', OPENAI_API_KEY: 'private', NODE_OPTIONS: '--require attacker.cjs', ORKESTRAI_WORKSPACE_TOKEN: 'private' }))
       .toEqual({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows', ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' });

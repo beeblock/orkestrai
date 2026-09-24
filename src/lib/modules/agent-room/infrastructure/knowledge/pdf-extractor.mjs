@@ -8,6 +8,17 @@ const MAX_PIXELS = 8_000_000, MAX_SIDE = 4096;
 /** @type {['eng', 'por', 'spa']} */
 const LANGUAGES = ['eng', 'por', 'spa'];
 
+/** @param {string} root */
+export function pdfResourceOptions(root) {
+  // PDF.js requires a trailing forward slash even for Windows filesystem paths.
+  return {
+    standardFontDataUrl: join(root, 'standard_fonts') + '/',
+    cMapUrl: join(root, 'cmaps') + '/',
+    cMapPacked: true,
+    wasmUrl: join(root, 'wasm') + '/',
+  };
+}
+
 /** @param {number} width @param {number} height */
 export function rasterSize(width, height) {
   if (![width, height].every(value => Number.isFinite(value) && value > 0)) throw new Error('invalid_page_size');
@@ -92,7 +103,7 @@ export async function extractPdf(bytes, progress, directory) {
     task = getDocument({ data: bytes, enableXfa: false, useWorkerFetch: false,
       useSystemFonts: false, disableFontFace: true, verbosity: 1, stopAtErrors: false,
       maxImageSize: 16_000_000, canvasMaxAreaInBytes: MAX_PIXELS * 4,
-      standardFontDataUrl: join(root, 'standard_fonts/'), cMapUrl: join(root, 'cmaps/'), cMapPacked: true, wasmUrl: join(root, 'wasm/') });
+      ...pdfResourceOptions(root) });
     const doc = await task.promise;
     extraction.pages = doc.numPages;
     truncated = doc.numPages > MAX_PAGES;
