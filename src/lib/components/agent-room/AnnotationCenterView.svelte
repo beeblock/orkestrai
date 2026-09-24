@@ -90,7 +90,7 @@
       />
       <InputGroup.Root class="ml-auto h-8 min-w-[180px] max-w-[300px] flex-1 border-[var(--app-border)] bg-[var(--app-canvas)] shadow-none">
         <InputGroup.Addon><Search size={13} /></InputGroup.Addon>
-        <InputGroup.Input bind:value={query} class="text-ui-md" placeholder={m['annotations.search']()} aria-label={m['annotations.search']()} />
+        <InputGroup.Input bind:value={query} class="text-ui-md" placeholder={m['annotations.search']()} aria-label={m['annotations.search']()} data-annotation-search />
       </InputGroup.Root>
     </div>
   </header>

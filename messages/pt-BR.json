@@ -5075,5 +5075,6 @@
   "design.quality_clean_title": "Nenhum problema encontrado",
   "design.bindings_show_all": "Mostrar todas ({count})",
   "design.bindings_show_less": "Mostrar menos",
-  "canvas.start_blank": "Começar do zero"
+  "canvas.start_blank": "Começar do zero",
+  "design.combine_shapes": "Combinar formas"
 }
