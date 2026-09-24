@@ -1,5 +1,6 @@
 <script lang="ts">
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import SidePanel from './SidePanel.svelte';
   import { defaults, superForm } from 'sveltekit-superforms';
   import { zod } from 'sveltekit-superforms/adapters';
   import * as Form from '$lib/components/ui/form';
@@ -7,7 +8,7 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Button } from '$lib/components/ui/button';
-  import { CheckCircle2, CircleDot, GitBranch, ListChecks, Plane, Play, Trash2, Users, X, Zap } from '@lucide/svelte';
+  import { CheckCircle2, CircleDot, GitBranch, Layers, ListChecks, Plane, Play, Trash2, Users, X, Zap } from '@lucide/svelte';
   import { createFloorSchema } from '$lib/modules/agent-room/contracts/schemas/floorSchemas.js';
   import type { Floor, Workspace, WorkspaceHooks } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -166,14 +167,10 @@
   }
 </script>
 
-<aside class="side-panel">
-  <header class="panel-header">
-    <h3>{m['floor.title']()}</h3>
-    <div class="panel-header-actions">
-      <HeaderIconButton label={m['floor.hooks']()} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></HeaderIconButton>
-      <HeaderIconButton label={m['floor.close']()} onclick={onClose}><X size={14} /></HeaderIconButton>
-    </div>
-  </header>
+<SidePanel class="side-panel" title={m['floor.title']()} icon={Layers} closeLabel={m['floor.close']()} {onClose}>
+  {#snippet actions()}
+    <HeaderIconButton label={m['floor.hooks']()} class="node-action-btn" side="left" active={showHooks} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></HeaderIconButton>
+  {/snippet}
 
   {#if overview}
     <article class="rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-3 {visibleFloorId === null ? 'border-[var(--app-secondary)]' : ''}" data-tour="floor-overview">
@@ -352,39 +349,9 @@
       <Button size="sm" onclick={saveHooks}>{m['floor.save_hooks']()}</Button>
     </div>
   {/if}
-</aside>
+</SidePanel>
 
 <style>
-  .side-panel {
-    width: 320px;
-    flex-shrink: 0;
-    border-left: 1px solid var(--app-border);
-    background: var(--app-sidebar);
-    padding: 14px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .panel-header h3 {
-    margin: 0;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0;
-    color: var(--app-text-muted);
-  }
-
-  .panel-header-actions {
-    display: flex;
-    gap: 2px;
-  }
 
   .floor-actions {
     display: flex;

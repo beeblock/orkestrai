@@ -21,6 +21,7 @@ pt-BR, English, and Spanish translations.
 - Redesign the Workbench tree with 30px rows, neutral selection, a labeled Hubs group, hover/focus row actions and mono counts; mark the active tab with an accent line and keep its close button visible; show a readable header trail and actionable empty states.
 - Add mini usage meters with threshold colors to the Workbench usage footer.
 - Describe Control Center activity in plain language (for example "Status updated · Maestro") with translated categories, prominent metrics and a sliding Activity/Communications switch.
+- Give the Canvas side panels (Floors, Ports, Roles, Presets) one shared frame with an icon title, description, consistent close button and smooth entrance; tone down repeated preset actions until hover.
 
 ### Fixed
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SidePanel from './SidePanel.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
 
   import { defaults, superForm } from 'sveltekit-superforms';
@@ -11,7 +12,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as Tabs from '$lib/components/ui/tabs';
   import * as Select from '$lib/components/ui/select';
-  import { BookOpen, Check, FolderOpen, Pencil, Plus, ScanSearch, Search, Trash2, X } from '@lucide/svelte';
+  import { BadgeCheck, BookOpen, Check, FolderOpen, Pencil, Plus, ScanSearch, Search, Trash2 } from '@lucide/svelte';
   import type { Workspace } from '$lib/modules/agent-room/domain/types.js';
   import type { AgentRole } from '$lib/modules/agent-room/application/services/RoleService.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -177,17 +178,13 @@
   });
 </script>
 
-<aside class="side-panel">
-  <header class="panel-header">
-    <h3>{m['roles.title']()}</h3>
-    <div class="panel-header-actions">
-      <HeaderIconButton label={m['roles.discover']()} class="node-action-btn" side="left" onclick={() => discover()}><ScanSearch size={14} /></HeaderIconButton>
-      {#if desktop}
-        <HeaderIconButton label={m['roles.discover_from_folder']()} class="node-action-btn" side="left" onclick={discoverFromFolder}><FolderOpen size={14} /></HeaderIconButton>
-      {/if}
-      <HeaderIconButton label={m['roles.close']()} class="node-action-btn" side="left" onclick={onClose}><X size={14} /></HeaderIconButton>
-    </div>
-  </header>
+<SidePanel class="side-panel" title={m['roles.title']()} icon={BadgeCheck} width={380} closeLabel={m['roles.close']()} {onClose}>
+  {#snippet actions()}
+    <HeaderIconButton label={m['roles.discover']()} class="node-action-btn" side="left" onclick={() => discover()}><ScanSearch size={14} /></HeaderIconButton>
+    {#if desktop}
+      <HeaderIconButton label={m['roles.discover_from_folder']()} class="node-action-btn" side="left" onclick={discoverFromFolder}><FolderOpen size={14} /></HeaderIconButton>
+    {/if}
+  {/snippet}
 
   <p class="hint">
     {m['roles.hint_1']()}
@@ -312,43 +309,12 @@
     <Button type="submit" size="sm">{editingSlug ? m['settings.save']() : m['roles.save']()}</Button>
   </form>
   {/if}
-</aside>
+</SidePanel>
 
 <style>
-  .side-panel {
-    width: 380px;
-    flex-shrink: 0;
-    border-left: 1px solid var(--app-border);
-    background: var(--app-sidebar);
-    padding: 14px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .panel-header h3 {
-    margin: 0;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0;
-    color: var(--app-text-muted);
-  }
-
-  .panel-header-actions {
-    display: flex;
-    gap: 2px;
-  }
-
   .hint {
     margin: 0;
-    font-size: 10px;
+    font-size: 11.5px;
     color: var(--app-text-muted);
     line-height: 1.5;
   }
