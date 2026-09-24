@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Eye, HardDrive, RefreshCw, Save } from '@lucide/svelte';
+  import { ChevronRight, Eraser, Eye, HardDrive, Save, TriangleAlert } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Switch } from '$lib/components/ui/switch';
   import { Slider } from '$lib/components/ui/slider';
@@ -27,6 +27,19 @@
   const eligibleTasks = $derived(tasks.filter((task) => task.status !== 'done' && task.assigneeNodeId === targetAgent));
   const eligibleWindows = $derived(windows.filter((window) => config.allowedApplications.some((app) => app.toLowerCase() === window.appId.toLowerCase())));
   const valid = $derived(Boolean(draft.windowId && draft.applicationId && selectedRoutine && eligibleTasks.some((task) => task.id === draft.taskId)));
+
+  // Apresentacao: tom do ponto de estado e secao de armazenamento recolhida.
+  const uid = $props.id();
+  let storageOpen = $state(false);
+  const stateTone = $derived.by(() => {
+    const state = observation?.state ?? 'paused';
+    if (state === 'paused') return 'muted';
+    if (state === 'unchanged') return 'success';
+    if (state === 'changed') return 'accent';
+    if (state === 'blocked' || state === 'error') return 'warning';
+    return 'info';
+  });
+  const mib = (bytes: number) => (bytes / 1048576).toFixed(1);
 
   function edit(patch: Partial<ComputerWatch>) { dirty = true; draft = { ...draft, ...patch }; }
   function region(key: keyof ComputerWatch['region'], percent: number) {
@@ -67,51 +80,333 @@
   });
 </script>
 
-<section class="mt-4 space-y-3 border-t border-[var(--app-border)] pt-3" data-testid="computer-observation-controls">
-  <div class="flex flex-wrap items-center gap-2">
-    <Eye size={14} class="text-[var(--app-text-muted)]" /><h3 class="min-w-0 flex-1 text-xs font-semibold">{m['computer.watch_title']()}</h3>
-    <label class="flex items-center gap-2 text-xs"><span>{m['computer.watch_enabled']()}</span><Switch checked={config.watch.enabled} disabled={busy || (!config.watch.enabled && !valid)} onCheckedChange={(enabled: boolean) => enabled ? apply(true) : save({ ...config, watch: { ...config.watch, enabled: false } })} /></label>
+<section class="oc-card" data-testid="computer-observation-controls">
+  <div class="oc-head">
+    <h3 class="oc-title"><Eye size={14} aria-hidden="true" />{m['computer.watch_title']()}</h3>
+    <label class="flex items-center gap-2 text-[12px] font-medium"><span>{m['computer.watch_enabled']()}</span><Switch checked={config.watch.enabled} disabled={busy || (!config.watch.enabled && !valid)} onCheckedChange={(enabled: boolean) => enabled ? apply(true) : save({ ...config, watch: { ...config.watch, enabled: false } })} /></label>
   </div>
-  <p role="status" class="border-l-2 border-[var(--app-accent)] pl-2 text-xs text-[var(--app-text-secondary)]">{messages[`computer.watch_${observation?.state ?? 'paused'}`]()}</p>
-  {#if observation?.error}<p role="alert" class="text-xs text-[var(--app-warning)]">{m['computer.watch_error']()}</p>{/if}
-  {#if optionsError}<p role="alert" class="text-xs text-[var(--app-warning)]">{m['computer.watch_options_error']()}</p>{/if}
-  <div class="grid min-w-0 gap-2">
-    <label class="min-w-0 space-y-1 text-xs"><span>{messages['computer.watch_mode']()}</span><Select.Root type="single" value={draft.mode} onValueChange={(value: string) => edit({ mode: value as ComputerWatch['mode'] })}><Select.Trigger class="w-full" disabled={busy}>{messages[`computer.watch_mode_${draft.mode}`]()}</Select.Trigger><Select.Content><Select.Item value="auto">{messages['computer.watch_mode_auto']()}</Select.Item><Select.Item value="visual">{messages['computer.watch_mode_visual']()}</Select.Item></Select.Content></Select.Root></label>
-    <label class="min-w-0 space-y-1 text-xs"><span>{m['computer.capture_target']()}</span><Select.Root type="single" value={draft.windowId} onValueChange={(value: string) => edit({ windowId: value, applicationId: eligibleWindows.find((w) => w.id === value)?.appId ?? '' })}><Select.Trigger class="w-full min-w-0" disabled={busy}><span class="truncate">{eligibleWindows.find((w) => w.id === draft.windowId)?.title || draft.windowId || m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each eligibleWindows as window (window.id)}<Select.Item value={window.id}>{window.appName} · {window.title}</Select.Item>{/each}</Select.Content></Select.Root></label>
-    <label class="min-w-0 space-y-1 text-xs"><span>{m['computer.watch_routine']()}</span><Select.Root type="single" value={draft.routineId ?? ''} onValueChange={(value: string) => edit({ routineId: value, taskId: null })}><Select.Trigger class="w-full min-w-0" disabled={busy}><span class="truncate">{selectedRoutine?.name ?? m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each routines as routine (routine.id)}<Select.Item value={routine.id}>{routine.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
-    <label class="min-w-0 space-y-1 text-xs"><span>{m['computer.watch_task']()}</span><Select.Root type="single" value={draft.taskId ?? ''} onValueChange={(value: string) => edit({ taskId: value })}><Select.Trigger class="w-full min-w-0" disabled={busy || !selectedRoutine}><span class="truncate">{eligibleTasks.find((task) => task.id === draft.taskId)?.title ?? m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each eligibleTasks as task (task.id)}<Select.Item value={task.id}>{task.title}</Select.Item>{/each}</Select.Content></Select.Root></label>
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+    <p role="status" class="oc-status" data-tone={stateTone}><span class="oc-dot" aria-hidden="true"></span>{messages[`computer.watch_${observation?.state ?? 'paused'}`]()}</p>
+    <span class="oc-meta"><span class="oc-num">{observation?.checks ?? 0}</span> {m['computer.watch_checks']()}</span>
+    <span class="oc-meta"><span class="oc-num">{observation?.notifications ?? 0}</span> {m['computer.watch_notifications']()}</span>
   </div>
-  <label class="block min-w-0 space-y-1 text-xs"><span>{messages['computer.reply_scope']()}</span><Select.Root type="single" value={draft.replyGrantId ?? 'none'} onValueChange={(value: string) => edit({ replyGrantId: value === 'none' ? null : value, ...(value !== 'none' ? { mode: 'auto' } : {}) })}><Select.Trigger class="w-full" disabled={busy}><span class="truncate">{replyGrants.find(g => g.id === draft.replyGrantId)?.recipient.name ?? messages['computer.reply_none']()}</span></Select.Trigger><Select.Content><Select.Item value="none">{messages['computer.reply_none']()}</Select.Item>{#each replyGrants.filter(g => g.enabled && g.agentId === targetAgent && g.taskId === draft.taskId && g.applicationId === draft.applicationId) as grant}<Select.Item value={grant.id}>{grant.recipient.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
-  <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-    <label class="space-y-2 text-xs"><span>{m['computer.watch_interval']()}: {draft.intervalSeconds}s</span><Slider type="single" min={1} max={60} step={1} value={draft.intervalSeconds} disabled={busy} aria-label={m['computer.watch_interval']()} onValueChange={(value: number) => edit({ intervalSeconds: value })} /></label>
-    <label class="space-y-2 text-xs"><span>{m['computer.watch_cooldown']()}: {draft.cooldownSeconds}s</span><Slider type="single" min={1} max={120} step={1} value={draft.cooldownSeconds} disabled={busy} aria-label={m['computer.watch_cooldown']()} onValueChange={(value: number) => edit({ cooldownSeconds: value })} /></label>
+  {#if observation?.error}<p role="alert" class="oc-callout"><TriangleAlert size={13} aria-hidden="true" /><span>{m['computer.watch_error']()}</span></p>{/if}
+  {#if optionsError}<p role="alert" class="oc-callout"><TriangleAlert size={13} aria-hidden="true" /><span>{m['computer.watch_options_error']()}</span></p>{/if}
+  <div class="oc-grid">
+    <label class="oc-field"><span class="oc-label">{messages['computer.watch_mode']()}</span><Select.Root type="single" value={draft.mode} onValueChange={(value: string) => edit({ mode: value as ComputerWatch['mode'] })}><Select.Trigger class="h-8 w-full min-w-0" disabled={busy}><span class="truncate">{messages[`computer.watch_mode_${draft.mode}`]()}</span></Select.Trigger><Select.Content><Select.Item value="auto">{messages['computer.watch_mode_auto']()}</Select.Item><Select.Item value="visual">{messages['computer.watch_mode_visual']()}</Select.Item></Select.Content></Select.Root></label>
+    <label class="oc-field"><span class="oc-label">{m['computer.capture_target']()}</span><Select.Root type="single" value={draft.windowId} onValueChange={(value: string) => edit({ windowId: value, applicationId: eligibleWindows.find((w) => w.id === value)?.appId ?? '' })}><Select.Trigger class="h-8 w-full min-w-0" disabled={busy}><span class="truncate">{eligibleWindows.find((w) => w.id === draft.windowId)?.title || draft.windowId || m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each eligibleWindows as window (window.id)}<Select.Item value={window.id}>{window.appName} · {window.title}</Select.Item>{/each}</Select.Content></Select.Root></label>
+    <label class="oc-field"><span class="oc-label">{m['computer.watch_routine']()}</span><Select.Root type="single" value={draft.routineId ?? ''} onValueChange={(value: string) => edit({ routineId: value, taskId: null })}><Select.Trigger class="h-8 w-full min-w-0" disabled={busy}><span class="truncate">{selectedRoutine?.name ?? m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each routines as routine (routine.id)}<Select.Item value={routine.id}>{routine.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
+    <label class="oc-field"><span class="oc-label">{m['computer.watch_task']()}</span><Select.Root type="single" value={draft.taskId ?? ''} onValueChange={(value: string) => edit({ taskId: value })}><Select.Trigger class="h-8 w-full min-w-0" disabled={busy || !selectedRoutine}><span class="truncate">{eligibleTasks.find((task) => task.id === draft.taskId)?.title ?? m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each eligibleTasks as task (task.id)}<Select.Item value={task.id}>{task.title}</Select.Item>{/each}</Select.Content></Select.Root></label>
+    <label class="oc-field oc-span"><span class="oc-label">{messages['computer.reply_scope']()}</span><Select.Root type="single" value={draft.replyGrantId ?? 'none'} onValueChange={(value: string) => edit({ replyGrantId: value === 'none' ? null : value, ...(value !== 'none' ? { mode: 'auto' } : {}) })}><Select.Trigger class="h-8 w-full min-w-0" disabled={busy}><span class="truncate">{replyGrants.find(g => g.id === draft.replyGrantId)?.recipient.name ?? messages['computer.reply_none']()}</span></Select.Trigger><Select.Content><Select.Item value="none">{messages['computer.reply_none']()}</Select.Item>{#each replyGrants.filter(g => g.enabled && g.agentId === targetAgent && g.taskId === draft.taskId && g.applicationId === draft.applicationId) as grant}<Select.Item value={grant.id}>{grant.recipient.name}</Select.Item>{/each}</Select.Content></Select.Root></label>
   </div>
-  <details class="text-xs">
-    <summary class="cursor-pointer py-2 font-medium">{m['computer.watch_region']()}</summary>
-    <div class="grid grid-cols-2 gap-4 py-2">
+  <div class="oc-grid oc-sliders">
+    <label class="oc-field"><span class="oc-label"><span>{m['computer.watch_interval']()}</span><span class="oc-value">{draft.intervalSeconds} s</span></span><Slider type="single" min={1} max={60} step={1} value={draft.intervalSeconds} disabled={busy} aria-label={m['computer.watch_interval']()} onValueChange={(value: number) => edit({ intervalSeconds: value })} /></label>
+    <label class="oc-field"><span class="oc-label"><span>{m['computer.watch_cooldown']()}</span><span class="oc-value">{draft.cooldownSeconds} s</span></span><Slider type="single" min={1} max={120} step={1} value={draft.cooldownSeconds} disabled={busy} aria-label={m['computer.watch_cooldown']()} onValueChange={(value: number) => edit({ cooldownSeconds: value })} /></label>
+  </div>
+  <details class="oc-details">
+    <summary class="oc-summary"><ChevronRight size={14} class="oc-chevron" aria-hidden="true" />{m['computer.watch_region']()}<span class="oc-value ml-auto">{Math.round(draft.region.width * 100)}% × {Math.round(draft.region.height * 100)}%</span></summary>
+    <div class="oc-grid oc-sliders pt-2 pb-1">
       {#each ['x', 'y', 'width', 'height'] as key}
         {@const name = key as keyof ComputerWatch['region']}
-        <label class="space-y-2"><span>{messages[`computer.watch_region_${key}`]()} {Math.round(draft.region[name] * 100)}%</span><Slider type="single" min={name === 'x' || name === 'y' ? 0 : 1} max={name === 'x' || name === 'y' ? 99 : Math.floor((1 - draft.region[name === 'width' ? 'x' : 'y']) * 100)} step={1} value={Math.round(draft.region[name] * 100)} disabled={busy} aria-label={messages[`computer.watch_region_${key}`]()} onValueChange={(value: number) => region(name, value)} /></label>
+        <label class="oc-field"><span class="oc-label"><span>{messages[`computer.watch_region_${key}`]()}</span><span class="oc-value">{Math.round(draft.region[name] * 100)}%</span></span><Slider type="single" min={name === 'x' || name === 'y' ? 0 : 1} max={name === 'x' || name === 'y' ? 99 : Math.floor((1 - draft.region[name === 'width' ? 'x' : 'y']) * 100)} step={1} value={Math.round(draft.region[name] * 100)} disabled={busy} aria-label={messages[`computer.watch_region_${key}`]()} onValueChange={(value: number) => region(name, value)} /></label>
       {/each}
-      <label class="col-span-2 space-y-2"><span>{m['computer.watch_threshold']()}: {draft.minChangePercent}%</span><Slider type="single" min={0.1} max={10} step={0.1} value={draft.minChangePercent} disabled={busy} aria-label={m['computer.watch_threshold']()} onValueChange={(value: number) => edit({ minChangePercent: value })} /></label>
+      <label class="oc-field oc-span"><span class="oc-label"><span>{m['computer.watch_threshold']()}</span><span class="oc-value">{draft.minChangePercent}%</span></span><Slider type="single" min={0.1} max={10} step={0.1} value={draft.minChangePercent} disabled={busy} aria-label={m['computer.watch_threshold']()} onValueChange={(value: number) => edit({ minChangePercent: value })} /></label>
     </div>
   </details>
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <label class="flex items-center gap-2 text-xs"><Switch checked={config.allowAgentWatch} disabled={busy} onCheckedChange={(checked: boolean) => save({ ...config, allowAgentWatch: checked })} />{m['computer.watch_agent_config']()}</label>
-    <Button size="sm" variant="outline" disabled={busy || !dirty || (draft.enabled && !valid)} onclick={() => apply()}><Save size={13} />{m['computer.watch_save']()}</Button>
+  <div class="oc-footer">
+    <label class="flex items-center gap-2 text-[12px]"><Switch checked={config.allowAgentWatch} disabled={busy} onCheckedChange={(checked: boolean) => save({ ...config, allowAgentWatch: checked })} />{m['computer.watch_agent_config']()}</label>
+    <Button size="sm" variant={dirty ? 'default' : 'outline'} disabled={busy || !dirty || (draft.enabled && !valid)} onclick={() => apply()}><Save size={13} />{m['computer.watch_save']()}</Button>
   </div>
-  <div class="flex flex-wrap gap-3 text-xs tabular-nums text-[var(--app-text-muted)]"><span>{m['computer.watch_checks']()}: {observation?.checks ?? 0}</span><span>{m['computer.watch_notifications']()}: {observation?.notifications ?? 0}</span></div>
-  {#if observation?.pendingMessages !== undefined}<p class="text-xs tabular-nums text-[var(--app-text-secondary)]">{messages['computer.watch_pending_messages']()}: {observation.pendingMessages}</p>{/if}
-  {#if observation?.source}<div class="flex flex-wrap gap-3 text-xs tabular-nums text-[var(--app-text-muted)]"><span>{messages[`computer.watch_source_${observation.source}`]()}</span>{#if observation.checkMs !== undefined}<span>{messages['computer.watch_check_duration']()}: {observation.checkMs} ms</span>{/if}</div>{/if}
+  {#if observation?.pendingMessages !== undefined || observation?.source}
+    <div class="flex flex-wrap gap-x-3 gap-y-1">
+      {#if observation?.pendingMessages !== undefined}<span class="oc-meta">{messages['computer.watch_pending_messages']()}: <span class="oc-num">{observation.pendingMessages}</span></span>{/if}
+      {#if observation?.source}<span class="oc-meta">{messages[`computer.watch_source_${observation.source}`]()}</span>{#if observation.checkMs !== undefined}<span class="oc-meta">{messages['computer.watch_check_duration']()}: <span class="oc-num">{observation.checkMs} ms</span></span>{/if}{/if}
+    </div>
+  {/if}
 </section>
 
-<section class="mt-4 space-y-3 border-t border-[var(--app-border)] pt-3" data-testid="computer-storage-controls">
-  <div class="flex items-center gap-2"><HardDrive size={14} class="text-[var(--app-text-muted)]" /><h3 class="flex-1 text-xs font-semibold">{m['computer.storage_title']()}</h3><Button size="icon-sm" variant="ghost" disabled={busy} title={m['computer.storage_cleanup']()} aria-label={m['computer.storage_cleanup']()} onclick={cleanup}><RefreshCw size={14} /></Button></div>
-  <div class="grid grid-cols-2 gap-3">
-    <label class="min-w-0 space-y-1 text-xs"><span>{m['computer.storage_days']()}</span><Select.Root type="single" value={String(config.evidenceRetentionDays)} onValueChange={(value: string) => save({ ...config, evidenceRetentionDays: Number(value) })}><Select.Trigger class="w-full" disabled={busy}>{config.evidenceRetentionDays}</Select.Trigger><Select.Content>{#each [1, 7, 14, 30, 90, 365] as days}<Select.Item value={String(days)}>{days}</Select.Item>{/each}</Select.Content></Select.Root></label>
-    <label class="min-w-0 space-y-1 text-xs"><span>{m['computer.storage_limit']()} (MiB)</span><Select.Root type="single" value={String(config.evidenceMaxMiB)} onValueChange={(value: string) => save({ ...config, evidenceMaxMiB: Number(value) })}><Select.Trigger class="w-full" disabled={busy}>{config.evidenceMaxMiB}</Select.Trigger><Select.Content>{#each [32, 128, 256, 512, 1024] as size}<Select.Item value={String(size)}>{size}</Select.Item>{/each}</Select.Content></Select.Root></label>
+<section class="oc-card" data-testid="computer-storage-controls">
+  <div class="oc-head">
+    <h3 class="oc-title"><button type="button" class="oc-toggle" aria-expanded={storageOpen} aria-controls={`${uid}-storage`} onclick={() => (storageOpen = !storageOpen)}><ChevronRight size={14} class="oc-chevron" aria-hidden="true" /><HardDrive size={14} aria-hidden="true" />{m['computer.storage_title']()}</button></h3>
+    {#if storage?.checkedAt}<span class="oc-count">{storage.files} · {mib(storage.bytes)} MiB</span>{/if}
+    <Button size="icon-sm" variant="ghost" disabled={busy} title={m['computer.storage_cleanup']()} aria-label={m['computer.storage_cleanup']()} onclick={cleanup}><Eraser size={14} /></Button>
   </div>
-  {#if storage?.checkedAt}<div class="grid gap-1 text-xs tabular-nums text-[var(--app-text-secondary)]"><span>{m['computer.storage_evidence']()}: {storage.files} · {(storage.bytes / 1048576).toFixed(1)} MiB</span><span>{m['computer.storage_temporary']()}: {storage.temporaryFiles} · {(storage.temporaryBytes / 1048576).toFixed(1)} MiB</span></div>{:else}<p class="text-xs text-[var(--app-text-muted)]">{m['computer.storage_pending']()}</p>{/if}
-  {#if storage?.error}<p role="alert" class="text-xs text-[var(--app-warning)]">{m['computer.storage_error']()}</p>{/if}
-  <p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['computer.storage_limits']()}</p>
+  {#if storage?.error}<p role="alert" class="oc-callout"><TriangleAlert size={13} aria-hidden="true" /><span>{m['computer.storage_error']()}</span></p>{/if}
+  {#if storageOpen}
+    <div id={`${uid}-storage`} class="oc-reveal space-y-3 pt-1">
+      <div class="oc-grid">
+        <label class="oc-field"><span class="oc-label">{m['computer.storage_days']()}</span><Select.Root type="single" value={String(config.evidenceRetentionDays)} onValueChange={(value: string) => save({ ...config, evidenceRetentionDays: Number(value) })}><Select.Trigger class="h-8 w-full tabular-nums" disabled={busy}>{config.evidenceRetentionDays}</Select.Trigger><Select.Content>{#each [1, 7, 14, 30, 90, 365] as days}<Select.Item value={String(days)}>{days}</Select.Item>{/each}</Select.Content></Select.Root></label>
+        <label class="oc-field"><span class="oc-label">{m['computer.storage_limit']()} (MiB)</span><Select.Root type="single" value={String(config.evidenceMaxMiB)} onValueChange={(value: string) => save({ ...config, evidenceMaxMiB: Number(value) })}><Select.Trigger class="h-8 w-full tabular-nums" disabled={busy}>{config.evidenceMaxMiB}</Select.Trigger><Select.Content>{#each [32, 128, 256, 512, 1024] as size}<Select.Item value={String(size)}>{size}</Select.Item>{/each}</Select.Content></Select.Root></label>
+      </div>
+      {#if storage?.checkedAt}<div class="flex flex-wrap gap-x-3 gap-y-1"><span class="oc-meta">{m['computer.storage_evidence']()}: <span class="oc-num">{storage.files} · {mib(storage.bytes)} MiB</span></span><span class="oc-meta">{m['computer.storage_temporary']()}: <span class="oc-num">{storage.temporaryFiles} · {mib(storage.temporaryBytes)} MiB</span></span></div>{:else}<p class="oc-meta">{m['computer.storage_pending']()}</p>{/if}
+      <p class="oc-help">{m['computer.storage_limits']()}</p>
+    </div>
+  {/if}
 </section>
+
+<style>
+  /* Cartoes do painel do Computador: elevacao por sombra, cabecalho claro. */
+  .oc-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-border);
+    container-type: inline-size;
+  }
+
+  .oc-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+  }
+
+  .oc-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    color: var(--app-text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .oc-title :global(svg) {
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+  }
+
+  .oc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    margin: -2px -6px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .oc-toggle:hover {
+    background: var(--app-hover);
+  }
+
+  .oc-toggle:focus-visible,
+  .oc-summary:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .oc-card :global(.oc-chevron) {
+    transition: transform var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  .oc-toggle[aria-expanded='true'] :global(.oc-chevron),
+  .oc-details[open] :global(.oc-chevron) {
+    transform: rotate(90deg);
+  }
+
+  .oc-reveal {
+    animation: oc-reveal var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  @keyframes oc-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--distance-micro) * -1));
+    }
+  }
+
+  .oc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    margin: 0;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text);
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .oc-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--app-text-muted);
+  }
+
+  .oc-status[data-tone='success'] .oc-dot {
+    background: var(--app-success);
+  }
+
+  .oc-status[data-tone='accent'] .oc-dot {
+    background: var(--app-accent);
+  }
+
+  .oc-status[data-tone='info'] .oc-dot {
+    background: var(--app-info);
+  }
+
+  .oc-status[data-tone='warning'] {
+    background: var(--app-warning-soft);
+  }
+
+  .oc-status[data-tone='warning'] .oc-dot {
+    background: var(--app-warning);
+  }
+
+  .oc-meta {
+    margin: 0;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .oc-num,
+  .oc-value,
+  .oc-count {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .oc-num {
+    color: var(--app-text-soft);
+  }
+
+  .oc-value {
+    color: var(--app-text-soft);
+    font-weight: 500;
+  }
+
+  .oc-count {
+    flex-shrink: 0;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    line-height: 18px;
+    white-space: nowrap;
+  }
+
+  .oc-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: var(--app-warning-soft);
+    color: var(--app-text);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .oc-callout :global(svg) {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--app-warning);
+  }
+
+  .oc-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px 16px;
+  }
+
+  @container (min-width: 440px) {
+    .oc-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .oc-span {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .oc-sliders {
+    row-gap: 14px;
+  }
+
+  .oc-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .oc-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .oc-details {
+    border-radius: 8px;
+  }
+
+  .oc-summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    margin: 0 -6px;
+    padding: 0 6px;
+    border-radius: 7px;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+    list-style: none;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .oc-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .oc-summary:hover {
+    background: var(--app-hover);
+  }
+
+  .oc-summary :global(svg) {
+    color: var(--app-text-muted);
+  }
+
+  .oc-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  }
+
+  .oc-help {
+    margin: 0;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+</style>

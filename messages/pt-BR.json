@@ -4994,5 +4994,7 @@
   "canvas.tool_drop_hint": "Solte para criar aqui",
   "diff.empty_title": "Nada para comparar",
   "diff.empty_hint": "Arquivo novo ou sem alterações de conteúdo. Abra no editor para ver o arquivo inteiro.",
-  "loop.member_role": "Papel no time"
+  "loop.member_role": "Papel no time",
+  "code_graph.loading": "Carregando o grafo…",
+  "tool_workshop.tools": "Ferramentas"
 }

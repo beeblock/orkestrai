@@ -7,7 +7,11 @@
     AlertTriangle,
     Activity,
     ArrowDownToLine,
-    ArrowUpFromLine,
+    ArrowLeft,
+    ArrowRight,
+    ArrowDownLeft,
+    ArrowLeftRight,
+    ArrowUpRight,
     Box,
     Braces,
     FileCode2,
@@ -19,7 +23,10 @@
     ListTodo,
     ExternalLink,
     Network,
-    MoreHorizontal,
+    Layers,
+    LoaderCircle,
+    DatabaseZap,
+    SearchX,
     RefreshCw,
     Search,
     ShieldCheck,
@@ -36,7 +43,10 @@
   import { Input } from '$lib/components/ui/input';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Button } from '$lib/components/ui/button';
+  import { Slider } from '$lib/components/ui/slider';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import type {
     CodeGraphProject,
@@ -1280,6 +1290,18 @@
   });
 </script>
 
+{#snippet indexAction()}
+  <Button
+    size="sm"
+    class="bg-[var(--app-accent)] text-[var(--app-accent-contrast)] hover:bg-[var(--app-accent)] hover:brightness-105"
+    disabled={indexing || intelligenceDisabled}
+    onclick={() => void indexWorkspace()}
+  >
+    {#if indexing}<LoaderCircle size={13} class="animate-spin" />{:else}<DatabaseZap size={13} />{/if}
+    {indexing ? m['code_graph.indexing']() : m['code_graph.index']()}
+  </Button>
+{/snippet}
+
 <NodeShell
   {id}
   {selected}
@@ -1305,25 +1327,19 @@
     </HeaderIconButton>
   {/snippet}
 
+
   <div
-    class="nodrag nowheel flex h-full min-h-0 flex-col overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]"
+    class="cg nodrag nowheel flex h-full min-h-0 flex-col overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)]"
     role="region"
     aria-label={m['code_graph.title']()}
     onwheel={(event) => event.stopPropagation()}
   >
-    <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] p-2">
-      <Select.Root type="single" value={projectId} disabled={intelligenceDisabled} onValueChange={(value: string) => void changeProject(value)}>
-        <Select.Trigger size="sm" class="min-w-36 max-w-52">{projectScopeLabel(currentProject)}</Select.Trigger>
-        <Select.Content>
-          <Select.Item value="all">{m['code_graph.all_repositories']()}</Select.Item>
-          {#each snapshot?.projects ?? [] as project (project.id)}
-            <Select.Item value={project.id}>{projectScopeLabel(project)}</Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
-      <form class="relative flex min-w-44 flex-1" onsubmit={(event) => { event.preventDefault(); void searchSymbols(); }}>
+    <!-- Barra: explorar (busca + escopo) a esquerda; visoes e reindexacao discretas a direita. -->
+    <div class="cg-toolbar">
+      <form class="relative flex min-w-40 flex-1" onsubmit={(event) => { event.preventDefault(); void searchSymbols(); }}>
+        <Search size={13} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[var(--app-text-muted)]" aria-hidden="true" />
         <input
-          class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] pr-14 pl-2 text-xs outline-none focus:border-[var(--app-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+          class="cg-search"
           bind:value={query}
           disabled={intelligenceDisabled}
           placeholder={m['code_graph.search_placeholder']()}
@@ -1331,7 +1347,7 @@
         />
         <HeaderIconButton
           label={searchMode === 'semantic' ? m['code_graph.semantic_search_enabled']() : m['code_graph.semantic_search_disabled']()}
-          class={`absolute top-1/2 right-7 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${searchMode === 'semantic' ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]' : ''}`}
+          class={`cg-inset-btn right-7 ${searchMode === 'semantic' ? 'is-on' : ''}`}
           active={searchMode === 'semantic'}
           disabled={intelligenceDisabled}
           side="bottom"
@@ -1339,108 +1355,132 @@
         >
           <Sparkles size={12} />
         </HeaderIconButton>
-        <HeaderIconButton label={m['code_graph.search']()} class="absolute top-1/2 right-1 grid size-6 -translate-y-1/2 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" side="bottom" type="submit" disabled={intelligenceDisabled}>
-          <Search size={12} />
+        <HeaderIconButton label={m['code_graph.search']()} class="cg-inset-btn right-1" side="bottom" type="submit" disabled={intelligenceDisabled}>
+          <ArrowRight size={12} />
         </HeaderIconButton>
       </form>
-      <Button
-        size="sm"
-        class="h-8 bg-[var(--app-accent)] text-ui-sm text-[var(--app-accent-contrast)] hover:brightness-105"
-        disabled={indexing || intelligenceDisabled}
-        onclick={() => void indexWorkspace()}
-      >
-        <RefreshCw size={12} class={indexing ? 'animate-spin' : undefined} />
-        {indexing ? m['code_graph.indexing']() : m['code_graph.index']()}
-      </Button>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              size="sm"
-              variant={viewMode === 'changes' ? 'default' : 'outline'}
-              class="h-8 text-ui-sm"
-              disabled={!hasIndexedGraph || changeLoading || intelligenceDisabled}
-              onclick={() => void loadChanges()}
+      <Select.Root type="single" value={projectId} disabled={intelligenceDisabled} onValueChange={(value: string) => void changeProject(value)}>
+        <Select.Trigger size="sm" class="h-8 max-w-48 min-w-0 shrink text-xs"><span class="truncate">{projectScopeLabel(currentProject)}</span></Select.Trigger>
+        <Select.Content>
+          <Select.Item value="all">{m['code_graph.all_repositories']()}</Select.Item>
+          {#each snapshot?.projects ?? [] as project (project.id)}
+            <Select.Item value={project.id}>{projectScopeLabel(project)}</Select.Item>
+          {/each}
+        </Select.Content>
+      </Select.Root>
+      {#if hasIndexedGraph}
+        <div class="flex shrink-0 items-center gap-0.5">
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  type="button"
+                  class="cg-tool"
+                  class:is-on={viewMode === 'changes'}
+                  disabled={!hasIndexedGraph || changeLoading || intelligenceDisabled}
+                  onclick={() => void loadChanges()}
+                >
+                  <GitCompareArrows size={14} class={changeLoading ? 'animate-pulse' : undefined} />
+                  <span class="cg-tool-label">{m['code_graph.changes']()}</span>{#if changes}<span class="cg-tool-count">{changedFileCount}</span>{/if}
+                </button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content side="bottom" class="max-w-64 text-pretty">{m['code_graph.changes_description']()}</Tooltip.Content>
+          </Tooltip.Root>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger
+              class={`cg-tool ${['contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(viewMode) ? 'is-on' : ''}`}
+              disabled={!hasIndexedGraph || intelligenceDisabled}
+              aria-label={m['code_graph.intelligence_views']()}
+              title={m['code_graph.intelligence_views']()}
             >
-              <GitCompareArrows size={12} class={changeLoading ? 'animate-pulse' : undefined} />
-              {m['code_graph.changes']()}{changes ? ` (${changedFileCount})` : ''}
-            </Button>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content side="bottom" class="max-w-64 text-pretty">{m['code_graph.changes_description']()}</Tooltip.Content>
-      </Tooltip.Root>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-          class={`inline-flex h-8 items-center gap-1.5 rounded border border-[var(--app-border)] px-2 text-ui-sm text-[var(--app-text)] hover:bg-[var(--app-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] data-[state=open]:bg-[var(--app-accent-soft)] ${['contracts', 'quality', 'semantic', 'runtime', 'operations', 'compare'].includes(viewMode) ? 'bg-[var(--app-accent-soft)]' : ''}`}
-          disabled={!hasIndexedGraph || intelligenceDisabled}
-          aria-label={m['code_graph.intelligence_views']()}
-        >
-          <MoreHorizontal size={13} />
-          {m['code_graph.intelligence']()}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="z-[140] min-w-52">
-          <DropdownMenu.Label>{m['code_graph.intelligence_views']()}</DropdownMenu.Label>
-          <DropdownMenu.Item onclick={() => void loadContracts()}>
-            <Network size={13} class={contractLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.contracts']()}{contracts ? ` (${contracts.matches.length})` : ''}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => void loadQuality()}>
-            <ShieldCheck size={13} class={qualityLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.quality']()}{quality ? ` (${quality.counts.findings})` : ''}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => void loadSemantic()}>
-            <Sparkles size={13} class={semanticLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.semantic']()}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => void loadRuntime()}>
-            <Activity size={13} class={runtimeLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.runtime']()}{runtime ? ` (${runtime.counts.runs})` : ''}
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item onclick={() => void loadOperations()}>
-            <Bot size={13} class={operationsLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.operations']()}{operations ? ` (${trackedAgents.length})` : ''}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => void loadComparison()}>
-            <GitCompareArrows size={13} class={comparisonLoading ? 'animate-pulse' : undefined} />
-            {m['code_graph.compare']()}
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item onclick={() => void loadInvestigations()}>
-            <Bookmark size={13} /> {m['code_graph.investigations']()}
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+              <Layers size={14} />
+              <span class="cg-tool-label">{m['code_graph.intelligence']()}</span>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" class="z-[140] min-w-52">
+              <DropdownMenu.Label>{m['code_graph.intelligence_views']()}</DropdownMenu.Label>
+              <DropdownMenu.Item onclick={() => void loadContracts()}>
+                <Network size={13} class={contractLoading ? 'animate-pulse' : undefined} />
+                {m['code_graph.contracts']()}{contracts ? ` (${contracts.matches.length})` : ''}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onclick={() => void loadQuality()}>
+                <ShieldCheck size={13} class={qualityLoading ? 'animate-pulse' : undefined} />
+                {m['code_graph.quality']()}{quality ? ` (${quality.counts.findings})` : ''}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onclick={() => void loadSemantic()}>
+                <Sparkles size={13} class={semanticLoading ? 'animate-pulse' : undefined} />
+                {m['code_graph.semantic']()}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onclick={() => void loadRuntime()}>
+                <Activity size={13} class={runtimeLoading ? 'animate-pulse' : undefined} />
+                {m['code_graph.runtime']()}{runtime ? ` (${runtime.counts.runs})` : ''}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item onclick={() => void loadOperations()}>
+                <Bot size={13} class={operationsLoading ? 'animate-pulse' : undefined} />
+                {m['code_graph.operations']()}{operations ? ` (${trackedAgents.length})` : ''}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onclick={() => void loadComparison()}>
+                <GitCompareArrows size={13} class={comparisonLoading ? 'animate-pulse' : undefined} />
+                {m['code_graph.compare']()}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item onclick={() => void loadInvestigations()}>
+                <Bookmark size={13} /> {m['code_graph.investigations']()}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          <span class="mx-1 h-4 w-px bg-[var(--app-border)]" aria-hidden="true"></span>
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <button {...props} type="button" class="cg-tool" disabled={indexing || intelligenceDisabled} onclick={() => void indexWorkspace()}>
+                  {#if indexing}<LoaderCircle size={14} class="animate-spin" />{:else}<DatabaseZap size={14} />{/if}
+                  <span class="cg-tool-label">{indexing ? m['code_graph.indexing']() : m['code_graph.index']()}</span>
+                </button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content side="bottom">{m['code_graph.index']()}</Tooltip.Content>
+          </Tooltip.Root>
+        </div>
+      {/if}
     </div>
 
-    {#if snapshot}
-      <div class="grid shrink-0 grid-cols-4 divide-x divide-[var(--app-border)] border-b border-[var(--app-border)] bg-[var(--app-surface)]">
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.files}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.files']()}</span></div>
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.symbols}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.symbols']()}</span></div>
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.totals.edges}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.relationships']()}</span></div>
-        <div class="min-w-0 px-2 py-1.5"><strong class="block text-xs">{snapshot.projects.length}</strong><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.repositories']()}</span></div>
+    {#if snapshot && hasIndexedGraph}
+      <!-- Metricas discretas: numero tabular + rotulo, sem divisorias. -->
+      <div class="cg-stats">
+        <span class="cg-stat"><span class="cg-stat-value">{snapshot.totals.files}</span><span class="cg-stat-label">{m['code_graph.files']()}</span></span>
+        <span class="cg-stat"><span class="cg-stat-value">{snapshot.totals.symbols}</span><span class="cg-stat-label">{m['code_graph.symbols']()}</span></span>
+        <span class="cg-stat"><span class="cg-stat-value">{snapshot.totals.edges}</span><span class="cg-stat-label">{m['code_graph.relationships']()}</span></span>
+        <span class="cg-stat"><span class="cg-stat-value">{snapshot.projects.length}</span><span class="cg-stat-label">{m['code_graph.repositories']()}</span></span>
       </div>
     {/if}
 
     {#if error}
-      <div class="flex shrink-0 items-center gap-2 border-b border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 px-3 py-2 text-ui-xs text-[var(--app-danger)]">
-        <AlertTriangle size={12} /> <span class="min-w-0 truncate">{error}</span>
+      <div class="flex shrink-0 items-center gap-2 bg-[var(--app-danger-soft)] px-3 py-2 text-[12px] text-[var(--app-text)]" role="alert">
+        <AlertTriangle size={13} class="shrink-0 text-[var(--app-danger)]" /> <span class="min-w-0 truncate" title={error}>{error}</span>
       </div>
     {/if}
 
-    <div class="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(150px,0.34fr)]">
-      <div class="relative min-h-0 min-w-0 overflow-hidden border-r border-[var(--app-border)]">
+    <div class="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(190px,0.36fr)]">
+      <div class="relative min-h-0 min-w-0 overflow-hidden">
         {#if loading}
-          <div class="absolute inset-0 grid place-items-center text-xs text-[var(--app-text-muted)]"><RefreshCw size={18} class="animate-spin" /></div>
+          <div class="absolute inset-0 z-10 grid place-items-center"><span class="cg-pill" role="status"><LoaderCircle size={13} class="animate-spin" aria-hidden="true" />{m['code_graph.loading']()}</span></div>
         {:else if !hasIndexedGraph}
-          <div class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
-            <Network size={28} class="text-[var(--app-secondary)]" />
-            <strong class="text-sm">{intelligenceDisabled ? m['code_graph.disabled_title']() : m['code_graph.empty_title']()}</strong>
-            <p class="max-w-80 text-ui-sm leading-5 text-[var(--app-text-muted)]">{intelligenceDisabled ? m['code_graph.disabled_description']() : m['code_graph.empty_description']()}</p>
+          <!-- Acima do host do grafo (vazio) para o botao receber o clique. -->
+          <div class="absolute inset-0 z-10 bg-[var(--app-canvas)]">
+            <NodeEmptyState
+              icon={Network}
+              title={intelligenceDisabled ? m['code_graph.disabled_title']() : m['code_graph.empty_title']()}
+              description={intelligenceDisabled ? m['code_graph.disabled_description']() : m['code_graph.empty_description']()}
+              actions={intelligenceDisabled ? undefined : indexAction}
+            />
           </div>
         {:else if graph && graph.nodes.length === 0}
-          <div class="absolute inset-0 grid place-items-center text-xs text-[var(--app-text-muted)]">{m['code_graph.no_results']()}</div>
+          <div class="pointer-events-none absolute inset-0 z-10">
+            <NodeEmptyState compact icon={SearchX} title={m['code_graph.no_results']()} />
+          </div>
         {/if}
         <div
           bind:this={graphHost}
@@ -1449,91 +1489,91 @@
           aria-label={m['code_graph.visualization']()}
         ></div>
         {#if graph?.truncated}
-          <span class="absolute bottom-2 left-2 rounded bg-[var(--app-surface)]/90 px-2 py-1 text-ui-xs text-[var(--app-warning)] shadow">{m['code_graph.truncated']()}</span>
+          <span class="cg-pill cg-float absolute bottom-3 left-3 max-w-[calc(100%-24px)]"><span class="size-1.5 shrink-0 rounded-full bg-[var(--app-warning)]" aria-hidden="true"></span><span class="truncate">{m['code_graph.truncated']()}</span></span>
         {/if}
       </div>
 
-      <aside class="min-h-0 overflow-y-auto overscroll-contain bg-[var(--app-surface)] p-2">
+      <aside class="cg-aside min-h-0 overflow-y-auto overscroll-contain">
         {#if selectedRelationship}
-          <button class="mb-2 inline-flex items-center gap-1 text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => { selectedRelationship = null; }}>
-            <ArrowUpFromLine size={11} /> {m['code_graph.back_to_graph']()}
+          <button class="cg-back" onclick={() => { selectedRelationship = null; }}>
+            <ArrowLeft size={12} /> {m['code_graph.back_to_graph']()}
           </button>
-          <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2.5">
-            <span class="mb-2 inline-flex rounded bg-[var(--app-accent-soft)] px-1.5 py-0.5 text-ui-xs font-semibold text-[var(--app-accent)]">{selectedRelationship.classification === 'runtime' ? m['code_graph.runtime_relationship']() : selectedRelationship.classification === 'inferred' ? m['code_graph.inferred_relationship']() : m['code_graph.static_relationship']()}</span>
-            <strong class="block break-words text-ui-xs leading-4">{selectedRelationship.summary}</strong>
-            <dl class="mt-2 space-y-1 text-ui-xs text-[var(--app-text-muted)]">
-              <div><dt>{m['code_graph.provenance']()}</dt><dd class="break-all font-mono text-[var(--app-text)]">{selectedRelationship.provenance.path ?? m['code_graph.index_inference']()}:{selectedRelationship.provenance.line ?? 1}</dd></div>
-              <div><dt>{m['code_graph.confidence']()}</dt><dd class="text-[var(--app-text)]">{Math.round(selectedRelationship.provenance.confidence)}%</dd></div>
+          <div class="cg-card mb-3">
+            <span class="cg-chip mb-2">{selectedRelationship.classification === 'runtime' ? m['code_graph.runtime_relationship']() : selectedRelationship.classification === 'inferred' ? m['code_graph.inferred_relationship']() : m['code_graph.static_relationship']()}</span>
+            <strong class="block text-[12px] leading-snug font-medium break-words">{selectedRelationship.summary}</strong>
+            <dl class="mt-2.5 space-y-1.5 text-ui-xs text-[var(--app-text-muted)]">
+              <div><dt>{m['code_graph.provenance']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] break-all text-[var(--app-text)]">{selectedRelationship.provenance.path ?? m['code_graph.index_inference']()}:{selectedRelationship.provenance.line ?? 1}</dd></div>
+              <div><dt>{m['code_graph.confidence']()}</dt><dd class="mt-0.5 tabular-nums text-[var(--app-text)]">{Math.round(selectedRelationship.provenance.confidence)}%</dd></div>
             </dl>
           </div>
-          <div class="grid grid-cols-2 gap-1">
+          <div class="cg-pair">
             <Button size="xs" variant="outline" onclick={() => void openSymbol(selectedRelationship!.source.id)}>{m['code_graph.source_symbol']()}</Button>
             <Button size="xs" variant="outline" onclick={() => void openSymbol(selectedRelationship!.target.id)}>{m['code_graph.target_symbol']()}</Button>
           </div>
         {:else if viewMode === 'changes' && changes}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.change_impact']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
-          </div>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.change_impact']()}</strong>
           {#if changes.scopes.length === 0}
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.no_changes']()}</div>
+            <p class="cg-note">{m['code_graph.no_changes']()}</p>
           {:else}
-            <div class="space-y-3">
+            <div class="space-y-4">
               {#each changes.scopes as scope (scope.id)}
-                <section>
-                  <div class="mb-1 flex items-center gap-1 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
-                    <span class="truncate">{scope.kind === 'floor' ? m['code_graph.floor_scope']({ name: scope.name }) : m['code_graph.workspace_scope']()}</span>
-                    <span class="ml-auto tabular-nums">{scope.files.length}</span>
-                    {#if scope.kind === 'workspace'}
+                <section class="cg-scope">
+                  <div class="cg-scope-head">
+                    <span class="section-label min-w-0 truncate">{scope.kind === 'floor' ? m['code_graph.floor_scope']({ name: scope.name }) : m['code_graph.workspace_scope']()}</span>
+                    <span class="cg-count">{scope.files.length}</span>
+                    <span class="cg-reveal">
+                      {#if scope.kind === 'workspace'}
+                        <HeaderIconButton
+                          label={m['code_graph.create_review']()}
+                          class="nodrag cg-icon-btn"
+                          side="top"
+                          disabled={handoffBusy !== null}
+                          onclick={() => void createHandoff('review', scope)}
+                        ><GitPullRequestArrow size={12} class={handoffBusy === `review:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
+                      {/if}
                       <HeaderIconButton
-                        label={m['code_graph.create_review']()}
-                        class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
+                        label={m['code_graph.context']()}
+                        class="nodrag cg-icon-btn"
+                        side="top"
+                        onclick={() => void openContext({ scopeId: scope.id })}
+                      ><Send size={12} /></HeaderIconButton>
+                      <HeaderIconButton
+                        label={m['code_graph.create_task']()}
+                        class="nodrag cg-icon-btn"
                         side="top"
                         disabled={handoffBusy !== null}
-                        onclick={() => void createHandoff('review', scope)}
-                      ><GitPullRequestArrow size={12} class={handoffBusy === `review:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
-                    {/if}
-                    <HeaderIconButton
-                      label={m['code_graph.context']()}
-                      class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
-                      side="top"
-                      onclick={() => void openContext({ scopeId: scope.id })}
-                    ><Send size={12} /></HeaderIconButton>
-                    <HeaderIconButton
-                      label={m['code_graph.create_task']()}
-                      class="nodrag grid size-6 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]"
-                      side="top"
-                      disabled={handoffBusy !== null}
-                      onclick={() => void createHandoff('task', scope)}
-                    ><ListTodo size={12} class={handoffBusy === `task:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
+                        onclick={() => void createHandoff('task', scope)}
+                      ><ListTodo size={12} class={handoffBusy === `task:${scope.id}` ? 'animate-pulse' : undefined} /></HeaderIconButton>
+                    </span>
                   </div>
-                  <div class="space-y-1">
+                  <div class="space-y-0.5">
                     {#each scope.files.slice(0, 20) as file (`${scope.id}:${file.projectId}:${file.path}`)}
-                      <button class="flex w-full min-w-0 items-center gap-2 rounded border border-transparent px-1.5 py-1 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-hover)]" onclick={() => openChangedFile(file)}>
-                        <span class="grid size-5 shrink-0 place-items-center rounded bg-[var(--app-canvas)] font-mono text-ui-xs text-[var(--app-warning)]">{file.status}</span>
-                        <span class="min-w-0 flex-1"><span class="block truncate text-ui-xs">{file.path}</span><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{file.projectName} · {file.symbolIds.length} {m['code_graph.symbols']()}</span></span>
+                      <button class="cg-row items-center" onclick={() => openChangedFile(file)}>
+                        <span class="cg-file-status">{file.status}</span>
+                        <span class="min-w-0 flex-1"><span class="block truncate text-[12px]" title={file.path}>{file.path}</span><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{file.projectName} · <span class="tabular-nums">{file.symbolIds.length}</span> {m['code_graph.symbols']()}</span></span>
                       </button>
                     {/each}
                   </div>
                 </section>
               {/each}
               {#if changes.conflicts.length}
-                <section class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 p-2">
-                  <strong class="mb-1 block text-ui-xs text-[var(--app-danger)]">{m['code_graph.floor_conflicts']()}</strong>
+                <section class="cg-callout" data-tone="danger">
+                  <strong class="mb-1 block text-[12px] font-semibold">{m['code_graph.floor_conflicts']()}</strong>
                   {#each changes.conflicts as conflict (conflict.id)}
-                    <div class="border-t border-[var(--app-danger)]/20 py-1.5 first:border-0">
-                      <span class="block text-ui-xs font-semibold">{conflict.leftFloorName} ↔ {conflict.rightFloorName}</span>
-                      <span class="block text-ui-xs leading-3 text-[var(--app-text-muted)]">{conflict.sharedPaths.length} {m['code_graph.shared_files']()} · {conflict.sharedImpactSymbolIds.length + conflict.sharedSymbolIds.length} {m['code_graph.shared_symbols']()}</span>
+                    <div class="border-t border-[color-mix(in_srgb,var(--app-danger)_20%,transparent)] py-1.5 first:border-0">
+                      <span class="block text-[12px] font-medium">{conflict.leftFloorName} ↔ {conflict.rightFloorName}</span>
+                      <span class="block text-ui-xs leading-4 text-[var(--app-text-muted)]">{conflict.sharedPaths.length} {m['code_graph.shared_files']()} · {conflict.sharedImpactSymbolIds.length + conflict.sharedSymbolIds.length} {m['code_graph.shared_symbols']()}</span>
                     </div>
                   {/each}
                 </section>
               {/if}
               {#if changes.likelyTests.length}
                 <section>
-                  <strong class="mb-1 block text-ui-xs">{m['code_graph.likely_tests']()}</strong>
+                  <span class="section-label mb-1.5 block">{m['code_graph.likely_tests']()}</span>
                   <div class="space-y-0.5">
                     {#each changes.likelyTests.slice(0, 20) as path (path)}
-                      <div class="truncate rounded bg-[var(--app-canvas)] px-2 py-1 font-mono text-ui-xs text-[var(--app-text-muted)]">{path}</div>
+                      <div class="truncate rounded-md bg-[var(--app-surface-subtle)] px-2 py-1 font-mono text-[10.5px] text-[var(--app-text-muted)]" title={path}>{path}</div>
                     {/each}
                   </div>
                 </section>
@@ -1541,54 +1581,52 @@
             </div>
           {/if}
         {:else if viewMode === 'contracts' && contracts}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.contract_map']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
-          </div>
-          <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-emerald-500">{contracts.endpoints.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.endpoints']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{contracts.requests.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.requests']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{contracts.schemas.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.schemas']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{contracts.gateways.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.gateways']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-success)]">{contracts.matches.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.contract_matches']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-warning)]">{contracts.unmatchedRequestIds.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.unmatched_requests']()}</span></div>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.contract_map']()}</strong>
+          <div class="cg-tiles">
+            <div class="cg-tile"><strong><span class="cg-kind-dot" style:background={symbolColor('endpoint')}></span>{contracts.endpoints.length}</strong><span>{m['code_graph.endpoints']()}</span></div>
+            <div class="cg-tile"><strong><span class="cg-kind-dot" style:background={symbolColor('apiRequest')}></span>{contracts.requests.length}</strong><span>{m['code_graph.requests']()}</span></div>
+            <div class="cg-tile"><strong><span class="cg-kind-dot" style:background={symbolColor('schema')}></span>{contracts.schemas.length}</strong><span>{m['code_graph.schemas']()}</span></div>
+            <div class="cg-tile"><strong><span class="cg-kind-dot" style:background={symbolColor('gateway')}></span>{contracts.gateways.length}</strong><span>{m['code_graph.gateways']()}</span></div>
+            <div class="cg-tile" data-tone="success"><strong>{contracts.matches.length}</strong><span>{m['code_graph.contract_matches']()}</span></div>
+            <div class="cg-tile" data-tone="warning"><strong>{contracts.unmatchedRequestIds.length}</strong><span>{m['code_graph.unmatched_requests']()}</span></div>
           </div>
           {#if contracts.conflicts.length}
-            <section class="mb-3 rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/10 p-2">
-              <strong class="mb-1 block text-ui-xs text-[var(--app-danger)]">{m['code_graph.contract_conflicts']()}</strong>
+            <section class="cg-callout mb-3" data-tone="danger">
+              <strong class="mb-1 block text-[12px] font-semibold">{m['code_graph.contract_conflicts']()}</strong>
               {#each contracts.conflicts.slice(0, 20) as conflict (conflict.id)}
-                <div class="border-t border-[var(--app-danger)]/20 py-1.5 first:border-0">
-                  <span class="block truncate font-mono text-ui-xs">{conflict.method} {conflict.path}</span>
+                <div class="border-t border-[color-mix(in_srgb,var(--app-danger)_20%,transparent)] py-1.5 first:border-0">
+                  <span class="block truncate font-mono text-[10.5px]">{conflict.method} {conflict.path}</span>
                   <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{conflict.projectNames.join(' · ')}</span>
                 </div>
               {/each}
             </section>
           {/if}
           <section>
-            <strong class="mb-1 block text-ui-xs">{m['code_graph.contract_matches']()}</strong>
+            <span class="section-label mb-1.5 block">{m['code_graph.contract_matches']()}</span>
             <div class="space-y-1">
               {#each contracts.matches.slice(0, 30) as match (match.id)}
                 {@const request = contractSymbol(match.requestSymbolId)}
                 {@const endpoint = contractSymbol(match.endpointSymbolId)}
                 {#if request && endpoint}
-                  <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => void openGraphSymbol(request.id)}>
-                    <span class="block truncate font-mono text-ui-xs">{request.name}</span>
-                    <span class="mt-0.5 block truncate text-ui-xs text-[var(--app-text-muted)]">{request.projectName} → {endpoint.projectName} · {match.reason === 'exact' ? m['code_graph.match_exact']() : m['code_graph.match_gateway']()} · {match.confidence}%</span>
+                  <button class="cg-row cg-row-card flex-col" onclick={() => void openGraphSymbol(request.id)}>
+                    <span class="block w-full truncate font-mono text-[11px]">{request.name}</span>
+                    <span class="block w-full truncate text-ui-xs text-[var(--app-text-muted)]">{request.projectName} → {endpoint.projectName} · {match.reason === 'exact' ? m['code_graph.match_exact']() : m['code_graph.match_gateway']()} · <span class="tabular-nums">{match.confidence}%</span></span>
                   </button>
                 {/if}
               {/each}
             </div>
           </section>
           {#if contracts.unmatchedRequestIds.length}
-            <section class="mt-3 border-t border-[var(--app-border)] pt-3">
-              <strong class="mb-1 block text-ui-xs text-[var(--app-warning)]">{m['code_graph.unmatched_requests']()}</strong>
+            <section class="mt-4">
+              <span class="section-label mb-1.5 block">{m['code_graph.unmatched_requests']()}</span>
               <div class="space-y-1">
                 {#each contracts.unmatchedRequestIds.slice(0, 30) as symbolId (symbolId)}
                   {@const request = contractSymbol(symbolId)}
                   {#if request}
-                    <button class="w-full rounded border border-[var(--app-warning)]/25 bg-[var(--app-warning)]/5 p-2 text-left hover:bg-[var(--app-warning)]/10" onclick={() => void openGraphSymbol(request.id)}>
-                      <span class="block truncate font-mono text-ui-xs">{request.name}</span>
-                      <span class="mt-0.5 block truncate text-ui-xs text-[var(--app-text-muted)]">{request.projectName ?? request.projectId}</span>
+                    <button class="cg-row cg-row-card flex-col" data-tone="warning" onclick={() => void openGraphSymbol(request.id)}>
+                      <span class="block w-full truncate font-mono text-[11px]">{request.name}</span>
+                      <span class="block w-full truncate text-ui-xs text-[var(--app-text-muted)]">{request.projectName ?? request.projectId}</span>
                     </button>
                   {/if}
                 {/each}
@@ -1596,72 +1634,66 @@
             </section>
           {/if}
         {:else if viewMode === 'quality' && quality}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.quality_title']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.quality_title']()}</strong>
+          <div class="cg-tiles">
+            <div class="cg-tile"><strong>{quality.counts.findings}</strong><span>{m['code_graph.quality_findings']()}</span></div>
+            <div class="cg-tile" data-tone="danger"><strong>{quality.counts.errors}</strong><span>{m['code_graph.quality_errors']()}</span></div>
+            <div class="cg-tile" data-tone="warning"><strong>{quality.counts.warnings}</strong><span>{m['code_graph.quality_warnings']()}</span></div>
+            <div class="cg-tile"><strong>{quality.counts.duplicates}</strong><span>{m['code_graph.quality_duplicates']()}</span></div>
+            <div class="cg-tile"><strong>{quality.counts.cycles}</strong><span>{m['code_graph.quality_cycles']()}</span></div>
+            <div class="cg-tile"><strong>{quality.counts.deadCode}</strong><span>{m['code_graph.quality_dead_code']()}</span></div>
           </div>
-          <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-[var(--app-text)]">{quality.counts.findings}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_findings']()}</span></div>
-            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{quality.counts.errors}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_errors']()}</span></div>
-            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{quality.counts.warnings}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_warnings']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-cyan-500">{quality.counts.duplicates}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_duplicates']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-violet-500">{quality.counts.cycles}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_cycles']()}</span></div>
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm text-orange-500">{quality.counts.deadCode}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_dead_code']()}</span></div>
-          </div>
-          <section class="mb-3">
-            <strong class="mb-1 block text-ui-xs">{m['code_graph.data_flow']()}</strong>
+          <section class="mb-4">
+            <span class="section-label mb-1.5 block">{m['code_graph.data_flow']()}</span>
             <div class="flex flex-wrap gap-1">
               {#each Object.entries(quality.dataFlow.byType) as [type, count] (type)}
-                <span class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-1.5 py-1 text-ui-xs text-[var(--app-text-muted)]"><strong class="text-[var(--app-text)]">{count}</strong> {resourceTypeLabel(type)}</span>
+                <span class="cg-chip"><strong class="tabular-nums text-[var(--app-text)]">{count}</strong> {resourceTypeLabel(type)}</span>
               {/each}
               {#if Object.keys(quality.dataFlow.byType).length === 0}
-                <span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.quality_resources_empty']()}</span>
+                <span class="text-ui-sm text-[var(--app-text-muted)]">{m['code_graph.quality_resources_empty']()}</span>
               {/if}
             </div>
           </section>
           <section>
-            <strong class="mb-1 block text-ui-xs">{m['code_graph.quality_findings']()}</strong>
+            <span class="section-label mb-1.5 block">{m['code_graph.quality_findings']()}</span>
             {#if quality.findings.length === 0}
-              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.quality_empty']()}</div>
+              <p class="cg-note">{m['code_graph.quality_empty']()}</p>
             {:else}
               <div class="space-y-1">
                 {#each quality.findings as finding (finding.id)}
-                  <div class="flex items-start gap-1 rounded border p-1 {finding.severity === 'error' ? 'border-[var(--app-danger)]/30' : finding.severity === 'warning' ? 'border-[var(--app-warning)]/30' : 'border-[var(--app-border)]'}">
-                    <button class="min-w-0 flex-1 rounded p-1 text-left hover:bg-[var(--app-hover)]" onclick={() => finding.symbolIds[0] && void openSymbol(finding.symbolIds[0])}>
-                      <span class="flex items-start gap-2">
-                        <span class="mt-0.5 size-1.5 shrink-0 rounded-full {finding.severity === 'error' ? 'bg-[var(--app-danger)]' : finding.severity === 'warning' ? 'bg-[var(--app-warning)]' : 'bg-[var(--app-secondary)]'}"></span>
-                        <span class="min-w-0 flex-1">
-                          <strong class="block text-ui-xs leading-3">{findingTitle(finding)}</strong>
-                          <span class="mt-0.5 block break-words text-ui-xs leading-3 text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
-                          <span class="mt-0.5 block break-words font-mono text-ui-xs leading-3 text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
-                          <span class="mt-1 block text-ui-xs font-semibold text-[var(--app-secondary)]">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
-                        </span>
+                  <div class="cg-finding">
+                    <button class="cg-row min-w-0 flex-1" onclick={() => finding.symbolIds[0] && void openSymbol(finding.symbolIds[0])}>
+                      <span class="mt-1 size-1.5 shrink-0 rounded-full {finding.severity === 'error' ? 'bg-[var(--app-danger)]' : finding.severity === 'warning' ? 'bg-[var(--app-warning)]' : 'bg-[var(--app-info)]'}"></span>
+                      <span class="min-w-0 flex-1">
+                        <strong class="block text-[12px] leading-4 font-medium">{findingTitle(finding)}</strong>
+                        <span class="mt-0.5 block text-ui-xs leading-4 break-words text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
+                        <span class="mt-0.5 block font-mono text-[10.5px] leading-4 break-words text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
+                        <span class="mt-1 block text-ui-xs text-[var(--app-text-soft)] tabular-nums">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
                       </span>
                     </button>
-                    <HeaderIconButton label={m['code_graph.context']()} class="grid size-6 shrink-0 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]" side="left" onclick={() => void openContext({ findingId: finding.id })}><Send size={11} /></HeaderIconButton>
+                    <span class="cg-reveal"><HeaderIconButton label={m['code_graph.context']()} class="cg-icon-btn" side="left" onclick={() => void openContext({ findingId: finding.id })}><Send size={12} /></HeaderIconButton></span>
                   </div>
                 {/each}
               </div>
             {/if}
           </section>
         {:else if viewMode === 'semantic' && semanticStatus}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.semantic_title']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
-          </div>
-          <section class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2.5">
-            <div class="flex items-center gap-2">
-              <span class="grid size-7 place-items-center rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Sparkles size={14} /></span>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.semantic_title']()}</strong>
+          <section class="cg-card">
+            <div class="flex items-center gap-2.5">
+              <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Sparkles size={14} /></span>
               <div class="min-w-0 flex-1">
-                <strong class="block text-ui-xs">{semanticStateLabel(semanticStatus.state)}</strong>
-                <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{semanticStatus.model}</span>
+                <strong class="block text-[12px] font-medium">{semanticStateLabel(semanticStatus.state)}</strong>
+                <span class="block truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={semanticStatus.model}>{semanticStatus.model}</span>
               </div>
             </div>
-            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--app-border)]">
-              <div class="h-full bg-[var(--app-accent)]" style={`width: ${semanticStatus.totalSymbols ? Math.round((semanticStatus.indexedSymbols / semanticStatus.totalSymbols) * 100) : 0}%`}></div>
+            <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--app-hover)]">
+              <div class="h-full rounded-full bg-[var(--app-accent)] transition-[width] duration-250 ease-smooth-out" style={`width: ${semanticStatus.totalSymbols ? Math.round((semanticStatus.indexedSymbols / semanticStatus.totalSymbols) * 100) : 0}%`}></div>
             </div>
-            <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
-            <div class={`mt-3 grid gap-1 ${data.codeIntelligenceMode === 'assisted' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            <span class="mt-1.5 block text-ui-xs text-[var(--app-text-muted)] tabular-nums">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
+            <div class={`mt-3 grid gap-1.5 ${data.codeIntelligenceMode === 'assisted' ? 'grid-cols-1' : 'grid-cols-2'}`}>
               <Button size="xs" class="w-full" disabled={semanticLoading || !hasIndexedGraph || semanticStatus.totalSymbols === 0} onclick={() => void updateSemantic('build')}>
                 <RefreshCw size={11} class={semanticLoading ? 'animate-spin' : undefined} />
                 {data.codeIntelligenceMode === 'assisted'
@@ -1678,32 +1710,30 @@
             </div>
           </section>
           {#if data.codeIntelligenceMode === 'assisted'}
-            <p class="mt-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_auto']()}</p>
+            <p class="cg-help mt-3">{m['code_graph.semantic_auto']()}</p>
           {/if}
-          <p class="mt-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.semantic_privacy']()}</p>
+          <p class="cg-help mt-2">{m['code_graph.semantic_privacy']()}</p>
         {:else if viewMode === 'runtime' && runtime}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.runtime_title']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.runtime_title']()}</strong>
+          <div class="cg-tiles">
+            <div class="cg-tile"><strong>{runtime.counts.runs}</strong><span>{m['code_graph.evidence_runs']()}</span></div>
+            <div class="cg-tile" data-tone="success"><strong>{runtime.counts.coveredSymbols}</strong><span>{m['code_graph.evidence_covered']()}</span></div>
+            <div class="cg-tile" data-tone="danger"><strong>{runtime.counts.failures}</strong><span>{m['code_graph.evidence_failures']()}</span></div>
+            <div class="cg-tile" data-tone="warning"><strong>{runtime.counts.runtimeOnlyCalls}</strong><span>{m['code_graph.evidence_runtime_only']()}</span></div>
           </div>
-          <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{runtime.counts.runs}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_runs']()}</span></div>
-            <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">{runtime.counts.coveredSymbols}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_covered']()}</span></div>
-            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{runtime.counts.failures}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_failures']()}</span></div>
-            <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">{runtime.counts.runtimeOnlyCalls}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.evidence_runtime_only']()}</span></div>
-          </div>
-          <form class="mb-3 space-y-1.5 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2" onsubmit={(event) => { event.preventDefault(); void importEvidence(); }}>
-            <strong class="block text-ui-xs">{m['code_graph.evidence_import']()}</strong>
+          <form class="cg-card mb-4 space-y-2" onsubmit={(event) => { event.preventDefault(); void importEvidence(); }}>
+            <strong class="block text-[12px] font-semibold">{m['code_graph.evidence_import']()}</strong>
             <Select.Root type="single" value={evidenceKind} onValueChange={(value: string) => { evidenceKind = value as typeof evidenceKind; }}>
-              <Select.Trigger size="sm" class="w-full">{evidenceKindLabel(evidenceKind)}</Select.Trigger>
+              <Select.Trigger size="sm" class="w-full text-xs">{evidenceKindLabel(evidenceKind)}</Select.Trigger>
               <Select.Content>
                 {#each ['auto', 'coverage', 'test', 'trace'] as kind (kind)}
                   <Select.Item value={kind}>{evidenceKindLabel(kind)}</Select.Item>
                 {/each}
               </Select.Content>
             </Select.Root>
-            <input
-              class="h-8 w-full rounded border border-[var(--app-border)] bg-[var(--app-surface-raised)] px-2 font-mono text-ui-xs outline-none focus:border-[var(--app-accent)]"
+            <Input
+              class="h-8 font-mono text-[11px]"
               bind:value={evidencePath}
               placeholder={m['code_graph.evidence_path_placeholder']()}
               aria-label={m['code_graph.evidence_path']()}
@@ -1713,38 +1743,36 @@
             </Button>
           </form>
           <section>
-            <strong class="mb-1 block text-ui-xs">{m['code_graph.evidence_recent']()}</strong>
+            <span class="section-label mb-1.5 block">{m['code_graph.evidence_recent']()}</span>
             {#if runtime.runs.length === 0}
-              <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.evidence_empty']()}</div>
+              <p class="cg-note">{m['code_graph.evidence_empty']()}</p>
             {:else}
               <div class="space-y-1">
                 {#each runtime.runs.slice(0, 50) as run (run.id)}
-                  <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
-                    <span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full {run.kind === 'coverage' ? 'bg-emerald-500' : run.kind === 'test' ? 'bg-[var(--app-danger)]' : 'bg-cyan-500'}"></span><strong class="min-w-0 flex-1 truncate text-ui-xs">{run.label}</strong></span>
-                    <span class="mt-1 block truncate font-mono text-ui-xs text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
-                    <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{run.stats.coveredSymbols} {m['code_graph.evidence_covered']()} · {run.stats.failures} {m['code_graph.evidence_failures']()} · {run.stats.observedCalls} {m['code_graph.evidence_calls']()}</span>
+                  <div class="cg-card">
+                    <span class="flex items-center gap-1.5"><span class="size-1.5 shrink-0 rounded-full {run.kind === 'coverage' ? 'bg-[var(--app-success)]' : run.kind === 'test' ? 'bg-[var(--app-danger)]' : 'bg-[var(--app-info)]'}"></span><strong class="min-w-0 flex-1 truncate text-[12px] font-medium">{run.label}</strong></span>
+                    <span class="mt-1 block truncate font-mono text-[10.5px] text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
+                    <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)] tabular-nums">{run.stats.coveredSymbols} {m['code_graph.evidence_covered']()} · {run.stats.failures} {m['code_graph.evidence_failures']()} · {run.stats.observedCalls} {m['code_graph.evidence_calls']()}</span>
                   </div>
                 {/each}
               </div>
             {/if}
           </section>
         {:else if viewMode === 'operations' && operations}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.operations_title']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
-          </div>
-          <div class="mb-3 grid grid-cols-2 gap-1">
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2"><strong class="block text-sm">{activeAgents.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.active_agents']()}</span></div>
-            <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">{operations.conflicts.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.edit_conflicts']()}</span></div>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.operations_title']()}</strong>
+          <div class="cg-tiles">
+            <div class="cg-tile"><strong>{activeAgents.length}</strong><span>{m['code_graph.active_agents']()}</span></div>
+            <div class="cg-tile" data-tone="danger"><strong>{operations.conflicts.length}</strong><span>{m['code_graph.edit_conflicts']()}</span></div>
           </div>
           {#if operations.conflicts.length}
-            <section class="mb-3 space-y-1 rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2">
-              <strong class="block text-ui-xs text-[var(--app-danger)]">{m['code_graph.conflict_warning']()}</strong>
+            <section class="cg-callout mb-3 space-y-1" data-tone="danger">
+              <strong class="block text-[12px] font-semibold">{m['code_graph.conflict_warning']()}</strong>
               {#each operations.conflicts as conflict (conflict.id)}
                 {@const left = operations.agents.find((agent) => agent.nodeId === conflict.leftNodeId)}
                 {@const right = operations.agents.find((agent) => agent.nodeId === conflict.rightNodeId)}
-                <div class="border-t border-[var(--app-danger)]/20 pt-1.5 text-ui-xs first:border-0 first:pt-0">
-                  <strong class="block text-[var(--app-text)]">{left?.title} ↔ {right?.title}</strong>
+                <div class="border-t border-[color-mix(in_srgb,var(--app-danger)_20%,transparent)] pt-1.5 text-ui-xs first:border-0 first:pt-0">
+                  <strong class="block font-medium text-[var(--app-text)]">{left?.title} ↔ {right?.title}</strong>
                   <span class="block break-words text-[var(--app-text-muted)]">{conflict.sharedPaths.slice(0, 3).join(' · ') || m['code_graph.shared_symbols_count']({ count: conflict.sharedSymbolIds.length })}</span>
                 </div>
               {/each}
@@ -1753,80 +1781,81 @@
           <section class="space-y-1">
             {#each trackedAgents as agent (agent.nodeId)}
               {@const agentIndex = operations.agents.findIndex((candidate) => candidate.nodeId === agent.nodeId)}
-              <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => data.onJumpToNode?.(agent.nodeId)}>
-                <span class="flex items-center gap-1.5"><span class="size-2 rounded-full ring-1 ring-black/10" style={`background:${AGENT_COLORS[Math.max(0, agentIndex) % AGENT_COLORS.length]}`}></span><strong class="min-w-0 flex-1 truncate text-ui-xs">{agent.title}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{agentStateLabel(agent.state)}</span></span>
-                <span class="mt-1 block truncate text-ui-xs text-[var(--app-text-muted)]">{agent.task?.title ?? m['code_graph.no_active_task']()} · {agent.floorName ?? m['code_graph.main_workspace']()}</span>
-                <span class="mt-1 block text-ui-xs text-[var(--app-secondary)]">{m['code_graph.active_symbols_count']({ count: agent.symbolIds.length })}</span>
+              <button class="cg-row cg-row-card flex-col" onclick={() => data.onJumpToNode?.(agent.nodeId)}>
+                <span class="flex w-full items-center gap-1.5"><span class="size-2 shrink-0 rounded-full" style={`background:${AGENT_COLORS[Math.max(0, agentIndex) % AGENT_COLORS.length]}`}></span><strong class="min-w-0 flex-1 truncate text-[12px] font-medium">{agent.title}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{agentStateLabel(agent.state)}</span></span>
+                <span class="block w-full truncate text-ui-xs text-[var(--app-text-muted)]">{agent.task?.title ?? m['code_graph.no_active_task']()} · {agent.floorName ?? m['code_graph.main_workspace']()}</span>
+                <span class="block w-full text-ui-xs text-[var(--app-text-soft)] tabular-nums">{m['code_graph.active_symbols_count']({ count: agent.symbolIds.length })}</span>
               </button>
             {/each}
           </section>
         {:else if viewMode === 'compare'}
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <strong class="text-xs">{m['code_graph.compare_title']()}</strong>
-            <button class="text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>{m['code_graph.overview']()}</button>
-          </div>
+          <button class="cg-back" onclick={() => void loadOverview()}><ArrowLeft size={12} /> {m['code_graph.overview']()}</button>
+          <strong class="cg-h">{m['code_graph.compare_title']()}</strong>
           {#if revisions.length < 2}
-            <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['code_graph.compare_empty']()}</div>
+            <p class="cg-note">{m['code_graph.compare_empty']()}</p>
           {:else}
             <div class="mb-3 space-y-1.5">
               <Select.Root type="single" value={compareFrom} onValueChange={(value: string) => { compareFrom = value; void compareRevisions(projectId); }}>
-                <Select.Trigger size="sm" class="w-full">{revisionLabel(compareFrom, m['code_graph.compare_from']())}</Select.Trigger>
+                <Select.Trigger size="sm" class="w-full text-xs">{revisionLabel(compareFrom, m['code_graph.compare_from']())}</Select.Trigger>
                 <Select.Content>{#each revisions as revision (revision.id)}<Select.Item value={revision.id} disabled={revision.id === compareTo}>#{revision.sequence} · {revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}</Select.Item>{/each}</Select.Content>
               </Select.Root>
               <Select.Root type="single" value={compareTo} onValueChange={(value: string) => { compareTo = value; void compareRevisions(projectId); }}>
-                <Select.Trigger size="sm" class="w-full">{revisionLabel(compareTo, m['code_graph.compare_to']())}</Select.Trigger>
+                <Select.Trigger size="sm" class="w-full text-xs">{revisionLabel(compareTo, m['code_graph.compare_to']())}</Select.Trigger>
                 <Select.Content>{#each revisions as revision (revision.id)}<Select.Item value={revision.id} disabled={revision.id === compareFrom}>#{revision.sequence} · {revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}</Select.Item>{/each}</Select.Content>
               </Select.Root>
             </div>
             {#if comparison}
-              <div class="mb-3 grid grid-cols-3 gap-1">
-                <div class="rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><strong class="block text-sm text-emerald-500">+{comparison.added.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.comparison_added']()}</span></div>
-                <div class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 p-2"><strong class="block text-sm text-[var(--app-warning)]">~{comparison.modified.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.comparison_modified']()}</span></div>
-                <div class="rounded border border-[var(--app-danger)]/30 bg-[var(--app-danger)]/5 p-2"><strong class="block text-sm text-[var(--app-danger)]">-{comparison.removed.length}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{m['code_graph.comparison_removed']()}</span></div>
+              <div class="cg-tiles cg-tiles-3">
+                <div class="cg-tile" data-tone="success"><strong>+{comparison.added.length}</strong><span>{m['code_graph.comparison_added']()}</span></div>
+                <div class="cg-tile" data-tone="warning"><strong>~{comparison.modified.length}</strong><span>{m['code_graph.comparison_modified']()}</span></div>
+                <div class="cg-tile" data-tone="danger"><strong>-{comparison.removed.length}</strong><span>{m['code_graph.comparison_removed']()}</span></div>
               </div>
-              <div class="mb-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 py-1.5 text-ui-xs text-[var(--app-text-muted)]">
+              <p class="cg-note mb-3 tabular-nums">
                 {m['code_graph.relationship_changes']({ added: comparison.relationships.added.length, modified: comparison.relationships.modified.length, removed: comparison.relationships.removed.length })}
-              </div>
+              </p>
               <div class="space-y-1">
                 {#each [...comparison.added.map((symbol) => ({ symbol, state: 'added' })), ...comparison.modified.map((item) => ({ symbol: item.after, state: 'modified' })), ...comparison.removed.map((symbol) => ({ symbol, state: 'removed' }))].slice(0, 80) as item (`${item.state}:${item.symbol.fingerprint}`)}
-                  <div class="rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2">
-                    <span class="block truncate text-ui-xs font-semibold">{item.symbol.name}</span>
-                    <span class="block truncate font-mono text-ui-xs text-[var(--app-text-muted)]">{comparisonStateLabel(item.state)} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
+                  <div class="cg-card">
+                    <span class="block truncate text-[12px] font-medium">{item.symbol.name}</span>
+                    <span class="block truncate font-mono text-[10.5px] text-[var(--app-text-muted)]">{comparisonStateLabel(item.state as 'added' | 'modified' | 'removed')} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
                   </div>
                 {/each}
               </div>
             {/if}
           {/if}
         {:else if results.length}
-          <div class="mb-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['code_graph.search_results']()}</div>
-          <div class="space-y-1">
+          <span class="section-label mb-2 block">{m['code_graph.search_results']()}</span>
+          <div class="space-y-0.5">
             {#each results as result (result.id)}
-              <button class="w-full rounded border border-transparent p-2 text-left hover:border-[var(--app-border)] hover:bg-[var(--app-hover)]" onclick={() => void openSymbol(result.id)}>
-                <span class="block truncate text-ui-sm font-semibold">{result.name}</span>
-                <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{symbolKind(result.kind)} · {result.path ?? result.projectName}</span>
-                {#if searchMode === 'semantic'}
-                  {@const semantic = semanticMatches.find((match) => match.symbol.id === result.id)}
-                  {#if semantic}<span class="mt-1 block text-ui-xs font-semibold text-[var(--app-accent)]">{m['code_graph.semantic_score']({ score: semantic.score })}</span>{/if}
-                {/if}
+              <button class="cg-row" onclick={() => void openSymbol(result.id)}>
+                <span class="cg-kind-dot mt-1.5" style:background={symbolColor(result.kind)} aria-hidden="true"></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-[12px] font-medium">{result.name}</span>
+                  <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{symbolKind(result.kind)} · {result.path ?? result.projectName}</span>
+                  {#if searchMode === 'semantic'}
+                    {@const semantic = semanticMatches.find((match) => match.symbol.id === result.id)}
+                    {#if semantic}<span class="mt-1 block text-ui-xs font-medium text-[var(--app-accent)] tabular-nums">{m['code_graph.semantic_score']({ score: semantic.score })}</span>{/if}
+                  {/if}
+                </span>
               </button>
             {/each}
           </div>
         {:else if selectedSymbol}
-          <button class="mb-2 inline-flex items-center gap-1 text-ui-xs text-[var(--app-secondary)] hover:underline" onclick={() => void loadOverview()}>
-            <ArrowUpFromLine size={11} /> {m['code_graph.overview']()}
+          <button class="cg-back" onclick={() => void loadOverview()}>
+            <ArrowLeft size={12} /> {m['code_graph.overview']()}
           </button>
-          <div class="mb-3 flex items-start gap-2">
-            {#if selectedSymbol.kind === 'module'}<FileCode2 size={16} class="mt-0.5 shrink-0 text-sky-500" />{:else if selectedSymbol.kind === 'class' || selectedSymbol.kind === 'interface'}<Box size={16} class="mt-0.5 shrink-0 text-violet-500" />{:else}<Braces size={16} class="mt-0.5 shrink-0 text-emerald-500" />{/if}
-            <div class="min-w-0"><strong class="block break-words text-xs">{selectedSymbol.name}</strong><span class="block break-words text-ui-xs text-[var(--app-text-muted)]">{symbolKind(selectedSymbol.kind)}</span></div>
+          <div class="mb-3 flex items-start gap-2.5">
+            <span class="cg-symbol-icon" style:color={symbolColor(selectedSymbol.kind)}>{#if selectedSymbol.kind === 'module'}<FileCode2 size={15} />{:else if selectedSymbol.kind === 'class' || selectedSymbol.kind === 'interface'}<Box size={15} />{:else}<Braces size={15} />{/if}</span>
+            <div class="min-w-0"><strong class="block text-[13px] leading-snug font-semibold break-words">{selectedSymbol.name}</strong><span class="block text-ui-xs break-words text-[var(--app-text-muted)]">{symbolKind(selectedSymbol.kind)}</span></div>
           </div>
-          <dl class="space-y-2 text-ui-xs">
-            <div><dt class="text-[var(--app-text-muted)]">{m['code_graph.qualified_name']()}</dt><dd class="mt-0.5 break-all font-mono">{selectedSymbol.qualifiedName}</dd></div>
-            {#if selectedSymbol.path}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.location']()}</dt><dd class="mt-0.5 break-all font-mono">{selectedSymbol.projectName}/{selectedSymbol.path}:{selectedSymbol.startLine ?? 1}</dd></div>{/if}
-            {#if selectedSymbol.signature}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.signature']()}</dt><dd class="mt-0.5 break-words font-mono leading-4">{selectedSymbol.signature}</dd></div>{/if}
-            {#if selectedSymbol.documentation}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.documentation']()}</dt><dd class="mt-0.5 break-words leading-4">{selectedSymbol.documentation}</dd></div>{/if}
+          <dl class="space-y-2.5 text-ui-xs">
+            <div><dt class="text-[var(--app-text-muted)]">{m['code_graph.qualified_name']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] leading-relaxed break-all">{selectedSymbol.qualifiedName}</dd></div>
+            {#if selectedSymbol.path}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.location']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] leading-relaxed break-all">{selectedSymbol.projectName}/{selectedSymbol.path}:{selectedSymbol.startLine ?? 1}</dd></div>{/if}
+            {#if selectedSymbol.signature}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.signature']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] leading-relaxed break-words">{selectedSymbol.signature}</dd></div>{/if}
+            {#if selectedSymbol.documentation}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.documentation']()}</dt><dd class="mt-0.5 leading-relaxed break-words">{selectedSymbol.documentation}</dd></div>{/if}
           </dl>
           {#if selectedSymbol.path}
-            <div class="mt-3 grid grid-cols-2 gap-1">
+            <div class="cg-pair mt-3">
               <Button size="xs" variant="outline" class="w-full" onclick={openSource}>
                 <ExternalLink size={11} /> {m['code_graph.open_source']()}
               </Button>
@@ -1841,26 +1870,35 @@
             </Button>
           {/if}
           {#if selectedSymbol.revisionId !== 'live'}
-          <div class="mt-3 border-t border-[var(--app-border)] pt-2">
-            <span class="mb-1 block text-ui-xs font-semibold text-[var(--app-text-muted)]">{m['code_graph.direction']()}</span>
-            <div class="grid grid-cols-3 rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-0.5">
-              {#each ['incoming', 'both', 'outgoing'] as value}
-                <button class="rounded px-1 py-1 text-ui-xs" class:bg-[var(--app-surface-raised)]={direction === value} class:text-[var(--app-secondary)]={direction === value} onclick={() => { direction = value as typeof direction; void openSymbol(selectedSymbol!.id); }}>{value === 'incoming' ? m['code_graph.incoming']() : value === 'outgoing' ? m['code_graph.outgoing']() : m['code_graph.both']()}</button>
-              {/each}
+          <div class="mt-4 space-y-3 border-t border-[var(--app-border)] pt-3">
+            <div>
+              <span class="mb-1.5 block text-ui-xs font-medium text-[var(--app-text-soft)]">{m['code_graph.direction']()}</span>
+              <SegmentedControl
+                size="sm"
+                fill
+                label={m['code_graph.direction']()}
+                value={direction}
+                onValueChange={(value) => { direction = value; void openSymbol(selectedSymbol!.id); }}
+                options={[
+                  { value: 'incoming', label: m['code_graph.incoming'](), icon: ArrowDownLeft },
+                  { value: 'both', label: m['code_graph.both'](), icon: ArrowLeftRight },
+                  { value: 'outgoing', label: m['code_graph.outgoing'](), icon: ArrowUpRight },
+                ]}
+              />
             </div>
-            <label class="mt-2 block text-ui-xs text-[var(--app-text-muted)]">
-              {m['code_graph.depth']({ depth })}
-              <input class="mt-1 w-full accent-[var(--app-accent)]" type="range" min="1" max="4" bind:value={depth} onchange={() => void openSymbol(selectedSymbol!.id)} />
-            </label>
+            <div>
+              <span class="mb-2 block text-ui-xs font-medium text-[var(--app-text-soft)] tabular-nums">{m['code_graph.depth']({ depth })}</span>
+              <Slider type="single" min={1} max={4} step={1} value={depth} aria-label={m['code_graph.depth']({ depth })} onValueChange={(value: number) => { depth = value; }} onValueCommit={() => void openSymbol(selectedSymbol!.id)} />
+            </div>
           </div>
           {/if}
         {:else}
-          <div class="space-y-2">
-            <strong class="text-xs">{m['code_graph.repositories']()}</strong>
+          <div class="space-y-1.5">
+            <span class="section-label mb-1 block">{m['code_graph.repositories']()}</span>
             {#each snapshot?.projects ?? [] as project (project.id)}
-              <button class="w-full rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 text-left hover:bg-[var(--app-hover)]" onclick={() => void changeProject(project.id)}>
-                <span class="flex items-center justify-between gap-2"><strong class="min-w-0 truncate text-ui-xs">{project.name}</strong><span class="text-ui-xs text-[var(--app-text-muted)]">{projectStatus(project)}</span></span>
-                <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)]">{project.stats.files} {m['code_graph.files']()} · {project.stats.symbols} {m['code_graph.symbols']()}</span>
+              <button class="cg-row cg-row-card flex-col" onclick={() => void changeProject(project.id)}>
+                <strong class="block w-full truncate text-[12px] font-medium" title={project.name}>{project.name}</strong>
+                <span class="flex w-full flex-wrap items-center gap-x-2 gap-y-1"><span class="cg-chip" data-tone={project.status === 'ready' ? 'success' : project.status === 'error' ? 'danger' : project.status === 'stale' ? 'warning' : undefined}>{projectStatus(project)}</span><span class="text-ui-xs text-[var(--app-text-muted)] tabular-nums">{project.stats.files} {m['code_graph.files']()} · {project.stats.symbols} {m['code_graph.symbols']()}</span></span>
               </button>
             {/each}
           </div>
@@ -1916,10 +1954,10 @@
           <div class="grid h-full place-items-center"><RefreshCw size={20} class="animate-spin text-[var(--app-accent)]" /></div>
         {:else if contextPackage}
           <div class="mb-3 flex flex-wrap gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
-            <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_tokens']({ used: contextPackage.estimatedTokens, max: contextPackage.maxTokens })}</span>
-            <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_symbols']({ count: contextPackage.symbols.length })}</span>
-            <span class="rounded border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1">{m['code_graph.context_relationships']({ count: contextPackage.relationships.length })}</span>
-            {#if contextPackage.truncated}<span class="rounded border border-[var(--app-warning)]/30 bg-[var(--app-warning)]/5 px-2 py-1 text-[var(--app-warning)]">{m['code_graph.truncated']()}</span>{/if}
+            <span class="rounded-full bg-[var(--app-hover)] px-2.5 py-1 tabular-nums">{m['code_graph.context_tokens']({ used: contextPackage.estimatedTokens, max: contextPackage.maxTokens })}</span>
+            <span class="rounded-full bg-[var(--app-hover)] px-2.5 py-1 tabular-nums">{m['code_graph.context_symbols']({ count: contextPackage.symbols.length })}</span>
+            <span class="rounded-full bg-[var(--app-hover)] px-2.5 py-1 tabular-nums">{m['code_graph.context_relationships']({ count: contextPackage.relationships.length })}</span>
+            {#if contextPackage.truncated}<span class="rounded-full bg-[var(--app-warning-soft)] px-2.5 py-1 text-[var(--app-warning)]">{m['code_graph.truncated']()}</span>{/if}
           </div>
           <pre class="whitespace-pre-wrap break-words font-mono text-ui-xs leading-5 text-[var(--app-text)]">{contextPackage.markdown}</pre>
         {/if}
@@ -1937,14 +1975,25 @@
               </Select.Content>
             </Select.Root>
           </label>
-          <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.token_budget']()}</span><Input type="number" min="500" max="16000" step="500" bind:value={contextTokens} onblur={() => void buildContext()} /></label>
+          <div>
+            <span class="mb-2 flex items-baseline justify-between gap-2 text-ui-xs font-medium"><span>{m['code_graph.token_budget']()}</span><span class="font-mono text-[10.5px] text-[var(--app-text-soft)] tabular-nums">{Number(contextTokens).toLocaleString(localeState.current)}</span></span>
+            <Slider type="single" min={500} max={16000} step={500} value={Number(contextTokens) || 4000} aria-label={m['code_graph.token_budget']()} onValueChange={(value: number) => { contextTokens = String(value); }} onValueCommit={() => void buildContext()} />
+          </div>
           <div>
             <span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.send_to']()}</span>
-            <div class="grid grid-cols-2 gap-1">
-              {#each ['leader', 'agent', 'council', 'task'] as target (target)}
-                <Button size="xs" variant={contextHandoff === target ? 'secondary' : 'outline'} onclick={() => { contextHandoff = target as typeof contextHandoff; }}>{target === 'leader' ? m['code_graph.leader']() : target === 'agent' ? m['code_graph.agent']() : target === 'council' ? m['code_graph.council']() : m['code_graph.task']()}</Button>
-              {/each}
-            </div>
+            <SegmentedControl
+              size="sm"
+              fill
+              label={m['code_graph.send_to']()}
+              value={contextHandoff}
+              onValueChange={(value) => { contextHandoff = value; }}
+              options={[
+                { value: 'leader', label: m['code_graph.leader']() },
+                { value: 'agent', label: m['code_graph.agent']() },
+                { value: 'council', label: m['code_graph.council']() },
+                { value: 'task', label: m['code_graph.task']() },
+              ]}
+            />
           </div>
           {#if contextHandoff === 'agent'}
             <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.target_agent']()}</span>
@@ -1982,3 +2031,546 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  .cg {
+    container: code-graph / inline-size;
+  }
+
+  .cg-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+    background: var(--app-surface);
+  }
+
+  .cg-search {
+    width: 100%;
+    height: 32px;
+    padding: 0 56px 0 30px;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    background: var(--app-surface-subtle);
+    color: var(--app-text);
+    font-size: 12px;
+    outline: none;
+    transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .cg-search::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  .cg-search:focus {
+    border-color: var(--app-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
+  }
+
+  .cg-search:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .cg :global(.cg-inset-btn) {
+    position: absolute;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    translate: 0 -50%;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .cg :global(.cg-inset-btn:hover) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .cg :global(.cg-inset-btn.is-on) {
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .cg :global(.cg-inset-btn:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* Ferramentas secundarias: fantasmas com rotulo; viram so icone em nos estreitos. */
+  .cg :global(.cg-tool) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    min-width: 32px;
+    justify-content: center;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .cg :global(.cg-tool:hover:not(:disabled)),
+  .cg :global(.cg-tool[data-state='open']) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .cg :global(.cg-tool:active:not(:disabled)) {
+    transform: scale(var(--scale-press));
+  }
+
+  .cg :global(.cg-tool.is-on) {
+    background: var(--app-secondary-soft);
+    color: var(--app-secondary);
+  }
+
+  .cg :global(.cg-tool:disabled) {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .cg :global(.cg-tool:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .cg-tool-count {
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @container code-graph (max-width: 760px) {
+    .cg-tool-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .cg :global(.cg-tool) {
+      padding: 0 8px;
+    }
+  }
+
+  .cg-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 6px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+    background: var(--app-surface);
+  }
+
+  .cg-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--app-hover);
+  }
+
+  .cg-stat-value {
+    color: var(--app-text);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cg-stat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .cg-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .cg-pill.cg-float {
+    background: var(--app-surface-raised);
+    color: var(--app-text-soft);
+    box-shadow: var(--app-shadow-panel);
+  }
+
+  .cg-aside {
+    container: cg-aside / inline-size;
+    padding: 10px;
+    background: var(--app-surface);
+    box-shadow: inset 1px 0 0 var(--app-border);
+  }
+
+  .cg-h {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-wrap: balance;
+  }
+
+  .cg-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  @container cg-aside (min-width: 250px) {
+    .cg-pair {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Aside estreito: segmentos so com icone (o rotulo segue acessivel). */
+  @container cg-aside (max-width: 249px) {
+    .cg-aside :global(.segment-label) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  .cg-back {
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: color var(--duration-quick) ease-out;
+  }
+
+  .cg-back:hover {
+    color: var(--app-text);
+  }
+
+  .cg-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 10px;
+    padding: 0;
+  }
+
+  .cg-back:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .cg-card {
+    padding: 9px 10px;
+    border-radius: 9px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .cg-note,
+  .cg-help {
+    margin: 0;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  .cg-note {
+    padding: 10px;
+    border-radius: 9px;
+    background: var(--app-surface-subtle);
+  }
+
+  .cg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    width: fit-content;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .cg-chip[data-tone='success'] {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .cg-chip[data-tone='warning'] {
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+  }
+
+  .cg-chip[data-tone='danger'] {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .cg-count {
+    flex-shrink: 0;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Blocos de metricas: numero tabular neutro; cor apenas para estado. */
+  .cg-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .cg-tiles.cg-tiles-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cg-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    padding: 7px 9px;
+    border-radius: 9px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .cg-tile strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--app-text);
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cg-tile > span {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    color: var(--app-text-muted);
+    font-size: 11px;
+    line-height: 1.3;
+    hyphens: auto;
+    overflow-wrap: break-word;
+  }
+
+  .cg-tile[data-tone='success'] strong {
+    color: var(--app-success);
+  }
+
+  .cg-tile[data-tone='warning'] strong {
+    color: var(--app-warning);
+  }
+
+  .cg-tile[data-tone='danger'] strong {
+    color: var(--app-danger);
+  }
+
+  .cg-kind-dot {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .cg-callout {
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: var(--app-danger-soft);
+    color: var(--app-text);
+  }
+
+  .cg-callout[data-tone='danger'] > strong {
+    color: var(--app-danger);
+  }
+
+  .cg-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .cg-row:hover {
+    background: var(--app-hover);
+  }
+
+  .cg-row:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .cg-row.cg-row-card {
+    gap: 3px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .cg-row.cg-row-card:hover {
+    box-shadow: var(--app-shadow-border-hover);
+  }
+
+  .cg-row.cg-row-card[data-tone='warning'] {
+    background: color-mix(in srgb, var(--app-warning) 7%, var(--app-surface-subtle));
+  }
+
+  .cg-file-status {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+
+  .cg-symbol-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .cg-scope-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 26px;
+    margin-bottom: 4px;
+  }
+
+  .cg-scope-head .section-label {
+    flex: 1;
+  }
+
+  .cg-finding {
+    display: flex;
+    align-items: flex-start;
+    gap: 2px;
+    border-radius: 8px;
+  }
+
+  .cg :global(.cg-icon-btn) {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .cg :global(.cg-icon-btn:hover) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .cg :global(.cg-icon-btn:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* Acoes de linha/escopo aparecem ao apontar ou focar (sem roubar largura). */
+  .cg-reveal {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .cg-scope:hover .cg-reveal,
+  .cg-scope:focus-within .cg-reveal,
+  .cg-finding:hover .cg-reveal,
+  .cg-finding:focus-within .cg-reveal {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    .cg-reveal {
+      opacity: 1;
+    }
+  }
+</style>

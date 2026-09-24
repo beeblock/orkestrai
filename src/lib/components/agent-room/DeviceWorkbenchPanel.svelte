@@ -12,6 +12,7 @@
     LoaderCircle,
     Maximize2,
     Minus,
+    MoreHorizontal,
     PackagePlus,
     PanelRightClose,
     PanelRightOpen,
@@ -30,6 +31,9 @@
   } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
+  import NodeEmptyState from './canvas/NodeEmptyState.svelte';
   import { Input } from '$lib/components/ui/input';
   import * as Select from '$lib/components/ui/select';
   import * as Tabs from '$lib/components/ui/tabs';
@@ -355,26 +359,36 @@
   });
 </script>
 
+{#snippet startAction()}
+  <Button size="sm" disabled={!selectedDevice?.available || busyCommand !== null} onclick={requestStart}>
+    {#if busyCommand === 'start'}<LoaderCircle size={13} class="animate-spin" aria-hidden="true" />{:else}<Play size={13} aria-hidden="true" />{/if}
+    {selectedDevice ? m['device.start_named']({ device: selectedDevice.name }) : m['device.start']()}
+  </Button>
+{/snippet}
+
+{#snippet setupAction()}
+  <Button size="sm" variant="outline" href={activeAvailability?.setupUrl ?? undefined} target="_blank" rel="noreferrer">
+    {m['device.open_setup']()}<ExternalLink size={12} aria-hidden="true" />
+  </Button>
+{/snippet}
+
 <section class="device-panel grid h-full min-h-0 grid-rows-[42px_minmax(0,1fr)] bg-[var(--app-canvas)] text-[var(--app-text)]" data-testid="device-panel">
-  <header class="flex min-w-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2">
-    <div class="flex h-7 shrink-0 items-center rounded-[5px] border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-0.5" aria-label={m['device.platform']()}>
-      <button
-        class={`grid size-6 place-items-center rounded-[3px] text-ui-xs font-semibold transition-colors ${selectedPlatform === 'ios' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
-        aria-pressed={selectedPlatform === 'ios'}
-        disabled={Boolean(session)}
-        onclick={() => (selectedPlatform = 'ios')}
-      >{m['device.platform_ios']()}</button>
-      <button
-        class={`grid h-6 min-w-8 place-items-center rounded-[3px] px-1 text-ui-xs font-semibold transition-colors ${selectedPlatform === 'android' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
-        aria-pressed={selectedPlatform === 'android'}
-        disabled={Boolean(session)}
-        onclick={() => (selectedPlatform = 'android')}
-      >{m['device.platform_android']()}</button>
-    </div>
+  <header class="flex min-w-0 items-center gap-1.5 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2">
+    <SegmentedControl
+      size="sm"
+      label={m['device.platform']()}
+      value={selectedPlatform}
+      onValueChange={(value) => (selectedPlatform = value)}
+      options={[
+        { value: 'ios', label: m['device.platform_ios'](), disabled: Boolean(session) },
+        { value: 'android', label: m['device.platform_android'](), disabled: Boolean(session) },
+      ]}
+      class="shrink-0"
+    />
 
     {#if !session}
       <Select.Root type="single" value={selectedDeviceId} onValueChange={(value: string) => (selectedDeviceId = value)} disabled={!activeAvailability?.available || !devices.length}>
-        <Select.Trigger size="sm" class="min-w-0 max-w-72 flex-1 border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs" aria-label={m['device.choose_device']()}>
+        <Select.Trigger size="sm" class="h-7 min-w-0 max-w-72 flex-1 text-xs" aria-label={m['device.choose_device']()}>
           {selectedDevice?.name ?? m['device.choose_device']()}
         </Select.Trigger>
         <Select.Content>
@@ -392,67 +406,59 @@
       </Select.Root>
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 shrink-0 rounded-[5px]" aria-label={m['device.refresh']()} disabled={loading || busyCommand !== null} onclick={() => void load()}><RefreshCw size={13} class={loading ? 'animate-spin' : ''} aria-hidden="true" /></Button>{/snippet}
+          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="shrink-0" aria-label={m['device.refresh']()} disabled={loading || busyCommand !== null} onclick={() => void load()}><RefreshCw size={14} class={loading ? 'animate-spin' : ''} aria-hidden="true" /></Button>{/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>{m['device.refresh']()}</Tooltip.Content>
       </Tooltip.Root>
-      <Button size="sm" class="h-7 gap-1.5 rounded-[5px]" disabled={!selectedDevice?.available || busyCommand !== null} onclick={requestStart}>
-        {#if busyCommand === 'start'}<LoaderCircle size={13} class="animate-spin" aria-hidden="true" />{:else}<Play size={13} aria-hidden="true" />{/if}
-        {m['device.start']()}
-      </Button>
+      <span class="flex-1"></span>
     {:else}
-      <div class="flex min-w-0 flex-1 items-center gap-2">
-        <span class="size-1.5 shrink-0 rounded-full bg-[var(--app-success)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--app-success)_15%,transparent)]"></span>
+      <div class="flex min-w-0 flex-1 items-center gap-2 pl-1">
+        <span class="size-1.5 shrink-0 rounded-full bg-[var(--app-success)] shadow-[0_0_0_3px_var(--app-success-soft)]" aria-hidden="true"></span>
         <span class="truncate text-xs font-medium">{session.deviceName}</span>
-        <span class="hidden truncate text-ui-xs text-[var(--app-text-muted)] sm:inline">{devices.find((device) => device.id === session.deviceId)?.runtime ?? session.platform}</span>
+        <span class="hidden truncate font-mono text-[10.5px] text-[var(--app-text-muted)] sm:inline">{devices.find((device) => device.id === session.deviceId)?.runtime ?? session.platform}</span>
       </div>
+      <!-- Navegacao do aparelho sempre a mao; gestos raros e recuperacao do stream no menu. -->
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.home']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'button', button: 'home' })}><House size={14} aria-hidden="true" /></Button>{/snippet}
+          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={m['device.home']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'button', button: 'home' })}><House size={14} aria-hidden="true" /></Button>{/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>{m['device.home']()}</Tooltip.Content>
       </Tooltip.Root>
       {#if session.platform === 'android'}
         <Tooltip.Root>
           <Tooltip.Trigger>
-            {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.back']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'button', button: 'back' })}><ArrowLeft size={14} aria-hidden="true" /></Button>{/snippet}
+            {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={m['device.back']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'button', button: 'back' })}><ArrowLeft size={14} aria-hidden="true" /></Button>{/snippet}
           </Tooltip.Trigger>
           <Tooltip.Content>{m['device.back']()}</Tooltip.Content>
         </Tooltip.Root>
         <Tooltip.Root>
           <Tooltip.Trigger>
-            {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.app_switcher']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'button', button: 'app-switcher' })}><PanelsTopLeft size={14} aria-hidden="true" /></Button>{/snippet}
+            {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={m['device.app_switcher']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'button', button: 'app-switcher' })}><PanelsTopLeft size={14} aria-hidden="true" /></Button>{/snippet}
           </Tooltip.Trigger>
           <Tooltip.Content>{m['device.app_switcher']()}</Tooltip.Content>
         </Tooltip.Root>
       {/if}
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.rotate']()} disabled={busyCommand !== null} onclick={rotate}><RotateCw size={14} aria-hidden="true" /></Button>{/snippet}
+          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={m['device.rotate']()} disabled={busyCommand !== null} onclick={rotate}><RotateCw size={14} aria-hidden="true" /></Button>{/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>{m['device.rotate']()}</Tooltip.Content>
       </Tooltip.Root>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" aria-label={m['device.more_controls']()} title={m['device.more_controls']()} disabled={busyCommand !== null}><MoreHorizontal size={14} aria-hidden="true" /></Button>{/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="min-w-48">
+          <DropdownMenu.Item onclick={() => void command({ command: 'pinch', centerX: 0.5, centerY: 0.5, startDistance: 0.42, endDistance: 0.18, durationMs: 260 })}><ZoomOut size={14} aria-hidden="true" />{m['device.pinch_in']()}</DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => void command({ command: 'pinch', centerX: 0.5, centerY: 0.5, startDistance: 0.18, endDistance: 0.42, durationMs: 260 })}><ZoomIn size={14} aria-hidden="true" />{m['device.pinch_out']()}</DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item onclick={restart}><RefreshCw size={14} class={busyCommand === 'start' || busyCommand === 'stop' ? 'animate-spin' : ''} aria-hidden="true" />{m['device.restart']()}</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+      <span class="mx-0.5 h-4 w-px shrink-0 bg-[var(--app-border)]" aria-hidden="true"></span>
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.pinch_in']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'pinch', centerX: 0.5, centerY: 0.5, startDistance: 0.42, endDistance: 0.18, durationMs: 260 })}><ZoomOut size={14} aria-hidden="true" /></Button>{/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>{m['device.pinch_in']()}</Tooltip.Content>
-      </Tooltip.Root>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.pinch_out']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'pinch', centerX: 0.5, centerY: 0.5, startDistance: 0.18, endDistance: 0.42, durationMs: 260 })}><ZoomIn size={14} aria-hidden="true" /></Button>{/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>{m['device.pinch_out']()}</Tooltip.Content>
-      </Tooltip.Root>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px]" aria-label={m['device.restart']()} disabled={busyCommand !== null} onclick={restart}><RefreshCw size={14} class={busyCommand === 'start' || busyCommand === 'stop' ? 'animate-spin' : ''} aria-hidden="true" /></Button>{/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>{m['device.restart']()}</Tooltip.Content>
-      </Tooltip.Root>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[5px] text-[var(--app-danger)]" aria-label={m['device.stop']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'stop' })}><Power size={14} aria-hidden="true" /></Button>{/snippet}
+          {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="text-[var(--app-danger)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['device.stop']()} disabled={busyCommand !== null} onclick={() => void command({ command: 'stop' })}><Power size={14} aria-hidden="true" /></Button>{/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>{m['device.stop']()}</Tooltip.Content>
       </Tooltip.Root>
@@ -460,7 +466,7 @@
 
     <Tooltip.Root>
       <Tooltip.Trigger>
-        {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 shrink-0 rounded-[5px]" aria-label={m['device.details']()} aria-pressed={detailsOpen} onclick={() => (detailsOpen = !detailsOpen)}>{#if detailsOpen}<PanelRightClose size={14} aria-hidden="true" />{:else}<PanelRightOpen size={14} aria-hidden="true" />{/if}</Button>{/snippet}
+        {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class={`shrink-0 ${detailsOpen ? 'bg-[var(--app-active)] text-[var(--app-text)]' : ''}`} aria-label={m['device.details']()} aria-pressed={detailsOpen} onclick={() => (detailsOpen = !detailsOpen)}>{#if detailsOpen}<PanelRightClose size={14} aria-hidden="true" />{:else}<PanelRightOpen size={14} aria-hidden="true" />{/if}</Button>{/snippet}
       </Tooltip.Trigger>
       <Tooltip.Content>{m['device.details']()}</Tooltip.Content>
     </Tooltip.Root>
@@ -469,18 +475,15 @@
   <div class={`device-layout relative grid min-h-0 min-w-0 ${detailsOpen ? 'grid-cols-[minmax(0,1fr)_minmax(260px,34%)]' : 'grid-cols-[minmax(0,1fr)]'}`}>
     <main bind:this={viewportElement} class="relative min-h-0 min-w-0 overflow-hidden bg-[var(--app-canvas)]">
       {#if loading}
-        <div class="flex h-full items-center justify-center gap-2 p-3 text-xs text-[var(--app-text-muted)]"><LoaderCircle size={15} class="animate-spin" />{m['device.status_checking']()}</div>
+        <div class="grid h-full place-items-center p-3"><span class="device-pill" role="status"><LoaderCircle size={13} class="animate-spin" aria-hidden="true" />{m['device.status_checking']()}</span></div>
       {:else if !session}
-        <div class="mx-auto flex h-full max-w-sm flex-col items-center justify-center p-3 text-center sm:p-5">
-          <div class="mx-auto grid size-12 place-items-center rounded-[8px] border border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text-muted)] shadow-sm"><Smartphone size={23} strokeWidth={1.5} /></div>
-          <h2 class="mt-4 text-sm font-semibold">{availabilityLabel()}</h2>
-          <p class="mt-1 text-xs leading-5 text-[var(--app-text-muted)]">{activeAvailability?.available ? m['device.select_prompt']() : m['device.setup_required']()}</p>
-          {#if activeAvailability?.setupUrl && !activeAvailability.available}
-            <a class="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[5px] border border-[var(--app-border)] bg-[var(--app-surface)] px-3 text-xs font-medium hover:bg-[var(--app-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]" href={activeAvailability.setupUrl} target="_blank" rel="noreferrer">
-              {m['device.open_setup']()}<ExternalLink size={12} aria-hidden="true" />
-            </a>
-          {/if}
-        </div>
+        <NodeEmptyState
+          icon={Smartphone}
+          tone={activeAvailability?.available ? 'neutral' : 'warning'}
+          title={availabilityLabel()}
+          description={activeAvailability?.available ? m['device.select_prompt']() : m['device.setup_required']()}
+          actions={activeAvailability?.available ? startAction : activeAvailability?.setupUrl ? setupAction : undefined}
+        />
       {:else}
         <div class="device-viewport-scroll absolute inset-0 overflow-auto overscroll-contain" data-testid="device-viewport-scroll">
           <div class="device-viewport-stage box-border flex min-h-full min-w-full p-3 pb-14">
@@ -519,89 +522,89 @@
           </div>
         </div>
 
-        <div class="absolute bottom-2 right-2 z-10 flex h-8 items-center rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface)] p-0.5 shadow-lg" data-testid="device-viewport-controls">
+        <div class="device-float absolute right-3 bottom-3 z-10 flex h-8 items-center gap-0.5 rounded-[10px] p-0.5" data-testid="device-viewport-controls">
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[4px]" aria-label={m['device.viewport_zoom_out']()} disabled={!streamWidth || viewportScale <= 0.25} onclick={() => zoomViewport(-1)}><Minus size={13} aria-hidden="true" /></Button>{/snippet}
+              {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-lg" aria-label={m['device.viewport_zoom_out']()} disabled={!streamWidth || viewportScale <= 0.25} onclick={() => zoomViewport(-1)}><Minus size={13} aria-hidden="true" /></Button>{/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content>{m['device.viewport_zoom_out']()}</Tooltip.Content>
           </Tooltip.Root>
-          <output class="w-11 select-none text-center font-mono text-ui-xs text-[var(--app-text-soft)]" aria-label={m['device.viewport_zoom_level']({ percent: viewportZoomLabel })}>{viewportZoomLabel}</output>
+          <output class="w-11 select-none text-center font-mono text-[11px] tabular-nums text-[var(--app-text-soft)]" aria-label={m['device.viewport_zoom_level']({ percent: viewportZoomLabel })}>{viewportZoomLabel}</output>
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-[4px]" aria-label={m['device.viewport_zoom_in']()} disabled={!streamWidth || viewportScale >= 2} onclick={() => zoomViewport(1)}><Plus size={13} aria-hidden="true" /></Button>{/snippet}
+              {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="size-7 rounded-lg" aria-label={m['device.viewport_zoom_in']()} disabled={!streamWidth || viewportScale >= 2} onclick={() => zoomViewport(1)}><Plus size={13} aria-hidden="true" /></Button>{/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content>{m['device.viewport_zoom_in']()}</Tooltip.Content>
           </Tooltip.Root>
-          <span class="mx-0.5 h-4 w-px bg-[var(--app-border)]"></span>
+          <span class="mx-0.5 h-4 w-px bg-[var(--app-border)]" aria-hidden="true"></span>
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class={`size-7 rounded-[4px] ${viewportMode === 'fit' ? 'bg-[var(--app-surface-raised)]' : ''}`} aria-label={m['device.viewport_fit']()} aria-pressed={viewportMode === 'fit'} disabled={!streamWidth} onclick={() => (viewportMode = 'fit')}><Maximize2 size={13} aria-hidden="true" /></Button>{/snippet}
+              {#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class={`size-7 rounded-lg ${viewportMode === 'fit' ? 'bg-[var(--app-active)] text-[var(--app-text)]' : ''}`} aria-label={m['device.viewport_fit']()} aria-pressed={viewportMode === 'fit'} disabled={!streamWidth} onclick={() => (viewportMode = 'fit')}><Maximize2 size={13} aria-hidden="true" /></Button>{/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content>{m['device.viewport_fit']()}</Tooltip.Content>
           </Tooltip.Root>
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({ props })}<Button {...props} variant="ghost" size="sm" class={`h-7 min-w-8 rounded-[4px] px-1.5 font-mono text-ui-xs ${viewportMode === 'custom' && customViewportScale === 1 ? 'bg-[var(--app-surface-raised)]' : ''}`} aria-label={m['device.viewport_actual']()} aria-pressed={viewportMode === 'custom' && customViewportScale === 1} disabled={!streamWidth} onclick={showActualSize}>1:1</Button>{/snippet}
+              {#snippet child({ props })}<Button {...props} variant="ghost" size="sm" class={`h-7 min-w-8 rounded-lg px-1.5 font-mono text-[11px] ${viewportMode === 'custom' && customViewportScale === 1 ? 'bg-[var(--app-active)] text-[var(--app-text)]' : ''}`} aria-label={m['device.viewport_actual']()} aria-pressed={viewportMode === 'custom' && customViewportScale === 1} disabled={!streamWidth} onclick={showActualSize}>1:1</Button>{/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content>{m['device.viewport_actual']()}</Tooltip.Content>
           </Tooltip.Root>
         </div>
 
         {#if busyCommand && !['logs', 'tree', 'screenshot'].includes(busyCommand)}
-          <div class="pointer-events-none absolute bottom-12 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-black/75 px-3 py-1.5 text-ui-xs font-medium text-white shadow-lg backdrop-blur-sm"><LoaderCircle size={11} class="animate-spin" />{m['device.sending']()}</div>
+          <div class="device-float device-pill pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2" role="status"><LoaderCircle size={12} class="animate-spin" aria-hidden="true" />{m['device.sending']()}</div>
         {/if}
       {/if}
     </main>
 
     {#if detailsOpen}
-      <aside class="device-details min-h-0 min-w-0 border-l border-[var(--app-border)] bg-[var(--app-surface)]" aria-label={m['device.details']()}>
-        <Tabs.Root value={detailTab} onValueChange={(value: string) => (detailTab = value)} class="grid h-full min-h-0 grid-rows-[38px_minmax(0,1fr)]">
-          <Tabs.List class="h-[38px] w-full justify-start overflow-x-auto rounded-none border-b border-[var(--app-border)] bg-transparent px-2">
-            <Tabs.Trigger value="logs" class="h-7 gap-1.5 px-2 text-ui-xs"><ScrollText size={12} />{m['device.logs']()}</Tabs.Trigger>
-            <Tabs.Trigger value="tree" class="h-7 gap-1.5 px-2 text-ui-xs"><ListTree size={12} />{m['device.tree']()}</Tabs.Trigger>
-            <Tabs.Trigger value="screenshots" class="h-7 gap-1.5 px-2 text-ui-xs"><Camera size={12} />{m['device.screenshots']()}</Tabs.Trigger>
-            <Tabs.Trigger value="permissions" class="h-7 gap-1.5 px-2 text-ui-xs"><ShieldCheck size={12} />{m['device.permissions']()}</Tabs.Trigger>
-          </Tabs.List>
+      <aside class="device-details min-h-0 min-w-0 bg-[var(--app-surface)]" aria-label={m['device.details']()}>
+        <Tabs.Root value={detailTab} onValueChange={(value: string) => (detailTab = value)} class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-0">
+          <div class="min-w-0 border-b border-[var(--app-border)] px-2 py-1.5"><Tabs.List class="h-8 w-full justify-start gap-0.5 overflow-x-auto rounded-lg bg-[var(--app-hover)] p-0.5">
+            <Tabs.Trigger value="logs" class="dv-tab" title={m['device.logs']()}><ScrollText aria-hidden="true" /><span class="dv-tab-label">{m['device.logs']()}</span></Tabs.Trigger>
+            <Tabs.Trigger value="tree" class="dv-tab" title={m['device.tree']()}><ListTree aria-hidden="true" /><span class="dv-tab-label">{m['device.tree']()}</span></Tabs.Trigger>
+            <Tabs.Trigger value="screenshots" class="dv-tab" title={m['device.screenshots']()}><Camera aria-hidden="true" /><span class="dv-tab-label">{m['device.screenshots']()}</span></Tabs.Trigger>
+            <Tabs.Trigger value="permissions" class="dv-tab" title={m['device.permissions']()}><ShieldCheck aria-hidden="true" /><span class="dv-tab-label">{m['device.permissions']()}</span></Tabs.Trigger>
+          </Tabs.List></div>
 
           <Tabs.Content value="logs" class="min-h-0 overflow-auto p-3">
-            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.logs']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'logs', minutes: 2 })}><RefreshCw size={11} class={busyCommand === 'logs' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
-            <pre class="min-h-36 whitespace-pre-wrap break-words rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-code-text)]">{logs || m['device.no_logs']()}</pre>
+            <div class="mb-3 flex items-center justify-between gap-2"><span class="section-label">{m['device.logs']()}</span><Button variant="outline" size="sm" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'logs', minutes: 2 })}><RefreshCw size={12} class={busyCommand === 'logs' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
+            <pre class="min-h-36 whitespace-pre-wrap break-words dv-pre">{logs || m['device.no_logs']()}</pre>
             <div class="mt-4 space-y-2 border-t border-[var(--app-border)] pt-3">
-              <label class="text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-type-text">{m['device.type_text']()}</label>
+              <label class="text-[12px] font-medium text-[var(--app-text-soft)]" for="device-type-text">{m['device.type_text']()}</label>
               <div class="flex gap-2"><Input id="device-type-text" bind:value={typeText} class="h-8 min-w-0 text-xs" onkeydown={(event: KeyboardEvent) => { if (event.key === 'Enter') void sendText(); }} /><Button size="sm" class="h-8 w-8 shrink-0 p-0" aria-label={m['device.send_text']()} disabled={!session || !typeText.trim() || busyCommand !== null} onclick={sendText}><Keyboard size={13} /></Button></div>
-              <label class="block pt-2 text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-install-path">{m['device.install_app']()}</label>
+              <label class="block pt-2 text-[12px] font-medium text-[var(--app-text-soft)]" for="device-install-path">{m['device.install_app']()}</label>
               <div class="flex gap-2"><Input id="device-install-path" bind:value={installPath} class="h-8 min-w-0 text-xs" placeholder={m['device.install_placeholder']()} /><Button size="sm" variant="outline" class="h-8 w-8 shrink-0 p-0" aria-label={m['device.install_app']()} disabled={!session || !installPath.trim() || busyCommand !== null} onclick={() => void command({ command: 'install', path: installPath.trim() })}><PackagePlus size={13} /></Button></div>
-              <label class="block pt-2 text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-bundle-id">{m['device.launch_app']()}</label>
+              <label class="block pt-2 text-[12px] font-medium text-[var(--app-text-soft)]" for="device-bundle-id">{m['device.launch_app']()}</label>
               <div class="flex gap-2"><Input id="device-bundle-id" bind:value={bundleId} class="h-8 min-w-0 text-xs" placeholder={m['device.launch_placeholder']()} /><Button size="sm" variant="outline" class="h-8 w-8 shrink-0 p-0" aria-label={m['device.launch_app']()} disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void command({ command: 'launch', bundleId: bundleId.trim() })}><Play size={13} /></Button></div>
             </div>
           </Tabs.Content>
 
           <Tabs.Content value="tree" class="min-h-0 overflow-auto p-3">
-            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.accessibility_tree']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'tree' })}><RefreshCw size={11} class={busyCommand === 'tree' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
-            <pre class="min-h-36 whitespace-pre-wrap break-all rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-code-text)]">{tree || m['device.no_tree']()}</pre>
+            <div class="mb-3 flex items-center justify-between gap-2"><span class="section-label">{m['device.accessibility_tree']()}</span><Button variant="outline" size="sm" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'tree' })}><RefreshCw size={12} class={busyCommand === 'tree' ? 'animate-spin' : ''} />{m['device.refresh']()}</Button></div>
+            <pre class="min-h-36 whitespace-pre-wrap break-all dv-pre">{tree || m['device.no_tree']()}</pre>
           </Tabs.Content>
 
           <Tabs.Content value="screenshots" class="min-h-0 overflow-auto p-3">
-            <div class="mb-3 flex items-center justify-between gap-2"><span class="text-xs font-medium">{m['device.screenshots']()}</span><Button variant="outline" size="sm" class="h-7 gap-1.5 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'screenshot' })}><Camera size={11} />{m['device.capture']()}</Button></div>
+            <div class="mb-3 flex items-center justify-between gap-2"><span class="section-label">{m['device.screenshots']()}</span><Button variant="outline" size="sm" disabled={!session || busyCommand !== null} onclick={() => void command({ command: 'screenshot' })}><Camera size={12} />{m['device.capture']()}</Button></div>
             {#if screenshotPath}
-              <img class="w-full rounded-[5px] border border-[var(--app-border)] bg-black object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(screenshotPath)}`} alt={m['device.latest_screenshot']()} />
-              <p class="mt-2 break-all font-mono text-ui-xs leading-4 text-[var(--app-text-muted)]">{screenshotPath}</p>
+              <img class="img-outline w-full rounded-lg bg-black object-contain" src={`/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(screenshotPath)}`} alt={m['device.latest_screenshot']()} />
+              <p class="mt-2 break-all font-mono text-[10.5px] leading-relaxed text-[var(--app-text-muted)]">{screenshotPath}</p>
             {:else}
-              <div class="flex min-h-40 items-center justify-center rounded-[5px] border border-dashed border-[var(--app-border)] text-center text-xs text-[var(--app-text-muted)]">{m['device.no_screenshots']()}</div>
+              <div class="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-[var(--app-border)] px-4 text-center text-ui-md text-[var(--app-text-muted)]">{m['device.no_screenshots']()}</div>
             {/if}
           </Tabs.Content>
 
           <Tabs.Content value="permissions" class="min-h-0 overflow-auto p-3">
             <div class="space-y-3">
               <div>
-                <label class="text-ui-xs font-medium text-[var(--app-text-soft)]" for="device-permission-bundle">{session?.platform === 'android' ? m['device.package_id']() : m['device.bundle_id']()}</label>
+                <label class="text-[12px] font-medium text-[var(--app-text-soft)]" for="device-permission-bundle">{session?.platform === 'android' ? m['device.package_id']() : m['device.bundle_id']()}</label>
                 <Input id="device-permission-bundle" bind:value={bundleId} class="mt-1 h-8 text-xs" placeholder={m['device.launch_placeholder']()} />
               </div>
               <div>
-                <span class="text-ui-xs font-medium text-[var(--app-text-soft)]">{m['device.permission']()}</span>
+                <span class="text-[12px] font-medium text-[var(--app-text-soft)]">{m['device.permission']()}</span>
                 <Select.Root type="single" value={selectedPermission} onValueChange={(value: string) => (selectedPermission = value as DevicePermission)}>
-                  <Select.Trigger size="sm" class="mt-1 h-8 w-full border-[var(--app-border)] bg-[var(--app-surface-subtle)] text-xs">
+                  <Select.Trigger size="sm" class="mt-1 h-8 w-full text-xs">
                     {permissionOptions.find((option) => option.value === selectedPermission)?.label ?? selectedPermission}
                   </Select.Trigger>
                   <Select.Content>
@@ -612,12 +615,12 @@
                 </Select.Root>
               </div>
               <div class="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || busyCommand !== null} onclick={() => void permissionCommand('list')}>{m['device.permission_list']()}</Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('grant')}>{m['device.permission_grant']()}</Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('revoke')}>{m['device.permission_revoke']()}</Button>
-                <Button variant="outline" size="sm" class="h-8 rounded-[5px] text-ui-xs" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('reset')}>{m['device.permission_reset']()}</Button>
+                <Button variant="outline" size="sm" class="h-8" disabled={!session || busyCommand !== null} onclick={() => void permissionCommand('list')}>{m['device.permission_list']()}</Button>
+                <Button variant="outline" size="sm" class="h-8" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('grant')}>{m['device.permission_grant']()}</Button>
+                <Button variant="outline" size="sm" class="h-8" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('revoke')}>{m['device.permission_revoke']()}</Button>
+                <Button variant="outline" size="sm" class="h-8" disabled={!session || !bundleId.trim() || busyCommand !== null} onclick={() => void permissionCommand('reset')}>{m['device.permission_reset']()}</Button>
               </div>
-              <pre class="min-h-36 whitespace-pre-wrap break-words rounded-[5px] border border-[var(--app-border)] bg-[var(--app-code-bg)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-code-text)]">{permissions || m['device.no_permissions']()}</pre>
+              <pre class="min-h-36 whitespace-pre-wrap break-words dv-pre">{permissions || m['device.no_permissions']()}</pre>
             </div>
           </Tabs.Content>
         </Tabs.Root>
@@ -647,9 +650,97 @@
     container: device-panel / inline-size;
   }
 
+  /* Controles flutuantes sobre o stream: superficie elevada por sombra. */
+  .device-float {
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-panel);
+  }
+
+  .device-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .device-float.device-pill {
+    background: var(--app-surface-raised);
+    color: var(--app-text);
+  }
+
+  .device-panel :global(.dv-pre) {
+    min-height: 9rem;
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--app-code-bg);
+    color: var(--app-code-text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    box-shadow: inset 0 0 0 1px var(--app-border);
+  }
+
+  .device-panel :global(.dv-tab) {
+    flex: none;
+    gap: 6px;
+    height: 28px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: none;
+    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
+  }
+
+  .device-panel :global(.dv-tab:hover) {
+    color: var(--app-text);
+  }
+
+  .device-panel :global(.dv-tab[data-state='active']) {
+    background: var(--app-surface-raised);
+    color: var(--app-text);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .device-panel :global(.dv-tab svg) {
+    width: 13px;
+    height: 13px;
+  }
+
+  .device-panel :global(.dv-tab:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .device-details {
+    box-shadow: inset 1px 0 0 var(--app-border);
+  }
+
   @container device-panel (max-width: 720px) {
     .device-layout {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* Painel sobreposto e estreito: abas inativas so com icone (nome acessivel mantido). */
+    .device-details :global(.dv-tab[data-state='inactive'] .dv-tab-label) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
 
     .device-details {
@@ -657,7 +748,7 @@
       inset: 0 0 0 auto;
       z-index: 20;
       width: min(320px, calc(100% - 36px));
-      box-shadow: -16px 0 36px rgb(0 0 0 / 20%);
+      box-shadow: var(--app-shadow-panel);
     }
   }
 </style>

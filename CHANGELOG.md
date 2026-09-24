@@ -33,6 +33,7 @@ pt-BR, English, and Spanish translations.
 - Give shapes a floating toolbar that frees their resize handles, and give groups a dashed frame, a raised label and keyboard rename with Enter or F2.
 - Rework the automation nodes: set loop rounds with a slider and file writing with a switch next to a clear Run button, reorder flow steps by dragging or with the arrow keys, adjust the usage threshold with a slider and the window with a segmented control, and read usage as meters with reset times.
 - Calm the API client: theme colors throughout, a request list whose actions appear on hover, empty states with an Add request action, segmented toggles, status chips with icons and drag-to-order requests in the runner.
+- Rework the code graph, Second Brain, document, device, computer and tool workshop views: a one-row code graph toolbar with Index as the single primary action, stats that appear once indexed, a slider for depth and token budget, source rows with kind icons and tags, document and device empty states that offer the next step, computer settings grouped into cards with rarely used sections folded, and tool status chips with readable executor names.
 
 ### Fixed
 
@@ -43,6 +44,7 @@ pt-BR, English, and Spanish translations.
 - Let the Git file list scroll instead of being cut off, stop showing editor confirmations in red and stop flashing "empty folder" before a file tree loads.
 - Keep compact interface text at its intended size when a component also sets a text color, instead of falling back to a larger default.
 - End truncated titles and descriptions with an ellipsis instead of wrapping them onto a second line.
+- Make the code graph's Index button clickable in its empty state and keep the device tools panel from being clipped in narrow nodes.
 - Show "no usage data reported" in a neutral tone instead of green, and make the empty API client's Add request button create a request at the top level.
 
 ## 0.35.0 - 2026-09-24
