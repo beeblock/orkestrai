@@ -34,6 +34,7 @@ pt-BR, English, and Spanish translations.
 - Mark the language in use as Current in the welcome flow and focus it, so the first option no longer looks selected.
 - Show "1 selected" instead of a plural label when a single node is selected.
 - Resolve surfaces and text in Computer, Integrations, Tool Workshop, Storyboard, Sequence and Knowledge views that referenced missing theme colors.
+- Remove the blue resize outline that covered the selection ring of a selected node.
 
 ## 0.35.0 - 2026-09-24
 

@@ -107,7 +107,7 @@
     {minWidth}
     {minHeight}
     onResizeEnd={(_event, params) => onResize?.(id, params)}
-    lineStyle="border-color: transparent"
+    lineClass="node-resize-line"
     handleStyle="width: 8px; height: 8px; border-radius: 3px; border: 1.5px solid var(--app-surface); background: var(--accent)"
   />
   <!-- Handle unico bidirecional (connectionMode Loose), estilo Maestri: sem
@@ -202,6 +202,12 @@
 
   .node-shell:hover {
     box-shadow: 0 0 0 1px var(--app-ring-hairline-strong), var(--app-shadow-card);
+  }
+
+  /* lineStyle da xyflow nao chega as linhas (so aos handles): sem esta regra
+     a borda azul padrao do redimensionador aparece sobre o anel de selecao. */
+  .node-shell :global(.svelte-flow__resize-control.line.node-resize-line) {
+    border-color: transparent;
   }
 
   .node-shell.selected {
