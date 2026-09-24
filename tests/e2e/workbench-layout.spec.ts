@@ -74,9 +74,11 @@ test.describe('Workbench layout and search', () => {
       const target = panes.nth(1);
       await expect(target).not.toContainText(droppedTitle);
 
-      // Arrastar a linha da árvore até um painel abre o item ali.
-      await page.locator('.wb-row').filter({ hasText: droppedTitle }).dragTo(target);
+      // Use a continuous pointer path so native dragover runs before release.
+      await page.locator('.wb-row').filter({ hasText: droppedTitle }).dragTo(target, { steps: 12 });
       await expect(target).toContainText(droppedTitle);
+      await page.reload();
+      await expect(page.locator('section[data-pane-id]').nth(1)).toContainText(droppedTitle);
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }
