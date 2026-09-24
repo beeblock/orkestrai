@@ -1,13 +1,12 @@
 <script lang="ts">
   import {
-    ChevronDown,
     ChevronRight,
     Circle,
     Copy,
     Eye,
     EyeOff,
+    FileText,
     Frame,
-    GripVertical,
     Group,
     Image,
     Layers3,
@@ -28,6 +27,7 @@
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as m from '$lib/paraglide/messages.js';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import type { DesignElement, DesignPage } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
   import { designLayerRows, rootDesignLayerIds } from './design-layer-tree.js';
 
@@ -195,33 +195,38 @@
 </script>
 
 <div class="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)]" data-testid="design-file-panel">
-  <section class="border-b border-[var(--app-border)]" aria-label={m['design.pages']()}>
-    <div class="flex h-8 items-center gap-2 px-2 text-ui-sm font-semibold text-[var(--app-text-soft)]">
-      <span class="min-w-0 flex-1">{m['design.pages']()}</span>
-      <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{pages.length}</span>
-      <Button variant="ghost" size="icon-sm" class="size-7" disabled={saving || pages.length >= 100} aria-label={m['design.add_page']()} onclick={() => void onCreatePage()}><Plus size={13} /></Button>
+  <section class="border-b border-[var(--app-border)] pb-1.5" aria-label={m['design.pages']()}>
+    <div class="flex h-9 items-center gap-2 pr-1.5 pl-3">
+      <span class="section-label min-w-0 flex-1">{m['design.pages']()}</span>
+      <span class="meta-mono">{pages.length}</span>
+      <Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-soft)] hover:text-[var(--app-text)]" disabled={saving || pages.length >= 100} aria-label={m['design.add_page']()} title={m['design.add_page']()} onclick={() => void onCreatePage()}><Plus size={14} /></Button>
     </div>
-    <div class="max-h-36 overflow-y-auto px-1 pb-1" role="list">
+    <!-- A linha inteira arrasta para reordenar (o alvo antigo era um grip de
+         12px); a ordem tambem segue no menu da pagina para quem usa teclado. -->
+    <div class="max-h-36 space-y-px overflow-y-auto px-1.5" role="list">
       {#each orderedPages as item, index (item.id)}
         <ContextMenu.Root>
           <ContextMenu.Trigger
-            class={`group/page relative flex h-8 min-w-0 items-center rounded px-1 ${item.id === activePageId ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)]'}`}
+            class={`group/page relative flex h-7 min-w-0 items-center gap-1.5 rounded-md pr-0.5 pl-2 transition-colors duration-150 ${item.id === activePageId ? 'bg-[var(--app-active)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]'} ${draggedPageId === item.id ? 'opacity-50' : ''}`}
             data-testid={`design-page-${item.id}`}
             role="listitem"
-            ondragover={(event) => { event.preventDefault(); event.stopPropagation(); updatePageDrop(event, item); }}
-            ondrop={(event) => { event.preventDefault(); event.stopPropagation(); void dropPage(item); }}
+            draggable={editingPageId !== item.id}
+            ondragstart={(event: DragEvent) => { draggedPageId = item.id; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }}
+            ondragend={() => { draggedPageId = null; pageDrop = null; }}
+            ondragover={(event: DragEvent) => { event.preventDefault(); event.stopPropagation(); updatePageDrop(event, item); }}
+            ondrop={(event: DragEvent) => { event.preventDefault(); event.stopPropagation(); void dropPage(item); }}
           >
             {#if pageDrop?.id === item.id}
               <span class={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-[var(--app-accent)] ${pageDrop.placement === 'before' ? 'top-0 -translate-y-1/2' : 'bottom-0 translate-y-1/2'}`}></span>
             {/if}
-            <button class="grid size-7 shrink-0 cursor-grab place-items-center text-[var(--app-text-muted)] opacity-40 group-hover/page:opacity-100" draggable="true" aria-label={m['design.reorder_page']()} onpointerdown={(event) => event.stopPropagation()} ondragstart={(event) => { draggedPageId = item.id; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }} ondragend={() => { draggedPageId = null; pageDrop = null; }}><GripVertical size={12} /></button>
+            <FileText size={13} class={`shrink-0 ${item.id === activePageId ? 'text-[var(--app-text-soft)]' : 'text-[var(--app-text-muted)]'}`} />
             {#if editingPageId === item.id}
-              <Input bind:ref={renameInput} data-testid="design-page-rename" class="h-7 min-w-0 flex-1 px-1.5 text-ui-sm" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
+              <Input bind:ref={renameInput} data-testid="design-page-rename" class="h-6 min-w-0 flex-1 px-1.5 text-ui-md md:text-ui-md" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event: KeyboardEvent) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
             {:else}
-              <button class="min-w-0 flex-1 truncate text-left text-ui-sm" aria-current={item.id === activePageId ? 'page' : undefined} onclick={() => void onActivatePage(item.id)} ondblclick={() => beginPageRename(item)}>{item.name}</button>
+              <button type="button" class={`min-w-0 flex-1 truncate text-left text-ui-md outline-none focus-visible:underline ${item.id === activePageId ? 'font-medium' : ''}`} aria-current={item.id === activePageId ? 'page' : undefined} title={item.name} onclick={() => void onActivatePage(item.id)} ondblclick={() => beginPageRename(item)}>{item.name}</button>
             {/if}
             <DropdownMenu.Root>
-              <DropdownMenu.Trigger class="grid size-7 shrink-0 place-items-center rounded text-[var(--app-text-muted)] opacity-0 hover:bg-[var(--app-border)] group-hover/page:opacity-100 focus:opacity-100" aria-label={m['design.page_actions']()}><MoreHorizontal size={13} /></DropdownMenu.Trigger>
+              <DropdownMenu.Trigger class="grid size-6 shrink-0 place-items-center rounded-md text-[var(--app-text-muted)] opacity-0 outline-none transition-[opacity,background-color,color] duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] group-hover/page:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--app-accent)] data-[state=open]:opacity-100" aria-label={m['design.page_actions']()}><MoreHorizontal size={14} /></DropdownMenu.Trigger>
               <DropdownMenu.Content align="start" class="w-48">
                 <DropdownMenu.Item onclick={() => beginPageRename(item)}>{m['design.rename']()}</DropdownMenu.Item>
                 <DropdownMenu.Item onclick={() => void onDuplicatePage(item)}><Copy />{m['design.duplicate']()}</DropdownMenu.Item>
@@ -245,52 +250,63 @@
 
   <div class="border-b border-[var(--app-border)] p-2">
     <div class="relative">
-      <Search class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-[var(--app-text-muted)]" />
-      <Input class="h-8 pl-7 text-ui-sm" bind:value={query} placeholder={m['design.search_layers']()} aria-label={m['design.search_layers']()} />
+      <Search class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[var(--app-text-muted)]" />
+      <Input class="h-7 pl-8 text-ui-md md:text-ui-md" bind:value={query} placeholder={m['design.search_layers']()} aria-label={m['design.search_layers']()} />
     </div>
   </div>
 
-  <section class="min-h-0 overflow-y-auto p-1" aria-label={m['design.layers']()} ondragover={(event) => { event.preventDefault(); if (event.target === event.currentTarget) layerDrop = { id: null, placement: 'inside' }; }} ondrop={(event) => { event.preventDefault(); if (event.target === event.currentTarget) void dropLayers(null, 'inside'); }}>
+  <section class="min-h-0 overflow-y-auto px-1.5 py-1" aria-label={m['design.layers']()} ondragover={(event) => { event.preventDefault(); if (event.target === event.currentTarget) layerDrop = { id: null, placement: 'inside' }; }} ondrop={(event) => { event.preventDefault(); if (event.target === event.currentTarget) void dropLayers(null, 'inside'); }}>
     {#if !rows.length}
-      <div class="grid min-h-24 place-items-center px-4 text-center text-ui-sm leading-5 text-[var(--app-text-muted)]">{query ? m['design.no_layers_found']() : m['design.no_layers']()}</div>
+      <NodeEmptyState compact icon={query ? Search : Layers3} title={query ? m['design.no_layers_found']() : m['design.no_layers']()} description={query ? undefined : m['design.no_layers_hint']()} />
     {:else}
       <div role="tree" aria-multiselectable="true">
         {#each rows as row (row.element.id)}
           {@const element = row.element}
           {@const LayerIcon = iconFor(element)}
+          {@const isSelected = selectedIds.includes(element.id)}
           <ContextMenu.Root>
+            <!-- A linha inteira arrasta (antes so um grip de 12px). Visibilidade
+                 e bloqueio flutuam no hover sem roubar largura do nome; quando
+                 ativos ficam como indicador discreto. -->
             <ContextMenu.Trigger
-              class={`group/layer relative mb-0.5 flex h-8 min-w-0 items-center rounded pr-1 ${selectedIds.includes(element.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)]'}`}
-              style={`padding-left: ${4 + row.depth * 14}px`}
+              class={`group/layer relative flex h-7 min-w-0 items-center rounded-md pr-1 transition-colors duration-150 ${isSelected ? 'bg-[color-mix(in_srgb,var(--design-selection)_18%,transparent)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]'} ${draggedLayerIds.includes(element.id) ? 'opacity-50' : ''}`}
+              style={`padding-left: ${2 + row.depth * 14}px`}
               role="treeitem"
               aria-level={row.depth + 1}
-              aria-selected={selectedIds.includes(element.id)}
+              aria-selected={isSelected}
               aria-expanded={row.hasChildren ? row.expanded : undefined}
               data-testid={`design-layer-${element.id}`}
-              ondragover={(event) => { event.preventDefault(); event.stopPropagation(); updateLayerDrop(event, element); }}
-              ondrop={(event) => { event.preventDefault(); event.stopPropagation(); void dropLayers(element.id, element.type === 'frame' || element.type === 'group' ? 'inside' : 'before'); }}
+              draggable={editingLayerId !== element.id}
+              ondragstart={(event: DragEvent) => { draggedLayerIds = selectedIds.includes(element.id) ? rootDesignLayerIds(elements, selectedIds) : [element.id]; layerDrop = null; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }}
+              ondragend={finishLayerDrag}
+              ondragover={(event: DragEvent) => { event.preventDefault(); event.stopPropagation(); updateLayerDrop(event, element); }}
+              ondrop={(event: DragEvent) => { event.preventDefault(); event.stopPropagation(); void dropLayers(element.id, element.type === 'frame' || element.type === 'group' ? 'inside' : 'before'); }}
             >
               {#if layerDrop?.id === element.id}
                 {#if layerDrop.placement === 'inside'}
-                  <span class="pointer-events-none absolute inset-0 rounded ring-1 ring-inset ring-[var(--app-accent)]"></span>
+                  <span class="pointer-events-none absolute inset-0 rounded-md ring-2 ring-inset ring-[var(--app-accent)]"></span>
                 {:else}
                   <span class={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-[var(--app-accent)] ${layerDrop.placement === 'before' ? 'top-0 -translate-y-1/2' : 'bottom-0 translate-y-1/2'}`}></span>
                 {/if}
               {/if}
-              <button class="grid size-7 shrink-0 cursor-grab place-items-center text-[var(--app-text-muted)] opacity-0 group-hover/layer:opacity-70 focus:opacity-100" draggable="true" aria-label={m['design.reorder_layer']()} onpointerdown={(event) => event.stopPropagation()} ondragstart={(event) => { draggedLayerIds = selectedIds.includes(element.id) ? rootDesignLayerIds(elements, selectedIds) : [element.id]; layerDrop = null; if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'; }} ondragend={finishLayerDrag}><GripVertical size={12} /></button>
               {#if row.hasChildren}
-                <button class="grid size-6 shrink-0 place-items-center rounded hover:bg-[var(--app-border)]" aria-label={row.expanded ? m['design.collapse_layer']() : m['design.expand_layer']()} onclick={(event) => { event.stopPropagation(); toggleCollapse(element.id); }}>{#if row.expanded}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}</button>
+                <button type="button" class="grid size-5 shrink-0 place-items-center rounded text-[var(--app-text-muted)] transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-[var(--app-accent)]" aria-label={row.expanded ? m['design.collapse_layer']() : m['design.expand_layer']()} onclick={(event) => { event.stopPropagation(); toggleCollapse(element.id); }}><ChevronRight size={12} class={`transition-transform duration-150 ease-out ${row.expanded ? 'rotate-90' : ''}`} /></button>
               {:else}
-                <span class="size-6 shrink-0"></span>
+                <span class="size-5 shrink-0"></span>
               {/if}
-              <LayerIcon size={13} class={`shrink-0 ${element.componentId ? 'text-[var(--app-accent)]' : element.instanceRootId === element.id ? 'text-[var(--app-info)]' : 'text-[var(--app-text-muted)]'}`} />
+              <LayerIcon size={13} class={`ml-0.5 shrink-0 ${element.componentId ? 'text-[var(--app-accent)]' : element.instanceRootId === element.id ? 'text-[var(--app-info)]' : 'text-[var(--app-text-muted)]'}`} />
               {#if editingLayerId === element.id}
-                <Input bind:ref={renameInput} data-testid="design-layer-rename" class="h-7 min-w-0 flex-1 px-1.5 text-ui-sm" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
+                <Input bind:ref={renameInput} data-testid="design-layer-rename" class="ml-1 h-6 min-w-0 flex-1 px-1.5 text-ui-md md:text-ui-md" bind:value={renameDraft} onblur={() => void commitRename()} onkeydown={(event: KeyboardEvent) => { if (event.key === 'Enter') { event.preventDefault(); void commitRename(); } else if (event.key === 'Escape') { event.preventDefault(); cancelRename(); } }} />
               {:else}
-                <button class="min-w-0 flex-1 truncate px-1.5 text-left text-ui-sm" onclick={(event) => onSelect(element.id, event.shiftKey)} ondblclick={() => beginLayerRename(element)}>{element.name}</button>
+                <button type="button" class={`min-w-0 flex-1 truncate px-1.5 text-left text-ui-md outline-none focus-visible:underline ${element.visible ? '' : 'opacity-50'}`} title={element.name} onclick={(event) => onSelect(element.id, event.shiftKey)} ondblclick={() => beginLayerRename(element)}>{element.name}</button>
               {/if}
-              <button class="grid size-7 shrink-0 place-items-center rounded text-[var(--app-text-muted)] opacity-0 hover:bg-[var(--app-border)] hover:text-[var(--app-text)] group-hover/layer:opacity-100 focus:opacity-100" aria-label={element.visible ? m['design.hide']() : m['design.show']()} onclick={() => void onToggleVisibility(element)}>{#if element.visible}<Eye size={12} />{:else}<EyeOff size={12} />{/if}</button>
-              <button class={`grid size-7 shrink-0 place-items-center rounded hover:bg-[var(--app-border)] hover:text-[var(--app-text)] ${element.locked ? 'text-[var(--app-text-soft)] opacity-100' : 'text-[var(--app-text-muted)] opacity-0 group-hover/layer:opacity-100 focus:opacity-100'}`} aria-label={element.locked ? m['design.unlock']() : m['design.lock']()} onclick={() => void onToggleLock(element)}>{#if element.locked}<Lock size={12} />{:else}<Unlock size={12} />{/if}</button>
+              {#if element.locked || !element.visible}
+                <span class="flex shrink-0 items-center gap-1 pr-1 text-[var(--app-text-muted)] transition-opacity duration-150 group-hover/layer:opacity-0 group-focus-within/layer:opacity-0" aria-hidden="true">{#if !element.visible}<EyeOff size={12} />{/if}{#if element.locked}<Lock size={12} />{/if}</span>
+              {/if}
+              <div class="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-px rounded-md bg-[var(--app-surface-raised)] p-px opacity-0 shadow-[var(--app-shadow-border)] transition-opacity duration-150 group-hover/layer:opacity-100 group-focus-within/layer:opacity-100">
+                <button type="button" class="grid size-6 place-items-center rounded-[5px] text-[var(--app-text-muted)] transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-[var(--app-accent)]" aria-label={element.visible ? m['design.hide']() : m['design.show']()} title={element.visible ? m['design.hide']() : m['design.show']()} onclick={() => void onToggleVisibility(element)}>{#if element.visible}<Eye size={13} />{:else}<EyeOff size={13} />{/if}</button>
+                <button type="button" class={`grid size-6 place-items-center rounded-[5px] transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-[var(--app-accent)] ${element.locked ? 'text-[var(--app-text-soft)]' : 'text-[var(--app-text-muted)]'}`} aria-label={element.locked ? m['design.unlock']() : m['design.lock']()} title={element.locked ? m['design.unlock']() : m['design.lock']()} onclick={() => void onToggleLock(element)}>{#if element.locked}<Lock size={13} />{:else}<Unlock size={13} />{/if}</button>
+              </div>
             </ContextMenu.Trigger>
             <ContextMenu.Content class="w-52">
               <ContextMenu.Item onclick={() => { onSelect(element.id, false); onCopy(); }}><Copy />{m['design.copy_layers']()}</ContextMenu.Item>

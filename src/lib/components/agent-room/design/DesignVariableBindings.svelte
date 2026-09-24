@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Braces, ExternalLink } from '@lucide/svelte';
+  import { Braces, ChevronDown, ExternalLink } from '@lucide/svelte';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { Button } from '$lib/components/ui/button';
   import type {
     DesignBindableProperty,
@@ -8,6 +9,7 @@
     DesignVariableType,
   } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
   import * as m from '$lib/paraglide/messages.js';
+  import DesignInspectorSection from './DesignInspectorSection.svelte';
   import DesignVariableCombobox from './DesignVariableCombobox.svelte';
 
   let {
@@ -49,6 +51,12 @@
     return result;
   });
 
+  const boundCount = $derived(specs.filter((spec) => element.variableBindings[spec.property]).length);
+  // Frames chegam a 13 propriedades vinculaveis: mostramos as tres mais usadas
+  // (e qualquer uma ja vinculada) e o resto sob demanda.
+  let showAll = $state(false);
+  const visibleSpecs = $derived(showAll ? specs : specs.filter((spec, index) => index < 3 || element.variableBindings[spec.property]));
+
   function options(types: DesignVariableType[]) {
     return document.variables
       .filter((variable) => types.includes(variable.type))
@@ -60,32 +68,36 @@
   }
 </script>
 
-<section class="space-y-2 border-y border-[var(--app-border)] py-3">
-  <div class="flex items-center justify-between gap-2">
-    <div class="flex min-w-0 items-center gap-1.5">
-      <Braces size={13} class="shrink-0 text-[var(--app-accent)]" />
-      <h3 class="truncate font-semibold text-[var(--app-text-soft)]">{m['design.variable_bindings']()}</h3>
-    </div>
-    <Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.open_variables']()} title={m['design.open_variables']()} onclick={onOpenVariables}><ExternalLink size={11} /></Button>
-  </div>
+{#snippet openVariables()}
+  <Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-muted)] hover:text-[var(--app-text)]" aria-label={m['design.open_variables']()} title={m['design.open_variables']()} onclick={onOpenVariables}><ExternalLink size={13} /></Button>
+{/snippet}
+
+<!-- Aberta por padrao: o combobox de cada propriedade precisa estar no DOM
+     logo apos selecionar a camada. A contagem no cabecalho resume o estado. -->
+<DesignInspectorSection id="variable-bindings" title={m['design.variable_bindings']()} meta={boundCount ? String(boundCount) : undefined} actions={document.variables.length ? openVariables : undefined}>
   {#if !document.variables.length}
-    <button class="w-full border border-dashed border-[var(--app-border)] px-2 py-2 text-left text-ui-xs leading-4 text-[var(--app-text-muted)] hover:border-[var(--app-accent)] hover:text-[var(--app-text)]" onclick={onOpenVariables}>{m['design.bindings_empty']()}</button>
+    <NodeEmptyState compact icon={Braces} title={m['design.bindings_empty_title']()} description={m['design.bindings_empty']()}>
+      {#snippet actions()}<Button variant="outline" size="sm" onclick={onOpenVariables}><Braces size={13} />{m['design.open_variables']()}</Button>{/snippet}
+    </NodeEmptyState>
   {:else}
-    <div class="space-y-1.5">
-      {#each specs as spec (spec.property)}
-        <label class="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2">
-          <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={spec.label}>{spec.label}</span>
-          <DesignVariableCombobox
-            value={element.variableBindings[spec.property] ?? ''}
-            options={options(spec.types)}
-            emptyLabel={m['design.variable_unbound']()}
-            searchPlaceholder={m['design.search_variables']()}
-            noResultsLabel={m['design.no_variable_results']()}
-            ariaLabel={m['design.bind_property']({ property: spec.label })}
-            onValueChange={(value) => onBind(spec.property, value || null)}
-          />
-        </label>
-      {/each}
-    </div>
+    {#each visibleSpecs as spec (spec.property)}
+      <label class="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+        <span class="truncate text-ui-xs text-[var(--app-text-muted)]" title={spec.label}>{spec.label}</span>
+        <DesignVariableCombobox
+          value={element.variableBindings[spec.property] ?? ''}
+          options={options(spec.types)}
+          emptyLabel={m['design.variable_unbound']()}
+          searchPlaceholder={m['design.search_variables']()}
+          noResultsLabel={m['design.no_variable_results']()}
+          ariaLabel={m['design.bind_property']({ property: spec.label })}
+          onValueChange={(value) => onBind(spec.property, value || null)}
+        />
+      </label>
+    {/each}
+    {#if specs.length > visibleSpecs.length || showAll}
+      <button type="button" class="flex h-6 items-center gap-1 rounded-md px-1 text-ui-xs text-[var(--app-text-muted)] transition-colors duration-150 hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]" aria-expanded={showAll} onclick={() => (showAll = !showAll)}>
+        <ChevronDown size={12} class={`transition-transform duration-150 ease-out ${showAll ? '' : '-rotate-90'}`} />{showAll ? m['design.bindings_show_less']() : m['design.bindings_show_all']({ count: String(specs.length) })}
+      </button>
+    {/if}
   {/if}
-</section>
+</DesignInspectorSection>

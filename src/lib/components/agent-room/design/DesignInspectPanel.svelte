@@ -1,11 +1,11 @@
 <script lang="ts">
   import { toast } from '@beeblock/svelar/ui';
   import { Accessibility, Braces, Check, ClipboardCopy, Code2, Component, FileCode2, Link2, Shapes } from '@lucide/svelte';
-  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import type { DesignDocument, DesignElement, DesignOperation } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
   import { designInspectBindings, designInspectCss, designOwningComponent } from '$lib/modules/agent-room/domain/design-inspect.js';
   import * as m from '$lib/paraglide/messages.js';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import DesignCodebasePanel from './DesignCodebasePanel.svelte';
   import DesignFigmaPanel from './DesignFigmaPanel.svelte';
 
@@ -83,11 +83,25 @@
   }
 </script>
 
+{#snippet subTab(id: View, label: string, Icon: typeof Braces)}
+  <button type="button" class={`flex h-7 min-w-0 flex-auto items-center justify-center gap-1.5 rounded-md px-2 text-ui-sm font-medium transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)] ${view === id ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-[var(--app-shadow-border)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === id} onclick={() => (view = id)}><Icon size={13} class="shrink-0" /><span class="truncate">{label}</span></button>
+{/snippet}
+
+{#snippet sectionTitle(label: string, Icon: typeof Braces)}
+  <div class="flex items-center gap-1.5 text-[var(--app-text-muted)]"><Icon size={13} class="shrink-0" /><span class="section-label">{label}</span></div>
+{/snippet}
+
+{#snippet emptyNote(text: string)}
+  <p class="text-ui-sm leading-5 text-[var(--app-text-muted)] [text-wrap:pretty]">{text}</p>
+{/snippet}
+
 <div class="flex h-full min-h-0 flex-col text-ui-sm" data-testid="design-inspect-panel">
-  <div class="grid grid-cols-3 gap-0.5 border-b border-[var(--app-border)] p-1">
-    <button class={`flex h-7 items-center justify-center gap-1 rounded text-ui-xs font-medium ${view === 'inspect' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === 'inspect'} onclick={() => (view = 'inspect')}><Braces size={11} />{m['design.inspect']()}</button>
-    <button class={`flex h-7 items-center justify-center gap-1 rounded text-ui-xs font-medium ${view === 'code' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === 'code'} onclick={() => (view = 'code')}><Code2 size={11} />{m['design.code']()}</button>
-    <button class={`flex h-7 items-center justify-center gap-1 rounded text-ui-xs font-medium ${view === 'figma' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === 'figma'} onclick={() => (view = 'figma')}><Shapes size={11} />{m['design.figma']()}</button>
+  <div class="border-b border-[var(--app-border)] p-2">
+    <div class="flex gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+      {@render subTab('inspect', m['design.inspect'](), Braces)}
+      {@render subTab('code', m['design.code'](), Code2)}
+      {@render subTab('figma', m['design.figma'](), Shapes)}
+    </div>
   </div>
 
   {#if view === 'code'}
@@ -97,49 +111,47 @@
   {:else}
     <div class="min-h-0 flex-1 overflow-y-auto">
       {#if selected}
-        <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0"><p class="truncate font-semibold text-[var(--app-text)]">{selected.name}</p><p class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]">{elementTypeLabel(selected)} · {Math.round(selected.width)} × {Math.round(selected.height)}</p></div>
-            <Badge variant="outline" class="shrink-0 text-ui-xs">{selected.id.slice(-6)}</Badge>
-          </div>
+        <section class="flex items-center gap-2.5 border-b border-[var(--app-border)] px-3 py-2.5">
+          <div class="min-w-0 flex-1"><p class="truncate text-ui-md font-semibold text-[var(--app-text)]" title={selected.name}>{selected.name}</p><p class="mt-0.5 text-ui-xs tabular-nums text-[var(--app-text-muted)]">{elementTypeLabel(selected)} · {Math.round(selected.width)} × {Math.round(selected.height)}</p></div>
+          <span class="meta-mono shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5" title={selected.id}>{selected.id.slice(-6)}</span>
         </section>
 
         <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Accessibility size={12} />{m['design.accessibility']()}</div>
-          <div class="grid grid-cols-[72px_minmax(0,1fr)] gap-x-2 gap-y-1 text-ui-xs"><span class="text-[var(--app-text-muted)]">{m['design.accessibility_role']()}</span><span class="truncate text-[var(--app-text-soft)]">{accessibilityRoleLabel(selected)}</span><span class="text-[var(--app-text-muted)]">{m['design.accessibility_label']()}</span><span class="break-words text-[var(--app-text-soft)]">{selected.decorative ? m['design.decorative']() : selected.accessibilityLabel || m['design.inspect_not_set']()}</span></div>
+          {@render sectionTitle(m['design.accessibility'](), Accessibility)}
+          <dl class="grid grid-cols-[84px_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-ui-sm"><dt class="text-ui-xs leading-5 text-[var(--app-text-muted)]">{m['design.accessibility_role']()}</dt><dd class="truncate text-[var(--app-text-soft)]">{accessibilityRoleLabel(selected)}</dd><dt class="text-ui-xs leading-5 text-[var(--app-text-muted)]">{m['design.accessibility_label']()}</dt><dd class="break-words text-[var(--app-text-soft)]">{selected.decorative ? m['design.decorative']() : selected.accessibilityLabel || m['design.inspect_not_set']()}</dd></dl>
         </section>
 
         <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Braces size={12} />{m['design.inspect_bindings']()}</div>
+          {@render sectionTitle(m['design.inspect_bindings'](), Braces)}
           {#if bindings.length}
-            <div class="space-y-1">{#each bindings as binding (binding.property)}<div class="grid grid-cols-[72px_minmax(0,1fr)] gap-2 rounded bg-[var(--app-surface-subtle)] px-2 py-1.5"><span class="truncate text-ui-xs text-[var(--app-text-muted)]">{binding.property}</span><span class="min-w-0"><span class="block truncate text-ui-xs text-[var(--app-text)]">{binding.variableName}</span><span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{binding.resolvedValue}</span></span></div>{/each}</div>
-          {:else}<p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.inspect_bindings_empty']()}</p>{/if}
+            <div class="space-y-1">{#each bindings as binding (binding.property)}<div class="grid grid-cols-[84px_minmax(0,1fr)] gap-2 rounded-md bg-[var(--app-hover)] px-2 py-1.5"><span class="truncate font-mono text-ui-xs text-[var(--app-text-muted)]" title={binding.property}>{binding.property}</span><span class="min-w-0"><span class="block truncate text-ui-sm text-[var(--app-text)]">{binding.variableName}</span><span class="block truncate font-mono text-ui-xs text-[var(--app-text-muted)]">{binding.resolvedValue}</span></span></div>{/each}</div>
+          {:else}{@render emptyNote(m['design.inspect_bindings_empty']())}{/if}
         </section>
 
         <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Component size={12} />{m['design.inspect_component_contract']()}</div>
+          {@render sectionTitle(m['design.inspect_component_contract'](), Component)}
           {#if activeComponent}
-            <p class="font-medium text-[var(--app-text)]">{activeComponent.name}</p>
-            {#if activeComponent.codeConnect}<div class="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-2"><p class="flex items-center gap-1 text-ui-xs font-medium"><Link2 size={10} />{m['design.code_connect']()}</p><p class="mt-1 break-all text-ui-xs text-[var(--app-text-muted)]">{activeComponent.codeConnect.path} · {activeComponent.codeConnect.exportName}</p></div>{:else}<p class="text-ui-xs text-[var(--app-text-muted)]">{m['design.inspect_code_connect_empty']()}</p>{/if}
-          {:else}<p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.inspect_component_empty']()}</p>{/if}
+            <p class="text-ui-md font-medium text-[var(--app-text)]">{activeComponent.name}</p>
+            {#if activeComponent.codeConnect}<div class="rounded-md bg-[var(--app-hover)] p-2"><p class="flex items-center gap-1 text-ui-xs font-medium text-[var(--app-text-soft)]"><Link2 size={11} />{m['design.code_connect']()}</p><p class="mt-1 break-all font-mono text-ui-xs text-[var(--app-text-muted)]">{activeComponent.codeConnect.path} · {activeComponent.codeConnect.exportName}</p></div>{:else}{@render emptyNote(m['design.inspect_code_connect_empty']())}{/if}
+          {:else}{@render emptyNote(m['design.inspect_component_empty']())}{/if}
         </section>
 
         <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Shapes size={12} />{m['design.inspect_figma_origin']()}</div>
-          {#if selected.figmaSource || activeComponent?.figmaSource}<div class="rounded border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-2"><p class="truncate text-ui-xs text-[var(--app-text)]">{figmaLink?.fileName ?? m['design.figma_official']()}</p><p class="mt-1 break-all text-ui-xs text-[var(--app-text-muted)]">{selected.figmaSource?.nodeId ?? activeComponent?.figmaSource?.nodeId}</p></div>{:else}<p class="text-ui-xs text-[var(--app-text-muted)]">{m['design.inspect_figma_empty']()}</p>{/if}
+          {@render sectionTitle(m['design.inspect_figma_origin'](), Shapes)}
+          {#if selected.figmaSource || activeComponent?.figmaSource}<div class="rounded-md bg-[var(--app-hover)] p-2"><p class="truncate text-ui-sm text-[var(--app-text)]">{figmaLink?.fileName ?? m['design.figma_official']()}</p><p class="mt-1 break-all font-mono text-ui-xs text-[var(--app-text-muted)]">{selected.figmaSource?.nodeId ?? activeComponent?.figmaSource?.nodeId}</p></div>{:else}{@render emptyNote(m['design.inspect_figma_empty']())}{/if}
         </section>
 
         <section class="space-y-2 border-b border-[var(--app-border)] p-3">
-          <div class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><FileCode2 size={12} />{m['design.inspect_artifacts']()}</div>
-          {#if artifacts.length}<div class="space-y-1">{#each artifacts as artifact (artifact.id)}<div class="rounded border border-[var(--app-border)] px-2 py-1.5"><p class="truncate text-ui-xs text-[var(--app-text)]">{artifact.name}</p><p class="truncate text-ui-xs text-[var(--app-text-muted)]">{artifact.path} · {artifact.framework}</p></div>{/each}</div>{:else}<p class="text-ui-xs text-[var(--app-text-muted)]">{m['design.inspect_artifacts_empty']()}</p>{/if}
+          {@render sectionTitle(m['design.inspect_artifacts'](), FileCode2)}
+          {#if artifacts.length}<div class="space-y-1">{#each artifacts as artifact (artifact.id)}<div class="rounded-md bg-[var(--app-hover)] px-2 py-1.5"><p class="truncate text-ui-sm text-[var(--app-text)]">{artifact.name}</p><p class="truncate font-mono text-ui-xs text-[var(--app-text-muted)]" title={artifact.path}>{artifact.path} · {artifact.framework}</p></div>{/each}</div>{:else}{@render emptyNote(m['design.inspect_artifacts_empty']())}{/if}
         </section>
 
         <section class="space-y-2 p-3">
-          <div class="flex items-center justify-between gap-2"><div class="flex items-center gap-1.5 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]"><Code2 size={12} />{m['design.css']()}</div><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.inspect_copy_css']()} title={m['design.inspect_copy_css']()} onclick={() => void copyCss()}>{#if copied}<Check size={11} />{:else}<ClipboardCopy size={11} />{/if}</Button></div>
-          <pre class="max-h-64 overflow-auto rounded border border-[var(--app-border)] bg-[var(--app-canvas)] p-2 font-mono text-ui-xs leading-4 text-[var(--app-text-soft)]"><code>{css}</code></pre>
+          <div class="flex items-center justify-between gap-2">{@render sectionTitle(m['design.css'](), Code2)}<Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-soft)] hover:text-[var(--app-text)]" aria-label={m['design.inspect_copy_css']()} title={m['design.inspect_copy_css']()} onclick={() => void copyCss()}>{#if copied}<Check size={13} class="text-[var(--app-success)]" />{:else}<ClipboardCopy size={13} />{/if}</Button></div>
+          <pre class="max-h-64 overflow-auto rounded-lg bg-[var(--app-canvas)] p-2.5 font-mono text-ui-xs leading-5 text-[var(--app-text-soft)] shadow-[inset_0_0_0_1px_var(--app-border)]"><code>{css}</code></pre>
         </section>
       {:else}
-        <div class="m-3 border border-dashed border-[var(--app-border)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]"><Braces size={17} class="mb-2 text-[var(--app-accent)]" />{selectedIds.length > 1 ? m['design.inspect_multiple_selection']({ count: String(selectedIds.length) }) : m['design.inspect_no_selection']()}</div>
+        <div class="py-4"><NodeEmptyState compact icon={Braces} title={selectedIds.length > 1 ? m['design.multiple_selection']({ count: String(selectedIds.length) }) : m['design.no_selection_title']()} description={m['design.inspect_no_selection']()} /></div>
       {/if}
     </div>
   {/if}

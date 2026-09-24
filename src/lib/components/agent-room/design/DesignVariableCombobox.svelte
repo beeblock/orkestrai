@@ -40,7 +40,7 @@
 <Popover.Root bind:open>
   <Popover.Trigger bind:ref={trigger}>
     {#snippet child({ props })}
-      <Button {...props} variant="outline" size="sm" class="h-8 w-full min-w-0 justify-between gap-2 px-2 text-ui-xs" role="combobox" aria-label={ariaLabel} aria-expanded={open}>
+      <Button {...props} variant="outline" size="sm" class={`h-7 w-full min-w-0 justify-between gap-2 px-2 text-ui-md font-normal ${value === emptyValue ? 'text-[var(--app-text-muted)]' : 'text-[var(--app-text)]'}`} role="combobox" aria-label={ariaLabel} aria-expanded={open}>
         <span class="min-w-0 flex-1 truncate text-left">{currentLabel}</span>
         <ChevronsUpDown size={12} class="shrink-0 opacity-50" />
       </Button>

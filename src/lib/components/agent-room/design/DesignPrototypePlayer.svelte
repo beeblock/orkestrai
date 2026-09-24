@@ -277,23 +277,27 @@
 </script>
 
 <div bind:this={root} class="fixed inset-0 z-[180] grid grid-rows-[48px_minmax(0,1fr)] bg-[#101012] text-white" data-design-prototype-player>
-  <header class="flex min-w-0 items-center gap-1 border-b border-white/10 bg-[#17171a] px-2 shadow-lg">
-    <div class="flex min-w-0 items-center gap-2 px-1">
-      <span class="grid size-7 shrink-0 place-items-center rounded-md bg-white/10 text-[#a991ff]"><Play size={14} fill="currentColor" /></span>
-      <div class="hidden min-w-0 sm:block"><p class="truncate text-ui-sm font-semibold">{document.name}</p><p class="text-ui-xs text-white/45">{m['design.prototype_presenting']()}</p></div>
+  <!-- Barra de apresentacao: identidade e fluxo a esquerda, navegacao no
+       meio do grupo, opcoes de exibicao e saida a direita. Estados ligados
+       (hotspots, preencher) ficam com fundo, nao so com o icone trocado. -->
+  <header class="flex min-w-0 items-center gap-1 border-b border-white/10 bg-[#17171a] px-2">
+    <div class="flex min-w-0 items-center gap-2.5 px-1">
+      <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-white/10 text-[#a991ff]"><Play size={14} fill="currentColor" /></span>
+      <div class="hidden min-w-0 sm:block"><p class="truncate text-ui-md font-semibold">{document.name}</p><p class="text-ui-xs text-white/50">{m['design.prototype_presenting']()}</p></div>
     </div>
-    <span class="mx-1 h-5 w-px bg-white/10"></span>
-    <NativeSelect.Root class="h-8 w-[min(210px,32vw)] border-white/10 bg-white/5 text-ui-sm text-white" value={activeFlowId} onchange={(event: Event) => startFlow((event.currentTarget as HTMLSelectElement).value)} aria-label={m['design.prototype_flow']()}>
+    <span class="mx-1.5 h-5 w-px shrink-0 bg-white/10" aria-hidden="true"></span>
+    <NativeSelect.Root size="sm" class="w-[min(220px,32vw)] [&_select]:border-white/10 [&_select]:bg-white/5 [&_select]:text-ui-md [&_select]:text-white" value={activeFlowId} onchange={(event: Event) => startFlow((event.currentTarget as HTMLSelectElement).value)} aria-label={m['design.prototype_flow']()}>
       {#each flows as flow}<NativeSelect.Option value={flow.id}>{flow.name}</NativeSelect.Option>{/each}
     </NativeSelect.Root>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" disabled={!history.length && !overlays.length} aria-label={m['design.prototype_back']()} title={m['design.prototype_back']()} onclick={goBack}><ArrowLeft size={14} /></Button>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_restart']()} title={m['design.prototype_restart']()} onclick={() => activeFlow && startFlow(activeFlow.id)}><RefreshCw size={14} /></Button>
+    <Button variant="ghost" size="icon-sm" class="size-8 text-white/70 hover:bg-white/10 hover:text-white" disabled={!history.length && !overlays.length} aria-label={m['design.prototype_back']()} title={m['design.prototype_back']()} onclick={goBack}><ArrowLeft size={15} /></Button>
+    <Button variant="ghost" size="icon-sm" class="size-8 text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_restart']()} title={m['design.prototype_restart']()} onclick={() => activeFlow && startFlow(activeFlow.id)}><RefreshCw size={15} /></Button>
     <div class="flex-1"></div>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" aria-pressed={hotspotsVisible} aria-label={m['design.prototype_hotspots']()} title={m['design.prototype_hotspots']()} onclick={() => (hotspotsVisible = !hotspotsVisible)}>{#if hotspotsVisible}<Eye size={14} />{:else}<EyeOff size={14} />{/if}</Button>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" aria-pressed={fillStage} aria-label={m['design.prototype_fill']()} title={m['design.prototype_fill']()} onclick={() => (fillStage = !fillStage)}><Scaling size={14} /></Button>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_fullscreen']()} title={m['design.prototype_fullscreen']()} onclick={() => void toggleFullscreen()}><Maximize2 size={14} /></Button>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_share']()} title={m['design.prototype_share']()} onclick={() => activeFlowId && void onShare(activeFlowId)}><Share2 size={14} /></Button>
-    <Button variant="ghost" size="icon-sm" class="text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_close']()} title={m['design.prototype_close']()} onclick={onClose}><X size={16} /></Button>
+    <Button variant="ghost" size="icon-sm" class={`size-8 hover:bg-white/10 hover:text-white ${hotspotsVisible ? 'bg-white/12 text-white' : 'text-white/70'}`} aria-pressed={hotspotsVisible} aria-label={m['design.prototype_hotspots']()} title={m['design.prototype_hotspots']()} onclick={() => (hotspotsVisible = !hotspotsVisible)}>{#if hotspotsVisible}<Eye size={15} />{:else}<EyeOff size={15} />{/if}</Button>
+    <Button variant="ghost" size="icon-sm" class={`size-8 hover:bg-white/10 hover:text-white ${fillStage ? 'bg-white/12 text-white' : 'text-white/70'}`} aria-pressed={fillStage} aria-label={m['design.prototype_fill']()} title={m['design.prototype_fill']()} onclick={() => (fillStage = !fillStage)}><Scaling size={15} /></Button>
+    <Button variant="ghost" size="icon-sm" class="size-8 text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_fullscreen']()} title={m['design.prototype_fullscreen']()} onclick={() => void toggleFullscreen()}><Maximize2 size={15} /></Button>
+    <Button variant="ghost" size="icon-sm" class="size-8 text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_share']()} title={m['design.prototype_share']()} onclick={() => activeFlowId && void onShare(activeFlowId)}><Share2 size={15} /></Button>
+    <span class="mx-1.5 h-5 w-px shrink-0 bg-white/10" aria-hidden="true"></span>
+    <Button variant="ghost" size="icon-sm" class="size-8 text-white/70 hover:bg-white/10 hover:text-white" aria-label={m['design.prototype_close']()} title={m['design.prototype_close']()} onclick={onClose}><X size={16} /></Button>
   </header>
 
   <main class="relative grid min-h-0 place-items-center overflow-hidden p-5" style:background={document.presentation.background}>
@@ -373,7 +377,7 @@
         {/each}
       </div>
     {:else}
-      <div class="max-w-sm text-center"><Play size={30} class="mx-auto text-white/30" /><p class="mt-3 text-sm font-medium">{m['design.prototype_empty_title']()}</p><p class="mt-1 text-xs leading-5 text-white/50">{m['design.prototype_empty_body']()}</p></div>
+      <div class="max-w-sm text-center"><span class="mx-auto grid size-11 place-items-center rounded-xl bg-white/8 text-white/60"><Play size={18} /></span><p class="mt-3 text-ui-lg font-semibold [text-wrap:balance]">{m['design.prototype_empty_title']()}</p><p class="mt-1 text-ui-md leading-5 text-white/55 [text-wrap:pretty]">{m['design.prototype_empty_body']()}</p><Button variant="ghost" size="sm" class="mt-4 text-white/80 hover:bg-white/10 hover:text-white" onclick={onClose}><X size={14} />{m['design.prototype_close']()}</Button></div>
     {/if}
   </main>
 </div>

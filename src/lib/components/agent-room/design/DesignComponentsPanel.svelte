@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { BookOpen, Boxes, Component, CopyPlus, Diamond, Eye, Link2, Plus, Search, Trash2, Unlink2 } from '@lucide/svelte';
+  import { BookOpen, Boxes, Component, CopyPlus, Diamond, Eye, Link2, Minus, Plus, Search, Trash2, Unlink2 } from '@lucide/svelte';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Switch } from '$lib/components/ui/switch';
@@ -289,61 +290,82 @@
   }
 </script>
 
+{#snippet subTab(id: 'components' | 'libraries', label: string, Icon: typeof Diamond)}
+  <button type="button" class={`flex h-7 min-w-0 flex-auto items-center justify-center gap-1.5 rounded-md px-2 text-ui-sm font-medium transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)] ${view === id ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-[var(--app-shadow-border)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === id} onclick={() => (view = id)}><Icon size={13} class="shrink-0" /><span class="truncate">{label}</span></button>
+{/snippet}
+
 <div class="flex h-full min-h-0 flex-col text-ui-sm">
-  <div class="grid grid-cols-2 gap-0.5 border-b border-[var(--app-border)] p-1">
-    <button class={`flex h-7 items-center justify-center gap-1 rounded text-ui-xs font-medium ${view === 'components' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === 'components'} onclick={() => (view = 'components')}><Diamond size={11} />{m['design.components']()}</button>
-    <button class={`flex h-7 items-center justify-center gap-1 rounded text-ui-xs font-medium ${view === 'libraries' ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`} aria-pressed={view === 'libraries'} onclick={() => (view = 'libraries')}><BookOpen size={11} />{m['design.libraries']()}</button>
+  <div class="border-b border-[var(--app-border)] p-2">
+    <div class="flex gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5">
+      {@render subTab('components', m['design.components'](), Diamond)}
+      {@render subTab('libraries', m['design.libraries'](), BookOpen)}
+    </div>
   </div>
   {#if view === 'components'}
-  <div class="space-y-2 border-b border-[var(--app-border)] p-2">
-    <div class="flex h-6 items-center justify-between"><span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.components']()}</span><div class="flex gap-0.5"><Button variant="ghost" size="icon-sm" class="size-6" disabled={selectedElements.length < 2 || !selectedElements.every((element) => element.componentId)} aria-label={m['design.combine_variants']()} title={m['design.combine_variants']()} onclick={() => void combineVariants()}><Boxes size={12} /></Button><Button variant="ghost" size="icon-sm" class="size-6" disabled={!selectedElement || !['frame', 'group'].includes(selectedElement.type) || Boolean(selectedElement.componentId || selectedElement.instanceRootId)} aria-label={m['design.create_component']()} title={m['design.create_component']()} onclick={() => void createComponent()}><Plus size={12} /></Button></div></div>
-    <div class="relative"><Search size={12} class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[var(--app-text-muted)]" /><Input class="pl-7" placeholder={m['design.search_components']()} bind:value={search} /></div>
+  <div class="space-y-2 border-b border-[var(--app-border)] px-3 pt-1.5 pb-2.5">
+    <div class="flex h-7 items-center justify-between gap-2">
+      <span class="section-label">{m['design.components']()}</span>
+      <div class="flex gap-0.5">
+        <Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-soft)] hover:text-[var(--app-text)]" disabled={selectedElements.length < 2 || !selectedElements.every((element) => element.componentId)} aria-label={m['design.combine_variants']()} title={m['design.combine_variants']()} onclick={() => void combineVariants()}><Boxes size={14} /></Button>
+        <Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-soft)] hover:text-[var(--app-text)]" disabled={!selectedElement || !['frame', 'group'].includes(selectedElement.type) || Boolean(selectedElement.componentId || selectedElement.instanceRootId)} aria-label={m['design.create_component']()} title={m['design.create_component']()} onclick={() => void createComponent()}><Plus size={14} /></Button>
+      </div>
+    </div>
+    {#if document.components.length}
+      <div class="relative"><Search size={13} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[var(--app-text-muted)]" /><Input class="h-7 pl-8 text-ui-md md:text-ui-md" placeholder={m['design.search_components']()} aria-label={m['design.search_components']()} bind:value={search} /></div>
+    {/if}
   </div>
 
-  <div class="max-h-52 shrink-0 overflow-y-auto border-b border-[var(--app-border)] p-1">
-    {#if !components.length}<p class="p-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.components_empty']()}</p>{/if}
+  {#if !document.components.length}
+    <!-- Um unico estado vazio (antes a mesma frase aparecia na lista e no
+         detalhe) apontando o caminho: selecionar frame/grupo e usar o "+". -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
+      <NodeEmptyState icon={Component} title={m['design.components_empty_title']()} description={m['design.components_empty']()} />
+    </div>
+  {:else}
+  <div class="max-h-52 shrink-0 space-y-px overflow-y-auto border-b border-[var(--app-border)] p-1.5">
+    {#if !components.length}<p class="px-2 py-3 text-center text-ui-sm text-[var(--app-text-muted)]">{m['design.no_components_found']()}</p>{/if}
     {#each components as component (component.id)}
       {@const root = document.elements.find((element) => element.id === component.rootElementId)}
-      <div class={`flex h-8 items-center rounded pr-1 ${activeComponent?.id === component.id ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)]'}`}>
-        <button class="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left" disabled={saving} onclick={() => (selectedComponentId = component.id)}><Diamond size={12} class="shrink-0 text-[var(--app-accent)]" /><span class="min-w-0 flex-1 truncate">{component.name}</span>{#if component.setId}<span class="text-ui-xs text-[var(--app-text-muted)]">{Object.values(component.variantValues).join(' · ')}</span>{/if}</button>
-        <button class="grid size-6 shrink-0 place-items-center rounded text-[var(--app-text-muted)] hover:bg-[var(--app-border)] hover:text-[var(--app-text)]" aria-label={m['design.select_component_source']()} onclick={() => root && onSelectElements([root.id])}><Eye size={11} /></button>
+      <div class={`group/component flex h-7 items-center rounded-md pr-0.5 transition-colors duration-150 ${activeComponent?.id === component.id ? 'bg-[var(--app-active)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text)]'}`}>
+        <button type="button" class="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none focus-visible:underline" disabled={saving} onclick={() => (selectedComponentId = component.id)}><Diamond size={13} class="shrink-0 text-[var(--app-accent)]" /><span class="min-w-0 flex-1 truncate text-ui-md">{component.name}</span>{#if component.setId}<span class="max-w-20 shrink-0 truncate text-ui-xs text-[var(--app-text-muted)]">{Object.values(component.variantValues).join(' · ')}</span>{/if}</button>
+        <button type="button" class="grid size-6 shrink-0 place-items-center rounded-[5px] text-[var(--app-text-muted)] opacity-0 transition-[opacity,background-color,color] duration-150 group-hover/component:opacity-100 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--app-accent)]" aria-label={m['design.select_component_source']()} title={m['design.select_component_source']()} onclick={() => root && onSelectElements([root.id])}><Eye size={13} /></button>
       </div>
     {/each}
   </div>
 
-  <div class="min-h-0 flex-1 overflow-y-auto p-2">
+  <div class="min-h-0 flex-1 overflow-y-auto p-3">
     {#if selectedInstance && activeComponent}
       <div class="space-y-3">
-        <div class="flex items-center gap-2"><Link2 size={13} class="text-[var(--app-accent)]" /><div class="min-w-0"><p class="truncate font-semibold text-[var(--app-text)]">{selectedInstance.name}</p><p class="truncate text-ui-xs text-[var(--app-text-muted)]">{activeComponent.name}</p></div></div>
-        {#if selectedSet}<label class="space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{selectedSet.name}</span><NativeSelect.Root value={activeComponent.id} onchange={(event: Event) => void swapInstance(inputValue(event))}>{#each document.components.filter((component) => component.setId === selectedSet.id) as component}<NativeSelect.Option value={component.id}>{Object.values(component.variantValues).join(' · ') || component.name}</NativeSelect.Option>{/each}</NativeSelect.Root></label>{/if}
+        <div class="flex items-center gap-2.5"><span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Link2 size={14} /></span><div class="min-w-0"><p class="truncate text-ui-md font-semibold text-[var(--app-text)]">{selectedInstance.name}</p><p class="truncate text-ui-xs text-[var(--app-text-muted)]">{activeComponent.name}</p></div></div>
+        {#if selectedSet}<label class="block space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{selectedSet.name}</span><NativeSelect.Root size="sm" class="w-full [&_select]:text-ui-md" value={activeComponent.id} onchange={(event: Event) => void swapInstance(inputValue(event))}>{#each document.components.filter((component) => component.setId === selectedSet.id) as component}<NativeSelect.Option value={component.id}>{Object.values(component.variantValues).join(' · ') || component.name}</NativeSelect.Option>{/each}</NativeSelect.Root></label>{/if}
         {#each activeComponent.properties as property (property.id)}
           {@const value = selectedInstance.instanceProperties[property.id] ?? property.defaultValue}
           <label class="block space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{property.name}</span>
-            {#if property.type === 'text'}<Input value={String(value ?? '')} onchange={(event: Event) => void setInstanceProperty(property, inputValue(event))} />
-            {:else if property.type === 'boolean'}<div class="flex h-8 items-center justify-between border border-[var(--app-border)] px-2"><span>{value ? m['design.enabled']() : m['design.disabled']()}</span><Switch size="sm" checked={Boolean(value)} onCheckedChange={(checked: boolean) => void setInstanceProperty(property, checked)} /></div>
+            {#if property.type === 'text'}<Input class="h-7 text-ui-md md:text-ui-md" value={String(value ?? '')} onchange={(event: Event) => void setInstanceProperty(property, inputValue(event))} />
+            {:else if property.type === 'boolean'}<div class="flex h-7 items-center justify-between rounded-md bg-[var(--app-hover)] px-2"><span class="text-ui-sm">{value ? m['design.enabled']() : m['design.disabled']()}</span><Switch size="sm" checked={Boolean(value)} onCheckedChange={(checked: boolean) => void setInstanceProperty(property, checked)} /></div>
             {:else}<Button class="w-full" variant="outline" size="sm" onclick={() => void assignSlot(property)}>{m['design.assign_selected_to_slot']({ count: String(Math.max(0, selectedIds.length - 1)) })}</Button>{/if}
           </label>
         {/each}
         <Button class="w-full" variant="outline" size="sm" onclick={() => void detachInstance()}><Unlink2 size={13} />{m['design.detach_instance']()}</Button>
       </div>
     {:else if activeComponent}
-      <div class="space-y-3">
-        <div class="grid grid-cols-[minmax(0,1fr)_28px] gap-1.5"><Input value={activeComponent.name} aria-label={m['design.component_name']()} onchange={(event: Event) => void updateComponent({ name: inputValue(event) })} /><Button variant="ghost" size="icon-sm" disabled={instanceCount > 0} aria-label={instanceCount ? m['design.component_in_use']({ count: String(instanceCount) }) : m['design.delete_component']()} title={instanceCount ? m['design.component_in_use']({ count: String(instanceCount) }) : m['design.delete_component']()} onclick={() => void deleteComponent()}><Trash2 size={12} /></Button></div>
-        <Input value={activeComponent.description} placeholder={m['design.component_description']()} onchange={(event: Event) => void updateComponent({ description: inputValue(event) })} />
+      <div class="space-y-2">
+        <div class="grid grid-cols-[minmax(0,1fr)_28px] gap-1.5"><Input class="h-7 text-ui-md font-medium md:text-ui-md" value={activeComponent.name} aria-label={m['design.component_name']()} onchange={(event: Event) => void updateComponent({ name: inputValue(event) })} /><Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" disabled={instanceCount > 0} aria-label={instanceCount ? m['design.component_in_use']({ count: String(instanceCount) }) : m['design.delete_component']()} title={instanceCount ? m['design.component_in_use']({ count: String(instanceCount) }) : m['design.delete_component']()} onclick={() => void deleteComponent()}><Trash2 size={13} /></Button></div>
+        <Input class="h-7 text-ui-md md:text-ui-md" value={activeComponent.description} placeholder={m['design.component_description']()} aria-label={m['design.component_description']()} onchange={(event: Event) => void updateComponent({ description: inputValue(event) })} />
         <Button class="w-full" variant="secondary" size="sm" onclick={() => void createInstance()}><CopyPlus size={13} />{m['design.create_instance']()}</Button>
         {#if activeComponent.setId}
           {@const set = document.componentSets.find((candidate) => candidate.id === activeComponent.setId)}
-          {#if set}{#each set.propertyNames as propertyName}<label class="space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{propertyName}</span><Input value={activeComponent.variantValues[propertyName] ?? ''} onchange={(event: Event) => void updateComponent({ variantValues: { ...activeComponent.variantValues, [propertyName]: inputValue(event) } })} /></label>{/each}{/if}
+          {#if set}{#each set.propertyNames as propertyName}<label class="block space-y-1"><span class="text-ui-xs text-[var(--app-text-muted)]">{propertyName}</span><Input class="h-7 text-ui-md md:text-ui-md" value={activeComponent.variantValues[propertyName] ?? ''} onchange={(event: Event) => void updateComponent({ variantValues: { ...activeComponent.variantValues, [propertyName]: inputValue(event) } })} /></label>{/each}{/if}
         {/if}
-        <section class="space-y-1.5 border-t border-[var(--app-border)] pt-2"><div class="flex items-center justify-between"><span class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['design.component_properties']()}</span><DropdownMenu.Root><DropdownMenu.Trigger class="inline-grid size-6 place-items-center rounded hover:bg-[var(--app-surface-raised)]" disabled={!owningComponent || owningComponent.id !== activeComponent.id} aria-label={m['design.expose_property']()}><Plus size={12} /></DropdownMenu.Trigger><DropdownMenu.Content class="z-[140] min-w-44" align="end"><DropdownMenu.Item disabled={!canExpose('text')} onclick={() => void exposeProperty('text')}>{m['design.property_text']()}</DropdownMenu.Item><DropdownMenu.Item disabled={!canExpose('boolean')} onclick={() => void exposeProperty('boolean')}>{m['design.property_boolean']()}</DropdownMenu.Item><DropdownMenu.Item disabled={!canExpose('slot')} onclick={() => void exposeProperty('slot')}>{m['design.property_slot']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root></div>
-          {#if !activeComponent.properties.length}<p class="text-ui-xs leading-4 text-[var(--app-text-muted)]">{m['design.component_properties_empty']()}</p>{/if}
-          {#each activeComponent.properties as property (property.id)}<div class="grid grid-cols-[minmax(0,1fr)_72px_26px] items-center gap-1"><Input class="h-7" value={property.name} onchange={(event: Event) => void updateProperty(property, { name: inputValue(event) })} /><span class="truncate text-ui-xs uppercase text-[var(--app-text-muted)]">{propertyTypeLabel(property.type)}</span><Button variant="ghost" size="icon-sm" class="size-6" aria-label={m['design.delete']()} onclick={() => void deleteProperty(property)}><Trash2 size={10} /></Button></div>{/each}
+        <section class="space-y-1.5 border-t border-[var(--app-border)] pt-2.5">
+          <div class="flex h-7 items-center justify-between"><span class="section-label">{m['design.component_properties']()}</span><DropdownMenu.Root><DropdownMenu.Trigger class="grid size-7 place-items-center rounded-md text-[var(--app-text-soft)] outline-none transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-[var(--app-accent)] disabled:opacity-40 data-[state=open]:bg-[var(--app-active)]" disabled={!owningComponent || owningComponent.id !== activeComponent.id} aria-label={m['design.expose_property']()} title={m['design.expose_property']()}><Plus size={14} /></DropdownMenu.Trigger><DropdownMenu.Content class="z-[140] min-w-44" align="end"><DropdownMenu.Item disabled={!canExpose('text')} onclick={() => void exposeProperty('text')}>{m['design.property_text']()}</DropdownMenu.Item><DropdownMenu.Item disabled={!canExpose('boolean')} onclick={() => void exposeProperty('boolean')}>{m['design.property_boolean']()}</DropdownMenu.Item><DropdownMenu.Item disabled={!canExpose('slot')} onclick={() => void exposeProperty('slot')}>{m['design.property_slot']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root></div>
+          {#if !activeComponent.properties.length}<p class="text-ui-sm leading-5 text-[var(--app-text-muted)] [text-wrap:pretty]">{m['design.component_properties_empty']()}</p>{/if}
+          {#each activeComponent.properties as property (property.id)}<div class="group/property grid grid-cols-[minmax(0,1fr)_auto_28px] items-center gap-1.5"><Input class="h-7 text-ui-md md:text-ui-md" value={property.name} aria-label={property.name} onchange={(event: Event) => void updateProperty(property, { name: inputValue(event) })} /><span class="rounded-full bg-[var(--app-hover)] px-2 py-0.5 text-ui-xs text-[var(--app-text-soft)]">{propertyTypeLabel(property.type)}</span><Button variant="ghost" size="icon-sm" class="size-7 text-[var(--app-text-muted)] opacity-60 transition-[opacity,color] duration-150 hover:text-[var(--app-danger)] group-focus-within/property:opacity-100 group-hover/property:opacity-100" aria-label={m['design.delete']()} title={m['design.delete']()} onclick={() => void deleteProperty(property)}><Minus size={13} /></Button></div>{/each}
         </section>
       </div>
-    {:else}
-      <div class="border border-dashed border-[var(--app-border)] p-3 text-ui-xs leading-4 text-[var(--app-text-muted)]"><Component size={17} class="mb-2 text-[var(--app-accent)]" />{m['design.components_empty']()}</div>
     {/if}
   </div>
+  {/if}
   {:else if view === 'libraries'}
     <div class="min-h-0 flex-1"><DesignLibrariesPanel {document} {onApply} {onDocumentChange} /></div>
   {/if}
