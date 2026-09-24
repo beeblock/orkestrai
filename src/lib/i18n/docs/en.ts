@@ -4,7 +4,7 @@ import type { DocsCatalog } from './types.js';
 export const DOCS_EN: DocsCatalog = {
   quickstart: [
     'Create a workspace (+ button in the sidebar) pointing to your project folder.',
-    'Open Agents in the bottom bar, choose an available service, and drag a rectangle on the canvas — name it, optionally choose model/effort, and check Leader if it will command the team.',
+    'Open Agents in the bottom bar, choose an available service, and drag a rectangle on the canvas — name it, optionally choose model/effort, and check Leader if it will command the team. Notes, tasks, files and other tools can also be dragged from the bar straight to the spot on the canvas where you want the node.',
     'Draw more agents and connect them by dragging from one handle dot to the other.',
     'Open the Tasks board (+ Tasks), create cards and assign them — each task lands straight in the agent\'s terminal.',
     'Talk to any agent through its own terminal, or let the leader distribute everything on its own via the orkestrai CLI.',
