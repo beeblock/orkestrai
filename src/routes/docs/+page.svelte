@@ -112,6 +112,38 @@
   let query = $state('');
   let copiedSnippetId = $state<string | null>(null);
 
+  // Navegacao acompanha a secao visivel; casos de uso longos comecam
+  // recolhidos para a pagina nao virar uma parede de texto.
+  let activeAnchor = $state('comece');
+  let expandedUseCases = $state<string[]>([]);
+  const LONG_USE_CASE = 320;
+
+  function toggleUseCase(id: string) {
+    expandedUseCases = expandedUseCases.includes(id)
+      ? expandedUseCases.filter((item) => item !== id)
+      : [...expandedUseCases, id];
+  }
+
+  $effect(() => {
+    void filtered.length;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const ids = ['comece', 'casos-de-uso', ...filtered.map((section) => section.id), 'changelog'];
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) visible.add(entry.target.id);
+        else visible.delete(entry.target.id);
+      }
+      const first = ids.find((id) => visible.has(id));
+      if (first) activeAnchor = first;
+    }, { rootMargin: '-84px 0px -60% 0px' });
+    for (const id of ids) {
+      const node = document.getElementById(id);
+      if (node) observer.observe(node);
+    }
+    return () => observer.disconnect();
+  });
+
   const filtered = $derived.by(() => {
     const term = query.trim().toLowerCase();
     if (!term) return sections;
@@ -199,7 +231,7 @@
       <ArrowLeft size={15} aria-hidden="true" />
       {m['docs.back_canvas']()}
     </Button>
-    <h1 class="m-0 font-['Sora_Variable'] text-[21px] font-[650] text-balance">{m['docs.heading']()}</h1>
+    <h1 class="m-0 font-display text-[20px] font-semibold tracking-[-0.015em] text-balance">{m['docs.heading']()}</h1>
     <span class="flex-1"></span>
     <Button variant="outline" size="sm" onclick={rewatchOnboarding}>
       <PlayCircle size={15} aria-hidden="true" />
@@ -216,12 +248,12 @@
         <kbd class="search-kbd">⌘K</kbd>
       </label>
       <nav aria-label={m['docs.nav_aria']()}>
-        <a href="#comece" class="nav-link">{m['docs.quickstart_title']()}</a>
-        <a href="#casos-de-uso" class="nav-link">{m['docs.usecases_title']()}</a>
+        <a href="#comece" class="nav-link" aria-current={activeAnchor === 'comece' ? 'location' : undefined}>{m['docs.quickstart_title']()}</a>
+        <a href="#casos-de-uso" class="nav-link" aria-current={activeAnchor === 'casos-de-uso' ? 'location' : undefined}>{m['docs.usecases_title']()}</a>
         {#each filtered as section (section.id)}
-          <a href={`#${section.id}`} class="nav-link">{section.title}</a>
+          <a href={`#${section.id}`} class="nav-link" aria-current={activeAnchor === section.id ? 'location' : undefined}>{section.title}</a>
         {/each}
-        <a href="#changelog" class="nav-link">{m['docs.changelog_title']()}</a>
+        <a href="#changelog" class="nav-link" aria-current={activeAnchor === 'changelog' ? 'location' : undefined}>{m['docs.changelog_title']()}</a>
         {#if !filtered.length}
           <span class="nav-empty">{m['docs.nav_empty']({ query })}</span>
         {/if}
@@ -245,12 +277,19 @@
         <h2 class="usecases-title">{m['docs.usecases_title']()}</h2>
         <div class="usecases-grid">
           {#each useCases as useCase (useCase.id)}
+            {@const long = useCase.body.length > LONG_USE_CASE}
+            {@const open = expandedUseCases.includes(useCase.id)}
             <article class="doc-card usecase-card" id={`usecase-${useCase.id}`}>
               <header>
                 <span class="icon-chip"><useCase.icon size={15} aria-hidden="true" /></span>
                 <h3>{useCase.title}</h3>
               </header>
-              <p>{useCase.body}</p>
+              <p class:clamped={long && !open}>{useCase.body}</p>
+              {#if long}
+                <button type="button" class="read-more" aria-expanded={open} onclick={() => toggleUseCase(useCase.id)}>
+                  {open ? m['docs.read_less']() : m['docs.read_more']()}
+                </button>
+              {/if}
               <footer>
                 <div class="usecase-tags">
                   {#each useCase.tags as tag (tag)}
@@ -490,9 +529,15 @@
   }
 
   .nav-link:hover {
+    color: var(--copy);
+    background: var(--app-hover);
+  }
+
+  .nav-link[aria-current='location'] {
     border-left-color: var(--app-accent);
     color: var(--copy);
-    background: var(--surface-raised);
+    background: var(--app-hover);
+    font-weight: 500;
   }
 
   .nav-link:focus-visible {
@@ -549,7 +594,7 @@
 
   .doc-card h2 {
     flex: 1;
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
+    font-family: var(--font-display);
     font-size: 14.5px;
     font-weight: 600;
     letter-spacing: 0;
@@ -611,7 +656,7 @@
   }
 
   .usecases-title {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
+    font-family: var(--font-display);
     font-size: 15px;
     font-weight: 600;
     margin: 8px 2px 0;
@@ -633,7 +678,7 @@
 
   .usecase-card h3 {
     flex: 1;
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
+    font-family: var(--font-display);
     font-size: 13.5px;
     font-weight: 600;
     margin: 0;
@@ -643,10 +688,41 @@
 
   .usecase-card p {
     margin: 0;
-    font-size: 12.5px;
+    max-width: 68ch;
+    font-size: 13px;
     line-height: 1.65;
     color: var(--copy-soft);
     text-wrap: pretty;
+  }
+
+  .usecase-card p.clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 5;
+    overflow: hidden;
+  }
+
+  .read-more {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--app-accent);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .read-more:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .read-more:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
   }
 
   .usecase-card footer {
@@ -716,7 +792,7 @@
   .search-kbd {
     flex-shrink: 0;
     font-size: 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     color: var(--copy-muted);
     background: var(--surface-raised);
     border: 1px solid var(--line-strong);

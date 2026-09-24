@@ -4961,5 +4961,19 @@
   "settings.minimap_desc": "Shows the canvas overview in the bottom-right corner.",
   "settings.controls_desc": "Shows the zoom, fit and lock buttons on the canvas.",
   "settings.new_node_sizes": "New node size",
-  "settings.new_node_sizes_desc": "Width and height used when creating terminals and notes."
+  "settings.new_node_sizes_desc": "Width and height used when creating terminals and notes.",
+  "knowledge.empty_hint": "Import files or connect notes, tasks and documents on the canvas to feed your second brain.",
+  "knowledge.no_matches_hint": "Try other terms, another tag or all sources.",
+  "flow.empty_title": "Build the flow step by step",
+  "flow.drag_step": "Drag to reorder the step (or use the arrow keys)",
+  "flow.repeat_less": "Fewer repetitions",
+  "flow.repeat_more": "More repetitions",
+  "flow.history_title": "Recent runs",
+  "flow.steps_title": "Steps",
+  "docs.read_more": "Read more",
+  "docs.read_less": "Show less",
+  "sequence.empty_hint": "Pick a workspace video on the left and add it as the first clip.",
+  "sequence.drag_hint": "Drag clips to change the order",
+  "storyboard.empty_hint": "Plan the video scene by scene: direction, dialogue, framing and duration.",
+  "storyboard.drag_hint": "Drag scenes to change the order"
 }

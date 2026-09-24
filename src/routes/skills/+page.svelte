@@ -238,18 +238,18 @@
   <Tabs.Root
     value={tab}
     onValueChange={(value: string) => (tab = value === 'mcps' ? 'mcps' : 'skills')}
-    class="flex flex-col gap-3.5"
+    class="flex w-[min(920px,100%)] flex-col gap-3.5"
   >
-    <Tabs.List class="w-fit self-start gap-1 rounded-full border border-app-border bg-app-surface p-[3px]">
+    <Tabs.List class="w-fit self-start gap-0.5 rounded-lg bg-app-hover p-0.5">
       <Tabs.Trigger
         value="skills"
-        class="flex-none gap-1.5 rounded-full px-3.5 text-ui-md font-medium text-app-text-soft data-active:bg-app-accent-soft data-active:text-app-text dark:data-active:border-transparent dark:data-active:bg-app-accent-soft dark:data-active:text-app-text"
+        class="flex-none gap-1.5 rounded-md px-3.5 text-ui-md font-medium text-app-text-muted hover:text-app-text data-active:bg-app-surface-raised data-active:text-app-text data-active:shadow-border dark:data-active:border-transparent dark:data-active:bg-app-surface-raised dark:data-active:text-app-text [&[data-state=active]_svg]:text-app-accent"
       >
         <Blocks size={14} aria-hidden="true" /> {m['skills.tab_skills']()}
       </Tabs.Trigger>
       <Tabs.Trigger
         value="mcps"
-        class="flex-none gap-1.5 rounded-full px-3.5 text-ui-md font-medium text-app-text-soft data-active:bg-app-accent-soft data-active:text-app-text dark:data-active:border-transparent dark:data-active:bg-app-accent-soft dark:data-active:text-app-text"
+        class="flex-none gap-1.5 rounded-md px-3.5 text-ui-md font-medium text-app-text-muted hover:text-app-text data-active:bg-app-surface-raised data-active:text-app-text data-active:shadow-border dark:data-active:border-transparent dark:data-active:bg-app-surface-raised dark:data-active:text-app-text [&[data-state=active]_svg]:text-app-accent"
       >
         <McpIcon size={14} aria-hidden="true" /> {m['skills.tab_mcps']()}
       </Tabs.Trigger>
@@ -488,7 +488,7 @@
 <style>
   .skills-page {
     min-height: 100vh;
-    background: var(--app-canvas);
+    background: var(--app-page);
     color: var(--app-text);
     padding: 24px 24px 80px;
     display: flex;
@@ -499,7 +499,7 @@
   }
 
   .skills-page > * {
-    width: min(760px, 100%);
+    width: min(920px, 100%);
   }
 
   .page-header {
@@ -510,14 +510,14 @@
     align-items: center;
     gap: 12px;
     padding: 10px 0 14px;
-    background: linear-gradient(180deg, var(--app-canvas) 78%, transparent);
+    background: linear-gradient(180deg, var(--app-page) 78%, transparent);
   }
 
   .header-titles h1 {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
-    font-size: 19px;
+    font-family: var(--font-display);
+    font-size: 20px;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
     margin: 0;
     text-wrap: balance;
   }
@@ -549,15 +549,10 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    border: 1px solid var(--app-border);
     border-radius: 14px;
     background: var(--app-surface);
+    box-shadow: var(--app-shadow-border);
     padding: 18px 20px 20px;
-    transition: border-color 160ms ease;
-  }
-
-  .page-section:hover {
-    border-color: var(--app-border-strong);
   }
 
   .section-head {
@@ -579,7 +574,7 @@
   }
 
   .section-titles h2 {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
+    font-family: var(--font-display);
     font-size: 14.5px;
     font-weight: 600;
     letter-spacing: -0.005em;
@@ -603,14 +598,20 @@
     gap: 6px;
   }
 
+  /* Raio concentrico: secao 14px com 20px de respiro -> linhas 8px. */
   .item-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--app-border);
+    min-height: 48px;
+    padding: 8px 12px;
+    border-radius: 8px;
     background: var(--app-surface-subtle);
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .item-row:hover {
+    background: var(--app-hover);
   }
 
   .item-icon {
@@ -665,7 +666,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
   }
 
   .result-skeleton {

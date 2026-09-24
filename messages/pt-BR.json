@@ -4961,5 +4961,19 @@
   "settings.minimap_desc": "Mostra a visão geral do canvas no canto inferior direito.",
   "settings.controls_desc": "Mostra os botões de zoom, ajuste e bloqueio no canvas.",
   "settings.new_node_sizes": "Tamanho de novos nós",
-  "settings.new_node_sizes_desc": "Largura e altura usadas ao criar terminais e notas."
+  "settings.new_node_sizes_desc": "Largura e altura usadas ao criar terminais e notas.",
+  "knowledge.empty_hint": "Importe arquivos ou conecte notas, tarefas e documentos no canvas para alimentar o segundo cérebro.",
+  "knowledge.no_matches_hint": "Tente outros termos, outra etiqueta ou todas as fontes.",
+  "flow.empty_title": "Monte o fluxo passo a passo",
+  "flow.drag_step": "Arraste para reordenar o passo (ou use as setas do teclado)",
+  "flow.repeat_less": "Menos repetições",
+  "flow.repeat_more": "Mais repetições",
+  "flow.history_title": "Execuções recentes",
+  "flow.steps_title": "Passos",
+  "docs.read_more": "Ler mais",
+  "docs.read_less": "Mostrar menos",
+  "sequence.empty_hint": "Escolha um vídeo do workspace à esquerda e adicione-o como primeiro clipe.",
+  "sequence.drag_hint": "Arraste os clipes para mudar a ordem",
+  "storyboard.empty_hint": "Planeje o vídeo cena a cena: direção, diálogo, enquadramento e duração.",
+  "storyboard.drag_hint": "Arraste as cenas para mudar a ordem"
 }

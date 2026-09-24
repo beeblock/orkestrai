@@ -4961,5 +4961,19 @@
   "settings.minimap_desc": "Muestra la vista general del canvas en la esquina inferior derecha.",
   "settings.controls_desc": "Muestra los botones de zoom, ajuste y bloqueo en el canvas.",
   "settings.new_node_sizes": "Tamaño de nodos nuevos",
-  "settings.new_node_sizes_desc": "Ancho y alto usados al crear terminales y notas."
+  "settings.new_node_sizes_desc": "Ancho y alto usados al crear terminales y notas.",
+  "knowledge.empty_hint": "Importa archivos o conecta notas, tareas y documentos en el canvas para alimentar tu segundo cerebro.",
+  "knowledge.no_matches_hint": "Prueba otros términos, otra etiqueta o todas las fuentes.",
+  "flow.empty_title": "Arma el flujo paso a paso",
+  "flow.drag_step": "Arrastra para reordenar el paso (o usa las flechas del teclado)",
+  "flow.repeat_less": "Menos repeticiones",
+  "flow.repeat_more": "Más repeticiones",
+  "flow.history_title": "Ejecuciones recientes",
+  "flow.steps_title": "Pasos",
+  "docs.read_more": "Leer más",
+  "docs.read_less": "Mostrar menos",
+  "sequence.empty_hint": "Elige un video del workspace a la izquierda y agrégalo como primer clip.",
+  "sequence.drag_hint": "Arrastra los clips para cambiar el orden",
+  "storyboard.empty_hint": "Planifica el video escena por escena: dirección, diálogo, encuadre y duración.",
+  "storyboard.drag_hint": "Arrastra las escenas para cambiar el orden"
 }
