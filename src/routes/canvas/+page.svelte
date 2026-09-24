@@ -3368,7 +3368,7 @@
             <p>{workspaces.length ? m['canvas.empty_body_pick']() : m['canvas.empty_body_new']()}</p>
             <div class="empty-actions">
               <Button class="press h-9 gap-1.5 px-3.5" onclick={() => { initialPresetId = ''; showWorkspaceForm = true; }}>
-                <Plus size={15} />{m['canvas.new_ws']()}
+                <Plus size={15} />{m['canvas.start_blank']()}
               </Button>
               <Button variant="outline" class="press h-9 gap-1.5 px-3.5" onclick={() => toggleSidePanel('presets')}>
                 <LayoutTemplate size={15} />{m['canvas.start_with_preset']()}
