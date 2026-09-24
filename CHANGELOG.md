@@ -22,6 +22,7 @@ pt-BR, English, and Spanish translations.
 - Add mini usage meters with threshold colors to the Workbench usage footer.
 - Describe Control Center activity in plain language (for example "Status updated · Maestro") with translated categories, prominent metrics and a sliding Activity/Communications switch.
 - Give the Canvas side panels (Floors, Ports, Roles, Presets) one shared frame with an icon title, description, consistent close button and smooth entrance; tone down repeated preset actions until hover.
+- Make Settings direct to use: the navigation tracks the visible section, minimap and zoom controls are switches, font size, padding and editor font use sliders with live values, node sizes show their unit, and canvas connections and Workbench tabs use segmented selectors.
 
 ### Fixed
 

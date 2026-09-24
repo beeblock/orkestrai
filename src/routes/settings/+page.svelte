@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import { onDestroy, onMount } from 'svelte';
   import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, RotateCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
   import { isMacPlatform } from '$lib/components/agent-room/platform.js';
@@ -55,7 +56,38 @@
   const hotkeyLabel = $derived(comboLabel(settings.dictationHotkey || DEFAULT_DICTATION_HOTKEY));
   const ttsSpeed = $derived(normalizeEmbeddedTtsSpeed(settings.voiceTtsSpeed));
   const settingsSectionClasses = 'settings-section flex scroll-mt-[84px] flex-col gap-[18px] border-0 border-t border-[var(--app-border)] bg-transparent px-0 py-6 first:border-t-0 max-[560px]:py-5';
-  const settingsNavLinkClasses = 'flex min-h-[34px] items-center gap-[9px] border-l-2 border-transparent py-[7px] pr-[11px] pl-[10px] text-xs leading-[1.35] text-[var(--app-text-muted)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-l-[var(--app-accent)] hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)] focus-visible:border-l-[var(--app-accent)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-text)] [&_svg]:shrink-0 [&_svg]:text-[var(--app-text-muted)] hover:[&_svg]:text-[var(--app-accent)] focus-visible:[&_svg]:text-[var(--app-accent)] max-[900px]:mb-[-1px] max-[900px]:min-h-10 max-[900px]:whitespace-nowrap max-[900px]:border-l-0 max-[900px]:border-b-2 max-[900px]:hover:border-b-[var(--app-accent)] max-[900px]:focus-visible:border-b-[var(--app-accent)]';
+  // Navegacao acompanha a secao visivel (scroll-spy) para a pessoa saber
+  // onde esta numa pagina longa.
+  const SETTINGS_NAV = [
+    { id: 'autonomy', icon: Power, label: m['settings.section_autonomy'] },
+    { id: 'terminal', icon: SquareTerminal, label: m['settings.section_terminal'] },
+    { id: 'appearance', icon: Palette, label: m['settings.section_appearance'] },
+    { id: 'dictation', icon: Mic, label: m['settings.section_dictation'] },
+    { id: 'voice', icon: Volume2, label: m['settings.section_voice'] },
+    { id: 'shortcuts', icon: Keyboard, label: m['settings.section_shortcuts'] },
+    { id: 'presets', icon: Layers, label: m['settings.section_presets'] },
+    { id: 'updates', icon: RefreshCw, label: m['settings.section_updates'] },
+    { id: 'language', icon: Languages, label: m['settings.language'] },
+  ];
+  let activeSection = $state('autonomy');
+
+  $effect(() => {
+    if (!loaded || typeof IntersectionObserver === 'undefined') return;
+    const sections = SETTINGS_NAV.map((item) => document.getElementById(item.id)).filter((node): node is HTMLElement => Boolean(node));
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) visible.add(entry.target.id);
+        else visible.delete(entry.target.id);
+      }
+      const first = SETTINGS_NAV.find((item) => visible.has(item.id));
+      if (first) activeSection = first.id;
+    }, { rootMargin: '-96px 0px -55% 0px' });
+    for (const section of sections) observer.observe(section);
+    return () => observer.disconnect();
+  });
+
+  const settingsNavLinkClasses = 'aria-[current=location]:border-l-[var(--app-accent)] aria-[current=location]:bg-[var(--app-hover)] aria-[current=location]:text-[var(--app-text)] aria-[current=location]:[&_svg]:text-[var(--app-accent)] rounded-r-md flex min-h-[34px] items-center gap-[9px] border-l-2 border-transparent py-[7px] pr-[11px] pl-[10px] text-xs leading-[1.35] text-[var(--app-text-muted)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-l-[var(--app-accent)] hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)] focus-visible:border-l-[var(--app-accent)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-text)] [&_svg]:shrink-0 [&_svg]:text-[var(--app-text-muted)] hover:[&_svg]:text-[var(--app-accent)] focus-visible:[&_svg]:text-[var(--app-accent)] max-[900px]:mb-[-1px] max-[900px]:min-h-10 max-[900px]:whitespace-nowrap max-[900px]:border-l-0 max-[900px]:border-b-2 max-[900px]:hover:border-b-[var(--app-accent)] max-[900px]:focus-visible:border-b-[var(--app-accent)]';
 
   function captureHotkey(event: KeyboardEvent) {
     if (!capturingHotkey) return;
@@ -131,12 +163,6 @@
     if (language === 'pt-BR') return m['language.name_pt_br']();
     if (language === 'es') return m['language.name_es']();
     return m['language.name_en']();
-  }
-
-  function edgeRenderingLabel(value: string): string {
-    if (value === 'elastic') return m['settings.canvas_edges_elastic']();
-    if (value === 'static') return m['settings.canvas_edges_static']();
-    return m['settings.canvas_edges_auto']();
   }
 
   function setTtsSpeed(value: number) {
@@ -391,7 +417,7 @@
       {m['settings.back_canvas']()}
     </Button>
     <div class="header-titles max-[560px]:col-[1/4] max-[560px]:row-start-2 max-[560px]:min-w-0">
-      <h1 class="m-0 font-['Sora_Variable'] text-[21px] font-[650]">{m['settings.title']()}</h1>
+      <h1 class="m-0 font-display text-[20px] font-semibold tracking-[-0.015em]">{m['settings.title']()}</h1>
       <p class="mt-[3px] mb-0 text-xs text-[var(--app-text-muted)] max-[560px]:text-pretty">{m['settings.subtitle']()}</p>
     </div>
     <span class="header-spacer max-[560px]:hidden"></span>
@@ -404,15 +430,9 @@
   <div class="grid w-[min(1120px,100%)] grid-cols-[210px_minmax(0,1fr)] items-start gap-10 max-[900px]:grid-cols-1 max-[900px]:gap-0">
     <aside class="sticky top-[82px] max-h-[calc(100vh-102px)] overflow-y-auto max-[900px]:top-[70px] max-[900px]:z-[9] max-[900px]:max-h-none max-[900px]:overflow-x-auto max-[900px]:overflow-y-hidden max-[900px]:bg-[color-mix(in_srgb,var(--app-page)_94%,transparent)] max-[900px]:backdrop-blur-xl max-[900px]:[scrollbar-width:none]" aria-label={m['settings.title']()}>
       <nav class="grid gap-0.5 border-l border-[var(--app-border)] py-1 max-[900px]:flex max-[900px]:w-max max-[900px]:min-w-full max-[900px]:border-l-0 max-[900px]:border-b">
-        <a class={settingsNavLinkClasses} href="#autonomy"><Power size={14} />{m['settings.section_autonomy']()}</a>
-        <a class={settingsNavLinkClasses} href="#terminal"><SquareTerminal size={14} />{m['settings.section_terminal']()}</a>
-        <a class={settingsNavLinkClasses} href="#appearance"><Palette size={14} />{m['settings.section_appearance']()}</a>
-        <a class={settingsNavLinkClasses} href="#dictation"><Mic size={14} />{m['settings.section_dictation']()}</a>
-        <a class={settingsNavLinkClasses} href="#voice"><Volume2 size={14} />{m['settings.section_voice']()}</a>
-        <a class={settingsNavLinkClasses} href="#shortcuts"><Keyboard size={14} />{m['settings.section_shortcuts']()}</a>
-        <a class={settingsNavLinkClasses} href="#presets"><Layers size={14} />{m['settings.section_presets']()}</a>
-        <a class={settingsNavLinkClasses} href="#updates"><RefreshCw size={14} />{m['settings.section_updates']()}</a>
-        <a class={settingsNavLinkClasses} href="#language"><Languages size={14} />{m['settings.language']()}</a>
+        {#each SETTINGS_NAV as item (item.id)}
+          <a class={settingsNavLinkClasses} href={`#${item.id}`} aria-current={activeSection === item.id ? 'location' : undefined}><item.icon size={14} />{item.label()}</a>
+        {/each}
       </nav>
     </aside>
     <div class="grid min-w-0">
@@ -498,31 +518,32 @@
       </div>
     </header>
 
+    <div class="grid">
+      <div class="setting-row">
+        <div class="setting-copy">
+          <span class="field-label">{m['settings.minimap']()}</span>
+          <p class="field-hint">{m['settings.minimap_desc']()}</p>
+        </div>
+        <Switch
+          checked={settings.showMinimap !== 'false'}
+          aria-label={m['settings.minimap']()}
+          onCheckedChange={(checked: boolean) => (settings = { ...settings, showMinimap: String(checked) })}
+        />
+      </div>
+      <div class="setting-row">
+        <div class="setting-copy">
+          <span class="field-label">{m['settings.controls']()}</span>
+          <p class="field-hint">{m['settings.controls_desc']()}</p>
+        </div>
+        <Switch
+          checked={settings.showControls !== 'false'}
+          aria-label={m['settings.controls']()}
+          onCheckedChange={(checked: boolean) => (settings = { ...settings, showControls: String(checked) })}
+        />
+      </div>
+    </div>
+
     <div class="grid-fields">
-      <div class="field">
-        <span class="field-label">{m['settings.minimap']()}</span>
-        <Select.Root type="single" value={settings.showMinimap} onValueChange={(value: string) => (settings = { ...settings, showMinimap: value })}>
-          <Select.Trigger data-slot="select-trigger">
-            {settings.showMinimap === 'true' ? m['settings.show']() : m['settings.hide']()}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="true">{m['settings.show']()}</Select.Item>
-            <Select.Item value="false">{m['settings.hide']()}</Select.Item>
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="field">
-        <span class="field-label">{m['settings.controls']()}</span>
-        <Select.Root type="single" value={settings.showControls} onValueChange={(value: string) => (settings = { ...settings, showControls: value })}>
-          <Select.Trigger data-slot="select-trigger">
-            {settings.showControls === 'true' ? m['settings.show']() : m['settings.hide']()}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="true">{m['settings.show']()}</Select.Item>
-            <Select.Item value="false">{m['settings.hide']()}</Select.Item>
-          </Select.Content>
-        </Select.Root>
-      </div>
       <div class="field">
         <span class="field-label">{m['settings.theme']()}</span>
         <Select.Root type="single" value={settings.terminalTheme} onValueChange={(value: string) => (settings = { ...settings, terminalTheme: value })}>
@@ -548,16 +569,32 @@
 
     <div class="grid-fields">
       <div class="field">
-        <span class="field-label">{m['settings.font_size']()}</span>
-        <Input type="number" min="9" max="24" bind:value={settings.terminalFontSize} />
+        <span class="field-label field-label-row">{m['settings.font_size']()}<output class="slider-value">{Number(settings.terminalFontSize) || 13}px</output></span>
+        <Slider
+          type="single"
+          value={Number(settings.terminalFontSize) || 13}
+          min={9}
+          max={24}
+          step={1}
+          aria-label={m['settings.font_size']()}
+          onValueChange={(value: number) => (settings = { ...settings, terminalFontSize: String(value) })}
+        />
+      </div>
+      <div class="field">
+        <span class="field-label field-label-row">{m['settings.padding']()}<output class="slider-value">{Number(settings.terminalPadding ?? 8)}px</output></span>
+        <Slider
+          type="single"
+          value={Number(settings.terminalPadding ?? 8)}
+          min={0}
+          max={24}
+          step={1}
+          aria-label={m['settings.padding']()}
+          onValueChange={(value: number) => (settings = { ...settings, terminalPadding: String(value) })}
+        />
       </div>
       <div class="field span-2">
         <span class="field-label">{m['settings.font_family']()}</span>
         <Input bind:value={settings.terminalFontFamily} placeholder="ui-monospace, Menlo, monospace" />
-      </div>
-      <div class="field">
-        <span class="field-label">{m['settings.padding']()}</span>
-        <Input type="number" min="0" max="24" bind:value={settings.terminalPadding} />
       </div>
     </div>
 
@@ -574,22 +611,28 @@
       <div><span style={`color:${previewTheme.red}`}>✗</span> {m['settings.preview_sample_error']()}</div>
     </div>
 
-    <div class="grid-fields">
-      <div class="field">
-        <span class="field-label">{m['settings.terminal_width']()}</span>
-        <Input type="number" bind:value={settings.newTerminalWidth} />
+    <div class="grid gap-3">
+      <div class="setting-copy">
+        <span class="field-label">{m['settings.new_node_sizes']()}</span>
+        <p class="field-hint">{m['settings.new_node_sizes_desc']()}</p>
       </div>
-      <div class="field">
-        <span class="field-label">{m['settings.terminal_height']()}</span>
-        <Input type="number" bind:value={settings.newTerminalHeight} />
-      </div>
-      <div class="field">
-        <span class="field-label">{m['settings.note_width']()}</span>
-        <Input type="number" bind:value={settings.newNoteWidth} />
-      </div>
-      <div class="field">
-        <span class="field-label">{m['settings.note_height']()}</span>
-        <Input type="number" bind:value={settings.newNoteHeight} />
+      <div class="grid-fields">
+        <label class="field">
+          <span class="field-label">{m['settings.terminal_width']()}</span>
+          <span class="unit-input"><Input type="number" bind:value={settings.newTerminalWidth} /><span aria-hidden="true">px</span></span>
+        </label>
+        <label class="field">
+          <span class="field-label">{m['settings.terminal_height']()}</span>
+          <span class="unit-input"><Input type="number" bind:value={settings.newTerminalHeight} /><span aria-hidden="true">px</span></span>
+        </label>
+        <label class="field">
+          <span class="field-label">{m['settings.note_width']()}</span>
+          <span class="unit-input"><Input type="number" bind:value={settings.newNoteWidth} /><span aria-hidden="true">px</span></span>
+        </label>
+        <label class="field">
+          <span class="field-label">{m['settings.note_height']()}</span>
+          <span class="unit-input"><Input type="number" bind:value={settings.newNoteHeight} /><span aria-hidden="true">px</span></span>
+        </label>
       </div>
     </div>
   </section>
@@ -605,39 +648,31 @@
     <div class="mb-5 grid gap-2 border-b border-[var(--app-border)] pb-5">
       <span class="field-label">{m['settings.canvas_edges']()}</span>
       <p class="field-hint">{m['settings.canvas_edges_desc']()}</p>
-      <Select.Root
-        type="single"
+      <SegmentedControl
+        class="w-fit max-w-full"
+        label={m['settings.canvas_edges']()}
         value={settings.canvasEdgeRendering ?? 'auto'}
         onValueChange={(value: string) => (settings = { ...settings, canvasEdgeRendering: value })}
-      >
-        <Select.Trigger class="w-full sm:w-72" aria-label={m['settings.canvas_edges']()}>
-          {edgeRenderingLabel(settings.canvasEdgeRendering ?? 'auto')}
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Item value="auto">{m['settings.canvas_edges_auto']()}</Select.Item>
-          <Select.Item value="elastic">{m['settings.canvas_edges_elastic']()}</Select.Item>
-          <Select.Item value="static">{m['settings.canvas_edges_static']()}</Select.Item>
-        </Select.Content>
-      </Select.Root>
+        options={[
+          { value: 'auto', label: m['settings.canvas_edges_auto']() },
+          { value: 'elastic', label: m['settings.canvas_edges_elastic']() },
+          { value: 'static', label: m['settings.canvas_edges_static']() },
+        ]}
+      />
     </div>
     <div class="mb-5 grid gap-2 border-b border-[var(--app-border)] pb-5">
       <span class="field-label">{m['settings.workbench_tabs']()}</span>
       <p class="field-hint">{m['settings.workbench_tabs_desc']()}</p>
-      <Select.Root
-        type="single"
+      <SegmentedControl
+        class="w-fit max-w-full"
+        label={m['settings.workbench_tabs']()}
         value={settings.workbenchTabPlacement ?? 'vertical'}
         onValueChange={(value: string) => (settings = { ...settings, workbenchTabPlacement: value })}
-      >
-        <Select.Trigger class="w-full sm:w-72" aria-label={m['settings.workbench_tabs']()}>
-          {(settings.workbenchTabPlacement ?? 'vertical') === 'horizontal'
-            ? m['settings.workbench_tabs_horizontal']()
-            : m['settings.workbench_tabs_vertical']()}
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Item value="vertical">{m['settings.workbench_tabs_vertical']()}</Select.Item>
-          <Select.Item value="horizontal">{m['settings.workbench_tabs_horizontal']()}</Select.Item>
-        </Select.Content>
-      </Select.Root>
+        options={[
+          { value: 'vertical', label: m['settings.workbench_tabs_vertical']() },
+          { value: 'horizontal', label: m['settings.workbench_tabs_horizontal']() },
+        ]}
+      />
     </div>
     <div class="mb-5 grid gap-4 border-b border-[var(--app-border)] pb-5">
       <div>
@@ -670,10 +705,18 @@
           />
         </div>
       </div>
-      <label class="field max-w-40">
-        <span class="field-label">{m['settings.editor_font_size']()}</span>
-        <Input type="number" min="9" max="24" bind:value={settings.editorFontSize} />
-      </label>
+      <div class="field max-w-72">
+        <span class="field-label field-label-row">{m['settings.editor_font_size']()}<output class="slider-value">{Number(settings.editorFontSize) || 13}px</output></span>
+        <Slider
+          type="single"
+          value={Number(settings.editorFontSize) || 13}
+          min={9}
+          max={24}
+          step={1}
+          aria-label={m['settings.editor_font_size']()}
+          onValueChange={(value: number) => (settings = { ...settings, editorFontSize: String(value) })}
+        />
+      </div>
     </div>
     <AppThemeSettings {settings} onChange={(next) => (settings = next)} />
   </section>
@@ -1179,9 +1222,74 @@
   }
 
   .field-label {
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 500;
-    color: var(--app-text-soft);
+    color: var(--app-text);
+  }
+
+  /* Rotulo com o valor atual do slider alinhado a direita. */
+  .field-label-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .slider-value {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-text-muted);
+  }
+
+  .field :global([data-slot='slider']) {
+    margin: 8px 0 6px;
+  }
+
+  /* Linha de configuracao: rotulo e descricao a esquerda, controle a direita. */
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 56px;
+    padding: 12px 0;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .setting-row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .setting-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  /* Numero com unidade: o sufixo fica dentro do campo. */
+  .unit-input {
+    position: relative;
+    display: block;
+  }
+
+  .unit-input :global(input) {
+    padding-right: 34px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .unit-input > span {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--app-text-muted);
+    pointer-events: none;
   }
 
   .theme-select-swatch {
@@ -1266,7 +1374,7 @@
 
   :global(.hotkey-capture) {
     min-width: 150px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
 
