@@ -4852,7 +4852,6 @@
   "ui.close": "Fechar",
   "canvas.no_ws_title": "Nenhum workspace ainda",
   "canvas.no_ws_body": "Um workspace liga uma pasta do projeto a um canvas com agentes, notas e tarefas.",
-  "canvas.create_first_ws": "Criar workspace",
   "canvas.workspace_count": "{count} workspaces",
   "canvas.empty_title_new": "Crie seu primeiro workspace",
   "canvas.empty_title_pick": "Escolha um workspace",
@@ -5075,5 +5074,6 @@
   "design.figma_links_empty_title": "Nenhuma origem vinculada",
   "design.quality_clean_title": "Nenhum problema encontrado",
   "design.bindings_show_all": "Mostrar todas ({count})",
-  "design.bindings_show_less": "Mostrar menos"
+  "design.bindings_show_less": "Mostrar menos",
+  "canvas.start_blank": "Começar do zero"
 }
