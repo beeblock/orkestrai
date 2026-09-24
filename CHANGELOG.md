@@ -18,6 +18,9 @@ pt-BR, English, and Spanish translations.
 - Terminal voice controls gather in one compact group that appears on hover or focus and stays visible while recording; the quick prompt highlights while focused and its send button lights up when there is text.
 - Pick a note's color from a single button instead of six header dots; notes use a reading font and their frame follows the note color.
 - Move task cards with a Move to menu or Alt+Left/Right, edit titles with Enter, and reveal secondary card actions on hover or focus; columns, counts and drop zones are clearer.
+- Redesign the Workbench tree with 30px rows, neutral selection, a labeled Hubs group, hover/focus row actions and mono counts; mark the active tab with an accent line and keep its close button visible; show a readable header trail and actionable empty states.
+- Add mini usage meters with threshold colors to the Workbench usage footer.
+- Describe Control Center activity in plain language (for example "Status updated · Maestro") with translated categories, prominent metrics and a sliding Activity/Communications switch.
 
 ### Fixed
 

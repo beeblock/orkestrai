@@ -48,13 +48,13 @@
 
 <footer
   data-testid="workbench-usage-footer"
-  class="flex h-7 min-w-0 items-center border-t border-[var(--app-border)] bg-[var(--app-surface)] px-2"
+  class="flex h-7 min-w-0 items-center border-t border-[var(--app-border)] bg-[var(--app-surface)] px-2.5"
   aria-label={m['workbench.usage_footer_label']()}
 >
   <Activity size={12} class="mr-2 shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
   <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
     {#if usageStore.loading && !usageStore.values.length}
-      <span class="text-ui-xs text-[var(--app-text-muted)]">{m['workbench.usage_loading']()}</span>
+      <span class="text-ui-xs text-[var(--app-text-muted)]" role="status">{m['workbench.usage_loading']()}</span>
     {:else}
       {#each usageStore.values.filter((usage) => usage.windows.length > 0 || usage.error) as usage (usageRoutingId(usage))}
         {@const meta = usageProviderDefinition(usage.provider)}
@@ -64,19 +64,20 @@
               <button
                 {...props}
                 type="button"
-                class="flex h-5 shrink-0 items-center gap-1 rounded-[4px] px-1.5 text-ui-xs text-[var(--app-text-soft)] hover:bg-[var(--app-surface-raised)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--app-accent)]"
+                class="usage-chip"
                 aria-label={summary(usage)}
                 onclick={openUsage}
               >
-                {#if meta.icon}<img src={meta.icon} width="12" height="12" alt="" class="size-3 object-contain" />{/if}
+                {#if meta.icon}<span class="usage-logo app-logo-plate"><img src={meta.icon} width="11" height="11" alt="" /></span>{/if}
                 <span class="font-medium">{meta.name}{#if usage.profileName} · {usage.profileName}{/if}</span>
                 {#if usage.error || !usage.windows.length}
-                  <TriangleAlert size={10} class="text-[var(--app-warning)]" aria-hidden="true" />
+                  <TriangleAlert size={11} class="text-[var(--app-warning)]" aria-hidden="true" />
                 {:else}
                   {#each usage.windows as window (window.kind)}
-                    <span class="flex items-center gap-0.5 tabular-nums">
-                      <span class="text-ui-xs text-[var(--app-text-muted)]">{windowLabel(window)}</span>
-                      <span class="font-semibold" style:color={color(window.usedPercent)}>{window.usedPercent}%</span>
+                    <span class="usage-window">
+                      <span class="usage-window-label">{windowLabel(window)}</span>
+                      <span class="usage-meter" aria-hidden="true"><span style:width={`${Math.min(100, Math.max(0, window.usedPercent))}%`} style:background={color(window.usedPercent)}></span></span>
+                      <span class="usage-percent" style:color={color(window.usedPercent)}>{window.usedPercent}%</span>
                     </span>
                   {/each}
                 {/if}
@@ -90,7 +91,76 @@
   </div>
   <button
     type="button"
-    class="ml-2 shrink-0 text-ui-xs text-[var(--app-text-muted)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--app-accent)]"
+    class="ml-2 h-5 shrink-0 rounded-md px-1.5 text-ui-xs text-[var(--app-text-muted)] transition-colors duration-150 hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--app-accent)]"
     onclick={openUsage}
   >{m['workbench.usage_open']()}</button>
 </footer>
+
+<style>
+  /* Chip de uso: marca, nome e mini medidor por janela com cor por limite. */
+  .usage-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 20px;
+    flex-shrink: 0;
+    padding: 0 7px 0 3px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .usage-chip:hover {
+    background: var(--app-hover);
+  }
+
+  .usage-chip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .usage-logo {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+  }
+
+  .usage-window {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .usage-window-label {
+    color: var(--app-text-muted);
+  }
+
+  .usage-meter {
+    position: relative;
+    width: 24px;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--app-hover);
+  }
+
+  .usage-meter > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: inherit;
+    transition: width var(--duration-slow) var(--ease-smooth-out);
+  }
+
+  .usage-percent {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
