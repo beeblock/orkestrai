@@ -4983,5 +4983,6 @@
   "git.no_branches": "No branches yet",
   "git.no_branches_hint": "Make the first commit to create the current branch.",
   "device.start_named": "Start {device}",
-  "device.more_controls": "More controls"
+  "device.more_controls": "More controls",
+  "onboarding.language_current": "Current"
 }
