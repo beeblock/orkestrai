@@ -28,6 +28,7 @@ pt-BR, English, and Spanish translations.
 - Calm the Provider Center: a segmented filter with counts, neutral elevated cards with status in the badge, Open Canvas as an outline row action and a profile form with clear focus.
 - Track the visible section in the How to use index and collapse long use cases behind Read more; give Skills & MCPs a stable width, elevated sections and standard tabs.
 - Give command palettes dedicated command icons, rows without repeated labels, a larger search field, a highlighted item that stays in view and a keyboard shortcut footer.
+- Rework the file tree, diff, editor, Git and portal nodes: a real search field, colored Git status chips with readable names, file actions on hover or focus, loading placeholders, empty and error states with a next step, a commit field that lights up when ready, a lighter portal header with settings on its control chip, and sliders for device dimensions.
 
 ### Fixed
 
@@ -35,6 +36,7 @@ pt-BR, English, and Spanish translations.
 - Show "1 selected" instead of a plural label when a single node is selected.
 - Resolve surfaces and text in Computer, Integrations, Tool Workshop, Storyboard, Sequence and Knowledge views that referenced missing theme colors.
 - Remove the blue resize outline that covered the selection ring of a selected node.
+- Let the Git file list scroll instead of being cut off, stop showing editor confirmations in red and stop flashing "empty folder" before a file tree loads.
 
 ## 0.35.0 - 2026-09-24
 

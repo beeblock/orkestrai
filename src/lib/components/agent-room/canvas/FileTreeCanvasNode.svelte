@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowUp, File, Folder, FolderTree, GitBranch, GitCommitHorizontal, RefreshCw, Search, X } from '@lucide/svelte';
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import { ArrowUp, ChevronRight, CircleAlert, File, Folder, FolderOpen, FolderTree, GitBranch, GitCommitHorizontal, RefreshCw, Search, X } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import { Input } from '$lib/components/ui/input';
   import { Button } from '$lib/components/ui/button';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   export type FileTreeNodeData = {
@@ -40,6 +40,9 @@
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
   let graphMode = $state(false);
   let graphText = $state('');
+  // So estado de tela: evita mostrar "pasta vazia" antes da primeira listagem chegar.
+  let loaded = $state(false);
+  let searchInput: HTMLInputElement | null = $state(null);
 
   async function toggleGraph() {
     graphMode = !graphMode;
@@ -74,12 +77,37 @@
       branch = status.branch;
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : m['files.error_list']();
+    } finally {
+      loaded = true;
     }
   }
 
   function statusFor(entry: FsEntry): string | null {
     const change = changes.find((item) => item.path === entry.name || entry.path.endsWith(`/${item.path}`));
     return change ? (change.staged ? `${change.status}*` : change.status) : null;
+  }
+
+  // Marcador git -> tom e nome legivel (a letra continua visivel; o nome vai no title/leitor de tela).
+  function statusTone(status: string): 'modified' | 'added' | 'deleted' | 'conflict' | 'renamed' {
+    const code = status.charAt(0);
+    if (code === 'A' || code === '?') return 'added';
+    if (code === 'D') return 'deleted';
+    if (code === 'U') return 'conflict';
+    if (code === 'R' || code === 'C') return 'renamed';
+    return 'modified';
+  }
+
+  function statusName(status: string): string {
+    const code = status.charAt(0);
+    const name = code === 'A' ? m['git.status_added']()
+      : code === '?' ? m['git.status_untracked']()
+        : code === 'D' ? m['git.status_deleted']()
+          : code === 'U' ? m['git.status_conflict']()
+            : code === 'R' ? m['git.status_renamed']()
+              : code === 'C' ? m['git.status_copied']()
+                : code === 'T' ? m['git.status_type']()
+                  : m['git.status_modified']();
+    return status.endsWith('*') ? m['git.status_staged']({ status: name }) : name;
   }
 
   function openEntry(entry: FsEntry) {
@@ -159,6 +187,12 @@
     }, 350);
   }
 
+  function clearSearch() {
+    searchQuery = '';
+    handleSearch();
+    searchInput?.focus();
+  }
+
   function openSearchResult(result: { path: string }) {
     data.onOpenFile(result.path);
     searchResults = null;
@@ -201,22 +235,67 @@
   {#snippet title()}
     {data.title || m['files.default_title']()}
     {#if branch}
-      <span class="branch-badge"><GitBranch size={10} /> {branch}</span>
+      <span class="branch-badge" title={branch}><GitBranch size={11} aria-hidden="true" /><span class="branch-name">{branch}</span></span>
     {/if}
   {/snippet}
   {#snippet actions()}
     {#if branch}
-      <HeaderIconButton class="node-action-btn" label={graphMode ? m['files.view_files']() : m['files.view_graph']()} onclick={toggleGraph}>
+      <HeaderIconButton class="node-action-btn" label={graphMode ? m['files.view_files']() : m['files.view_graph']()} active={graphMode} onclick={toggleGraph}>
         <GitCommitHorizontal size={13} />
       </HeaderIconButton>
     {/if}
-    <HeaderIconButton class="node-action-btn" label={m['onboarding.back']()} disabled={!currentPath} onclick={goUp}><ArrowUp size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={m['files.reload']()} onclick={refresh}><RefreshCw size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={m['files.remove']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>
   {/snippet}
 
+  <!-- Busca no topo: e o primeiro gesto de quem procura um arquivo. -->
+  <div class="tree-search nodrag">
+    <label class="search-field">
+      <Search size={13} aria-hidden="true" />
+      <input
+        bind:this={searchInput}
+        bind:value={searchQuery}
+        oninput={handleSearch}
+        onkeydown={(event) => {
+          if (event.key === 'Escape' && searchQuery) {
+            event.preventDefault();
+            clearSearch();
+          }
+        }}
+        placeholder={m['ph.file_search']()}
+        aria-label={m['files.search_aria']()}
+        spellcheck="false"
+        autocomplete="off"
+      />
+      {#if searchQuery}
+        <button type="button" class="search-clear" aria-label={m['files.clear_search']()} title={m['files.clear_search']()} onclick={clearSearch}>
+          <X size={12} />
+        </button>
+      {/if}
+    </label>
+  </div>
+
+  {#if searchResults}
+    <div class="search-results nodrag nowheel">
+      {#each searchResults as result}
+        <button class="search-result" title={result.path} onclick={() => openSearchResult(result)}>
+          <span class="result-path">{result.path.split('/').slice(-2).join('/')}{#if result.line}<span class="result-line">:{result.line}</span>{/if}</span>
+          {#if result.preview}
+            <span class="result-preview">{result.preview}</span>
+          {/if}
+        </button>
+      {:else}
+        <p class="search-empty">{m['files.search_empty']()}</p>
+      {/each}
+    </div>
+  {/if}
+
   {#if currentPath && !graphMode}
-    <p class="current-path">{currentPath.split('/').slice(-2).join('/')}</p>
+    <!-- Onde estou + como voltar, juntos: o botao de subir so existe quando ha para onde subir. -->
+    <div class="path-bar nodrag">
+      <HeaderIconButton class="path-up" label={m['api_client.parent_folder']()} side="bottom" onclick={goUp}><ArrowUp size={13} /></HeaderIconButton>
+      <p class="current-path" title={currentPath}>{currentPath.split('/').slice(-2).join('/')}</p>
+    </div>
   {/if}
 
   {#if graphMode}
@@ -225,47 +304,61 @@
     </div>
   {/if}
 
-  <div class="tree-search nodrag">
-    <Search size={11} />
-    <input
-      bind:value={searchQuery}
-      oninput={handleSearch}
-      placeholder={m['ph.file_search']()}
-      spellcheck="false"
-    />
-  </div>
-  {#if searchResults}
-    <div class="search-results nodrag nowheel">
-      {#each searchResults as result}
-        <button class="search-result" onclick={() => openSearchResult(result)}>
-          <span class="result-path">{result.path.split('/').slice(-2).join('/')}{result.line ? `:${result.line}` : ''}</span>
-          {#if result.preview}
-            <span class="result-preview">{result.preview}</span>
-          {/if}
-        </button>
-      {:else}
-        <p class="empty">{m['files.search_empty']()}</p>
-      {/each}
-    </div>
-  {/if}
-
   <div class="tree-body nodrag nowheel" class:hidden={graphMode}>
     {#if errorMessage}
-      <p class="error">{errorMessage}</p>
+      <div class="tree-error" role="alert">
+        <CircleAlert size={14} aria-hidden="true" />
+        <span class="error">{errorMessage}</span>
+        <button type="button" class="tree-error-retry" onclick={refresh}>{m['workspace_access.retry']()}</button>
+      </div>
     {/if}
-    {#each entries as entry (entry.path)}
-      <button class="tree-entry" ondblclick={() => openEntry(entry)} onclick={() => entry.type === 'directory' && openEntry(entry)}>
-        <span class="entry-icon">
-          {#if entry.type === 'directory'}<Folder size={12} />{:else}<File size={12} />{/if}
-        </span>
-        <span class="entry-name">{entry.name}</span>
-        {#if statusFor(entry)}
-          <span class="entry-status">{statusFor(entry)}</span>
+    {#if !loaded && !errorMessage}
+      <div class="tree-loading" aria-busy="true" aria-label={m['workbench_files.loading']()}>
+        {#each [72, 54, 64, 46, 58] as width, index (index)}
+          <span class="tree-skeleton" style:--w={`${width}%`}></span>
+        {/each}
+      </div>
+    {:else}
+      {#each entries as entry (entry.path)}
+        {@const status = statusFor(entry)}
+        <button
+          class="tree-entry"
+          class:directory={entry.type === 'directory'}
+          title={entry.path}
+          ondblclick={() => openEntry(entry)}
+          onclick={() => entry.type === 'directory' && openEntry(entry)}
+          onkeydown={(event) => {
+            // Enter no arquivo abre como o duplo clique (o clique simples so navega pastas).
+            if (event.key === 'Enter' && entry.type === 'file') {
+              event.preventDefault();
+              openEntry(entry);
+            }
+          }}
+        >
+          <span class="entry-icon" aria-hidden="true">
+            {#if entry.type === 'directory'}<Folder size={14} />{:else}<File size={14} />{/if}
+          </span>
+          <span class="entry-name">{entry.name}</span>
+          {#if status}
+            <span class="entry-status" data-tone={statusTone(status)} title={statusName(status)} aria-hidden="true">{status}</span>
+            <span class="sr-only">{statusName(status)}</span>
+          {/if}
+          {#if entry.type === 'directory'}
+            <ChevronRight size={13} class="entry-chevron" aria-hidden="true" />
+          {/if}
+        </button>
+      {/each}
+      {#if entries.length === 0 && !errorMessage}
+        {#if currentPath}
+          <NodeEmptyState icon={FolderOpen} compact title={m['files.empty_dir_title']()}>
+            {#snippet actions()}
+              <Button variant="outline" size="sm" onclick={goUp}><ArrowUp />{m['api_client.parent_folder']()}</Button>
+            {/snippet}
+          </NodeEmptyState>
+        {:else}
+          <NodeEmptyState icon={FolderOpen} compact title={m['files.empty_dir_title']()} />
         {/if}
-      </button>
-    {/each}
-    {#if entries.length === 0 && !errorMessage}
-      <p class="empty">{m['files.empty_dir']()}</p>
+      {/if}
     {/if}
   </div>
 </NodeShell>
@@ -309,69 +402,185 @@
 </Dialog.Root>
 
 <style>
-  .git-menu-trigger {
-    display: inline-flex;
-    align-items: center;
-    border: none;
-    background: transparent;
-    color: var(--app-success);
-    cursor: pointer;
-    padding: 2px;
-    border-radius: 5px;
-  }
-
-  .git-menu-trigger:hover {
-    background: var(--app-border);
-  }
-
+  /* Busca: campo de 28px com foco visivel, dentro de uma faixa com respiro. */
   .tree-search {
+    flex: none;
+    padding: 8px 8px 6px;
+  }
+
+  .search-field {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--app-border);
+    gap: 7px;
+    height: 28px;
+    padding: 0 4px 0 9px;
+    border-radius: 7px;
+    background: var(--app-surface-subtle);
+    box-shadow: var(--app-shadow-border);
     color: var(--app-text-muted);
+    cursor: text;
+    transition: box-shadow var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out;
   }
 
-  .tree-search input {
+  .search-field:hover {
+    box-shadow: var(--app-shadow-border-hover);
+  }
+
+  .search-field:focus-within {
+    background: var(--app-surface);
+    box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
+  }
+
+  .search-field input {
     flex: 1;
+    min-width: 0;
+    height: 100%;
     border: none;
     outline: none;
     background: transparent;
-    color: var(--app-text-soft);
-    font-size: 11px;
+    color: var(--app-text);
+    font-size: 12px;
+  }
+
+  .search-field input::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  .search-clear {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    flex: none;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .search-clear:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .search-clear:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .search-results {
-    max-height: 160px;
+    flex: none;
+    max-height: 180px;
     overflow-y: auto;
+    padding: 0 6px 6px;
     border-bottom: 1px solid var(--app-border);
   }
 
   .search-result {
     display: flex;
     flex-direction: column;
+    gap: 1px;
     width: 100%;
+    min-height: 30px;
+    justify-content: center;
     padding: 4px 8px;
     border: none;
+    border-radius: 6px;
     background: transparent;
     cursor: pointer;
     text-align: left;
+    transition: background-color var(--duration-quick) ease-out;
   }
 
   .search-result:hover {
-    background: var(--app-border);
+    background: var(--app-hover);
+  }
+
+  .search-result:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
   }
 
   .result-path {
-    font-size: 11px;
-    color: var(--app-secondary);
+    overflow: hidden;
+    color: var(--app-text);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .result-line {
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
   }
 
   .result-preview {
-    font-size: 10px;
-    color: var(--app-text-muted);
     overflow: hidden;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .search-empty {
+    margin: 0;
+    padding: 6px 8px;
+    color: var(--app-text-muted);
+    font-size: 12px;
+  }
+
+  /* Caminho atual + subir: uma linha, alinhada ao inicio das linhas da arvore. */
+  .path-bar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    min-height: 30px;
+    padding: 0 8px 0 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  }
+
+  .path-bar :global(.path-up) {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  }
+
+  .path-bar :global(.path-up:hover) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .path-bar :global(.path-up:active) {
+    transform: scale(var(--scale-press));
+  }
+
+  .path-bar :global(.path-up:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .current-path {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--app-text-soft);
+    font-family: var(--font-mono);
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -380,14 +589,15 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 8px 10px;
+    padding: 8px 12px;
   }
 
   .graph-view pre {
     margin: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
-    line-height: 1.5;
+    font-variant-ligatures: none;
+    line-height: 1.55;
     color: var(--app-text-soft);
   }
 
@@ -395,80 +605,219 @@
     display: none;
   }
 
+  /* Branch e informacao, nao estado: chip neutro com texto mono. */
   .branch-badge {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 10px;
+    gap: 4px;
+    height: 20px;
+    max-width: 140px;
+    margin-left: 8px;
+    padding: 0 7px;
+    overflow: hidden;
+    border-radius: 6px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
     font-weight: 400;
-    color: var(--app-success);
-    background: color-mix(in srgb, var(--app-success) 12%, transparent);
-    padding: 1px 7px;
-    border-radius: 8px;
-    margin-left: 6px;
+    text-overflow: ellipsis;
+    vertical-align: 1px;
+    white-space: nowrap;
   }
 
-  .current-path {
-    margin: 0;
-    padding: 3px 10px;
-    font-size: 10px;
-    color: var(--app-text-muted);
-    border-bottom: 1px solid var(--app-border);
+  .branch-badge :global(svg) {
+    flex: none;
+    color: var(--app-success);
+  }
+
+  .branch-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .tree-body {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     overflow-y: auto;
-    padding: 4px;
+    padding: 6px;
   }
 
   .tree-entry {
     display: flex;
+    flex: none;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
-    padding: 3px 6px;
+    min-height: 28px;
+    padding: 0 8px;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     background: transparent;
     color: var(--app-text-soft);
-    font-size: 12px;
+    font-size: 12.5px;
     cursor: pointer;
     text-align: left;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
   }
 
   .tree-entry:hover {
-    background: var(--app-border);
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .tree-entry:active {
+    background: var(--app-active);
+  }
+
+  .tree-entry:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
   }
 
   .entry-icon {
     display: inline-flex;
+    flex: none;
     color: var(--app-text-muted);
+  }
+
+  .directory .entry-icon {
+    color: color-mix(in srgb, var(--app-success) 70%, var(--app-text-muted));
   }
 
   .entry-name {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  /* A seta so aparece ao apontar: diz "entra aqui" sem poluir a lista em repouso. */
+  .tree-entry :global(.entry-chevron) {
+    flex: none;
+    color: var(--app-text-muted);
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .tree-entry:hover :global(.entry-chevron),
+  .tree-entry:focus-visible :global(.entry-chevron) {
+    opacity: 1;
+  }
+
+  /* Marcador git como chip legivel: a cor diz o tipo, a letra continua igual. */
   .entry-status {
-    font-size: 10px;
+    display: inline-grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    flex: none;
+    padding: 0 4px;
+    border-radius: 5px;
+    background: var(--app-warning-soft);
     color: var(--app-warning);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
     font-weight: 600;
+    line-height: 1;
+  }
+
+  .entry-status[data-tone='added'] {
+    background: var(--app-success-soft);
+    color: var(--app-success);
+  }
+
+  .entry-status[data-tone='deleted'],
+  .entry-status[data-tone='conflict'] {
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .entry-status[data-tone='renamed'] {
+    background: var(--app-info-soft);
+    color: var(--app-info);
+  }
+
+  .tree-loading {
+    display: grid;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .tree-skeleton {
+    display: block;
+    width: var(--w);
+    height: 12px;
+    margin: 4px 0;
+    border-radius: 4px;
+    background: var(--app-hover);
+    animation: tree-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes tree-pulse {
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  .tree-error {
+    display: flex;
+    flex: none;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 4px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  .tree-error :global(svg) {
+    flex: none;
+    margin-top: 1px;
   }
 
   .error {
-    color: var(--app-danger);
-    font-size: 11px;
-    padding: 6px;
+    flex: 1;
+    min-width: 0;
+    color: var(--app-text);
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
   }
 
-  .empty {
-    color: var(--app-text-muted);
-    font-size: 11px;
-    padding: 6px;
+  .tree-error-retry {
+    flex: none;
+    height: 24px;
+    margin: -3px 0;
+    padding: 0 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-danger);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .tree-error-retry:hover {
+    background: color-mix(in srgb, var(--app-danger) 14%, transparent);
+  }
+
+  .tree-error-retry:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tree-skeleton {
+      animation: none;
+    }
   }
 </style>

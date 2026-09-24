@@ -4991,5 +4991,7 @@
   "computer.capture_title": "Screenshot",
   "computer.allowed_count": "{allowed} of {total}",
   "canvas.tool_drag_hint": "Click and draw on the canvas, or drag it there",
-  "canvas.tool_drop_hint": "Drop to create here"
+  "canvas.tool_drop_hint": "Drop to create here",
+  "diff.empty_title": "Nothing to compare",
+  "diff.empty_hint": "New file or no content changes. Open it in the editor to see the whole file."
 }

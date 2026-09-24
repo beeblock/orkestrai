@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowRight, Globe, KeyRound, MousePointer2, Navigation, Pause, Play, Pencil, RotateCcw, Send, Settings, ShieldCheck, Smartphone, X } from '@lucide/svelte';
+  import { ArrowRight, ChevronDown, Globe, KeyRound, MousePointer2, Navigation, Pause, Play, Pencil, RotateCcw, Send, ShieldCheck, Smartphone, X } from '@lucide/svelte';
   import type { PortalViewport } from './portal-device-presets.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -9,6 +9,7 @@
   import NodeShell from './NodeShell.svelte';
   import type { NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import NodeEmptyState from './NodeEmptyState.svelte';
   import PortalViewportToolbar from './PortalViewportToolbar.svelte';
   import { portalScriptExpression, unwrapPortalScriptResult } from './portal-script.js';
   import { managedPortalSurface } from '../managed-portal-surface.js';
@@ -122,6 +123,12 @@
   let browserTabs = $state<Array<{ id: string; title: string; url: string }>>([]);
   let activeBrowserTab = $state('');
   let browserStateTimer: ReturnType<typeof setTimeout> | null = null;
+  let addressInput: HTMLInputElement | null = $state(null);
+  // Rotulo do estado de controle (mesma regra de antes), agora tambem abre as configuracoes.
+  const controlLabel = $derived(paused ? m['portal.control_paused']() : control === 'disabled' ? m['portal.control_disabled']() : allowBackground ? m['portal.control_background']() : m['portal.control_visible']());
+  const controlTone = $derived(paused ? 'paused' : control === 'disabled' ? 'manual' : 'agent');
+  // "Ir" acende quando o endereco digitado ainda nao e o que esta aberto.
+  const addressPending = $derived(Boolean(address.trim()) && address.trim() !== String(data.payload.url ?? '').trim());
 
   function persistBrowserTabs() {
     browserStateTimer = null;
@@ -647,11 +654,15 @@
         onblur={commitNameEdit}
       />
     {:else}
-      <span class="portal-name">{data.title || m['portal.default_title']()}</span>
+      <!-- Renomear mora junto do nome (lapis ao apontar, ou duplo clique), liberando o cabecalho. -->
+      <span class="portal-title-row">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span class="portal-name" ondblclick={startNameEdit}>{data.title || m['portal.default_title']()}</span>
+        <HeaderIconButton class="portal-rename nodrag" label={m['portal.rename']()} onclick={startNameEdit}><Pencil size={12} /></HeaderIconButton>
+      </span>
     {/if}
   {/snippet}
   {#snippet actions()}
-    <HeaderIconButton class="node-action-btn" label={m['portal.rename']()} disabled={editingName} onclick={startNameEdit}><Pencil size={13} /></HeaderIconButton>
     <HeaderIconButton
       class="node-action-btn"
       label={deviceToolbarOpen ? m['portal.device_toolbar_hide']() : m['portal.device_toolbar_show']()}
@@ -664,34 +675,47 @@
       active={inspecting}
       onclick={() => void startInspection()}
     ><MousePointer2 size={13} /></HeaderIconButton>
-    <HeaderIconButton class="node-action-btn" label={paused ? m['portal.control_resume']() : m['portal.control_pause']()} onclick={togglePause}>{#if paused}<Play size={13} />{:else}<Pause size={13} />{/if}</HeaderIconButton>
-    <HeaderIconButton class="node-action-btn" label={m['portal.managed_settings']()} onclick={() => { settingsOpen = true; void loadTargets(); }}><Settings size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={paused ? m['portal.control_resume']() : m['portal.control_pause']()} active={paused} onclick={togglePause}>{#if paused}<Play size={13} />{:else}<Pause size={13} />{/if}</HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={m['portal.close']()} danger onclick={() => void closePortal()}><X size={13} /></HeaderIconButton>
   {/snippet}
 
   <div class="portal-body nodrag nowheel" class:inspecting>
     <div class="portal-navigation">
-      <span class="flex shrink-0 items-center gap-1 text-ui-xs font-medium text-[var(--app-text-muted)]"><ShieldCheck size={13} />{paused ? m['portal.control_paused']() : control === 'disabled' ? m['portal.control_disabled']() : allowBackground ? m['portal.control_background']() : m['portal.control_visible']()}</span>
+      <!-- O estado de controle e tambem a porta para as configuracoes do navegador gerenciado. -->
+      <button
+        type="button"
+        class="portal-control-chip"
+        data-tone={controlTone}
+        aria-label={`${controlLabel} — ${m['portal.managed_settings']()}`}
+        title={m['portal.managed_settings']()}
+        onclick={() => { settingsOpen = true; void loadTargets(); }}
+      >
+        <ShieldCheck size={13} aria-hidden="true" />
+        <span class="portal-control-label">{controlLabel}</span>
+        <ChevronDown size={12} class="portal-control-caret" aria-hidden="true" />
+      </button>
       <input
+        bind:this={addressInput}
         class="portal-address nodrag"
         bind:value={address}
         onkeydown={handleKeydown}
         placeholder="https://..."
         spellcheck="false"
+        autocomplete="off"
         aria-label={m['portal.address']()}
       />
-      <HeaderIconButton class="node-action-btn" label={m['portal.navigate']()} disabled={inspecting} onclick={() => void navigate()}><ArrowRight size={14} /></HeaderIconButton>
+      <HeaderIconButton class={`node-action-btn portal-go ${addressPending ? 'ready' : ''}`} label={m['portal.navigate']()} disabled={inspecting} onclick={() => void navigate()}><ArrowRight size={14} /></HeaderIconButton>
     </div>
     {#if deviceToolbarOpen}
       <PortalViewportToolbar {viewport} onchange={setViewport} />
     {/if}
     {#if browserTabs.length > 1}
-      <div class="nodrag nowheel border-b border-[var(--app-border)] px-2 py-1">
+      <div class="nodrag nowheel border-b border-[var(--app-border)] px-2 py-1.5">
         <Select.Root type="single" value={activeBrowserTab} onValueChange={(tabId) => {
           void desktop?.portalSurface({ workspaceId: data.workspaceId, nodeId: id, method: 'activate', args: { tabId } }).then((state) => {
             browserTabs = state.tabs; activeBrowserTab = state.activeTabId;
           }).catch((error) => toast.error(publicPortalError(error)));
-        }}><Select.Trigger class="h-7 w-full min-w-0 text-ui-xs" aria-label={m['portal.browser_tabs']()}><span class="truncate">{browserTabs.find((tab) => tab.id === activeBrowserTab)?.title || address}</span></Select.Trigger><Select.Content>{#each browserTabs as tab (tab.id)}<Select.Item value={tab.id}>{tab.title || tab.url}</Select.Item>{/each}</Select.Content></Select.Root>
+        }}><Select.Trigger class="h-7 w-full min-w-0 text-ui-sm" aria-label={m['portal.browser_tabs']()}><span class="truncate">{browserTabs.find((tab) => tab.id === activeBrowserTab)?.title || address}</span></Select.Trigger><Select.Content>{#each browserTabs as tab (tab.id)}<Select.Item value={tab.id}>{tab.title || tab.url}</Select.Item>{/each}</Select.Content></Select.Root>
       </div>
     {/if}
     {#if inspecting}
@@ -726,16 +750,22 @@
               ></iframe>
             {/if}
           {:else}
-            <p class="portal-empty">{m['portal.empty']()}</p>
+            <div class="portal-empty">
+              <NodeEmptyState icon={Globe} title={m['portal.empty_title']()} description={m['portal.empty']()}>
+                {#snippet actions()}
+                  <Button variant="outline" size="sm" onclick={() => addressInput?.focus()}>{m['portal.empty_action']()}</Button>
+                {/snippet}
+              </NodeEmptyState>
+            </div>
           {/if}
         </div>
       </div>
       {#if !portalReady && data.payload.url && isDesktop && portalError}
         <div class="portal-status" role="status">
-          <Navigation size={15} />
+          <Navigation size={14} aria-hidden="true" />
           <span>{m['portal.design_disconnected']({ detail: portalError })}</span>
           <button type="button" class="nodrag" onclick={retryNow}>
-            <RotateCcw size={13} />
+            <RotateCcw size={13} aria-hidden="true" />
             {m['portal.retry']()}
           </button>
         </div>
@@ -893,6 +923,13 @@
 </Dialog.Root>
 
 <style>
+  .portal-title-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
   .portal-name {
     display: block;
     min-width: 0;
@@ -901,14 +938,54 @@
     white-space: nowrap;
   }
 
+  /* Lapis discreto: aparece ao apontar/focar o cabecalho, sem ocupar um slot de acao. */
+  .portal-title-row :global(.portal-rename) {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  :global(.canvas-portal .node-header:hover) .portal-title-row :global(.portal-rename),
+  .portal-title-row :global(.portal-rename:focus-visible) {
+    opacity: 1;
+  }
+
+  .portal-title-row :global(.portal-rename:hover) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .portal-title-row :global(.portal-rename:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .portal-title-row :global(.portal-rename svg) {
+    width: 12px;
+    height: 12px;
+  }
+
   .portal-name-input {
     width: min(220px, 100%);
+    height: 24px;
     min-width: 0;
+    padding: 0 6px;
     border: 1px solid var(--app-accent);
-    border-radius: 4px;
-    background: var(--app-surface);
+    border-radius: 6px;
+    outline: none;
+    background: var(--app-surface-subtle);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
     color: var(--app-text);
-    padding: 2px 6px;
     font: inherit;
   }
 
@@ -918,25 +995,78 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
-    padding: 6px 8px;
+    padding: 6px 6px 6px 8px;
     border-bottom: 1px solid var(--app-border);
     background: var(--app-surface-subtle);
+  }
+
+  /* Chip de controle: diz quem manda no portal e abre as configuracoes. */
+  .portal-control-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 5px;
+    max-width: 44%;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .portal-control-chip:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .portal-control-chip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  .portal-control-chip[data-tone='agent'] :global(svg:first-child) {
+    color: var(--app-success);
+  }
+
+  .portal-control-chip[data-tone='paused'] {
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+  }
+
+  .portal-control-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .portal-control-chip :global(.portal-control-caret) {
+    flex: none;
+    color: var(--app-text-muted);
   }
 
   .portal-address {
     flex: 1;
     width: 100%;
+    min-width: 0;
     height: 28px;
-    padding: 0 9px;
-    border-radius: 6px;
-    border: 1px solid var(--app-border);
+    padding: 0 10px;
+    border: none;
+    border-radius: 7px;
     outline: none;
     background: var(--app-surface);
+    box-shadow: var(--app-shadow-border);
     color: var(--app-text);
     caret-color: var(--app-accent);
     font-size: 12px;
     font-weight: 400;
-    transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+    text-overflow: ellipsis;
+    transition: box-shadow var(--duration-quick) ease-out;
   }
 
   .portal-address::placeholder {
@@ -944,12 +1074,27 @@
   }
 
   .portal-address:hover {
-    border-color: var(--app-border-strong);
+    box-shadow: var(--app-shadow-border-hover);
   }
 
   .portal-address:focus-visible {
-    border-color: var(--app-accent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 20%, transparent);
+    box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 3px color-mix(in srgb, var(--app-accent) 16%, transparent);
+  }
+
+  /* "Ir" acende so quando ha um endereco novo para abrir. */
+  .portal-navigation :global(.portal-go.ready) {
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+  }
+
+  .portal-navigation :global(.portal-go.ready:hover) {
+    background: color-mix(in srgb, var(--app-accent) 88%, var(--app-text));
+    color: var(--app-accent-contrast);
+  }
+
+  .portal-navigation :global(.node-action-btn:disabled) {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .portal-body {
@@ -958,20 +1103,33 @@
     flex: 1;
     min-height: 0;
     background: var(--app-surface);
+    container-type: inline-size;
+  }
+
+  /* No estreito, o chip vira so o icone e o endereco fica com o espaco. */
+  @container (max-width: 460px) {
+    .portal-control-label,
+    .portal-control-chip :global(.portal-control-caret) {
+      display: none;
+    }
+
+    .portal-control-chip {
+      padding: 0 7px;
+    }
   }
 
   .inspection-bar {
     display: flex;
-    height: 32px;
+    height: 34px;
     flex: none;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     min-width: 0;
-    padding: 0 8px;
+    padding: 0 6px 0 12px;
     color: var(--app-text);
     background: var(--app-accent-soft);
-    border-bottom: 1px solid var(--app-accent);
-    font-size: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--app-accent) 55%, transparent);
+    font-size: 12px;
   }
 
   .inspection-bar span:nth-child(2) {
@@ -983,8 +1141,25 @@
   }
 
   .inspection-bar button {
+    height: 26px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
     color: var(--app-accent);
-    font-weight: 650;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .inspection-bar button:hover {
+    background: color-mix(in srgb, var(--app-accent) 14%, transparent);
+  }
+
+  .inspection-bar button:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .inspection-pulse {
@@ -1044,32 +1219,35 @@
 
   .portal-frame-device {
     flex: none;
-    box-shadow: 0 0 0 1px var(--app-border), 0 10px 28px rgb(0 0 0 / 18%);
+    border-radius: 6px;
+    box-shadow: var(--app-shadow-panel);
   }
 
   .portal-frame-hidden { visibility: hidden; }
 
   .portal-empty {
-    color: var(--app-text-muted);
-    font-size: 12px;
-    padding: 12px;
-    background: var(--app-canvas);
     height: 100%;
-    margin: 0;
+    background: var(--app-canvas);
   }
 
+  /* Falha de carregamento: cartao flutuante calmo com a acao de recuperar ao lado. */
   .portal-status {
     position: absolute;
-    inset: auto 10px 10px;
+    inset: auto 12px 12px;
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px 10px;
-    border: 1px solid var(--app-warning);
-    background: color-mix(in srgb, var(--app-canvas) 92%, var(--app-warning));
+    gap: 8px;
+    padding: 6px 6px 6px 12px;
+    border-radius: 10px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-overlay);
     color: var(--app-text);
-    font-size: 10px;
-    box-shadow: 0 6px 18px rgb(0 0 0 / 16%);
+    font-size: 12px;
+  }
+
+  .portal-status > :global(svg) {
+    flex: none;
+    color: var(--app-warning);
   }
 
   .portal-status span {
@@ -1084,18 +1262,30 @@
     display: inline-flex;
     flex: none;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
     border: 0;
-    border-left: 1px solid color-mix(in srgb, var(--app-warning) 45%, transparent);
-    background: transparent;
-    color: inherit;
-    padding: 1px 0 1px 8px;
+    border-radius: 7px;
+    background: var(--app-hover);
+    color: var(--app-text);
     font: inherit;
+    font-weight: 500;
     cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
   .portal-status button:hover {
-    color: var(--app-warning);
+    background: var(--app-active);
+  }
+
+  .portal-status button:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .portal-status button:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .portal-element-preview :global(*) {

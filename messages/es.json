@@ -4991,5 +4991,7 @@
   "computer.capture_title": "Captura de pantalla",
   "computer.allowed_count": "{allowed} de {total}",
   "canvas.tool_drag_hint": "Haz clic y dibuja en el canvas, o arrástralo hasta allí",
-  "canvas.tool_drop_hint": "Suelta para crear aquí"
+  "canvas.tool_drop_hint": "Suelta para crear aquí",
+  "diff.empty_title": "Nada que comparar",
+  "diff.empty_hint": "Archivo nuevo o sin cambios de contenido. Ábrelo en el editor para ver el archivo completo."
 }

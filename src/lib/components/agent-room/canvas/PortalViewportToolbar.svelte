@@ -11,6 +11,7 @@
     type PortalViewport,
   } from './portal-device-presets.js';
   import { Input } from '$lib/components/ui/input';
+  import { Slider } from '$lib/components/ui/slider';
   import * as Popover from '$lib/components/ui/popover';
   import * as Select from '$lib/components/ui/select';
   import * as m from '$lib/paraglide/messages.js';
@@ -78,6 +79,11 @@
       : { width: viewport.width, height: value });
   }
 
+  // Slider so move o rascunho; a dimensao e aplicada (e persistida) ao soltar, pelo mesmo commitDimension.
+  function sliderValue(draft: string): number {
+    return clampPortalViewportDimension(Number(draft));
+  }
+
   function commitOnEnter(event: KeyboardEvent, axis: 'width' | 'height') {
     if (event.key !== 'Enter') return;
     commitDimension(axis);
@@ -86,14 +92,14 @@
 </script>
 
 <div
-  class="nodrag flex h-10 shrink-0 items-center gap-1.5 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2"
+  class="nodrag flex h-10 shrink-0 items-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-2"
   role="toolbar"
   aria-label={m['portal.device_toolbar_show']()}
   data-testid="portal-viewport-toolbar"
 >
   <Select.Root type="single" value={selectedPresetId} onValueChange={applyPreset}>
     <Select.Trigger
-      class="h-7 min-w-0 flex-1 border-[var(--app-border)] bg-[var(--app-canvas)] px-2 text-ui-sm shadow-none"
+      class="h-7 min-w-0 flex-1 border-transparent bg-[var(--app-surface-subtle)] px-2 text-ui-md shadow-[var(--app-shadow-border)] transition-[box-shadow,background-color] duration-150 hover:shadow-[var(--app-shadow-border-hover)]"
       size="sm"
       aria-label={m['portal.device_preset']()}
     >
@@ -114,7 +120,7 @@
         <Select.Item value={preset.id} class="py-1.5">
           <div class="flex min-w-0 flex-1 items-center justify-between gap-5">
             <span>{preset.label}</span>
-            <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{preset.width} × {preset.height}</span>
+            <span class="font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{preset.width} × {preset.height}</span>
           </div>
         </Select.Item>
       {/each}
@@ -126,47 +132,72 @@
   {#if viewport}
     <Popover.Root>
       <Popover.Trigger
-        class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-canvas)] px-2 text-ui-xs tabular-nums text-[var(--app-text)] transition-[background-color,border-color,box-shadow] hover:bg-[var(--app-surface-subtle)] focus-visible:border-[var(--app-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/25"
+        class="press ml-0.5 inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-[var(--app-surface-subtle)] px-2 font-mono text-[11px] tabular-nums text-[var(--app-text)] shadow-[var(--app-shadow-border)] hover:shadow-[var(--app-shadow-border-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)] data-[state=open]:shadow-[var(--app-shadow-border-hover)]"
         aria-label={m['portal.device_dimensions']({ width: viewport.width, height: viewport.height })}
       >
         <Ruler class="size-3 text-[var(--app-text-muted)]" />
         <span>{viewport.width} × {viewport.height}</span>
       </Popover.Trigger>
-      <Popover.Content class="w-[min(19rem,calc(100vw-1.5rem))] gap-3 p-3" align="end" sideOffset={8}>
+      <Popover.Content class="w-[min(18rem,calc(100vw-1.5rem))] gap-3 p-3" align="end" sideOffset={8}>
         <Popover.Header>
           <Popover.Title class="text-xs">{m['portal.device_custom']()}</Popover.Title>
         </Popover.Header>
-        <div class="grid grid-cols-2 gap-2">
-          <label class="grid gap-1 text-ui-xs font-medium text-[var(--app-text-muted)]">
-            <span>{m['portal.device_width']()}</span>
-            <div class="relative">
-              <Input
-                class="h-8 pr-7 text-xs tabular-nums"
-                type="number"
-                min={PORTAL_VIEWPORT_MIN}
-                max={PORTAL_VIEWPORT_MAX}
-                bind:value={widthDraft}
-                onblur={() => commitDimension('width')}
-                onkeydown={(event: KeyboardEvent) => commitOnEnter(event, 'width')}
-              />
-              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-ui-xs text-[var(--app-text-muted)]">px</span>
-            </div>
-          </label>
-          <label class="grid gap-1 text-ui-xs font-medium text-[var(--app-text-muted)]">
-            <span>{m['portal.device_height']()}</span>
-            <div class="relative">
-              <Input
-                class="h-8 pr-7 text-xs tabular-nums"
-                type="number"
-                min={PORTAL_VIEWPORT_MIN}
-                max={PORTAL_VIEWPORT_MAX}
-                bind:value={heightDraft}
-                onblur={() => commitDimension('height')}
-                onkeydown={(event: KeyboardEvent) => commitOnEnter(event, 'height')}
-              />
-              <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-ui-xs text-[var(--app-text-muted)]">px</span>
-            </div>
-          </label>
+        <!-- Cada eixo: numero exato + slider para arrastar a largura/altura. -->
+        <div class="grid gap-4">
+          <div class="grid gap-2">
+            <label class="flex items-center justify-between gap-3 text-ui-sm font-medium text-[var(--app-text-soft)]">
+              <span>{m['portal.device_width']()}</span>
+              <span class="relative w-24 shrink-0">
+                <Input
+                  class="h-7 pr-7 text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  type="number"
+                  min={PORTAL_VIEWPORT_MIN}
+                  max={PORTAL_VIEWPORT_MAX}
+                  bind:value={widthDraft}
+                  onblur={() => commitDimension('width')}
+                  onkeydown={(event: KeyboardEvent) => commitOnEnter(event, 'width')}
+                />
+                <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-ui-xs text-[var(--app-text-muted)]">px</span>
+              </span>
+            </label>
+            <Slider
+              type="single"
+              min={PORTAL_VIEWPORT_MIN}
+              max={PORTAL_VIEWPORT_MAX}
+              step={1}
+              value={sliderValue(widthDraft)}
+              onValueChange={(value: number) => (widthDraft = String(value))}
+              onValueCommit={() => commitDimension('width')}
+              aria-label={m['portal.device_width']()}
+            />
+          </div>
+          <div class="grid gap-2">
+            <label class="flex items-center justify-between gap-3 text-ui-sm font-medium text-[var(--app-text-soft)]">
+              <span>{m['portal.device_height']()}</span>
+              <span class="relative w-24 shrink-0">
+                <Input
+                  class="h-7 pr-7 text-xs tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  type="number"
+                  min={PORTAL_VIEWPORT_MIN}
+                  max={PORTAL_VIEWPORT_MAX}
+                  bind:value={heightDraft}
+                  onblur={() => commitDimension('height')}
+                  onkeydown={(event: KeyboardEvent) => commitOnEnter(event, 'height')}
+                />
+                <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-ui-xs text-[var(--app-text-muted)]">px</span>
+              </span>
+            </label>
+            <Slider
+              type="single"
+              min={PORTAL_VIEWPORT_MIN}
+              max={PORTAL_VIEWPORT_MAX}
+              step={1}
+              value={sliderValue(heightDraft)}
+              onValueChange={(value: number) => (heightDraft = String(value))}
+              onValueCommit={() => commitDimension('height')}
+              aria-label={m['portal.device_height']()}
+            />
+          </div>
         </div>
       </Popover.Content>
     </Popover.Root>
