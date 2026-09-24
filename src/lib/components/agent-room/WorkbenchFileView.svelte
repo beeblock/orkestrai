@@ -564,7 +564,7 @@
     {/if}
   </section>
 
-  <footer class="flex min-w-0 items-center gap-3 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">
+  <footer class="flex min-w-0 items-center gap-3 border-t border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3 font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">
     {#if inspection}
       <span class="truncate">{inspection.contentType}</span>
       <span class="shrink-0">{formatBytes(inspection.size)}</span>

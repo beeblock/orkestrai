@@ -310,7 +310,7 @@
     <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--app-border)] px-4 py-3">
       <div class="flex min-w-0 items-center gap-3">
         <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-success-soft)] text-[var(--app-success)]" aria-hidden="true"><ShieldCheck size={16} /></span>
-        <div class="min-w-0"><h2 class="truncate font-display text-[14px] font-semibold">{m['autonomy.title']()}</h2><p class="truncate font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{m['autonomy.revision']({ revision: policy.revision })}</p></div>
+        <div class="min-w-0"><h2 class="truncate font-display text-[14px] font-semibold">{m['autonomy.title']()}</h2><p class="truncate font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">{m['autonomy.revision']({ revision: policy.revision })}</p></div>
       </div>
       <div class="flex items-center gap-2">
         {#if policy.policy.halted}<span class="rounded-md bg-[var(--app-danger-soft)] px-1.5 py-px text-ui-xs font-medium text-[var(--app-danger)]">{m['autonomy.halted']()}</span>{/if}
@@ -322,7 +322,7 @@
     <Tabs.Root bind:value={tab} class="grid min-h-0 flex-1 grid-rows-[40px_minmax(0,1fr)] gap-0">
       <Tabs.List variant="line" class="h-10 w-full justify-start gap-0.5 overflow-x-auto rounded-none border-b border-[var(--app-border)] bg-transparent px-2">
         <Tabs.Trigger value="access" class="autonomy-tab"><ShieldCheck size={13} />{m['autonomy.access']()}</Tabs.Trigger>
-        <Tabs.Trigger value="gates" class="autonomy-tab"><CircleAlert size={13} />{m['autonomy.gates']()} {#if gates.some((item) => item.status === 'pending')}<span class="rounded-full bg-[var(--app-warning-soft)] px-1.5 font-mono text-[10.5px] leading-4 tabular-nums text-[var(--app-warning)]">{gates.filter((item) => item.status === 'pending').length}</span>{/if}</Tabs.Trigger>
+        <Tabs.Trigger value="gates" class="autonomy-tab"><CircleAlert size={13} />{m['autonomy.gates']()} {#if gates.some((item) => item.status === 'pending')}<span class="rounded-full bg-[var(--app-warning-soft)] px-1.5 font-mono text-[11px] leading-4 tabular-nums text-[var(--app-warning)]">{gates.filter((item) => item.status === 'pending').length}</span>{/if}</Tabs.Trigger>
         <Tabs.Trigger value="vault" class="autonomy-tab"><KeyRound size={13} />{m['autonomy.vault']()}</Tabs.Trigger>
         <Tabs.Trigger value="audit" class="autonomy-tab"><ScrollText size={13} />{m['autonomy.audit']()}</Tabs.Trigger>
       </Tabs.List>
@@ -407,7 +407,7 @@
           <div class="mt-4 overflow-hidden rounded-xl bg-[var(--app-surface)] shadow-border">
             {#each secrets as secret}
               <article class="secret-row flex items-start justify-between gap-3 px-3.5 py-3">
-                <div class="min-w-0"><p class="truncate text-ui-lg font-semibold">{secret.name}</p><p class="mt-0.5 truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={secret.ref}>{secret.ref}</p><p class="mt-1 text-ui-sm text-[var(--app-text-soft)]">{secret.purpose ?? m['autonomy.no_purpose']()}</p></div>
+                <div class="min-w-0"><p class="truncate text-ui-lg font-semibold">{secret.name}</p><p class="mt-0.5 truncate font-mono text-[11px] text-[var(--app-text-muted)]" title={secret.ref}>{secret.ref}</p><p class="mt-1 text-ui-sm text-[var(--app-text-soft)]">{secret.purpose ?? m['autonomy.no_purpose']()}</p></div>
                 <Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<Button {...props} variant="ghost" size="icon-sm" class="secret-delete shrink-0 text-[var(--app-text-muted)] hover:bg-[var(--app-danger-soft)] hover:text-[var(--app-danger)]" aria-label={m['autonomy.delete_secret']()} onclick={() => void removeSecret(secret)}><Trash2 size={14} /></Button>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['autonomy.delete_secret']()}</Tooltip.Content></Tooltip.Root>
               </article>
             {/each}
@@ -511,7 +511,7 @@
     color: var(--app-text);
   }
 
-  .grant-chip:has([data-state='checked']) {
+  .grant-chip:has(:global([data-state='checked'])) {
     background: var(--app-active);
     color: var(--app-text);
   }

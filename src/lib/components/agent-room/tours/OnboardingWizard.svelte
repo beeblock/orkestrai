@@ -343,7 +343,7 @@
     border-radius: 999px;
     background: var(--app-accent);
     color: var(--app-accent-contrast);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
   }
 

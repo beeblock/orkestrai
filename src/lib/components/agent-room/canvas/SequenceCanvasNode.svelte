@@ -106,7 +106,7 @@
                 ondragleave={() => { if (dropClip === item.id) dropClip = null; }}
                 ondrop={(event) => { event.preventDefault(); event.stopPropagation(); dropOn(index); }}
                 ondragend={() => { dragClip = ''; dropClip = null; }}
-              ><strong class="block text-ui-md font-medium break-words text-[var(--app-text)]">{index + 1}. {item.title}</strong><span class="font-mono text-[10.5px] text-[var(--app-text-muted)] tabular-nums">{(item.out - item.in).toFixed(2)}s · {Math.round(item.volume * 100)}%</span>{#if item.caption}<span class="mt-0.5 block line-clamp-2 text-ui-sm text-[var(--app-text-muted)]">{item.caption}</span>{/if}</button>
+              ><strong class="block text-ui-md font-medium break-words text-[var(--app-text)]">{index + 1}. {item.title}</strong><span class="font-mono text-[11px] text-[var(--app-text-muted)] tabular-nums">{(item.out - item.in).toFixed(2)}s · {Math.round(item.volume * 100)}%</span>{#if item.caption}<span class="mt-0.5 block line-clamp-2 text-ui-sm text-[var(--app-text-muted)]">{item.caption}</span>{/if}</button>
             {/each}
           </nav>
           {#if clips.length > 1}<p class="shrink-0 px-3 pb-2 text-ui-xs text-[var(--app-text-muted)]">{m['sequence.drag_hint']()}</p>{/if}

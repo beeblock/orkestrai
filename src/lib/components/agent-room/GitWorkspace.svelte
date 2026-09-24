@@ -209,7 +209,7 @@
     <div class="min-w-0 flex-1">
       <p class="gw-branch" title={snapshot?.status.branch ?? undefined}>{snapshot?.status.branch ?? m['git.detached']()}</p>
       <p class="gw-meta">
-        {#if snapshot?.status.head}<span class="font-mono text-[10.5px] tabular-nums">{snapshot.status.head.slice(0, 8)}</span>{:else}<span>{m['git.no_commits']()}</span>{/if}
+        {#if snapshot?.status.head}<span class="font-mono text-[11px] tabular-nums">{snapshot.status.head.slice(0, 8)}</span>{:else}<span>{m['git.no_commits']()}</span>{/if}
         {#if snapshot?.status.upstream}
           <span class="gw-sync" title={snapshot.status.upstream}><span>{snapshot.status.ahead}↑</span><span>{snapshot.status.behind}↓</span></span>
         {/if}
@@ -470,7 +470,7 @@
     background: var(--app-hover);
     color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -553,7 +553,7 @@
     background: var(--app-hover);
     color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
     line-height: 18px;
     text-align: center;
@@ -642,7 +642,7 @@
   .gw-count {
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -673,7 +673,7 @@
     background: var(--app-warning-soft);
     color: var(--app-warning);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 1;
   }
@@ -891,7 +891,7 @@
     background: var(--app-hover);
     color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-ligatures: none;
     white-space: nowrap;
   }
@@ -899,7 +899,7 @@
   .gw-hash {
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -1017,7 +1017,7 @@
     overflow: hidden;
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

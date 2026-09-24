@@ -223,7 +223,7 @@
       </div>
       {/if}
     </fieldset>
-    {#if error}<div role="alert" class="vw-callout danger mt-4"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{creativeError(error)}<span class="block font-mono text-[10.5px] break-all opacity-80">{error.startsWith('creative_') ? error : ''}</span></span></div>{/if}
+    {#if error}<div role="alert" class="vw-callout danger mt-4"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span class="min-w-0 break-words">{creativeError(error)}<span class="block font-mono text-[11px] break-all opacity-80">{error.startsWith('creative_') ? error : ''}</span></span></div>{/if}
     {#if billing}<div class="vw-card mt-4 space-y-2 text-xs"><p>{m['creative.billing_rate']({ price: String(billing.unitPrice), unit: billing.unit })}</p><label class="block space-y-1"><span>{m['creative.billing_units']()}</span><Input type="number" min={0.000001} max={1000000000} step="any" value={config.billingUnits ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => { config.billingUnits = event.currentTarget.value ? Number(event.currentTarget.value) : null; changed(); }} /></label></div>{/if}
     {#if preview}<div class="vw-card mt-4 text-xs leading-5"><strong class="tabular-nums">{m['creative.estimate_value']({ estimate: usd(preview.estimatedCents), reservation: usd(preview.reservedCents) })}</strong><p class="mt-1 text-[var(--app-text-muted)]">{m['creative.budget_help']()}</p>
       {#if preview.priceSource === 'public_list'}<p>{m['creative.quote_public']({ date: preview.priceVerifiedAt ?? '' })}</p>{:else if preview.priceSource === 'account_quote'}<p>{m['creative.quote_account']()}</p>{/if}
@@ -243,7 +243,7 @@
       {#each runs as run (run.id)}
         {@const tone = runTone(run.status)}
         <div class="vw-run space-y-1.5 text-xs">
-          <div class="flex items-center justify-between gap-2"><span class="vw-status" data-tone={tone}>{#if tone === 'active'}<LoaderCircle size={11} class="animate-spin" aria-hidden="true" />{/if}<span class="min-w-0 break-words">{creativeStatus(run.status)}</span></span><time class="shrink-0 font-mono text-[10.5px] text-[var(--app-text-muted)] tabular-nums">{new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
+          <div class="flex items-center justify-between gap-2"><span class="vw-status" data-tone={tone}>{#if tone === 'active'}<LoaderCircle size={11} class="animate-spin" aria-hidden="true" />{/if}<span class="min-w-0 break-words">{creativeStatus(run.status)}</span></span><time class="shrink-0 font-mono text-[11px] text-[var(--app-text-muted)] tabular-nums">{new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
           <div class="break-words text-[var(--app-text-muted)] tabular-nums">{run.snapshot.modelContract?.name ?? CREATIVE_MODELS[run.snapshot.config.modelId as CreativeModelId]?.name ?? run.snapshot.config.modelId} · {usd(run.reservedCents)}</div>
           {#if run.snapshot.characters?.length}<p class="break-words">{run.snapshot.characters.map(character => `${character.name} · v${character.version}`).join(', ')}</p>{#if run.status === 'completed'}<p class="text-[var(--app-text-muted)]">{m['creative.character_review_required']()}</p>{/if}{/if}
           {#if run.errorCode}<p class="break-words leading-5 text-[var(--app-danger)]">{creativeError(run.errorCode)}</p>{/if}
@@ -380,9 +380,9 @@
     padding: 0 5px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 18px;
     text-align: center;
     font-variant-numeric: tabular-nums;

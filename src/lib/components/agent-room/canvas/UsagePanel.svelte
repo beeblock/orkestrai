@@ -375,7 +375,7 @@
   .window-reset {
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 

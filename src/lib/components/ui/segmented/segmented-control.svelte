@@ -14,6 +14,7 @@
 </script>
 
 <script lang="ts" generics="T extends string">
+	import * as Tooltip from "$lib/components/ui/tooltip";
 	import { cn } from "$lib/utils.js";
 
 	type Props = {
@@ -120,25 +121,40 @@
 	<span bind:this={pill} class="segmented-pill" aria-hidden="true"></span>
 	{#each options as option (option.value)}
 		{@const selected = option.value === value}
-		<button
-			type="button"
-			role="radio"
-			data-segment
-			aria-checked={selected}
-			aria-label={iconOnly ? option.label : undefined}
-			tabindex={selected ? 0 : -1}
-			disabled={option.disabled}
-			class="segment"
-			onclick={() => select(option.value)}
-		>
-			{#if option.icon}
-				<option.icon size={size === "sm" ? 13 : 14} class="segment-icon" />
-			{/if}
-			{#if !iconOnly}<span class="segment-label">{option.label}</span>{/if}
-			{#if option.count !== undefined}<span class="segment-count">{option.count}</span>{/if}
-		</button>
+		{#if iconOnly}
+			<!-- Sem rotulo visivel, o tooltip e o que explica o icone a quem usa mouse. -->
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					{#snippet child({ props })}{@render segment(option, selected, props)}{/snippet}
+				</Tooltip.Trigger>
+				<Tooltip.Content side="top">{option.label}</Tooltip.Content>
+			</Tooltip.Root>
+		{:else}
+			{@render segment(option, selected, {})}
+		{/if}
 	{/each}
 </div>
+
+{#snippet segment(option: SegmentedOption<T>, selected: boolean, props: Record<string, unknown>)}
+	<button
+		{...props}
+		type="button"
+		role="radio"
+		data-segment
+		aria-checked={selected}
+		aria-label={iconOnly ? option.label : undefined}
+		tabindex={selected ? 0 : -1}
+		disabled={option.disabled}
+		class="segment"
+		onclick={() => select(option.value)}
+	>
+		{#if option.icon}
+			<option.icon size={size === "sm" ? 13 : 14} class="segment-icon" />
+		{/if}
+		{#if !iconOnly}<span class="segment-label">{option.label}</span>{/if}
+		{#if option.count !== undefined}<span class="segment-count">{option.count}</span>{/if}
+	</button>
+{/snippet}
 
 <style>
 	/* Trilho 8px com 2px de respiro -> segmentos e pilula 6px (concentrico). */
@@ -234,9 +250,9 @@
 		padding: 0 4px;
 		border-radius: 999px;
 		background: var(--app-hover);
-		color: var(--app-text-muted);
+		color: var(--app-text-soft);
 		font-family: var(--font-mono);
-		font-size: 10px;
+		font-size: 11px;
 		line-height: 16px;
 		text-align: center;
 		font-variant-numeric: tabular-nums;

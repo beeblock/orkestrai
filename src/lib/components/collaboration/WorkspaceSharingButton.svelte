@@ -169,7 +169,7 @@
 
   .share-peers {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -200,7 +200,7 @@
     background: var(--app-warning);
     color: var(--app-accent-contrast);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 16px;
     text-align: center;

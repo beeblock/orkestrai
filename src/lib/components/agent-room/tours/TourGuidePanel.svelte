@@ -142,7 +142,7 @@
   .tour-step-of {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
     color: var(--app-text-muted);
   }

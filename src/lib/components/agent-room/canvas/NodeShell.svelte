@@ -148,7 +148,7 @@
     {/if}
     {#if connections.length}
       <Popover.Root>
-        <Popover.Trigger class="connections-badge nodrag inline-flex h-[22px] shrink-0 items-center gap-1 rounded-md bg-[var(--app-hover)] px-1.5 font-mono text-[10.5px] leading-none text-[var(--app-text-muted)] tabular-nums transition-[color,background-color] duration-150 hover:bg-[var(--app-active)] hover:text-[var(--app-text)] data-[state=open]:bg-[var(--app-active)] data-[state=open]:text-[var(--app-text)]" aria-label={m['shell.connections']()}>
+        <Popover.Trigger class="connections-badge nodrag inline-flex h-[22px] shrink-0 items-center gap-1 rounded-md bg-[var(--app-hover)] px-1.5 font-mono text-[11px] leading-none text-[var(--app-text-soft)] tabular-nums transition-[color,background-color] duration-150 hover:bg-[var(--app-active)] hover:text-[var(--app-text)] data-[state=open]:bg-[var(--app-active)] data-[state=open]:text-[var(--app-text)]" aria-label={m['shell.connections']()}>
           <Link2 size={11} />{connections.length}
         </Popover.Trigger>
         <Popover.Content class="w-56 p-1">
@@ -336,7 +336,7 @@
   .connection-type {
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
   }
 
   .connection-remove {

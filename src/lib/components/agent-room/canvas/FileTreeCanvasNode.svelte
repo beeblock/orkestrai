@@ -514,7 +514,7 @@
   .result-line {
     color: var(--app-text-muted);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
@@ -619,7 +619,7 @@
     background: var(--app-hover);
     color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 400;
     text-overflow: ellipsis;
     vertical-align: 1px;
@@ -722,7 +722,7 @@
     background: var(--app-warning-soft);
     color: var(--app-warning);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 1;
   }

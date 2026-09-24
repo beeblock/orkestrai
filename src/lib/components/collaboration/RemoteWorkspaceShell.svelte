@@ -1713,7 +1713,7 @@
   .rw-count {
     min-width: 18px;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -1728,7 +1728,7 @@
     background: var(--app-warning-soft);
     color: var(--app-warning);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 18px;
     text-align: center;
@@ -2120,7 +2120,7 @@
     background: var(--app-warning);
     color: var(--app-accent-contrast);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 16px;
     text-align: center;

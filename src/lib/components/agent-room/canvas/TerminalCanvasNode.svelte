@@ -1148,8 +1148,8 @@
 
   .mention-type {
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--app-text-muted);
+    font-size: 11px;
+    color: var(--app-text-soft);
     background: var(--app-hover);
     border-radius: 4px;
     padding: 1px 5px;

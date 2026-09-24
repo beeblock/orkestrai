@@ -442,14 +442,14 @@
     onpointermove={() => (selectedId = item.id)}
     class="group/result h-[42px] min-w-0 gap-2.5 px-2"
   >
-    <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-muted)] transition-colors duration-150 group-data-selected/result:bg-[var(--app-accent-soft)] group-data-selected/result:text-[var(--app-accent)]">
+    <span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] text-[var(--app-text-soft)] transition-colors duration-150 group-data-selected/result:bg-[var(--app-accent-soft)] group-data-selected/result:text-[var(--app-accent)]">
       {#if item.kind === 'command'}{@render commandIcon(item.id)}{:else}{@render itemIcon(item.kind)}{/if}
     </span>
     <span class="min-w-0 flex-1">
       <span class="block truncate text-[13px] font-medium text-[var(--app-text)]">{item.title}</span>
       {#if item.kind !== 'command' && item.subtitle}<span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{item.subtitle}</span>{/if}
     </span>
-    {#if item.kind !== 'command'}<span class="shrink-0 font-mono text-[10.5px] text-[var(--app-text-muted)]">{kindLabel(item.kind)}</span>{/if}
+    {#if item.kind !== 'command'}<span class="shrink-0 font-mono text-[11px] text-[var(--app-text-muted)]">{kindLabel(item.kind)}</span>{/if}
   </Command.Item>
 {/snippet}
 

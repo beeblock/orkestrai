@@ -1502,7 +1502,7 @@
             <span class="cg-chip mb-2">{selectedRelationship.classification === 'runtime' ? m['code_graph.runtime_relationship']() : selectedRelationship.classification === 'inferred' ? m['code_graph.inferred_relationship']() : m['code_graph.static_relationship']()}</span>
             <strong class="block text-[12px] leading-snug font-medium break-words">{selectedRelationship.summary}</strong>
             <dl class="mt-2.5 space-y-1.5 text-ui-xs text-[var(--app-text-muted)]">
-              <div><dt>{m['code_graph.provenance']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] break-all text-[var(--app-text)]">{selectedRelationship.provenance.path ?? m['code_graph.index_inference']()}:{selectedRelationship.provenance.line ?? 1}</dd></div>
+              <div><dt>{m['code_graph.provenance']()}</dt><dd class="mt-0.5 font-mono text-[11px] break-all text-[var(--app-text)]">{selectedRelationship.provenance.path ?? m['code_graph.index_inference']()}:{selectedRelationship.provenance.line ?? 1}</dd></div>
               <div><dt>{m['code_graph.confidence']()}</dt><dd class="mt-0.5 tabular-nums text-[var(--app-text)]">{Math.round(selectedRelationship.provenance.confidence)}%</dd></div>
             </dl>
           </div>
@@ -1573,7 +1573,7 @@
                   <span class="section-label mb-1.5 block">{m['code_graph.likely_tests']()}</span>
                   <div class="space-y-0.5">
                     {#each changes.likelyTests.slice(0, 20) as path (path)}
-                      <div class="truncate rounded-md bg-[var(--app-surface-subtle)] px-2 py-1 font-mono text-[10.5px] text-[var(--app-text-muted)]" title={path}>{path}</div>
+                      <div class="truncate rounded-md bg-[var(--app-surface-subtle)] px-2 py-1 font-mono text-[11px] text-[var(--app-text-muted)]" title={path}>{path}</div>
                     {/each}
                   </div>
                 </section>
@@ -1596,7 +1596,7 @@
               <strong class="mb-1 block text-[12px] font-semibold">{m['code_graph.contract_conflicts']()}</strong>
               {#each contracts.conflicts.slice(0, 20) as conflict (conflict.id)}
                 <div class="border-t border-[color-mix(in_srgb,var(--app-danger)_20%,transparent)] py-1.5 first:border-0">
-                  <span class="block truncate font-mono text-[10.5px]">{conflict.method} {conflict.path}</span>
+                  <span class="block truncate font-mono text-[11px]">{conflict.method} {conflict.path}</span>
                   <span class="block truncate text-ui-xs text-[var(--app-text-muted)]">{conflict.projectNames.join(' · ')}</span>
                 </div>
               {/each}
@@ -1668,7 +1668,7 @@
                       <span class="min-w-0 flex-1">
                         <strong class="block text-[12px] leading-4 font-medium">{findingTitle(finding)}</strong>
                         <span class="mt-0.5 block text-ui-xs leading-4 break-words text-[var(--app-text-muted)]">{finding.paths.slice(0, 3).join(' · ') || finding.projectNames.join(' · ')}</span>
-                        <span class="mt-0.5 block font-mono text-[10.5px] leading-4 break-words text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
+                        <span class="mt-0.5 block font-mono text-[11px] leading-4 break-words text-[var(--app-text-muted)]">{findingMetrics(finding)}</span>
                         <span class="mt-1 block text-ui-xs text-[var(--app-text-soft)] tabular-nums">{m['code_graph.quality_confidence']({ confidence: finding.confidence })}</span>
                       </span>
                     </button>
@@ -1686,7 +1686,7 @@
               <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Sparkles size={14} /></span>
               <div class="min-w-0 flex-1">
                 <strong class="block text-[12px] font-medium">{semanticStateLabel(semanticStatus.state)}</strong>
-                <span class="block truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={semanticStatus.model}>{semanticStatus.model}</span>
+                <span class="block truncate font-mono text-[11px] text-[var(--app-text-muted)]" title={semanticStatus.model}>{semanticStatus.model}</span>
               </div>
             </div>
             <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--app-hover)]">
@@ -1751,7 +1751,7 @@
                 {#each runtime.runs.slice(0, 50) as run (run.id)}
                   <div class="cg-card">
                     <span class="flex items-center gap-1.5"><span class="size-1.5 shrink-0 rounded-full {run.kind === 'coverage' ? 'bg-[var(--app-success)]' : run.kind === 'test' ? 'bg-[var(--app-danger)]' : 'bg-[var(--app-info)]'}"></span><strong class="min-w-0 flex-1 truncate text-[12px] font-medium">{run.label}</strong></span>
-                    <span class="mt-1 block truncate font-mono text-[10.5px] text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
+                    <span class="mt-1 block truncate font-mono text-[11px] text-[var(--app-text-muted)]">{run.projectName}/{run.sourcePath}</span>
                     <span class="mt-1 block text-ui-xs text-[var(--app-text-muted)] tabular-nums">{run.stats.coveredSymbols} {m['code_graph.evidence_covered']()} · {run.stats.failures} {m['code_graph.evidence_failures']()} · {run.stats.observedCalls} {m['code_graph.evidence_calls']()}</span>
                   </div>
                 {/each}
@@ -1817,7 +1817,7 @@
                 {#each [...comparison.added.map((symbol) => ({ symbol, state: 'added' })), ...comparison.modified.map((item) => ({ symbol: item.after, state: 'modified' })), ...comparison.removed.map((symbol) => ({ symbol, state: 'removed' }))].slice(0, 80) as item (`${item.state}:${item.symbol.fingerprint}`)}
                   <div class="cg-card">
                     <span class="block truncate text-[12px] font-medium">{item.symbol.name}</span>
-                    <span class="block truncate font-mono text-[10.5px] text-[var(--app-text-muted)]">{comparisonStateLabel(item.state as 'added' | 'modified' | 'removed')} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
+                    <span class="block truncate font-mono text-[11px] text-[var(--app-text-muted)]">{comparisonStateLabel(item.state as 'added' | 'modified' | 'removed')} · {item.symbol.path ?? item.symbol.qualifiedName}</span>
                   </div>
                 {/each}
               </div>
@@ -1849,9 +1849,9 @@
             <div class="min-w-0"><strong class="block text-[13px] leading-snug font-semibold break-words">{selectedSymbol.name}</strong><span class="block text-ui-xs break-words text-[var(--app-text-muted)]">{symbolKind(selectedSymbol.kind)}</span></div>
           </div>
           <dl class="space-y-2.5 text-ui-xs">
-            <div><dt class="text-[var(--app-text-muted)]">{m['code_graph.qualified_name']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] leading-relaxed break-all">{selectedSymbol.qualifiedName}</dd></div>
-            {#if selectedSymbol.path}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.location']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] leading-relaxed break-all">{selectedSymbol.projectName}/{selectedSymbol.path}:{selectedSymbol.startLine ?? 1}</dd></div>{/if}
-            {#if selectedSymbol.signature}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.signature']()}</dt><dd class="mt-0.5 font-mono text-[10.5px] leading-relaxed break-words">{selectedSymbol.signature}</dd></div>{/if}
+            <div><dt class="text-[var(--app-text-muted)]">{m['code_graph.qualified_name']()}</dt><dd class="mt-0.5 font-mono text-[11px] leading-relaxed break-all">{selectedSymbol.qualifiedName}</dd></div>
+            {#if selectedSymbol.path}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.location']()}</dt><dd class="mt-0.5 font-mono text-[11px] leading-relaxed break-all">{selectedSymbol.projectName}/{selectedSymbol.path}:{selectedSymbol.startLine ?? 1}</dd></div>{/if}
+            {#if selectedSymbol.signature}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.signature']()}</dt><dd class="mt-0.5 font-mono text-[11px] leading-relaxed break-words">{selectedSymbol.signature}</dd></div>{/if}
             {#if selectedSymbol.documentation}<div><dt class="text-[var(--app-text-muted)]">{m['code_graph.documentation']()}</dt><dd class="mt-0.5 leading-relaxed break-words">{selectedSymbol.documentation}</dd></div>{/if}
           </dl>
           {#if selectedSymbol.path}
@@ -1976,7 +1976,7 @@
             </Select.Root>
           </label>
           <div>
-            <span class="mb-2 flex items-baseline justify-between gap-2 text-ui-xs font-medium"><span>{m['code_graph.token_budget']()}</span><span class="font-mono text-[10.5px] text-[var(--app-text-soft)] tabular-nums">{Number(contextTokens).toLocaleString(localeState.current)}</span></span>
+            <span class="mb-2 flex items-baseline justify-between gap-2 text-ui-xs font-medium"><span>{m['code_graph.token_budget']()}</span><span class="font-mono text-[11px] text-[var(--app-text-soft)] tabular-nums">{Number(contextTokens).toLocaleString(localeState.current)}</span></span>
             <Slider type="single" min={500} max={16000} step={500} value={Number(contextTokens) || 4000} aria-label={m['code_graph.token_budget']()} onValueChange={(value: number) => { contextTokens = String(value); }} onValueCommit={() => void buildContext()} />
           </div>
           <div>
@@ -2157,7 +2157,7 @@
     border-radius: 999px;
     background: var(--app-hover);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 16px;
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -2221,7 +2221,7 @@
     padding: 0 10px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-size: 12px;
     white-space: nowrap;
   }
@@ -2359,9 +2359,9 @@
     padding: 0 5px;
     border-radius: 999px;
     background: var(--app-hover);
-    color: var(--app-text-muted);
+    color: var(--app-text-soft);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     line-height: 16px;
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -2495,7 +2495,7 @@
     background: var(--app-warning-soft);
     color: var(--app-warning);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
   }
 

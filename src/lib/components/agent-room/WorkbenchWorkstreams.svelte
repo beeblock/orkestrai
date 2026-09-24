@@ -270,7 +270,7 @@
 
           <div class="grid gap-0 lg:grid-cols-2">
             <section class="border-b border-[var(--app-border)] px-6 py-5 lg:border-r">
-              <div class="mb-3 flex h-7 items-center justify-between gap-2"><h3 class="flex items-center gap-2 section-label"><Activity size={13} aria-hidden="true" />{m['workstreams.activity']()}</h3><span class="font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{selected.timeline.length}</span></div>
+              <div class="mb-3 flex h-7 items-center justify-between gap-2"><h3 class="flex items-center gap-2 section-label"><Activity size={13} aria-hidden="true" />{m['workstreams.activity']()}</h3><span class="font-mono text-[11px] tabular-nums text-[var(--app-text-muted)]">{selected.timeline.length}</span></div>
               {#if selected.timeline.length}
                 <ol class="space-y-0">
                   {#each [...selected.timeline].reverse() as event (event.id)}

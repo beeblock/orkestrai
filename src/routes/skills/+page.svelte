@@ -642,7 +642,7 @@
   }
 
   .builtin-tag {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--app-success);
     background: color-mix(in srgb, var(--app-success) 12%, transparent);
@@ -661,7 +661,7 @@
   }
 
   .item-source {
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--app-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -717,7 +717,7 @@
   }
 
   .mcp-env-help {
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--app-text-muted);
   }
 
