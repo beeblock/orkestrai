@@ -20,6 +20,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import * as Tooltip from '$lib/components/ui/tooltip';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import { retainUsageFeed, usageStore } from './usage-store.svelte.js';
   import type {
     AgentActivitySnapshot,
@@ -30,6 +31,7 @@
     ControlCenterSnapshot,
   } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
+  import NodeEmptyState from './canvas/NodeEmptyState.svelte';
 
   let {
     workspaceName,
@@ -120,6 +122,32 @@
     return thread.fromTitle ?? m['control_center.workspace_user']();
   }
 
+  // Rotulos de apresentacao para valores do backend; o que nao estiver aqui
+  // continua aparecendo como veio (nenhuma regra muda).
+  const CATEGORY_LABELS: Record<string, () => string> = {
+    agent: m['control_center.category_agent'], message: m['control_center.category_message'],
+    task: m['control_center.category_task'], workflow: m['control_center.category_workflow'],
+    review: m['control_center.category_review'], git: m['control_center.category_git'],
+    terminal: m['control_center.category_terminal'], design: m['control_center.category_design'],
+    portal: m['control_center.category_portal'], remote: m['control_center.category_remote'],
+    usage: m['control_center.category_usage'], system: m['control_center.category_system'],
+  };
+  const VERB_LABELS: Record<string, () => string> = {
+    updated: m['control_center.verb_updated'], started: m['control_center.verb_started'],
+    stopped: m['control_center.verb_stopped'], ended: m['control_center.verb_ended'],
+    executed: m['control_center.verb_executed'], analyzed: m['control_center.verb_analyzed'],
+    completed: m['control_center.verb_completed'], failed: m['control_center.verb_failed'],
+    synthesized: m['control_center.verb_synthesized'], decided: m['control_center.verb_decided'],
+    received: m['control_center.verb_received'], replied: m['control_center.verb_replied'],
+    requested: m['control_center.verb_requested'], resumed: m['control_center.verb_resumed'],
+    controlled: m['control_center.verb_controlled'],
+  };
+  const agentTitles = $derived(new Map((snapshot?.agents ?? []).map((agent) => [agent.nodeId, agent.title])));
+
+  function categoryLabel(category: string): string {
+    return CATEGORY_LABELS[category]?.() ?? category;
+  }
+
   function activityTitle(event: AgentActivity): string {
     if (event.objectTitle) return event.objectTitle;
     const name = (key: string) => String(event.metadata[key] ?? m['control_center.workspace_user']());
@@ -128,7 +156,10 @@
     if (event.action === 'system:task_completed') return m['control_center.action_task_completed']({ title: name('taskTitle') });
     if (event.action === 'system:task_review') return m['control_center.action_task_review']({ title: name('taskTitle') });
     if (event.action === 'system:task_working') return m['control_center.action_task_working']({ title: name('taskTitle') });
-    return event.action ?? event.verb;
+    if (event.action) return event.action;
+    const verb = VERB_LABELS[event.verb]?.() ?? event.verb;
+    const agentName = agentTitles.get(event.nodeId);
+    return agentName ? m['control_center.activity_by']({ verb, name: agentName }) : verb;
   }
 
   function activityIcon(category: AgentActivity['category']) {
@@ -160,11 +191,11 @@
 <section class="control-center grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-[var(--app-canvas)]" data-testid="control-center-view">
   <header class="border-b border-[var(--app-border)] bg-[var(--app-surface)] px-5 py-4">
     <div class="flex min-w-0 items-start gap-3">
-      <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[6px] border border-[var(--app-border)] bg-[var(--app-surface-raised)] text-[var(--app-accent)]">
+      <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]">
         <Activity size={17} aria-hidden="true" />
       </span>
       <div class="min-w-0 flex-1">
-        <h2 class="truncate text-sm font-semibold text-[var(--app-text)]">{m['control_center.title']()}</h2>
+        <h2 class="truncate font-display text-[15px] font-semibold tracking-[-0.01em] text-[var(--app-text)]">{m['control_center.title']()}</h2>
         <p class="mt-0.5 truncate text-ui-sm text-[var(--app-text-muted)]">{workspaceName} · {m['control_center.subtitle']()}</p>
       </div>
       <Tooltip.Root>
@@ -179,13 +210,13 @@
       </Tooltip.Root>
     </div>
 
-    <div class="control-summary mt-4 grid gap-px overflow-hidden rounded-[6px] border border-[var(--app-border)] bg-[var(--app-border)]" aria-label={m['control_center.summary_aria']()}>
+    <div class="control-summary mt-4 grid gap-2" aria-label={m['control_center.summary_aria']()}>
       {#each summary as metric (metric.id)}
-        <div class="flex min-w-0 items-center gap-2 bg-[var(--app-surface)] px-3 py-2.5">
-          <span style:color={metric.color}><metric.icon size={14} aria-hidden="true" /></span>
+        <div class="flex min-w-0 items-center gap-3 rounded-[10px] bg-[var(--app-surface-subtle)] px-3 py-2.5 shadow-border">
+          <span class="grid size-7 shrink-0 place-items-center rounded-lg" style:color={metric.color} style:background={`color-mix(in srgb, ${metric.color} 14%, transparent)`}><metric.icon size={14} aria-hidden="true" /></span>
           <div class="min-w-0">
-            <div class="text-sm font-semibold tabular-nums text-[var(--app-text)]">{metric.count}</div>
-            <div class="truncate text-ui-xs font-medium uppercase text-[var(--app-text-muted)]">{metric.label}</div>
+            <div class="font-mono text-lg leading-6 font-medium tabular-nums text-[var(--app-text)]">{metric.count}</div>
+            <div class="section-label truncate">{metric.label}</div>
           </div>
         </div>
       {/each}
@@ -206,8 +237,8 @@
       <section class="control-agents min-h-0 overflow-y-auto" aria-labelledby="control-center-agents">
         <div class="sticky top-0 z-10 flex h-9 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-4">
           <Users size={13} class="text-[var(--app-text-muted)]" aria-hidden="true" />
-          <h3 id="control-center-agents" class="text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">{m['control_center.agents']()}</h3>
-          <span class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]">{snapshot?.agents.length ?? 0}</span>
+          <h3 id="control-center-agents" class="section-label">{m['control_center.agents']()}</h3>
+          <span class="ml-auto font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{snapshot?.agents.length ?? 0}</span>
         </div>
         {#if snapshot?.agents.length}
           <div class="divide-y divide-[var(--app-border)]">
@@ -218,9 +249,9 @@
                 </span>
                 <div class="min-w-0">
                   <div class="flex min-w-0 items-center gap-2">
-                    <h4 class="truncate text-xs font-semibold text-[var(--app-text)]">{agent.title}</h4>
-                    <span class="shrink-0 rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]">{agent.provider ?? m['control_center.shell']()}</span>
-                    {#if agent.floorName}<span class="inline-flex min-w-0 items-center gap-1 rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]"><Layers size={9} class="shrink-0" /><span class="truncate">{agent.floorName}</span></span>{/if}
+                    <h4 class="truncate text-[13px] font-semibold text-[var(--app-text)]">{agent.title}</h4>
+                    <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]">{agent.provider ?? m['control_center.shell']()}</span>
+                    {#if agent.floorName}<span class="inline-flex min-w-0 items-center gap-1 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-ui-xs text-[var(--app-text-muted)]"><Layers size={11} class="shrink-0" /><span class="truncate">{agent.floorName}</span></span>{/if}
                     {#if agent.role}<span class="min-w-0 truncate text-ui-xs text-[var(--app-text-muted)]">{agent.role}</span>{/if}
                   </div>
                   <p class="mt-1 truncate text-ui-sm text-[var(--app-text-soft)]">{agent.currentTask?.title ?? actionLabel(agent)}</p>
@@ -232,46 +263,31 @@
                   </div>
                 </div>
                 <div class="flex flex-col items-end gap-1 text-ui-xs text-[var(--app-text-muted)]">
-                  {#if usageFor(agent)}<span class="font-semibold tabular-nums text-[var(--app-text-soft)]">{usageFor(agent)}</span>{/if}
-                  <span>{m['control_center.provider_usage']()}</span>
+                  {#if usageFor(agent)}
+                    <span class="font-mono text-[12px] font-semibold tabular-nums text-[var(--app-text-soft)]">{usageFor(agent)}</span>
+                    <span>{m['control_center.provider_usage']()}</span>
+                  {/if}
                 </div>
               </article>
             {/each}
           </div>
         {:else}
-          <div class="grid min-h-56 place-items-center p-8 text-center">
-            <div><CircleDashed size={24} class="mx-auto text-[var(--app-text-muted)]" /><p class="mt-2 text-xs text-[var(--app-text-muted)]">{m['control_center.no_agents']()}</p></div>
-          </div>
+          <div class="grid min-h-56"><NodeEmptyState icon={CircleDashed} title={m['control_center.no_agents']()} /></div>
         {/if}
       </section>
 
       <section class="min-h-0 overflow-y-auto" aria-labelledby="control-center-secondary">
         <div class="sticky top-0 z-10 flex h-9 items-center gap-1 border-b border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-2">
           <h3 id="control-center-secondary" class="sr-only">{m['control_center.activity']()}</h3>
-          <button
-            type="button"
-            class="flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-ui-xs font-semibold uppercase transition-colors"
-            class:bg-[var(--app-surface-raised)]={secondaryView === 'activity'}
-            class:text-[var(--app-text)]={secondaryView === 'activity'}
-            class:text-[var(--app-text-muted)]={secondaryView !== 'activity'}
-            aria-pressed={secondaryView === 'activity'}
-            onclick={() => (secondaryView = 'activity')}
-          >
-            <Activity size={12} />{m['control_center.activity']()}
-            <span class="tabular-nums">{snapshot?.activity.length ?? 0}</span>
-          </button>
-          <button
-            type="button"
-            class="flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-ui-xs font-semibold uppercase transition-colors"
-            class:bg-[var(--app-surface-raised)]={secondaryView === 'communications'}
-            class:text-[var(--app-text)]={secondaryView === 'communications'}
-            class:text-[var(--app-text-muted)]={secondaryView !== 'communications'}
-            aria-pressed={secondaryView === 'communications'}
-            onclick={() => (secondaryView = 'communications')}
-          >
-            <Inbox size={12} />{m['control_center.inbox']()}
-            <span class="tabular-nums">{snapshot?.communications.length ?? 0}</span>
-          </button>
+          <SegmentedControl
+            size="sm"
+            label={m['control_center.activity']()}
+            bind:value={secondaryView}
+            options={[
+              { value: 'activity', label: m['control_center.activity'](), icon: Activity, count: snapshot?.activity.length ?? 0 },
+              { value: 'communications', label: m['control_center.inbox'](), icon: Inbox, count: snapshot?.communications.length ?? 0 },
+            ]}
+          />
         </div>
 
         {#if secondaryView === 'activity'}
@@ -285,12 +301,12 @@
                   </span>
                   <div class="min-w-0">
                     <div class="flex min-w-0 items-start gap-2">
-                      <strong class="min-w-0 flex-1 text-ui-xs font-semibold leading-4 text-[var(--app-text)]">{activityTitle(event)}</strong>
+                      <strong class="min-w-0 flex-1 text-ui-md font-semibold leading-4 text-[var(--app-text)]">{activityTitle(event)}</strong>
                       <span class="shrink-0 text-ui-xs text-[var(--app-text-muted)]">{elapsed(event.createdAt)}</span>
                     </div>
                     {#if event.outcome}<p class="mt-1 text-ui-xs leading-4 text-[var(--app-text-soft)]">{event.outcome}</p>{/if}
                     <div class="mt-1.5 flex min-w-0 items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
-                      <span class="rounded-[3px] bg-[var(--app-surface-raised)] px-1.5 py-0.5">{event.category}</span>
+                      <span class="rounded-md bg-[var(--app-hover)] px-1.5 py-0.5">{categoryLabel(event.category)}</span>
                       <span>{stateLabel(event.state)}</span>
                       {#if event.objectType}<span>·</span><span class="truncate">{event.objectType}</span>{/if}
                     </div>
@@ -305,9 +321,7 @@
               {/each}
             </div>
           {:else}
-            <div class="grid min-h-56 place-items-center p-8 text-center">
-              <div><Activity size={24} class="mx-auto text-[var(--app-text-muted)]" /><p class="mt-2 text-xs text-[var(--app-text-muted)]">{m['control_center.no_activity']()}</p></div>
-            </div>
+            <div class="grid min-h-56"><NodeEmptyState icon={Activity} title={m['control_center.no_activity']()} /></div>
           {/if}
         {:else if snapshot?.communications.length}
           <div class="divide-y divide-[var(--app-border)]">
@@ -339,9 +353,7 @@
             {/each}
           </div>
         {:else}
-          <div class="grid min-h-56 place-items-center p-8 text-center">
-            <div><Inbox size={24} class="mx-auto text-[var(--app-text-muted)]" /><p class="mt-2 text-xs text-[var(--app-text-muted)]">{m['control_center.no_messages']()}</p></div>
-          </div>
+          <div class="grid min-h-56"><NodeEmptyState icon={Inbox} title={m['control_center.no_messages']()} /></div>
         {/if}
       </section>
     </div>

@@ -48,7 +48,7 @@
   {#if panes.length > 1}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
-        class="grid size-6 shrink-0 place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 transition-[background-color,color,opacity] hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-text)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] group-hover:opacity-100"
+        class="wt-action"
         aria-label={m['workbench.move_to']()}
         onclick={(event) => event.stopPropagation()}
       >
@@ -66,29 +66,30 @@
 
 {#if placement === 'vertical'}
   <section class="px-1.5 pb-2" aria-label={label}>
-    <div class="flex h-6 items-center gap-2 px-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
+    <div class="wt-section">
       <span class={`size-1.5 rounded-full ${activePane ? 'bg-[var(--app-accent)]' : 'bg-[var(--app-border-strong)]'}`}></span>
       <span>{label}</span>
-      <span class="ml-auto tabular-nums">{tabs.length}</span>
+      <span class="wt-count">{tabs.length}</span>
     </div>
-    <div class="space-y-0.5">
+    <div class="space-y-px">
       {#each tabs as node (node.id)}
         <div
-          class={`group flex min-h-8 min-w-0 cursor-grab items-center rounded-[5px] border transition-[background-color,border-color,color] active:cursor-grabbing ${pane.activeNodeId === node.id ? 'border-[var(--app-border-strong)] bg-[var(--app-surface-raised)] text-[var(--app-text)]' : 'border-transparent text-[var(--app-text-soft)] hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)]'}`}
+          class="wt-row group"
+          class:active={pane.activeNodeId === node.id}
           draggable="true"
           role="group"
           title={m['workbench.move_tab']()}
           ondragstart={(event) => startTabDrag(event, node.id)}
         >
           <button
-            class="flex min-h-8 min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+            class="wt-row-button"
             aria-current={pane.activeNodeId === node.id ? 'page' : undefined}
             onclick={() => onSelect(node.id)}
           >
             <span class={pane.activeNodeId === node.id ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'}>
               <WorkbenchNodeIcon type={node.type} size={13} />
             </span>
-            <span data-testid="workbench-vertical-tab-name" class="min-w-0 flex-1 break-words text-ui-sm leading-[14px]">{node.title || node.type}</span>
+            <span data-testid="workbench-vertical-tab-name" class="min-w-0 flex-1 break-words text-[12.5px] leading-[16px]">{node.title || node.type}</span>
             {#if dirtyNodeIds.includes(node.id)}<span class="size-1.5 shrink-0 rounded-full bg-[var(--app-warning)]" aria-label={m['editor.unsaved']()}></span>{/if}
           </button>
           {@render moveMenu(node.id)}
@@ -97,7 +98,7 @@
               {#snippet child({ props })}
                 <button
                   {...props}
-                  class="mr-1 grid size-6 shrink-0 place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 transition-[background-color,color,opacity] hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-text)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] group-hover:opacity-100"
+                  class="wt-action close"
                   aria-label={m['workbench.close_tab']({ name: node.title || node.type })}
                   onclick={() => onClose(node.id)}
                 >
@@ -112,23 +113,24 @@
     </div>
   </section>
 {:else}
-  <div class={`flex h-9 min-w-0 items-stretch overflow-x-auto border-b bg-[var(--app-surface-subtle)] ${activePane ? 'border-b-[var(--app-accent)]' : 'border-[var(--app-border)]'}`} role="tablist" aria-label={label}>
+  <div class="wt-strip" class:pane-active={activePane} role="tablist" aria-label={label}>
     {#each tabs as node (node.id)}
       <div
-        class={`group flex min-w-32 max-w-56 shrink-0 cursor-grab items-center border-r border-[var(--app-border)] active:cursor-grabbing ${pane.activeNodeId === node.id ? 'bg-[var(--app-surface)] text-[var(--app-text)]' : 'text-[var(--app-text-muted)] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text-soft)]'}`}
+        class="wt-tab group"
+        class:active={pane.activeNodeId === node.id}
         draggable="true"
         role="presentation"
         title={m['workbench.move_tab']()}
         ondragstart={(event) => startTabDrag(event, node.id)}
       >
         <button
-          class="flex h-full min-w-0 flex-1 items-center gap-2 px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+          class="wt-tab-button"
           role="tab"
           aria-selected={pane.activeNodeId === node.id}
           onclick={() => onSelect(node.id)}
         >
           <WorkbenchNodeIcon type={node.type} size={13} />
-          <span class="min-w-0 flex-1 truncate text-ui-sm" title={node.title || node.type}>{node.title || node.type}</span>
+          <span class="min-w-0 flex-1 truncate text-[12.5px]" title={node.title || node.type}>{node.title || node.type}</span>
           {#if dirtyNodeIds.includes(node.id)}<span class="size-1.5 shrink-0 rounded-full bg-[var(--app-warning)]" aria-label={m['editor.unsaved']()}></span>{/if}
         </button>
         {@render moveMenu(node.id)}
@@ -137,7 +139,7 @@
             {#snippet child({ props })}
               <button
                 {...props}
-                class="mr-1 grid size-6 shrink-0 place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 transition-[background-color,color,opacity] hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-text)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] group-hover:opacity-100"
+                class="wt-action close"
                 aria-label={m['workbench.close_tab']({ name: node.title || node.type })}
                 onclick={() => onClose(node.id)}
               >
@@ -151,3 +153,185 @@
     {/each}
   </div>
 {/if}
+
+<style>
+  /* Itens abertos (lista vertical): mesmo idioma de selecao da arvore. */
+  .wt-section {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 26px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-text-muted);
+  }
+
+  .wt-count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wt-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: 30px;
+    border-radius: 6px;
+    color: var(--app-text-soft);
+    cursor: grab;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .wt-row:active {
+    cursor: grabbing;
+  }
+
+  .wt-row:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .wt-row.active {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .wt-row.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--app-accent);
+  }
+
+  .wt-row-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 30px;
+    flex: 1;
+    padding: 6px 8px 6px 10px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .wt-row-button:focus-visible,
+  .wt-tab-button:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+    border-radius: 6px;
+  }
+
+  /* Acoes de aba: aparecem ao apontar ou focar; fechar fica visivel na ativa. */
+  .wt-action {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .wt-action.close {
+    margin-right: 3px;
+  }
+
+  .group:hover .wt-action,
+  .group:focus-within .wt-action,
+  .active .wt-action.close {
+    opacity: 1;
+  }
+
+  .wt-action:hover {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .wt-action:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  /* Abas horizontais: a ativa se funde ao conteudo e ganha linha de acento
+     no topo (neutra quando o painel nao esta ativo). */
+  .wt-strip {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    height: 36px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--app-border);
+    background: var(--app-surface-subtle);
+  }
+
+  .wt-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wt-tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 128px;
+    max-width: 224px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--app-border);
+    color: var(--app-text-muted);
+    cursor: grab;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .wt-tab:hover {
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+  }
+
+  .wt-tab.active {
+    margin-bottom: -1px;
+    background: var(--app-canvas);
+    color: var(--app-text);
+    box-shadow: inset 0 2px 0 var(--app-border-strong);
+  }
+
+  .pane-active .wt-tab.active {
+    box-shadow: inset 0 2px 0 var(--app-accent);
+  }
+
+  .wt-tab-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 100%;
+    flex: 1;
+    padding: 0 6px 0 10px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+</style>

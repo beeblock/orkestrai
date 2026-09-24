@@ -24,6 +24,7 @@
     Film,
     BookUser,
     Palette,
+    Network,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -99,6 +100,7 @@
   } from '$lib/components/agent-room/leader-dictation.js';
   import { TEXT_DICTATION_FALLBACK, type TextDictationFallbackDetail } from '$lib/components/agent-room/text-dictation.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
+  import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import WorkspaceModeSwitch from '$lib/components/agent-room/WorkspaceModeSwitch.svelte';
   import AttentionCenter from '$lib/components/agent-room/AttentionCenter.svelte';
   import WorkspacePermissionNotice from '$lib/components/agent-room/WorkspacePermissionNotice.svelte';
@@ -1055,7 +1057,7 @@
 {#snippet renderWorkbenchPane(pane: WorkbenchPaneState)}
   {@const paneNode = nodeForPane(pane)}
   <section
-    class={`grid h-full min-h-0 min-w-0 bg-[var(--app-canvas)] transition-[box-shadow,background-color] ${tabPlacement === 'horizontal' ? 'grid-rows-[36px_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)]'} ${selectedLayout?.activePaneId === pane.id ? 'shadow-[inset_0_0_0_1px_var(--app-border-strong)]' : ''} ${dropTargetPaneId === pane.id ? 'bg-[var(--app-accent-soft)] shadow-[inset_0_0_0_2px_var(--app-accent)]' : ''}`}
+    class={`grid h-full min-h-0 min-w-0 bg-[var(--app-canvas)] transition-[box-shadow,background-color] ${tabPlacement === 'horizontal' ? 'grid-rows-[36px_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)]'} ${selectedLayout?.activePaneId === pane.id && visiblePanes.length > 1 ? 'shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--app-accent)_45%,transparent)]' : ''} ${dropTargetPaneId === pane.id ? 'bg-[var(--app-accent-soft)] shadow-[inset_0_0_0_2px_var(--app-accent)]' : ''}`}
     data-pane-id={pane.id}
     data-testid={`workbench-pane-${pane.id}`}
     aria-label={paneLabel(pane.id)}
@@ -1158,13 +1160,7 @@
           {/key}
         {/if}
       {:else}
-        <div class="flex h-full items-center justify-center p-8">
-          <div class="max-w-xs text-center">
-            <PanelRightOpen size={26} class="mx-auto mb-3 text-[var(--app-text-muted)]" strokeWidth={1.5} aria-hidden="true" />
-            <h2 class="text-sm font-semibold text-balance">{m['workbench.empty_pane_title']()}</h2>
-            <p class="mt-1 text-xs leading-5 text-pretty text-[var(--app-text-muted)]">{m['workbench.empty_pane_body']()}</p>
-          </div>
-        </div>
+        <NodeEmptyState icon={PanelRightOpen} title={m['workbench.empty_pane_title']()} description={m['workbench.empty_pane_body']()} />
       {/if}
     </div>
   </section>
@@ -1198,7 +1194,7 @@
   <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-sidebar)]">
     <div class="flex h-11 shrink-0 items-center gap-2 px-3">
       <img src="/brand/icon.svg" width="20" height="20" alt="" />
-      <strong class="font-['Sora_Variable'] text-[14px] font-semibold text-[var(--app-text)]">Orkestrai</strong>
+      <strong class="font-display text-[14.5px] font-semibold tracking-[-0.01em] text-[var(--app-text)]">Orkestrai</strong>
       <div class="ml-auto"><WorkspaceSharingButton variant="icon" workspaceId={selectedWorkspaceId} onOpen={() => (sharingOpen = true)} /></div>
     </div>
     <div class="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[var(--app-border)] px-3">
@@ -1227,7 +1223,7 @@
 
     {#if tabPlacement === 'vertical' && selectedLayout && selectedWorkspaceId}
       <div class="max-h-[38%] shrink-0 overflow-y-auto border-b border-[var(--app-border)] pb-1" data-testid="workbench-vertical-tabs">
-        <div class="flex h-7 items-center px-3 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
+        <div class="wb-section wb-section-top">
           {m['workbench.open_items']()}
         </div>
         {#each visiblePanes as pane (pane.id)}
@@ -1266,7 +1262,7 @@
           {@const expanded = expandedWorkspaceIds.includes(workspace.id) || Boolean(query.trim())}
           <section class="mb-0.5">
             <button
-              class="group flex h-8 w-full items-center gap-1.5 rounded-[5px] px-1.5 text-left text-xs text-[var(--app-text-soft)] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"
+              class="wb-workspace group"
               aria-expanded={expanded}
               onclick={() => void toggleWorkspace(workspace.id)}
             >
@@ -1276,35 +1272,36 @@
               {#if workspace.suspendedAt}
                 <Power size={11} class="text-[var(--app-text-muted)]" aria-label={m['canvas.ws_suspended']({ name: workspace.name })} />
               {:else if workspaceAttention(workspace.id)}
-                <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-ui-xs font-semibold tabular-nums text-[var(--app-warning)]" title={m['control_center.summary_attention']()}>{workspaceAttention(workspace.id)}</span>
+                <span class="wb-badge" title={m['control_center.summary_attention']()}>{workspaceAttention(workspace.id)}</span>
               {:else if controlCenters[workspace.id]?.counts.working}
                 <span class="h-1.5 w-1.5 rounded-full bg-[var(--app-success)]" role="status" aria-label={m['control_center.summary_working']()}></span>
               {/if}
               {#if loadedWorkspaceIds.includes(workspace.id)}
-                <span class="min-w-5 text-right text-ui-xs tabular-nums text-[var(--app-text-muted)]">{workspaceNodes.length}</span>
+                <span class="wb-count">{workspaceNodes.length}</span>
               {/if}
             </button>
 
             {#if expanded}
-              <div class="ml-3 border-l border-[var(--app-border)] py-0.5 pl-1.5">
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchControlCenterItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
+              <div class="wb-children">
+                <div class="wb-section">{m['workbench.hubs']()}</div>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchControlCenterItemId(workspace.id)}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="wb-row-button"
                     aria-current={selectedNodeId === workbenchControlCenterItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchControlCenterItemId(workspace.id))}
                   >
                     <Activity size={13} class={selectedNodeId === workbenchControlCenterItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['control_center.title']()}</span>
                     {#if workspaceAttention(workspace.id)}
-                      <span class="rounded-[3px] bg-[color-mix(in_srgb,var(--app-warning)_16%,transparent)] px-1.5 py-0.5 text-ui-xs font-semibold tabular-nums text-[var(--app-warning)]">{workspaceAttention(workspace.id)}</span>
+                      <span class="wb-badge">{workspaceAttention(workspace.id)}</span>
                     {:else}
-                      <span class="text-ui-xs tabular-nums text-[var(--app-text-muted)]">{controlCenters[workspace.id]?.counts.working ?? 0}</span>
+                      <span class="wb-count">{controlCenters[workspace.id]?.counts.working ?? 0}</span>
                     {/if}
                   </button>
                 </div>
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchWorkstreamsItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchWorkstreamsItemId(workspace.id)}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="wb-row-button"
                     aria-current={selectedNodeId === workbenchWorkstreamsItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchWorkstreamsItemId(workspace.id))}
                   >
@@ -1312,9 +1309,9 @@
                     <span class="min-w-0 flex-1 truncate font-medium">{m['workstreams.title']()}</span>
                   </button>
                 </div>
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchReviewCenterItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchReviewCenterItemId(workspace.id)}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="wb-row-button"
                     aria-current={selectedNodeId === workbenchReviewCenterItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchReviewCenterItemId(workspace.id))}
                   >
@@ -1322,9 +1319,9 @@
                     <span class="min-w-0 flex-1 truncate font-medium">{m['review_center.title']()}</span>
                   </button>
                 </div>
-                <div class="group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] text-[var(--app-text-soft)] transition-[background-color,color] hover:bg-[var(--app-surface-raised)]">
+                <div class="wb-row group">
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="wb-row-button"
                     aria-haspopup="dialog"
                     onclick={() => {
                       selectedWorkspaceId = workspace.id;
@@ -1337,9 +1334,9 @@
                     <span class="text-ui-xs text-[var(--app-text-muted)]">{m['council.new']()}</span>
                   </button>
                 </div>
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchAutomationsItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchAutomationsItemId(workspace.id)}>
                   <button
-                    class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                    class="wb-row-button"
                     aria-current={selectedNodeId === workbenchAutomationsItemId(workspace.id) ? 'page' : undefined}
                     onclick={() => selectNode(workspace.id, workbenchAutomationsItemId(workspace.id))}
                   >
@@ -1347,20 +1344,20 @@
                     <span class="min-w-0 flex-1 truncate font-medium">{m['automation.title']()}</span>
                   </button>
                 </div>
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
-                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchMemoryItemId(workspace.id))}>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchMemoryItemId(workspace.id)}>
+                  <button class="wb-row-button" aria-current={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchMemoryItemId(workspace.id))}>
                     <BookMarked size={13} class={selectedNodeId === workbenchMemoryItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['knowledge.title']()}</span>
                   </button>
                 </div>
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
-                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchHuddlesItemId(workspace.id))}>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchHuddlesItemId(workspace.id)}>
+                  <button class="wb-row-button" aria-current={selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchHuddlesItemId(workspace.id))}>
                     <MessageCircleMore size={13} class={selectedNodeId === workbenchHuddlesItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['huddle.title']()}</span>
                   </button>
                 </div>
-                <div class={`group mb-0.5 flex h-8 w-full min-w-0 items-center rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
-                  <button class="flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]" aria-current={selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchAnnotationsItemId(workspace.id))}>
+                <div class="wb-row group" class:selected={selectedNodeId === workbenchAnnotationsItemId(workspace.id)}>
+                  <button class="wb-row-button" aria-current={selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'page' : undefined} onclick={() => selectNode(workspace.id, workbenchAnnotationsItemId(workspace.id))}>
                     <MessageSquareText size={13} class={selectedNodeId === workbenchAnnotationsItemId(workspace.id) ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'} aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate font-medium">{m['annotations.title']()}</span>
                   </button>
@@ -1374,14 +1371,14 @@
                 {#each EXPLORER_GROUPS as group (group.id)}
                   {@const groupedItems = workspaceNodes.filter((item) => group.types.includes(item.type))}
                   {#if groupedItems.length}
-                    <div class="flex h-6 items-center gap-2 px-2 text-ui-xs font-semibold uppercase text-[var(--app-text-muted)]">
+                    <div class="wb-section">
                       <span>{explorerGroupLabel(group.id)}</span>
-                      <span class="ml-auto tabular-nums">{groupedItems.length}</span>
+                      <span class="wb-count">{groupedItems.length}</span>
                     </div>
                     {#each groupedItems as item (item.id)}
-                      <div data-testid={item.type === 'terminal' ? 'workbench-agent-item' : undefined} class={`group flex ${item.type === 'terminal' ? 'min-h-16 items-stretch' : 'h-8 items-center'} w-full min-w-0 rounded-[5px] transition-[background-color,color] hover:bg-[var(--app-surface-raised)] ${selectedNodeId === item.id ? 'bg-[var(--app-accent-soft)] text-[var(--app-text)]' : 'text-[var(--app-text-soft)]'}`}>
+                      <div data-testid={item.type === 'terminal' ? 'workbench-agent-item' : undefined} class="wb-row group" class:agent={item.type === 'terminal'} class:selected={selectedNodeId === item.id}>
                         <button
-                          class="flex min-w-0 flex-1 items-start gap-2 px-2 text-left text-ui-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-accent)]"
+                          class="wb-row-button" class:multiline={item.type === 'terminal'}
                           aria-current={selectedNodeId === item.id ? 'page' : undefined}
                           onclick={() => selectNode(workspace.id, item.id)}
                         >
@@ -1406,7 +1403,7 @@
                             {#snippet child({ props })}
                               <button
                                 {...props}
-                                class="mr-1 grid size-6 shrink-0 self-center place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 transition-[background-color,color,opacity] hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-text)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] group-hover:opacity-100"
+                                class="wb-row-action"
                                 aria-label={m['workbench.open_right_named']({ name: item.title || nodeTypeLabel(item) })}
                                 onclick={() => selectNode(workspace.id, item.id, 'horizontal')}
                               >
@@ -1421,7 +1418,7 @@
                             {#snippet child({ props })}
                               <button
                                 {...props}
-                                class="mr-1 grid size-6 shrink-0 self-center place-items-center rounded-[4px] text-[var(--app-text-muted)] opacity-0 transition-[background-color,color,opacity] hover:bg-[var(--app-accent-soft)] hover:text-[var(--app-text)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] group-hover:opacity-100"
+                                class="wb-row-action"
                                 aria-label={m['workbench.open_below_named']({ name: item.title || nodeTypeLabel(item) })}
                                 onclick={() => selectNode(workspace.id, item.id, 'vertical')}
                               >
@@ -1451,20 +1448,20 @@
   <section class="grid min-h-0 min-w-0 grid-rows-[48px_minmax(0,1fr)_28px]">
     <header class="flex min-w-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3" data-testid="terminal-workspace-header">
       {#if selectedWorkspace && selectedLayout}
-        <WorkspaceIcon name={selectedWorkspace.icon} size={15} />
-        <span class="truncate text-xs font-medium">{selectedWorkspace.name}</span>
+        <span class="shrink-0 text-[var(--app-text-muted)]"><WorkspaceIcon name={selectedWorkspace.icon} size={15} /></span>
+        <span class="truncate text-[12.5px] font-medium text-[var(--app-text-soft)]">{selectedWorkspace.name}</span>
         {#if selectedNode}
           <ChevronRight size={13} class="shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
-          <span class="min-w-0 truncate text-xs text-[var(--app-text-soft)]">{selectedNode.title || nodeTypeLabel(selectedNode)}</span>
-          <span class="ml-auto shrink-0 text-ui-xs text-[var(--app-text-muted)]">
-            {isWorkbenchFileItemId(selectedNode.id) ? m['workbench_files.file']() : nodeTypeLabel(selectedNode)}
-          </span>
-        {:else}
-          <span class="ml-auto"></span>
+          <span class="min-w-0 truncate text-[12.5px] font-medium text-[var(--app-text)]">{selectedNode.title || nodeTypeLabel(selectedNode)}</span>
+          {@const typeLabel = isWorkbenchFileItemId(selectedNode.id) ? m['workbench_files.file']() : nodeTypeLabel(selectedNode)}
+          {#if typeLabel !== (selectedNode.title || nodeTypeLabel(selectedNode))}
+            <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--app-text-muted)]">{typeLabel}</span>
+          {/if}
         {/if}
-        <div class="flex shrink-0 items-center gap-0.5 rounded-md border border-[var(--app-border)] bg-[var(--app-surface-subtle)] p-0.5">
+        <span class="ml-auto"></span>
+        <div class="flex shrink-0 items-center gap-0.5">
           <span
-            class="px-1.5 text-ui-xs tabular-nums text-[var(--app-text-muted)]"
+            class="px-1.5 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]"
             aria-label={m['workbench.pane_count']({ current: visiblePanes.length, max: MAX_WORKBENCH_PANES })}
             title={visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : undefined}
             data-testid="workbench-pane-count"
@@ -1553,13 +1550,11 @@
       {#if selectedWorkspace && selectedLayout}
         {@render renderWorkbenchLayout(selectedLayout.root)}
       {:else if !loading}
-        <div class="flex h-full items-center justify-center p-8">
-          <div class="max-w-sm text-center">
-            <SquareTerminal size={28} class="mx-auto mb-3 text-[var(--app-text-muted)]" strokeWidth={1.5} />
-            <h1 class="text-sm font-semibold">{m['workbench.empty_title']()}</h1>
-            <p class="mt-1 text-xs leading-5 text-[var(--app-text-muted)]">{m['workbench.empty_body']()}</p>
-          </div>
-        </div>
+        <NodeEmptyState icon={SquareTerminal} title={m['workbench.empty_title']()} description={m['workbench.empty_body']()}>
+          {#snippet actions()}
+            <Button variant="outline" size="sm" class="press gap-1.5" href="/canvas"><Network size={14} />{m['workbench.open_canvas']()}</Button>
+          {/snippet}
+        </NodeEmptyState>
       {/if}
     </div>
     <WorkbenchUsageFooter workspaceId={selectedWorkspaceId} />
@@ -1598,3 +1593,191 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  /*
+   * Arvore do Workbench: mesmo idioma da barra lateral do Canvas — linhas de
+   * 30px, selecao neutra com indicador de acento, acoes da linha que aparecem
+   * ao apontar ou focar e rotulos de secao com respiro entre letras.
+   */
+  .wb-workspace {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    min-height: 30px;
+    padding: 0 8px 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .wb-workspace:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .wb-workspace:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .wb-children {
+    margin: 1px 0 4px 13px;
+    padding: 2px 0 2px 6px;
+    box-shadow: inset 1px 0 0 var(--app-border);
+  }
+
+  .wb-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    margin-top: 6px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-text-muted);
+  }
+
+  .wb-children > .wb-section:first-child {
+    margin-top: 0;
+  }
+
+  .wb-section-top {
+    margin-top: 2px;
+    padding: 0 12px;
+  }
+
+  .wb-count {
+    margin-left: auto;
+    min-width: 18px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-text-muted);
+  }
+
+  .wb-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--app-warning-soft);
+    color: var(--app-warning);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wb-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    margin-bottom: 1px;
+    border-radius: 6px;
+    color: var(--app-text-soft);
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .wb-row.agent {
+    align-items: stretch;
+    min-height: 56px;
+  }
+
+  .wb-row:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .wb-row.selected {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .wb-row.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--app-accent);
+  }
+
+  .wb-row-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+    align-self: stretch;
+    padding: 0 8px 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .wb-row-button.multiline {
+    align-items: flex-start;
+  }
+
+  .wb-row-button:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .wb-row-action {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 3px;
+    flex-shrink: 0;
+    align-self: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .wb-row:hover .wb-row-action,
+  .wb-row:focus-within .wb-row-action {
+    opacity: 1;
+  }
+
+  .wb-row-action:hover {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .wb-row-action:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+</style>
