@@ -933,6 +933,10 @@
     transition: opacity var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
   }
 
+  .dictate-controls > :global(*) {
+    pointer-events: auto;
+  }
+
   .terminal-node:hover .dictate-controls,
   .terminal-node:focus-within .dictate-controls,
   .dictate-controls.busy {

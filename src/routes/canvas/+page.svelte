@@ -3839,6 +3839,12 @@
     transition: opacity var(--duration-quick) ease-out;
   }
 
+  /* O conteiner nao bloqueia a linha (degrade), mas os botoes continuam
+     clicaveis por mouse, teclado e automacao. */
+  .row-actions > :global(*) {
+    pointer-events: auto;
+  }
+
   .workspace-list li:hover {
     --row-bg: color-mix(in srgb, var(--app-sidebar), var(--app-text) 8%);
   }
@@ -3979,6 +3985,10 @@
     pointer-events: none;
     background: linear-gradient(to right, transparent, color-mix(in srgb, var(--app-sidebar), var(--app-text) 8%) 14px);
     transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .ws-group-actions > :global(*) {
+    pointer-events: auto;
   }
 
   .ws-group-header:hover .ws-group-actions,
