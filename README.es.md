@@ -7,8 +7,20 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/beeblock/orkestrai/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/beeblock/orkestrai?label=release&color=f3c34f"></a>
+  <img alt="macOS, Windows y Linux" src="https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-171b20">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/beeblock/orkestrai?color=171b20"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/beeblock/orkestrai/releases/latest"><strong>Descargar para macOS, Windows o Linux</strong></a> · <a href="https://orkestrai.app/es">orkestrai.app</a>
+</p>
+
+<p align="center">
   <a href="README.md">English</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · Español
 </p>
+
+<p align="center"><img src="docs/media/readme/orchestrate.webp" alt="El agente Maestro crea una tarea por el puente de Orkestrai, delega un comando al agente Frontend y recibe la respuesta en el canvas" width="880"></p>
 
 Orkestrai es una aplicación de escritorio local-first para macOS, Windows y
 Linux. Reúne Claude Code, Codex CLI, Kimi Code, OpenCode, Cursor, Antigravity,
@@ -16,18 +28,85 @@ Cline, Devin, shells, tareas, notas,
 navegadores y worktrees de Git en un lienzo persistente donde developers, vibe
 coders, diseñadores, marketers y creators pueden dirigir un equipo de IA.
 
-Descarga los instaladores más recientes desde
-[beeblock/orkestrai](https://github.com/beeblock/orkestrai/releases/latest).
+## Míralo en acción
 
-Para diagnosticar la aplicación de escritorio, abre **Ver → Herramientas de
-desarrollo** y reproduce el problema con Console visible. **Ayuda → Abrir
-carpeta de logs** abre el `orkestrai.log` rotativo, que registra fallos del
-renderer y del servidor interno ocultando credenciales comunes; la salida
-normal de los agentes no se guarda.
+Cada clip de abajo se grabó en la app real: terminales, comandos y resultados
+reales, sin nada simulado. Míralos con subtítulos en español, inglés y portugués
+en [orkestrai.app](https://orkestrai.app/es).
 
-## Características Principales
+### Arma el equipo en el canvas
 
-- **Segundo cerebro nativo:** arrastra PDF, Markdown, XLSX, CSV y otros archivos al Canvas como nodos. Busca pasajes con fuentes junto a notas, tareas y memoria; explora etiquetas, backlinks y grafo en Canvas o Workbench. Extracción local con límites y actualización explícitos; los PDF escaneados no reciben OCR automático.
+Arrastra terminales, notas, tableros de tareas, flujos y más desde el dock
+directamente al canvas, anota lo que el equipo necesita saber y conéctalo al
+agente correcto.
+
+<p align="center"><img src="docs/media/readme/canvas-tools.webp" alt="Arrastrando herramientas del dock al canvas de Orkestrai y conectando una nota a un agente" width="880"></p>
+
+### Trabaja lado a lado en el Workbench
+
+Pasa del canvas al Workbench en un clic, arrastra elementos a paneles divididos y
+mantén terminales reales a tamaño completo junto a tableros, notas y archivos.
+
+<p align="center"><img src="docs/media/readme/workbench.webp" alt="Abriendo artefactos del canvas en el Workbench, arrastrándolos a paneles divididos y usando una terminal real" width="880"></p>
+
+### Encadena agentes con aprobación humana
+
+Los flujos pasan el trabajo de un agente al siguiente, esperan tu aprobación y
+registran cada ejecución.
+
+<p align="center"><img src="docs/media/readme/flow.webp" alt="Un flujo ejecuta las pruebas en el agente Frontend, espera la aprobación humana y sigue en el Maestro" width="880"></p>
+
+### Automatiza el trabajo recurrente
+
+Crea una automatización en segundos: elige el agente y lo que debe hacer, y
+ejecútala ahora o con un disparador.
+
+<p align="center"><img src="docs/media/readme/automations.webp" alt="Creando una automatización en el panel de Automatizaciones y ejecutándola en la terminal de Frontend" width="880"></p>
+
+### Un Segundo cerebro que todo el equipo puede buscar
+
+Importa documentos, sigue cada conexión en el grafo de conocimiento y explóralo en
+3D. Los agentes buscan los mismos pasajes con fuente por el puente.
+
+<p align="center"><img src="docs/media/readme/knowledge.webp" alt="Importando documentos al Segundo cerebro y explorando el grafo de conocimiento en 3D" width="880"></p>
+
+### Convierte código real en diseño nativo
+
+Importa un diseño desde el código de tu proyecto, refínalo en el inspector y
+convierte cada cambio en una revisión que vuelve como código.
+
+<p align="center"><img src="docs/media/readme/design.webp" alt="Un diseño importado del código del checkout y refinado en el inspector de diseño de Orkestrai" width="880"></p>
+
+### Genera imágenes consistentes con Codex
+
+Las referencias y el contexto se vuelven un atlas del personaje, y el Codex
+conectado genera cada imagen directo en tu workspace: seis vistas, el mismo
+personaje.
+
+<p align="center"><img src="docs/media/readme/image-flow.webp" alt="Un flujo de imagen convierte un atlas de referencia en seis vistas consistentes del mismo personaje" width="880"></p>
+
+### Produce video con el proveedor que elijas
+
+Las escenas aprobadas alimentan flujos de video en fal.ai, BytePlus ModelArk o
+Higgsfield, con vista previa de costo antes de cada ejecución. Los clips se
+vuelven la película final en una secuencia en el canvas.
+
+<p align="center"><img src="docs/media/readme/video-flow.webp" alt="Escenas aprobadas alimentan flujos de video; los clips generados se reproducen en el canvas y se vuelven la película final" width="880"></p>
+
+### Sigue el workspace desde el celular
+
+Escanea el código QR, aprueba el dispositivo exacto en el host y sigue agentes,
+tareas y actividad desde cualquier navegador. Las terminales solo se abren cuando
+concedes ese acceso al dispositivo.
+
+<p align="center"><img src="docs/media/readme/remote.webp" alt="El host comparte el workspace con un código QR, aprueba un celular con acceso a la terminal y el celular ejecuta un comando en la terminal de un agente" width="880"></p>
+
+## Todas las funciones
+
+<details>
+<summary><strong>Todo lo que hace Orkestrai</strong> (haz clic para expandir)</summary>
+
+- **Segundo cerebro nativo:** arrastra PDF, Markdown, XLSX, CSV y otros archivos al Canvas como nodos. Busca pasajes con fuentes junto a notas, tareas y memoria; explora etiquetas, backlinks y grafo en Canvas o Workbench. Extracción local con límites y actualización explícitos; los PDF escaneados y mixtos reciben OCR sin conexión en inglés, portugués y español con modelos integrados, cita de página y confianza del reconocimiento; los originales se mantienen intactos.
 - **Aprendizaje duradero de agentes:** conserva lecciones con evidencia entre sesiones y proveedores. Elige automático, revisión o desactivado; revisa historial y activa, rechaza o archiva lecciones. Las tareas reciben lecciones relevantes mediante CLI/MCP, sin cambiar permisos ni entrenar pesos del modelo. Guía y tour en Cómo usar > Segundo cerebro.
 
 - **Asistentes continuos en el escritorio:** supervisa una conversación autorizada,
@@ -293,6 +372,8 @@ normal de los agentes no se guarda.
 - **Continuidad de sesión:** cada terminal reanuda su propia conversación del
   proveedor después de cerrar y volver a abrir la aplicación.
 
+</details>
+
 ## Plataformas Compatibles
 
 | Plataforma | Arquitecturas | Paquete |
@@ -321,6 +402,14 @@ Abre la Central desde el icono de cable del canvas, `Cmd/Ctrl+2` o el menú nati
 Workspace para preparar un provider y verificarlo de nuevo después de instalar.
 Las instalaciones nuevas comienzan en inglés y preguntan el idioma preferido
 como primer paso del onboarding.
+
+## Solución de problemas
+
+Para diagnosticar la aplicación de escritorio, abre **Ver → Herramientas de
+desarrollo** y reproduce el problema con Console visible. **Ayuda → Abrir
+carpeta de logs** abre el `orkestrai.log` rotativo, que registra fallos del
+renderer y del servidor interno ocultando credenciales comunes; la salida
+normal de los agentes no se guarda.
 
 ## Desarrollo
 

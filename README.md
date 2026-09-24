@@ -7,8 +7,20 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/beeblock/orkestrai/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/beeblock/orkestrai?label=release&color=f3c34f"></a>
+  <img alt="macOS, Windows and Linux" src="https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-171b20">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/beeblock/orkestrai?color=171b20"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/beeblock/orkestrai/releases/latest"><strong>Download for macOS, Windows or Linux</strong></a> · <a href="https://orkestrai.app">orkestrai.app</a>
+</p>
+
+<p align="center">
   English · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.es.md">Español</a>
 </p>
+
+<p align="center"><img src="docs/media/readme/orchestrate.webp" alt="The Maestro agent adds a task through the Orkestrai bridge, delegates a command to the Frontend agent and receives its answer on the canvas" width="880"></p>
 
 Orkestrai is a local-first desktop application for macOS, Windows, and Linux. It
 brings Claude Code, Codex CLI, Kimi Code, OpenCode, Cursor, Antigravity, Cline,
@@ -16,15 +28,83 @@ Devin, shells, tasks, notes,
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
-Download the latest installers from
-[beeblock/orkestrai](https://github.com/beeblock/orkestrai/releases/latest).
+## See it in action
 
-For desktop troubleshooting, open **View → Developer tools** and reproduce the
-problem with Console visible. **Help → Open logs folder** opens the rotating
-`orkestrai.log`, which captures renderer and internal-server failures with
-common credentials redacted; normal agent output is not persisted.
+Every clip below is recorded from the real app: real terminals, real commands,
+and real results, with nothing mocked. Watch them with captions in English,
+Portuguese, and Spanish at [orkestrai.app](https://orkestrai.app).
 
-## Highlights
+### Build the team on the canvas
+
+Drag terminals, notes, task boards, flows, and more from the dock straight onto
+the canvas, write down what the team needs to know, and connect it to the right
+agent.
+
+<p align="center"><img src="docs/media/readme/canvas-tools.webp" alt="Dragging tools from the dock onto the Orkestrai canvas and connecting a note to an agent" width="880"></p>
+
+### Work side by side in the Workbench
+
+Jump from the canvas to the Workbench in one click, drag items into split panes,
+and keep real terminals at full size next to boards, notes, and files.
+
+<p align="center"><img src="docs/media/readme/workbench.webp" alt="Opening canvas artifacts in the Workbench, dragging them into split panes and running a real terminal" width="880"></p>
+
+### Chain agents with human approval
+
+Flows pass work from one agent to the next, stop for your approval, and record
+every run.
+
+<p align="center"><img src="docs/media/readme/flow.webp" alt="A flow runs tests on the Frontend agent, waits for human approval and continues on the Maestro" width="880"></p>
+
+### Automate recurring work
+
+Create an automation in seconds: pick the agent and what it should do, then run
+it now or on a trigger.
+
+<p align="center"><img src="docs/media/readme/automations.webp" alt="Creating an automation in the Automations panel and running it in the Frontend terminal" width="880"></p>
+
+### Keep a Second Brain the whole team can search
+
+Import documents, follow every connection in the knowledge graph, and explore it
+in 3D. Agents search the same cited passages through the bridge.
+
+<p align="center"><img src="docs/media/readme/knowledge.webp" alt="Importing documents into the Second Brain and exploring the knowledge graph in 3D" width="880"></p>
+
+### Turn real code into a native design
+
+Import a design from your project's code, refine it in the inspector, and turn
+every change into a revision you can deliver back as code.
+
+<p align="center"><img src="docs/media/readme/design.webp" alt="A design imported from the checkout code and refined in the Orkestrai design inspector" width="880"></p>
+
+### Generate consistent images with Codex
+
+References and context become a character atlas, and the connected Codex
+generates each image straight into your workspace: six views, one consistent
+character.
+
+<p align="center"><img src="docs/media/readme/image-flow.webp" alt="An image workflow turns a reference atlas into six consistent views of the same character" width="880"></p>
+
+### Produce video with the provider you choose
+
+Approved scenes feed video flows on fal.ai, BytePlus ModelArk, or Higgsfield,
+with cost previews before each run. The clips become the final film in a
+sequence on the canvas.
+
+<p align="center"><img src="docs/media/readme/video-flow.webp" alt="Approved scenes feed video workflows; the generated clips play on the canvas and become the final film" width="880"></p>
+
+### Follow the workspace from your phone
+
+Scan the QR code, approve the exact device on the host, and follow agents,
+tasks, and activity from any browser. Terminals open only when you grant that
+device access.
+
+<p align="center"><img src="docs/media/readme/remote.webp" alt="The host shares the workspace with a QR code, approves a phone with terminal access and the phone runs a command in an agent terminal" width="880"></p>
+
+## All features
+
+<details>
+<summary><strong>Everything Orkestrai can do</strong> (click to expand)</summary>
 
 - **Native Second Brain:** drop PDF, Markdown, XLSX, CSV and other files onto Canvas as document nodes. Search cited passages alongside notes, tasks and sourced memory; follow tags, backlinks and a knowledge graph in Canvas or Workbench. Scanned and mixed PDFs receive offline English, Portuguese and Spanish OCR with bundled models, page citations and recognition confidence. Originals stay intact. Extraction is bounded (25 MB, 200 PDF pages, two minutes); partial/failed pages are explicit, and critical OCR values must be checked against the original.
 - **Durable agent learning:** named agents retain evidence-linked procedural lessons across sessions and provider changes. Choose automatic, review-first or off, inspect revision history, and activate, reject or archive lessons. New tasks recall bounded relevant lessons through the same CLI/MCP contracts, without modifying security grants or training model weights. See the Second Brain guide and interactive tour in How to use.
@@ -559,6 +639,8 @@ common credentials redacted; normal agent output is not persisted.
 - **Session continuity:** each terminal resumes its own provider conversation
   after the application is closed and reopened.
 
+</details>
+
 ## Supported Platforms
 
 | Platform | Architectures | Package |
@@ -587,6 +669,13 @@ Open Provider Center from the canvas cable icon, `Cmd/Ctrl+2`, or the native
 Workspace menu to prepare a provider and check it again after installation.
 New installations start in English and ask for the preferred interface language
 as the first onboarding step.
+
+## Troubleshooting
+
+For desktop troubleshooting, open **View → Developer tools** and reproduce the
+problem with Console visible. **Help → Open logs folder** opens the rotating
+`orkestrai.log`, which captures renderer and internal-server failures with
+common credentials redacted; normal agent output is not persisted.
 
 ## Development
 
