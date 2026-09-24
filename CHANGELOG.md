@@ -42,6 +42,7 @@ pt-BR, English, and Spanish translations.
 - Remove the blue resize outline that covered the selection ring of a selected node.
 - Let the Git file list scroll instead of being cut off, stop showing editor confirmations in red and stop flashing "empty folder" before a file tree loads.
 - Keep compact interface text at its intended size when a component also sets a text color, instead of falling back to a larger default.
+- End truncated titles and descriptions with an ellipsis instead of wrapping them onto a second line.
 - Show "no usage data reported" in a neutral tone instead of green, and make the empty API client's Add request button create a request at the top level.
 
 ## 0.35.0 - 2026-09-24

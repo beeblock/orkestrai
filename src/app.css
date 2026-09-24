@@ -43,16 +43,20 @@ kbd {
   font-family: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Consolas, monospace;
 }
 
-/* Headings sem widows; descricoes sem orfaos */
-h1,
-h2,
-h3,
-h4 {
-  text-wrap: balance;
-}
+/* Headings sem widows; descricoes sem orfaos. Em @layer base para que
+   utilitarios como truncate/whitespace-nowrap continuem vencendo (o atalho
+   text-wrap redefine text-wrap-mode e desfaria o nowrap). */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
 
-p {
-  text-wrap: pretty;
+  p {
+    text-wrap: pretty;
+  }
 }
 
 /*
