@@ -8,6 +8,8 @@
   import { onMount } from 'svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Button } from '$lib/components/ui/button';
+  import { Progress } from '$lib/components/ui/progress';
+  import { Download, ExternalLink, RotateCw } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
 
   const RELEASES_URL = 'https://github.com/beeblock/orkestrai/releases/latest';
@@ -88,9 +90,13 @@
 </script>
 
 {#if status === 'downloading'}
+  <!-- Pilula flutuante; quando ha toasts no canto, desliza para o lado deles. -->
   <div class="update-progress" role="status">
-    <span class="update-progress-label">{m['update.downloading']({ percent })}</span>
-    <span class="update-progress-bar"><span class="update-progress-fill" style:width="{percent}%"></span></span>
+    <span class="update-progress-head">
+      <Download size={13} class="update-progress-icon" aria-hidden="true" />
+      <span class="update-progress-label">{m['update.downloading']({ percent })}</span>
+    </span>
+    <Progress value={percent} max={100} class="update-progress-bar" aria-label={m['update.downloading']({ percent })} />
   </div>
 {/if}
 
@@ -111,9 +117,9 @@
     <AlertDialog.Footer>
       <AlertDialog.Cancel>{m['update.later']()}</AlertDialog.Cancel>
       {#if failed || plannedManualUpdate}
-        <Button size="sm" onclick={downloadManually}>{m['update.download_site']()}</Button>
+        <Button onclick={downloadManually}><ExternalLink aria-hidden="true" />{m['update.download_site']()}</Button>
       {:else}
-        <Button size="sm" onclick={install}>{m['update.restart']()}</Button>
+        <Button onclick={install}><RotateCw aria-hidden="true" />{m['update.restart']()}</Button>
       {/if}
     </AlertDialog.Footer>
   </AlertDialog.Content>
@@ -122,38 +128,69 @@
 <style>
   .update-progress {
     position: fixed;
-    bottom: 16px;
     right: 16px;
+    bottom: 16px;
     z-index: 60;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 10px 14px;
-    border-radius: 10px;
-    border: 1px solid var(--app-border);
+    gap: 8px;
+    min-width: 232px;
+    padding: 10px 12px;
+    border-radius: 12px;
     background: var(--app-surface-raised);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    min-width: 200px;
+    box-shadow: var(--app-shadow-panel);
+    animation: update-in var(--duration-slow) var(--ease-smooth-out) both;
+    transition: translate var(--duration-medium) var(--ease-smooth-out);
+  }
+
+  /* Toasts ocupam o mesmo canto (coluna de 400px): a pilula abre espaco ao lado. */
+  :global(body:has(.orkestrai-toaster > [role='alert'])) .update-progress {
+    translate: calc(-400px - 8px) 0;
+  }
+
+  @media (max-width: 720px) {
+    :global(body:has(.orkestrai-toaster > [role='alert'])) .update-progress {
+      translate: 0 calc(-100% - 88px);
+    }
+  }
+
+  @keyframes update-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-base));
+    }
+  }
+
+  .update-progress-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .update-progress :global(.update-progress-icon) {
+    flex-shrink: 0;
+    color: var(--app-accent);
   }
 
   .update-progress-label {
-    font-size: 11.5px;
+    font-size: 12px;
     color: var(--app-text-soft);
     font-variant-numeric: tabular-nums;
   }
 
-  .update-progress-bar {
+  .update-progress :global(.update-progress-bar) {
     height: 4px;
-    border-radius: 999px;
-    background: var(--app-border);
-    overflow: hidden;
+    background: var(--app-hover);
   }
 
-  .update-progress-fill {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
+  .update-progress :global(.update-progress-bar [data-slot='progress-indicator']) {
     background: var(--app-accent);
-    transition: width 200ms ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .update-progress {
+      animation: none;
+      transition: none;
+    }
   }
 </style>

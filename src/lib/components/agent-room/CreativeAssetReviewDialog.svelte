@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Check, X, MessageSquare, Play, Pause, RefreshCw, ExternalLink, Film } from '@lucide/svelte';
+  import { Check, X, MessageSquare, Play, Pause, RefreshCw, ExternalLink, Film, ChevronRight, CircleAlert, LoaderCircle, Volume2, Image as ImageIcon } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import { Button } from '$lib/components/ui/button';
   import { Textarea } from '$lib/components/ui/textarea';
@@ -85,16 +85,21 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content data-testid="creative-asset-review" class="flex h-[min(880px,calc(100dvh-24px))] w-[calc(100vw-24px)] min-w-0 flex-col gap-3 overflow-hidden sm:max-w-6xl">
-    <Dialog.Header class="pr-8"><Dialog.Title>{m['creative_review.title']()}</Dialog.Title><Dialog.Description>{m['creative_review.description']()}</Dialog.Description></Dialog.Header>
-    <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs"><label class="flex items-center gap-2"><Switch bind:checked={scope} disabled={!origin?.groupId} />{m['creative_review.related']()}</label><Button variant="ghost" size="icon-sm" aria-label={m['creative.refresh']()} title={m['creative.refresh']()} disabled={busy || loading} onclick={load}><RefreshCw size={15} /></Button></div>
-    {#if loading}<p role="status" class="text-xs text-muted-foreground">{m['creative.loading']()}</p>{/if}
-    <div class="grid min-h-0 flex-1 auto-rows-[minmax(430px,1fr)] grid-cols-1 gap-3 overflow-y-auto overscroll-contain sm:grid-cols-2">
+  <Dialog.Content data-testid="creative-asset-review" class="flex h-[min(880px,calc(100dvh-24px))] w-[calc(100vw-24px)] min-w-0 flex-col gap-3 overflow-hidden sm:max-w-[1000px]">
+    <Dialog.Header class="shrink-0 pr-8"><Dialog.Title>{m['creative_review.title']()}</Dialog.Title><Dialog.Description>{m['creative_review.description']()}</Dialog.Description></Dialog.Header>
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
+      <label class="flex cursor-pointer items-center gap-2 text-ui-md text-[var(--app-text-soft)]"><Switch bind:checked={scope} disabled={!origin?.groupId} />{m['creative_review.related']()}</label>
+      <div class="flex items-center gap-2">
+        {#if loading}<span role="status" class="flex items-center gap-1.5 text-ui-md text-[var(--app-text-muted)]"><LoaderCircle size={13} class="animate-spin" aria-hidden="true" />{m['creative.loading']()}</span>{/if}
+        <Button variant="ghost" size="icon-sm" aria-label={m['creative.refresh']()} title={m['creative.refresh']()} disabled={busy || loading} onclick={load}><RefreshCw size={15} /></Button>
+      </div>
+    </div>
+    <div class="grid min-h-0 flex-1 auto-rows-[minmax(430px,1fr)] grid-cols-1 gap-4 overflow-y-auto overscroll-contain sm:grid-cols-2">
       {#each selections as nodeId, index (index)}
         {@const inspection = inspections[index]}
         <section class="flex min-h-0 min-w-0 flex-col gap-2" aria-label={index === 0 ? 'A' : 'B'}>
-          <div class="flex items-center gap-2"><span class="text-xs font-bold">{index === 0 ? 'A' : 'B'}</span><div class="min-w-0 flex-1"><ModelCombobox value={nodeId} options={visible.map(asset => ({ value: asset.nodeId, label: asset.title || asset.path }))} defaultLabel={m['creative_review.choose']()} searchPlaceholder={m['creative.search_media']()} emptyLabel={m['creative.no_inputs']()} ariaLabel={`${m['creative_review.choose']()} ${index === 0 ? 'A' : 'B'}`} onValueChange={(value) => { if (!busy) void inspect(index, value); }} /></div></div>
-          <div class="relative flex min-h-40 flex-1 items-center justify-center overflow-hidden rounded-md border bg-[var(--app-canvas)]">
+          <div class="flex items-center gap-2"><span class="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--app-hover)] font-mono text-[12px] font-semibold text-[var(--app-text-soft)]" aria-hidden="true">{index === 0 ? 'A' : 'B'}</span><div class="min-w-0 flex-1"><ModelCombobox value={nodeId} options={visible.map(asset => ({ value: asset.nodeId, label: asset.title || asset.path }))} defaultLabel={m['creative_review.choose']()} searchPlaceholder={m['creative.search_media']()} emptyLabel={m['creative.no_inputs']()} ariaLabel={`${m['creative_review.choose']()} ${index === 0 ? 'A' : 'B'}`} onValueChange={(value) => { if (!busy) void inspect(index, value); }} /></div></div>
+          <div class="relative flex min-h-40 flex-1 items-center justify-center overflow-hidden rounded-lg bg-[var(--app-canvas)] shadow-[var(--app-shadow-border)]">
             {#if inspection}
               {#if inspection.snapshot.media.mimeType.startsWith('image/')}<img src={`${url(inspection.asset)}${url(inspection.asset).includes('?') ? '&' : '?'}v=${inspection.snapshot.media.sha256}`} alt={inspection.asset.title} draggable="false" class="absolute inset-0 h-full w-full object-contain" onload={() => decoded[index] = true} onerror={() => { decoded[index] = false; error = 'creative_reference_unavailable'; }} />
               {:else if inspection.snapshot.media.mimeType.startsWith('video/')}
@@ -102,19 +107,85 @@
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <video bind:this={players[index]} src={url(inspection.asset)} controls={!videoPair} playsinline preload="metadata" muted={index === 0 ? sound !== 'A' : sound !== 'B'} class="absolute inset-0 h-full w-full object-contain" onloadedmetadata={(event) => { const value = event.currentTarget.duration; durations[index] = Number.isFinite(value) && value > 0 ? value : 0; decoded[index] = durations[index] > 0; }} ontimeupdate={() => tick(index)} onended={stop} onerror={() => { stop(); decoded[index] = false; error = 'creative_reference_unavailable'; }} aria-label={inspection.asset.title}></video>
               {:else}<audio controls onloadedmetadata={() => decoded[index] = true} onerror={() => { decoded[index] = false; error = 'creative_reference_unavailable'; }} preload="metadata" src={url(inspection.asset)} aria-label={inspection.asset.title} class="w-full"></audio>{/if}
-            {:else}<span class="text-xs text-muted-foreground">{m['creative_review.choose']()}</span>{/if}
+            {:else}<span class="flex flex-col items-center gap-2 text-ui-md text-[var(--app-text-muted)]"><ImageIcon size={18} aria-hidden="true" />{m['creative_review.choose']()}</span>{/if}
           </div>
-          <div class="flex shrink-0 items-center justify-between gap-2 text-xs"><strong class={inspection?.reviewCurrent && inspection.review?.decision === 'approved' ? 'text-[var(--app-success)]' : 'text-muted-foreground'}>{status(inspection)}</strong>{#if inspection}<Button variant="ghost" size="icon-sm" title={m['creative_review.open']()} aria-label={m['creative_review.open']()} onclick={() => { open = false; onOpenNode?.(nodeId); }}><ExternalLink size={14} /></Button>{/if}</div>
-          <Textarea aria-label={`${m['creative_review.comment']()} ${index === 0 ? 'A' : 'B'}`} bind:value={comments[index]} maxlength={8000} rows={2} class="min-h-14 shrink-0" disabled={!inspection || busy} />
-          <div class="flex shrink-0 flex-wrap gap-1"><Button variant="outline" size="sm" disabled={!inspection || !decoded[index] || busy} onclick={() => decide(index, 'approved')}><Check size={14} />{m['creative_review.approve']()}</Button><Button variant="outline" size="sm" disabled={!inspection || !decoded[index] || busy} onclick={() => decide(index, 'changes_requested')}><MessageSquare size={14} />{m['creative_review.request_changes']()}</Button><Button variant="ghost" size="icon-sm" disabled={!inspection || !decoded[index] || busy} title={m['creative_review.reject']()} aria-label={m['creative_review.reject']()} onclick={() => decide(index, 'rejected')}><X size={14} /></Button></div>
-          {#if inspection}<details class="shrink-0 text-xs"><summary class="cursor-pointer text-muted-foreground">{m['creative_review.history']()} ({inspection.history.length})</summary><div class="max-h-28 space-y-2 overflow-y-auto py-2"><p class="break-all">{inspection.snapshot.media.path}</p>{#each inspection.snapshot.characters as character}<p>{character.name} · v{character.version}</p>{/each}{#each inspection.history as review}<p class="break-words"><strong>{decisionLabel(review.decision)}</strong> · {new Date(review.createdAt).toLocaleString()} · {review.actorType === 'user' ? m['creative_review.owner']() : m['creative_review.agent']()}<br />{review.comment}<br /><code class="break-all text-[10px] text-muted-foreground">{review.snapshot.media.sha256}</code></p>{/each}</div></details>{/if}
+          <div class="flex shrink-0 items-center justify-between gap-2">
+            <strong class={`review-status ${inspection?.reviewCurrent && inspection.review?.decision === 'approved' ? 'approved' : inspection?.review && !inspection.reviewCurrent ? 'stale' : inspection?.reviewCurrent && inspection.review?.decision === 'rejected' ? 'rejected' : ''}`}>{status(inspection)}</strong>
+            {#if inspection}<Button variant="ghost" size="icon-sm" title={m['creative_review.open']()} aria-label={m['creative_review.open']()} onclick={() => { open = false; onOpenNode?.(nodeId); }}><ExternalLink size={14} /></Button>{/if}
+          </div>
+          <Textarea aria-label={`${m['creative_review.comment']()} ${index === 0 ? 'A' : 'B'}`} placeholder={m['creative_review.comment']()} bind:value={comments[index]} maxlength={8000} rows={2} class="min-h-14 shrink-0 resize-y text-[13px]" disabled={!inspection || busy} />
+          <div class="flex shrink-0 flex-wrap items-center gap-1.5"><Button variant="outline" size="sm" disabled={!inspection || !decoded[index] || busy} onclick={() => decide(index, 'approved')}><Check size={14} class="text-[var(--app-success)]" aria-hidden="true" />{m['creative_review.approve']()}</Button><Button variant="outline" size="sm" disabled={!inspection || !decoded[index] || busy} onclick={() => decide(index, 'changes_requested')}><MessageSquare size={14} aria-hidden="true" />{m['creative_review.request_changes']()}</Button><Button variant="ghost" size="icon-sm" class="text-[var(--app-text-muted)] hover:text-[var(--app-danger)]" disabled={!inspection || !decoded[index] || busy} title={m['creative_review.reject']()} aria-label={m['creative_review.reject']()} onclick={() => decide(index, 'rejected')}><X size={14} /></Button></div>
+          {#if inspection}<details class="group shrink-0 text-ui-md"><summary class="flex cursor-pointer list-none items-center gap-1.5 text-[var(--app-text-muted)] hover:text-[var(--app-text)] [&::-webkit-details-marker]:hidden"><ChevronRight size={13} class="shrink-0 transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />{m['creative_review.history']()} <span class="font-mono text-[11px] tabular-nums">({inspection.history.length})</span></summary><div class="grid max-h-28 gap-2 overflow-y-auto py-2 pl-5"><p class="font-mono text-[10.5px] break-all text-[var(--app-text-muted)]">{inspection.snapshot.media.path}</p>{#each inspection.snapshot.characters as character}<p>{character.name} · v{character.version}</p>{/each}{#each inspection.history as review}<p class="break-words"><strong class="font-medium">{decisionLabel(review.decision)}</strong> · {new Date(review.createdAt).toLocaleString()} · {review.actorType === 'user' ? m['creative_review.owner']() : m['creative_review.agent']()}<br />{review.comment}<br /><code class="font-mono text-[10.5px] break-all text-[var(--app-text-muted)]">{review.snapshot.media.sha256}</code></p>{/each}</div></details>{/if}
         </section>
       {/each}
     </div>
-    {#if videoPair}<div class="flex shrink-0 flex-wrap items-center gap-3 border-t pt-3"><Button variant="outline" size="icon-sm" disabled={!commonDuration} aria-label={playing ? m['creative_review.pause']() : m['creative_review.play']()} title={playing ? m['creative_review.pause']() : m['creative_review.play']()} onclick={togglePlay}>{#if playing}<Pause size={14} />{:else}<Play size={14} />{/if}</Button><div class="min-w-28 flex-1"><Slider type="single" value={time} min={0} max={commonDuration || 1} step={0.01} aria-label={m['creative_review.seek']()} onValueChange={(value: number) => seek(value)} /></div><span class="text-xs tabular-nums">{time.toFixed(1)} / {commonDuration.toFixed(1)} s</span><Button variant="outline" size="sm" onclick={() => sound = sound === 'A' ? 'B' : 'A'}>{m['creative_review.audio']()} {sound}</Button></div>{/if}
-    <div class="flex h-20 shrink-0 gap-2 overflow-x-auto overscroll-contain border-t pt-2" aria-label={m['creative_review.variants']()}>
-      {#each visible as asset}<button type="button" disabled={busy} class="relative flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded border-2 {selections.includes(asset.nodeId) ? 'border-[var(--app-accent)]' : 'border-[var(--app-border)]'}" title={asset.title} aria-label={asset.title} onclick={() => inspect(1, asset.nodeId)}>{#if asset.type === 'image'}<img src={url(asset)} alt={asset.title} loading="lazy" draggable="false" class="h-full w-full object-contain" />{:else}<Film size={20} /><span class="absolute inset-x-0 bottom-0 truncate bg-background/90 px-1 text-[10px]">{asset.title}</span>{/if}</button>{/each}
+    {#if videoPair}<div class="flex shrink-0 flex-wrap items-center gap-3 rounded-lg bg-[var(--app-hover)] px-3 py-2"><Button variant="outline" size="icon-sm" disabled={!commonDuration} aria-label={playing ? m['creative_review.pause']() : m['creative_review.play']()} title={playing ? m['creative_review.pause']() : m['creative_review.play']()} onclick={togglePlay}>{#if playing}<Pause size={14} />{:else}<Play size={14} />{/if}</Button><div class="min-w-28 flex-1"><Slider type="single" value={time} min={0} max={commonDuration || 1} step={0.01} aria-label={m['creative_review.seek']()} onValueChange={(value: number) => seek(value)} /></div><span class="font-mono text-[11px] text-[var(--app-text-soft)] tabular-nums">{time.toFixed(1)} / {commonDuration.toFixed(1)} s</span><Button variant="outline" size="sm" onclick={() => sound = sound === 'A' ? 'B' : 'A'}><Volume2 size={14} aria-hidden="true" />{m['creative_review.audio']()} {sound}</Button></div>{/if}
+    <div class="flex h-20 shrink-0 gap-2 overflow-x-auto overscroll-contain border-t border-[var(--app-border)] pt-2" aria-label={m['creative_review.variants']()}>
+      {#each visible as asset}<button type="button" disabled={busy} class="variant-thumb" aria-current={selections.includes(asset.nodeId) ? 'true' : undefined} title={asset.title} aria-label={asset.title} onclick={() => inspect(1, asset.nodeId)}>{#if asset.type === 'image'}<img src={url(asset)} alt={asset.title} loading="lazy" draggable="false" class="h-full w-full object-contain" />{:else}<Film size={18} aria-hidden="true" /><span class="absolute inset-x-0 bottom-0 truncate bg-[var(--app-surface-raised)]/90 px-1 text-ui-xs">{asset.title}</span>{/if}</button>{/each}
     </div>
-    {#if error}<p role="alert" class="shrink-0 text-xs text-destructive">{creativeError(error)}</p>{/if}
+    {#if error}<p role="alert" class="flex shrink-0 items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{creativeError(error)}</span></p>{/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  .review-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--app-text-muted);
+  }
+
+  .review-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .review-status.approved {
+    color: var(--app-success);
+  }
+
+  .review-status.stale {
+    color: var(--app-warning);
+  }
+
+  .review-status.rejected {
+    color: var(--app-danger);
+  }
+
+  /* Miniatura de variante: selecionada ganha anel de acento. */
+  .variant-thumb {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 96px;
+    height: 64px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 8px;
+    background: var(--app-canvas);
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition: box-shadow var(--duration-quick) ease-out;
+  }
+
+  .variant-thumb:hover:not(:disabled) {
+    box-shadow: var(--app-shadow-border-hover);
+  }
+
+  .variant-thumb[aria-current='true'] {
+    box-shadow: 0 0 0 2px var(--app-accent);
+  }
+
+  .variant-thumb:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+</style>

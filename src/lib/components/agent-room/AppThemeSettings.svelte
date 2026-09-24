@@ -160,7 +160,7 @@
 
 <section class="theme-settings">
   <header class="theme-heading">
-    <div>
+    <div class="min-w-0">
       <h3>{m['theme.choose']()}</h3>
       <p>{m['theme.choose_desc']()}</p>
     </div>
@@ -180,6 +180,7 @@
     </div>
   </header>
 
+  <!-- Cada tema e uma miniatura do app: escolher e ver ao mesmo tempo. -->
   <div class="theme-list">
     {#each themes as theme (theme.id)}
       <button
@@ -189,17 +190,19 @@
         aria-pressed={theme.id === activeTheme.id}
         onclick={() => selectTheme(theme.id)}
       >
-        <span class="theme-swatches" aria-hidden="true">
-          <span style:background={theme.tokens.canvas}></span>
-          <span style:background={theme.tokens.surface}></span>
-          <span style:background={theme.tokens.accent}></span>
-          <span style:background={theme.tokens.text}></span>
+        <span class="theme-preview" style:background={theme.tokens.canvas} aria-hidden="true">
+          <span class="tp-sidebar" style:background={theme.tokens.sidebar}></span>
+          <span class="tp-card" style:background={theme.tokens.surface} style:box-shadow={`0 0 0 1px ${theme.tokens.border}`}>
+            <span class="tp-line" style:background={theme.tokens.text}></span>
+            <span class="tp-line short" style:background={theme.tokens.textMuted}></span>
+            <span class="tp-button" style:background={theme.tokens.accent}></span>
+          </span>
         </span>
         <span class="theme-option-copy">
-          <strong>{theme.name}</strong>
+          <strong title={theme.name}>{theme.name}</strong>
           <small>{theme.dark ? m['theme.dark']() : m['theme.light']()}{theme.builtin ? '' : ` · ${m['theme.custom']()}`}</small>
         </span>
-        {#if theme.id === activeTheme.id}<Check size={15} aria-hidden="true" />{/if}
+        {#if theme.id === activeTheme.id}<span class="theme-check" aria-hidden="true"><Check size={12} /></span>{/if}
       </button>
     {/each}
   </div>
@@ -208,7 +211,7 @@
     <div class="custom-editor">
       <header class="editor-head">
         <div class="editor-title">
-          <Palette size={15} aria-hidden="true" />
+          <Palette size={14} aria-hidden="true" />
           <strong>{m['theme.editor']()}</strong>
         </div>
         <Button variant="ghost" size="icon-sm" class="danger-action" title={m['theme.delete']()} aria-label={m['theme.delete']()} onclick={deleteTheme}>
@@ -229,15 +232,18 @@
 
       <div class="token-grid">
         {#each APP_THEME_TOKEN_KEYS as key (key)}
-          <label class="token-field">
-            <span>{TOKEN_LABELS[key]()}</span>
+          <div class="token-field">
+            <span class="token-label">{TOKEN_LABELS[key]()}</span>
             <span class="color-control">
-              <input
-                type="color"
-                value={activeCustomTheme.tokens[key]}
-                aria-label={TOKEN_LABELS[key]()}
-                oninput={(event) => updateToken(key, event.currentTarget.value)}
-              />
+              <!-- Amostra clicavel: abre o seletor nativo do sistema. -->
+              <span class="swatch" style:background={activeCustomTheme.tokens[key]}>
+                <input
+                  type="color"
+                  value={activeCustomTheme.tokens[key]}
+                  aria-label={TOKEN_LABELS[key]()}
+                  oninput={(event) => updateToken(key, event.currentTarget.value)}
+                />
+              </span>
               <input
                 class="hex-input"
                 value={activeCustomTheme.tokens[key]}
@@ -253,7 +259,7 @@
                 }}
               />
             </span>
-          </label>
+          </div>
         {/each}
       </div>
       <p class="editor-hint"><Plus size={12} aria-hidden="true" /> {m['theme.editor_hint']()}</p>
@@ -272,40 +278,33 @@
   }
 
   .theme-heading,
-  .editor-head,
-  .editor-meta,
-  .mode-toggle,
-  .editor-title,
-  .theme-option,
-  .color-control,
-  .editor-hint {
-    display: flex;
-    align-items: center;
-  }
-
-  .theme-heading,
   .editor-head {
+    display: flex;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
   }
 
   .theme-heading h3 {
     margin: 0;
-    font-size: 13px;
-    color: var(--copy);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--app-text);
   }
 
   .theme-heading p,
   .builtin-hint,
   .editor-hint {
-    margin: 2px 0 0;
+    margin: 3px 0 0;
     font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--copy-muted);
+    line-height: 1.6;
+    color: var(--app-text-muted);
+    text-wrap: pretty;
   }
 
   .theme-actions {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
@@ -318,73 +317,148 @@
 
   .theme-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    border-block: 1px solid var(--line);
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 10px;
   }
 
+  /* Cartao 12px com miniatura 6px e respiro de 6px (raio concentrico). */
   .theme-option {
+    position: relative;
+    display: flex;
     min-width: 0;
-    gap: 10px;
-    min-height: 58px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px 6px 8px;
     border: 0;
-    border-bottom: 1px solid var(--line);
+    border-radius: 12px;
     background: transparent;
-    color: var(--copy-soft);
-    padding: 9px 10px;
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text-soft);
     text-align: left;
     cursor: pointer;
-    transition: background-color 140ms ease, color 140ms ease;
+    transition:
+      box-shadow var(--duration-quick) ease-out,
+      background-color var(--duration-quick) ease-out,
+      color var(--duration-quick) ease-out;
   }
 
-  .theme-option:hover,
+  .theme-option:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
   .theme-option.active {
-    background: var(--surface-raised);
-    color: var(--copy);
+    box-shadow: 0 0 0 2px var(--app-accent);
+    color: var(--app-text);
   }
 
-  .theme-option.active {
-    box-shadow: inset 3px 0 0 var(--violet);
+  .theme-option:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
   }
 
-  .theme-swatches {
-    display: grid;
-    grid-template-columns: repeat(2, 13px);
-    width: 28px;
-    height: 28px;
+  .theme-option:active {
+    scale: 0.98;
+  }
+
+  .theme-preview {
+    position: relative;
+    display: flex;
+    height: 64px;
+    gap: 6px;
+    padding: 8px;
     overflow: hidden;
-    border: 1px solid var(--line-strong);
     border-radius: 6px;
-    flex-shrink: 0;
+    outline: 1px solid oklch(0.5 0 0 / 0.18);
+    outline-offset: -1px;
+  }
+
+  .tp-sidebar {
+    width: 18%;
+    border-radius: 3px;
+  }
+
+  .tp-card {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 5px;
+    padding: 7px 8px;
+    border-radius: 4px;
+  }
+
+  .tp-line {
+    height: 4px;
+    width: 70%;
+    border-radius: 999px;
+  }
+
+  .tp-line.short {
+    width: 45%;
+    opacity: 0.8;
+  }
+
+  .tp-button {
+    width: 28px;
+    height: 8px;
+    margin-top: auto;
+    border-radius: 3px;
   }
 
   .theme-option-copy {
     display: flex;
-    flex: 1;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
+    padding: 0 4px;
   }
 
   .theme-option-copy strong {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: 12.5px;
+    font-weight: 500;
   }
 
   .theme-option-copy small {
-    font-size: 10px;
-    color: var(--copy-muted);
+    font-size: 11px;
+    color: var(--app-text-muted);
+  }
+
+  .theme-check {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
   }
 
   .custom-editor {
-    padding-top: 2px;
+    padding-top: 14px;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .editor-head {
+    align-items: center;
   }
 
   .editor-title {
+    display: flex;
+    align-items: center;
     gap: 7px;
-    font-size: 12px;
-    color: var(--copy-soft);
+    font-size: 12.5px;
+    color: var(--app-text);
+  }
+
+  .editor-title strong {
+    font-weight: 500;
   }
 
   :global(.danger-action:hover) {
@@ -392,6 +466,7 @@
   }
 
   .editor-meta {
+    display: flex;
     align-items: end;
     gap: 18px;
   }
@@ -404,21 +479,24 @@
   }
 
   .editor-meta label > span,
-  .token-field > span:first-child {
-    font-size: 11px;
+  .token-label {
+    font-size: 11.5px;
     font-weight: 500;
-    color: var(--copy-muted);
+    color: var(--app-text-soft);
   }
 
   .mode-toggle {
+    display: flex;
+    align-items: center;
     gap: 9px;
-    min-height: 36px;
+    min-height: 32px;
+    cursor: pointer;
   }
 
   .token-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-    gap: 9px 14px;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 10px 14px;
   }
 
   .token-field {
@@ -429,35 +507,68 @@
   }
 
   .color-control {
-    gap: 7px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
-  .color-control input[type='color'] {
-    width: 34px;
-    height: 30px;
-    flex: 0 0 34px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--surface-raised);
-    padding: 3px;
+  /* Amostra redonda com o input nativo invisivel por cima (clique abre o seletor). */
+  .swatch {
+    position: relative;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px oklch(0.5 0 0 / 0.25);
+    transition: scale var(--duration-quick) ease-out;
+  }
+
+  .swatch:hover {
+    scale: 1.06;
+  }
+
+  .swatch:has(input:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .swatch input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
     cursor: pointer;
   }
 
   .hex-input {
     width: 100%;
     min-width: 0;
-    height: 30px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--surface-subtle);
-    color: var(--copy);
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--app-hover);
+    color: var(--app-text);
     padding: 0 8px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
+    font-variant-numeric: tabular-nums;
     text-transform: uppercase;
+    transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .hex-input:hover {
+    background: var(--app-active);
+  }
+
+  .hex-input:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .editor-hint {
+    display: flex;
+    align-items: center;
     gap: 6px;
   }
 
@@ -474,7 +585,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .theme-option {
+    .theme-option,
+    .swatch {
       transition: none;
     }
   }

@@ -21,12 +21,16 @@
     UserX,
     MonitorSmartphone,
     AppWindow,
+    ChevronRight,
+    Minus,
+    Plus,
   } from "@lucide/svelte";
+  import { SegmentedControl } from "$lib/components/ui/segmented";
+  import NodeEmptyState from "$lib/components/agent-room/canvas/NodeEmptyState.svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
   import * as Tabs from "$lib/components/ui/tabs";
-  import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Switch } from "$lib/components/ui/switch";
@@ -122,6 +126,9 @@
       (device) => device.approvedAt && !device.revokedAt,
     ) ?? [],
   );
+  // Abas com o visual do SegmentedControl (trilho neutro, pilula elevada).
+  const segmentTab =
+    "h-8 gap-1.5 rounded-md text-[13px] data-[state=active]:bg-[var(--app-surface-raised)] data-[state=active]:text-[var(--app-text)] data-[state=active]:shadow-[var(--app-shadow-border)] dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-[var(--app-surface-raised)] dark:data-[state=active]:text-[var(--app-text)]";
   const selectedInviteUri = $derived(inviteTarget === "web" ? webInviteUri : inviteUri);
 
   function headers(): Record<string, string> {
@@ -442,475 +449,256 @@
 </script>
 
 <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-  <Dialog.Content
-    class="grid h-[min(90dvh,720px)] max-h-[720px] max-w-[calc(100%-1.5rem)]! grid-rows-[auto_minmax(0,1fr)] gap-0! overflow-hidden rounded-lg p-0! sm:max-w-3xl!"
-  >
-    <Dialog.Header class="border-b border-border/60 px-5 py-4 pr-12">
+  <!-- Altura fixa so com abas (evita saltos ao trocar); demais estados abracam o conteudo. -->
+  <Dialog.Content class={`flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px] ${status?.enabled && status.share ? 'h-[min(90dvh,720px)]' : 'max-h-[min(90dvh,720px)]'}`}>
+    <Dialog.Header class="shrink-0 border-b border-border/70 px-5 pt-5 pb-4 pr-12">
       <div class="flex items-start gap-3">
-        <span
-          class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]"
-          ><RadioTower size={18} /></span
-        >
-        <div class="min-w-0">
+        <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]" aria-hidden="true"><RadioTower size={16} /></span>
+        <div class="grid min-w-0 gap-1">
           <Dialog.Title>{m["collaboration.title"]()}</Dialog.Title>
-          <Dialog.Description class="text-pretty"
-            >{m["collaboration.subtitle"]()}</Dialog.Description
-          >
+          <Dialog.Description>{m["collaboration.subtitle"]()}</Dialog.Description>
         </div>
         {#if status?.share}
-          <Badge
-            variant="outline"
-            class="ml-auto mr-5 gap-1 border-[var(--app-border)] text-[var(--app-text-soft)]"
-          >
-            <span
-              class={`size-1.5 rounded-full ${status.transport?.state === "connected" ? "bg-[var(--app-success)]" : "bg-[var(--app-warning)]"}`}
-            ></span>
+          <span class="ml-auto flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--app-hover)] px-2.5 py-1 text-ui-sm text-[var(--app-text-soft)]" role="status">
+            <span class={`size-1.5 rounded-full ${status.transport?.state === "connected" ? "bg-[var(--app-success)]" : "bg-[var(--app-warning)]"}`} aria-hidden="true"></span>
             {transportLabel(status.transport?.state ?? "offline")}
-          </Badge>
+          </span>
         {/if}
       </div>
     </Dialog.Header>
 
-    <div class="min-h-0 overflow-hidden">
+    <div class="flex min-h-0 flex-1 flex-col">
       {#if loading}
-        <div class="grid h-full min-h-0 place-items-center">
-          <LoaderCircle
-            class="animate-spin text-[var(--app-accent)]"
-            size={22}
-          />
+        <div class="grid min-h-48 flex-1 place-items-center">
+          <span class="flex items-center gap-2 rounded-full bg-[var(--app-hover)] px-3 py-1.5 text-ui-md text-[var(--app-text-soft)]" role="status">
+            <LoaderCircle class="animate-spin text-[var(--app-accent)]" size={14} aria-hidden="true" />{m["collaboration.title"]()}
+          </span>
         </div>
       {:else if !status?.enabled}
-        <div
-          class="mx-auto flex h-full min-h-0 max-w-xl flex-col justify-center overflow-y-auto px-6 py-10 text-center"
-        >
-          <span
-            class="mx-auto grid size-12 place-items-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] text-[var(--app-accent)]"
-            ><ShieldCheck size={23} /></span
-          >
-          <h2 class="mt-4 text-base font-semibold">
-            {m["collaboration.experimental_title"]()}
-          </h2>
-          <p
-            class="mt-2 text-sm leading-6 text-pretty text-[var(--app-text-muted)]"
-          >
-            {m["collaboration.experimental_body"]()}
-          </p>
-          <div class="mt-5 flex items-center justify-center gap-3">
-            <Switch
-              checked={false}
-              disabled={busy}
-              onCheckedChange={(checked: boolean) => void setEnabled(checked)}
-              aria-label={m["collaboration.enable"]()}
-            />
-            <span class="text-sm font-medium"
-              >{m["collaboration.enable"]()}</span
-            >
+        <!-- Recurso desligado: estado vazio centrado com a proxima acao. -->
+        <div class="grid flex-1 place-items-center overflow-y-auto px-6 py-10">
+          <div class="grid max-w-md justify-items-center gap-2 text-center">
+            <span class="mb-1 grid size-10 place-items-center rounded-xl bg-[var(--app-accent-soft)] text-[var(--app-accent)]" aria-hidden="true"><ShieldCheck size={19} /></span>
+            <h2 class="font-display text-[15px] font-semibold text-balance">{m["collaboration.experimental_title"]()}</h2>
+            <p class="text-ui-lg leading-relaxed text-pretty text-[var(--app-text-muted)]">{m["collaboration.experimental_body"]()}</p>
+            <label class="mt-4 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 shadow-[var(--app-shadow-border)] transition-[background-color] duration-150 hover:bg-[var(--app-hover)]">
+              <Switch
+                checked={false}
+                disabled={busy}
+                onCheckedChange={(checked: boolean) => void setEnabled(checked)}
+                aria-label={m["collaboration.enable"]()}
+              />
+              <span class="text-ui-lg font-medium">{m["collaboration.enable"]()}</span>
+            </label>
           </div>
         </div>
       {:else if !status.share}
-        <form
-          method="POST"
-          use:enhance
-          class="mx-auto h-full max-w-2xl space-y-5 overflow-y-auto px-6 py-6"
-        >
-          <div
-            class="rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-4"
-          >
-            <div class="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck size={16} class="text-[var(--app-success)]" />{m[
-                "collaboration.private_title"
-              ]()}
+        <form method="POST" use:enhance class="flex min-h-0 flex-1 flex-col">
+          <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div class="mx-auto grid max-w-2xl gap-6 px-5 py-5">
+              <p class="flex items-start gap-3 rounded-lg bg-[var(--app-success-soft)] px-3 py-3 text-ui-md leading-relaxed text-pretty">
+                <ShieldCheck size={16} class="mt-0.5 shrink-0 text-[var(--app-success)]" aria-hidden="true" />
+                <span><strong class="block text-ui-lg font-medium">{m["collaboration.private_title"]()}</strong><span class="text-[var(--app-text-soft)]">{m["collaboration.private_body"]()}</span></span>
+              </p>
+
+              <div class="grid items-start gap-4 sm:grid-cols-2">
+                <label class="grid content-start gap-1.5">
+                  <span class="text-ui-lg font-medium">{m["collaboration.default_role"]()}</span>
+                  <Select.Root type="single" value={$formData.defaultRole as string} onValueChange={(value: string) => ($formData.defaultRole = value as CollaborationRole)}>
+                    <Select.Trigger class="w-full"><span class="truncate">{$formData.defaultRole ? roleLabel($formData.defaultRole as CollaborationRole) : ""}</span></Select.Trigger>
+                    <Select.Content>{#each ["viewer", "collaborator", "operator", "administrator"] as role}<Select.Item value={role}>{roleLabel(role as CollaborationRole)}</Select.Item>{/each}</Select.Content>
+                  </Select.Root>
+                  <span class="text-ui-md leading-snug text-pretty text-[var(--app-text-muted)]">{roleDescription($formData.defaultRole as CollaborationRole)}</span>
+                </label>
+                <label class="grid content-start gap-1.5">
+                  <span class="text-ui-lg font-medium">{m["collaboration.expires"]()}</span>
+                  <Select.Root type="single" value={String($formData.expiresInMinutes)} onValueChange={(value: string) => ($formData.expiresInMinutes = Number(value))}>
+                    <Select.Trigger class="w-full"><span class="truncate">{expiryLabel(Number($formData.expiresInMinutes))}</span></Select.Trigger>
+                    <Select.Content>{#each [15, 30, 60, 240, 1440] as minutes}<Select.Item value={String(minutes)}>{expiryLabel(minutes)}</Select.Item>{/each}</Select.Content>
+                  </Select.Root>
+                </label>
+              </div>
+
+              <!-- Limite pequeno (1-5): stepper em vez de campo numerico livre. -->
+              <div class="flex items-center justify-between gap-4 border-t border-[var(--app-border)] pt-4">
+                <span class="text-ui-lg font-medium" id="collaboration-max-peers">{m["collaboration.max_peers"]()}</span>
+                <div class="stepper" role="group" aria-labelledby="collaboration-max-peers">
+                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`${m["collaboration.max_peers"]()} −`} disabled={Number($formData.maxPeers) <= 1} onclick={() => ($formData.maxPeers = Math.max(1, Number($formData.maxPeers) - 1))}><Minus aria-hidden="true" /></Button>
+                  <output class="stepper-value" aria-live="polite">{$formData.maxPeers}</output>
+                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`${m["collaboration.max_peers"]()} +`} disabled={Number($formData.maxPeers) >= 5} onclick={() => ($formData.maxPeers = Math.min(5, Number($formData.maxPeers) + 1))}><Plus aria-hidden="true" /></Button>
+                </div>
+              </div>
+
+              <!-- Relay e raramente alterado: fica recolhido. -->
+              <details class="advanced group rounded-lg shadow-[var(--app-shadow-border)]">
+                <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-ui-lg font-medium">
+                  <ChevronRight size={14} class="shrink-0 text-[var(--app-text-muted)] transition-transform duration-150 group-open:rotate-90" aria-hidden="true" />{m["collaboration.advanced"]()}
+                </summary>
+                <div class="grid gap-1.5 px-3 pb-3">
+                  <label class="grid gap-1.5">
+                    <span class="text-ui-md font-medium">{m["collaboration.relay"]()}</span>
+                    <Input bind:value={$formData.relayUrl} autocomplete="off" spellcheck="false" class="font-mono text-[12px]" />
+                  </label>
+                  <p class="text-ui-md leading-snug text-pretty text-[var(--app-text-muted)]">{m["collaboration.relay_help"]()}</p>
+                </div>
+              </details>
             </div>
-            <p class="mt-1.5 text-xs leading-5 text-[var(--app-text-muted)]">
-              {m["collaboration.private_body"]()}
-            </p>
           </div>
-          <div class="grid items-start gap-4 sm:grid-cols-2">
-            <label class="flex self-start flex-col items-stretch gap-1.5 text-xs font-medium">
-              <span class="min-h-4 leading-4">{m["collaboration.default_role"]()}</span>
-              <Select.Root
-                type="single"
-                value={$formData.defaultRole as string}
-                onValueChange={(value: string) =>
-                  ($formData.defaultRole = value as CollaborationRole)}
-              >
-                <Select.Trigger class="w-full"
-                  ><span
-                    >{$formData.defaultRole
-                      ? roleLabel($formData.defaultRole as CollaborationRole)
-                      : ""}</span
-                  ></Select.Trigger
-                >
-                <Select.Content
-                  >{#each ["viewer", "collaborator", "operator", "administrator"] as role}<Select.Item
-                      value={role}
-                      >{roleLabel(role as CollaborationRole)}</Select.Item
-                    >{/each}</Select.Content
-                >
-              </Select.Root>
-              <span class="font-normal leading-4 text-[var(--app-text-muted)]"
-                >{roleDescription(
-                  $formData.defaultRole as CollaborationRole,
-                )}</span
-              >
-            </label>
-            <label class="flex self-start flex-col items-stretch gap-1.5 text-xs font-medium">
-              <span class="min-h-4 leading-4">{m["collaboration.expires"]()}</span>
-              <Select.Root
-                type="single"
-                value={String($formData.expiresInMinutes)}
-                onValueChange={(value: string) =>
-                  ($formData.expiresInMinutes = Number(value))}
-              >
-                <Select.Trigger class="w-full"
-                  ><span>{expiryLabel(Number($formData.expiresInMinutes))}</span
-                  ></Select.Trigger
-                >
-                <Select.Content
-                  >{#each [15, 30, 60, 240, 1440] as minutes}<Select.Item
-                      value={String(minutes)}
-                      >{expiryLabel(minutes)}</Select.Item
-                    >{/each}</Select.Content
-                >
-              </Select.Root>
-            </label>
-          </div>
-          <div class="grid items-start gap-4 sm:grid-cols-[1fr_140px]">
-            <label class="flex self-start flex-col items-stretch gap-1.5 text-xs font-medium">
-              <span class="min-h-4 leading-4">{m["collaboration.relay"]()}</span><Input
-                bind:value={$formData.relayUrl}
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </label>
-            <label class="flex self-start flex-col items-stretch gap-1.5 text-xs font-medium">
-              <span class="min-h-4 leading-4">{m["collaboration.max_peers"]()}</span><Input
-                type="number"
-                min="1"
-                max="5"
-                bind:value={$formData.maxPeers}
-              />
-            </label>
-          </div>
-          <p class="text-xs leading-5 text-[var(--app-text-muted)]">
-            {m["collaboration.relay_help"]()}
-          </p>
-          <div class="flex justify-end">
-            <Button type="submit" disabled={busy}
-              >{#if busy}<LoaderCircle class="animate-spin" />{/if}<RadioTower
-              />{m["collaboration.start"]()}</Button
-            >
+          <div class="flex shrink-0 justify-end gap-2 border-t border-border/70 bg-muted/35 px-5 py-3.5">
+            <Button type="submit" disabled={busy}>{#if busy}<LoaderCircle class="animate-spin" aria-hidden="true" />{:else}<RadioTower aria-hidden="true" />{/if}{m["collaboration.start"]()}</Button>
           </div>
         </form>
       {:else}
-        <Tabs.Root bind:value={activeTab} class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-0">
-          <Tabs.List
-            class="mx-5 mt-4 grid grid-cols-3 bg-[var(--app-surface-raised)]"
-          >
-            <Tabs.Trigger value="invite" class="transition-[background-color,color,box-shadow] data-[state=active]:bg-[var(--app-accent)]! data-[state=active]:text-[var(--app-accent-contrast)]! data-[state=active]:shadow-sm"
-              >{m["collaboration.tab_invite"]()}</Tabs.Trigger
-            >
-            <Tabs.Trigger value="access" class="gap-1.5 transition-[background-color,color,box-shadow] data-[state=active]:bg-[var(--app-accent)]! data-[state=active]:text-[var(--app-accent-contrast)]! data-[state=active]:shadow-sm"
-              >{m[
-                "collaboration.tab_access"
-              ]()}{#if pendingDevices.length}<Badge
-                  class="h-4 min-w-4 px-1 text-ui-xs"
-                  >{pendingDevices.length}</Badge
-                >{/if}</Tabs.Trigger
-            >
-            <Tabs.Trigger value="activity" class="transition-[background-color,color,box-shadow] data-[state=active]:bg-[var(--app-accent)]! data-[state=active]:text-[var(--app-accent-contrast)]! data-[state=active]:shadow-sm"
-              >{m["collaboration.tab_activity"]()}</Tabs.Trigger
-            >
+        <Tabs.Root bind:value={activeTab} class="flex min-h-0 flex-1 flex-col gap-0">
+          <Tabs.List class="mx-5 mt-4 grid h-9 shrink-0 grid-cols-3 rounded-lg bg-[var(--app-hover)] p-0.5">
+            <Tabs.Trigger value="invite" class={segmentTab}>{m["collaboration.tab_invite"]()}</Tabs.Trigger>
+            <Tabs.Trigger value="access" class={segmentTab}>{m["collaboration.tab_access"]()}{#if pendingDevices.length}<span class="min-w-4 rounded-full bg-[var(--app-warning)] px-1 font-mono text-[10.5px] leading-4 text-[var(--app-accent-contrast)] tabular-nums">{pendingDevices.length}</span>{/if}</Tabs.Trigger>
+            <Tabs.Trigger value="activity" class={segmentTab}>{m["collaboration.tab_activity"]()}</Tabs.Trigger>
           </Tabs.List>
 
-          <Tabs.Content value="invite" class="m-0 min-h-0 overflow-y-auto overscroll-contain p-5">
+          <Tabs.Content value="invite" class="m-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
             <div class="grid gap-5 md:grid-cols-[minmax(0,1fr)_224px]">
-              <div>
-                <div class="flex items-center gap-2">
-                  <Signal size={16} class="text-[var(--app-success)]" />
-                  <h2 class="text-sm font-semibold">
-                    {m["collaboration.active"]()}
-                  </h2>
+              <div class="grid content-start gap-4">
+                <div>
+                  <h2 class="flex items-center gap-2 text-ui-lg font-medium"><Signal size={15} class="text-[var(--app-success)]" aria-hidden="true" />{m["collaboration.active"]()}</h2>
+                  <p class="mt-1 text-ui-md leading-relaxed text-pretty text-[var(--app-text-muted)]">{m["collaboration.invite_help"]()}</p>
                 </div>
-                <p class="mt-2 text-xs leading-5 text-[var(--app-text-muted)]">
-                  {m["collaboration.invite_help"]()}
-                </p>
-                <div class="mt-4 grid grid-cols-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-1" role="tablist" aria-label={m["collaboration.invite_target"]()}>
-                  <button type="button" role="tab" aria-selected={inviteTarget === "web"} class={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-ui-sm font-medium transition-colors ${inviteTarget === "web" ? "bg-[var(--app-surface)] text-[var(--app-text)] shadow-sm" : "text-[var(--app-text-muted)] hover:text-[var(--app-text)]"}`} onclick={() => { inviteTarget = "web"; copied = false; void renderQr(); }}><MonitorSmartphone size={14} />{m["collaboration.invite_web"]()}</button>
-                  <button type="button" role="tab" aria-selected={inviteTarget === "app"} class={`flex min-h-9 items-center justify-center gap-2 rounded-md px-2 text-ui-sm font-medium transition-colors ${inviteTarget === "app" ? "bg-[var(--app-surface)] text-[var(--app-text)] shadow-sm" : "text-[var(--app-text-muted)] hover:text-[var(--app-text)]"}`} onclick={() => { inviteTarget = "app"; copied = false; void renderQr(); }}><AppWindow size={14} />{m["collaboration.invite_app"]()}</button>
+                <div class="grid gap-1.5">
+                  <SegmentedControl
+                    fill
+                    label={m["collaboration.invite_target"]()}
+                    value={inviteTarget}
+                    onValueChange={(value) => { inviteTarget = value; copied = false; void renderQr(); }}
+                    options={[
+                      { value: "web", label: m["collaboration.invite_web"](), icon: MonitorSmartphone },
+                      { value: "app", label: m["collaboration.invite_app"](), icon: AppWindow },
+                    ]}
+                  />
+                  <p class="text-ui-md leading-snug text-pretty text-[var(--app-text-muted)]">{inviteTarget === "web" ? m["collaboration.invite_web_help"]() : m["collaboration.invite_app_help"]()}</p>
                 </div>
-                <p class="mt-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{inviteTarget === "web" ? m["collaboration.invite_web_help"]() : m["collaboration.invite_app_help"]()}</p>
-                <div
-                  class="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface-raised)] p-3 text-xs"
-                >
-                  <span class="text-[var(--app-text-muted)]"
-                    >{m["collaboration.connected_peers"]()}</span
-                  ><strong class="text-right tabular-nums"
-                    >{status.transport?.connectedPeers ?? 0} / {status.share
-                      .maxPeers}</strong
-                  >
-                  <span class="text-[var(--app-text-muted)]"
-                    >{m["collaboration.expires_at"]()}</span
-                  ><strong class="text-right"
-                    >{new Date(status.share.expiresAt).toLocaleString(
-                      localeState.current,
-                    )}</strong
-                  >
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="stat-tile"><span class="section-label">{m["collaboration.connected_peers"]()}</span><p class="mt-1 font-mono text-ui-lg tabular-nums">{status.transport?.connectedPeers ?? 0} / {status.share.maxPeers}</p></div>
+                  <div class="stat-tile"><span class="section-label">{m["collaboration.expires_at"]()}</span><p class="mt-1 text-ui-lg tabular-nums">{new Date(status.share.expiresAt).toLocaleString(localeState.current)}</p></div>
                 </div>
                 {#if selectedInviteUri}
-                  <div class="mt-4 flex min-w-0 gap-2">
-                    <Input
-                      readonly
-                      value={selectedInviteUri}
-                      class="min-w-0 font-mono text-ui-sm"
-                    /><Button
-                      variant="outline"
-                      size="icon"
-                      aria-label={m["collaboration.copy_invite"]()}
-                      onclick={copyInvite}
-                      >{#if copied}<Check />{:else}<Clipboard />{/if}</Button
-                    >
+                  <div class="flex min-w-0 gap-2">
+                    <Input readonly value={selectedInviteUri} class="min-w-0 font-mono text-[12px]" aria-label={m["collaboration.copy_invite"]()} />
+                    <Button variant="outline" size="icon" aria-label={m["collaboration.copy_invite"]()} title={m["collaboration.copy_invite"]()} onclick={copyInvite}>{#if copied}<Check class="text-[var(--app-success)]" aria-hidden="true" />{:else}<Clipboard aria-hidden="true" />{/if}</Button>
                   </div>
                 {:else}
-                  <div
-                    class="mt-4 rounded-lg border border-dashed border-[var(--app-border)] px-4 py-5 text-center text-xs text-[var(--app-text-muted)]"
-                  >
-                    {m["collaboration.invite_rotated"]()}
-                  </div>
+                  <p class="flex items-start gap-2 rounded-lg bg-[var(--app-hover)] px-3 py-2.5 text-ui-md leading-snug text-pretty text-[var(--app-text-soft)]"><KeyRound size={14} class="mt-px shrink-0" aria-hidden="true" />{m["collaboration.invite_rotated"]()}</p>
                 {/if}
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onclick={refreshInvite}
-                    ><RefreshCw />{m["collaboration.refresh_invite"]()}</Button
-                  ><Button
-                    variant="destructive"
-                    size="sm"
-                    onclick={() => (confirmStop = true)}
-                    ><ShieldOff />{m["collaboration.stop"]()}</Button
-                  >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <Button variant="outline" size="sm" disabled={busy} onclick={refreshInvite}><RefreshCw aria-hidden="true" />{m["collaboration.refresh_invite"]()}</Button>
+                  <Button variant="destructive" size="sm" onclick={() => (confirmStop = true)}><ShieldOff aria-hidden="true" />{m["collaboration.stop"]()}</Button>
                 </div>
               </div>
-              <div
-                class="grid min-h-56 place-items-center rounded-lg border border-[var(--app-border)] bg-white p-3"
-              >
-                {#if qrDataUrl}<img
-                    src={qrDataUrl}
-                    width="200"
-                    height="200"
-                    alt={m["collaboration.qr_alt"]()}
-                    class="aspect-square w-full"
-                  />{:else}<KeyRound size={28} class="text-neutral-400" />{/if}
+              <div class="grid aspect-square place-items-center self-start rounded-xl bg-white p-3 shadow-[var(--app-shadow-border)]">
+                {#if qrDataUrl}<img src={qrDataUrl} width="200" height="200" alt={m["collaboration.qr_alt"]()} class="aspect-square w-full" />{:else}<KeyRound size={28} class="text-neutral-400" aria-hidden="true" />{/if}
               </div>
             </div>
           </Tabs.Content>
 
-          <Tabs.Content value="access" class="m-0 min-h-0 space-y-5 overflow-y-auto overscroll-contain p-5">
-            <section>
-              <h2
-                class="text-xs font-semibold uppercase text-[var(--app-text-muted)]"
-              >
-                {m["collaboration.pending"]()} · {pendingDevices.length}
-              </h2>
-              <div class="mt-2 space-y-2">
-                {#each pendingDevices as device (device.id)}
-                  <div
-                    class="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--app-warning)]/35 bg-[var(--app-warning)]/5 p-3"
-                  >
-                    <span
-                      class="grid size-8 place-items-center rounded-lg bg-[var(--app-surface-raised)]"
-                      ><Laptop size={15} /></span
-                    >
-                    <div class="min-w-32 flex-1">
-                      <p class="text-sm font-medium">{device.displayName}</p>
-                      <p
-                        class="mt-0.5 font-mono text-ui-xs text-[var(--app-text-muted)]"
-                      >
-                        {device.fingerprint}
-                      </p>
+          <Tabs.Content value="access" class="m-0 grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-6 overflow-y-auto overscroll-contain p-5">
+            <section class="grid gap-2">
+              <h2 class="section-label">{m["collaboration.pending"]()} · <span class="tabular-nums">{pendingDevices.length}</span></h2>
+              {#each pendingDevices as device (device.id)}
+                <!-- Pedido pendente: cartao neutro; o estado fica no icone em alerta. -->
+                <div class="grid gap-3 rounded-lg p-3 shadow-[var(--app-shadow-border)]">
+                  <div class="flex items-center gap-3">
+                    <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-warning-soft)] text-[var(--app-warning)]" aria-hidden="true"><Laptop size={15} /></span>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-ui-lg font-medium">{device.displayName}</p>
+                      <p class="mt-0.5 truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={device.fingerprint}>{device.fingerprint}</p>
                     </div>
-                    <Select.Root
-                      type="single"
-                      value={roleDrafts[device.id]}
-                      onValueChange={(value: string) =>
-                        {
-                          roleDrafts = {
-                            ...roleDrafts,
-                            [device.id]: value as CollaborationRole,
-                          };
-                          if (value !== "administrator") {
-                            terminalDrafts = { ...terminalDrafts, [device.id]: false };
-                          }
-                        }}
-                    >
-                      <Select.Trigger size="sm"
-                        ><span
-                          >{roleLabel(
-                            roleDrafts[device.id] ?? device.role,
-                          )}</span
-                        ></Select.Trigger
-                      >
-                      <Select.Content
-                        >{#each ["viewer", "collaborator", "operator", "administrator"] as role}<Select.Item
-                            value={role}
-                            >{roleLabel(role as CollaborationRole)}</Select.Item
-                          >{/each}</Select.Content
-                      >
-                    </Select.Root>
-                    <label class="grid min-w-40 gap-1 text-ui-xs text-[var(--app-text-muted)]">
+                  </div>
+                  <div class="flex flex-wrap items-end gap-3">
+                    <label class="grid min-w-36 gap-1 text-ui-sm text-[var(--app-text-muted)]">
+                      <span>{m["collaboration.default_role"]()}</span>
+                      <Select.Root type="single" value={roleDrafts[device.id]} onValueChange={(value: string) => { roleDrafts = { ...roleDrafts, [device.id]: value as CollaborationRole }; if (value !== "administrator") { terminalDrafts = { ...terminalDrafts, [device.id]: false }; } }}>
+                        <Select.Trigger size="sm" class="w-full"><span class="truncate">{roleLabel(roleDrafts[device.id] ?? device.role)}</span></Select.Trigger>
+                        <Select.Content>{#each ["viewer", "collaborator", "operator", "administrator"] as role}<Select.Item value={role}>{roleLabel(role as CollaborationRole)}</Select.Item>{/each}</Select.Content>
+                      </Select.Root>
+                    </label>
+                    <label class="grid min-w-40 gap-1 text-ui-sm text-[var(--app-text-muted)]">
                       <span>{m["collaboration.design_access"]()}</span>
                       <Select.Root type="single" value={designDrafts[device.id] ?? "inherited"} onValueChange={(value: string) => designDrafts = { ...designDrafts, [device.id]: value as DesignAccess }}>
-                        <Select.Trigger size="sm"><span>{designAccessLabel(designDrafts[device.id] ?? "inherited")}</span></Select.Trigger>
+                        <Select.Trigger size="sm" class="w-full"><span class="truncate">{designAccessLabel(designDrafts[device.id] ?? "inherited")}</span></Select.Trigger>
                         <Select.Content>{#each ["inherited", "none", "view", "comment", "propose", "edit"] as access}<Select.Item value={access}>{designAccessLabel(access as DesignAccess)}</Select.Item>{/each}</Select.Content>
                       </Select.Root>
                     </label>
-                    <label
-                      class="flex min-w-40 items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"
-                      title={m["collaboration.terminal_access_help"]()}
-                    >
+                    <label class="flex h-7 items-center gap-2 text-ui-md text-[var(--app-text-soft)]" title={m["collaboration.terminal_access_help"]()}>
                       <Switch
                         checked={terminalDrafts[device.id] ?? false}
                         disabled={busy || roleDrafts[device.id] !== "administrator"}
-                        onCheckedChange={(checked: boolean) =>
-                          (terminalDrafts = { ...terminalDrafts, [device.id]: checked })}
+                        onCheckedChange={(checked: boolean) => (terminalDrafts = { ...terminalDrafts, [device.id]: checked })}
                         aria-label={m["collaboration.terminal_access"]()}
                       />
                       <span>{m["collaboration.terminal_access"]()}</span>
                     </label>
-                    <Button
-                      size="sm"
-                      disabled={busy}
-                      onclick={() => decide(device, true)}
-                      ><UserCheck />{m["collaboration.approve"]()}</Button
-                    >
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onclick={() => decide(device, false)}
-                      ><UserX />{m["collaboration.reject"]()}</Button
-                    >
-                  </div>
-                {:else}<p
-                    class="rounded-lg border border-dashed border-[var(--app-border)] p-5 text-center text-xs text-[var(--app-text-muted)]"
-                  >
-                    {m["collaboration.no_pending"]()}
-                  </p>{/each}
-              </div>
-            </section>
-            <section>
-              <h2
-                class="text-xs font-semibold uppercase text-[var(--app-text-muted)]"
-              >
-                {m["collaboration.approved"]()} · {approvedDevices.length}
-              </h2>
-              <div
-                class="mt-2 divide-y divide-[var(--app-border)] rounded-lg border border-[var(--app-border)]"
-              >
-                {#each approvedDevices as device (device.id)}
-                  <div class="flex flex-wrap items-center gap-3 p-3">
-                    <span class="size-2 rounded-full bg-[var(--app-success)]"
-                    ></span>
-                    <div class="min-w-32 flex-1">
-                      <p class="truncate text-sm font-medium">
-                        {device.displayName}
-                      </p>
-                      <p
-                        class="mt-0.5 text-ui-xs text-[var(--app-text-muted)]"
-                      >
-                        {device.fingerprint}
-                      </p>
+                    <div class="ml-auto flex gap-2">
+                      <Button size="sm" variant="ghost" disabled={busy} onclick={() => decide(device, false)}><UserX aria-hidden="true" />{m["collaboration.reject"]()}</Button>
+                      <Button size="sm" disabled={busy} onclick={() => decide(device, true)}><UserCheck aria-hidden="true" />{m["collaboration.approve"]()}</Button>
                     </div>
-                    <Select.Root
-                      type="single"
-                      value={roleDrafts[device.id]}
-                      onValueChange={(value: string) =>
-                        {
-                          roleDrafts = {
-                            ...roleDrafts,
-                            [device.id]: value as CollaborationRole,
-                          };
-                          if (value !== "administrator") {
-                            terminalDrafts = { ...terminalDrafts, [device.id]: false };
-                          }
-                        }}
-                      ><Select.Trigger size="sm"
-                        ><span
-                          >{roleLabel(
-                            roleDrafts[device.id] ?? device.role,
-                          )}</span
-                        ></Select.Trigger
-                      ><Select.Content
-                        >{#each ["viewer", "collaborator", "operator", "administrator"] as role}<Select.Item
-                            value={role}
-                            >{roleLabel(role as CollaborationRole)}</Select.Item
-                          >{/each}</Select.Content
-                      ></Select.Root>
-                    <label
-                      class="flex min-w-40 items-center gap-2 text-ui-xs text-[var(--app-text-muted)]"
-                      title={m["collaboration.terminal_access_help"]()}
-                    >
+                  </div>
+                </div>
+              {:else}
+                <p class="flex items-center gap-2 rounded-lg bg-[var(--app-hover)] px-3 py-2.5 text-ui-md text-[var(--app-text-muted)]"><Laptop size={14} class="shrink-0" aria-hidden="true" />{m["collaboration.no_pending"]()}</p>
+              {/each}
+            </section>
+            <section class="grid gap-2">
+              <h2 class="section-label">{m["collaboration.approved"]()} · <span class="tabular-nums">{approvedDevices.length}</span></h2>
+              <div class="overflow-hidden rounded-lg shadow-[var(--app-shadow-border)]">
+                {#each approvedDevices as device (device.id)}
+                  <div class="device-row">
+                    <span class="size-2 shrink-0 rounded-full bg-[var(--app-success)]" aria-hidden="true"></span>
+                    <div class="min-w-32 flex-1">
+                      <p class="truncate text-ui-lg font-medium">{device.displayName}</p>
+                      <p class="mt-0.5 truncate font-mono text-[10.5px] text-[var(--app-text-muted)]" title={device.fingerprint}>{device.fingerprint}</p>
+                    </div>
+                    <Select.Root type="single" value={roleDrafts[device.id]} onValueChange={(value: string) => { roleDrafts = { ...roleDrafts, [device.id]: value as CollaborationRole }; if (value !== "administrator") { terminalDrafts = { ...terminalDrafts, [device.id]: false }; } }}>
+                      <Select.Trigger size="sm" aria-label={m["collaboration.default_role"]()}><span>{roleLabel(roleDrafts[device.id] ?? device.role)}</span></Select.Trigger>
+                      <Select.Content>{#each ["viewer", "collaborator", "operator", "administrator"] as role}<Select.Item value={role}>{roleLabel(role as CollaborationRole)}</Select.Item>{/each}</Select.Content>
+                    </Select.Root>
+                    <label class="flex items-center gap-2 text-ui-md text-[var(--app-text-soft)]" title={m["collaboration.terminal_access_help"]()}>
                       <Switch
                         checked={terminalDrafts[device.id] ?? false}
                         disabled={busy || roleDrafts[device.id] !== "administrator"}
-                        onCheckedChange={(checked: boolean) =>
-                          (terminalDrafts = { ...terminalDrafts, [device.id]: checked })}
+                        onCheckedChange={(checked: boolean) => (terminalDrafts = { ...terminalDrafts, [device.id]: checked })}
                         aria-label={m["collaboration.terminal_access"]()}
                       />
                       <span>{m["collaboration.terminal_access"]()}</span>
                     </label>
-                    {#if roleDrafts[device.id] !== device.role ||
-                    (terminalDrafts[device.id] ?? false) !== device.scopes.includes("terminal.control")}<Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onclick={() => decide(device, true)}
-                        >{m["collaboration.update_access"]()}</Button
-                      >{/if}<Button
-                      variant="ghost"
-                      size="sm"
-                      onclick={() => (pendingRevoke = device)}
-                      >{m["collaboration.revoke"]()}</Button
-                    >
+                    <div class="flex gap-1">
+                      {#if roleDrafts[device.id] !== device.role || (terminalDrafts[device.id] ?? false) !== device.scopes.includes("terminal.control")}
+                        <Button variant="outline" size="sm" disabled={busy} onclick={() => decide(device, true)}>{m["collaboration.update_access"]()}</Button>
+                      {/if}
+                      <Button variant="ghost" size="sm" class="text-[var(--app-danger)] hover:text-[var(--app-danger)]" onclick={() => (pendingRevoke = device)}>{m["collaboration.revoke"]()}</Button>
+                    </div>
                   </div>
-                {:else}<p
-                    class="p-5 text-center text-xs text-[var(--app-text-muted)]"
-                  >
-                    {m["collaboration.no_devices"]()}
-                  </p>{/each}
+                {:else}
+                  <p class="px-3 py-4 text-center text-ui-md text-[var(--app-text-muted)]">{m["collaboration.no_devices"]()}</p>
+                {/each}
               </div>
             </section>
           </Tabs.Content>
 
-          <Tabs.Content value="activity" class="m-0 min-h-0 overflow-y-auto overscroll-contain p-5">
-            <div
-              class="divide-y divide-[var(--app-border)] rounded-lg border border-[var(--app-border)]"
-            >
-              {#each status.audit as event (event.id)}
-                <div class="flex gap-3 p-3">
-                  <Clock3
-                    size={14}
-                    class="mt-0.5 shrink-0 text-[var(--app-text-muted)]"
-                  />
-                  <div class="min-w-0 flex-1">
-                    <p class="text-xs font-medium">
-                      {eventLabel(event.eventType)}
-                    </p>
-                    <p class="mt-1 text-ui-xs text-[var(--app-text-muted)]">
-                      {new Date(event.createdAt).toLocaleString(
-                        localeState.current,
-                      )}
-                    </p>
-                  </div>
-                </div>
-              {:else}<p
-                  class="p-6 text-center text-xs text-[var(--app-text-muted)]"
-                >
-                  {m["collaboration.audit_empty"]()}
-                </p>{/each}
-            </div>
+          <Tabs.Content value="activity" class="m-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+            {#if status.audit.length}
+              <ol class="overflow-hidden rounded-lg shadow-[var(--app-shadow-border)]">
+                {#each status.audit as event (event.id)}
+                  <li class="device-row items-start">
+                    <Clock3 size={14} class="mt-0.5 shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
+                    <div class="min-w-0 flex-1">
+                      <p class="text-ui-lg font-medium">{eventLabel(event.eventType)}</p>
+                      <p class="mt-0.5 font-mono text-[10.5px] tabular-nums text-[var(--app-text-muted)]">{new Date(event.createdAt).toLocaleString(localeState.current)}</p>
+                    </div>
+                  </li>
+                {/each}
+              </ol>
+            {:else}
+              <NodeEmptyState icon={Clock3} title={m["collaboration.audit_empty"]()} />
+            {/if}
           </Tabs.Content>
         </Tabs.Root>
       {/if}
@@ -918,44 +706,76 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<AlertDialog.Root
-  open={confirmStop}
-  onOpenChange={(open) => !open && (confirmStop = false)}
->
-  <AlertDialog.Content
-    ><AlertDialog.Header
-      ><AlertDialog.Title
-        >{m["collaboration.stop_confirm_title"]()}</AlertDialog.Title
-      ><AlertDialog.Description
-        >{m["collaboration.stop_confirm_body"]()}</AlertDialog.Description
-      ></AlertDialog.Header
-    ><AlertDialog.Footer
-      ><AlertDialog.Cancel>{m["settings.cancel"]()}</AlertDialog.Cancel
-      ><AlertDialog.Action disabled={busy} onclick={stopSharing}
-        >{m["collaboration.stop"]()}</AlertDialog.Action
-      ></AlertDialog.Footer
-    ></AlertDialog.Content
-  >
+<AlertDialog.Root open={confirmStop} onOpenChange={(open) => !open && (confirmStop = false)}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{m["collaboration.stop_confirm_title"]()}</AlertDialog.Title>
+      <AlertDialog.Description>{m["collaboration.stop_confirm_body"]()}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>{m["settings.cancel"]()}</AlertDialog.Cancel>
+      <AlertDialog.Action variant="destructive" disabled={busy} onclick={stopSharing}>{m["collaboration.stop"]()}</AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
 </AlertDialog.Root>
 
-<AlertDialog.Root
-  open={pendingRevoke !== null}
-  onOpenChange={(open) => !open && (pendingRevoke = null)}
->
-  <AlertDialog.Content
-    ><AlertDialog.Header
-      ><AlertDialog.Title
-        >{m["collaboration.revoke_confirm_title"]()}</AlertDialog.Title
-      ><AlertDialog.Description
-        >{m["collaboration.revoke_confirm_body"]({
-          name: pendingRevoke?.displayName ?? "",
-        })}</AlertDialog.Description
-      ></AlertDialog.Header
-    ><AlertDialog.Footer
-      ><AlertDialog.Cancel>{m["settings.cancel"]()}</AlertDialog.Cancel
-      ><AlertDialog.Action disabled={busy} onclick={revoke}
-        >{m["collaboration.revoke"]()}</AlertDialog.Action
-      ></AlertDialog.Footer
-    ></AlertDialog.Content
-  >
+<AlertDialog.Root open={pendingRevoke !== null} onOpenChange={(open) => !open && (pendingRevoke = null)}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{m["collaboration.revoke_confirm_title"]()}</AlertDialog.Title>
+      <AlertDialog.Description>{m["collaboration.revoke_confirm_body"]({ name: pendingRevoke?.displayName ?? "" })}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>{m["settings.cancel"]()}</AlertDialog.Cancel>
+      <AlertDialog.Action variant="destructive" disabled={busy} onclick={revoke}>{m["collaboration.revoke"]()}</AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  .stat-tile {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .device-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+
+  .device-row + .device-row {
+    border-top: 1px solid var(--app-border);
+  }
+
+  .stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .stepper-value {
+    min-width: 28px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--app-text);
+  }
+
+  .advanced summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .advanced summary:focus-visible {
+    border-radius: 8px;
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+</style>

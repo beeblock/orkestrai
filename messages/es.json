@@ -5014,5 +5014,13 @@
   "autonomy.event_cancelled": "Cancelado",
   "autonomy.no_secrets": "No hay credenciales guardadas",
   "autonomy.no_audit": "Aún no hay eventos auditados",
-  "huddle.no_agents_hint": "Agrega agentes en el Canvas para invitarlos a un huddle."
+  "huddle.no_agents_hint": "Agrega agentes en el Canvas para invitarlos a un huddle.",
+  "term.commands_empty_hint": "Guarda atajos que usas con frecuencia, como npm run dev.",
+  "agent_runtime.idle_label": "Tiempo inactivo",
+  "agent_runtime.usage_label": "Límite de uso",
+  "agent_runtime.limits": "Límites",
+  "council.no_agents": "No hay agentes en este workspace",
+  "council.no_agents_hint": "Agrega agentes al canvas para comparar perspectivas.",
+  "collaboration.advanced": "Avanzado",
+  "creative_recipe.empty_hint": "Guarda un storyboard como flujo para reutilizar su guion y entradas."
 }

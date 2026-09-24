@@ -3,7 +3,9 @@
   import * as Select from '$lib/components/ui/select';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
-  import { Label } from '$lib/components/ui/label';
+  import { Slider } from '$lib/components/ui/slider';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
+  import { CircleAlert, LoaderCircle, Minus, Moon, Plus, Sun } from '@lucide/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import type { AgentRuntimeData } from '$lib/modules/agent-room/contracts/schemas/agent-runtime.schema.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -99,69 +101,160 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={(value) => !value && onClose()}>
-  <Dialog.Content class="sm:max-w-lg">
+  <Dialog.Content class="sm:max-w-[520px]">
     <Dialog.Header>
       <Dialog.Title>{m['agent_runtime.title']()}</Dialog.Title>
       <Dialog.Description>{m['agent_runtime.description']()}</Dialog.Description>
     </Dialog.Header>
 
-    <div class="space-y-4">
-      <div class="flex items-center justify-between rounded-md border border-[var(--app-border)] bg-[var(--app-surface-subtle)] px-3 py-2">
-        <div>
-          <p class="text-sm font-medium">{m['agent_runtime.state']()}</p>
-          <p class="text-xs text-[var(--app-text-muted)]">{runtime?.activeRuns ?? 0} {m['agent_runtime.active_runs']()}</p>
+    <div class="grid gap-5">
+      <!-- Estado atual e a acao que o altera ficam juntos. -->
+      <div class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 shadow-[var(--app-shadow-border)]">
+        <div class="flex min-w-0 items-center gap-2.5">
+          <span class="state-dot" class:awake={runtime?.state === 'awake'} aria-hidden="true"></span>
+          <div class="min-w-0">
+            <p class="text-ui-lg font-medium">
+              {m['agent_runtime.state']()} · <span class={runtime?.state === 'awake' ? 'text-[var(--app-success)]' : 'text-[var(--app-text-soft)]'}>{runtime?.state === 'awake' ? m['agent_runtime.awake']() : m['agent_runtime.sleeping']()}</span>
+            </p>
+            <p class="text-ui-md text-muted-foreground"><span class="tabular-nums">{runtime?.activeRuns ?? 0}</span> {m['agent_runtime.active_runs']()}</p>
+          </div>
         </div>
-        <span class={`rounded-full px-2 py-1 text-xs font-medium ${runtime?.state === 'awake' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-[var(--app-border)]'}`}>
-          {runtime?.state === 'awake' ? m['agent_runtime.awake']() : m['agent_runtime.sleeping']()}
-        </span>
+        {#if runtime?.state === 'awake'}
+          <Button type="button" size="sm" variant="outline" class="shrink-0" disabled={busy || Boolean(runtime.activeRuns)} onclick={() => act('sleep')}><Moon aria-hidden="true" />{m['agent_runtime.sleep']()}</Button>
+        {:else}
+          <Button type="button" size="sm" variant="outline" class="shrink-0" disabled={busy} onclick={() => act('wake')}><Sun aria-hidden="true" />{m['agent_runtime.wake']()}</Button>
+        {/if}
       </div>
 
-      <div class="space-y-2">
-        <Label for="agent-runtime-mode">{m['agent_runtime.mode']()}</Label>
-        <Select.Root type="single" value={mode} onValueChange={(value: string) => (mode = value as typeof mode)}>
-          <Select.Trigger id="agent-runtime-mode" class="w-full">
-            {mode === 'persistent' ? m['agent_runtime.mode_persistent']() : mode === 'on_demand' ? m['agent_runtime.mode_on_demand']() : m['agent_runtime.mode_interactive']()}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="interactive">{m['agent_runtime.mode_interactive']()}</Select.Item>
-            <Select.Item value="on_demand">{m['agent_runtime.mode_on_demand']()}</Select.Item>
-            <Select.Item value="persistent">{m['agent_runtime.mode_persistent']()}</Select.Item>
-          </Select.Content>
-        </Select.Root>
-        <p class="text-xs text-[var(--app-text-muted)]">
+      <div class="grid gap-1.5">
+        <span class="text-ui-lg font-medium" id="agent-runtime-mode-label">{m['agent_runtime.mode']()}</span>
+        <SegmentedControl
+          fill
+          label={m['agent_runtime.mode']()}
+          value={mode}
+          onValueChange={(value) => (mode = value)}
+          options={[
+            { value: 'interactive', label: m['agent_runtime.mode_interactive']() },
+            { value: 'on_demand', label: m['agent_runtime.mode_on_demand']() },
+            { value: 'persistent', label: m['agent_runtime.mode_persistent']() },
+          ]}
+        />
+        <p class="text-ui-md leading-snug text-pretty text-muted-foreground" aria-live="polite">
           {mode === 'persistent' ? m['agent_runtime.mode_persistent_hint']() : mode === 'on_demand' ? m['agent_runtime.mode_on_demand_hint']() : m['agent_runtime.mode_interactive_hint']()}
         </p>
       </div>
 
-      <div class="grid grid-cols-3 gap-3">
-        <Label class="space-y-1 text-xs" for="agent-runtime-idle">
-          <span>{m['agent_runtime.idle_minutes']()}</span>
-          <Input id="agent-runtime-idle" type="number" min="5" max="720" bind:value={idleMinutes} />
-        </Label>
-        <Label class="space-y-1 text-xs" for="agent-runtime-concurrency">
-          <span>{m['agent_runtime.concurrency']()}</span>
-          <Input id="agent-runtime-concurrency" type="number" min="1" max="8" bind:value={concurrency} />
-        </Label>
-        <Label class="space-y-1 text-xs" for="agent-runtime-usage">
-          <span>{m['agent_runtime.usage_limit']()}</span>
-          <Input id="agent-runtime-usage" type="number" min="50" max="100" bind:value={usageLimit} />
-        </Label>
+      <!-- Limites: cada numero no controle que combina com sua faixa. -->
+      <div class="grid border-t border-[var(--app-border)] pt-3">
+        <span class="section-label mb-1">{m['agent_runtime.limits']()}</span>
+        <div class="limit-row">
+          <label class="text-ui-lg" for="agent-runtime-idle">{m['agent_runtime.idle_label']()}</label>
+          <span class="unit-input">
+            <Input id="agent-runtime-idle" type="number" min="5" max="720" step="5" bind:value={idleMinutes} aria-label={m['agent_runtime.idle_minutes']()} class="h-8 w-28 text-[13px]" />
+            <span aria-hidden="true">min</span>
+          </span>
+        </div>
+        <div class="limit-row">
+          <span class="text-ui-lg" id="agent-runtime-concurrency-label">{m['agent_runtime.concurrency']()}</span>
+          <div class="stepper" role="group" aria-labelledby="agent-runtime-concurrency-label">
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`${m['agent_runtime.concurrency']()} −`} disabled={concurrency <= 1} onclick={() => (concurrency = Math.max(1, concurrency - 1))}><Minus aria-hidden="true" /></Button>
+            <output class="stepper-value" aria-live="polite">{concurrency}</output>
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`${m['agent_runtime.concurrency']()} +`} disabled={concurrency >= 8} onclick={() => (concurrency = Math.min(8, concurrency + 1))}><Plus aria-hidden="true" /></Button>
+          </div>
+        </div>
+        <div class="limit-row">
+          <span class="text-ui-lg">{m['agent_runtime.usage_label']()}</span>
+          <div class="flex w-44 items-center gap-3">
+            <Slider type="single" class="flex-1 [&_[data-slot=slider-track]]:bg-[var(--app-border-strong)]" value={usageLimit} min={50} max={100} step={1} aria-label={m['agent_runtime.usage_limit']()} onValueChange={(value: number) => (usageLimit = value)} />
+            <output class="slider-value w-9 text-right">{usageLimit}%</output>
+          </div>
+        </div>
       </div>
 
-      <div class="flex gap-2">
-        {#if runtime?.state === 'awake'}
-          <Button type="button" variant="outline" disabled={busy || Boolean(runtime.activeRuns)} onclick={() => act('sleep')}>{m['agent_runtime.sleep']()}</Button>
-        {:else}
-          <Button type="button" variant="outline" disabled={busy} onclick={() => act('wake')}>{m['agent_runtime.wake']()}</Button>
-        {/if}
-      </div>
-
-      {#if errorMessage}<p class="text-sm text-destructive" role="alert">{errorMessage}</p>{/if}
+      {#if errorMessage}<p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{errorMessage}</span></p>{/if}
     </div>
 
     <Dialog.Footer>
       <Button type="button" variant="outline" onclick={onClose}>{m['dlg.cancel']()}</Button>
-      <Button type="button" disabled={busy} onclick={save}>{busy ? m['term.runtime_saving']() : m['dlg.save']()}</Button>
+      <Button type="button" disabled={busy} onclick={save}>
+        {#if busy}<LoaderCircle class="animate-spin" aria-hidden="true" />{/if}
+        {busy ? m['term.runtime_saving']() : m['dlg.save']()}
+      </Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  .state-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--app-text-muted);
+  }
+
+  .state-dot.awake {
+    background: var(--app-success);
+    box-shadow: 0 0 0 3px var(--app-success-soft);
+  }
+
+  /* Linha de limite: rotulo a esquerda, controle a direita (como em Configuracoes). */
+  .limit-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+  }
+
+  .limit-row + .limit-row {
+    border-top: 1px solid var(--app-border);
+  }
+
+  .unit-input {
+    position: relative;
+    display: block;
+  }
+
+  .unit-input :global(input) {
+    padding-right: 36px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .unit-input > span {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--app-text-muted);
+    pointer-events: none;
+  }
+
+  .stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--app-hover);
+  }
+
+  .stepper-value {
+    min-width: 28px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--app-text);
+  }
+
+  .slider-value {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-text-muted);
+  }
+</style>

@@ -35,6 +35,8 @@ pt-BR, English, and Spanish translations.
 - Calm the API client: theme colors throughout, a request list whose actions appear on hover, empty states with an Add request action, segmented toggles, status chips with icons and drag-to-order requests in the runner.
 - Rework the code graph, Second Brain, document, device, computer and tool workshop views: a one-row code graph toolbar with Index as the single primary action, stats that appear once indexed, a slider for depth and token budget, source rows with kind icons and tags, document and device empty states that offer the next step, computer settings grouped into cards with rarely used sections folded, and tool status chips with readable executor names.
 - Rework the Workbench hubs: the Review Center gets calm file rows with stage and discard on hover, an anchored comment popover and clear loading and empty states; Workstreams, Annotations and Attention get segmented filters with counts and a proper search field; Huddles show a live chip, clickable participant rows and message avatars; Automations reveal row actions on hover and show recipes as cards; the concurrent runs limit is a slider; and the file explorer and file toolbar match the Workbench sidebar.
+- Give every dialog the same anatomy: a title with a one-line description, grouped fields with hints, errors in one consistent block and a footer with the primary action last. Runtimes, modes, platforms and code intelligence use segmented controls; agent limits use a stepper, a slider and a minutes field; workspace settings are split into sections; and themes are picked from preview cards with color swatches.
+- Show update downloads as a floating progress pill, announce tour steps to screen readers and tuck rarely used sharing options under Advanced.
 
 ### Fixed
 
@@ -48,6 +50,7 @@ pt-BR, English, and Spanish translations.
 - Make the code graph's Index button clickable in its empty state and keep the device tools panel from being clipped in narrow nodes.
 - Translate recipe categories and security audit events, give vault fields visible labels, keep a long revision hash inside its Annotations column and show review risks with a warning icon instead of a check.
 - Show the Huddles icon in open Workbench items and tabs, and name Huddles and Workstreams in the pane header instead of their internal type.
+- Highlight the active scope tab in the terminal commands dialog, which never showed as selected.
 - Show "no usage data reported" in a neutral tone instead of green, and make the empty API client's Add request button create a request at the top level.
 
 ## 0.35.0 - 2026-09-24

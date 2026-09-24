@@ -12,7 +12,8 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Button } from '$lib/components/ui/button';
   import * as Select from '$lib/components/ui/select';
-  import { FolderGit2, FolderOpen, Plus, Trash2, Waypoints } from '@lucide/svelte';
+  import { CircleAlert, CircleCheck, FolderGit2, FolderOpen, LoaderCircle, Plus, Trash2, Waypoints } from '@lucide/svelte';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import { onMount } from 'svelte';
   import McpIcon from '../McpIcon.svelte';
   import { isLegacyEmojiIcon, WORKSPACE_ICONS } from '../workspace-icons.js';
@@ -290,131 +291,182 @@
   }
 </script>
 
+{#snippet fieldError({ errors, errorProps }: { errors: string[]; errorProps: Record<string, unknown> })}
+  {#each errors as error (error)}
+    <p {...errorProps} class="flex items-center gap-1.5 text-ui-md text-[var(--app-danger)]"><CircleAlert size={13} class="shrink-0" aria-hidden="true" />{error}</p>
+  {/each}
+{/snippet}
+
 <Dialog.Root open onOpenChange={(isOpen) => !isOpen && onClose()}>
-  <Dialog.Content class="max-h-[min(90dvh,820px)] max-w-[calc(100%-1.5rem)]! grid-rows-[auto_minmax(0,1fr)] gap-0! overflow-hidden rounded-lg p-0! sm:max-w-2xl!">
-    <Dialog.Header class="border-b border-border/60 px-5 py-4 pr-12">
+  <Dialog.Content class="flex max-h-[min(90dvh,820px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]">
+    <Dialog.Header class="shrink-0 border-b border-border/70 px-5 pt-5 pb-4 pr-12">
       <Dialog.Title>{m['dlg.edit_ws_title']()}</Dialog.Title>
-      <Dialog.Description class="text-pretty">{m['dlg.edit_ws_desc']()}</Dialog.Description>
+      <Dialog.Description>{m['dlg.edit_ws_desc']()}</Dialog.Description>
     </Dialog.Header>
 
-    <form method="POST" use:enhance class="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-      <div class="min-h-0 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <Form.Field {form} name="name">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['dlg.name']()}</Form.Label>
-                <Input {...props} bind:value={$formData.name} autocomplete="off" />
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-          </Form.Field>
+    <form method="POST" use:enhance class="flex min-h-0 flex-1 flex-col">
+      <div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-6 overflow-y-auto overscroll-contain px-5 py-5">
+        <!-- Geral: nome, diretorio e icone. -->
+        <section class="grid gap-4">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <Form.Field {form} name="name" class="min-w-0 space-y-1.5">
+              <Form.Control>
+                {#snippet children({ props })}
+                  <Form.Label class="text-[13px]">{m['dlg.name']()}</Form.Label>
+                  <Input {...props} bind:value={$formData.name} autocomplete="off" />
+                {/snippet}
+              </Form.Control>
+              <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+            </Form.Field>
 
-          <Form.Field {form} name="workingDir">
-            <Form.Control>
-              {#snippet children({ props })}
-                <Form.Label>{m['dlg.working_dir']()}</Form.Label>
-                <div class="flex min-w-0 gap-2">
-                  <Input {...props} bind:value={$formData.workingDir} autocomplete="off" class="min-w-0 flex-1" readonly={runtimeKind === 'wsl'} />
-                  {#if desktop && runtimeKind !== 'wsl'}
-                    <Tooltip.Root>
-                      <Tooltip.Trigger>
-                        {#snippet child({ props })}
-                          <Button {...props} type="button" variant="outline" size="icon" aria-label={m['dlg.pick_folder']()} onclick={pickDirectory}>
-                            <FolderOpen size={15} aria-hidden="true" />
-                          </Button>
-                        {/snippet}
-                      </Tooltip.Trigger>
-                      <Tooltip.Content side="top">{m['dlg.pick_folder']()}</Tooltip.Content>
-                    </Tooltip.Root>
-                  {/if}
-                </div>
-              {/snippet}
-            </Form.Control>
-            <Form.FieldErrors />
-          </Form.Field>
-        </div>
+            <Form.Field {form} name="workingDir" class="min-w-0 space-y-1.5">
+              <Form.Control>
+                {#snippet children({ props })}
+                  <Form.Label class="text-[13px]">{m['dlg.working_dir']()}</Form.Label>
+                  <div class="flex min-w-0 gap-2">
+                    <Input {...props} bind:value={$formData.workingDir} autocomplete="off" spellcheck={false} class="min-w-0 flex-1 font-mono text-[12px]" title={$formData.workingDir} readonly={runtimeKind === 'wsl'} />
+                    {#if desktop && runtimeKind !== 'wsl'}
+                      <Tooltip.Root>
+                        <Tooltip.Trigger>
+                          {#snippet child({ props })}
+                            <Button {...props} type="button" variant="outline" size="icon" aria-label={m['dlg.pick_folder']()} onclick={pickDirectory}>
+                              <FolderOpen size={15} aria-hidden="true" />
+                            </Button>
+                          {/snippet}
+                        </Tooltip.Trigger>
+                        <Tooltip.Content side="top">{m['dlg.pick_folder']()}</Tooltip.Content>
+                      </Tooltip.Root>
+                    {/if}
+                  </div>
+                {/snippet}
+              </Form.Control>
+              <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+            </Form.Field>
+          </div>
+
+          <div class="grid gap-1.5">
+            <span class="text-ui-lg font-medium" id="workspace-icon-label">{m['dlg.ws_icon']()}</span>
+            <div class="grid grid-cols-[repeat(auto-fill,minmax(36px,1fr))] gap-1.5" role="radiogroup" aria-labelledby="workspace-icon-label">
+              {#each WORKSPACE_ICONS as option (option.name)}
+                {@const OptionIcon = option.component}
+                <button
+                  type="button"
+                  class="icon-choice"
+                  role="radio"
+                  aria-checked={($formData.icon ?? null) === option.name}
+                  aria-label={option.name}
+                  title={option.name}
+                  onclick={() => ($formData.icon = ($formData.icon ?? null) === option.name ? null : option.name)}
+                >
+                  <OptionIcon size={15} aria-hidden="true" />
+                </button>
+              {/each}
+            </div>
+            {#if isLegacyEmojiIcon(typeof $formData.icon === 'string' ? $formData.icon : null)}
+              <p class="m-0 text-ui-md text-muted-foreground">{m['dlg.icon_legacy_hint']({ icon: $formData.icon ?? '' })}</p>
+            {/if}
+          </div>
+        </section>
 
         {#if wsl.supported}
-          <section class="grid gap-4 rounded-md border border-border/70 bg-muted/20 p-3 sm:grid-cols-2">
-            <div class="space-y-2">
-              <span class="text-sm font-medium leading-none">{m['dlg.runtime_label']()}</span>
-              <Select.Root type="single" value={runtimeKind} onValueChange={(value: string) => (runtimeKind = value === 'wsl' ? 'wsl' : 'native')}>
-                <Select.Trigger class="w-full">
-                  {runtimeKind === 'wsl' ? m['dlg.runtime_wsl']() : m['dlg.runtime_native']()}
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="native">{m['dlg.runtime_native']()}</Select.Item>
-                  <Select.Item value="wsl">{m['dlg.runtime_wsl']()}</Select.Item>
-                </Select.Content>
-              </Select.Root>
-              <p class="text-xs text-muted-foreground">{m['dlg.runtime_change_hint']()}</p>
+          <section class="grid gap-3 border-t border-border/70 pt-5">
+            <div class="grid gap-1.5">
+              <span class="text-ui-lg font-medium">{m['dlg.runtime_label']()}</span>
+              <SegmentedControl
+                class="w-fit max-w-full"
+                label={m['dlg.runtime_label']()}
+                value={runtimeKind}
+                onValueChange={(value) => (runtimeKind = value === 'wsl' ? 'wsl' : 'native')}
+                options={[
+                  { value: 'native', label: m['dlg.runtime_native']() },
+                  { value: 'wsl', label: m['dlg.runtime_wsl']() },
+                ]}
+              />
+              <p class="text-ui-md text-muted-foreground text-pretty">{m['dlg.runtime_change_hint']()}</p>
             </div>
 
             {#if runtimeKind === 'wsl'}
-              <div class="space-y-2">
-                <span class="text-sm font-medium leading-none">{m['dlg.wsl_distribution']()}</span>
-                <Select.Root type="single" value={wslDistribution} onValueChange={(value: string) => (wslDistribution = value)}>
-                  <Select.Trigger class="w-full">
-                    {wslDistribution || m['dlg.wsl_distribution_placeholder']()}
-                  </Select.Trigger>
-                  <Select.Content>
-                    {#each wsl.distributions as distribution (distribution.name)}
-                      <Select.Item value={distribution.name}>{distribution.name}</Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
-              </div>
-
-              <div class="space-y-2 sm:col-span-2">
-                <label class="text-sm font-medium leading-none" for="wsl-working-dir">{m['dlg.wsl_working_dir']()}</label>
-                <Input id="wsl-working-dir" bind:value={wslWorkingDir} placeholder="/home/user/project" autocomplete="off" />
-                <p class="text-xs text-muted-foreground">{m['dlg.wsl_working_dir_hint']()}</p>
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                <div class="grid min-w-0 content-start gap-1.5">
+                  <span class="text-ui-lg font-medium">{m['dlg.wsl_distribution']()}</span>
+                  <Select.Root type="single" value={wslDistribution} onValueChange={(value: string) => (wslDistribution = value)}>
+                    <Select.Trigger class="w-full" aria-label={m['dlg.wsl_distribution']()}>
+                      <span class="truncate">{wslDistribution || m['dlg.wsl_distribution_placeholder']()}</span>
+                    </Select.Trigger>
+                    <Select.Content>
+                      {#each wsl.distributions as distribution (distribution.name)}
+                        <Select.Item value={distribution.name}>{distribution.name}</Select.Item>
+                      {/each}
+                    </Select.Content>
+                  </Select.Root>
+                </div>
+                <div class="grid min-w-0 content-start gap-1.5">
+                  <label class="text-ui-lg font-medium" for="wsl-working-dir">{m['dlg.wsl_working_dir']()}</label>
+                  <Input id="wsl-working-dir" bind:value={wslWorkingDir} placeholder="/home/user/project" autocomplete="off" spellcheck={false} class="font-mono text-[12px]" />
+                </div>
+                <p class="text-ui-md text-muted-foreground text-pretty sm:col-span-2">{m['dlg.wsl_working_dir_hint']()}</p>
               </div>
               {#if !wsl.distributions.length}
-                <p class="text-xs text-destructive sm:col-span-2" role="alert">{wsl.error || m['dlg.wsl_unavailable']()}</p>
+                <p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{wsl.error || m['dlg.wsl_unavailable']()}</span></p>
               {/if}
             {/if}
           </section>
         {/if}
 
-        <section class="space-y-3 border-t border-border/60 pt-4" data-testid="workspace-repository-roots">
+        <!-- Instrucoes que viram AGENTS.md/CLAUDE.md. -->
+        <section class="grid gap-3 border-t border-border/70 pt-5">
+          <Form.Field {form} name="instructions" class="space-y-1.5">
+            <Form.Control>
+              {#snippet children({ props })}
+                <Form.Label class="text-[13px]">{m['dlg.agent_instructions']()}</Form.Label>
+                <Textarea {...props} bind:value={$formData.instructions} rows={5} autocomplete="off" placeholder={m['ph.ws_instructions']()} class="min-h-28 resize-y" />
+              {/snippet}
+            </Form.Control>
+            <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+          </Form.Field>
+
+          <Form.Field {form} name="syncAgentInstructionFiles" class="space-y-1">
+            <Form.Control>
+              {#snippet children({ props })}
+                <div class="flex items-center gap-2.5">
+                  <Checkbox {...props} checked={$formData.syncAgentInstructionFiles} onCheckedChange={(value: boolean | 'indeterminate') => ($formData.syncAgentInstructionFiles = value === true)} />
+                  <Form.Label class="cursor-pointer text-[13px] font-normal">{m['dlg.sync_instruction_files']()}</Form.Label>
+                </div>
+              {/snippet}
+            </Form.Control>
+            <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+          </Form.Field>
+        </section>
+
+        <section class="grid gap-3 border-t border-border/70 pt-5" data-testid="workspace-repository-roots">
           <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0 space-y-1">
-              <div class="flex items-center gap-2">
-                <FolderGit2 size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />
-                <h3 class="text-sm font-medium">{m['dlg.repository_roots_title']()}</h3>
-              </div>
-              <p class="max-w-xl text-pretty text-xs text-muted-foreground">{m['dlg.repository_roots_desc']()}</p>
+            <div class="grid min-w-0 gap-1">
+              <h3 class="flex items-center gap-2 text-ui-lg font-medium">
+                <FolderGit2 size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['dlg.repository_roots_title']()}
+              </h3>
+              <p class="max-w-xl text-ui-md text-pretty text-muted-foreground">{m['dlg.repository_roots_desc']()}</p>
             </div>
-            <Tooltip.Root>
-              <Tooltip.Trigger>
-                {#snippet child({ props })}
-                  <Button {...props} type="button" variant="outline" size="icon-sm" class="shrink-0" aria-label={m['dlg.repository_roots_add']()} onclick={addRepository}>
-                    <Plus size={14} aria-hidden="true" />
-                  </Button>
-                {/snippet}
-              </Tooltip.Trigger>
-              <Tooltip.Content side="top">{m['dlg.repository_roots_add']()}</Tooltip.Content>
-            </Tooltip.Root>
+            <Button type="button" variant="outline" size="sm" class="shrink-0" onclick={addRepository}>
+              <Plus aria-hidden="true" />{m['dlg.repository_roots_add']()}
+            </Button>
           </div>
 
           {#if repositoryRoots.length}
-            <div class="space-y-2">
+            <div class="grid gap-2">
               {#each repositoryRoots as repository, index (index)}
                 <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(8rem,0.65fr)_minmax(0,1.35fr)_auto]">
-                  <div class="min-w-0 space-y-1">
+                  <div class="min-w-0">
                     <label class="sr-only" for={`repository-alias-${index}`}>{m['dlg.repository_roots_alias']()}</label>
                     <InputGroup.Root>
                       <InputGroup.Addon>@</InputGroup.Addon>
                       <InputGroup.Input id={`repository-alias-${index}`} bind:value={repository.alias} autocomplete="off" spellcheck={false} placeholder="api-tests" />
                     </InputGroup.Root>
                   </div>
-                  <div class="col-span-2 row-start-2 min-w-0 space-y-1 sm:col-span-1 sm:row-auto">
+                  <div class="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:row-auto">
                     <label class="sr-only" for={`repository-path-${index}`}>{m['dlg.repository_roots_path']()}</label>
-                    <Input id={`repository-path-${index}`} bind:value={repository.path} autocomplete="off" spellcheck={false} placeholder={m['dlg.repository_roots_path']()} class="min-w-0 font-mono text-xs" />
+                    <Input id={`repository-path-${index}`} bind:value={repository.path} autocomplete="off" spellcheck={false} placeholder={m['dlg.repository_roots_path']()} title={repository.path} class="min-w-0 font-mono text-[12px]" />
                   </div>
-                  <div class="col-start-2 row-start-1 flex shrink-0 items-center gap-1 sm:col-auto sm:row-auto">
+                  <div class="col-start-2 row-start-1 flex shrink-0 items-center gap-0.5 sm:col-auto sm:row-auto">
                     {#if desktop}
                       <Tooltip.Root>
                         <Tooltip.Trigger>
@@ -444,29 +496,26 @@
           {/if}
         </section>
 
-        <section class="space-y-3 border-t border-border/60 pt-4" data-testid="workspace-code-intelligence-mode">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <Waypoints size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />
-              <h3 class="text-sm font-medium">{m['dlg.code_intelligence_title']()}</h3>
-            </div>
-            <p class="max-w-xl text-pretty text-xs text-muted-foreground">{m['dlg.code_intelligence_description']()}</p>
+        <section class="grid gap-3 border-t border-border/70 pt-5" data-testid="workspace-code-intelligence-mode">
+          <div class="grid gap-1">
+            <h3 class="flex items-center gap-2 text-ui-lg font-medium">
+              <Waypoints size={14} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['dlg.code_intelligence_title']()}
+            </h3>
+            <p class="max-w-xl text-ui-md text-pretty text-muted-foreground">{m['dlg.code_intelligence_description']()}</p>
           </div>
-          <Select.Root type="single" value={codeIntelligenceMode} onValueChange={(value: string) => (codeIntelligenceMode = value as CodeIntelligenceMode)}>
-            <Select.Trigger class="w-full" aria-label={m['dlg.code_intelligence_title']()}>
-              {codeIntelligenceMode === 'assisted'
-                ? m['dlg.code_intelligence_assisted']()
-                : codeIntelligenceMode === 'manual'
-                  ? m['dlg.code_intelligence_manual']()
-                  : m['dlg.code_intelligence_disabled']()}
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="assisted">{m['dlg.code_intelligence_assisted']()}</Select.Item>
-              <Select.Item value="manual">{m['dlg.code_intelligence_manual']()}</Select.Item>
-              <Select.Item value="disabled">{m['dlg.code_intelligence_disabled']()}</Select.Item>
-            </Select.Content>
-          </Select.Root>
-          <p class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-pretty text-xs leading-5 text-muted-foreground">
+          <!-- Tres modos: controle segmentado + explicacao do modo escolhido. -->
+          <SegmentedControl
+            class="w-fit max-w-full"
+            label={m['dlg.code_intelligence_title']()}
+            value={codeIntelligenceMode}
+            onValueChange={(value) => (codeIntelligenceMode = value)}
+            options={[
+              { value: 'assisted', label: m['dlg.code_intelligence_assisted']() },
+              { value: 'manual', label: m['dlg.code_intelligence_manual']() },
+              { value: 'disabled', label: m['dlg.code_intelligence_disabled']() },
+            ]}
+          />
+          <p class="rounded-lg bg-[var(--app-hover)] px-3 py-2.5 text-ui-md leading-relaxed text-pretty text-[var(--app-text-soft)]" aria-live="polite">
             {codeIntelligenceMode === 'assisted'
               ? m['dlg.code_intelligence_assisted_description']()
               : codeIntelligenceMode === 'manual'
@@ -475,109 +524,112 @@
           </p>
         </section>
 
-        <div class="space-y-2">
-          <span class="text-sm font-medium leading-none">{m['dlg.ws_icon']()}</span>
-          <div class="grid grid-cols-[repeat(auto-fit,minmax(34px,1fr))] gap-1.5" role="radiogroup" aria-label={m['dlg.ws_icon']()}>
-            {#each WORKSPACE_ICONS as option (option.name)}
-              {@const OptionIcon = option.component}
-              <button
-                type="button"
-                class={($formData.icon ?? null) === option.name
-                  ? 'flex aspect-square items-center justify-center rounded-lg border border-[var(--app-accent)] bg-[var(--app-accent)] text-[var(--app-accent-contrast)] transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-                  : 'flex aspect-square items-center justify-center rounded-lg border border-[var(--app-border)] bg-transparent text-[var(--app-text-muted)] transition-[color,background-color,border-color] hover:bg-[var(--app-surface-raised)] hover:text-[var(--app-text)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'}
-                role="radio"
-                aria-checked={($formData.icon ?? null) === option.name}
-                aria-label={option.name}
-                onclick={() => ($formData.icon = ($formData.icon ?? null) === option.name ? null : option.name)}
-              >
-                <OptionIcon size={15} aria-hidden="true" />
-              </button>
-            {/each}
+        <section class="grid gap-3 border-t border-border/70 pt-5">
+          <div class="grid gap-1">
+            <h3 class="flex items-center gap-2 text-ui-lg font-medium">
+              <McpIcon size={13} class="shrink-0 text-muted-foreground" aria-hidden="true" />{m['dlg.mcp_title']()}
+            </h3>
+            <p class="text-ui-md text-pretty text-muted-foreground">{m['dlg.mcp_desc']()}</p>
           </div>
-          {#if isLegacyEmojiIcon(typeof $formData.icon === 'string' ? $formData.icon : null)}
-            <p class="m-0 text-ui-sm text-[var(--app-text-muted)]">{m['dlg.icon_legacy_hint']({ icon: $formData.icon ?? '' })}</p>
-          {/if}
-        </div>
-
-        <Form.Field {form} name="instructions">
-          <Form.Control>
-            {#snippet children({ props })}
-              <Form.Label>{m['dlg.agent_instructions']()}</Form.Label>
-              <Textarea {...props} bind:value={$formData.instructions} rows={5} autocomplete="off" placeholder={m['ph.ws_instructions']()} />
-            {/snippet}
-          </Form.Control>
-          <Form.FieldErrors />
-        </Form.Field>
-
-        <Form.Field {form} name="syncAgentInstructionFiles">
-          <Form.Control>
-            {#snippet children({ props })}
-              <div class="flex items-center gap-2">
-                <Checkbox {...props} checked={$formData.syncAgentInstructionFiles} onCheckedChange={(value: boolean | 'indeterminate') => ($formData.syncAgentInstructionFiles = value === true)} />
-                <Form.Label>{m['dlg.sync_instruction_files']()}</Form.Label>
-              </div>
-            {/snippet}
-          </Form.Control>
-          <Form.FieldErrors />
-        </Form.Field>
-
-        {#if submitError}
-          <p class="text-sm text-destructive" aria-live="polite">{submitError}</p>
-        {/if}
-
-        <section class="space-y-2 border-t border-border/60 pt-4">
-          <div class="flex items-center gap-2">
-            <McpIcon size={13} class="text-muted-foreground" aria-hidden="true" />
-            <h3 class="text-sm font-medium">{m['dlg.mcp_title']()}</h3>
-          </div>
-          <p class="text-pretty text-xs text-muted-foreground">{m['dlg.mcp_desc']()}</p>
           {#if mcps.length}
-            <ul class="space-y-1">
+            <ul class="grid gap-1">
               {#each mcps as server (server.name)}
-                <li class="flex min-w-0 items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
-                  <span class="shrink-0 font-medium">{server.name}</span>
-                  <span class="min-w-0 flex-1 truncate text-muted-foreground">{server.command} {server.args.join(' ')}</span>
+                <li class="flex min-h-9 min-w-0 items-center gap-2.5 rounded-lg bg-[var(--app-hover)] py-1 pr-1 pl-3">
+                  <span class="shrink-0 text-ui-lg font-medium">{server.name}</span>
+                  <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground" title={`${server.command} ${server.args.join(' ')}`}>{server.command} {server.args.join(' ')}</span>
                   {#if server.builtin}
-                    <span class="shrink-0 text-ui-xs text-emerald-500">{m['dlg.mcp_builtin']()}</span>
+                    <span class="mr-2 shrink-0 rounded-full bg-[var(--app-hover)] px-2 py-0.5 text-ui-xs text-[var(--app-text-soft)]">{m['dlg.mcp_builtin']()}</span>
                   {:else}
-                    <button type="button" class="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" aria-label={m['dlg.mcp_remove']({ name: server.name })} onclick={() => removeMcp(server.name)}>
-                      <Trash2 size={12} aria-hidden="true" />
-                    </button>
+                    <Button type="button" variant="ghost" size="icon-sm" class="shrink-0 text-muted-foreground hover:text-destructive" aria-label={m['dlg.mcp_remove']({ name: server.name })} title={m['dlg.mcp_remove']({ name: server.name })} onclick={() => removeMcp(server.name)}>
+                      <Trash2 size={13} aria-hidden="true" />
+                    </Button>
                   {/if}
                 </li>
               {/each}
             </ul>
           {/if}
-          <div class="grid gap-2 sm:grid-cols-2">
-            <Input name="mcp-name" aria-label={m['ph.mcp_name']()} bind:value={mcpName} autocomplete="off" placeholder={m['ph.mcp_name']()} class="h-8 min-w-0 text-xs" />
-            <Input name="mcp-command" aria-label={m['ph.mcp_command']()} bind:value={mcpCommand} autocomplete="off" placeholder={m['ph.mcp_command']()} class="h-8 min-w-0 text-xs" />
-            <Input name="mcp-args" aria-label={m['ph.mcp_args']()} bind:value={mcpArgs} autocomplete="off" placeholder={m['ph.mcp_args']()} class="h-8 min-w-0 text-xs sm:col-span-2" />
-            <Button type="button" variant="outline" size="sm" class="sm:col-start-2 sm:justify-self-end" disabled={!mcpName.trim() || !mcpCommand.trim()} onclick={addMcp}>
-              {m['dlg.add']()}
-            </Button>
+          <div class="grid gap-2 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
+            <Input name="mcp-name" aria-label={m['ph.mcp_name']()} bind:value={mcpName} autocomplete="off" spellcheck={false} placeholder={m['ph.mcp_name']()} class="h-8 min-w-0 text-[13px]" />
+            <Input name="mcp-command" aria-label={m['ph.mcp_command']()} bind:value={mcpCommand} autocomplete="off" spellcheck={false} placeholder={m['ph.mcp_command']()} class="h-8 min-w-0 text-[13px]" />
+            <div class="flex min-w-0 gap-2 sm:col-span-2">
+              <Input name="mcp-args" aria-label={m['ph.mcp_args']()} bind:value={mcpArgs} autocomplete="off" spellcheck={false} placeholder={m['ph.mcp_args']()} class="h-8 min-w-0 flex-1 text-[13px]" />
+              <Button type="button" variant="outline" class="shrink-0" disabled={!mcpName.trim() || !mcpCommand.trim()} onclick={addMcp}>
+                <Plus aria-hidden="true" />{m['dlg.add']()}
+              </Button>
+            </div>
           </div>
           {#if mcpError}
-            <p class="text-xs text-destructive" aria-live="polite">{mcpError}</p>
+            <p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{mcpError}</span></p>
           {/if}
         </section>
 
-        <section class="space-y-2 border-t border-border/60 pt-4">
+        <section class="grid gap-2 border-t border-border/70 pt-5">
           <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p class="text-pretty text-xs text-muted-foreground">{m['dlg.preset_hint']()}</p>
+            <p class="text-ui-md text-pretty text-muted-foreground">{m['dlg.preset_hint']()}</p>
             <Button type="button" variant="outline" size="sm" class="shrink-0" disabled={presetState === 'saving'} onclick={saveAsPreset}>
+              {#if presetState === 'saving'}<LoaderCircle class="animate-spin" aria-hidden="true" />{/if}
               {presetState === 'saving' ? m['dlg.saving']() : m['dlg.save_as_preset']()}
             </Button>
           </div>
           {#if presetMessage}
-            <p class="text-xs {presetState === 'error' ? 'text-destructive' : 'text-emerald-500'}" aria-live="polite">{presetMessage}</p>
+            {#if presetState === 'error'}
+              <p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{presetMessage}</span></p>
+            {:else}
+              <p class="flex items-center gap-2 text-ui-md text-[var(--app-success)]" role="status"><CircleCheck size={14} class="shrink-0" aria-hidden="true" /><span>{presetMessage}</span></p>
+            {/if}
           {/if}
         </section>
+
+        {#if submitError}
+          <p class="flex items-start gap-2 rounded-lg bg-[var(--app-danger-soft)] px-3 py-2 text-ui-md leading-snug text-[var(--app-danger)]" role="alert"><CircleAlert size={14} class="mt-px shrink-0" aria-hidden="true" /><span>{submitError}</span></p>
+        {/if}
       </div>
 
-      <Dialog.Footer class="m-0! rounded-none rounded-b-lg border-t border-border/60 px-5 py-3">
+      <Dialog.Footer class="m-0 shrink-0">
         <Button type="button" variant="outline" onclick={onClose}>{m['dlg.cancel']()}</Button>
         <Button type="submit">{m['dlg.save']()}</Button>
       </Dialog.Footer>
     </form>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  /* Grade de icones: selecionado usa acento suave (a cor forte fica no botao primario). */
+  .icon-choice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    min-height: 36px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: var(--app-shadow-border);
+    color: var(--app-text-muted);
+    cursor: pointer;
+    transition:
+      background-color var(--duration-quick) ease-out,
+      color var(--duration-quick) ease-out,
+      box-shadow var(--duration-quick) ease-out;
+  }
+
+  .icon-choice:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .icon-choice[aria-checked='true'] {
+    background: var(--app-accent-soft);
+    box-shadow: inset 0 0 0 1px var(--app-accent);
+    color: var(--app-accent);
+  }
+
+  .icon-choice:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .icon-choice:active {
+    scale: 0.96;
+  }
+</style>
