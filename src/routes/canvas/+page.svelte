@@ -3119,7 +3119,7 @@
   {/snippet}
   </aside>
 
-  <section class="canvas-area" class:drawing={drawTool !== null} class:tool-drop={toolDragOver} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondragleave={(event) => { if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) toolDragOver = false; }} ondrop={handleCanvasFileDrop}>
+  <section class="canvas-area" class:drawing={drawTool !== null} class:tool-drop={toolDragOver} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondragleave={(event) => { if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as HTMLElement | null)) toolDragOver = false; }} ondrop={handleCanvasFileDrop}>
     {#if toolDragOver}<div class="tool-drop-hint" aria-hidden="true">{m['canvas.tool_drop_hint']()}</div>{/if}
     <SvelteFlowProvider>
     {#if activeWorkspace}
