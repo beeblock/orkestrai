@@ -25,6 +25,7 @@ import { agentSessionService } from './AgentSessionService.js';
 import { roleService } from './RoleService.js';
 import { providerProfileService } from './ProviderProfileService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { portalGrantsAgent, portalProfileFromPayload } from '../../contracts/schemas/managed-portal.schema.js';
 
 export function resolveAgentReplyText(
   transcriptText: string | null,
@@ -873,8 +874,8 @@ export class BridgeService {
         url: String((node.payload as { url?: string }).url ?? ''),
         connected: agentNodeId ? connectedIds.has(node.id) : null,
         access: {
-          control: String((node.payload as Record<string, unknown>).portalControl ?? 'disabled'),
-          granted: agentNodeId ? (Array.isArray((node.payload as Record<string, unknown>).portalAgentIds) && ((node.payload as Record<string, unknown>).portalAgentIds as string[]).includes(agentNodeId)) : null,
+          control: portalProfileFromPayload(node.payload).control,
+          granted: agentNodeId ? nodes.some((agent) => agent.id === agentNodeId && agent.type === 'terminal') && portalGrantsAgent(portalProfileFromPayload(node.payload), agentNodeId) : null,
           paused: (node.payload as Record<string, unknown>).portalPaused === true,
           allowBackground: (node.payload as Record<string, unknown>).portalAllowBackground === true,
         },
@@ -1404,7 +1405,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 - \`orkestrai task add "<título>" --note "<título-da-nota>"\` / \`task link <taskId> <nota>\` / \`task unlink <taskId>\` — vincula a tarefa à sua nota de spec. SEMPRE vincule: tarefa com spec vinculada é autossuficiente. Regras: UMA nota por tarefa (a mesma nota pode servir várias tarefas); ao arquivar a tarefa, a nota sai do canvas JUNTO (fica acessível pelo histórico); nota vinculada não é apagada pelo X do canvas — só sai de verdade junto com a tarefa (ou se desvinculada).
 - \`orkestrai portal create "<url>" [--title "<t>"] [--connect "<Agente>"|all] [--force-new]\` — antes de criar, rode \`orkestrai list\`. A mesma URL reutiliza o portal existente; se já houver outro portal, navegue-o para a URL desejada. Use \`--force-new\` SOMENTE quando o usuário pedir explicitamente mais um portal.
 - \`orkestrai portal <nome-ou-nodeId> navigate "<url>"\` — abre uma URL no portal escolhido por nome único ou id. \`eval\`, \`dom\` e \`screenshot\` aceitam o mesmo identificador.
-- \`orkestrai portal <nodeId> eval "<js>"\` — desabilitado para agentes. Use snapshot/click/type/select/extract com acesso concedido, política ativa e tarefa atribuída. Nunca tente contornar gates com scripts.
+- \`orkestrai portal <nodeId> eval "<js>"\` — desabilitado para agentes. Use snapshot/click/type/select/extract: portais sem restrições explícitas pertencem a todo o time do workspace, incluindo novos recrutas. Não exija configuração de autonomia nem tarefa para navegar; taskId é opcional para rastreabilidade. Respeite pausas, listas explícitas de agentes, hosts e políticas de Segurança habilitadas. Login/senha/OTP continuam manuais. Nunca tente contornar gates com scripts.
 - \`orkestrai portal <nodeId> dom\` — devolve o HTML atual (ler telas, pesquisar, testar o que você está construindo).
 - \`orkestrai portal <nodeId> screenshot\` — captura a tela do portal.
 - \`orkestrai floor create "<nome>" [--clone]\` — cria um andar (worktree git com branch própria) para trabalho isolado.

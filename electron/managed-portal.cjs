@@ -38,6 +38,10 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
 
   function layout(managed) {
     if (!managed.parent || !managed.geometry || !managed.visible) { managed.clip.setVisible(false); return; }
+    // DOM transforms and native View geometry cannot be committed atomically.
+    // The renderer presents its cached page during motion without changing the
+    // session or revoking the agent's access to the visible Portal.
+    if (managed.geometry.moving) { managed.clip.setVisible(false); return; }
     const { bounds, clip, zoom } = managed.geometry;
     managed.clip.setBounds(clip);
     const tab = managed.tabs.get(managed.activeTabId);
@@ -408,6 +412,12 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     if (method === 'navigate') { await load(tab, args.url, 30000); return state(managed); }
     if (method === 'inspectScript') return tab.window.webContents.executeJavaScript(String(args.code), true);
     if (method === 'capture') return (await tab.window.webContents.capturePage(args.rect)).toDataURL();
+    if (method === 'preview') {
+      const image = await tab.window.webContents.capturePage();
+      const size = image.getSize();
+      const scale = Math.min(1, 1600 / Math.max(size.width, size.height));
+      return (scale < 1 ? image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)) }) : image).toDataURL();
+    }
     if (method === 'state') return state(managed);
     if (method === 'pause' || method === 'resume') { managed.pauseLocked = method === 'pause'; return state(managed); }
     if (method === 'activate') {

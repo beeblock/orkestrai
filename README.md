@@ -188,6 +188,10 @@ device access.
   people and agents can target the correct browser by name or node id. The
   bridge inventories all workspace Portals with explicit connection state,
   reuses matching URLs, and requires explicit intent before adding another.
+  New and unconfigured Portals allow the whole workspace team to read and
+  interact, including newly recruited agents. Normal use does not require an
+  autonomy policy or assigned task. Explicit agent lists, manual/read-only
+  settings, pauses and enabled security policies remain respected and audited.
   The Core can operate the same protected profile with the Canvas closed through
   semantic snapshots and typed browser actions. Per-Portal host allowlists and
   workspace-confined files keep unattended runs bounded, Control Center records

@@ -142,7 +142,9 @@ process.env.ORIGIN ??= `http://${host}:${port}`;
 // audio para WAV PCM16 antes do upload (~32 KB/s), entao esse default rejeita
 // gravacoes com cerca de 16 segundos. 32 MB comporta aproximadamente 17 min
 // e ainda mantem um limite explicito para proteger a memoria do processo.
-process.env.BODY_SIZE_LIMIT ??= '32M';
+// 64 MiB creative references plus multipart headers. Individual routes enforce
+// their own (usually much smaller) file limits.
+process.env.BODY_SIZE_LIMIT ??= '65M';
 markPrivateChildEnv(
   ...dotEnvKeys,
   'APP_KEY',

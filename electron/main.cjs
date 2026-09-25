@@ -1142,7 +1142,7 @@ ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
   const request = await portalSurfaceRequest(event, input);
   if (input.method === 'attach') return managedPortalExecutor.surface(request, mainWindow, input.lease);
   if (input.method === 'detach') return managedPortalExecutor.detach(request.workspaceId, request.nodeId, input.lease);
-  if (!['navigate', 'inspectScript', 'capture', 'state', 'close', 'activate', 'pause', 'resume'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
+  if (!['navigate', 'inspectScript', 'capture', 'preview', 'state', 'close', 'activate', 'pause', 'resume'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
   if (JSON.stringify(input.args || {}).length > 500000) throw new Error('Portal surface input is too large.');
   return managedPortalExecutor.userCommand(request, input.method, input.args || {});
 });
@@ -1150,6 +1150,7 @@ ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
 ipcMain.on('orkestrai:portal-layout', (event, input) => {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return;
   const geometry = input?.geometry;
+  if (geometry?.moving !== undefined && typeof geometry.moving !== 'boolean') return;
   if (!geometry || typeof geometry.visible !== 'boolean' || !Number.isFinite(geometry.zoom) || geometry.zoom < 0.1 || geometry.zoom > 5) return;
   for (const rect of [geometry.bounds, geometry.clip]) {
     if (!rect || !['x', 'y', 'width', 'height'].every((key) => Number.isInteger(rect[key]) && Math.abs(rect[key]) < 100000)) return;

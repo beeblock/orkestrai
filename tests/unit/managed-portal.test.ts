@@ -12,11 +12,17 @@ describe('managed Portal contracts', () => {
   it('normalizes bounded browser profiles without credentials', () => {
     expect(portalProfileSchema.parse({})).toEqual({
       profileId: 'default', profileScope: 'workspace', allowedHosts: [], downloadDirectory: '.orkestrai/downloads',
-      control: 'disabled', agentIds: [], paused: false, allowBackground: false,
+      control: 'interact', agentAccess: 'workspace', agentIds: [], paused: false, allowBackground: false,
     });
     expect(portalProfileFromPayload({ portalProfileId: 'team', portalAllowedHosts: ['APP.EXAMPLE.COM'] })).toMatchObject({
       profileId: 'team', allowedHosts: ['app.example.com'],
     });
+  });
+
+  it('defaults to team access without discarding explicit legacy restrictions', () => {
+    expect(portalProfileFromPayload({})).toMatchObject({ control: 'interact', agentAccess: 'workspace' });
+    expect(portalProfileFromPayload({ portalControl: 'disabled', portalAgentIds: [] })).toMatchObject({ control: 'disabled', agentAccess: 'selected' });
+    expect(portalProfileFromPayload({ portalAgentAccess: 'workspace', portalAgentIds: [] })).toMatchObject({ agentAccess: 'workspace' });
   });
 
   it('enforces host allowlists and rejects URL credentials', () => {

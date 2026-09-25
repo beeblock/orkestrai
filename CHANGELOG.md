@@ -5,6 +5,14 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.36.1 - 2026-09-25
+
+### Fixed
+
+- Restore normal Portal use for workspace agents without requiring an enforcing autonomy policy or an assigned task. New and unconfigured Portals are available to the whole team, including new recruits; explicit access lists, manual/read-only modes, pauses, protected fields, enabled policies and audit trails remain in force.
+- Import dropped MP4, M4V, MOV, WebM and MKV files up to 64 MB as native Video nodes with playback and reusable workflow references, instead of unsupported knowledge documents. Preserve original bytes and existing provider permission gates.
+- Keep Portal pages behind Canvas controls and aligned during drag, pan, zoom and resize. Show an in-node preview during movement, then restore the same live page without reloading its session.
+
 ## 0.36.0 - 2026-09-24
 
 ### Added

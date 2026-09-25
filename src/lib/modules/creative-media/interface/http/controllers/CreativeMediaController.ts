@@ -1,4 +1,7 @@
 import { Controller } from '@beeblock/svelar/routing';
+import { CreativeVideoUploadDto } from '../../../application/dto/CreativeMediaDto.js';
+import { CreativeVideoUploadRequest } from '../requests/CreativeMediaRequest.js';
+import { CreativeMediaFiles } from '../../../application/services/CreativeMediaFiles.js';
 import { FormValidationError } from '@beeblock/svelar/forms';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
@@ -15,6 +18,11 @@ import { creativeVideoResponse } from '../../../application/services/CreativeVid
 import { CreativeProfileRequest, CreativePolicyRequest, CreativeWorkflowRequest, CreativeRunRequest, CreativeRunCommandRequest, CreativeBridgeRequest, creativeBodyEvent } from '../requests/CreativeMediaRequest.js';
 
 export class CreativeMediaController extends Controller {
+  uploadVideo(event: any) { return this.respond(async () => {
+    this.owner(event);
+    const input = await CreativeVideoUploadRequest.validate(creativeBodyEvent(event));
+    return new CreativeMediaFiles().importVideo(CreativeVideoUploadDto.from(event.params.id, input));
+  }); }
   models(event: any) { return this.respond(async () => {
     this.owner(event);
     return new ExecuteCreativeMediaAction().execute(CreativeMediaDto.from(event.params.id, { type: 'user' }, 'models', undefined, Object.fromEntries(event.url.searchParams)));

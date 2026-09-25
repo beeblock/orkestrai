@@ -159,6 +159,10 @@ acesso ao aparelho.
   preset diretamente dentro de uma pasta aninhada validada da barra lateral,
   pelo cabeçalho da pasta ou pelo diálogo de Novo workspace, sem um item
   intermediário na raiz.
+- **Portais disponíveis ao time:** portais novos e não configurados permitem
+  Ler e interagir a todo o time, incluindo novos recrutas, sem exigir política
+  de autonomia ou tarefa atribuída. Listas explícitas, modos manual/somente
+  leitura, pausas e políticas de segurança ativadas continuam respeitados e auditados.
 - **Workbench configurável:** mantenha terminais, quadros, notas, portais,
   arquivos, fluxos e uso abertos em abas verticais por padrão ou horizontais
   opcionais, e organize até oito artefatos ao vivo em divisões redimensionáveis

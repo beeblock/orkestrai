@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { uuidv7 } from '@beeblock/svelar/support';
+import type { CreativeVideoUploadDto } from '../dto/CreativeMediaDto.js';
 import { constants } from 'node:fs';
 import { mkdir, open, link, copyFile, unlink } from 'node:fs/promises';
 import { dirname, posix, extname } from 'node:path';
@@ -7,7 +9,7 @@ import { creativeWorkspaceGateway, type CreativeWorkspaceGateway } from '$lib/mo
 import type { CreativeRemoteVideo } from '../ports/CreativeVideoProvider.js';
 import { MAX_CREATIVE_IMAGE_BYTES, MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.js';
 import { CreativeMediaError, type CreativeReference, type CreativeMediaReference, type CreativeRun, type CreativeVideoAsset } from '../../domain/types.js';
-import { VIDEO_FORMATS, matchesVideoHeader, videoMimeFromPath } from '../../domain/video-format.js';
+import { VIDEO_FORMATS, matchesVideoHeader, videoMimeFromPath, importedVideoMime } from '../../domain/video-format.js';
 
 export function creativeOutputPath(run: CreativeRun, video: CreativeRemoteVideo, outputIndex = 0) {
   const name = `${run.snapshot.config.filePrefix}-${run.id}${outputIndex ? `-${outputIndex + 1}` : ''}.${VIDEO_FORMATS[video.mimeType ?? 'video/mp4']}`;
@@ -16,6 +18,31 @@ export function creativeOutputPath(run: CreativeRun, video: CreativeRemoteVideo,
 
 export class CreativeMediaFiles {
   constructor(private readonly workspace: CreativeWorkspaceGateway = creativeWorkspaceGateway) {}
+
+  async importVideo(input: CreativeVideoUploadDto) {
+    const { workspaceId, file, floorId, x, y } = input;
+    await this.workspace.characterDestination(workspaceId, floorId);
+    const mimeType = importedVideoMime(file.name);
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (!mimeType || !matchesVideoHeader(bytes.subarray(0, 1024), mimeType)) throw new CreativeMediaError('creative_video_import_format', 422);
+    const path = `.orkestrai/media/videos/${uuidv7()}.${VIDEO_FORMATS[mimeType]}`;
+    const destination = await this.workspace.writablePath(workspaceId, path);
+    await mkdir(dirname(destination), { recursive: true });
+    // Recheck confinement after creating parents; never overwrite user files.
+    const handle = await open(await this.workspace.writablePath(workspaceId, path), 'wx', 0o600);
+    try {
+      await handle.writeFile(bytes);
+      await handle.close();
+      await this.workspace.characterDestination(workspaceId, floorId);
+      return await this.workspace.createNode(workspaceId, 'video', file.name.replace(/[\x00-\x1f]/g, '').slice(0, 180), {
+        path, mimeType, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), source: 'import',
+      }, undefined, floorId, { x, y });
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      await unlink(destination).catch(() => undefined);
+      throw error;
+    }
+  }
 
   async asset(workspaceId: string, nodeId: string): Promise<CreativeMediaReference> {
     const node = await this.workspace.node(workspaceId, nodeId);
@@ -91,7 +118,7 @@ export class CreativeMediaFiles {
     if (!path) throw new CreativeMediaError('creative_reference_unavailable');
     const bytes = await this.readImage(workspaceId, path, 64 * 1024 * 1024);
     let mimeType: string | undefined;
-    if (bytes.toString('ascii', 4, 8) === 'ftyp') mimeType = extname(path).toLowerCase() === '.m4a' ? 'audio/mp4' : 'video/mp4';
+    if (bytes.toString('ascii', 4, 8) === 'ftyp') mimeType = extname(path).toLowerCase() === '.m4a' ? 'audio/mp4' : importedVideoMime(path) ?? 'video/mp4';
     else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WAVE') mimeType = 'audio/wav';
     else if (bytes.toString('ascii', 0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && extname(path).toLowerCase() === '.mp3')) mimeType = 'audio/mpeg';
     else if (bytes.toString('ascii', 0, 4) === 'OggS') mimeType = 'audio/ogg';

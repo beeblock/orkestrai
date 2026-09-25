@@ -1,4 +1,13 @@
 import type { CreativeActor } from '../../domain/types.js';
+import { creativeVideoUploadSchema } from '../../contracts/schemas/creative-video-upload.schema.js';
+
+export class CreativeVideoUploadDto {
+  private constructor(readonly workspaceId: string, readonly file: File, readonly x: number, readonly y: number, readonly floorId: string | null) {}
+  static from(workspaceId: string, input: unknown) {
+    const value = creativeVideoUploadSchema.parse(input);
+    return new CreativeVideoUploadDto(workspaceId, value.file, value.x, value.y, value.floorId);
+  }
+}
 import { CreativeMediaError } from '../../domain/types.js';
 import { creativeCatalogQuerySchema, creativeRunCommandSchema, creativeRunRequestSchema, creativeWorkflowSaveSchema } from '../../contracts/schemas/creative-media.schema.js';
 import { creativeCharacterCommandSchema } from '../../contracts/schemas/creative-character.schema.js';
