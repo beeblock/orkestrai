@@ -13,6 +13,7 @@
   import PortalViewportToolbar from './PortalViewportToolbar.svelte';
   import { portalScriptExpression, unwrapPortalScriptResult } from './portal-script.js';
   import { managedPortalSurface } from '../managed-portal-surface.js';
+  import { portalProfileFromPayload } from '$lib/modules/agent-room/contracts/schemas/managed-portal.schema.js';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import { Button } from '$lib/components/ui/button';
@@ -55,6 +56,7 @@
       portalAllowScripts?: boolean;
       portalControl?: 'disabled' | 'read' | 'interact';
       portalAgentIds?: string[];
+      portalAgentAccess?: 'workspace' | 'selected';
       portalPaused?: boolean;
       portalAllowBackground?: boolean;
     };
@@ -116,7 +118,8 @@
   let profileScope = $state<'private' | 'workspace'>(data.payload.portalProfileScope ?? 'workspace');
   let allowedHosts = $state((data.payload.portalAllowedHosts ?? []).join('\n'));
   let downloadDirectory = $state(data.payload.portalDownloadDirectory ?? '.orkestrai/downloads');
-  let control = $state<'disabled' | 'read' | 'interact'>(data.payload.portalControl ?? 'disabled');
+  let control = $state<'disabled' | 'read' | 'interact'>(data.payload.portalControl ?? 'interact');
+  let agentAccess = $state(portalProfileFromPayload(data.payload).agentAccess);
   let agentIds = $state<string[]>(data.payload.portalAgentIds ?? []);
   let paused = $state(data.payload.portalPaused ?? false);
   let allowBackground = $state(data.payload.portalAllowBackground ?? false);
@@ -404,7 +407,7 @@
       portalAllowedHosts: hosts,
       portalDownloadDirectory: cleanDirectory,
       portalAllowScripts: false,
-      portalControl: control, portalAgentIds: agentIds, portalPaused: paused, portalAllowBackground: allowBackground,
+      portalControl: control, portalAgentAccess: agentAccess, portalAgentIds: agentIds, portalPaused: paused, portalAllowBackground: allowBackground,
     });
     settingsOpen = false;
     toast.success(m['portal.managed_saved']());
@@ -787,7 +790,13 @@
         <span class="text-ui-xs font-normal leading-5 text-[var(--app-text-muted)]">{m['portal.control_policy_help']()}</span>
       </label>
       <fieldset class="grid gap-2"><legend class="text-ui-sm font-medium">{m['portal.control_agents']()}</legend>
-        {#each agents as agent (agent.id)}<label class="flex items-center gap-2 text-ui-sm"><Checkbox checked={agentIds.includes(agent.id)} onCheckedChange={(checked: boolean) => (agentIds = checked ? [...new Set([...agentIds, agent.id])] : agentIds.filter((value) => value !== agent.id))} />{agent.title}</label>{/each}
+        <Select.Root type="single" bind:value={agentAccess}>
+          <Select.Trigger class="w-full">{agentAccess === 'workspace' ? m['portal.control_team']() : m['portal.control_selected']()}</Select.Trigger>
+          <Select.Content><Select.Item value="workspace">{m['portal.control_team']()}</Select.Item><Select.Item value="selected">{m['portal.control_selected']()}</Select.Item></Select.Content>
+        </Select.Root>
+        {#if agentAccess === 'selected'}
+          {#each agents as agent (agent.id)}<label class="flex items-center gap-2 text-ui-sm"><Checkbox checked={agentIds.includes(agent.id)} onCheckedChange={(checked: boolean) => (agentIds = checked ? [...new Set([...agentIds, agent.id])] : agentIds.filter((value) => value !== agent.id))} />{agent.title}</label>{/each}
+        {/if}
       </fieldset>
       <label class="flex items-center justify-between gap-4 text-ui-sm"><span>{m['portal.control_background']()}</span><Switch checked={allowBackground} onCheckedChange={(value: boolean) => (allowBackground = value)} /></label>
       <label class="grid gap-1.5 text-ui-sm font-medium">

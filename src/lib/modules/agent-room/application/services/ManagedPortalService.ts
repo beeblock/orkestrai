@@ -6,11 +6,11 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { controlCenterService } from './ControlCenterService.js';
 import type { PortalCommandResult } from './PortalService.js';
 import {
-  portalProfileSchema,
+  portalProfileFromPayload,
+  portalGrantsAgent,
   type ManagedPortalCommand,
   type ManagedPortalExecutorRequest,
   type ManagedPortalExecutorResult,
-  type PortalProfile,
 } from '../../contracts/schemas/managed-portal.schema.js';
 import { autonomyPolicyService, type AutonomyOperation } from './AutonomyPolicyService.js';
 
@@ -39,19 +39,7 @@ if (!runtime.__orkestraiPortalListenerReady && typeof process.on === 'function')
   runtime.__orkestraiPortalListenerReady = true;
 }
 
-export function portalProfileFromPayload(payload: CanvasNodePayload): PortalProfile {
-  const values = payload as Record<string, unknown>;
-  return portalProfileSchema.parse({
-    profileId: values.portalProfileId ?? 'default',
-    profileScope: values.portalProfileScope ?? 'workspace',
-    allowedHosts: Array.isArray(values.portalAllowedHosts) ? values.portalAllowedHosts : [],
-    downloadDirectory: values.portalDownloadDirectory ?? '.orkestrai/downloads',
-    control: values.portalControl ?? 'disabled',
-    agentIds: values.portalAgentIds ?? [],
-    paused: values.portalPaused ?? false,
-    allowBackground: values.portalAllowBackground ?? false,
-  });
-}
+export { portalProfileFromPayload } from '../../contracts/schemas/managed-portal.schema.js';
 
 export function assertAllowedPortalUrl(candidate: string, allowedHosts: string[], currentUrl?: string): URL {
   if (candidate.length > 4_096) throw new Error('Portal URL is too long.');
@@ -159,6 +147,7 @@ export class ManagedPortalService {
     const readOnly = ['snapshot', 'extract', 'screenshot', 'dom'].includes(command.action)
       || command.action === 'wait' || (command.action === 'tabs' && command.args.operation === 'list');
     const actorId = context.actorId ?? command.from ?? null;
+    const actorType = context.actorType ?? (command.from ? 'agent' : 'user');
     const { ref: _ref, ...semanticArgs } = command.args as Record<string, unknown>;
     const requestDigest = createHash('sha256').update(JSON.stringify(semanticArgs)).digest('hex');
     const operation: AutonomyOperation = {
@@ -169,7 +158,7 @@ export class ManagedPortalService {
       operation: 'portal:authorize:' + command.action,
       target: portal.id,
       mutation: false,
-      actorType: context.actorType ?? (command.from ? 'agent' : 'user'),
+      actorType,
       actorId,
       input: { action: command.action, requestDigest, taskId: command.taskId ?? null },
       auditOutput: (value) => ({ confirmed: (value as PortalCommandResult)?.ok === true, action: command.action }),
@@ -180,9 +169,12 @@ export class ManagedPortalService {
       if (command.action === 'eval') throw new Error('Arbitrary agent scripts cannot operate authenticated Portals. Use typed Portal tools.');
       if (profile.paused) throw new Error('Portal control is paused by the user.');
       if (profile.control === 'disabled' || (!readOnly && profile.control !== 'interact')) throw new Error('This action is outside the Portal control grant.');
-      if (context.actorType === 'agent' && (!actorId || !profile.agentIds.includes(actorId))) throw new Error('This agent has not been granted access to the Portal.');
-      const policy = await autonomyPolicyService.get(workspaceId);
-      if (!readOnly && (!policy.enabled || policy.mode === 'observe')) throw new Error('Enable an enforcing autonomy policy before granting browser mutations.');
+      if (actorType === 'agent') {
+        const agent = actorId ? await workspaceRepository.getNode(actorId) : null;
+        if (!agent || agent.workspaceId !== workspaceId || agent.type !== 'terminal' || !portalGrantsAgent(profile, agent.id)) {
+          throw new Error('This agent has not been granted access to the Portal.');
+        }
+      }
       const inspection = await requestElectron(request, true);
       const observed = inspection?.ok ? inspection.result as { url?: string; element?: { name?: string; tag?: string; href?: string; protected?: boolean } } : null;
       const element = observed?.element;
@@ -203,7 +195,7 @@ export class ManagedPortalService {
       const liveProfile = latest ? portalProfileFromPayload(latest.payload as CanvasNodePayload) : null;
       if (!liveProfile || liveProfile.paused || liveProfile.control === 'disabled'
         || (!readOnly && liveProfile.control !== 'interact')
-        || (context.actorType === 'agent' && !liveProfile.agentIds.includes(actorId!))) throw new Error('Portal access was revoked.');
+        || (actorType === 'agent' && !portalGrantsAgent(liveProfile, actorId!))) throw new Error('Portal access was revoked.');
       request.profile = liveProfile;
       if (command.action === 'download') {
         args.downloadDirectory = await preparePortalDirectory(root, String(args.downloadDirectory));

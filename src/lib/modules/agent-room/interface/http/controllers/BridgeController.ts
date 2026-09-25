@@ -1484,11 +1484,9 @@ export class BridgeController extends Controller {
       const portal = await bridgeService.resolvePortal(workspace.id, input.nodeId);
       const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
       if (!actor) throw new Error('Portal control requires an authenticated active agent terminal.');
-      const readOnly = ['snapshot', 'extract', 'screenshot', 'dom', 'wait'].includes(input.action) || (input.action === 'tabs' && input.args.operation === 'list');
-      if (!readOnly) {
-        const tasks = (await taskBoardService.list(workspace.id)).filter((task) => task.assigneeNodeId === actor && task.status !== 'done' && (!input.taskId || task.id === input.taskId));
-        if (tasks.length !== 1) throw new Error('Portal mutations require an active assigned task; pass taskId when several are active.');
-        input.taskId = tasks[0].id;
+      if (input.taskId) {
+        const task = (await taskBoardService.list(workspace.id)).find((task) => task.id === input.taskId);
+        if (!task || task.assigneeNodeId !== actor || task.status === 'done') throw new Error('The supplied Portal task must be active and assigned to this agent.');
       }
       const result = await managedPortalService.execute(workspace.id, { ...input, from: actor, nodeId: portal.id }, { actorType: 'agent', actorId: actor });
       return this.json({ data: result }, result.ok ? 200 : 400);

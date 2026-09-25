@@ -1,8 +1,10 @@
 import { FormRequest } from '@beeblock/svelar/forms';
+import { creativeVideoUploadSchema } from '../../../contracts/schemas/creative-video-upload.schema.js';
 import { z } from '@beeblock/svelar/validation';
 import { creativePolicySaveSchema, creativeProfileSaveSchema, creativeRunCommandSchema, creativeRunRequestSchema, creativeWorkflowSaveSchema } from '../../../contracts/schemas/creative-media.schema.js';
 
 export class CreativeProfileRequest extends FormRequest { rules() { return creativeProfileSaveSchema; } }
+export class CreativeVideoUploadRequest extends FormRequest { rules() { return creativeVideoUploadSchema; } }
 export class CreativePolicyRequest extends FormRequest { rules() { return creativePolicySaveSchema; } }
 export class CreativeWorkflowRequest extends FormRequest { rules() { return creativeWorkflowSaveSchema; } }
 export class CreativeRunRequest extends FormRequest { rules() { return creativeRunRequestSchema; } }

@@ -22,3 +22,12 @@ export function matchesVideoHeader(bytes: Uint8Array, mime: VideoMime): boolean 
   const header = ascii(0, Math.min(bytes.length, 1024));
   return header.includes(mime === 'video/webm' ? 'webm' : 'matroska');
 }
+// Imported files must also fit the existing provider-reference reader.
+export const MAX_IMPORTED_VIDEO_BYTES = 64 * 1024 * 1024;
+export function importedVideoMime(name: string): VideoMime | null {
+  const extension = name.split('.').pop()?.toLowerCase();
+  return ({ mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska' } as Record<string, VideoMime>)[extension ?? ''] ?? null;
+}
+export function isVideoDrop(file: { name: string; type: string }): boolean {
+  return file.type.startsWith('video/') || importedVideoMime(file.name) !== null || /\.(avi|wmv|flv|mpeg|mpg|ogv|3gp|mts|m2ts)$/i.test(file.name);
+}

@@ -82,7 +82,8 @@
   import CreativeRecipeDialog from '$lib/components/agent-room/CreativeRecipeDialog.svelte';
   import CreativeBrandDialog from '$lib/components/agent-room/CreativeBrandDialog.svelte';
   import { CHARACTER_DRAG_TYPE, characterDragSchema } from '$lib/components/agent-room/character-drag.js';
-  import { creativeApi, creativeError } from '$lib/components/agent-room/creative-media-client.js';
+  import { creativeApi, creativeError, uploadWorkspaceVideo } from '$lib/components/agent-room/creative-media-client.js';
+  import { isVideoDrop } from '$lib/modules/creative-media/domain/video-format.js';
   import type { CreativeCharacter } from '$lib/modules/creative-media/domain/character.js';
   import VideoCanvasNode from '$lib/components/agent-room/canvas/VideoCanvasNode.svelte';
   import ImageToolbarMenu from '$lib/components/agent-room/canvas/ImageToolbarMenu.svelte';
@@ -2101,6 +2102,7 @@
     const origin = zoomApi.screenToFlowPosition({ x: event.clientX, y: event.clientY });
     const occupied = nodes.map(node => ({ x: node.position.x, y: node.position.y, width: Number(node.width ?? node.measured?.width ?? 560), height: Number(node.height ?? node.measured?.height ?? 360) }));
     const failed: string[] = [];
+    const failedVideos: string[] = [];
     let createdCount = 0;
     importingImages = true;
     const progressToast = toast.info(m['knowledge.importing']({ count: files.length }), { duration: 0 });
@@ -2108,6 +2110,14 @@
       for (const file of files) {
         let objectUrl: string | null = null;
         try {
+          if (isVideoDrop(file)) {
+            const position = findFreeCanvasPosition(occupied, { ...origin, width: 520, height: 390 }, { rowsPerColumn: 3 });
+            const node = await uploadWorkspaceVideo(workspaceId, file, { ...position, floorId });
+            occupied.push({ x: node.x, y: node.y, width: node.width ?? 520, height: node.height ?? 390 });
+            createdCount += 1;
+            if (activeWorkspace?.id === workspaceId && visibleFloorId === floorId) nodes = [...nodes.filter(item => item.id !== node.id), toFlowNode(node)];
+            continue;
+          }
           const supported = /^image\/(png|jpeg|webp|gif|avif|bmp|x-icon|vnd.microsoft.icon|svg\+xml)$/i.test(file.type)
             || /\.(png|jpe?g|webp|gif|avif|bmp|ico|svg)$/i.test(file.name);
           if (!supported) {
@@ -2137,7 +2147,7 @@
             nodes = [...nodes.filter(item => item.id !== node.id), toFlowNode(node)];
           }
         } catch {
-          failed.push(file.name);
+          (isVideoDrop(file) ? failedVideos : failed).push(file.name);
         } finally {
           if (objectUrl) URL.revokeObjectURL(objectUrl);
         }
@@ -2145,6 +2155,7 @@
       clearWorkspaceViewCache(workspaceId);
       if (createdCount) toast.success(m['knowledge.imported']({ count: createdCount }));
       if (failed.length) toast.error(m['canvas.image_drop_failed']({ files: failed.slice(0, 5).join(', '), count: failed.length }));
+      if (failedVideos.length) toast.error(m['canvas.video_drop_failed']({ files: failedVideos.slice(0, 5).join(', '), count: failedVideos.length }));
     } finally {
       importingImages = false;
       toast.dismiss(progressToast);

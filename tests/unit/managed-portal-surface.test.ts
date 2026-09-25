@@ -73,6 +73,20 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('hides only native presentation during motion without closing or disabling the shared browser', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    const clip = [...parent.contentView.children][0];
+    const geometry = { bounds: { x: 320, y: 140, width: 800, height: 600 }, clip: { x: 320, y: 140, width: 800, height: 400 }, zoom: 1, visible: true };
+    executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, moving: true }, lease);
+    expect(clip.visible).toBe(false);
+    expect((await executor.execute(request)).ok).toBe(true);
+    expect((await executor.inspect(request)).visible).toBe(true);
+    executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, moving: false }, lease);
+    expect(clip.visible).toBe(true);
+    expect(clip.setBounds).toHaveBeenLastCalledWith(geometry.clip);
+    expect((await executor.inspect(request)).webContentsId).toBe(contents.id);
+    expect(ContentsView.instances).toHaveLength(1);
+  });
   it('moves the clipping surface without blinking the active tab or repeatedly resetting its zoom', async () => {
     const { executor, request, lease, contents } = await setup();
     const view = ContentsView.instances[0];

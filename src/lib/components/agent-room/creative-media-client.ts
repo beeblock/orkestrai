@@ -1,6 +1,20 @@
 import { getCsrfToken } from '@beeblock/svelar/http';
 import * as m from '$lib/paraglide/messages.js';
 import type { CreativeRunStatus } from '$lib/modules/creative-media/domain/catalog.js';
+import { creativeVideoUploadSchema } from '$lib/modules/creative-media/contracts/schemas/creative-video-upload.schema.js';
+
+export async function uploadWorkspaceVideo(workspaceId: string, file: File, placement: { x: number; y: number; floorId: string | null }) {
+  creativeVideoUploadSchema.parse({ file, ...placement });
+  const body = new FormData();
+  body.set('file', file);
+  for (const [key, value] of Object.entries(placement)) if (value != null) body.set(key, String(value));
+  const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/creative-media/videos`, {
+    method: 'POST', headers: { 'X-CSRF-Token': getCsrfToken() ?? '' }, body,
+  });
+  const result = await response.json();
+  if (!response.ok || result.error) throw new Error(result.error ?? 'creative_request_failed');
+  return result.data as import('$lib/modules/agent-room/domain/types.js').CanvasNode;
+}
 
 export async function creativeApi<T>(url: string, method = 'GET', body?: unknown, timeout = 60000): Promise<T> {
   const csrf = getCsrfToken();

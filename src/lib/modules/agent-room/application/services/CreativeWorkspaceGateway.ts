@@ -62,12 +62,12 @@ export class CreativeWorkspaceGateway {
     const task = await AgentBoardTask.query().where('workspace_id', workspaceId).where('id', taskId).first();
     return Boolean(node?.type === 'terminal' && task && !task.getAttribute('archived_at') && task.getAttribute('status') !== 'done' && task.getAttribute('assignee_node_id') === nodeId);
   }
-  async createNode(workspaceId: string, type: 'image' | 'sequence' | 'storyboard' | 'video' | 'videoWorkflow', title: string, payload: CanvasNodePayload, nearId?: string, targetFloorId?: string | null) {
+  async createNode(workspaceId: string, type: 'image' | 'sequence' | 'storyboard' | 'video' | 'videoWorkflow', title: string, payload: CanvasNodePayload, nearId?: string, targetFloorId?: string | null, position?: { x: number; y: number }) {
     const nodes = await this.nodes(workspaceId);
     const near = nodes.find(node => node.id === nearId);
     const size = ['storyboard', 'sequence'].includes(type) ? { width: 860, height: 600 } : type === 'image' ? { width: 280, height: 300 } : { width: type === 'video' ? 520 : 460, height: type === 'video' ? 390 : 640 };
     const floorId = targetFloorId ?? near?.floorId ?? null;
-    const rect = findFreeCanvasPosition(nodes.filter(node => (node.floorId ?? null) === floorId), { x: near ? near.x + near.width + 64 : 100, y: near?.y ?? 100, ...size });
+    const rect = findFreeCanvasPosition(nodes.filter(node => (node.floorId ?? null) === floorId), { x: near ? near.x + near.width + 64 : 100, y: near?.y ?? 100, ...position, ...size });
     const node = await workspaceRepository.createNode({ workspaceId, type, title, payload, floorId, ...size, ...rect });
     if (near) await this.connect(workspaceId, near.id, node.id);
     this.broadcast(workspaceId);

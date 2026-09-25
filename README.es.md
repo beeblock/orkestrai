@@ -162,6 +162,10 @@ concedes ese acceso al dispositivo.
   preset directamente dentro de una carpeta anidada validada de la barra
   lateral, desde el encabezado de la carpeta o el diálogo de Nuevo workspace,
   sin un elemento intermedio en la raíz.
+- **Portales disponibles para el equipo:** los portales nuevos y sin configurar
+  permiten Leer e interactuar a todo el equipo, incluidos nuevos reclutas, sin
+  exigir política de autonomía ni tarea asignada. Se conservan listas explícitas,
+  modos manual/solo lectura, pausas, políticas de seguridad activadas y auditoría.
 - **Workbench configurable:** mantén abiertas terminales, tableros, notas,
   portales, archivos, flujos y uso en pestañas verticales por defecto u
   horizontales opcionales, y organiza hasta ocho artefactos en vivo en divisiones

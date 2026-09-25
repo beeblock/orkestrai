@@ -19,6 +19,7 @@ import { AutonomyGatePendingError, autonomyPolicyService, redactAutonomyValue } 
 import { integrationExecutionService } from './IntegrationExecutionService.js';
 import { secretRefService } from './SecretRefService.js';
 import { managedPortalService, portalProfileFromPayload } from './ManagedPortalService.js';
+import { portalGrantsAgent } from '../../contracts/schemas/managed-portal.schema.js';
 import { managedPortalCommandSchema } from '../../contracts/schemas/managed-portal.schema.js';
 import { workspaceToolReference } from '../../../../../../packages/orkestrai-cli/src/workspace-tool-reference.js';
 
@@ -208,7 +209,7 @@ export class AgentWorkspaceToolService {
         if (executor.kind === 'browser') {
           const node = await workspaceRepository.getNode(executor.nodeId);
           const profile = node ? portalProfileFromPayload(node.payload as never) : null;
-          if (!profile || node?.workspaceId !== tool.workspaceId || !profile.agentIds.includes(actor.id) || profile.control === 'disabled' || profile.paused) throw new Error('Browser tool is outside the Portal grant.');
+          if (!profile || node?.workspaceId !== tool.workspaceId || !portalGrantsAgent(profile, actor.id) || profile.control === 'disabled' || profile.paused) throw new Error('Browser tool is outside the Portal grant.');
           if (profile.control !== 'interact' && executor.steps.some((step) => !['snapshot', 'extract', 'screenshot', 'wait'].includes(step.action))) throw new Error('Browser mutations exceed the Portal grant.');
         }
         if (executor.kind === 'http') {

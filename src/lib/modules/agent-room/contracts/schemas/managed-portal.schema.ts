@@ -11,7 +11,8 @@ export const portalProfileSchema = z.object({
   profileScope: z.enum(['private', 'workspace']).default('workspace'),
   allowedHosts: z.array(z.string().trim().min(1).max(253).toLowerCase()).max(64).default([]),
   downloadDirectory: safeRelativePathSchema.default('.orkestrai/downloads'),
-  control: z.enum(['disabled', 'read', 'interact']).default('disabled'),
+  control: z.enum(['disabled', 'read', 'interact']).default('interact'),
+  agentAccess: z.enum(['workspace', 'selected']).default('workspace'),
   agentIds: z.array(z.string().uuid()).max(100).default([]),
   paused: z.boolean().default(false),
   allowBackground: z.boolean().default(false),
@@ -49,6 +50,26 @@ export const managedPortalCommandSchema = z.discriminatedUnion('action', [
 export const updatePortalProfileSchema = portalProfileSchema.partial().strict();
 
 export type PortalProfile = z.infer<typeof portalProfileSchema>;
+
+/** Preserve explicit legacy restrictions; unconfigured Canvas Portals belong to the team. */
+export function portalProfileFromPayload(values: Record<string, unknown>): PortalProfile {
+  return portalProfileSchema.parse({
+    profileId: values.portalProfileId ?? 'default',
+    profileScope: values.portalProfileScope ?? 'workspace',
+    allowedHosts: Array.isArray(values.portalAllowedHosts) ? values.portalAllowedHosts : [],
+    downloadDirectory: values.portalDownloadDirectory ?? '.orkestrai/downloads',
+    control: values.portalControl ?? 'interact',
+    agentAccess: values.portalAgentAccess ?? (Array.isArray(values.portalAgentIds) ? 'selected' : 'workspace'),
+    agentIds: values.portalAgentIds ?? [],
+    paused: values.portalPaused ?? false,
+    allowBackground: values.portalAllowBackground ?? false,
+  });
+}
+
+/** The caller must additionally authenticate membership in this Portal's workspace. */
+export function portalGrantsAgent(profile: PortalProfile, agentId: string): boolean {
+  return profile.agentAccess === 'workspace' || profile.agentIds.includes(agentId);
+}
 export type ManagedPortalCommand = z.infer<typeof managedPortalCommandSchema>;
 export type ManagedPortalAction = ManagedPortalCommand['action'];
 
