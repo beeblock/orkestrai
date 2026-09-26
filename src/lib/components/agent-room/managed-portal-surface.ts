@@ -1,13 +1,56 @@
 import type { PortalWebviewElement } from './portal-design-inspector.js';
 import { unobstructedPortalRect } from './portal-surface-geometry.js';
 
-type State = { url: string; webContentsId: number; tabs: Array<{ id: string; url: string; title: string }>; activeTabId: string };
+type State = { url: string; webContentsId: number; tabs: Array<{ id: string; url: string; title: string }>; activeTabId: string; documentRevision?: number };
 type SurfaceInput = { workspaceId: string; nodeId: string; ready: (frame: PortalWebviewElement | null) => void; state?: (value: State) => void };
 type Desktop = {
   portalSurface: (input: Record<string, unknown>) => Promise<any>;
   portalLayout: (input: Record<string, unknown>) => void;
   onPortalState: (callback: (event: { workspaceId: string; nodeId: string; state: State }) => void) => () => void;
 };
+
+const overlays = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-popover-content], [data-slot="popover-content"], [role="tooltip"]';
+const occluders = '.svelte-flow__panel, [data-portal-occluder]';
+const presentationElements = `${overlays}, ${occluders}`;
+const surfaceListeners = new Set<() => void>();
+let overlayObserver: MutationObserver | undefined;
+let overlayResize: ResizeObserver | undefined;
+
+function observeOverlays(listener: () => void) {
+  surfaceListeners.add(listener);
+  if (!overlayObserver) {
+    const notify = () => surfaceListeners.forEach(update => update());
+    overlayResize = new ResizeObserver(notify);
+    const refresh = () => {
+      overlayResize!.disconnect();
+      document.querySelectorAll(presentationElements).forEach(element => overlayResize!.observe(element));
+      notify();
+    };
+    // Shared by all Portals. Ignore terminal output and other unrelated DOM churn.
+    overlayObserver = new MutationObserver(records => {
+      if (records.some(record => record.type === 'attributes'
+        ? record.target instanceof Element && record.target.matches(presentationElements)
+        : [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element
+          && (node.matches(presentationElements) || node.querySelector(presentationElements))))) refresh();
+    });
+    overlayObserver.observe(document.body, { subtree: true, childList: true, attributes: true,
+      attributeFilter: ['data-state', 'data-open', 'data-closed', 'hidden', 'aria-hidden'] });
+    refresh();
+  }
+  return () => {
+    surfaceListeners.delete(listener);
+    if (!surfaceListeners.size) {
+      overlayObserver?.disconnect(); overlayResize?.disconnect();
+      overlayObserver = undefined; overlayResize = undefined;
+    }
+  };
+}
+
+function isPresented(element: Element) {
+  return element.getClientRects().length > 0 && !element.hasAttribute('hidden')
+    && element.getAttribute('data-state') !== 'closed' && !element.hasAttribute('data-closed')
+    && getComputedStyle(element).visibility === 'visible';
+}
 
 export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   const desktop = (window as unknown as { orkestraiDesktop: Desktop }).orkestraiDesktop;
@@ -18,7 +61,7 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   let lastBounds = '';
   let moving = false;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
-  let previewPending = false;
+  let previewPending: Promise<void> | undefined;
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
   const preview = document.createElement('img');
   preview.alt = '';
@@ -29,25 +72,25 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   preview.style.visibility = 'hidden';
   host.append(preview);
   const call = (method: string, args: Record<string, unknown> = {}) => desktop.portalSurface({ ...identity, method, args });
-  async function refreshPreview() {
-    if (disposed || previewPending || !current?.webContentsId || document.visibilityState !== 'visible') return;
+  function refreshPreview(): Promise<void> {
+    if (previewPending) return previewPending;
+    if (disposed || !current?.webContentsId || document.visibilityState !== 'visible') return Promise.resolve();
     const rect = host.getBoundingClientRect();
-    if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return;
-    previewPending = true;
+    if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return Promise.resolve();
     const tabId = current.activeTabId;
-    try {
-      const url = await call('preview');
-      if (!disposed && current?.activeTabId === tabId && typeof url === 'string' && url.startsWith('data:image/')) {
-        preview.src = url;
-        preview.style.visibility = 'visible';
-      }
-    } catch { /* A loading page can be captured after it finishes. */ }
-    finally { previewPending = false; }
+    previewPending = call('preview').then(async url => {
+      if (disposed || current?.activeTabId !== tabId || typeof url !== 'string' || !url.startsWith('data:image/')) return;
+      preview.src = url;
+      await preview.decode().catch(() => undefined);
+      if (!disposed && current?.activeTabId === tabId) preview.style.visibility = 'visible';
+    }).catch(() => { /* A loading page can be captured after it finishes. */ })
+      .finally(() => { previewPending = undefined; });
+    return previewPending;
   }
   function settle() {
     clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
-      if (interacting) return;
+      if (disposed || interacting) return;
       moving = false;
       position();
       void refreshPreview();
@@ -56,16 +99,19 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   const updateState = (state: State) => {
     if (disposed) return;
     const changed = state.url !== current?.url;
+    const documentChanged = changed || state.activeTabId !== current?.activeTabId || state.documentRevision !== current?.documentRevision;
     current = state; input.state?.(state);
     if (changed) {
       preview.style.visibility = 'hidden';
       Object.assign(host, { src: state.url });
       const event = new Event('did-navigate'); Object.assign(event, { url: state.url, isMainFrame: true }); host.dispatchEvent(event);
     }
-    host.dispatchEvent(new Event('did-finish-load'));
-    // Native navigation can finish before Chromium has composited a frame.
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => void refreshPreview(), 250);
+    if (documentChanged) {
+      host.dispatchEvent(new Event('did-finish-load'));
+      // Reads and title updates are not navigations and must not capture at idle.
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => void refreshPreview(), 250);
+    }
   };
   const ready = call('attach').then((state: State) => {
     updateState(state); lastGeometry = ''; position();
@@ -101,22 +147,26 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
         left = Math.max(left, bounds.left); top = Math.max(top, bounds.top); right = Math.min(right, bounds.right); bottom = Math.min(bottom, bounds.bottom);
       }
     }
-    const blocker = document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [data-popover-content][data-state="open"]');
+    const blocker = Array.from(document.querySelectorAll(overlays)).some(element =>
+      !element.contains(host) && isPresented(element));
     const owner = host.closest('.svelte-flow__node');
     const covered = owner && [[left + 2, top + 2], [right - 2, bottom - 2], [(left + right) / 2, (top + bottom) / 2]].some(([x, y]) => {
       const topNode = document.elementFromPoint(x, y)?.closest('.svelte-flow__node');
       return topNode && topNode !== owner;
     });
     const clip = unobstructedPortalRect({ x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
-      Array.from(document.querySelectorAll<HTMLElement>('.svelte-flow__panel, [data-portal-occluder]'))
-        .filter(element => !element.contains(host) && getComputedStyle(element).visibility !== 'hidden')
+      Array.from(document.querySelectorAll<HTMLElement>(occluders))
+        .filter(element => !element.contains(host) && isPresented(element))
         .map(element => element.getBoundingClientRect()));
     const geometry = {
-      bounds: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) },
+      // Use the same inward rounding as clip so fractional Canvas positions do
+      // not look like left/top clipping and unnecessarily disable interaction.
+      bounds: { x: Math.ceil(rect.x), y: Math.ceil(rect.y), width: Math.max(1, Math.floor(rect.right) - Math.ceil(rect.x)), height: Math.max(1, Math.floor(rect.bottom) - Math.ceil(rect.y)) },
       clip: { x: Math.ceil(clip.x), y: Math.ceil(clip.y), width: Math.max(0, Math.floor(clip.x + clip.width) - Math.ceil(clip.x)), height: Math.max(0, Math.floor(clip.y + clip.height) - Math.ceil(clip.y)) },
       moving,
-      zoom: Math.min(5, Math.max(0.1, rect.width / (host.offsetWidth || rect.width || 1))),
-      visible: !blocker && !covered && document.visibilityState === 'visible' && getComputedStyle(host).visibility !== 'hidden' && right > left && bottom > top,
+      viewport: { width: Math.max(1, host.offsetWidth), height: Math.max(1, host.offsetHeight) },
+      zoom: Math.min(5, Math.max(0.05, rect.width / (host.offsetWidth || rect.width || 1))),
+      visible: !blocker && !covered && document.visibilityState === 'visible' && isPresented(host) && right > left && bottom > top,
     };
     const serialized = JSON.stringify(geometry);
     if (serialized !== lastGeometry) { lastGeometry = serialized; desktop.portalLayout({ ...identity, geometry }); }
@@ -128,9 +178,9 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   for (let element: HTMLElement | null = host; element; element = element.parentElement) {
     mutations.observe(element, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
   }
-  mutations.observe(document.body, { childList: true });
   let interactionFrame = 0;
   let interacting = false;
+  const unobserveOverlays = observeOverlays(position);
   const tick = () => {
     position();
     interactionFrame = interacting ? requestAnimationFrame(tick) : 0;
@@ -163,7 +213,7 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   return { destroy() {
     disposed = true; interacting = false; cancelAnimationFrame(interactionFrame);
     clearTimeout(settleTimer); clearTimeout(previewTimer); preview.remove();
-    observer.disconnect(); mutations.disconnect(); unsubscribe(); window.removeEventListener('scroll', position, true);
+    observer.disconnect(); mutations.disconnect(); unobserveOverlays(); unsubscribe(); window.removeEventListener('scroll', position, true);
     document.removeEventListener('pointerdown', startInteraction, true);
     document.removeEventListener('wheel', wheelInteraction, true);
     window.removeEventListener('pointerup', endInteraction, true);

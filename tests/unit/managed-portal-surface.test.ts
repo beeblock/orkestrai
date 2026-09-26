@@ -15,9 +15,18 @@ class Contents extends EventEmitter {
   getTitle() { return 'Portal fixture'; }
   isDestroyed() { return this.destroyed; }
   setZoomFactor = vi.fn();
+  getZoomFactor = () => 1;
+  capturePage = vi.fn(async () => ({ toDataURL: () => 'data:image/png;base64,', getSize: () => ({ width: 800, height: 600 }) }));
+  debugger = { isAttached: () => true, sendCommand: vi.fn(async (_method: string, _parameters?: Record<string, unknown>): Promise<any> => ({})) };
   setWindowOpenHandler(handler: typeof this.handler) { this.handler = handler; }
-  async loadURL(url: string) { this.url = url; this.emit('did-navigate', {}, url); }
-  executeJavaScriptInIsolatedWorld = vi.fn(async () => []);
+  async loadURL(url: string) {
+    this.emit('did-start-navigation', {}, url, false, true);
+    this.url = url;
+    this.emit('did-navigate', {}, url);
+    this.emit('dom-ready');
+    this.emit('did-finish-load');
+  }
+  executeJavaScriptInIsolatedWorld = vi.fn(async (): Promise<any> => ({ x: 0, y: 0, density: 1 }));
   close() { this.destroyed = true; this.emit('destroyed'); }
 }
 
@@ -67,12 +76,77 @@ async function setup() {
   const state = await executor.surface(request, parent, lease);
   executor.setGeometry(request.workspaceId, request.nodeId, {
     bounds: { x: 100, y: 100, width: 800, height: 600 },
-    clip: { x: 200, y: 160, width: 500, height: 350 }, zoom: 1, visible: true,
+    clip: { x: 100, y: 100, width: 500, height: 350 }, zoom: 1, visible: true,
   }, lease);
+  await new Promise(resolve => setImmediate(resolve));
   return { executor, parent, request, lease, state, onOpenRequest, contents: ContentsView.instances[0].webContents };
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('does not present or capture a page between main-frame navigation and DOM readiness', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    const calls = contents.debugger.sendCommand.mock.calls.length;
+    contents.emit('did-start-navigation', {}, 'https://example.com/next', false, true);
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true,
+    }, lease);
+    expect([...parent.contentView.children][0].visible).toBe(false);
+    expect(contents.debugger.sendCommand).toHaveBeenCalledTimes(calls);
+    await expect(executor.userCommand(request, 'preview', {})).rejects.toThrow('loading or unavailable');
+    contents.emit('dom-ready');
+    await new Promise(resolve => setImmediate(resolve));
+    expect([...parent.contentView.children][0].visible).toBe(true);
+    expect(contents.debugger.sendCommand).toHaveBeenLastCalledWith('Emulation.setDeviceMetricsOverride', expect.objectContaining({ dontSetVisibleSize: true }));
+  });
+
+  it('does not let a stale presentation completion suppress the next document', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    let finish!: (value: {}) => void;
+    contents.debugger.sendCommand.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true,
+    }, lease);
+    const before = contents.debugger.sendCommand.mock.calls.length;
+    contents.emit('render-process-gone', {}, { reason: 'crashed' });
+    contents.emit('dom-ready');
+    finish({});
+    await new Promise(resolve => setImmediate(resolve));
+    expect(contents.debugger.sendCommand).toHaveBeenCalledTimes(before + 1);
+    expect([...parent.contentView.children][0].visible).toBe(true);
+  });
+
+  it('retries the initial missing compositor frame without exposing the page early', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    const captures = contents.capturePage.mock.calls.length;
+    contents.capturePage.mockRejectedValueOnce(new Error('Current display surface not available for capture'));
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true,
+    }, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    expect([...parent.contentView.children][0].visible).toBe(false);
+    await vi.waitFor(() => expect([...parent.contentView.children][0].visible).toBe(true));
+    expect(contents.capturePage).toHaveBeenCalledTimes(captures + 2);
+  });
+
+  it('discards screenshots if navigation replaces the masked document', async () => {
+    const { executor, request, contents } = await setup();
+    let finish!: (result: { data: string }) => void;
+    contents.debugger.sendCommand.mockImplementation(async method => {
+      if (method === 'Page.captureScreenshot') return new Promise(resolve => { finish = resolve; });
+      return {};
+    });
+    const capture = executor.execute({ ...request, action: 'screenshot' });
+    await new Promise(resolve => setImmediate(resolve));
+    contents.emit('did-start-navigation', {}, 'https://example.com/new', false, true);
+    contents.emit('dom-ready');
+    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
+    finish({ data: png.toString('base64') });
+    expect(await capture).toMatchObject({ ok: false, error: expect.stringContaining('page changed during capture') });
+  });
+
   it('hides only native presentation during motion without closing or disabling the shared browser', async () => {
     const { executor, parent, request, lease, contents } = await setup();
     const clip = [...parent.contentView.children][0];
@@ -82,6 +156,7 @@ describe('embedded Portal surface lifecycle', () => {
     expect((await executor.execute(request)).ok).toBe(true);
     expect((await executor.inspect(request)).visible).toBe(true);
     executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, moving: false }, lease);
+    await new Promise(resolve => setImmediate(resolve));
     expect(clip.visible).toBe(true);
     expect(clip.setBounds).toHaveBeenLastCalledWith(geometry.clip);
     expect((await executor.inspect(request)).webContentsId).toBe(contents.id);
@@ -96,10 +171,109 @@ describe('embedded Portal surface lifecycle', () => {
       bounds: { x: 100 + x, y: 100, width: 800, height: 600 },
       clip: { x: 100 + x, y: 100, width: 800, height: 600 }, zoom: 1, visible: true,
     }, lease);
+    await new Promise(resolve => setImmediate(resolve));
     expect(visibility).not.toHaveBeenCalled();
     expect(contents.setZoomFactor).toHaveBeenCalledTimes(initialZoomCalls);
     expect(view.visible).toBe(true);
     expect((await executor.inspect(request)).webContentsId).toBe(contents.id);
+  });
+  it('bounds the actual native child and scales its presentation without origin-shared page zoom', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    const view = ContentsView.instances[0];
+    const zoomCalls = contents.setZoomFactor.mock.calls.length;
+    const geometry = { bounds: { x: -40, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 140, width: 200, height: 200 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true };
+    executor.setGeometry(request.workspaceId, request.nodeId, geometry, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(view.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 200, height: 200 });
+    expect(contents.debugger.sendCommand).toHaveBeenLastCalledWith('Emulation.setDeviceMetricsOverride', {
+      width: 800, height: 600, deviceScaleFactor: 0, mobile: false, scale: 0.5, dontSetVisibleSize: true,
+    });
+    expect(contents.setZoomFactor).toHaveBeenCalledTimes(zoomCalls);
+    const clip = [...parent.contentView.children][0];
+    executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, clip: { ...geometry.clip, width: 0 } }, lease);
+    expect(clip.visible).toBe(false);
+  });
+
+  it('does not resurrect a hidden surface when an asynchronous presentation finishes', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    let finish!: (value: {}) => void;
+    contents.debugger.sendCommand.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const geometry = { bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true };
+    executor.setGeometry(request.workspaceId, request.nodeId, geometry, lease);
+    executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, visible: false }, lease);
+    finish({});
+    await new Promise(resolve => setImmediate(resolve));
+    expect([...parent.contentView.children][0].visible).toBe(false);
+  });
+
+  it('serializes full captures off the visible hierarchy and preserves changes made while capturing', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    const clip = [...parent.contentView.children][0], view = ContentsView.instances[0];
+    const geometry = { bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true };
+    executor.setGeometry(request.workspaceId, request.nodeId, geometry, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
+    const data = { data: png.toString('base64') };
+    let finish!: (result: typeof data) => void;
+    let captures = 0;
+    contents.debugger.sendCommand.mockImplementation(async method => {
+      if (method !== 'Page.captureScreenshot') return {};
+      expect(clip.visible).toBe(false);
+      expect(clip.children.has(view)).toBe(false);
+      if (++captures === 1) return new Promise(resolve => { finish = resolve; });
+      return data;
+    });
+    const first = executor.userCommand(request, 'preview', {});
+    const second = executor.userCommand(request, 'capture', {});
+    await new Promise(resolve => setImmediate(resolve));
+    expect(captures).toBe(1);
+    executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, zoom: 0.75, visible: false }, lease);
+    finish(data);
+    await Promise.all([first, second]);
+    expect(captures).toBe(2);
+    expect(clip.visible).toBe(false);
+    expect(clip.children.has(view)).toBe(true);
+    executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, zoom: 0.75 }, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(clip.visible).toBe(true);
+    expect(contents.debugger.sendCommand).toHaveBeenLastCalledWith('Emulation.setDeviceMetricsOverride', expect.objectContaining({ scale: 0.75 }));
+  });
+
+  it('restores presentation after screenshot errors and waits for a correctly sized native frame', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    const clip = [...parent.contentView.children][0], view = ContentsView.instances[0];
+    const geometry = { bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true };
+    executor.setGeometry(request.workspaceId, request.nodeId, geometry, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    contents.debugger.sendCommand.mockImplementation(async method => {
+      if (method === 'Page.captureScreenshot') throw new Error('Screenshot failed');
+      return {};
+    });
+    let painted!: (image: Awaited<ReturnType<Contents['capturePage']>>) => void;
+    contents.capturePage.mockResolvedValueOnce({ toDataURL: () => '', getSize: () => ({ width: 400, height: 300 }) });
+    contents.capturePage.mockImplementationOnce(() => new Promise(resolve => { painted = resolve; }));
+    const capture = executor.userCommand(request, 'preview', {});
+    const result = expect(capture).rejects.toThrow('Screenshot failed');
+    await new Promise(resolve => setImmediate(resolve));
+    expect(clip.children.has(view)).toBe(true);
+    expect(clip.visible).toBe(false);
+    painted({ toDataURL: () => '', getSize: () => ({ width: 400, height: 300 }) });
+    await result;
+    expect(clip.visible).toBe(true);
+  });
+
+  it('changes document revision only when a document finishes loading, including same-URL reloads', async () => {
+    const { executor, request, contents } = await setup();
+    const before = (await executor.inspect(request)).documentRevision;
+    contents.emit('page-title-updated', {}, 'Unread message');
+    await executor.execute(request);
+    expect((await executor.inspect(request)).documentRevision).toBe(before);
+    contents.emit('did-finish-load');
+    expect((await executor.inspect(request)).documentRevision).toBe(before + 1);
   });
   it('executes against the same contents presented in the Canvas, including after remount', async () => {
     const { executor, parent, request, lease, state, contents } = await setup();

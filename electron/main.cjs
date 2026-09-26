@@ -1150,12 +1150,7 @@ ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
 ipcMain.on('orkestrai:portal-layout', (event, input) => {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return;
   const geometry = input?.geometry;
-  if (geometry?.moving !== undefined && typeof geometry.moving !== 'boolean') return;
-  if (!geometry || typeof geometry.visible !== 'boolean' || !Number.isFinite(geometry.zoom) || geometry.zoom < 0.1 || geometry.zoom > 5) return;
-  for (const rect of [geometry.bounds, geometry.clip]) {
-    if (!rect || !['x', 'y', 'width', 'height'].every((key) => Number.isInteger(rect[key]) && Math.abs(rect[key]) < 100000)) return;
-    if (rect.width < 0 || rect.height < 0) return;
-  }
+  if (!require('./portal-presentation.cjs').validPortalGeometry(geometry)) return;
   managedPortalExecutor?.setGeometry(input.workspaceId, input.nodeId, geometry, input.lease);
 });
 

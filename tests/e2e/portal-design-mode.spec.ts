@@ -4,6 +4,66 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 test.describe('Portal Design Mode', () => {
+  test('suspends native presentation for actual responsive dropdowns and restores it on close', async ({ page, request }) => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-portal-overlay-e2e-'));
+    const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data;
+    const workspaceResponse = await request.post('/api/agent-room/workspaces', {
+      data: { name: `E2E Portal overlays ${Date.now()}`, workingDir: dir },
+    });
+    const workspace = (await workspaceResponse.json()).data;
+    const portalResponse = await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+      data: { type: 'portal', title: 'Overlay probe', x: 120, y: 120, width: 720, height: 520,
+        payload: { url: 'https://example.com/' } },
+    });
+    const portal = (await portalResponse.json()).data;
+    try {
+      await request.put('/api/agent-room/settings', { data: { ...originalSettings, uiLanguage: 'en' } });
+      // Validate the real shadcn/Canvas DOM -> IPC contract here. Native pixels,
+      // input, sessions and clipping are covered by test-portal-layout.cjs.
+      await page.addInitScript(() => {
+        const state = { url: 'https://example.com/', webContentsId: 1, activeTabId: 'qa',
+          tabs: [{ id: 'qa', url: 'https://example.com/', title: 'Overlay probe' }] };
+        Object.assign(window, {
+          __portalGeometry: null,
+          orkestraiDesktop: {
+            onPortalState: () => () => {},
+            onPortalOpenRequest: () => () => {},
+            portalLayout: ({ geometry }: { geometry: unknown }) => Object.assign(window, { __portalGeometry: geometry }),
+            portalSurface: async ({ method }: { method: string }) => method === 'inspectScript'
+              ? { __orkestraiPortalScriptResult: true, ok: true, value: state.url }
+              : method === 'preview' ? '' : state,
+          },
+        });
+      });
+      await page.goto(`/canvas?workspace=${workspace.id}&node=${portal.id}`);
+      const portalNode = page.locator('.canvas-portal');
+      await expect(portalNode).toBeVisible();
+      const visible = () => page.evaluate(() => (window as any).__portalGeometry?.visible);
+      await page.mouse.move(5, 5);
+      await expect.poll(visible).toBe(true);
+      await portalNode.getByRole('button', { name: 'Test responsiveness' }).click();
+      const toolbar = portalNode.getByTestId('portal-viewport-toolbar');
+      await toolbar.getByRole('button', { name: 'Device' }).click();
+      await expect(page.getByRole('option', { name: /Laptop/ })).toBeVisible();
+      await expect.poll(visible).toBe(false);
+      await page.keyboard.press('Escape');
+      await page.mouse.move(5, 5);
+      await expect.poll(visible).toBe(true);
+      await toolbar.getByRole('button', { name: 'Device' }).click();
+      await page.getByRole('option', { name: /Laptop/ }).click();
+      await page.mouse.move(5, 5);
+      await expect.poll(() => page.evaluate(() => (window as any).__portalGeometry?.viewport)).toEqual({ width: 1366, height: 768 });
+      await expect.poll(visible).toBe(true);
+      await expect(portalNode.getByText(/Portal unavailable/)).toHaveCount(0);
+      await page.screenshot({ path: test.info().outputPath('portal-responsive-presentation.png') });
+    } finally {
+      await page.goto('about:blank').catch(() => undefined);
+      await request.put('/api/agent-room/settings', { data: originalSettings });
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('keeps browser fallback explicit instead of silently exposing a broken inspector', async ({ page, request }) => {
     const dir = mkdtempSync(join(tmpdir(), 'orkestrai-portal-design-e2e-'));
     const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;

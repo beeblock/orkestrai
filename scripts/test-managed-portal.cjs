@@ -39,7 +39,7 @@ async function main() {
     action: 'snapshot', args: {}, timeoutMs: 5000 };
   const lease = randomUUID();
   const initial = await executor.surface(request, parent, lease);
-  executor.setGeometry(request.workspaceId, request.nodeId, { bounds: {x:100,y:100,width:800,height:600}, clip:{x:200,y:160,width:500,height:350},zoom:1,visible:true }, lease);
+  executor.setGeometry(request.workspaceId, request.nodeId, { bounds: {x:100,y:100,width:800,height:600}, clip:{x:200,y:160,width:500,height:350}, viewport:{width:800,height:600},zoom:1,visible:true }, lease);
   const command = async (action, args = {}) => {
     console.log(`Portal regression: ${action}`);
     const result = await executor.execute({ ...request, requestId: randomUUID(), action, args });
@@ -101,6 +101,15 @@ async function main() {
   assert.equal((await executor.execute(background)).ok, false, 'runtime pause must override stale payload');
   await executor.userCommand(request, 'resume', {});
   assert.equal((await executor.execute(background)).ok, true);
+  console.log('Portal regression: detached screenshot');
+  const detachedCapture = await executor.execute({ ...background, action: 'screenshot' });
+  assert.equal(detachedCapture.ok, true, detachedCapture.error);
+  const detachedImage = nativeImage.createFromDataURL(detachedCapture.result.dataUrl);
+  assert.equal(detachedImage.isEmpty(), false);
+  assert.deepEqual([...detachedImage.toBitmap().subarray(pixel, pixel + 3)], [68, 68, 68], 'protected fields remain masked in background captures');
+  console.log('Portal regression: never-mounted screenshot');
+  const unmountedCapture = await executor.execute({ ...background, nodeId: randomUUID(), action: 'screenshot' });
+  assert.equal(unmountedCapture.ok, false, 'a never-mounted browser without a display surface must fail promptly instead of hanging');
   console.log(JSON.stringify({ ok:true, screenshot, protectedFieldsMasked:true, samePage:true, sameWebContents:true }));
 }
 
