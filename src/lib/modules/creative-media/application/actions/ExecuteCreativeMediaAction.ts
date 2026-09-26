@@ -1,9 +1,9 @@
 import { Action } from '@beeblock/svelar/actions';
 import type { CreativeMediaDto } from '../dto/CreativeMediaDto.js';
-import type { CreativeRunRequest, CreativeWorkflowSave } from '../../contracts/schemas/creative-media.schema.js';
+import type { CreativeRunRequest, CreativeWorkflowSave, CreativeVideoImport } from '../../contracts/schemas/creative-media.schema.js';
 import { creativeWorkflowService } from '../services/CreativeWorkflowService.js';
 import { creativeModelCatalog } from '../services/CreativeModelCatalogService.js';
-import { creativeCatalogQuerySchema } from '../../contracts/schemas/creative-media.schema.js';
+import { creativeCatalogQuerySchema, creativeWorkflowReadSchema } from '../../contracts/schemas/creative-media.schema.js';
 import { CreativeCharacterDto } from '../dto/CreativeCharacterDto.js';
 import { ExecuteCreativeCharacterAction } from './ExecuteCreativeCharacterAction.js';
 import { CreativeStoryboardDto } from '../dto/CreativeStoryboardDto.js';
@@ -21,6 +21,7 @@ export class ExecuteCreativeMediaAction extends Action<CreativeMediaDto, unknown
     const service = creativeWorkflowService;
     await service.assertActor(dto.workspaceId, dto.actor, !['models', 'read', 'list', 'cancel', 'close_unconfirmed', 'remove'].includes(dto.command));
     switch (dto.command) {
+      case 'import': return service.importVideo(dto.workspaceId, dto.input as CreativeVideoImport, dto.actor);
       case 'sequences': return new ExecuteCreativeSequenceAction().execute(CreativeSequenceDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'recipes': return new ExecuteCreativeRecipeAction().execute(CreativeRecipeDto.from(dto.workspaceId, dto.actor, dto.input));
       case 'brands': return new ExecuteCreativeBrandKitAction().execute(CreativeBrandKitDto.from(dto.workspaceId, dto.actor, dto.input));
@@ -36,7 +37,7 @@ export class ExecuteCreativeMediaAction extends Action<CreativeMediaDto, unknown
         return { models: models.slice(input.offset, input.offset + input.limit), total: models.length, nextOffset: input.offset + input.limit < models.length ? input.offset + input.limit : null, source: catalog.source, fetchedAt: catalog.fetchedAt };
       }
       case 'list': return service.capabilities(dto.workspaceId, dto.actor);
-      case 'read': return service.read(dto.workspaceId, dto.nodeId!);
+      case 'read': return service.read(dto.workspaceId, dto.nodeId!, dto.actor.type === 'user' || creativeWorkflowReadSchema.parse(dto.input).includeHistory);
       case 'create': case 'update': return service.save(dto.workspaceId, dto.input as CreativeWorkflowSave, dto.actor, dto.nodeId);
       case 'preview': return service.preview(dto.workspaceId, dto.nodeId!, dto.actor);
       case 'run': return service.run(dto.workspaceId, dto.nodeId!, dto.input as CreativeRunRequest, dto.actor);

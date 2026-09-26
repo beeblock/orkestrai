@@ -86,6 +86,15 @@ describe('native non-destructive video sequences', () => {
     expect(copied.document.clips[0]).toMatchObject({ nodeId: destination.node.id, sha256: added.sequence.document.clips[0].sha256 });
     expect(copied.export).toBeNull();
   });
+  it('does not reuse a removed Canvas clip even when its file remains on disk', async () => {
+    const f = await fixture(), added = await addFixture(f);
+    const clip = added.sequence.document.clips[0];
+    const original = await readFile(join(f.folder, clip.path));
+    await workspaceRepository.deleteNode(added.node.id);
+    await expect(f.encoder.copySource(f.workspace.id, clip, join(f.folder, 'must-not-exist.mp4'))).rejects.toThrow('creative_reference_unavailable');
+    expect(await readFile(join(f.folder, clip.path))).toEqual(original);
+    await expect(access(join(f.folder, 'must-not-exist.mp4'))).rejects.toThrow();
+  });
   it('uses the same task-bound agent contract and never grants runtime installation to agents', async () => {
     const f = await fixture(), agent = { type: 'agent' as const, nodeId: uuidv7(), taskId: uuidv7() };
     await expect(f.service.execute(f.workspace.id, { command: 'create', title: 'Unauthenticated' }, agent)).rejects.toThrow('creative_agent_task_required');

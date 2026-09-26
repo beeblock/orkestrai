@@ -58,11 +58,11 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { nodeId: 'api2', title: 'Agent API', fingerprint: 'a'.repeat(64), collection: { requests: [] } } }));
         } else if (req.url?.startsWith('/api/agent-room/bridge/api-clients')) {
           res.end(JSON.stringify({ data: [{ nodeId: 'api1', title: 'Project API', requests: [{ requestId: 'r1', method: 'GET', name: 'Health', url: 'https://example.test/health', authType: 'bearer' }] }] }));
-        } else if (req.url === '/api/agent-room/bridge/image-workflows' && req.method === 'GET') {
+        } else if (req.url?.split('?')[0] === '/api/agent-room/bridge/image-workflows' && req.method === 'GET') {
           res.end(JSON.stringify({ data: [{ nodeId: 'img1', title: 'Character poses', status: 'idle', references: [{ nodeId: 'ref1' }], outputs: [] }] }));
         } else if (req.url === '/api/agent-room/bridge/image-workflows' && req.method === 'POST') {
           res.end(JSON.stringify({ data: { nodeId: 'img2', title: 'Instagram carousel', status: 'idle', references: [], outputs: [] } }));
-        } else if (req.url === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'GET') {
+        } else if (req.url?.split('?')[0] === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'GET') {
           res.end(JSON.stringify({ data: { nodeId: 'img1', title: 'Character poses', status: 'idle', config: { prompt: 'Create a pose' } } }));
         } else if (req.url === '/api/agent-room/bridge/image-workflows/img1' && req.method === 'PATCH') {
           res.end(JSON.stringify({ data: { nodeId: 'img1', title: 'Carousel directions', status: 'idle', config: { count: 10 } } }));
@@ -136,6 +136,7 @@ describe('orkestrai CLI', () => {
             workspace: {
               id: 'w1',
               name: 'Teste',
+              workingDir: 'C:\\projects\\current', wslWorkingDir: '/mnt/c/projects/current', wslDistribution: 'Ubuntu-24.04',
               repository: { reference: '.', primary: true, isGit: true, runtimeKind: 'wsl', wslDistribution: 'Ubuntu-24.04' },
             },
             agents: [{ nodeId: 'n1', title: 'Claude', provider: 'claude', sessionAlive: true }],
@@ -232,6 +233,8 @@ describe('orkestrai CLI', () => {
     expect(code).toBe(0);
     expect(lines.join('\n')).toContain('Claude');
     expect(lines.join('\n')).toContain('Repositorio principal: . (Git · WSL Ubuntu-24.04)');
+    expect(lines.join('\n')).toContain('Project folder (host): C:\\projects\\current');
+    expect(lines.join('\n')).toContain('Project folder (WSL Ubuntu-24.04): /mnt/c/projects/current');
     expect(requests.at(-1).auth).toBe('Bearer tok123');
   });
 
@@ -830,6 +833,13 @@ describe('orkestrai CLI', () => {
     expect(lines.join('\n')).toContain('Character poses');
     expect(await run(['image', 'read', 'img1'], { cwd, out, env })).toBe(0);
     expect(lines.join('\n')).toContain('Create a pose');
+    expect(requests.at(-1).url).toBe('/api/agent-room/bridge/image-workflows/img1');
+    expect(await run(['image', 'read', 'img1', '--include-history'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1).url).toBe('/api/agent-room/bridge/image-workflows/img1?includeHistory=true');
+    expect(await run(['image', 'list', '--include-history'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1).url).toBe('/api/agent-room/bridge/image-workflows?includeHistory=true');
+    expect(await run(['image', 'list', '--include-history', 'false'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1).url).toBe('/api/agent-room/bridge/image-workflows');
     expect(await run(['image', 'create', '--title', 'Instagram carousel', '--count', '10', '--preset', 'instagram-portrait'], { cwd, out, env })).toBe(0);
     expect(requests.at(-1)).toMatchObject({
       method: 'POST', url: '/api/agent-room/bridge/image-workflows',

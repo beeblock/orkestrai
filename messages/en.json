@@ -2004,6 +2004,7 @@
   "flow.sync_nothing_new": "All connected agents are already in the steps.",
   "onboarding.use_current_ws": "Use the current workspace",
   "canvas.del_nodes_title": "Delete {count} node(s)?",
+  "canvas.del_nodes_failed": "Could not delete {count} node(s). They remain on the Canvas; nothing was hidden as deleted.",
   "canvas.del_nodes_desc": "Deleted terminals lose their session: the conversation history and context go with it. Connected edges are removed too. You cannot undo this from the canvas.",
   "tool.presets": "Open preset library",
   "canvas.label_presets": "Presets",

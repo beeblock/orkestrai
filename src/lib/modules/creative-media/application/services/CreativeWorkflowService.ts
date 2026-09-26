@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
+import { posix } from 'node:path';
+import { Connection } from '@beeblock/svelar/database';
+import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
+import { importedVideoMime } from '../../domain/video-format.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { creativeWorkspaceGateway, type CreativeWorkspaceGateway } from '$lib/modules/agent-room/application/services/CreativeWorkspaceGateway.js';
 import { autonomyPolicyService, AutonomyGatePendingError } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { creativeMediaRepository, type CreativeMediaRepository } from '../../infrastructure/repositories/CreativeMediaRepository.js';
 import { creativeVideoProvider } from '../../infrastructure/providers/registry.js';
 import { creativeProviderId, creativeSubmitUrl } from '../../domain/providers.js';
-import { creativeConfigSchema, creativeRunRequestSchema, creativeWorkflowSaveSchema, type CreativeRunRequest, type CreativeWorkflowSave } from '../../contracts/schemas/creative-media.schema.js';
+import { creativeConfigSchema, creativeRunRequestSchema, creativeWorkflowSaveSchema, creativeVideoImportSchema, type CreativeRunRequest, type CreativeWorkflowSave, type CreativeVideoImport } from '../../contracts/schemas/creative-media.schema.js';
 import { ACTIVE_CREATIVE_STATUSES, CREATIVE_CATALOG_REVISION, CREATIVE_MODELS, MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.js';
 import { CreativeMediaError, type CreativeActor, type CreativePreview, type CreativeRun, type CreativeSnapshot, type CreativeWorkflow } from '../../domain/types.js';
 import type { CreativeVideoProvider, CreativeRemoteVideo } from '../ports/CreativeVideoProvider.js';
@@ -23,6 +27,7 @@ const previewState = globalThis as typeof globalThis & { __orkestraiCreativePrev
 const previews = previewState.__orkestraiCreativePreviews ??= new Map();
 
 export class CreativeWorkflowService {
+  private videoImportQueue: Promise<unknown> = Promise.resolve();
   private priceCache = new Map<string, { expires: number; price: FalModelPrice | null }>();
   private priceRequests = new Map<string, Promise<void>>();
   constructor(
@@ -48,6 +53,39 @@ export class CreativeWorkflowService {
   async list(workspaceId: string) {
     const nodes = new Set((await this.workspace.nodes(workspaceId)).map(node => node.id));
     return (await this.repository.workflows(workspaceId)).filter(workflow => nodes.has(workflow.nodeId));
+  }
+
+  async importVideo(workspaceId: string, input: CreativeVideoImport, actor: CreativeActor) {
+    const workspace = await this.assertActor(workspaceId, actor);
+    const value = creativeVideoImportSchema.parse(input);
+    const path = posix.normalize(value.path);
+    if (!importedVideoMime(path)) throw new CreativeMediaError('creative_video_import_format', 422);
+    const absolute = await this.workspace.existingPath(workspaceId, path);
+    try {
+      await autonomyPolicyService.execute({ workspaceId, actorType: actor.type, actorId: actor.type === 'agent' ? actor.nodeId : null, capability: 'filesystem', operation: 'creative.video.import.read', mutation: false, certainty: 'semantic', filesystem: { path: absolute, permission: 'read' }, input: { path } }, async () => ({ authorized: true }));
+    } catch (error) { throw new CreativeMediaError(error instanceof AutonomyGatePendingError ? 'creative_approval_required' : 'creative_policy_denied', 403); }
+    const asset = await this.files.videoFile(workspaceId, path);
+    if (value.expectedSha256 && asset.sha256 !== value.expectedSha256) throw new CreativeMediaError('creative_reference_changed', 409);
+    const near = actor.type === 'agent' ? await this.workspace.node(workspaceId, actor.nodeId) : null;
+    const floorId = near?.floorId ?? null;
+    await this.workspace.characterDestination(workspaceId, floorId);
+    // Serialize imports so retries cannot race the SQLite node/edge transaction.
+    const pending = this.videoImportQueue.catch(() => undefined).then(() => Connection.transaction(async () => {
+      await this.assertActor(workspaceId, actor);
+      if (await this.workspace.existingPath(workspaceId, path) !== absolute) throw new CreativeMediaError('creative_reference_changed', 409);
+      const existing = (await this.workspace.nodes(workspaceId)).find(node => node.type === 'video' && (node.floorId ?? null) === floorId && node.payload.path === path);
+      if (existing) {
+        if (existing.payload.sha256 && existing.payload.sha256 !== asset.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
+        return { node: existing, reused: true };
+      }
+      const node = await this.workspace.createNode(workspaceId, 'video', value.title ?? posix.basename(path).slice(0, 180), { ...asset, source: 'import' }, near?.id, floorId);
+      return { node, reused: false };
+    }));
+    this.videoImportQueue = pending;
+    const result = await pending;
+    await autonomyPolicyService.recordSemanticEffect({ workspaceId, capability: 'filesystem', operation: 'creative.video.import', actorType: actor.type, actorId: actor.type === 'agent' ? actor.nodeId : null, input: { path, taskId: actor.type === 'agent' ? actor.taskId : null } }, { nodeId: result.node.id, sha256: asset.sha256, reused: result.reused });
+    this.workspace.broadcast(workspaceId);
+    return { ...result, workspace: workspaceProjectContext(workspace) };
   }
 
   async prices(workspaceId: string, actor: CreativeActor, profileId: string, modelIds: string[]) {
@@ -83,7 +121,7 @@ export class CreativeWorkflowService {
   }
 
   async capabilities(workspaceId: string, actor: CreativeActor) {
-    await this.assertActor(workspaceId, actor, false);
+    const workspace = await this.assertActor(workspaceId, actor, false);
     const profiles = [];
     for (const profile of await this.profiles.profiles()) {
       const policy = await this.repository.policy(workspaceId, profile.id);
@@ -100,14 +138,34 @@ export class CreativeWorkflowService {
     const workflows = await this.list(workspaceId);
     const persisted = new Set(workflows.map(workflow => workflow.nodeId));
     const drafts = nodes.filter(node => node.type === 'videoWorkflow' && !persisted.has(node.id)).map(node => ({ nodeId: node.id, title: node.title, config: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) }));
-    return { workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', providers: ['fal', 'byteplus', 'higgsfield'], paginated: true } };
+    return { workspace: workspaceProjectContext(workspace), workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', providers: ['fal', 'byteplus', 'higgsfield'], paginated: true } };
   }
 
-  async read(workspaceId: string, nodeId: string) {
+  async read(workspaceId: string, nodeId: string, includeHistory = true) {
     const node = await this.workspace.node(workspaceId, nodeId);
     if (node?.type !== 'videoWorkflow') throw new CreativeMediaError('creative_workflow_not_found', 404);
     const workflow = await this.repository.workflow(workspaceId, nodeId);
-    return { workflow, ...(!workflow ? { draftConfig: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) } : {}), runs: await this.repository.runs(workspaceId, nodeId), catalog: Object.values(CREATIVE_MODELS) };
+    const runs = await this.repository.runs(workspaceId, nodeId);
+    const current = includeHistory ? [] : (await this.workspace.nodes(workspaceId)).filter(node => node.type === 'video');
+    const outputs = current.flatMap(node => {
+      const payload = node.payload as { workflowNodeId?: string; runId?: string; path?: string };
+      return payload.workflowNodeId === nodeId && payload.path ? [{ nodeId: node.id, title: node.title, path: payload.path, runId: payload.runId }] : [];
+    });
+    // Persisted runs are audit records, not the inventory of media still on Canvas.
+    const visibleRuns = includeHistory ? runs : runs.map(({ snapshot: _snapshot, output, ...run }) => {
+      const present = (asset: NonNullable<CreativeRun['output']>) => outputs.some(node => node.runId === run.id && node.path === asset.path);
+      return {
+        ...run,
+        outputState: outputs.some(node => node.runId === run.id) ? 'on_canvas' : output ? 'removed_from_canvas' : 'not_generated',
+        output: output && present(output) ? { ...output, additionalOutputs: (output.additionalOutputs ?? []).filter(present) } : null,
+      };
+    });
+    return {
+      workflow, ...(!workflow ? { draftConfig: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) } : {}),
+      runs: visibleRuns, historyIncluded: includeHistory,
+      ...(!includeHistory ? { assetScope: 'canvas', outputs } : {}),
+      catalog: Object.values(CREATIVE_MODELS),
+    };
   }
 
   async save(workspaceId: string, input: CreativeWorkflowSave, actor: CreativeActor, nodeId?: string, nearNodeId?: string) {

@@ -2004,6 +2004,7 @@
   "flow.sync_nothing_new": "Todos os agentes conectados já estão nos passos.",
   "onboarding.use_current_ws": "Usar o workspace atual",
   "canvas.del_nodes_title": "Apagar {count} nó(s)?",
+  "canvas.del_nodes_failed": "Não foi possível apagar {count} nó(s). Eles continuam no Canvas; nenhum foi ocultado como se estivesse apagado.",
   "canvas.del_nodes_desc": "Terminais apagados perdem a sessão: o histórico e o contexto da conversa vão junto. Arestas conectadas somem também. Não dá para desfazer pelo canvas.",
   "tool.presets": "Abrir biblioteca de presets",
   "canvas.label_presets": "Presets",

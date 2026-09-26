@@ -309,6 +309,12 @@ device access.
   The generation queue shows actual image/video state and download recovery.
   Assemble delivered clips in a native Video sequence: reorder, trim, caption,
   adjust audio and export a new MP4 locally, preserving the source files.
+  Assigned agents can also attach an existing edited video, such as
+  `renders/final.mp4`, through `video_workflow_import` or `orkestrai video import`:
+  no new generation, upload or file move. The bridge exposes the configured
+  project root; briefs, prompts, montage sources and final exports belong there
+  by default. Removing a Canvas node keeps the file, but agents must not silently
+  reuse historical media that is no longer on Canvas.
 - **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
   references, and a live Codex agent to a Generate images node on the same
   canvas; the same node opens in Workbench. A connected Codex can create and

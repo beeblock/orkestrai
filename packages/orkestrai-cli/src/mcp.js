@@ -157,8 +157,8 @@ const TOOLS = [
   { name: 'api_client_export', description: 'Exporta a colecao conectada para Bruno ou Postman dentro do workspace, preservando estrutura, scripts e testes do runtime escolhido.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, kind: { type: 'string', enum: ['bruno', 'postman'] }, path: { type: 'string', default: '.orkestrai/exports' } }, required: ['nodeId', 'kind'] } },
   { name: 'api_client_run_runner', description: 'Executa um runner salvo com ordem, ambiente, iteracoes, dados por linha, variaveis encadeadas, testes e politica de parada.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, runnerId: { type: 'string' }, variables: { type: 'object', additionalProperties: { type: 'string' } }, maxExecutions: { type: 'integer', minimum: 1, maximum: 500, default: 100 } }, required: ['nodeId', 'runnerId'] } },
   { name: 'api_client_execute', description: 'Executa um request salvo em um Cliente de API conectado, aplicando variaveis e autenticacao localmente.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, requestId: { type: 'string' }, variables: { type: 'object', additionalProperties: { type: 'string' } } }, required: ['nodeId', 'requestId'] } },
-  { name: 'image_workflow_list', description: 'Lista os fluxos nativos operados por Codex ImageGen, suas conexoes, status, resultados e historico.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'image_workflow_read', description: 'Le o contrato exato do fluxo e, durante um run, retorna prompt, referenced_image_paths, destinos e chamada de conclusao. Use antes de image_gen.imagegen.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
+  { name: 'image_workflow_list', description: 'Lists current Canvas image workflows, connections and outputs. Removed media is not an input. includeHistory is only for an explicit user request to consult historical generations, never automatic reuse.', inputSchema: { type: 'object', properties: { includeHistory: { type: 'boolean', default: false } } } },
+  { name: 'image_workflow_read', description: 'Reads the live Canvas workflow and active generation contract before image_gen.imagegen. includeHistory is only for an explicit user request to consult historical generations; historical paths are not current Canvas assets.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, includeHistory: { type: 'boolean', default: false } }, required: ['nodeId'] } },
   { name: 'image_workflow_create', description: 'Cria um fluxo visivel no canvas, conecta este Codex como executor e salva a configuracao inicial sem iniciar a geracao.', inputSchema: { type: 'object', properties: {
     title: { type: 'string', minLength: 1, maxLength: 120 }, prompt: { type: 'string', maxLength: 32000 },
     count: { type: 'integer', minimum: 1, maximum: 10 }, transparentBackground: { type: 'boolean' },
@@ -440,7 +440,14 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   /** @type {Record<string, object>} */
   const properties = { taskId: { type: 'string', format: 'uuid' } };
   const required = ['taskId'];
-  if (!['sequences', 'recipes', 'brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (command === 'read') properties.input = { type: 'object', additionalProperties: false, properties: { includeHistory: { type: 'boolean', default: false, description: 'Only when the user explicitly requests historical generations. Not permission to reuse removed assets.' } } };
+  if (!['import', 'sequences', 'recipes', 'brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'create', 'cancel', 'retry_download'].includes(command)) { properties.nodeId = { type: 'string', format: 'uuid' }; required.push('nodeId'); }
+  if (command === 'import') {
+    properties.input = { type: 'object', additionalProperties: false, properties: {
+      path: { type: 'string', minLength: 1, maxLength: 500, description: 'Existing MP4/M4V/MOV/WebM/MKV path relative to workspace.workingDir, e.g. renders/final.mp4. An explicitly approved @repository/path is also accepted. Never an absolute path, URL or traversal.' },
+      title: { type: 'string', minLength: 1, maxLength: 180 }, expectedSha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+    }, required: ['path'] }; required.push('input');
+  }
   if (command === 'assets') {
     properties.input = { type: 'object', additionalProperties: false, properties: { command: { enum: ['list', 'inspect', 'decide', 'prepare'] }, nodeId: { type: 'string', format: 'uuid' }, expectedDigest: { type: 'string', pattern: '^[a-f0-9]{64}$' }, revision: { type: 'integer', minimum: 0 }, decision: { enum: ['proposed'] }, comment: { type: 'string', maxLength: 8000 }, edit: { type: 'object', additionalProperties: false, properties: {
       operation: { enum: ['variation', 'remove_background', 'annotated_change', 'animate'] }, direction: { type: 'string', maxLength: 16000 }, executorNodeId: { type: ['string', 'null'], format: 'uuid' }, count: { type: 'integer', minimum: 1, maximum: 10 }, config: VIDEO_CONFIG_SCHEMA,
@@ -706,9 +713,9 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'api_client_execute':
       return bridge('POST', `/api/agent-room/bridge/api-clients/${encodeURIComponent(args.nodeId)}/execute`, { requestId: args.requestId, variables: args.variables ?? {}, from: selfAgent });
     case 'image_workflow_list':
-      return bridge('GET', '/api/agent-room/bridge/image-workflows');
+      return bridge('GET', `/api/agent-room/bridge/image-workflows${args.includeHistory === true ? '?includeHistory=true' : ''}`);
     case 'image_workflow_read':
-      return bridge('GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}`);
+      return bridge('GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(args.nodeId)}${args.includeHistory === true ? '?includeHistory=true' : ''}`);
     case 'image_workflow_create': {
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       return bridge('POST', '/api/agent-room/bridge/image-workflows', { ...args, from: selfAgent });

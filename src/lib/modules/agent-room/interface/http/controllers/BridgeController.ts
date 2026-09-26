@@ -1,4 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
+import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
 import { AutonomyGatePendingError } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
@@ -54,6 +55,7 @@ import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/sc
 import { ContributeHuddleTurnDto } from '$lib/modules/agent-room/application/dto/HuddleDtos.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
 import { ImageWorkflowError, imageWorkflowService } from '$lib/modules/agent-room/application/services/ImageWorkflowService.js';
+import { imageWorkflowReadQuerySchema } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
 import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction, ValidateImageWorkflowOutputAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
@@ -104,8 +106,7 @@ export class BridgeController extends Controller {
       const repositories = workspace.repositoryRoots.map(({ alias }) => ({ alias, reference: `@${alias}` }));
       return this.json({ data: {
         workspace: {
-          id: workspace.id,
-          name: workspace.name,
+          ...workspaceProjectContext(workspace),
           codeIntelligenceMode: workspace.codeIntelligenceMode,
           repository: {
             reference: '.',
@@ -662,7 +663,8 @@ export class BridgeController extends Controller {
   async listImageWorkflows(event: any) {
     try {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
-      return this.json({ data: await imageWorkflowService.list(workspace.id) });
+      const { includeHistory } = imageWorkflowReadQuerySchema.parse(Object.fromEntries(event.url.searchParams));
+      return this.json({ data: await imageWorkflowService.list(workspace.id, includeHistory) });
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to list image workflows.', 401);
     }
@@ -682,7 +684,8 @@ export class BridgeController extends Controller {
   async readImageWorkflow(event: any) {
     try {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
-      return this.json({ data: await imageWorkflowService.read(workspace.id, event.params.nodeId) });
+      const { includeHistory } = imageWorkflowReadQuerySchema.parse(Object.fromEntries(event.url.searchParams));
+      return this.json({ data: await imageWorkflowService.read(workspace.id, event.params.nodeId, includeHistory) });
     } catch (error) {
       return this.imageWorkflowError(error, 'Image workflow not found.', 404);
     }

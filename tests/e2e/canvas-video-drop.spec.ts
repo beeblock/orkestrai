@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import WebSocket from 'ws';
 
 test('drops real videos as playable, persistent native workflow references without contacting providers', async ({ page, request }) => {
   test.setTimeout(90000);
@@ -9,6 +11,7 @@ test('drops real videos as playable, persistent native workflow references witho
   const root = '/api/agent-room/workspaces';
   const workspace = (await (await request.post(root, { data: { name: 'E2E video drop', workingDir: dir } })).json()).data;
   let paidRequests = 0;
+  let agentSocket: WebSocket | undefined, agentSessionId: string | undefined;
   page.on('request', req => { if (/fal\.ai|higgsfield|byteplus/.test(req.url())) paidRequests++; });
   try {
     await page.goto(`/canvas?workspace=${workspace.id}`);
@@ -87,8 +90,49 @@ test('drops real videos as playable, persistent native workflow references witho
     await failed; await invalid.dispose();
     await expect(page.getByText(/bad\.mp4/)).toBeVisible();
     expect((await (await request.get(`${root}/${workspace.id}/nodes`)).json()).data).toHaveLength(4);
+    // Exercise the real PTY identity -> CLI -> authenticated bridge -> Canvas path.
+    // This Node process is a deterministic agent stand-in, not a paid model.
+    await page.goto('about:blank');
+    mkdirSync(join(dir, 'renders'));
+    writeFileSync(join(dir, 'renders/final.webm'), Buffer.from(encoded, 'base64'));
+    const agentResponse = await request.post(`${root}/${workspace.id}/nodes`, { data: { type: 'terminal', title: 'Local editor fixture', x: 50, y: 50, width: 520, height: 400, payload: { provider: 'claude', command: process.execPath, args: [] } } });
+    expect(agentResponse.ok()).toBe(true);
+    const agent = (await agentResponse.json()).data;
+    const script = `
+      import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'packages/orkestrai-cli/src/cli.js')).href)};
+      setInterval(() => {}, 60000);
+      await run(['task', 'add', 'Deliver local edit', '--assign', process.env.ORKESTRAI_NODE_ID]);
+      let tasks;
+      await run(['task', 'list', '--json'], { out: value => { tasks = JSON.parse(value); } });
+      const task = tasks.find(item => item.title === 'Deliver local edit');
+      const args = ['video', 'import', '--task', task.id, '--input', JSON.stringify({path:'renders/final.webm',title:'Edited final'})];
+      await run(args);
+      await run(args);
+      console.log('E2E_IMPORT_FINISHED');
+    `;
+    agentSocket = new WebSocket('ws://127.0.0.1:5199/ws/agent-room/pty', { origin: 'http://127.0.0.1:5199' });
+    let output = '', socketError = '';
+    agentSocket.on('message', bytes => {
+      const message = JSON.parse(bytes.toString());
+      if (message.type === 'created') agentSessionId = message.session.id;
+      if (message.type === 'output') output += message.data;
+      if (message.type === 'error') socketError = message.message;
+    });
+    await new Promise<void>((resolve, reject) => { agentSocket!.once('open', resolve); agentSocket!.once('error', reject); });
+    agentSocket.send(JSON.stringify({ type: 'create', command: process.execPath, args: ['--input-type=module', '-e', script], cwd: dir, workspaceId: workspace.id, nodeId: agent.id, provider: 'claude', env: { ORKESTRAI_NODE_ID: agent.id, ORKESTRAI_WORKSPACE_CONFIG: join(dir, '.orkestrai/workspace.json'), ORKESTRAI_API_URL: 'http://127.0.0.1:5199' } }));
+    await expect.poll(() => socketError || output, { timeout: 20000 }).toContain('E2E_IMPORT_FINISHED');
+    const delivered = (await (await request.get(`${root}/${workspace.id}/nodes`)).json()).data.filter((node: any) => node.type === 'video' && node.payload.path === 'renders/final.webm');
+    expect(delivered).toHaveLength(1);
+    expect(readFileSync(join(dir, delivered[0].payload.path))).toEqual(Buffer.from(encoded, 'base64'));
+    await page.goto(`/terminal?workspace=${workspace.id}&node=${delivered[0].id}`);
+    await expect.poll(() => page.locator('video').first().evaluate((element: HTMLVideoElement) => ({ width: element.videoWidth, error: element.error?.code ?? null }))).toEqual({ width: 160, error: null });
+    await page.locator('video').first().evaluate((element: HTMLVideoElement) => { element.muted = true; return element.play(); });
+    await expect.poll(() => page.locator('video').first().evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0);
+    await page.screenshot({ path: '/tmp/orkestrai-agent-imported-montage.png' });
     expect(paidRequests).toBe(0);
   } finally {
+    if (agentSocket?.readyState === WebSocket.OPEN && agentSessionId) agentSocket.send(JSON.stringify({ type: 'kill', sessionId: agentSessionId }));
+    agentSocket?.close();
     await page.goto('about:blank').catch(() => undefined);
     await request.delete(`${root}/${workspace.id}`);
     rmSync(dir, { recursive: true, force: true });

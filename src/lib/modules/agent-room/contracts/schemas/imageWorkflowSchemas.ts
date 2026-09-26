@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+export const imageWorkflowReadQuerySchema = z.object({
+  includeHistory: z.enum(['true', 'false']).optional().transform(value => value === 'true'),
+});
+
 export const imageWorkflowStatusSchema = z.enum(['idle', 'running', 'succeeded', 'failed', 'cancelled']);
 export const imageWorkflowOutputPresetSchema = z.enum([
   'auto',

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { AgentCanvasNode } from '$lib/modules/agent-room/domain/models/AgentCanvasNode.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
@@ -112,6 +113,24 @@ describe('WorkspaceRepository', () => {
 
     expect(await workspaceRepository.deleteNode(a.id)).toBe(true);
     expect(await workspaceRepository.listEdges(workspace.id)).toHaveLength(0);
+  });
+
+  it('preserves both the node and its edges when node deletion fails', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Deletion rollback', workingDir: '/tmp' });
+    const a = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'note' });
+    const b = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'note' });
+    const edge = await workspaceRepository.createEdge({ workspaceId: workspace.id, sourceNodeId: a.id, targetNodeId: b.id });
+    const originalQuery = AgentCanvasNode.query.bind(AgentCanvasNode);
+    const querySpy = vi.spyOn(AgentCanvasNode, 'query').mockImplementation(() => {
+      const query = originalQuery();
+      vi.spyOn(query, 'delete').mockRejectedValueOnce(new Error('simulated storage failure'));
+      return query;
+    });
+    try {
+      await expect(workspaceService.deleteNode(workspace.id, a.id)).rejects.toThrow('simulated storage failure');
+      expect((await workspaceRepository.listNodes(workspace.id)).map(node => node.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+      expect((await workspaceRepository.listEdges(workspace.id)).map(item => item.id)).toEqual([edge.id]);
+    } finally { querySpy.mockRestore(); }
   });
 
   it('updates only requested node columns so payload writes cannot reset a concurrent drag', async () => {

@@ -8,6 +8,9 @@ import { CreativeQueueService } from '$lib/modules/creative-media/application/se
 import { CreativeMediaError } from '$lib/modules/creative-media/domain/types.js';
 import type { CreativePreview, CreativeRun } from '$lib/modules/creative-media/domain/types.js';
 import { CreativeWorkflowService } from '$lib/modules/creative-media/application/services/CreativeWorkflowService.js';
+import { creativeWorkflowService } from '$lib/modules/creative-media/application/services/CreativeWorkflowService.js';
+import { CreativeMediaDto } from '$lib/modules/creative-media/application/dto/CreativeMediaDto.js';
+import { ExecuteCreativeMediaAction } from '$lib/modules/creative-media/application/actions/ExecuteCreativeMediaAction.js';
 import { CreativeProviderService } from '$lib/modules/creative-media/application/services/CreativeProviderService.js';
 import { falModelCatalog, parseFalContract } from '$lib/modules/creative-media/application/services/FalModelCatalogService.js';
 import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
@@ -92,6 +95,45 @@ describe('Creative video persistence and queue', () => {
     await RunModel.query().where('id', run.id).update({ next_poll_at: new Date(0).toISOString(), lease_expires_at: null });
     return (await repository.run(run.workspaceId, run.id))!;
   }
+  it('keeps removed video outputs and snapshots out of agent reads, without erasing audit history', async () => {
+    const f = await fixture();
+    const output = { path: 'generated/videos/removed.mp4', runId: f.run.id, workflowNodeId: f.nodeId, additionalOutputs: [
+      { path: 'generated/videos/current.mp4', runId: f.run.id, workflowNodeId: f.nodeId },
+    ] };
+    await RunModel.query().where('id', f.run.id).update({ status: 'completed', output_json: JSON.stringify(output) });
+    const currentNode = { id: uuidv7(), type: 'video', title: 'Current clip', payload: output.additionalOutputs[0] };
+    const workspace = { node: vi.fn(async () => ({ id: f.nodeId, type: 'videoWorkflow' })), nodes: vi.fn(async () => [currentNode]) };
+    const service = new CreativeWorkflowService(repository, {} as never, {} as never, workspace as never);
+    const result = await service.read(f.workspaceId, f.nodeId, false);
+    expect(result).toMatchObject({ assetScope: 'canvas', historyIncluded: false, outputs: [{ nodeId: currentNode.id, path: 'generated/videos/current.mp4' }] });
+    expect(result.runs[0]).toMatchObject({ id: f.run.id, status: 'completed', output: null, outputState: 'on_canvas' });
+    expect(result.runs[0]).not.toHaveProperty('snapshot');
+    expect(JSON.stringify(result)).not.toContain('removed.mp4');
+    expect((await service.read(f.workspaceId, f.nodeId, true)).runs[0]).toMatchObject({ output, snapshot: f.preview.snapshot });
+    expect((await repository.run(f.workspaceId, f.run.id))?.output).toEqual(output);
+    workspace.nodes.mockResolvedValue([]);
+    const removed = await service.read(f.workspaceId, f.nodeId, false);
+    expect(removed.outputs).toEqual([]);
+    expect(removed.runs[0]).toMatchObject({ output: null, outputState: 'removed_from_canvas' });
+    const primaryNode = { id: uuidv7(), type: 'video', title: 'Primary', payload: output };
+    workspace.nodes.mockResolvedValue([primaryNode]);
+    expect((await service.read(f.workspaceId, f.nodeId, false)).runs[0].output).toMatchObject({ path: output.path, additionalOutputs: [] });
+  });
+  it('defaults bridge reads to current Canvas but keeps owner history and explicit agent history available', async () => {
+    const f = await fixture(), actor = { type: 'agent' as const, nodeId: uuidv7(), taskId: uuidv7() };
+    const authorize = vi.spyOn(creativeWorkflowService, 'assertActor').mockResolvedValue({} as never);
+    const read = vi.spyOn(creativeWorkflowService, 'read').mockResolvedValue({} as never);
+    try {
+      const action = new ExecuteCreativeMediaAction();
+      await action.execute(CreativeMediaDto.from(f.workspaceId, actor, 'read', f.nodeId));
+      expect(read).toHaveBeenLastCalledWith(f.workspaceId, f.nodeId, false);
+      await action.execute(CreativeMediaDto.from(f.workspaceId, actor, 'read', f.nodeId, { includeHistory: true }));
+      expect(read).toHaveBeenLastCalledWith(f.workspaceId, f.nodeId, true);
+      await action.execute(CreativeMediaDto.from(f.workspaceId, { type: 'user' }, 'read', f.nodeId));
+      expect(read).toHaveBeenLastCalledWith(f.workspaceId, f.nodeId, true);
+      expect(() => CreativeMediaDto.from(f.workspaceId, actor, 'read', f.nodeId, { includeHistory: 'false' })).toThrow();
+    } finally { authorize.mockRestore(); read.mockRestore(); }
+  });
   it('prevents agents from removing or replacing a character chosen for an existing scene', async () => {
     const workspaceId = uuidv7(), nodeId = uuidv7(), characterId = uuidv7();
     const node = { id: nodeId, type: 'videoWorkflow' };

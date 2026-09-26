@@ -2281,8 +2281,9 @@
   }
 
   async function deleteNode(id: string) {
+    if (!activeWorkspace) return;
     // X do no passa pela mesma confirmacao do Delete do teclado (modal).
-    pendingNodeDeletion = { nodeIds: [id], edgeIds: [] };
+    pendingNodeDeletion = { workspaceId: activeWorkspace.id, nodeIds: [id] };
   }
 
   async function resizeNode(id: string, params: { x: number; y: number; width: number; height: number }) {
@@ -2787,9 +2788,9 @@
    * perde o no se o usuario cancelar. Arestas passam direto (barato refazer).
    */
   async function handleBeforeDelete({ nodes: deletingNodes }: { nodes: Node[]; edges: Edge[] }): Promise<boolean> {
-    if (designModeNodeId) return false;
+    if (designModeNodeId || !activeWorkspace) return false;
     if (!deletingNodes.length) return true;
-    pendingNodeDeletion = { nodeIds: deletingNodes.map((node) => node.id), edgeIds: [] };
+    pendingNodeDeletion = { workspaceId: activeWorkspace.id, nodeIds: deletingNodes.map((node) => node.id) };
     return false;
   }
 
@@ -2797,19 +2798,24 @@
   async function confirmNodeDeletion() {
     const pending = pendingNodeDeletion;
     pendingNodeDeletion = null;
-    if (!pending || !activeWorkspace) return;
+    if (!pending || pending.workspaceId !== activeWorkspace?.id) return;
     snapshot();
-    for (const edgeId of pending.edgeIds) {
-      await api(`/api/agent-room/workspaces/${activeWorkspace.id}/edges/${edgeId}`, { method: 'DELETE' }).catch(() => {});
-    }
+    let failed = 0;
     for (const nodeId of pending.nodeIds) {
-      await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${nodeId}`, { method: 'DELETE' }).catch(() => {});
+      try {
+        await api(`/api/agent-room/workspaces/${pending.workspaceId}/nodes/${nodeId}`, { method: 'DELETE' });
+        if (activeWorkspace?.id === pending.workspaceId) {
+          nodes = nodes.filter((node) => node.id !== nodeId);
+          edges = edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
+        }
+      } catch {
+        failed++;
+      }
     }
-    nodes = nodes.filter((node) => !pending.nodeIds.includes(node.id));
-    edges = edges.filter((edge) => !pending.edgeIds.includes(edge.id) && !pending.nodeIds.includes(edge.source) && !pending.nodeIds.includes(edge.target));
+    if (failed) toast.error(m['canvas.del_nodes_failed']({ count: failed }));
   }
 
-  let pendingNodeDeletion = $state<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
+  let pendingNodeDeletion = $state<{ workspaceId: string; nodeIds: string[] } | null>(null);
   let selectedEdgeId = $state<string | null>(null);
 
   function handleEdgeClick({ edge }: { edge: Edge; event: MouseEvent }) {
