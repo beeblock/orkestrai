@@ -5,6 +5,16 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.36.3 - 2026-09-26
+
+### Fixed
+
+- Keep Portal pages behind Canvas sidebars, toolbars and responsive-device dropdowns after dragging stops. Observe nested menus and restore the same browser session when they close. Origin-clipped pages use the in-node preview until fully back inside the visible area; right/bottom clipping remains interactive.
+- Separate Canvas scale from the website viewport and browser zoom. Preserve responsive breakpoints, pixel density, scrolling and same-origin Portal independence; only node resizing or the responsive controls change the page dimensions.
+- Capture the complete logical Portal viewport, including its current scroll position and protected-field masks, instead of a clipped Canvas fragment.
+- Prevent Portal flashes and oversized page frames during zoom and at idle. Detach screenshot-only native resizes from the visible hierarchy, serialize captures, wait for the restored compositor frame, and stop treating agent reads or title changes as page reloads.
+- Prevent a native Electron crash when opening or inspecting a newly created Portal. Keep native sizing separate from device emulation, wait for document readiness, recover after failed navigation or renderer loss, and discard captures taken across document changes.
+
 ## 0.36.2 - 2026-09-26
 
 ### Fixed

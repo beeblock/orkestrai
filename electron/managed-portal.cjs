@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { managedPortalPartition, isAllowedPortalUrl, shouldOpenPortalInCanvas, publicPortalUrl } = require('./portal-policy.cjs');
+const { portalPresentation } = require('./portal-presentation.cjs');
 
 const MAX_RESULT_CHARS = 500_000;
 const { INIT_SCRIPT, SNAPSHOT_SCRIPT } = require('./portal-dom.cjs');
@@ -23,6 +24,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   const opening = new Map();
 
   function dispose(managed) {
+    managed.disposed = true;
     managed.visible = false;
     managed.clip.setVisible(false);
     if (managed.parent && !managed.parent.isDestroyed()) managed.parent.contentView.removeChildView(managed.clip);
@@ -37,24 +39,143 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   function layout(managed) {
+    if (managed.disposed) return;
     if (!managed.parent || !managed.geometry || !managed.visible) { managed.clip.setVisible(false); return; }
     // DOM transforms and native View geometry cannot be committed atomically.
     // The renderer presents its cached page during motion without changing the
     // session or revoking the agent's access to the visible Portal.
     if (managed.geometry.moving) { managed.clip.setVisible(false); return; }
-    const { bounds, clip, zoom } = managed.geometry;
-    managed.clip.setBounds(clip);
+    const { frame, metrics, previewOnly } = portalPresentation(managed.geometry);
+    if (!frame.width || !frame.height) { managed.clip.setVisible(false); return; }
+    managed.clip.setBounds(frame);
     const tab = managed.tabs.get(managed.activeTabId);
     if (!tab) return;
-    const contentBounds = { x: bounds.x - clip.x, y: bounds.y - clip.y, width: bounds.width, height: bounds.height };
+    if (!tab.documentReady || tab.capturing || tab.presentationPending) { managed.clip.setVisible(false); return; }
+    const contentBounds = { x: 0, y: 0, width: frame.width, height: frame.height };
     const boundsKey = JSON.stringify(contentBounds);
     if (tab.boundsKey !== boundsKey) { tab.view.setBounds(contentBounds); tab.boundsKey = boundsKey; }
-    if (tab.zoomFactor !== zoom) { tab.window.webContents.setZoomFactor(zoom); tab.zoomFactor = zoom; }
+    const presentationKey = JSON.stringify(metrics);
+    if (tab.presentationKey !== presentationKey) {
+      managed.clip.setVisible(false);
+      if (tab.presentationPending || tab.failedPresentationKey === presentationKey) return;
+      tab.presentationPending = true;
+      const epoch = tab.presentationEpoch;
+      tab.presentationFlight = debuggerCommand(tab, 'Emulation.setDeviceMetricsOverride', metrics).then(async () => {
+        if (epoch !== tab.presentationEpoch || !tab.documentReady) return;
+        // Pump a correctly sized frame while the enclosing native View is hidden.
+        // stayHidden would leave an initially hidden renderer without a frame.
+        await capturePresentedPage(tab);
+        if (epoch !== tab.presentationEpoch || !tab.documentReady) return;
+        tab.presentationKey = presentationKey;
+        tab.failedPresentationKey = undefined;
+      }).catch(() => {
+        if (epoch !== tab.presentationEpoch) return;
+        tab.failedPresentationKey = presentationKey;
+        diagnostics?.write?.('warn', 'managed-portal', 'Could not apply Portal presentation.', { nodeId: managed.nodeId });
+      }).finally(() => {
+        tab.presentationPending = false;
+        if (!tab.window.isDestroyed()) layout(managed);
+      });
+      return;
+    }
+    if (previewOnly) { managed.clip.setVisible(false); return; }
     for (const candidate of managed.tabs.values()) {
       const visible = candidate === tab;
       if (candidate.presented !== visible) { candidate.view.setVisible(visible); candidate.presented = visible; }
     }
     managed.clip.setVisible(true);
+  }
+
+  async function debuggerCommand(tab, method, parameters) {
+    const dbg = tab.window.webContents.debugger;
+    if (!dbg.isAttached()) dbg.attach('1.3');
+    return dbg.sendCommand(method, parameters);
+  }
+
+  async function capturePresentedPage(tab) {
+    // did-finish-load can precede the first compositor surface. Retry only this
+    // transient native error; never wait indefinitely or retry a closed page.
+    for (let attempt = 0; ; attempt++) {
+      if (tab.managed.disposed || tab.window.isDestroyed() || !tab.documentReady) throw new Error('Portal page is loading or unavailable.');
+      try { return await tab.window.webContents.capturePage(); }
+      catch (error) {
+        if (attempt >= 19 || !String(error?.message).includes('Current display surface not available')) throw error;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+  }
+
+  function capturePage(tab, rect, maxDimension, protect = false) {
+    const next = (tab.captureFlight || Promise.resolve()).catch(() => {}).then(() => captureDetachedPage(tab, rect, maxDimension, protect));
+    tab.captureFlight = next;
+    return next.finally(() => { if (tab.captureFlight === next) tab.captureFlight = undefined; });
+  }
+
+  async function captureDetachedPage(tab, rect, maxDimension, protect) {
+    const { managed, view } = tab;
+    if (managed.disposed || tab.window.isDestroyed()) throw new Error('The Portal tab was closed.');
+    if (!tab.documentReady) throw new Error('Portal page is loading or unavailable.');
+    const epoch = tab.presentationEpoch;
+    // CDP screenshots temporarily resize the native widget to the logical page.
+    // Never let that widget participate in the window's visible view hierarchy.
+    tab.capturing = true;
+    let result;
+    try {
+      await tab.presentationFlight;
+      if (managed.disposed || tab.window.isDestroyed()) throw new Error('The Portal tab was closed.');
+      view.setVisible(false); tab.presented = false;
+      managed.clip.removeChildView(view);
+      if (managed.activeTabId === tab.id) managed.clip.setVisible(false);
+      result = await captureLogicalPage(tab, rect, maxDimension, protect);
+    } finally {
+      if (!managed.disposed && !tab.window.isDestroyed()) {
+        tab.boundsKey = undefined;
+        tab.presentationKey = undefined;
+        tab.failedPresentationKey = undefined;
+        managed.clip.addChildView(view);
+        tab.capturing = false;
+        layout(managed);
+        await tab.presentationFlight;
+      }
+    }
+    // Navigation can replace the masked document, including during restoration.
+    if (epoch !== tab.presentationEpoch) throw new Error('Portal page changed during capture. Retry on the current page.');
+    return result;
+  }
+
+  async function captureLogicalPage(tab, rect, maxDimension, protect) {
+    const scroll = await tab.window.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: '({ x: scrollX, y: scrollY, density: devicePixelRatio, width: innerWidth, height: innerHeight })' }]);
+    const viewport = tab.managed.geometry?.viewport ?? { width: scroll.width, height: scroll.height };
+    const area = rect ?? { x: 0, y: 0, ...viewport };
+    const scale = maxDimension ? Math.min(1, maxDimension / (Math.max(area.width, area.height) * scroll.density)) : 1;
+    // Capture the logical page, not just the slice visible beside Canvas controls.
+    const capture = async () => {
+      const paint = capturePresentedPage(tab).then(() => undefined, error => error);
+      if (!tab.managed.geometry) {
+        const error = await paint;
+        if (error) throw error;
+      }
+      try {
+        return await debuggerCommand(tab, 'Page.captureScreenshot', {
+          format: 'png', captureBeyondViewport: true, clip: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
+        });
+      } finally {
+        const error = await paint;
+        if (error) throw error;
+      }
+    };
+    let result;
+    if (protect) {
+      await world(tab, 'globalThis.__orkestraiControlledPortal.mask(true)');
+      try {
+        // CDP captures a newly composited frame after the synchronous mask update.
+        // A requestAnimationFrame promise can stall hidden isolated-world scripts.
+        result = await capture();
+      } finally { await world(tab, 'globalThis.__orkestraiControlledPortal.mask(false)').catch(() => {}); }
+    } else result = await capture();
+    const { data } = result;
+    const png = Buffer.from(data, 'base64');
+    return { dataUrl: `data:image/png;base64,${data}`, width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
   }
 
   function configureContents(contents, managed, tabId) {
@@ -88,7 +209,13 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       if (!hostAllowed(url, managed.profile.allowedHosts, contents.getURL())) event.preventDefault();
     });
     for (const event of ['did-navigate', 'did-navigate-in-page', 'did-finish-load', 'page-title-updated']) {
-      contents.on(event, () => onState?.(managed.workspaceId, managed.nodeId, state(managed)));
+      contents.on(event, () => {
+        if (event === 'did-finish-load') {
+          const tab = managed.tabs.get(tabId);
+          if (tab) tab.documentRevision++;
+        }
+        onState?.(managed.workspaceId, managed.nodeId, state(managed));
+      });
     }
     contents.on('did-navigate', (_event, url) => {
       const tab = managed.tabs.get(tabId);
@@ -133,13 +260,37 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       },
     });
     const contents = view.webContents;
+    // Page zoom is shared by origin within a session. Canvas zoom must never use it.
+    contents.setZoomFactor(1);
     const window = { webContents: contents, loadURL: (url) => contents.loadURL(url),
       isDestroyed: () => contents.isDestroyed(), destroy: () => contents.close() };
     view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
     view.setVisible(false); managed.clip.addChildView(view);
-    const tab = { id: tabId, managed, window, view, url: 'about:blank', title: '' };
+    const tab = { id: tabId, managed, window, view, url: 'about:blank', title: '', documentRevision: 0,
+      documentReady: false, presentationEpoch: 0 };
     managed.tabs.set(tabId, tab);
     configureContents(window.webContents, managed, tabId);
+    const invalidateDocument = () => {
+      tab.documentReady = false;
+      tab.presentationEpoch++;
+      tab.presentationKey = undefined;
+      tab.failedPresentationKey = undefined;
+      layout(managed);
+    };
+    contents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) invalidateDocument();
+    });
+    contents.on('render-process-gone', invalidateDocument);
+    contents.on('dom-ready', () => {
+      tab.documentReady = true;
+      layout(managed);
+    });
+    contents.on('did-finish-load', () => {
+      // Older builds persisted Canvas scale as per-origin browser zoom.
+      if (contents.getZoomFactor() !== 1) contents.setZoomFactor(1);
+      tab.documentReady = true;
+      layout(managed);
+    });
     contents.on('destroyed', () => {
       managed.tabs.delete(tabId);
       managed.clip.removeChildView(view);
@@ -225,6 +376,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       paused: managed.pauseLocked || managed.profile.paused,
       title: tab?.window.webContents.getTitle() || tab?.title || '',
       activeTabId: managed.activeTabId,
+      documentRevision: tab?.documentRevision ?? 0,
       tabs: [...managed.tabs.values()].filter((item) => !item.window.isDestroyed()).map((item) => ({
         id: item.id, url: publicPortalUrl(item.window.webContents.getURL() || item.url), title: item.window.webContents.getTitle() || item.title,
       })),
@@ -340,26 +492,8 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
         }
         case 'wait': result = await waitFor(tab, request.args, request.timeoutMs); break;
         case 'screenshot': {
-          await world(tab, 'globalThis.__orkestraiControlledPortal.mask(true)');
-          try {
-          // Hidden pages need capture requests to advance the compositor. Discard these
-          // frames until the mask has painted; never return a pre-mask frame to an agent.
-          let painted = false;
-          let paintError;
-          void world(tab, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-            .then(() => { painted = true; }, (error) => { paintError = error; });
-          const deadline = Date.now() + Math.min(request.timeoutMs, 5000);
-          while (!painted && !paintError && Date.now() < deadline) {
-            // Newly hidden surfaces can report UnknownVizError until their first frame.
-            await tab.window.webContents.capturePage().catch(() => undefined);
-            await new Promise((resolve) => setTimeout(resolve, 16));
-          }
-          if (!painted) throw new Error('Portal protected capture could not confirm a rendered frame.');
-          const image = await tab.window.webContents.capturePage();
-          const dataUrl = image.toDataURL();
-          if (dataUrl.length > 28_000_000) throw new Error('Portal screenshot exceeds the 20 MB capture limit.');
-          result = { dataUrl, width: image.getSize().width, height: image.getSize().height };
-          } finally { await world(tab, 'globalThis.__orkestraiControlledPortal.mask(false)').catch(() => {}); }
+          result = await capturePage(tab, undefined, undefined, true);
+          if (result.dataUrl.length > 28_000_000) throw new Error('Portal screenshot exceeds the 20 MB capture limit.');
           break;
         }
         case 'extract': {
@@ -411,13 +545,8 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     const managed = await getManaged(request); const tab = activeTab(managed);
     if (method === 'navigate') { await load(tab, args.url, 30000); return state(managed); }
     if (method === 'inspectScript') return tab.window.webContents.executeJavaScript(String(args.code), true);
-    if (method === 'capture') return (await tab.window.webContents.capturePage(args.rect)).toDataURL();
-    if (method === 'preview') {
-      const image = await tab.window.webContents.capturePage();
-      const size = image.getSize();
-      const scale = Math.min(1, 1600 / Math.max(size.width, size.height));
-      return (scale < 1 ? image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)) }) : image).toDataURL();
-    }
+    if (method === 'capture') return (await capturePage(tab, args.rect)).dataUrl;
+    if (method === 'preview') return (await capturePage(tab, undefined, 1600)).dataUrl;
     if (method === 'state') return state(managed);
     if (method === 'pause' || method === 'resume') { managed.pauseLocked = method === 'pause'; return state(managed); }
     if (method === 'activate') {

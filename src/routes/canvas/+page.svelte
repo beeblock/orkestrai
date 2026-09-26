@@ -2854,7 +2854,7 @@
 <svelte:window onkeydown={handleGlobalKeydown} oncopy={handleShapeCopy} onpaste={handleShapePaste} />
 
 <main class="canvas-page">
-  <aside class="sidebar" inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
+  <aside class="sidebar" data-portal-occluder inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
     {#if !sidebarCollapsed}
       <div class="brand-row">
         <img src="/brand/icon.svg" width="22" height="22" alt="Orkestrai" />
