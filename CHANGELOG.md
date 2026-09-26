@@ -5,6 +5,15 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.36.2 - 2026-09-26
+
+### Fixed
+
+- Keep nodes visible when deletion fails and remove only server-confirmed deletions, including partial selections. Roll back connected-edge deletion if node deletion fails.
+- Separate live Canvas media from preserved generation history in agent image/video workflow reads. Historical paths require an explicit history query; removing a media node does not delete its project file or authorize automatic reuse.
+- Let assigned agents add existing edited project videos, including local montage renders, as playable Canvas nodes through the authenticated CLI/MCP bridge without regenerating, uploading or moving the files. Validate file format, size and optional hash, preserve project boundaries and reuse existing nodes on retries.
+- Expose the configured project folder in agent inventory and video capabilities, with distinct host and WSL paths. Clarify that briefs, prompts, montage sources, renders and final deliverables belong inside that root by default; changing terminal directories does not change the authenticated workspace.
+
 ## 0.36.1 - 2026-09-26
 
 ### Fixed

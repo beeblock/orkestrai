@@ -146,6 +146,24 @@ describe('image delivery normalization', () => {
 });
 
 describe('ImageWorkflowService', () => {
+  it('uses live Canvas outputs and exposes preserved historical paths only on explicit request', async () => {
+    const state = setupWorkflow();
+    const oldPath = 'generated/images/removed.png';
+    const livePath = 'generated/images/current.png';
+    state.getWorkflow().payload.history = [{ id: 'old-run', status: 'succeeded', outputPaths: [oldPath], outputNodeIds: ['removed-image'], sourceMasterPaths: ['generated/images/removed-master.png'] }];
+    state.nodes.push({ ...state.nodes[0], id: 'live-image', type: 'image', payload: { path: livePath, generatedBy: { workflowNodeId: 'workflow-1' } } });
+    state.edges.push({ id: 'live-edge', sourceNodeId: 'live-image', targetNodeId: 'workflow-1' });
+    const service = new ImageWorkflowService();
+    for (const read of [await service.read(state.workspace.id, 'workflow-1'), ...(await service.list(state.workspace.id))]) {
+      expect(read).toMatchObject({ assetScope: 'canvas', historyIncluded: false, historyCount: 1, history: [] });
+      expect(read.outputs.map(output => output.path)).toEqual([livePath]);
+      expect(JSON.stringify(read)).not.toContain(oldPath);
+      expect(JSON.stringify(read)).not.toContain('removed-master.png');
+    }
+    expect((await service.read(state.workspace.id, 'workflow-1', true)).history[0].outputPaths).toEqual([oldPath]);
+    expect((await service.list(state.workspace.id, true))[0].history).toHaveLength(1);
+    expect(state.getWorkflow().payload.history[0].outputPaths).toEqual([oldPath]);
+  });
   it('returns the repaired failure immediately when a running workflow has no run record', async () => {
     const state = setupWorkflow();
     state.getWorkflow().payload.status = 'running';

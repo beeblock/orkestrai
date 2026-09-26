@@ -8,6 +8,7 @@ import { CREATIVE_PROVIDER_IDS } from '../../domain/providers.js';
 const id = z.string().uuid();
 const revision = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 export const creativeProviderSchema = z.enum(CREATIVE_PROVIDER_IDS);
+export const creativeWorkflowReadSchema = z.object({ includeHistory: z.boolean().default(false) }).strict();
 export const creativeModelIdSchema = z.string().max(240).refine(value => CREATIVE_MODEL_IDS.includes(value as typeof CREATIVE_MODEL_IDS[number]) || FAL_ENDPOINT_PATTERN.test(value) || /^dreamina-seedance-[a-z0-9-]{6,80}$/.test(value), 'creative_model_not_found');
 export const creativeCatalogQuerySchema = z.object({
   provider: creativeProviderSchema.default('fal'),
@@ -31,6 +32,13 @@ export const creativePathSchema = z.string().trim().min(1).max(500).refine(
     && !/(^|[\\/])\.\.([\\/]|$)/.test(value) && !/[\x00-\x1f]/.test(value),
   'creative_invalid_path',
 );
+export const creativeVideoImportSchema = z.object({
+  path: creativePathSchema.transform(value => value.replace(/\\/g, '/')),
+  title: z.string().trim().min(1).max(180).regex(/^[^\x00-\x1f]+$/).optional(),
+  expectedSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+}).strict();
+export type CreativeVideoImport = z.infer<typeof creativeVideoImportSchema>;
+
 export const creativeConfigSchema = z.object({
   provider: creativeProviderSchema.default('fal'),
   modelId: creativeModelIdSchema.default('wan-2.7-text'),

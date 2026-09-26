@@ -56,7 +56,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
-  orkestrai video <list|read|create|update|preview|run|cancel|retry_download|remove> [nodeId-or-runId] --task <taskId> [--input <json>]
+  orkestrai video <list|read|import|create|update|preview|run|cancel|retry_download|remove> [nodeId-or-runId] --task <taskId> [--input <json>]
   orkestrai integration list [--json] | integration events [integrationId] [--limit <n>] [--json] | integration execute <integrationId> <action> --input <json> --task <taskId> --idempotency <key> [--json]
   orkestrai tool list [--json] | tool propose --name <nome> --slug <slug> --manifest <json> --task <taskId> | tool update <toolId> --manifest <json> --task <taskId> | tool execute <toolId> --input <json> --task <taskId> --idempotency <key> [--dry-run]
   orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
@@ -321,6 +321,8 @@ export async function run(argv, options = {}) {
         out(JSON.stringify(data, null, 2));
       } else {
         out(`Workspace: ${data.workspace.name}`);
+        if (data.workspace.workingDir) out(`Project folder (host): ${data.workspace.workingDir}`);
+        if (data.workspace.wslWorkingDir) out(`Project folder (WSL ${data.workspace.wslDistribution ?? ''}): ${data.workspace.wslWorkingDir}`);
         const primary = data.workspace.repository;
         if (primary) {
           const runtime = primary.runtimeKind === 'wsl'
@@ -1022,7 +1024,7 @@ export async function run(argv, options = {}) {
     }
     case 'video': {
       const [command, id] = rest;
-      if (!['sequences', 'recipes', 'brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'].includes(command)) throw new Error('Unknown video command.');
+      if (!['import', 'sequences', 'recipes', 'brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'].includes(command)) throw new Error('Unknown video command.');
       const videoFlags = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (flags));
       if (!selfAgent || !videoFlags.task) throw new Error('Video workflows require an active terminal identity and --task.');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/creative-media', {
@@ -1036,7 +1038,7 @@ export async function run(argv, options = {}) {
     case 'image': {
       const [action, nodeId, target] = rest;
       if (action === 'list') {
-        const data = await bridge(config, 'GET', '/api/agent-room/bridge/image-workflows');
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/image-workflows${flags['include-history'] === true || flags['include-history'] === 'true' ? '?includeHistory=true' : ''}`);
         if (flags.json) out(JSON.stringify(data, null, 2));
         else {
           for (const workflow of data) out(`- ${workflow.title} [${workflow.status}] (${workflow.nodeId}) · ${workflow.references.length} refs · ${workflow.outputs.length} outputs`);
@@ -1045,7 +1047,7 @@ export async function run(argv, options = {}) {
         return 0;
       }
       if (action === 'read' && nodeId) {
-        const data = await bridge(config, 'GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}`);
+        const data = await bridge(config, 'GET', `/api/agent-room/bridge/image-workflows/${encodeURIComponent(nodeId)}${flags['include-history'] === true || flags['include-history'] === 'true' ? '?includeHistory=true' : ''}`);
         out(JSON.stringify(data, null, 2));
         return 0;
       }

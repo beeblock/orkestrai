@@ -381,19 +381,19 @@ function runRecord(active: ImageWorkflowActiveRun, status: ImageWorkflowRun['sta
 }
 
 export class ImageWorkflowService {
-  async list(workspaceId: string) {
+  async list(workspaceId: string, includeHistory = false) {
     const [nodes, edges] = await Promise.all([workspaceRepository.listNodes(workspaceId), workspaceRepository.listEdges(workspaceId)]);
-    return Promise.all(nodes.filter((node) => node.type === 'imageWorkflow').map((node) => this.describe(node, nodes, edges)));
+    return Promise.all(nodes.filter((node) => node.type === 'imageWorkflow').map((node) => this.describe(node, nodes, edges, includeHistory)));
   }
 
-  async read(workspaceId: string, nodeId: string) {
+  async read(workspaceId: string, nodeId: string, includeHistory = false) {
     const [node, nodes, edges] = await Promise.all([
       workspaceRepository.getNode(nodeId),
       workspaceRepository.listNodes(workspaceId),
       workspaceRepository.listEdges(workspaceId),
     ]);
     if (!node || node.workspaceId !== workspaceId || node.type !== 'imageWorkflow') throw new ImageWorkflowError('image_workflow_not_found', 404);
-    return this.describe(node, nodes, edges);
+    return this.describe(node, nodes, edges, includeHistory);
   }
 
   async create(dto: CreateImageWorkflowDto) {
@@ -1075,7 +1075,7 @@ export class ImageWorkflowService {
     };
   }
 
-  private async describe(workflow: CanvasNode, nodes: CanvasNode[], edges: Awaited<ReturnType<typeof workspaceRepository.listEdges>>) {
+  private async describe(workflow: CanvasNode, nodes: CanvasNode[], edges: Awaited<ReturnType<typeof workspaceRepository.listEdges>>, includeHistory = false) {
     const connected = connectedNodes(workflow, nodes, edges);
     const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
     const [workspace, agents] = await Promise.all([workspaceRepository.getWorkspace(workflow.workspaceId), bridgeService.listAgents(workflow.workspaceId)]);
@@ -1109,7 +1109,10 @@ export class ImageWorkflowService {
         payload.contextOrder,
       ).map((node) => ({ nodeId: node.id, title: node.title ?? 'Note' })),
       references, executors: summarize('terminal'), outputs,
-      history: (payload.history ?? []).slice(-HISTORY_LIMIT),
+      assetScope: 'canvas',
+      historyIncluded: includeHistory,
+      historyCount: (payload.history ?? []).length,
+      history: includeHistory ? (payload.history ?? []).slice(-HISTORY_LIMIT) : [],
       activeExecution: workspace && payload.activeRun ? this.executionSpec(workspace, workflow, payload.activeRun, agents) : null,
     };
   }

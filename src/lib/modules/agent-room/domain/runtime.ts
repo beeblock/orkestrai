@@ -1,5 +1,15 @@
 import type { TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from './types.js';
 
+/** Host paths and Linux paths are distinct when the workspace uses WSL. */
+export function workspaceProjectContext(workspace: Pick<Workspace, 'id' | 'name' | 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir'>) {
+  return {
+    id: workspace.id, name: workspace.name, workingDir: workspace.workingDir,
+    runtimeKind: workspace.runtimeKind,
+    wslDistribution: workspace.runtimeKind === 'wsl' ? workspace.wslDistribution : null,
+    wslWorkingDir: workspace.runtimeKind === 'wsl' ? workspace.wslWorkingDir : null,
+  };
+}
+
 export function workspaceExecutionRuntime(
   workspace: Pick<Workspace, 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir'>,
 ): WorkspaceExecutionRuntime {

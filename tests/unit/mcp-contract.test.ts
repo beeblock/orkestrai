@@ -17,6 +17,7 @@ import { bridgeBoardTaskSchema, bridgeBoardTaskUpdateSchema } from '$lib/modules
 import { bridgeApplyDesignDeliverySchema, bridgeImportDesignMarkupSchema, previewDesignDeliverySchema } from '$lib/modules/agent-room/contracts/schemas/design-delivery.schema.js';
 import { createAgentApiClientSchema, executeAgentApiClientRunnerSchema, exportAgentApiClientSchema, importAgentApiClientSchema, replaceAgentApiClientSchema, syncAgentApiClientSchema } from '$lib/modules/agent-room/contracts/schemas/apiClient.schema.js';
 import { z } from 'zod';
+import { creativeVideoImportSchema } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';
 import { executeGitOperationSchema, gitOperationInputSchema, openWorkspaceFolderSchema } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
@@ -65,6 +66,7 @@ const bridgeGitExecuteSchema = executeGitOperationSchema.extend({ from: z.string
 type Expectation = { method: string; path: RegExp; schema?: z.ZodTypeAny };
 
 const EXPECTED: Record<string, Expectation> = {
+  video_workflow_import: { method: 'POST', path: /\/bridge\/creative-media$/, schema: z.object({ command: z.literal('import'), taskId: z.string().uuid(), input: creativeVideoImportSchema }).strict() },
   fs_open_folder: { method: 'POST', path: /\/bridge\/fs\/open-folder$/, schema: openWorkspaceFolderSchema },
   list: { method: 'GET', path: /\/bridge\/agents\?/ },
   usage: { method: 'GET', path: /\/bridge\/usage$/ },
@@ -174,6 +176,7 @@ const EXPECTED: Record<string, Expectation> = {
 };
 
 const TOOL_ARGS: Record<string, Record<string, unknown>> = {
+  video_workflow_import: { taskId: '00000000-0000-7000-8000-000000000099', input: { path: 'renders/final.mp4', title: 'Final edit', expectedSha256: 'a'.repeat(64) } },
   fs_open_folder: { path: 'generated/images/my campaign' },
   git_preview: { operation: 'checkout', ref: 'review' },
   git_execute: { operation: 'checkout', ref: 'review', expectedRevision: 'a'.repeat(64), taskId: '00000000-0000-7000-8000-000000000099' },
@@ -446,6 +449,20 @@ const TOOL_ARGS: Record<string, Record<string, unknown>> = {
 };
 
 describe('contrato MCP x bridge (todas as tools)', () => {
+  it('sends historical image reads only when includeHistory is explicitly true', async () => {
+    for (const name of ['image_workflow_list', 'image_workflow_read']) {
+      const input = new PassThrough(), chunks: string[] = [], paths: string[] = [];
+      const done = runMcpServer({ input, write: (chunk: string) => chunks.push(chunk), bridge: async (_method: string, path: string) => { paths.push(path); return {}; }, findFreePort: async () => 45678, selfAgent: 'n1' });
+      try {
+        for (const [index, includeHistory] of [undefined, false, true].entries()) {
+          send(input, { jsonrpc: '2.0', id: index + 1, method: 'tools/call', params: { name, arguments: { nodeId: 'n1', ...(includeHistory === undefined ? {} : { includeHistory }) } } });
+          await waitFor(chunks, index + 1);
+        }
+        const path = `/api/agent-room/bridge/image-workflows${name.endsWith('_read') ? '/n1' : ''}`;
+        expect(paths).toEqual([path, path, `${path}?includeHistory=true`]);
+      } finally { input.end(); await done; }
+    }
+  });
   it('publica referencia local e schemas de lote sem tocar a bridge', async () => {
     const referenceTool = MCP_TOOLS.find((tool) => tool.name === 'design_reference') as any;
     const elementBatchTool = MCP_TOOLS.find((tool) => tool.name === 'design_create_elements') as any;

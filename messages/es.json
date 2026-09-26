@@ -2004,6 +2004,7 @@
   "flow.sync_nothing_new": "Todos los agentes conectados ya están en los pasos.",
   "onboarding.use_current_ws": "Usar el workspace actual",
   "canvas.del_nodes_title": "¿Borrar {count} nodo(s)?",
+  "canvas.del_nodes_failed": "No se pudieron borrar {count} nodo(s). Siguen en el Canvas; ninguno se ocultó como si estuviera borrado.",
   "canvas.del_nodes_desc": "Los terminales borrados pierden la sesión: el historial y el contexto de la conversación se van junto. Las aristas conectadas también se eliminan. No se puede deshacer desde el canvas.",
   "tool.presets": "Abrir biblioteca de presets",
   "canvas.label_presets": "Presets",

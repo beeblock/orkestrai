@@ -49,8 +49,13 @@ export class CreativeMediaFiles {
     if (node?.type === 'image') return this.media(workspaceId, { nodeId });
     const path = (node?.payload as { path?: string })?.path;
     if (node?.type !== 'video' || !path) throw new CreativeMediaError('creative_reference_unavailable');
+    return { nodeId, ...await this.videoFile(workspaceId, path) };
+  }
+
+  async videoFile(workspaceId: string, path: string): Promise<CreativeMediaReference> {
     const mimeType = videoMimeFromPath(path);
-    const handle = await open(await this.workspace.existingPath(workspaceId, path), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const fullPath = await this.workspace.existingPath(workspaceId, path);
+    const handle = await open(fullPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     try {
       const initial = await handle.stat();
       if (!initial.isFile() || initial.size < 12 || initial.size > MAX_CREATIVE_VIDEO_BYTES) throw new CreativeMediaError('creative_reference_size');
@@ -65,7 +70,8 @@ export class CreativeMediaFiles {
       }
       const final = await handle.stat();
       if (size !== initial.size || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || final.ctimeMs !== initial.ctimeMs) throw new CreativeMediaError('creative_reference_changed', 409);
-      return { nodeId, path, mimeType, size, sha256: hash.digest('hex') };
+      if (await this.workspace.existingPath(workspaceId, path) !== fullPath) throw new CreativeMediaError('creative_reference_changed', 409);
+      return { path, mimeType, size, sha256: hash.digest('hex') };
     } finally { await handle.close(); }
   }
 

@@ -1,6 +1,7 @@
 import { constants as fsConstants, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { access, readFile } from 'node:fs/promises';
 import { posix, resolve } from 'node:path';
+import { Connection } from '@beeblock/svelar/database';
 import type { CanvasNodePayload, Workspace, WorkspaceRepositoryRoot } from '../../domain/types.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import { executionRuntimeKey } from '../../domain/runtime.js';
@@ -643,7 +644,7 @@ export class WorkspaceService {
       const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
       await creativeStoryboardRepository.remove(workspaceId, nodeId);
     }
-    await workspaceRepository.deleteNode(nodeId);
+    await Connection.transaction(() => workspaceRepository.deleteNode(nodeId));
     if (node.type === 'terminal') {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       if (workspace) await this.reprovisionBridge(workspace);

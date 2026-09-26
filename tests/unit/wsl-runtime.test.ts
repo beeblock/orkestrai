@@ -10,9 +10,16 @@ import {
 import {
   terminalExecutionRuntime,
   workspaceExecutionRuntime,
+  workspaceProjectContext,
 } from '$lib/modules/agent-room/domain/runtime.js';
 
 describe('WSL workspace runtime', () => {
+  it('identifies the project host root separately from WSL and never substitutes terminal cwd', () => {
+    const native = { id: 'project', name: 'Project', workingDir: '/projects/current', runtimeKind: 'native' as const, wslDistribution: null, wslWorkingDir: null };
+    expect(workspaceProjectContext(native)).toEqual(native);
+    const wsl = { ...native, workingDir: '\\\\wsl.localhost\\Ubuntu-24.04\\home\\dev\\project', runtimeKind: 'wsl' as const, wslDistribution: 'Ubuntu-24.04', wslWorkingDir: '/home/dev/project' };
+    expect(workspaceProjectContext(wsl)).toEqual(wsl);
+  });
   it('uses the workspace runtime by default and permits native or WSL terminal overrides', () => {
     const wslWorkspace = {
       runtimeKind: 'wsl' as const,
