@@ -12,7 +12,7 @@ export type TourAction =
   | { kind: 'createCodeGraph'; title: string }
   | { kind: 'createKnowledge'; title: string }
   | { kind: 'indexCodeGraph' }
-  | { kind: 'createVideoWorkflow'; title: string; prompt: string }
+  | { kind: 'createVideoWorkflow'; title: string; prompt: string; modality?: 'video' | 'audio' }
   | { kind: 'createStoryboard'; title: string }
   | {
       kind: 'createImageWorkflow';

@@ -34,7 +34,7 @@
   async function loadModels(refresh = false) {
     const requested = provider;
     modelsLoading = true; modelError = '';
-    try { const result = await creativeApi<{ models: FalModelSummary[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/models?provider=${requested}&limit=5000${refresh ? '&refresh=true' : ''}`); if (provider === requested) models = result.models; }
+    try { const result = await creativeApi<{ models: FalModelSummary[] }>(`/api/agent-room/workspaces/${workspaceId}/creative-media/models?provider=${requested}&modality=all&limit=5000${refresh ? '&refresh=true' : ''}`); if (provider === requested) models = result.models; }
     catch (cause) { if (provider === requested) modelError = (cause as Error).message; }
     finally { if (provider === requested) modelsLoading = false; }
   }
@@ -58,7 +58,7 @@
     provider = profile?.provider ?? 'fal';
     name = profile?.name ?? 'fal.ai'; enabled = profile?.enabled ?? false; revision = profile?.revision;
     const grant = policies.find(item => item.profileId === id);
-    policy = creativePolicySchema.parse(grant ? { enabled: grant.enabled, allowAgents: grant.allowAgents, allowExternalMedia: grant.allowExternalMedia, modelIds: grant.modelIds, maxRunCents: grant.maxRunCents, maxDayCents: grant.maxDayCents, maxConcurrentRuns: grant.maxConcurrentRuns } : {});
+    policy = creativePolicySchema.parse(grant ? { enabled: grant.enabled, allowAgents: grant.allowAgents, allowExternalMedia: grant.allowExternalMedia, falOutputAccess: grant.falOutputAccess, modelIds: grant.modelIds, maxRunCents: grant.maxRunCents, maxDayCents: grant.maxDayCents, maxConcurrentRuns: grant.maxConcurrentRuns } : {});
     policyRevision = grant?.revision; runUsd = policy.maxRunCents / 100; dayUsd = policy.maxDayCents / 100;
   }
   async function load(selected = profileId) {
@@ -148,6 +148,12 @@
             <label class="setting-row"><span class="text-ui-lg">{m['creative.agents_allowed']()}</span><Switch bind:checked={policy.allowAgents} /></label>
             <label class="setting-row"><span class="text-ui-lg text-pretty">{m['creative.external_allowed']()}</span><Switch bind:checked={policy.allowExternalMedia} /></label>
           </div>
+          {#if provider === 'fal'}
+            <div class="grid gap-2">
+              <label class="grid gap-1.5"><span class="text-ui-lg font-medium">{m['creative.output_access']()}</span><NativeSelect.Root bind:value={policy.falOutputAccess} aria-describedby={`creative-output-access-${instanceId}`}><option value="private">{m['creative.output_private']()}</option><option value="temporary_link">{m['creative.output_temporary_link']()}</option></NativeSelect.Root></label>
+              <p id={`creative-output-access-${instanceId}`} class="text-ui-md leading-relaxed text-pretty text-[var(--app-text-muted)]">{m['creative.output_access_help']()}</p>
+            </div>
+          {/if}
           <fieldset class="grid gap-2"><legend class="mb-2 flex items-center gap-2 text-ui-lg font-medium">{m['creative.allowed_models']()}<span class="rounded-full bg-[var(--app-hover)] px-1.5 font-mono text-[11px] font-normal text-[var(--app-text-soft)] tabular-nums">{policy.modelIds.length}</span></legend>
             <div class="relative"><Search size={14} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-[var(--app-text-muted)]" aria-hidden="true" /><Input bind:value={modelQuery} class="h-8 pl-8 text-[13px]" placeholder={m['creative.search_models']()} aria-label={m['creative.search_models']()} /></div>
             {#if modelsLoading}<p role="status" class="flex items-center gap-2 text-ui-md text-[var(--app-text-muted)]"><LoaderCircle size={12} class="animate-spin" aria-hidden="true" />{m['creative.catalog_loading']()}</p>{/if}

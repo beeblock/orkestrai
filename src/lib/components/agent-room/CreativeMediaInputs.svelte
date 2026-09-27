@@ -9,8 +9,9 @@
   import type { CreativeConfig } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
   import * as m from '$lib/paraglide/messages.js';
 
-  let { workspaceId, bindings, slots, inputs, onChange, onOpenNode }: {
+  let { workspaceId, bindings, slots, inputs, onChange, onOpenNode, audio = false }: {
     workspaceId: string; bindings: CreativeConfig['mediaBindings']; slots: string[]; inputs: CreativeMediaInput[];
+    audio?: boolean;
     onChange: (bindings: CreativeConfig['mediaBindings']) => void; onOpenNode?: (id: string) => void;
   } = $props();
   const inputIndex = $derived(new Map([...inputs, ...bindings.flatMap(binding => {
@@ -33,9 +34,9 @@
   </span>
 {/snippet}
 
-<section class="space-y-3 border-t border-[var(--app-border)] pt-3" aria-label={m['creative.media_bindings']()} data-testid="creative-media-inputs">
-  <div class="flex items-center justify-between gap-2 text-xs font-medium"><span>{m['creative.media_bindings']()}</span><Button size="icon-sm" variant="ghost" disabled={bindings.length >= 50 || !available.length} title={m['creative.add_media']()} aria-label={m['creative.add_media']()} onclick={() => onChange([...bindings, { pointer: available[0], path: '' }])}><Plus size={14} /></Button></div>
-  <p class="text-xs leading-5 text-[var(--app-text-muted)]">{m['creative.upload_disclosure']()}</p>
+<section class="space-y-3 border-t border-[var(--app-border)] pt-3" aria-label={audio ? m['creative_audio.references']() : m['creative.media_bindings']()} data-testid="creative-media-inputs">
+  <div class="flex items-center justify-between gap-2 text-xs font-medium"><span>{audio ? m['creative_audio.references']() : m['creative.media_bindings']()}</span><Button size="icon-sm" variant="ghost" disabled={bindings.length >= 50 || !available.length} title={m['creative.add_media']()} aria-label={m['creative.add_media']()} onclick={() => onChange([...bindings, { pointer: available[0], path: '' }])}><Plus size={14} /></Button></div>
+  <p class="text-xs leading-5 text-[var(--app-text-muted)]">{audio ? m['creative_audio.disclosure']() : m['creative.upload_disclosure']()}</p>
   {#each bindings as binding, index}
     {@const source = mediaBindingInput(binding, inputs)}
     {@const choices = [...new Set([binding.pointer, ...available])].filter(Boolean)}

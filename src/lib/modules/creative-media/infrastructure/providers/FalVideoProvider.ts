@@ -5,18 +5,18 @@ import { CREATIVE_MODELS, MAX_CREATIVE_VIDEO_BYTES } from '../../domain/catalog.
 import { FAL_ENDPOINT_PATTERN, concreteSchema, type ModelSchema, type FalModelContract } from '../../domain/model-contract.js';
 import { genericFalInput } from '../../domain/model-input.js';
 import { falBillingQuantity } from '../../domain/model-pricing.js';
-import { videoMimeFromPath } from '../../domain/video-format.js';
+import { canonicalMediaMime, videoMimeFromPath } from '../../domain/video-format.js';
 import { validateFalParameters } from '../../application/services/FalModelCatalogService.js';
 import { CreativeMediaError } from '../../domain/types.js';
-import type { CreativeProviderStatus, CreativeRemoteHandle, CreativeRemoteVideo, CreativeVideoProvider } from '../../application/ports/CreativeVideoProvider.js';
+import type { CreativeDeliveryOptions, CreativeProviderStatus, CreativeRemoteHandle, CreativeRemoteVideo, CreativeVideoProvider } from '../../application/ports/CreativeVideoProvider.js';
 
 const queueId = z.string().regex(/^[a-zA-Z0-9_-]{16,128}$/);
 const remoteSchema = z.object({ requestId: queueId, statusUrl: z.string().max(2048), responseUrl: z.string().max(2048), cancelUrl: z.string().max(2048) }).strict();
 const fileSchema = z.object({
-  url: z.string().max(4096), content_type: z.enum(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska', 'image/gif', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/flac', 'application/octet-stream']).nullish(),
+  url: z.string().max(4096), content_type: z.preprocess(canonicalMediaMime, z.enum(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska', 'image/gif', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/flac', 'application/octet-stream']).nullish()),
   file_size: z.number().int().positive().max(MAX_CREATIVE_VIDEO_BYTES).nullish(),
   width: z.number().int().positive().max(16384).nullish(), height: z.number().int().positive().max(16384).nullish(),
-  duration: z.number().positive().max(600).nullish(), fps: z.number().positive().max(240).nullish(),
+  duration: z.number().positive().max(86400).nullish(), fps: z.number().positive().max(240).nullish(),
 });
 const videoHosts = new Set(['v3.fal.media', 'v3b.fal.media', 'fal.media', 'storage.googleapis.com', 'cdn3.pixelcut.app', 'di3otfzjg1gxa.cloudfront.net']);
 
@@ -198,14 +198,16 @@ export class FalVideoProvider implements CreativeVideoProvider {
     return { estimatedCents, reservedCents: estimatedCents * 4 };
   }
 
-  async submit(credential: string, config: CreativeConfig, prompt: string, refs: { start?: string; end?: string; media?: Record<string, string> }, contract?: FalModelContract) {
+  async submit(credential: string, config: CreativeConfig, prompt: string, refs: { start?: string; end?: string; media?: Record<string, string> }, contract?: FalModelContract, delivery?: CreativeDeliveryOptions) {
     const input = falVideoInput(config, prompt, refs, contract);
     const endpoint = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS]?.endpoint ?? contract?.id;
     if (!endpoint) throw new CreativeMediaError('creative_model_contract_invalid');
     const response = await this.request(`https://queue.fal.run/${endpoint}`, credential, {
       method: 'POST', headers: {
         'X-Fal-Store-IO': '0', 'X-Fal-No-Retry': '1', 'x-app-fal-disable-fallback': 'true',
-        'X-Fal-Object-Lifecycle-Preference': JSON.stringify({ expiration_duration_seconds: 3600, initial_acl: { default: 'forbid', rules: [] } }),
+        // Output link access is an owner-approved policy pinned to the preview.
+        // Never widen an existing file's ACL or retry a paid submission here.
+        'X-Fal-Object-Lifecycle-Preference': JSON.stringify({ expiration_duration_seconds: 3600, initial_acl: { default: delivery?.falOutputAccess === 'temporary_link' ? 'allow' : 'forbid', rules: [] } }),
       }, body: JSON.stringify(input),
     });
     const result = z.object({ request_id: queueId, status_url: z.string(), response_url: z.string(), cancel_url: z.string() }).safeParse(response);
@@ -252,12 +254,19 @@ export class FalVideoProvider implements CreativeVideoProvider {
     }
     try {
       const response = await this.fetchFn(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(120000) });
-      const contentType = response.headers.get('content-type')?.split(';')[0].trim();
+      if (response.status === 401 || response.status === 403) {
+        await response.body?.cancel();
+        throw new CreativeMediaError('creative_download_denied', 502);
+      }
+      const contentType = canonicalMediaMime(response.headers.get('content-type')?.split(';')[0].trim()) as string | undefined;
       if (!response.ok || !response.body || ![video.mimeType ?? 'video/mp4', 'application/octet-stream'].includes(contentType ?? '') || Number(response.headers.get('content-length') ?? 0) > MAX_CREATIVE_VIDEO_BYTES) {
         await response.body?.cancel();
         throw new CreativeMediaError('creative_download_failed', 502);
       }
       return response;
-    } catch { throw new CreativeMediaError('creative_download_failed', 502); }
+    } catch (error) {
+      if (error instanceof CreativeMediaError) throw error;
+      throw new CreativeMediaError('creative_download_failed', 502);
+    }
   }
 }

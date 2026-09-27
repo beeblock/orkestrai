@@ -10,6 +10,7 @@ export type CreativeWorkflow = { id: string; workspaceId: string; nodeId: string
 export type CreativeReference = { nodeId: string; path: string; sha256: string; size: number; mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; width: number; height: number };
 export type CreativeSnapshot = {
   config: CreativeConfig; prompt: string; catalogRevision: string; revision: number;
+  falOutputAccess?: CreativePolicy['falOutputAccess'];
   startImage: CreativeReference | null; endImage: CreativeReference | null;
   modelContract?: FalModelContract;
   media?: Array<{ pointer: string; reference: CreativeMediaReference }>;
@@ -26,6 +27,7 @@ export type CreativeRun = {
   id: string; workspaceId: string; workflowId: string; nodeId: string; profileId: string;
   status: CreativeRunStatus; snapshot: CreativeSnapshot; reservedCents: number;
   queuePosition: number | null; errorCode: string | null; output: CreativeVideoAsset | null;
+  providerRequestId?: string;
   actor: CreativeActor; createdAt: string; updatedAt: string;
 };
 export type CreativePreview = {

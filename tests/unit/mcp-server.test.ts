@@ -61,6 +61,22 @@ describe('servidor MCP (orkestrai mcp)', () => {
       expect(MCP_TOOLS.find(tool => tool.name === 'task_add')!.description).toContain('dispatch');
     } finally { server.input.end(); await server.done; }
   });
+  it.each(['models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'])('routes audio %s through the shared authenticated creative contract', async command => {
+    const server = startMcp();
+    const input = ['create', 'update'].includes(command) ? { title: 'Narration', config: { modelId: 'fal-ai/elevenlabs/tts/eleven-v3', parameters: { text: 'Only these words.' } } } : {};
+    const args = { taskId: '00000000-0000-4000-8000-000000000001', input };
+    try {
+      server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: `audio_workflow_${command}`, arguments: args } });
+      const result = JSON.parse((await server.waitFor(1)).result.content[0].text);
+      expect(result).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/creative-media', body: { taskId: args.taskId, command } });
+      if (command === 'models') expect(result.body.input.modality).toBe('audio');
+      if (['create', 'update'].includes(command)) expect(result.body.input.config).toMatchObject({ modality: 'audio', outputDirectory: 'generated/audio', parameters: { text: 'Only these words.' } });
+      const tool = MCP_TOOLS.find(tool => tool.name === `audio_workflow_${command}`)!;
+      expect(tool.inputSchema.required).toContain('taskId');
+      expect(tool.inputSchema.properties).not.toHaveProperty('credential');
+      expect(tool.description).toContain('literal');
+    } finally { server.input.end(); await server.done; }
+  });
   it('exposes per-model contracts and read-only pricing without presenting suggestions as hard constraints', () => {
     const tool = MCP_TOOLS.find(tool => tool.name === 'video_workflow_models')!;
     expect(tool.description).toContain('descriptions, examples, defaults');

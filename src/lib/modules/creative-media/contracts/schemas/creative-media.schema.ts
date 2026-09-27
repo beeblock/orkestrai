@@ -11,6 +11,7 @@ export const creativeProviderSchema = z.enum(CREATIVE_PROVIDER_IDS);
 export const creativeWorkflowReadSchema = z.object({ includeHistory: z.boolean().default(false) }).strict();
 export const creativeModelIdSchema = z.string().max(240).refine(value => CREATIVE_MODEL_IDS.includes(value as typeof CREATIVE_MODEL_IDS[number]) || FAL_ENDPOINT_PATTERN.test(value) || /^dreamina-seedance-[a-z0-9-]{6,80}$/.test(value), 'creative_model_not_found');
 export const creativeCatalogQuerySchema = z.object({
+  modality: z.enum(['video', 'audio', 'all']).default('video'),
   provider: creativeProviderSchema.default('fal'),
   endpoint: creativeModelIdSchema.optional(),
   pricingIds: z.preprocess(value => typeof value === 'string' ? value.split(',') : value, z.array(creativeModelIdSchema).min(1).max(50).optional()),
@@ -40,6 +41,7 @@ export const creativeVideoImportSchema = z.object({
 export type CreativeVideoImport = z.infer<typeof creativeVideoImportSchema>;
 
 export const creativeConfigSchema = z.object({
+  modality: z.enum(['video', 'audio']).default('video'),
   provider: creativeProviderSchema.default('fal'),
   modelId: creativeModelIdSchema.default('wan-2.7-text'),
   parameters: creativeParametersSchema.default({}),
@@ -67,6 +69,7 @@ export const creativeConfigSchema = z.object({
   outputDirectory: creativePathSchema.default('generated/videos'),
   filePrefix: z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/).default('orkestrai-video'),
 }).strict().superRefine((value, ctx) => {
+  if (value.modality === 'audio' && (value.provider !== 'fal' || CREATIVE_MODEL_IDS.includes(value.modelId as typeof CREATIVE_MODEL_IDS[number]))) ctx.addIssue({ code: 'custom', path: ['modelId'], message: 'creative_unsupported_input' });
   if (new Set(value.mediaBindings.map(binding => binding.pointer)).size !== value.mediaBindings.length) ctx.addIssue({ code: 'custom', path: ['mediaBindings'], message: 'creative_duplicate_input' });
   const pointers = value.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer]);
   const aliases = value.characterBindings.flatMap(binding => binding.alias ? [binding.alias] : []);
@@ -97,6 +100,7 @@ export const creativePolicySchema = z.object({
   enabled: z.boolean().default(false),
   allowAgents: z.boolean().default(false),
   allowExternalMedia: z.boolean().default(false),
+  falOutputAccess: z.enum(['private', 'temporary_link']).default('private'),
   modelIds: z.array(creativeModelIdSchema).max(5000).default([]),
   maxRunCents: z.number().int().min(0).max(100000).default(0),
   maxDayCents: z.number().int().min(0).max(1000000).default(0),

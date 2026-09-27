@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
-  import { Film, Settings2, Save, Play, RefreshCw, Square, RotateCcw, X, Download, Plus, LoaderCircle, TriangleAlert, ChevronRight, ExternalLink, History } from '@lucide/svelte';
+  import { AudioLines, Film, Settings2, Save, Play, RefreshCw, Square, RotateCcw, X, Download, Plus, LoaderCircle, TriangleAlert, ChevronRight, ExternalLink, History } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Textarea } from '$lib/components/ui/textarea';
@@ -34,6 +34,7 @@
   type Data = { title: string; workspaceId: string; payload: { revision?: number; draftConfig?: CreativeConfig }; connections?: NodeConnection[]; onDelete: (id: string) => void; onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void; onRename?: (id: string, title: string) => void; onJumpToNode?: (id: string) => void; onRemoveConnection?: (id: string) => void; };
   let { id, data, selected } = $props<NodeProps & { data: Data }>();
   let config = $state<CreativeConfig>(creativeConfigSchema.parse({}));
+  const audioMode = $derived(config.modality === 'audio');
   let catalogProvider = $state<CreativeProviderId>('fal');
   const providerPending = $derived(catalogProvider !== config.provider);
   let characters = $state<CreativeCharacter[]>([]);
@@ -56,7 +57,7 @@
   const endpoint = $derived(`${base}/workflows/${id}`);
   const model = $derived(CREATIVE_MODELS[config.modelId as CreativeModelId]);
   const promptField = $derived(contract ? modelPromptField(contract.schema) : undefined);
-  const modelOptions = $derived([...(catalogProvider === 'fal' ? Object.values(CREATIVE_MODELS).map(item => ({ value: item.id, label: `${item.name} (${item.mode})` })) : []), ...catalog.filter(item => item.status === 'active').map(item => ({ value: item.id, label: `${item.name} · ${item.id}` }))]);
+  const modelOptions = $derived([...(catalogProvider === 'fal' && !audioMode ? Object.values(CREATIVE_MODELS).map(item => ({ value: item.id, label: `${item.name} (${item.mode})` })) : []), ...catalog.filter(item => item.status === 'active').map(item => ({ value: item.id, label: `${item.name} · ${item.id}` }))]);
   const active = $derived(runs.find(run => ACTIVE_CREATIVE_STATUSES.includes(run.status)));
   const images = $derived(inputs.filter(input => input.type === 'image'));
   const notes = $derived(inputs.filter(input => input.type === 'note'));
@@ -70,8 +71,9 @@
   }
   async function loadCatalog(refresh = false) {
     const requested = catalogProvider;
+    const modality = config.modality;
     catalogLoading = true; catalogError = '';
-    try { const result = await creativeApi<{ models: FalModelSummary[]; fetchedAt?: string }>(`${base}/models?provider=${requested}&limit=5000${refresh ? '&refresh=true' : ''}`); if (requested === catalogProvider) { catalog = result.models; catalogDate = result.fetchedAt ?? ''; } }
+    try { const result = await creativeApi<{ models: FalModelSummary[]; fetchedAt?: string }>(`${base}/models?provider=${requested}&modality=${modality}&limit=5000${refresh ? '&refresh=true' : ''}`); if (requested === catalogProvider && modality === config.modality) { catalog = result.models; catalogDate = result.fetchedAt ?? ''; } }
     catch (cause) { if (requested === catalogProvider) catalogError = (cause as Error).message; }
     finally { if (requested === catalogProvider) catalogLoading = false; }
   }
@@ -169,7 +171,7 @@
 </script>
 
 <NodeShell {id} {selected} accent="var(--app-secondary)" minWidth={390} minHeight={420} onResize={data.onResize} connections={data.connections ?? []} titleText={data.title} onRename={data.onRename} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection}>
-  {#snippet icon()}<Film size={14} />{/snippet}
+  {#snippet icon()}{#if audioMode}<AudioLines size={14} />{:else}<Film size={14} />{/if}{/snippet}
   {#snippet title()}{data.title || m['creative.title']()}{/snippet}
   {#snippet actions()}
     <HeaderIconButton class="node-action-btn" label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={13} /></HeaderIconButton>
@@ -180,7 +182,7 @@
     {#if loading}<p role="status" class="vw-pill mb-3 self-start"><LoaderCircle size={12} class="animate-spin" />{m['creative.loading']()}</p>{/if}
     {#if config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id)) || config.requiredReferenceNodeIds.some(id => ![config.startImageNodeId, config.endImageNodeId, ...config.mediaBindings.map(binding => binding.nodeId)].includes(id))}<p role="status" class="vw-callout warning mb-3"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span>{m['storyboard.bind_required']()}</span></p>{/if}
     <fieldset disabled={loading || busy || Boolean(active) || contractLoading} class="min-w-0 space-y-4 disabled:opacity-70" oninput={changed} onchange={changed}>
-      <label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.provider']()}</span><NativeSelect.Root value={catalogProvider} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { catalogProvider = event.currentTarget.value as CreativeProviderId; catalog = []; preview = null; void loadCatalog(); }}>{#each CREATIVE_PROVIDERS as item}<option value={item.id}>{item.name}</option>{/each}</NativeSelect.Root></label>
+      <label class="block space-y-1.5 text-xs font-medium"><span>{audioMode ? m['creative_audio.provider']() : m['creative.provider']()}</span><NativeSelect.Root value={catalogProvider} onchange={(event: Event & { currentTarget: HTMLSelectElement }) => { catalogProvider = event.currentTarget.value as CreativeProviderId; catalog = []; preview = null; void loadCatalog(); }}>{#each CREATIVE_PROVIDERS.filter(item => !audioMode || item.id === 'fal') as item}<option value={item.id}>{item.name}</option>{/each}</NativeSelect.Root></label>
       {#if providerPending}<p role="status" class="vw-callout warning"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" /><span>{m['creative.provider_choose_model']()}</span></p>{/if}
       <div class="grid grid-cols-2 gap-3">
         <CreativeModelPicker {base} profileId={providerPending ? null : config.profileId} value={providerPending ? '' : config.modelId} options={modelOptions} onValueChange={chooseModel} />
@@ -192,12 +194,13 @@
       {#if !providerPending}
       {#if model}<Button size="sm" variant="outline" title={m['creative.full_contract_help']()} onclick={expandContract}>{m['creative.full_contract']()}</Button>{/if}
       {#if contract}<a class="vw-link" href={contract.documentationUrl} target="_blank" rel="noreferrer"><ExternalLink size={12} class="shrink-0" aria-hidden="true" />{contract.id}</a>{/if}
-      <CreativeCharacterBindings workspaceId={data.workspaceId} {config} {contract} disabled={busy || Boolean(active) || loading || contractLoading} onRecords={(value) => characters = value} onChange={(value) => { config.characterBindings = value; changed(); }} />
-      {#if model || promptField}<CreativePrompt value={config.prompt} references={promptReferences} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} onChange={(value) => { config.prompt = value; changed(); }} />{/if}
-      <CreativeShotControls value={config.shot} disabled={busy || Boolean(active) || loading} onChange={(value) => { config.shot = value; changed(); }} />
+      {#if !audioMode}<CreativeCharacterBindings workspaceId={data.workspaceId} {config} {contract} disabled={busy || Boolean(active) || loading || contractLoading} onRecords={(value) => characters = value} onChange={(value) => { config.characterBindings = value; changed(); }} />{/if}
+      {#if model || promptField || config.prompt}<CreativePrompt value={config.prompt} references={promptReferences} maxlength={model?.promptLimit ?? concreteSchema(contract?.schema.properties?.[promptField ?? 'prompt'] ?? {}).maxLength ?? 50000} onChange={(value) => { config.prompt = value; changed(); }} />{/if}
+      {#if !audioMode}<CreativeShotControls value={config.shot} disabled={busy || Boolean(active) || loading} onChange={(value) => { config.shot = value; changed(); }} />{/if}
+      {#if audioMode && contract && !promptField && (config.prompt || config.contextNodeIds.length)}<p role="alert" class="vw-callout warning">{m['creative_audio.literal_input']()}</p>{/if}
       {#if contract}
         {#key `${config.provider}:${contract.id}`}<CreativeModelFields schema={contract.schema} value={config.parameters} managedPointers={[...config.mediaBindings.map(binding => binding.pointer), ...config.characterBindings.flatMap(binding => [...binding.imagePointers, binding.voicePointer])]} onChange={(value) => { config.parameters = value; changed(); }} onValidityChange={(valid) => parametersValid = valid} />{/key}
-        <CreativeMediaInputs workspaceId={data.workspaceId} bindings={config.mediaBindings} slots={mediaSlots} {inputs} onOpenNode={data.onJumpToNode} onChange={(bindings) => { config.mediaBindings = bindings; changed(); }} />
+        {#if !audioMode || mediaSlots.length || config.mediaBindings.length}<CreativeMediaInputs audio={audioMode} workspaceId={data.workspaceId} bindings={config.mediaBindings} slots={mediaSlots} {inputs} onOpenNode={data.onJumpToNode} onChange={(bindings) => { config.mediaBindings = bindings; changed(); }} />{/if}
       {/if}
       {#if model?.startImage}
         <div class="grid grid-cols-2 gap-3">
@@ -212,7 +215,7 @@
       </div>
       {#if model.audioToggle}<label class="flex min-h-8 items-center justify-between gap-3 text-xs font-medium"><span>{m['creative.audio']()}</span><Switch checked={config.generateAudio} onCheckedChange={(value: boolean) => { config.generateAudio = value; changed(); }} /></label><p class="text-xs leading-4 text-[var(--app-text-muted)]">{m['creative.audio_help']()}</p>{:else}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.wan_audio']()}</p>{/if}{/if}
       <div class="flex flex-col">
-      <details class="vw-details"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.notes']()}</span><span class="vw-count">{config.contextNodeIds.length}</span></summary><div class="max-h-36 space-y-0.5 overflow-y-auto pb-2">{#each notes as note}<label class="vw-check"><Checkbox checked={config.contextNodeIds.includes(note.id)} disabled={config.contextNodeIds.length >= 8 && !config.contextNodeIds.includes(note.id)} onCheckedChange={(checked: boolean | 'indeterminate') => noteChecked(note.id, checked === true)} /><span class="break-words">{note.title || note.id.slice(0,8)}</span></label>{/each}{#if !notes.length}<p class="py-1 text-ui-sm text-[var(--app-text-muted)]">{m['creative.no_inputs']()}</p>{/if}</div></details>
+      {#if !audioMode || promptField || config.contextNodeIds.length}<details class="vw-details"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.notes']()}</span><span class="vw-count">{config.contextNodeIds.length}</span></summary><div class="max-h-36 space-y-0.5 overflow-y-auto pb-2">{#each notes as note}<label class="vw-check"><Checkbox checked={config.contextNodeIds.includes(note.id)} disabled={config.contextNodeIds.length >= 8 && !config.contextNodeIds.includes(note.id)} onCheckedChange={(checked: boolean | 'indeterminate') => noteChecked(note.id, checked === true)} /><span class="break-words">{note.title || note.id.slice(0,8)}</span></label>{/each}{#if !notes.length}<p class="py-1 text-ui-sm text-[var(--app-text-muted)]">{m['creative.no_inputs']()}</p>{/if}</div></details>{/if}
       <details class="vw-details"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.advanced']()}</span></summary><div class="space-y-3 pb-2">
         {#if model}<label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.negative_prompt']()}</span><Textarea bind:value={config.negativePrompt} maxlength={model.negativePromptLimit} class="min-h-16" /></label>{/if}
         {#if model?.seed}<label class="block space-y-1.5 text-xs font-medium"><span>{m['creative.seed']()}</span><Input type="number" min={0} max={2147483647} step={1} value={config.seed ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => config.seed = event.currentTarget.value === '' ? null : Number(event.currentTarget.value)} /></label>{/if}
@@ -227,19 +230,20 @@
     {#if billing}<div class="vw-card mt-4 space-y-2 text-xs"><p>{m['creative.billing_rate']({ price: String(billing.unitPrice), unit: billing.unit })}</p><label class="block space-y-1"><span>{m['creative.billing_units']()}</span><Input type="number" min={0.000001} max={1000000000} step="any" value={config.billingUnits ?? ''} oninput={(event: Event & { currentTarget: HTMLInputElement }) => { config.billingUnits = event.currentTarget.value ? Number(event.currentTarget.value) : null; changed(); }} /></label></div>{/if}
     {#if preview}<div class="vw-card mt-4 text-xs leading-5"><strong class="tabular-nums">{m['creative.estimate_value']({ estimate: usd(preview.estimatedCents), reservation: usd(preview.reservedCents) })}</strong><p class="mt-1 text-[var(--app-text-muted)]">{m['creative.budget_help']()}</p>
       {#if preview.priceSource === 'public_list'}<p>{m['creative.quote_public']({ date: preview.priceVerifiedAt ?? '' })}</p>{:else if preview.priceSource === 'account_quote'}<p>{m['creative.quote_account']()}</p>{/if}
+      {#if preview.snapshot.config.provider === 'fal'}<p>{m['creative.output_access']()}: {preview.snapshot.falOutputAccess === 'temporary_link' ? m['creative.output_temporary_link']() : m['creative.output_private']()}</p>{#if preview.snapshot.falOutputAccess === 'temporary_link'}<p class="text-[var(--app-warning)]">{m['creative.output_access_help']()}</p>{/if}{/if}
       <details class="vw-details mt-2"><summary class="vw-summary"><ChevronRight size={14} class="vw-chevron" aria-hidden="true" /><span>{m['creative.outgoing_data']()}</span></summary><p class="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">{preview.snapshot.prompt}</p>{#each [preview.snapshot.startImage, preview.snapshot.endImage].filter(Boolean) as reference}<p class="mt-2 break-all font-mono">{reference?.path} ({reference?.width} × {reference?.height})</p>{/each}{#if preview.snapshot.modelContract}<pre class="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(preview.snapshot.config.parameters, null, 2)}</pre>{#each preview.snapshot.media ?? [] as item}<p class="break-all font-mono">{item.pointer}: {item.reference.path}</p>{/each}{/if}</details>
     </div>{/if}
     <!-- Barra de acoes fixa no rodape da rolagem: salvar/estimar/gerar
          continuam ao alcance mesmo com o formulario longo. -->
     <div class="vw-actions">
       <Button size="sm" variant="outline" disabled={providerPending || loading || busy || Boolean(active) || contractLoading || !parametersValid} onclick={() => execute('save')}><Save size={14} />{m['creative.save']()}</Button>
-      {#if preview}<Button size="sm" class="vw-primary" disabled={providerPending || loading || busy || Boolean(active) || !parametersValid || contractLoading} onclick={() => execute('run')}><Play size={14} />{m['creative.generate']()}</Button>{:else}<Button size="sm" class="vw-primary" disabled={providerPending || loading || busy || Boolean(active) || !config.profileId || !parametersValid || contractLoading || (!model && !contract)} onclick={() => execute('estimate')}><Film size={14} />{m['creative.estimate']()}</Button>{/if}
+      {#if preview}<Button size="sm" class="vw-primary" disabled={providerPending || loading || busy || Boolean(active) || !parametersValid || contractLoading} onclick={() => execute('run')}><Play size={14} />{audioMode ? m['creative_audio.generate']() : m['creative.generate']()}</Button>{:else}<Button size="sm" class="vw-primary" disabled={providerPending || loading || busy || Boolean(active) || !config.profileId || !parametersValid || contractLoading || (!model && !contract)} onclick={() => execute('estimate')}>{#if audioMode}<AudioLines size={14} />{:else}<Film size={14} />{/if}{m['creative.estimate']()}</Button>{/if}
       <Button size="icon-sm" variant="ghost" class="text-[var(--app-text-muted)]" title={m['creative.configure']()} aria-label={m['creative.configure']()} onclick={() => configure = true}><Settings2 size={15} /></Button>
       {#if dirty}<span class="vw-dirty"><span class="vw-dirty-dot" aria-hidden="true"></span>{m['creative.dirty']()}</span>{/if}
     </div>
     <section class="mt-4 flex flex-col gap-2" aria-label={m['creative.history']()}>
       <h3 class="section-label">{m['creative.history']()}</h3>
-      {#if !runs.length}<NodeEmptyState compact icon={History} title={m['creative.no_runs']()} class="vw-empty" />{/if}
+      {#if !runs.length}<NodeEmptyState compact icon={History} title={audioMode ? m['creative_audio.no_runs']() : m['creative.no_runs']()} class="vw-empty" />{/if}
       {#each runs as run (run.id)}
         {@const tone = runTone(run.status)}
         <div class="vw-run space-y-1.5 text-xs">
@@ -247,6 +251,7 @@
           <div class="break-words text-[var(--app-text-muted)] tabular-nums">{run.snapshot.modelContract?.name ?? CREATIVE_MODELS[run.snapshot.config.modelId as CreativeModelId]?.name ?? run.snapshot.config.modelId} · {usd(run.reservedCents)}</div>
           {#if run.snapshot.characters?.length}<p class="break-words">{run.snapshot.characters.map(character => `${character.name} · v${character.version}`).join(', ')}</p>{#if run.status === 'completed'}<p class="text-[var(--app-text-muted)]">{m['creative.character_review_required']()}</p>{/if}{/if}
           {#if run.errorCode}<p class="break-words leading-5 text-[var(--app-danger)]">{creativeError(run.errorCode)}</p>{/if}
+          {#if run.errorCode && run.providerRequestId}<p class="select-text break-all text-[var(--app-text-muted)]">{m['creative.provider_request_id']()}: <code>{run.providerRequestId}</code></p>{/if}
           <div class="flex flex-wrap items-center gap-2 empty:hidden">
             {#if ACTIVE_CREATIVE_STATUSES.includes(run.status) && !['submission_uncertain', 'cancel_requested'].includes(run.status)}
               {#if run.snapshot.config.provider === 'byteplus' && run.status !== 'queued'}<p class="text-xs text-[var(--app-text-muted)]">{m['creative.byteplus_cancel']()}</p>{:else}<Button size="sm" variant="outline" disabled={busy} onclick={() => command(run.id, 'cancel')}><Square size={12} />{m['creative.cancel']()}</Button>{/if}

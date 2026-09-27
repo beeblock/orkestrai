@@ -26,12 +26,13 @@
     GitFork,
     Wrench,
     Film,
+    AudioLines,
     Clapperboard,
     MessageCircleMore,
   } from '@lucide/svelte';
   import type { CanvasNodeType } from '$lib/modules/agent-room/domain/types.js';
 
-  let { type, size = 14 }: { type: CanvasNodeType; size?: number } = $props();
+  let { type, size = 14, audio = false }: { type: CanvasNodeType; size?: number; audio?: boolean } = $props();
 </script>
 
 {#if type === 'terminal'}<SquareTerminal {size} aria-hidden="true" />
@@ -45,6 +46,7 @@
 {:else if type === 'diff'}<GitCompareArrows {size} aria-hidden="true" />
 {:else if type === 'image'}<ImageIcon {size} aria-hidden="true" />
 {:else if type === 'imageWorkflow'}<Sparkles {size} aria-hidden="true" />
+{:else if (type === 'video' || type === 'videoWorkflow') && audio}<AudioLines {size} aria-hidden="true" />
 {:else if type === 'video' || type === 'videoWorkflow'}<Film {size} aria-hidden="true" />
 {:else if type === 'sequence'}<Film {size} aria-hidden="true" />
 {:else if type === 'storyboard'}<Clapperboard {size} aria-hidden="true" />

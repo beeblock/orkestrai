@@ -221,6 +221,18 @@ describe('orkestrai CLI', () => {
     return { lines, out: (line) => lines.push(String(line)) };
   }
 
+  it('routes audio creation and discovery through the same authenticated creative bridge', async () => {
+    const { out } = capture();
+    const env = { ORKESTRAI_NODE_ID: '00000000-0000-7000-8000-000000000001', ORKESTRAI_AGENT_TOKEN: 'terminal-token' };
+    const taskId = '00000000-0000-7000-8000-000000000099';
+    expect(await run(['audio', 'models', '--task', taskId], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/creative-media', body: { command: 'models', taskId, input: { modality: 'audio' } }, agentToken: 'terminal-token' });
+    const input = { title: 'Narration', config: { modelId: 'fal-ai/elevenlabs/tts/eleven-v3', parameters: { text: 'Literal narration.' } } };
+    expect(await run(['audio', 'create', '--task', taskId, '--input', JSON.stringify(input)], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1).body.input).toMatchObject({ ...input, config: { ...input.config, modality: 'audio', outputDirectory: 'generated/audio', filePrefix: 'orkestrai-audio' } });
+    await expect(run(['audio', 'run'], { cwd, out, env: {} })).rejects.toThrow('active terminal identity');
+  });
+
   it('opens an output folder through the authenticated bridge, not Computer', async () => {
     const { out } = capture();
     expect(await run(['fs', 'open-folder', 'generated/images/my campaign'], { cwd, out, env: { ORKESTRAI_AGENT_TOKEN: 'terminal-token' } })).toBe(0);

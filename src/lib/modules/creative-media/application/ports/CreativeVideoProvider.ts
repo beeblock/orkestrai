@@ -1,4 +1,4 @@
-import type { CreativeConfig } from '../../contracts/schemas/creative-media.schema.js';
+import type { CreativeConfig, CreativePolicy } from '../../contracts/schemas/creative-media.schema.js';
 import type { FalModelContract, FalModelPrice } from '../../domain/model-contract.js';
 import type { VideoMime } from '../../domain/video-format.js';
 
@@ -6,6 +6,7 @@ export type CreativeRemoteHandle = {
   requestId: string; statusUrl: string; responseUrl: string; cancelUrl: string;
 };
 export type CreativeEstimateContext = { prompt: string; media: Record<string, string> };
+export type CreativeDeliveryOptions = { falOutputAccess?: CreativePolicy['falOutputAccess'] };
 export type CreativeEstimate = { estimatedCents: number; reservedCents: number; priceSource?: 'account_quote' | 'public_list'; priceVerifiedAt?: string };
 export type CreativeProviderStatus = {
   status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; queuePosition: number | null;
@@ -20,7 +21,7 @@ export interface CreativeVideoProvider {
   prices?(credential: string, endpoints: string[]): Promise<FalModelPrice[]>;
   prepareMedia?(credential: string, media: Record<string, string>): Promise<Record<string, string>>;
   estimate(credential: string, config: CreativeConfig, contract?: FalModelContract, context?: CreativeEstimateContext): Promise<CreativeEstimate>;
-  submit(credential: string, config: CreativeConfig, prompt: string, references: { start?: string; end?: string; media?: Record<string, string> }, contract?: FalModelContract): Promise<CreativeRemoteHandle>;
+  submit(credential: string, config: CreativeConfig, prompt: string, references: { start?: string; end?: string; media?: Record<string, string> }, contract?: FalModelContract, delivery?: CreativeDeliveryOptions): Promise<CreativeRemoteHandle>;
   status(credential: string, handle: CreativeRemoteHandle): Promise<CreativeProviderStatus>;
   cancel(credential: string, handle: CreativeRemoteHandle): Promise<'requested' | 'completed' | 'missing'>;
   result(credential: string, handle: CreativeRemoteHandle, contract?: FalModelContract): Promise<CreativeRemoteVideo>;

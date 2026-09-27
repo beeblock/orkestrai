@@ -30,7 +30,15 @@ export function modelPromptField(schema: ModelSchema) {
   return ['prompt', 'text_prompt'].find(key => concreteSchema(schema.properties?.[key] ?? {}).type === 'string');
 }
 export function isVideoCategory(category: string) {
-  return /(?:^|-)to-video$/.test(category) || ['video-editing', 'video-upscaling', 'video-to-video', 'video', 'video-interpolation', 'video-extension', 'video-inpainting', 'video-outpainting'].includes(category);
+  return /(?:^|-)to-video$/.test(category) || ['image2video', 'text2video', 'video2video', 'video-editing', 'video-upscaling', 'video-to-video', 'video', 'video-interpolation', 'video-extension', 'video-inpainting', 'video-outpainting'].includes(category);
+}
+
+export function isAudioCategory(category: string) {
+  return ['text-to-audio', 'text-to-speech', 'text-to-music', 'audio-to-audio', 'video-to-audio', 'audio', 'music', 'sound-effects'].includes(category);
+}
+
+export function matchesCreativeModality(category: string, modality: 'video' | 'audio' | 'all') {
+  return (modality !== 'audio' && isVideoCategory(category)) || (modality !== 'video' && isAudioCategory(category));
 }
 
 function modelStringSlots(schema: ModelSchema, matches: (path: string) => boolean, used: string[], prefix = '', depth = 0): string[] {

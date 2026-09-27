@@ -72,9 +72,11 @@ export class CreativeQueueService {
           await this.workflows.authorize({ ...workflow, config: run.snapshot.config }, run.actor);
           if (run.snapshot.modelContract && provider.prepareMedia) references.media = await provider.prepareMedia(credential.revealInsideTrustedExecutor(), references.media);
           await this.workflows.authorize({ ...workflow, config: run.snapshot.config }, run.actor);
+          const policy = await repository.policy(run.workspaceId, run.profileId);
+          if (run.snapshot.config.provider === 'fal' && (run.snapshot.falOutputAccess ?? 'private') !== (policy?.falOutputAccess ?? 'private')) throw new CreativeMediaError('creative_preview_expired', 409);
           if (!await repository.transition(run.id, owner, ['queued'], 'submitting', { errorCode: null })) return;
           submitted = true;
-          const handle = await provider.submit(credential.revealInsideTrustedExecutor(), run.snapshot.config, run.snapshot.prompt, references, run.snapshot.modelContract);
+          const handle = await provider.submit(credential.revealInsideTrustedExecutor(), run.snapshot.config, run.snapshot.prompt, references, run.snapshot.modelContract, { falOutputAccess: run.snapshot.falOutputAccess });
           // Cancellation may race with the HTTP response: always retain the
           // provider handle so the following tick can cancel the actual job.
           const saved = await repository.transition(run.id, owner, ['submitting'], 'provider_running', { remote: handle });
@@ -120,6 +122,7 @@ export class CreativeQueueService {
         const outputs = [];
         const videos = [video, ...(video.variants ?? [])];
         if (videos.length > 10) throw new CreativeMediaError('creative_invalid_provider_response');
+        if (run.snapshot.config.modality === 'audio' && videos.some(item => !item.mimeType?.startsWith('audio/'))) throw new CreativeMediaError('creative_invalid_provider_response');
         for (const [index, result] of videos.entries()) {
           const asset = await this.workflows.download(run, result, index, credential);
           outputs.push(asset);
@@ -128,7 +131,7 @@ export class CreativeQueueService {
         }
         const output = { ...outputs[0], ...(outputs.length > 1 ? { additionalOutputs: outputs.slice(1) } : {}) };
         await repository.transition(run.id, owner, ['downloading', 'cancel_requested'], 'completed', { output, errorCode: null });
-        await autonomyPolicyService.recordSemanticEffect({ workspaceId: run.workspaceId, capability: 'integration', operation: 'creative.video.completed', actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null, runId: run.id, input: { nodeId: run.nodeId } }, { path: output.path, sha256: output.sha256, size: output.size });
+        await autonomyPolicyService.recordSemanticEffect({ workspaceId: run.workspaceId, capability: 'integration', operation: run.snapshot.config.modality === 'audio' ? 'creative.audio.completed' : 'creative.video.completed', actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null, runId: run.id, input: { nodeId: run.nodeId } }, { path: output.path, sha256: output.sha256, size: output.size });
       }
     } catch (error) {
       const code = error instanceof CreativeMediaError ? error.code : 'creative_provider_unavailable';

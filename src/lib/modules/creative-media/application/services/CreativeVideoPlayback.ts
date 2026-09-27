@@ -34,7 +34,7 @@ export async function creativeVideoResponse(workspaceId: string, assetId: string
     try { range = videoByteRange(request.headers.get('range'), info.size); }
     catch { await handle.close(); return new Response(null, { status: 416, headers: { 'content-range': `bytes */${info.size}` } }); }
     const start = range?.start ?? 0, end = range?.end ?? info.size - 1;
-    const headers: Record<string, string> = { 'content-type': mimeType, 'content-length': String(end - start + 1), 'accept-ranges': 'bytes', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'content-disposition': `inline; filename="orkestrai-video-${assetId}.${VIDEO_FORMATS[mimeType]}"` };
+    const headers: Record<string, string> = { 'content-type': mimeType, 'content-length': String(end - start + 1), 'accept-ranges': 'bytes', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'content-disposition': `inline; filename="orkestrai-${mimeType.startsWith('audio/') ? 'audio' : 'video'}-${assetId}.${VIDEO_FORMATS[mimeType]}"` };
     if (range) headers['content-range'] = `bytes ${start}-${end}/${info.size}`;
     if (request.method === 'HEAD') { await handle.close(); return new Response(null, { status: range ? 206 : 200, headers }); }
     const stream = handle.createReadStream({ start, end, autoClose: true });

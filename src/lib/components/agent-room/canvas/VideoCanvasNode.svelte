@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Film, Download, Columns2, TriangleAlert, X } from '@lucide/svelte';
+  import { AudioLines, Film, Download, Columns2, TriangleAlert, X } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -16,14 +16,14 @@
   const fileName = $derived(data.payload.path?.split('/').at(-1) ?? '');
 </script>
 <NodeShell {id} {selected} accent="var(--app-secondary)" minWidth={280} minHeight={220} onResize={data.onResize} connections={data.connections ?? []} titleText={data.title} onRename={data.onRename} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection}>
-  {#snippet icon()}<Film size={14} />{/snippet}
-  {#snippet title()}{data.title || m['creative.video']()}{/snippet}
+  {#snippet icon()}{#if data.payload.mimeType?.startsWith('audio/')}<AudioLines size={14} />{:else}<Film size={14} />{/if}{/snippet}
+  {#snippet title()}{data.title || (data.payload.mimeType?.startsWith('audio/') ? m['creative_audio.asset']() : m['creative.video']())}{/snippet}
   {#snippet actions()}<HeaderIconButton class="node-action-btn" label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={13} /></HeaderIconButton><HeaderIconButton class="node-action-btn" label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>{/snippet}
   <div class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-canvas)]">
     {#if data.payload.mimeType === 'image/gif'}
       <img src={url} alt={data.title || m['creative.video']()} class="min-h-0 w-full flex-1 object-contain" onerror={() => failed = true} />
     {:else if data.payload.mimeType?.startsWith('audio/')}
-      <div class="flex min-h-0 flex-1 items-center p-3"><audio src={url} controls preload="metadata" aria-label={data.title || m['creative.audio']()} class="w-full" onerror={() => failed = true}></audio></div>
+      <div class="flex min-h-0 flex-1 items-center p-3"><audio src={url} controls preload="metadata" aria-label={data.title || m['creative_audio.asset']()} class="w-full" onerror={() => failed = true}></audio></div>
     {:else}
     <!-- Generated clips have no supplied caption track; native controls remain accessible. -->
     <!-- svelte-ignore a11y_media_has_caption -->
@@ -33,7 +33,7 @@
          recuperacao (baixar o original) ao lado, no mesmo lugar. -->
     <footer class="flex min-h-10 shrink-0 items-center justify-between gap-3 border-t border-[color-mix(in_srgb,var(--app-border)_80%,transparent)] bg-[var(--app-surface)] py-1.5 pr-1.5 pl-3">
       {#if failed}
-        <span class="flex min-w-0 items-start gap-1.5 text-ui-sm leading-[1.4] text-pretty text-[var(--app-danger)]"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" />{m['creative.video_unavailable']()}</span>
+        <span class="flex min-w-0 items-start gap-1.5 text-ui-sm leading-[1.4] text-pretty text-[var(--app-danger)]"><TriangleAlert size={13} class="mt-px shrink-0" aria-hidden="true" />{data.payload.mimeType?.startsWith('audio/') ? m['creative_audio.unavailable']() : m['creative.video_unavailable']()}</span>
       {:else}
         <span class="meta-mono min-w-0 truncate" title={fileName || undefined}>{#if decodedSize?.width}{decodedSize.width} × {decodedSize.height}{:else if data.payload.width && data.payload.height}{data.payload.width} × {data.payload.height}{:else}{fileName}{/if}</span>
       {/if}

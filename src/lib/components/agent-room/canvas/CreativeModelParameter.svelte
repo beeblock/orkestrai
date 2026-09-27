@@ -33,6 +33,9 @@
   const valid = $derived(!invalidJson && !enumMismatch && !Object.values(childErrors).some(Boolean));
   $effect(() => { const next = valid; untrack(() => onValidityChange(next)); });
   const labels: Record<string, () => string> = {
+    text: m['creative_audio.text'], voice: m['creative_audio.voice'], language_code: m['creative_audio.language'],
+    music_length_ms: m['creative_audio.duration_ms'], duration_ms: m['creative_audio.duration_ms'], duration_seconds: m['creative_audio.duration_seconds'],
+    lyrics: m['creative_audio.lyrics'], force_instrumental: m['creative_audio.instrumental'], is_instrumental: m['creative_audio.instrumental'],
     duration: m['creative.duration'], resolution: m['creative.resolution'], aspect_ratio: m['creative.ratio'], generate_audio: m['creative.audio'],
     seed: m['creative.seed'], negative_prompt: m['creative.negative_prompt'], start_image_url: m['creative.start_image'], end_image_url: m['creative.end_image'], prompt_expansion_mode: m['creative.prompt_expansion'],
     ratio: m['creative.ratio'], first_image_url: m['creative.start_image'], last_image_url: m['creative.end_image'],

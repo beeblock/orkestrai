@@ -1,0 +1,2589 @@
+{
+  "source": "https://api.fal.ai/v1/models?expand=openapi-3.0",
+  "fetchedAt": "2026-09-27",
+  "models": [
+    {
+      "endpoint_id": "fal-ai/elevenlabs/tts/eleven-v3",
+      "metadata": {
+        "display_name": "Elevenlabs Tts Eleven V3",
+        "category": "text-to-audio",
+        "status": "active"
+      },
+      "openapi": {
+        "openapi": "3.0.4",
+        "info": {
+          "title": "Queue OpenAPI for fal-ai/elevenlabs/tts/eleven-v3",
+          "version": "1.0.0",
+          "description": "The OpenAPI schema for the fal-ai/elevenlabs/tts/eleven-v3 queue.",
+          "x-fal-metadata": {
+            "endpointId": "fal-ai/elevenlabs/tts/eleven-v3",
+            "category": "text-to-audio",
+            "thumbnailUrl": "https://v3b.fal.media/files/b/0a9f91a8/oTkavdBnqhpPaT65B3FG8_euEcQphX.png",
+            "playgroundUrl": "https://fal.ai/models/fal-ai/elevenlabs/tts/eleven-v3",
+            "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/tts/eleven-v3/api",
+            "about": "Eleven V3"
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "Authorization",
+              "description": "Fal Key"
+            }
+          },
+          "schemas": {
+            "QueueStatus": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_QUEUE",
+                    "IN_PROGRESS",
+                    "COMPLETED"
+                  ]
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "The request id."
+                },
+                "response_url": {
+                  "type": "string",
+                  "description": "The response url."
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "The status url."
+                },
+                "cancel_url": {
+                  "type": "string",
+                  "description": "The cancel url."
+                },
+                "logs": {
+                  "type": "object",
+                  "description": "The logs.",
+                  "additionalProperties": true
+                },
+                "metrics": {
+                  "type": "object",
+                  "description": "The metrics.",
+                  "additionalProperties": true
+                },
+                "queue_position": {
+                  "type": "integer",
+                  "description": "The queue position."
+                }
+              },
+              "required": [
+                "status",
+                "request_id"
+              ]
+            },
+            "ElevenlabsTtsElevenV3Input": {
+              "type": "object",
+              "title": "TextToSpeechRequestV3",
+              "x-fal-order-properties": [
+                "text",
+                "voice",
+                "stability",
+                "timestamps",
+                "language_code",
+                "apply_text_normalization"
+              ],
+              "required": [
+                "text"
+              ],
+              "description": "Request model for eleven_v3 which doesn't support previous_text/next_text",
+              "properties": {
+                "language_code": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Language Code",
+                  "description": "Language code (ISO 639-1) used to enforce a language for the model."
+                },
+                "timestamps": {
+                  "type": "boolean",
+                  "title": "Timestamps",
+                  "default": false,
+                  "description": "Whether to return timestamps for each word in the generated speech"
+                },
+                "stability": {
+                  "type": "number",
+                  "title": "Stability",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.5,
+                  "description": "Voice stability (0-1)"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Text",
+                  "examples": [
+                    "Hello! This is a test of the text to speech system, powered by ElevenLabs. How does it sound?"
+                  ],
+                  "description": "The text to convert to speech",
+                  "maxLength": 5000
+                },
+                "voice": {
+                  "type": "string",
+                  "title": "Voice",
+                  "description": "The voice to use for speech generation",
+                  "default": "Rachel",
+                  "examples": [
+                    "Aria",
+                    "Roger",
+                    "Sarah",
+                    "Laura",
+                    "Charlie",
+                    "George",
+                    "Callum",
+                    "River",
+                    "Liam",
+                    "Charlotte",
+                    "Alice",
+                    "Matilda",
+                    "Will",
+                    "Jessica",
+                    "Eric",
+                    "Chris",
+                    "Brian",
+                    "Daniel",
+                    "Lily",
+                    "Bill"
+                  ]
+                },
+                "apply_text_normalization": {
+                  "type": "string",
+                  "title": "Apply Text Normalization",
+                  "default": "auto",
+                  "description": "This parameter controls text normalization with three modes: 'auto', 'on', and 'off'. When set to 'auto', the system will automatically decide whether to apply text normalization (e.g., spelling out numbers). With 'on', text normalization will always be applied, while with 'off', it will be skipped.",
+                  "enum": [
+                    "auto",
+                    "on",
+                    "off"
+                  ]
+                }
+              }
+            },
+            "ElevenlabsTtsElevenV3Output": {
+              "type": "object",
+              "title": "TTSOutput",
+              "x-fal-order-properties": [
+                "audio",
+                "timestamps"
+              ],
+              "required": [
+                "audio"
+              ],
+              "properties": {
+                "timestamps": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Timestamps",
+                  "description": "Timestamps for each word in the generated speech. Only returned if `timestamps` is set to True in the request."
+                },
+                "audio": {
+                  "$ref": "#/components/schemas/File",
+                  "examples": [
+                    {
+                      "url": "https://v3.fal.media/files/zebra/zJL_oRY8h5RWwjoK1w7tx_output.mp3"
+                    }
+                  ],
+                  "description": "The generated audio file"
+                }
+              }
+            },
+            "File": {
+              "type": "object",
+              "title": "File",
+              "x-fal-order-properties": [
+                "url",
+                "content_type",
+                "file_name",
+                "file_size"
+              ],
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "file_name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Name",
+                  "examples": [
+                    "z9RV14K95DvU.png"
+                  ],
+                  "description": "The name of the file. It will be auto-generated if not provided."
+                },
+                "content_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Content Type",
+                  "examples": [
+                    "image/png"
+                  ],
+                  "description": "The mime type of the file."
+                },
+                "url": {
+                  "type": "string",
+                  "title": "Url",
+                  "description": "The URL where the file can be downloaded from."
+                },
+                "file_size": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Size",
+                  "examples": [
+                    4404019
+                  ],
+                  "description": "The size of the file in bytes."
+                }
+              }
+            }
+          }
+        },
+        "paths": {
+          "/fal-ai/elevenlabs/tts/eleven-v3/requests/{request_id}/status": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                },
+                {
+                  "name": "logs",
+                  "in": "query",
+                  "required": false,
+                  "schema": {
+                    "type": "number",
+                    "description": "Whether to include logs (`1`) in the response or not (`0`)."
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/tts/eleven-v3/requests/{request_id}/cancel": {
+            "put": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request was cancelled.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "success": {
+                            "type": "boolean",
+                            "description": "Whether the request was cancelled successfully."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/tts/eleven-v3": {
+            "post": {
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ElevenlabsTtsElevenV3Input"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/tts/eleven-v3/requests/{request_id}": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Result of the request.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/ElevenlabsTtsElevenV3Output"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "https://queue.fal.run"
+          }
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    {
+      "endpoint_id": "fal-ai/elevenlabs/music",
+      "metadata": {
+        "display_name": "Elevenlabs Music",
+        "category": "text-to-audio",
+        "status": "active"
+      },
+      "openapi": {
+        "openapi": "3.0.4",
+        "info": {
+          "title": "Queue OpenAPI for fal-ai/elevenlabs/music",
+          "version": "1.0.0",
+          "description": "The OpenAPI schema for the fal-ai/elevenlabs/music queue.",
+          "x-fal-metadata": {
+            "endpointId": "fal-ai/elevenlabs/music",
+            "category": "text-to-audio",
+            "thumbnailUrl": "https://v3b.fal.media/files/b/0a875694/SZffdb8layV90JxfN5fkP_d2048a658d9e4dc9973598f3542833a0.jpg",
+            "playgroundUrl": "https://fal.ai/models/fal-ai/elevenlabs/music",
+            "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/music/api",
+            "about": "Music"
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "Authorization",
+              "description": "Fal Key"
+            }
+          },
+          "schemas": {
+            "QueueStatus": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_QUEUE",
+                    "IN_PROGRESS",
+                    "COMPLETED"
+                  ]
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "The request id."
+                },
+                "response_url": {
+                  "type": "string",
+                  "description": "The response url."
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "The status url."
+                },
+                "cancel_url": {
+                  "type": "string",
+                  "description": "The cancel url."
+                },
+                "logs": {
+                  "type": "object",
+                  "description": "The logs.",
+                  "additionalProperties": true
+                },
+                "metrics": {
+                  "type": "object",
+                  "description": "The metrics.",
+                  "additionalProperties": true
+                },
+                "queue_position": {
+                  "type": "integer",
+                  "description": "The queue position."
+                }
+              },
+              "required": [
+                "status",
+                "request_id"
+              ]
+            },
+            "ElevenlabsMusicInput": {
+              "type": "object",
+              "title": "MusicRequest",
+              "x-fal-order-properties": [
+                "prompt",
+                "composition_plan",
+                "music_length_ms",
+                "force_instrumental",
+                "respect_sections_durations",
+                "output_format"
+              ],
+              "description": "Request format for Elevenlabs Music API",
+              "properties": {
+                "prompt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 4100
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Prompt",
+                  "examples": [
+                    "Mysterious original soundtrack, themes of jungle, rainforest, nature, woodwinds, busy rhythmic tribal percussion."
+                  ],
+                  "description": "The text prompt describing the music to generate"
+                },
+                "respect_sections_durations": {
+                  "type": "boolean",
+                  "title": "Respect Sections Durations",
+                  "default": true,
+                  "description": "Controls how strictly section durations in the composition_plan are enforced. It will only have an effect if it is used with composition_plan. When set to true, the model will precisely respect each section's duration_ms from the plan. When set to false, the model may adjust individual section durations which will generally lead to better generation quality and improved latency, while always preserving the total song duration from the plan."
+                },
+                "composition_plan": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MusicCompositionPlan"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The composition plan for the music"
+                },
+                "force_instrumental": {
+                  "type": "boolean",
+                  "title": "Force Instrumental",
+                  "default": false,
+                  "description": "If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the prompt. Can only be used with prompt."
+                },
+                "output_format": {
+                  "type": "string",
+                  "title": "Output Format",
+                  "default": "mp3_44100_128",
+                  "description": "Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.",
+                  "enum": [
+                    "mp3_22050_32",
+                    "mp3_44100_32",
+                    "mp3_44100_64",
+                    "mp3_44100_96",
+                    "mp3_44100_128",
+                    "mp3_44100_192",
+                    "pcm_8000",
+                    "pcm_16000",
+                    "pcm_22050",
+                    "pcm_24000",
+                    "pcm_44100",
+                    "pcm_48000",
+                    "ulaw_8000",
+                    "alaw_8000",
+                    "opus_48000_32",
+                    "opus_48000_64",
+                    "opus_48000_96",
+                    "opus_48000_128",
+                    "opus_48000_192"
+                  ]
+                },
+                "music_length_ms": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 3000,
+                      "maximum": 600000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Music Length Ms",
+                  "description": "The length of the song to generate in milliseconds. Used only in conjunction with prompt. Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt."
+                }
+              }
+            },
+            "ElevenlabsMusicOutput": {
+              "type": "object",
+              "title": "MusicOutput",
+              "x-fal-order-properties": [
+                "audio"
+              ],
+              "required": [
+                "audio"
+              ],
+              "properties": {
+                "audio": {
+                  "$ref": "#/components/schemas/File",
+                  "examples": [
+                    {
+                      "content_type": "audio/mpeg",
+                      "url": "https://storage.googleapis.com/falserverless/example_outputs/elevenlabs/music_generated.mp3",
+                      "file_name": "music_generated.mp3"
+                    }
+                  ],
+                  "description": "The generated music audio file in MP3 format"
+                }
+              }
+            },
+            "MusicCompositionPlan": {
+              "type": "object",
+              "title": "MusicCompositionPlan",
+              "x-fal-order-properties": [
+                "positive_global_styles",
+                "negative_global_styles",
+                "sections"
+              ],
+              "required": [
+                "positive_global_styles",
+                "negative_global_styles",
+                "sections"
+              ],
+              "properties": {
+                "positive_global_styles": {
+                  "type": "array",
+                  "title": "Positive Global Styles",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The styles that should be present in the entire song."
+                },
+                "sections": {
+                  "type": "array",
+                  "title": "Sections",
+                  "items": {
+                    "$ref": "#/components/schemas/MusicSection"
+                  },
+                  "description": "The sections of the song."
+                },
+                "negative_global_styles": {
+                  "type": "array",
+                  "title": "Negative Global Styles",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The styles that should not be present in the entire song."
+                }
+              }
+            },
+            "File": {
+              "type": "object",
+              "title": "File",
+              "x-fal-order-properties": [
+                "url",
+                "content_type",
+                "file_name",
+                "file_size"
+              ],
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "file_name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Name",
+                  "examples": [
+                    "z9RV14K95DvU.png"
+                  ],
+                  "description": "The name of the file. It will be auto-generated if not provided."
+                },
+                "content_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Content Type",
+                  "examples": [
+                    "image/png"
+                  ],
+                  "description": "The mime type of the file."
+                },
+                "url": {
+                  "type": "string",
+                  "title": "Url",
+                  "description": "The URL where the file can be downloaded from."
+                },
+                "file_size": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Size",
+                  "examples": [
+                    4404019
+                  ],
+                  "description": "The size of the file in bytes."
+                }
+              }
+            },
+            "MusicSection": {
+              "type": "object",
+              "title": "MusicSection",
+              "x-fal-order-properties": [
+                "section_name",
+                "positive_local_styles",
+                "negative_local_styles",
+                "duration_ms",
+                "lines"
+              ],
+              "required": [
+                "section_name",
+                "positive_local_styles",
+                "negative_local_styles",
+                "duration_ms",
+                "lines"
+              ],
+              "properties": {
+                "negative_local_styles": {
+                  "type": "array",
+                  "title": "Negative Local Styles",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The styles that should not be present in this section."
+                },
+                "positive_local_styles": {
+                  "type": "array",
+                  "title": "Positive Local Styles",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The styles that should be present in this section."
+                },
+                "lines": {
+                  "type": "array",
+                  "title": "Lines",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The lyrics of the section. Each line must be at most 200 characters long."
+                },
+                "section_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Section Name",
+                  "description": "The name of the section. Must be between 1 and 100 characters.",
+                  "maxLength": 100
+                },
+                "duration_ms": {
+                  "type": "integer",
+                  "title": "Duration Ms",
+                  "minimum": 3000,
+                  "maximum": 120000,
+                  "description": "The duration of the section in milliseconds. Must be between 3000ms and 120000ms."
+                }
+              }
+            }
+          }
+        },
+        "paths": {
+          "/fal-ai/elevenlabs/music/requests/{request_id}/status": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                },
+                {
+                  "name": "logs",
+                  "in": "query",
+                  "required": false,
+                  "schema": {
+                    "type": "number",
+                    "description": "Whether to include logs (`1`) in the response or not (`0`)."
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/music/requests/{request_id}/cancel": {
+            "put": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request was cancelled.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "success": {
+                            "type": "boolean",
+                            "description": "Whether the request was cancelled successfully."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/music": {
+            "post": {
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ElevenlabsMusicInput"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/music/requests/{request_id}": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Result of the request.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/ElevenlabsMusicOutput"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "https://queue.fal.run"
+          }
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    {
+      "endpoint_id": "fal-ai/elevenlabs/sound-effects/v2",
+      "metadata": {
+        "display_name": "Elevenlabs Sound Effects V2",
+        "category": "text-to-audio",
+        "status": "active"
+      },
+      "openapi": {
+        "openapi": "3.0.4",
+        "info": {
+          "title": "Queue OpenAPI for fal-ai/elevenlabs/sound-effects/v2",
+          "version": "1.0.0",
+          "description": "The OpenAPI schema for the fal-ai/elevenlabs/sound-effects/v2 queue.",
+          "x-fal-metadata": {
+            "endpointId": "fal-ai/elevenlabs/sound-effects/v2",
+            "category": "text-to-audio",
+            "thumbnailUrl": "https://storage.googleapis.com/falserverless/web-examples/elevenlabs/elevenlabs_thumbnail.webp",
+            "playgroundUrl": "https://fal.ai/models/fal-ai/elevenlabs/sound-effects/v2",
+            "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/sound-effects/v2/api",
+            "about": "ElevenLabs Sound Effects Generation. V2\n\nTurn text into sound effects for videos, voice-overs or video games using\nstate-of-the-art sound generation technology."
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "Authorization",
+              "description": "Fal Key"
+            }
+          },
+          "schemas": {
+            "QueueStatus": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_QUEUE",
+                    "IN_PROGRESS",
+                    "COMPLETED"
+                  ]
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "The request id."
+                },
+                "response_url": {
+                  "type": "string",
+                  "description": "The response url."
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "The status url."
+                },
+                "cancel_url": {
+                  "type": "string",
+                  "description": "The cancel url."
+                },
+                "logs": {
+                  "type": "object",
+                  "description": "The logs.",
+                  "additionalProperties": true
+                },
+                "metrics": {
+                  "type": "object",
+                  "description": "The metrics.",
+                  "additionalProperties": true
+                },
+                "queue_position": {
+                  "type": "integer",
+                  "description": "The queue position."
+                }
+              },
+              "required": [
+                "status",
+                "request_id"
+              ]
+            },
+            "ElevenlabsSoundEffectsV2Input": {
+              "type": "object",
+              "title": "SoundEffectRequestV2",
+              "x-fal-order-properties": [
+                "text",
+                "duration_seconds",
+                "prompt_influence",
+                "output_format",
+                "loop"
+              ],
+              "required": [
+                "text"
+              ],
+              "properties": {
+                "loop": {
+                  "type": "boolean",
+                  "title": "Loop",
+                  "default": false,
+                  "description": "Whether to create a sound effect that loops smoothly."
+                },
+                "duration_seconds": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 22
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Duration Seconds",
+                  "description": "Duration in seconds (0.5-22). If None, optimal duration will be determined from prompt."
+                },
+                "text": {
+                  "type": "string",
+                  "title": "Text",
+                  "examples": [
+                    "Spacious braam suitable for high-impact movie trailer moments",
+                    "A gentle wind chime tinkling in a soft breeze"
+                  ],
+                  "description": "The text describing the sound effect to generate",
+                  "maxLength": 450
+                },
+                "output_format": {
+                  "type": "string",
+                  "title": "Output Format",
+                  "default": "mp3_44100_128",
+                  "description": "Output format of the generated audio. Formatted as codec_sample_rate_bitrate.",
+                  "enum": [
+                    "mp3_22050_32",
+                    "mp3_44100_32",
+                    "mp3_44100_64",
+                    "mp3_44100_96",
+                    "mp3_44100_128",
+                    "mp3_44100_192",
+                    "pcm_8000",
+                    "pcm_16000",
+                    "pcm_22050",
+                    "pcm_24000",
+                    "pcm_44100",
+                    "pcm_48000",
+                    "ulaw_8000",
+                    "alaw_8000",
+                    "opus_48000_32",
+                    "opus_48000_64",
+                    "opus_48000_96",
+                    "opus_48000_128",
+                    "opus_48000_192"
+                  ]
+                },
+                "prompt_influence": {
+                  "type": "number",
+                  "title": "Prompt Influence",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.3,
+                  "description": "How closely to follow the prompt (0-1). Higher values mean less variation."
+                }
+              }
+            },
+            "ElevenlabsSoundEffectsV2Output": {
+              "type": "object",
+              "title": "SoundEffectOutput",
+              "x-fal-order-properties": [
+                "audio"
+              ],
+              "required": [
+                "audio"
+              ],
+              "description": "Output format for generated sound effects",
+              "properties": {
+                "audio": {
+                  "$ref": "#/components/schemas/File",
+                  "examples": [
+                    {
+                      "url": "https://v3.fal.media/files/lion/WgnO-jy6WduosuG_Ibobx_sound_effect.mp3"
+                    }
+                  ],
+                  "description": "The generated sound effect audio file in MP3 format"
+                }
+              }
+            },
+            "File": {
+              "type": "object",
+              "title": "File",
+              "x-fal-order-properties": [
+                "url",
+                "content_type",
+                "file_name",
+                "file_size"
+              ],
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "file_name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Name",
+                  "examples": [
+                    "z9RV14K95DvU.png"
+                  ],
+                  "description": "The name of the file. It will be auto-generated if not provided."
+                },
+                "content_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Content Type",
+                  "examples": [
+                    "image/png"
+                  ],
+                  "description": "The mime type of the file."
+                },
+                "url": {
+                  "type": "string",
+                  "title": "Url",
+                  "description": "The URL where the file can be downloaded from."
+                },
+                "file_size": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Size",
+                  "examples": [
+                    4404019
+                  ],
+                  "description": "The size of the file in bytes."
+                }
+              }
+            }
+          }
+        },
+        "paths": {
+          "/fal-ai/elevenlabs/sound-effects/v2/requests/{request_id}/status": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                },
+                {
+                  "name": "logs",
+                  "in": "query",
+                  "required": false,
+                  "schema": {
+                    "type": "number",
+                    "description": "Whether to include logs (`1`) in the response or not (`0`)."
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/sound-effects/v2/requests/{request_id}/cancel": {
+            "put": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request was cancelled.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "success": {
+                            "type": "boolean",
+                            "description": "Whether the request was cancelled successfully."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/sound-effects/v2": {
+            "post": {
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ElevenlabsSoundEffectsV2Input"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/sound-effects/v2/requests/{request_id}": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Result of the request.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/ElevenlabsSoundEffectsV2Output"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "https://queue.fal.run"
+          }
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    {
+      "endpoint_id": "fal-ai/elevenlabs/text-to-dialogue/eleven-v3",
+      "metadata": {
+        "display_name": "Elevenlabs",
+        "category": "text-to-audio",
+        "status": "active"
+      },
+      "openapi": {
+        "openapi": "3.0.4",
+        "info": {
+          "title": "Queue OpenAPI for fal-ai/elevenlabs/text-to-dialogue/eleven-v3",
+          "version": "1.0.0",
+          "description": "The OpenAPI schema for the fal-ai/elevenlabs/text-to-dialogue/eleven-v3 queue.",
+          "x-fal-metadata": {
+            "endpointId": "fal-ai/elevenlabs/text-to-dialogue/eleven-v3",
+            "category": "text-to-audio",
+            "thumbnailUrl": "https://v3b.fal.media/files/b/0a9f922b/QjrjK2Y_vUdOMv3wbQutK_lvizVaD6.png",
+            "playgroundUrl": "https://fal.ai/models/fal-ai/elevenlabs/text-to-dialogue/eleven-v3",
+            "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/text-to-dialogue/eleven-v3/api",
+            "about": "Text To Dialogue"
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "Authorization",
+              "description": "Fal Key"
+            }
+          },
+          "schemas": {
+            "QueueStatus": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_QUEUE",
+                    "IN_PROGRESS",
+                    "COMPLETED"
+                  ]
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "The request id."
+                },
+                "response_url": {
+                  "type": "string",
+                  "description": "The response url."
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "The status url."
+                },
+                "cancel_url": {
+                  "type": "string",
+                  "description": "The cancel url."
+                },
+                "logs": {
+                  "type": "object",
+                  "description": "The logs.",
+                  "additionalProperties": true
+                },
+                "metrics": {
+                  "type": "object",
+                  "description": "The metrics.",
+                  "additionalProperties": true
+                },
+                "queue_position": {
+                  "type": "integer",
+                  "description": "The queue position."
+                }
+              },
+              "required": [
+                "status",
+                "request_id"
+              ]
+            },
+            "ElevenlabsTextToDialogueElevenV3Input": {
+              "type": "object",
+              "title": "TextToDialogueRequest",
+              "x-fal-order-properties": [
+                "inputs",
+                "stability",
+                "use_speaker_boost",
+                "pronunciation_dictionary_locators",
+                "seed",
+                "language_code"
+              ],
+              "required": [
+                "inputs"
+              ],
+              "properties": {
+                "language_code": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Language Code",
+                  "description": "Language code (ISO 639-1) used to enforce a language for the model. An error will be returned if language code is not supported by the model."
+                },
+                "use_speaker_boost": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Use Speaker Boost",
+                  "description": "This setting boosts the similarity to the original speaker. Using this setting requires a slightly higher computational load, which in turn increases latency."
+                },
+                "stability": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Stability",
+                  "description": "Determines how stable the voice is and the randomness between each generation. Lower values introduce broader emotional range for the voice. Higher values can result in a monotonous voice with limited emotion. Must be one of 0.0, 0.5, 1.0, else it will be rounded to the nearest value."
+                },
+                "pronunciation_dictionary_locators": {
+                  "type": "array",
+                  "title": "Pronunciation Dictionary Locators",
+                  "items": {
+                    "$ref": "#/components/schemas/PronunciationDictionaryLocator"
+                  },
+                  "default": [],
+                  "description": "A list of pronunciation dictionary locators (id, version_id) to be applied to the text. They will be applied in order. You may have up to 3 locators per request"
+                },
+                "seed": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Seed",
+                  "description": "Random seed for reproducibility."
+                },
+                "inputs": {
+                  "type": "array",
+                  "title": "Inputs",
+                  "items": {
+                    "$ref": "#/components/schemas/DialogueBlock"
+                  },
+                  "examples": [
+                    [
+                      {
+                        "text": "[applause] Thank you all for coming tonight! Today we have a very special guest with us.",
+                        "voice": "Aria"
+                      },
+                      {
+                        "text": "[gulps] ... [strong canadian accent] [excited] Hello everyone! Thank you all for having me tonight on this special day.",
+                        "voice": "Charlotte"
+                      }
+                    ]
+                  ],
+                  "description": "A list of dialogue inputs, each containing text and a voice ID which will be converted into speech."
+                }
+              }
+            },
+            "ElevenlabsTextToDialogueElevenV3Output": {
+              "type": "object",
+              "title": "TextToDialogueOutput",
+              "x-fal-order-properties": [
+                "audio",
+                "seed"
+              ],
+              "required": [
+                "audio",
+                "seed"
+              ],
+              "properties": {
+                "audio": {
+                  "$ref": "#/components/schemas/File",
+                  "examples": [
+                    {
+                      "url": "https://v3.fal.media/files/zebra/XFeGS8Fq-q1eAPG2sSAo__output.mp3"
+                    }
+                  ],
+                  "description": "The generated audio file"
+                },
+                "seed": {
+                  "type": "integer",
+                  "title": "Seed",
+                  "description": "Random seed for reproducibility."
+                }
+              }
+            },
+            "PronunciationDictionaryLocator": {
+              "type": "object",
+              "title": "PronunciationDictionaryLocator",
+              "x-fal-order-properties": [
+                "pronunciation_dictionary_id",
+                "version_id"
+              ],
+              "properties": {
+                "version_id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Version Id",
+                  "description": "The ID of the version of the pronunciation dictionary. If not provided, the latest version will be used."
+                },
+                "pronunciation_dictionary_id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Pronunciation Dictionary Id",
+                  "description": "The ID of the pronunciation dictionary."
+                }
+              }
+            },
+            "DialogueBlock": {
+              "type": "object",
+              "title": "DialogueBlock",
+              "x-fal-order-properties": [
+                "text",
+                "voice"
+              ],
+              "required": [
+                "text",
+                "voice"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "title": "Text",
+                  "description": "The dialogue text"
+                },
+                "voice": {
+                  "type": "string",
+                  "title": "Voice",
+                  "examples": [
+                    "Aria",
+                    "Roger",
+                    "Sarah",
+                    "Laura",
+                    "Charlie",
+                    "George",
+                    "Callum",
+                    "River",
+                    "Liam",
+                    "Charlotte",
+                    "Alice",
+                    "Matilda",
+                    "Will",
+                    "Jessica",
+                    "Eric",
+                    "Chris",
+                    "Brian",
+                    "Daniel",
+                    "Lily",
+                    "Bill"
+                  ],
+                  "description": "The name or the ID of the voice to be used for the generation."
+                }
+              }
+            },
+            "File": {
+              "type": "object",
+              "title": "File",
+              "x-fal-order-properties": [
+                "url",
+                "content_type",
+                "file_name",
+                "file_size"
+              ],
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "file_name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Name",
+                  "examples": [
+                    "z9RV14K95DvU.png"
+                  ],
+                  "description": "The name of the file. It will be auto-generated if not provided."
+                },
+                "content_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Content Type",
+                  "examples": [
+                    "image/png"
+                  ],
+                  "description": "The mime type of the file."
+                },
+                "url": {
+                  "type": "string",
+                  "title": "Url",
+                  "description": "The URL where the file can be downloaded from."
+                },
+                "file_size": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Size",
+                  "examples": [
+                    4404019
+                  ],
+                  "description": "The size of the file in bytes."
+                }
+              }
+            }
+          }
+        },
+        "paths": {
+          "/fal-ai/elevenlabs/text-to-dialogue/eleven-v3/requests/{request_id}/status": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                },
+                {
+                  "name": "logs",
+                  "in": "query",
+                  "required": false,
+                  "schema": {
+                    "type": "number",
+                    "description": "Whether to include logs (`1`) in the response or not (`0`)."
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/text-to-dialogue/eleven-v3/requests/{request_id}/cancel": {
+            "put": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request was cancelled.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "success": {
+                            "type": "boolean",
+                            "description": "Whether the request was cancelled successfully."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/text-to-dialogue/eleven-v3": {
+            "post": {
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ElevenlabsTextToDialogueElevenV3Input"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/text-to-dialogue/eleven-v3/requests/{request_id}": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Result of the request.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/ElevenlabsTextToDialogueElevenV3Output"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "https://queue.fal.run"
+          }
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    {
+      "endpoint_id": "fal-ai/elevenlabs/voice-changer",
+      "metadata": {
+        "display_name": "ElevenLabs Voice Changer",
+        "category": "audio-to-audio",
+        "status": "active"
+      },
+      "openapi": {
+        "openapi": "3.0.4",
+        "info": {
+          "title": "Queue OpenAPI for fal-ai/elevenlabs/voice-changer",
+          "version": "1.0.0",
+          "description": "The OpenAPI schema for the fal-ai/elevenlabs/voice-changer queue.",
+          "x-fal-metadata": {
+            "endpointId": "fal-ai/elevenlabs/voice-changer",
+            "category": "audio-to-audio",
+            "thumbnailUrl": "https://v3b.fal.media/files/b/0a8a5e18/wKI4AAR-ugj6qdI9HH2P5_7696a622ff46451bb8fa7f0a4e54be13.jpg",
+            "playgroundUrl": "https://fal.ai/models/fal-ai/elevenlabs/voice-changer",
+            "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/voice-changer/api",
+            "about": "ElevenLabs Voice Changer: Change the voice in an audio file."
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "Authorization",
+              "description": "Fal Key"
+            }
+          },
+          "schemas": {
+            "QueueStatus": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_QUEUE",
+                    "IN_PROGRESS",
+                    "COMPLETED"
+                  ]
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "The request id."
+                },
+                "response_url": {
+                  "type": "string",
+                  "description": "The response url."
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "The status url."
+                },
+                "cancel_url": {
+                  "type": "string",
+                  "description": "The cancel url."
+                },
+                "logs": {
+                  "type": "object",
+                  "description": "The logs.",
+                  "additionalProperties": true
+                },
+                "metrics": {
+                  "type": "object",
+                  "description": "The metrics.",
+                  "additionalProperties": true
+                },
+                "queue_position": {
+                  "type": "integer",
+                  "description": "The queue position."
+                }
+              },
+              "required": [
+                "status",
+                "request_id"
+              ]
+            },
+            "ElevenlabsVoiceChangerInput": {
+              "type": "object",
+              "title": "VoiceChangerRequest",
+              "x-fal-order-properties": [
+                "audio_url",
+                "voice",
+                "remove_background_noise",
+                "seed",
+                "output_format"
+              ],
+              "required": [
+                "audio_url"
+              ],
+              "properties": {
+                "audio_url": {
+                  "type": "string",
+                  "title": "Audio Url",
+                  "examples": [
+                    "https://storage.googleapis.com/falserverless/example_inputs/elevenlabs/voice_change_in.mp3"
+                  ],
+                  "description": "The input audio file"
+                },
+                "remove_background_noise": {
+                  "type": "boolean",
+                  "title": "Remove Background Noise",
+                  "default": false,
+                  "description": "If set, will remove the background noise from your audio input using our audio isolation model."
+                },
+                "seed": {
+                  "type": "integer",
+                  "title": "Seed",
+                  "description": "Random seed for reproducibility."
+                },
+                "output_format": {
+                  "type": "string",
+                  "title": "Output Format",
+                  "default": "mp3_44100_128",
+                  "description": "Output format of the generated audio. Formatted as codec_sample_rate_bitrate.",
+                  "enum": [
+                    "mp3_22050_32",
+                    "mp3_44100_32",
+                    "mp3_44100_64",
+                    "mp3_44100_96",
+                    "mp3_44100_128",
+                    "mp3_44100_192",
+                    "pcm_8000",
+                    "pcm_16000",
+                    "pcm_22050",
+                    "pcm_24000",
+                    "pcm_44100",
+                    "pcm_48000",
+                    "ulaw_8000",
+                    "alaw_8000",
+                    "opus_48000_32",
+                    "opus_48000_64",
+                    "opus_48000_96",
+                    "opus_48000_128",
+                    "opus_48000_192"
+                  ]
+                },
+                "voice": {
+                  "type": "string",
+                  "title": "Voice",
+                  "description": "The voice to use for speech generation",
+                  "default": "Rachel",
+                  "examples": [
+                    "Aria",
+                    "Roger",
+                    "Sarah",
+                    "Laura",
+                    "Charlie",
+                    "George",
+                    "Callum",
+                    "River",
+                    "Liam",
+                    "Charlotte",
+                    "Alice",
+                    "Matilda",
+                    "Will",
+                    "Jessica",
+                    "Eric",
+                    "Chris",
+                    "Brian",
+                    "Daniel",
+                    "Lily",
+                    "Bill"
+                  ]
+                }
+              }
+            },
+            "ElevenlabsVoiceChangerOutput": {
+              "type": "object",
+              "title": "VoiceChangerOutput",
+              "x-fal-order-properties": [
+                "audio",
+                "seed"
+              ],
+              "required": [
+                "audio",
+                "seed"
+              ],
+              "properties": {
+                "audio": {
+                  "$ref": "#/components/schemas/File",
+                  "examples": [
+                    {
+                      "url": "https://storage.googleapis.com/falserverless/example_outputs/elevenlabs/voice_change_out.mp3"
+                    }
+                  ],
+                  "description": "The generated audio file"
+                },
+                "seed": {
+                  "type": "integer",
+                  "title": "Seed",
+                  "examples": [
+                    1902083897
+                  ],
+                  "description": "Random seed for reproducibility."
+                }
+              }
+            },
+            "File": {
+              "type": "object",
+              "title": "File",
+              "x-fal-order-properties": [
+                "url",
+                "content_type",
+                "file_name",
+                "file_size"
+              ],
+              "required": [
+                "url"
+              ],
+              "properties": {
+                "file_name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Name",
+                  "examples": [
+                    "z9RV14K95DvU.png"
+                  ],
+                  "description": "The name of the file. It will be auto-generated if not provided."
+                },
+                "content_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Content Type",
+                  "examples": [
+                    "image/png"
+                  ],
+                  "description": "The mime type of the file."
+                },
+                "url": {
+                  "type": "string",
+                  "title": "Url",
+                  "description": "The URL where the file can be downloaded from."
+                },
+                "file_size": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "File Size",
+                  "examples": [
+                    4404019
+                  ],
+                  "description": "The size of the file in bytes."
+                }
+              }
+            }
+          }
+        },
+        "paths": {
+          "/fal-ai/elevenlabs/voice-changer/requests/{request_id}/status": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                },
+                {
+                  "name": "logs",
+                  "in": "query",
+                  "required": false,
+                  "schema": {
+                    "type": "number",
+                    "description": "Whether to include logs (`1`) in the response or not (`0`)."
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/voice-changer/requests/{request_id}/cancel": {
+            "put": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request was cancelled.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "success": {
+                            "type": "boolean",
+                            "description": "Whether the request was cancelled successfully."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/voice-changer": {
+            "post": {
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/ElevenlabsVoiceChangerInput"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/elevenlabs/voice-changer/requests/{request_id}": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Result of the request.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/ElevenlabsVoiceChangerOutput"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "https://queue.fal.run"
+          }
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    {
+      "endpoint_id": "fal-ai/minimax-music/v2.6",
+      "metadata": {
+        "display_name": "Minimax Music 2.6",
+        "category": "text-to-audio",
+        "status": "active"
+      },
+      "openapi": {
+        "openapi": "3.0.4",
+        "info": {
+          "title": "Queue OpenAPI for fal-ai/minimax-music/v2.6",
+          "version": "1.0.0",
+          "description": "The OpenAPI schema for the fal-ai/minimax-music/v2.6 queue.",
+          "x-fal-metadata": {
+            "endpointId": "fal-ai/minimax-music/v2.6",
+            "category": "text-to-audio",
+            "thumbnailUrl": "https://v3b.fal.media/files/b/0a959abf/bBuGvGbMCy6eYzC8n05Ql_7f5c08f2be3f495cb9847f89217309a8.jpg",
+            "playgroundUrl": "https://fal.ai/models/fal-ai/minimax-music/v2.6",
+            "documentationUrl": "https://fal.ai/models/fal-ai/minimax-music/v2.6/api",
+            "about": "Text To Music V2 6"
+          }
+        },
+        "components": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "Authorization",
+              "description": "Fal Key"
+            }
+          },
+          "schemas": {
+            "QueueStatus": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "IN_QUEUE",
+                    "IN_PROGRESS",
+                    "COMPLETED"
+                  ]
+                },
+                "request_id": {
+                  "type": "string",
+                  "description": "The request id."
+                },
+                "response_url": {
+                  "type": "string",
+                  "description": "The response url."
+                },
+                "status_url": {
+                  "type": "string",
+                  "description": "The status url."
+                },
+                "cancel_url": {
+                  "type": "string",
+                  "description": "The cancel url."
+                },
+                "logs": {
+                  "type": "object",
+                  "description": "The logs.",
+                  "additionalProperties": true
+                },
+                "metrics": {
+                  "type": "object",
+                  "description": "The metrics.",
+                  "additionalProperties": true
+                },
+                "queue_position": {
+                  "type": "integer",
+                  "description": "The queue position."
+                }
+              },
+              "required": [
+                "status",
+                "request_id"
+              ]
+            },
+            "MinimaxMusicV26Input": {
+              "properties": {
+                "lyrics": {
+                  "type": "string",
+                  "examples": [
+                    "[verse]\nStreetlights flicker, the night breeze sighs\nShadows stretch as I walk alone\n[chorus]\nWandering, longing, where should I go"
+                  ],
+                  "title": "Lyrics",
+                  "maxLength": 3500,
+                  "description": "Lyrics of the song. Use \\n to separate lines. Supports structure tags: [Intro], [Verse], [Pre Chorus], [Chorus], [Post Chorus], [Hook], [Bridge], [Interlude], [Transition], [Build Up], [Break], [Inst], [Solo], [Outro]. Max 3500 characters. Required when is_instrumental is false.",
+                  "default": ""
+                },
+                "prompt": {
+                  "type": "string",
+                  "examples": [
+                    "City Pop, 80s retro, groovy synth bass, warm female vocal, 104 BPM, nostalgic urban night"
+                  ],
+                  "title": "Prompt",
+                  "maxLength": 2000,
+                  "description": "A description of the music style, mood, genre, and scenario. 10-2000 characters.",
+                  "minLength": 10
+                },
+                "lyrics_optimizer": {
+                  "type": "boolean",
+                  "title": "Lyrics Optimizer",
+                  "description": "When true and lyrics is empty, auto-generates lyrics from the prompt.",
+                  "default": false
+                },
+                "audio_setting": {
+                  "$ref": "#/components/schemas/AudioSetting25",
+                  "description": "Audio configuration settings"
+                },
+                "is_instrumental": {
+                  "type": "boolean",
+                  "title": "Is Instrumental",
+                  "description": "When true, generates vocal-free instrumental music.",
+                  "default": false
+                }
+              },
+              "title": "TextToMusic26Request",
+              "required": [
+                "prompt"
+              ],
+              "type": "object",
+              "x-fal-order-properties": [
+                "prompt",
+                "lyrics",
+                "lyrics_optimizer",
+                "is_instrumental",
+                "audio_setting"
+              ]
+            },
+            "MinimaxMusicV26Output": {
+              "properties": {
+                "audio": {
+                  "examples": [
+                    {
+                      "url": "https://v3b.fal.media/files/b/kangaroo/GJe3sQehFteUTmpDROzOs_output.mp3"
+                    }
+                  ],
+                  "$ref": "#/components/schemas/File",
+                  "description": "The generated music"
+                }
+              },
+              "title": "MusicV26Output",
+              "required": [
+                "audio"
+              ],
+              "type": "object",
+              "x-fal-order-properties": [
+                "audio"
+              ]
+            },
+            "AudioSetting25": {
+              "properties": {
+                "bitrate": {
+                  "enum": [
+                    32000,
+                    64000,
+                    128000,
+                    256000
+                  ],
+                  "title": "Bitrate",
+                  "type": "integer",
+                  "description": "Bitrate of generated audio",
+                  "default": 256000
+                },
+                "sample_rate": {
+                  "enum": [
+                    16000,
+                    24000,
+                    32000,
+                    44100
+                  ],
+                  "title": "Sample Rate",
+                  "type": "integer",
+                  "description": "Sample rate of generated audio",
+                  "default": 44100
+                },
+                "format": {
+                  "enum": [
+                    "mp3",
+                    "wav",
+                    "pcm"
+                  ],
+                  "title": "Format",
+                  "type": "string",
+                  "description": "Audio format",
+                  "default": "mp3"
+                }
+              },
+              "title": "AudioSetting25",
+              "type": "object",
+              "x-fal-order-properties": [
+                "sample_rate",
+                "bitrate",
+                "format"
+              ]
+            },
+            "File": {
+              "properties": {
+                "file_name": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "examples": [
+                    "z9RV14K95DvU.png"
+                  ],
+                  "title": "File Name",
+                  "description": "The name of the file. It will be auto-generated if not provided."
+                },
+                "content_type": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "examples": [
+                    "image/png"
+                  ],
+                  "title": "Content Type",
+                  "description": "The mime type of the file."
+                },
+                "url": {
+                  "title": "Url",
+                  "description": "The URL where the file can be downloaded from.",
+                  "type": "string"
+                },
+                "file_size": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "examples": [
+                    4404019
+                  ],
+                  "title": "File Size",
+                  "description": "The size of the file in bytes."
+                }
+              },
+              "title": "File",
+              "required": [
+                "url"
+              ],
+              "type": "object",
+              "x-fal-order-properties": [
+                "url",
+                "content_type",
+                "file_name",
+                "file_size"
+              ]
+            }
+          }
+        },
+        "paths": {
+          "/fal-ai/minimax-music/v2.6/requests/{request_id}/status": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                },
+                {
+                  "name": "logs",
+                  "in": "query",
+                  "required": false,
+                  "schema": {
+                    "type": "number",
+                    "description": "Whether to include logs (`1`) in the response or not (`0`)."
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/minimax-music/v2.6/requests/{request_id}/cancel": {
+            "put": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "The request was cancelled.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "success": {
+                            "type": "boolean",
+                            "description": "Whether the request was cancelled successfully."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/minimax-music/v2.6": {
+            "post": {
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "$ref": "#/components/schemas/MinimaxMusicV26Input"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "The request status.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/QueueStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/fal-ai/minimax-music/v2.6/requests/{request_id}": {
+            "get": {
+              "parameters": [
+                {
+                  "name": "request_id",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string",
+                    "description": "Request ID"
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Result of the request.",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/MinimaxMusicV26Output"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers": [
+          {
+            "url": "https://queue.fal.run"
+          }
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    }
+  ]
+}

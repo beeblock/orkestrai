@@ -56,7 +56,7 @@ for (const viewport of cases) test(`scrolls video provider fields without hiding
       const scroller = element.closest('[role="tabpanel"]')!.parentElement!.getBoundingClientRect();
       return r.top >= scroller.top && r.bottom <= scroller.bottom;
     })).toBe(true);
-    const concurrency = dialog.getByRole('tabpanel').getByRole('combobox');
+    const concurrency = dialog.getByRole('tabpanel').getByRole('combobox').last();
     await concurrency.scrollIntoViewIfNeeded();
     await concurrency.selectOption('2');
     await expect(concurrency).toHaveValue('2');

@@ -1,0 +1,950 @@
+{
+  "fetchedAt": "2026-09-27T10:12:13.246Z",
+  "models": [
+    {
+      "id": "fal-ai/elevenlabs/tts/eleven-v3",
+      "name": "Elevenlabs Tts Eleven V3",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/tts/eleven-v3/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/sound-effects/v2",
+      "name": "Elevenlabs Sound Effects V2",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/sound-effects/v2/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/tts/multilingual-v2",
+      "name": "ElevenLabs TTS Multilingual v2",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/tts/multilingual-v2/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/music",
+      "name": "Elevenlabs Music",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/music/api"
+    },
+    {
+      "id": "fal-ai/minimax/speech-02-hd",
+      "name": "MiniMax Speech-02 HD",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/speech-02-hd/api"
+    },
+    {
+      "id": "fal-ai/gemini-3.1-flash-tts",
+      "name": "Gemini 3.1 Flash Tts",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/gemini-3.1-flash-tts/api"
+    },
+    {
+      "id": "elevenlabs/music/v2.5",
+      "name": "Elevenlabs Music v2.5",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/elevenlabs/music/v2.5/api"
+    },
+    {
+      "id": "fal-ai/minimax/speech-2.8-hd",
+      "name": "MiniMax Speech 2.8 [HD]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/speech-2.8-hd/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/tts/turbo-v2.5",
+      "name": "ElevenLabs TTS Turbo v2.5",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/tts/turbo-v2.5/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-25/text-to-audio",
+      "name": "Stable Audio 2.5",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-25/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/demucs",
+      "name": "Demucs",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/demucs/api"
+    },
+    {
+      "id": "fal-ai/minimax-music/v2.6",
+      "name": "Minimax Music 2.6",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax-music/v2.6/api"
+    },
+    {
+      "id": "cassetteai/music-generator",
+      "name": "music generator",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/cassetteai/music-generator/api"
+    },
+    {
+      "id": "fal-ai/minimax/voice-clone",
+      "name": "MiniMax Voice Cloning",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/voice-clone/api"
+    },
+    {
+      "id": "bytedance/seed-audio-1.0",
+      "name": "Seed Audio 1.0",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/bytedance/seed-audio-1.0/api"
+    },
+    {
+      "id": "minimax/music-3",
+      "name": "MiniMax Music 3",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/minimax/music-3/api"
+    },
+    {
+      "id": "fal-ai/lyria2",
+      "name": "Lyria2",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/lyria2/api"
+    },
+    {
+      "id": "google/lyria-3.5",
+      "name": "Lyria 3.5",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/lyria-3.5/api"
+    },
+    {
+      "id": "fal-ai/lyria3/pro",
+      "name": "Lyria 3 Pro",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/lyria3/pro/api"
+    },
+    {
+      "id": "fal-ai/minimax-music/v2",
+      "name": "Minimax Music",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax-music/v2/api"
+    },
+    {
+      "id": "fal-ai/stable-audio",
+      "name": "Stable Audio Open",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio/api"
+    },
+    {
+      "id": "fal-ai/minimax/speech-02-turbo",
+      "name": "MiniMax Speech-02 Turbo",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/speech-02-turbo/api"
+    },
+    {
+      "id": "fal-ai/ace-step",
+      "name": "ACE Step",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ace-step/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/text-to-audio",
+      "name": "Stable Audio 3",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/audio-understanding",
+      "name": "Audio Understanding",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/audio-understanding/api"
+    },
+    {
+      "id": "fal-ai/qwen-3-tts/text-to-speech/1.7b",
+      "name": "Qwen 3 TTS - Text to Speech [1.7B]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/qwen-3-tts/text-to-speech/1.7b/api"
+    },
+    {
+      "id": "fal-ai/inworld-tts",
+      "name": "Inworld TTS-1.5 Max",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/inworld-tts/api"
+    },
+    {
+      "id": "fal-ai/minimax/speech-2.8-turbo",
+      "name": "MiniMax Speech 2.8 [Turbo]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/speech-2.8-turbo/api"
+    },
+    {
+      "id": "fal-ai/kokoro/american-english",
+      "name": "Kokoro TTS",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/american-english/api"
+    },
+    {
+      "id": "fal-ai/minimax/voice-design",
+      "name": "MiniMax Voice Design",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/voice-design/api"
+    },
+    {
+      "id": "fal-ai/sam-audio/separate",
+      "name": "Sam Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-audio/separate/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/audio-isolation",
+      "name": "ElevenLabs Audio Isolation",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/audio-isolation/api"
+    },
+    {
+      "id": "xai/tts/v1",
+      "name": "xAI Text to Speech",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/xai/tts/v1/api"
+    },
+    {
+      "id": "sonilo/v1.1/text-to-music",
+      "name": "Sonilo V1.1 Text to Music",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/sonilo/v1.1/text-to-music/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/text-to-dialogue/eleven-v3",
+      "name": "Elevenlabs",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/text-to-dialogue/eleven-v3/api"
+    },
+    {
+      "id": "sonilo/v1.1/text-to-sound-effects",
+      "name": "V1.1 Text to Sound Effects",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/sonilo/v1.1/text-to-sound-effects/api"
+    },
+    {
+      "id": "fal-ai/chatterbox/text-to-speech",
+      "name": "Chatterbox",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/chatterbox/text-to-speech/api"
+    },
+    {
+      "id": "fal-ai/qwen-3-tts/clone-voice/1.7b",
+      "name": "Qwen 3 TTS - Clone Voice [1.7B]",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/qwen-3-tts/clone-voice/1.7b/api"
+    },
+    {
+      "id": "google/gemini-3.8-flash-tts",
+      "name": "Gemini 3.8 Flash TTS",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-3.8-flash-tts/api"
+    },
+    {
+      "id": "fal-ai/gemini-tts",
+      "name": "Gemini TTS",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/gemini-tts/api"
+    },
+    {
+      "id": "cassetteai/sound-effects-generator",
+      "name": "Sound Effects Generator",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/cassetteai/sound-effects-generator/api"
+    },
+    {
+      "id": "fal-ai/minimax/speech-2.6-hd",
+      "name": "MiniMax Speech 2.6 [HD]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/speech-2.6-hd/api"
+    },
+    {
+      "id": "fal-ai/elevenlabs/voice-changer",
+      "name": "ElevenLabs Voice Changer",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/elevenlabs/voice-changer/api"
+    },
+    {
+      "id": "fal-ai/ace-step/prompt-to-audio",
+      "name": "ACE Step Prompt To Audio",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ace-step/prompt-to-audio/api"
+    },
+    {
+      "id": "fal-ai/chatterbox/text-to-speech/multilingual",
+      "name": "Chatterbox",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/chatterbox/text-to-speech/multilingual/api"
+    },
+    {
+      "id": "fal-ai/lyria3",
+      "name": "Lyria3",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/lyria3/api"
+    },
+    {
+      "id": "fal-ai/qwen-3-tts/voice-design/1.7b",
+      "name": "Qwen 3 TTS - Voice Design [1.7B]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/qwen-3-tts/voice-design/1.7b/api"
+    },
+    {
+      "id": "fal-ai/f5-tts",
+      "name": "F5 TTS",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/f5-tts/api"
+    },
+    {
+      "id": "fal-ai/index-tts-2/text-to-speech",
+      "name": "Index TTS 2.0",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/index-tts-2/text-to-speech/api"
+    },
+    {
+      "id": "sonilo/v1.1/video-to-music",
+      "name": "V1.1",
+      "category": "video-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/sonilo/v1.1/video-to-music/api"
+    },
+    {
+      "id": "sonilo/v1.1/video-to-sound-effects",
+      "name": "V1.1 Video to Sound Effects",
+      "category": "video-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/sonilo/v1.1/video-to-sound-effects/api"
+    },
+    {
+      "id": "fal-ai/bytedance/seed-speech/tts/v2",
+      "name": "Bytedance Seed Speech Text to Speech",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/bytedance/seed-speech/tts/v2/api"
+    },
+    {
+      "id": "fal-ai/kling-video/create-voice",
+      "name": "Kling Video Create Voice",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/create-voice/api"
+    },
+    {
+      "id": "resemble-ai/chatterboxhd/text-to-speech",
+      "name": "Chatterboxhd",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/resemble-ai/chatterboxhd/text-to-speech/api"
+    },
+    {
+      "id": "elevenlabs/music/v2",
+      "name": "Elevenlabs Music v2",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/elevenlabs/music/v2/api"
+    },
+    {
+      "id": "fal-ai/ffmpeg-api/merge-audios",
+      "name": "FFmpeg API [Merge Audios]",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ffmpeg-api/merge-audios/api"
+    },
+    {
+      "id": "fal-ai/deepfilternet3",
+      "name": "DeepFilterNet 3",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/deepfilternet3/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/text-to-audio",
+      "name": "Stable Audio 3 Small SFX Text to Audio",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/zonos2",
+      "name": "Zonos2 Text to Speech",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/zonos2/api"
+    },
+    {
+      "id": "alibaba/qwen-audio-3-tts",
+      "name": "Qwen Audio 3.0 TTS (Flash)",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/alibaba/qwen-audio-3-tts/api"
+    },
+    {
+      "id": "fal-ai/kling-video/video-to-audio",
+      "name": "Kling Video",
+      "category": "video-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/video-to-audio/api"
+    },
+    {
+      "id": "fal-ai/mmaudio-v2/text-to-audio",
+      "name": "MMAudio V2 Text to Audio",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/mmaudio-v2/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/ace-step/audio-to-audio",
+      "name": "ACE Step Audio To Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ace-step/audio-to-audio/api"
+    },
+    {
+      "id": "mirelo-ai/sfx1.6/text-to-audio",
+      "name": "Mirelo SFX1.6",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx1.6/text-to-audio/api"
+    },
+    {
+      "id": "mirelo-ai/sfx-v1.5/video-to-audio",
+      "name": "Mirelo SFX V1.5",
+      "category": "video-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx-v1.5/video-to-audio/api"
+    },
+    {
+      "id": "fal-ai/minimax/speech-2.6-turbo",
+      "name": "MiniMax Speech 2.6 [Turbo]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/speech-2.6-turbo/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/text-to-audio",
+      "name": "Stable Audio 3 Small Music Text to Audio",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/vibevoice/7b",
+      "name": "VibeVoice 7B",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vibevoice/7b/api"
+    },
+    {
+      "id": "google/gemini-3.8-flash-lite-tts",
+      "name": "Gemini 3.8 Flash Lite TTS",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/google/gemini-3.8-flash-lite-tts/api"
+    },
+    {
+      "id": "fal-ai/minimax-music",
+      "name": "MiniMax (Hailuo AI) Music",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax-music/api"
+    },
+    {
+      "id": "fal-ai/minimax-music/v2.5",
+      "name": "Minimax Music 2.5",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax-music/v2.5/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/audio-to-audio",
+      "name": "Stable Audio 3 Medium Audio to Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/audio-to-audio/api"
+    },
+    {
+      "id": "fal-ai/kokoro/british-english",
+      "name": "Kokoro TTS (British English)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/british-english/api"
+    },
+    {
+      "id": "fal-ai/orpheus-tts",
+      "name": "Orpheus TTS",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/orpheus-tts/api"
+    },
+    {
+      "id": "fal-ai/qwen-3-tts/text-to-speech/0.6b",
+      "name": "Qwen 3 TTS - Text to Speech [0.6B]",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/qwen-3-tts/text-to-speech/0.6b/api"
+    },
+    {
+      "id": "fal-ai/dia-tts",
+      "name": "Dia",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/dia-tts/api"
+    },
+    {
+      "id": "fal-ai/minimax-music/v1.5",
+      "name": "MiniMax (Hailuo AI) Music v1.5",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax-music/v1.5/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-25/audio-to-audio",
+      "name": "Stable Audio 2.5",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-25/audio-to-audio/api"
+    },
+    {
+      "id": "fal-ai/maya",
+      "name": "Maya1",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/maya/api"
+    },
+    {
+      "id": "fal-ai/kokoro/spanish",
+      "name": "Kokoro TTS (Spanish)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/spanish/api"
+    },
+    {
+      "id": "async/tts-pro/v1.0",
+      "name": "Async Text to Speech Pro V1.0",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/async/tts-pro/v1.0/api"
+    },
+    {
+      "id": "fal-ai/kling-video/v1/tts",
+      "name": "Kling TTS",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kling-video/v1/tts/api"
+    },
+    {
+      "id": "fal-ai/minimax/preview/speech-2.5-hd",
+      "name": "Minimax",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/preview/speech-2.5-hd/api"
+    },
+    {
+      "id": "fal-ai/sam-audio/span-separate",
+      "name": "Sam Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-audio/span-separate/api"
+    },
+    {
+      "id": "fal-ai/kokoro/brazilian-portuguese",
+      "name": "Kokoro TTS (Brazilian Portuguese)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/brazilian-portuguese/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/base/text-to-audio",
+      "name": "Stable Audio 3 Small SFX Base Text to Audio",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/base/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/base/text-to-audio",
+      "name": "Stable Audio 3 Medium Base Text to Audio",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/base/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/kokoro/french",
+      "name": "Kokoro TTS (French)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/french/api"
+    },
+    {
+      "id": "fal-ai/vibevoice",
+      "name": "VibeVoice 1.5B",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vibevoice/api"
+    },
+    {
+      "id": "fal-ai/qwen-3-tts/clone-voice/0.6b",
+      "name": "Qwen 3 TTS - Clone Voice [0.6B]",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/qwen-3-tts/clone-voice/0.6b/api"
+    },
+    {
+      "id": "fal-ai/minimax/preview/speech-2.5-turbo",
+      "name": "Minimax",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/minimax/preview/speech-2.5-turbo/api"
+    },
+    {
+      "id": "fal-ai/diffrhythm",
+      "name": "DiffRhythm: Lyrics to Song",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/diffrhythm/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/base/text-to-audio",
+      "name": "Stable Audio 3",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/base/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/audio-compressor",
+      "name": "Workflow Utilities Audio Compressor",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/audio-compressor/api"
+    },
+    {
+      "id": "fal-ai/kokoro/japanese",
+      "name": "Kokoro TTS (Japanese)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/japanese/api"
+    },
+    {
+      "id": "fal-ai/kokoro/italian",
+      "name": "Kokoro TTS (Italian)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/italian/api"
+    },
+    {
+      "id": "fal-ai/ace-step/audio-inpaint",
+      "name": "ACE Step Audio Inpaint",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ace-step/audio-inpaint/api"
+    },
+    {
+      "id": "fal-ai/ace-step/audio-outpaint",
+      "name": "ACE Step Audio Outpaint",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ace-step/audio-outpaint/api"
+    },
+    {
+      "id": "fal-ai/kokoro/mandarin-chinese",
+      "name": "Kokoro TTS (Mandarin Chinese)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/mandarin-chinese/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/audio-inpainting",
+      "name": "Stable Audio 3 Medium Audio Inpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/audio-inpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/audio-to-audio",
+      "name": "Stable Audio 3",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/audio-to-audio/api"
+    },
+    {
+      "id": "mirelo-ai/sfx-v1/video-to-audio",
+      "name": "Mirelo SFX",
+      "category": "video-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx-v1/video-to-audio/api"
+    },
+    {
+      "id": "fal-ai/dia-tts/voice-clone",
+      "name": "Dia Tts",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/dia-tts/voice-clone/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/base/audio-to-audio",
+      "name": "Stable Audio 3 Medium Base Audio to Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/base/audio-to-audio/api"
+    },
+    {
+      "id": "fal-ai/sam-audio/visual-separate",
+      "name": "Sam Audio",
+      "category": "video-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/sam-audio/visual-separate/api"
+    },
+    {
+      "id": "fal-ai/tada/3b/text-to-speech",
+      "name": "Tada",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/tada/3b/text-to-speech/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/audio-outpainting",
+      "name": "Stable Audio 3 Medium Audio Outpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/audio-outpainting/api"
+    },
+    {
+      "id": "fal-ai/zonos",
+      "name": "Zonos-Audio-Clone",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/zonos/api"
+    },
+    {
+      "id": "fal-ai/personaplex/realtime",
+      "name": "Personaplex",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/personaplex/realtime/api"
+    },
+    {
+      "id": "fal-ai/kokoro/hindi",
+      "name": "Kokoro TTS (Hindi)",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/kokoro/hindi/api"
+    },
+    {
+      "id": "fal-ai/personaplex",
+      "name": "Personaplex",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/personaplex/api"
+    },
+    {
+      "id": "fal-ai/vibevoice/0.5b",
+      "name": "Vibevoice",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/vibevoice/0.5b/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/audio-outpainting",
+      "name": "Stable Audio 3 Small Music Audio Outpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/audio-outpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/base/audio-outpainting",
+      "name": "Stable Audio 3 Small Music Base Audio Outpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/base/audio-outpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/audio-to-audio",
+      "name": "Stable Audio 3",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/audio-to-audio/api"
+    },
+    {
+      "id": "fal-ai/maya/batch",
+      "name": "Maya",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/maya/batch/api"
+    },
+    {
+      "id": "fal-ai/csm-1b",
+      "name": "CSM-1B",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/csm-1b/api"
+    },
+    {
+      "id": "fal-ai/tada/1b/text-to-speech",
+      "name": "Tada TTS 1B",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/tada/1b/text-to-speech/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/base/audio-inpainting",
+      "name": "Stable Audio 3 Medium Base Audio Inpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/base/audio-inpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-25/inpaint",
+      "name": "Stable Audio 25",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-25/inpaint/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/base/audio-to-audio",
+      "name": "Stable Audio 3 Small Music Base Audio to Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/base/audio-to-audio/api"
+    },
+    {
+      "id": "mirelo-ai/sfx1.6/inpaint-audio",
+      "name": "Mirelo SFX1.6",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx1.6/inpaint-audio/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/text-to-audio",
+      "name": "Ltx 2.3 Quality",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/text-to-audio/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/audio-outpainting",
+      "name": "Stable Audio 3 Small SFX Audio Outpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/audio-outpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/audio-inpainting",
+      "name": "Stable Audio 3 Small Music Audio Inpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/audio-inpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/medium/base/audio-outpainting",
+      "name": "Stable Audio 3 Medium Base Audio Outpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/medium/base/audio-outpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/music/base/audio-inpainting",
+      "name": "Stable Audio 3 Small Music Base Audio Inpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/music/base/audio-inpainting/api"
+    },
+    {
+      "id": "mirelo-ai/sfx1.6/extend-audio",
+      "name": "Mirelo SFX1.6",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/mirelo-ai/sfx1.6/extend-audio/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/base/audio-to-audio",
+      "name": "Stable Audio 3 Small SFX Base Audio to Audio",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/base/audio-to-audio/api"
+    },
+    {
+      "id": "fal-ai/workflow-utilities/impulse-response",
+      "name": "Workflow Utilities Impulse Response",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/workflow-utilities/impulse-response/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/audio-inpainting",
+      "name": "Stable Audio 3 Small SFX Audio Inpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/audio-inpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/base/audio-inpainting",
+      "name": "Stable Audio 3 Small SFX Base Audio Inpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/base/audio-inpainting/api"
+    },
+    {
+      "id": "fal-ai/stable-audio-3/small/sfx/base/audio-outpainting",
+      "name": "Stable Audio 3 Small SFX Base Audio Outpainting",
+      "category": "audio-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/stable-audio-3/small/sfx/base/audio-outpainting/api"
+    },
+    {
+      "id": "fal-ai/maya/stream",
+      "name": "Maya",
+      "category": "text-to-speech",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/maya/stream/api"
+    },
+    {
+      "id": "fal-ai/ltx-2.3-quality/text-to-audio/lora",
+      "name": "Ltx 2.3 Quality",
+      "category": "text-to-audio",
+      "status": "active",
+      "documentationUrl": "https://fal.ai/models/fal-ai/ltx-2.3-quality/text-to-audio/lora/api"
+    }
+  ]
+}
