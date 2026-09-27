@@ -35,6 +35,7 @@ export function switchCreativeModel(previous: CreativeConfig, modelId: string, p
   }
   const references = [...new Set([...previous.requiredReferenceNodeIds, ...[previous.startImageNodeId, previous.endImageNodeId, ...previous.mediaBindings.map(binding => binding.nodeId)].filter((id): id is string => !!id)])];
   return creativeConfigSchema.parse({ ...previous, modelId, requiredReferenceNodeIds: references,
+    ...(previous.modality === 'audio' && modelId !== previous.modelId ? { parameters: {} } : {}),
     startImageNodeId: next?.startImage ? previous.startImageNodeId : null,
     endImageNodeId: next?.endImage ? previous.endImageNodeId : null,
   });

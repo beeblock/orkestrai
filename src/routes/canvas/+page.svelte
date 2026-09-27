@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
   import { onMount, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from '@beeblock/svelar/ui';
@@ -635,7 +636,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design';
   let drawTool = $state<DrawTool | null>(null);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
@@ -673,6 +674,7 @@
     image: async (rect) => { await addImageNode(rect); },
     imageWorkflow: async (rect) => { await addImageWorkflowNode(rect); },
     videoWorkflow: async (rect) => { await addVideoWorkflowNode(rect); },
+    audioWorkflow: async (rect) => { await addVideoWorkflowNode(rect, true); },
     sequence: async (rect) => { await addSequenceNode(rect); },
     storyboard: async (rect) => { await addStoryboardNode(rect); },
     usage: async (rect) => { await addUsageNode(rect); },
@@ -2280,11 +2282,11 @@
     nodes = [...nodes, toFlowNode(node)];
   }
 
-  async function addVideoWorkflowNode(rect?: { x: number; y: number; width: number; height: number }) {
+  async function addVideoWorkflowNode(rect?: { x: number; y: number; width: number; height: number }, audio = false) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(460, 640);
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
-      method: 'POST', body: JSON.stringify({ type: 'videoWorkflow', title: m['creative.title'](), ...position, ...nodeSize(rect, 390, 420, 460, 640), payload: { schemaVersion: 1 }, floorId: visibleFloorId }),
+      method: 'POST', body: JSON.stringify({ type: 'videoWorkflow', title: audio ? m['creative_audio.title']() : m['creative.title'](), ...position, ...nodeSize(rect, 390, 420, 460, 640), payload: { schemaVersion: 1, ...(audio ? { draftConfig: AUDIO_WORKFLOW_DRAFT } : {}) }, floorId: visibleFloorId }),
     });
     nodes = [...nodes, toFlowNode(node)];
   }
@@ -3366,7 +3368,7 @@
               </div>
               <span class="toolbar-sep" aria-hidden="true"></span>
               <div class="tool-group" role="group" aria-label={m['canvas.group_creative']()}>
-              <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
+              <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'audioWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onAudio={() => toggleDrawTool('audioWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
               <DesignToolbarMenu
                 active={drawTool === 'design' || designExplorationOpen}
                 onBlank={() => toggleDrawTool('design')}

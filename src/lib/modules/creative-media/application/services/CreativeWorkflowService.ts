@@ -19,7 +19,7 @@ import { withCreativeProfileLock } from './creative-profile-lock.js';
 import { validateFalParameters } from './FalModelCatalogService.js';
 import { creativeModelCatalog } from './CreativeModelCatalogService.js';
 import { genericFalInput } from '../../domain/model-input.js';
-import { modelPromptField, type FalModelPrice } from '../../domain/model-contract.js';
+import { modelPromptField, matchesCreativeModality, type FalModelPrice } from '../../domain/model-contract.js';
 import { creativeCharacterService } from './CreativeCharacterService.js';
 import { shotDirectionPrompt } from '../../domain/shot-direction.js';
 
@@ -125,7 +125,7 @@ export class CreativeWorkflowService {
     const profiles = [];
     for (const profile of await this.profiles.profiles()) {
       const policy = await this.repository.policy(workspaceId, profile.id);
-      if (profile.enabled && policy?.enabled && policy.allowExternalMedia && (actor.type !== 'agent' || policy.allowAgents)) profiles.push({ id: profile.id, name: profile.name, provider: profile.provider, modelIds: policy.modelIds, maxRunCents: policy.maxRunCents, maxDayCents: policy.maxDayCents, maxConcurrentRuns: policy.maxConcurrentRuns });
+      if (profile.enabled && policy?.enabled && policy.allowExternalMedia && (actor.type !== 'agent' || policy.allowAgents)) profiles.push({ id: profile.id, name: profile.name, provider: profile.provider, modelIds: policy.modelIds, maxRunCents: policy.maxRunCents, maxDayCents: policy.maxDayCents, maxConcurrentRuns: policy.maxConcurrentRuns, ...(profile.provider === 'fal' ? { falOutputAccess: policy.falOutputAccess } : {}) });
     }
     const nodes = await this.workspace.nodes(workspaceId);
     const inputs = nodes.filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => {
@@ -138,7 +138,7 @@ export class CreativeWorkflowService {
     const workflows = await this.list(workspaceId);
     const persisted = new Set(workflows.map(workflow => workflow.nodeId));
     const drafts = nodes.filter(node => node.type === 'videoWorkflow' && !persisted.has(node.id)).map(node => ({ nodeId: node.id, title: node.title, config: creativeConfigSchema.parse((node.payload as { draftConfig?: unknown }).draftConfig ?? {}) }));
-    return { workspace: workspaceProjectContext(workspace), workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', providers: ['fal', 'byteplus', 'higgsfield'], paginated: true } };
+    return { workspace: workspaceProjectContext(workspace), workflows, drafts, profiles, inputs, models: Object.values(CREATIVE_MODELS), modelDiscovery: { command: 'video_workflow_models', provider: 'fal', providers: ['fal', 'byteplus', 'higgsfield'], paginated: true, modalities: ['video', 'audio'], audioProvider: 'fal' } };
   }
 
   async read(workspaceId: string, nodeId: string, includeHistory = true) {
@@ -189,7 +189,7 @@ export class CreativeWorkflowService {
     try {
       const result = await this.repository.saveWorkflow(workspaceId, nodeId, value);
       const origin = ((await this.workspace.node(workspaceId, nodeId))?.payload as { creativeOrigin?: unknown })?.creativeOrigin;
-      await this.workspace.updateNode(workspaceId, nodeId, value.title, { schemaVersion: 1, workflowId: result.id, revision: result.revision, ...(origin ? { creativeOrigin: origin } : {}) });
+      await this.workspace.updateNode(workspaceId, nodeId, value.title, { schemaVersion: 1, workflowId: result.id, revision: result.revision, modality: value.config.modality, ...(origin ? { creativeOrigin: origin } : {}) });
       for (const inputId of [value.config.startImageNodeId, value.config.endImageNodeId, ...value.config.contextNodeIds, ...value.config.mediaBindings.map(binding => binding.nodeId)]) if (inputId) await this.workspace.connect(workspaceId, inputId, nodeId);
       this.workspace.broadcast(workspaceId);
       return result;
@@ -219,6 +219,7 @@ export class CreativeWorkflowService {
       if (current.sha256 !== origin.frozenReference.sha256) throw new CreativeMediaError('creative_reference_changed', 409);
     }
     let config = creativeConfigSchema.parse(workflow.config);
+    const delivery = config.provider === 'fal' ? { falOutputAccess: config.profileId ? (await this.repository.policy(workflow.workspaceId, config.profileId))?.falOutputAccess ?? 'private' : 'private' } as const : {};
     const legacyModel = CREATIVE_MODELS[config.modelId as keyof typeof CREATIVE_MODELS];
     if (!legacyModel && (config.startImageNodeId || config.endImageNodeId)) throw new CreativeMediaError('creative_unsupported_input');
     if (config.requiredCharacterIds.some(id => !config.characterBindings.some(binding => binding.id === id))) throw new CreativeMediaError('creative_character_binding_required');
@@ -232,10 +233,14 @@ export class CreativeWorkflowService {
       contexts.push(text);
     }
     const modelContract = legacyModel ? undefined : await creativeModelCatalog.contract(config.modelId, config.provider);
+    if (modelContract && !matchesCreativeModality(modelContract.category, config.modality)) throw new CreativeMediaError('creative_unsupported_input');
     const identities = await creativeCharacterService.resolve(workflow.workspaceId, config, modelContract);
     config = identities.config;
     const configuredPrompt = config.parameters[modelContract ? modelPromptField(modelContract.schema) ?? 'prompt' : 'prompt'];
-    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), shotDirectionPrompt(config.shot), ...contexts, ...identities.directions].filter(Boolean).join('\n\n').trim();
+    // Spoken text stays verbatim in parameters.text/inputs; never read production notes aloud.
+    const acceptsDirection = config.modality !== 'audio' || Boolean(modelContract && modelPromptField(modelContract.schema));
+    if (!acceptsDirection && (config.prompt || contexts.length || identities.directions.length)) throw new CreativeMediaError('creative_audio_literal_input');
+    const prompt = [config.prompt || (typeof configuredPrompt === 'string' ? configuredPrompt : ''), ...(config.modality === 'video' ? [shotDirectionPrompt(config.shot)] : []), ...contexts, ...identities.directions].filter(Boolean).join('\n\n').trim();
     if (/@\{[^}\n]+\}/.test(prompt)) throw new CreativeMediaError('creative_reference_alias_missing');
     if (modelContract) {
       const media = [];
@@ -248,14 +253,14 @@ export class CreativeWorkflowService {
       }
       const input = genericFalInput(config, prompt, Object.fromEntries(media.map(item => [item.pointer, `https://media.invalid/${item.reference.sha256}`])), modelContract);
       validateFalParameters(modelContract, input);
-      return { config, prompt, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage: null, endImage: null, modelContract, media, ...(identities.characters.length ? { characters: identities.characters } : {}) };
+      return { config, prompt, ...delivery, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage: null, endImage: null, modelContract, media, ...(identities.characters.length ? { characters: identities.characters } : {}) };
     }
     if (!prompt) throw new CreativeMediaError('creative_prompt_required');
     if (prompt.length > legacyModel.promptLimit) throw new CreativeMediaError('creative_prompt_too_long');
     const startImage = config.startImageNodeId ? await this.files.image(workflow.workspaceId, config.startImageNodeId) : null;
     const endImage = config.endImageNodeId ? await this.files.image(workflow.workspaceId, config.endImageNodeId) : null;
     if (legacyModel.startImage && !startImage) throw new CreativeMediaError('creative_reference_required');
-    return { config, prompt, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage, endImage };
+    return { config, prompt, ...delivery, catalogRevision: CREATIVE_CATALOG_REVISION, revision: workflow.revision, startImage, endImage };
   }
 
   async authorize(workflow: CreativeWorkflow, actor: CreativeActor) {
@@ -345,8 +350,8 @@ export class CreativeWorkflowService {
   }
 
   async dispatch(run: CreativeRun, submit: () => Promise<unknown>) {
-    const outputPath = await this.workspace.writablePath(run.workspaceId, `${run.snapshot.config.outputDirectory}/${run.snapshot.config.filePrefix}-${run.id}.mp4`);
-    const operation = { workspaceId: run.workspaceId, capability: 'integration' as const, operation: 'creative.video.submit',
+    const outputPath = await this.workspace.writablePath(run.workspaceId, `${run.snapshot.config.outputDirectory}/${run.snapshot.config.filePrefix}-${run.id}.${run.snapshot.config.modality === 'audio' ? 'mp3' : 'mp4'}`);
+    const operation = { workspaceId: run.workspaceId, capability: 'integration' as const, operation: run.snapshot.config.modality === 'audio' ? 'creative.audio.submit' : 'creative.video.submit',
       actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null, runId: run.id,
       mutation: true, risk: 'purchase' as const, certainty: 'semantic' as const,
       network: { url: creativeSubmitUrl(creativeProviderId(run.snapshot.config.provider), run.snapshot.modelContract?.id ?? CREATIVE_MODELS[run.snapshot.config.modelId as keyof typeof CREATIVE_MODELS].endpoint), method: 'POST' },
@@ -369,7 +374,7 @@ export class CreativeWorkflowService {
       // Recheck the actual file, not the provisional MP4 name approved before
       // generation. Each variant respects current exclusions and size grants.
       return await autonomyPolicyService.execute({
-        workspaceId: run.workspaceId, capability: 'filesystem', operation: 'creative.video.download',
+        workspaceId: run.workspaceId, capability: 'filesystem', operation: run.snapshot.config.modality === 'audio' ? 'creative.audio.download' : 'creative.video.download',
         actorType: run.actor.type, actorId: run.actor.type === 'agent' ? run.actor.nodeId : null,
         runId: run.id, stepId: `output:${outputIndex}`, mutation: true, certainty: 'semantic',
         filesystem: { path: destination, permission: 'create', size: video.size ?? MAX_CREATIVE_VIDEO_BYTES },

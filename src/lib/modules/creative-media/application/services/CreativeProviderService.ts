@@ -68,7 +68,7 @@ export class CreativeProviderService {
     if (!await this.repository.profile(profileId)) throw new CreativeMediaError('creative_profile_not_found', 404);
     const { revision, ...value } = creativePolicySaveSchema.parse(input);
     const result = await this.repository.savePolicy(workspaceId, profileId, value, revision);
-    await autonomyPolicyService.recordSemanticEffect({ workspaceId, capability: 'integration', operation: 'creative.policy.save', actorType: 'user', input: { profileId, revision: result.revision } }, { enabled: result.enabled, modelIds: result.modelIds, maxRunCents: result.maxRunCents, maxDayCents: result.maxDayCents });
+    await autonomyPolicyService.recordSemanticEffect({ workspaceId, capability: 'integration', operation: 'creative.policy.save', actorType: 'user', input: { profileId, revision: result.revision } }, { enabled: result.enabled, modelIds: result.modelIds, maxRunCents: result.maxRunCents, maxDayCents: result.maxDayCents, falOutputAccess: result.falOutputAccess });
     return result;
   }
 

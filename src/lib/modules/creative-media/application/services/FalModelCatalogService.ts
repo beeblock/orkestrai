@@ -3,8 +3,9 @@ import { z } from 'zod';
 import Ajv, { type ValidateFunction } from 'ajv';
 import { TrustedIntegrationHttpClient } from '$lib/modules/agent-room/infrastructure/integrations/TrustedIntegrationHttpClient.js';
 import { CreativeMediaError } from '../../domain/types.js';
-import { FAL_ENDPOINT_PATTERN, isVideoCategory, type FalModelContract, type FalModelSummary, type ModelSchema } from '../../domain/model-contract.js';
+import { FAL_ENDPOINT_PATTERN, matchesCreativeModality, type FalModelContract, type FalModelSummary, type ModelSchema } from '../../domain/model-contract.js';
 import bundledCatalog from '../../domain/fal-video-catalog.json';
+import bundledAudio from '../../domain/fal-audio-catalog.json';
 
 const modelSchema = z.object({ endpoint_id: z.string().max(240).regex(FAL_ENDPOINT_PATTERN), metadata: z.object({ display_name: z.string().min(1).max(200), category: z.string().max(80), status: z.enum(['active', 'deprecated']) }), openapi: z.record(z.unknown()).optional() });
 const pageSchema = z.object({ models: z.array(modelSchema).max(100), has_more: z.boolean(), next_cursor: z.string().max(200).nullable() });
@@ -79,7 +80,7 @@ export function normalizeSchema(source: any, document: any, depth = 0, budget = 
 
 export function parseFalContract(raw: unknown): FalModelContract {
   const item = modelSchema.parse(raw);
-  if (!isVideoCategory(item.metadata.category) || !item.openapi) throw new CreativeMediaError('creative_model_contract_invalid');
+  if (!matchesCreativeModality(item.metadata.category, 'all') || !item.openapi) throw new CreativeMediaError('creative_model_contract_invalid');
   const document = item.openapi as any;
   if (document.error?.code === 'expansion_failed') throw new CreativeMediaError('creative_model_contract_unavailable', 503);
   const alias = document.info?.['x-fal-metadata']?.endpointId;
@@ -112,7 +113,7 @@ export class FalModelCatalogService {
     if (!cached || cached.expires <= Date.now()) void this.list().catch(() => undefined);
     return cached
       ? { models: structuredClone(cached.value) as FalModelSummary[], source: 'live', fetchedAt: new Date(cached.expires - 300000).toISOString() }
-      : { models: structuredClone(bundledCatalog.models) as FalModelSummary[], source: 'bundled', fetchedAt: bundledCatalog.fetchedAt };
+      : { models: structuredClone([...bundledCatalog.models, ...bundledAudio.models]) as FalModelSummary[], source: 'bundled', fetchedAt: bundledCatalog.fetchedAt };
   }
   private async query(params: URLSearchParams): Promise<z.infer<typeof pageSchema>> {
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -149,7 +150,7 @@ export class FalModelCatalogService {
       let cursor = '';
       for (let page = 0; page < 100; page++) {
         const result = await this.query(new URLSearchParams({ limit: '100', ...(cursor ? { cursor } : {}) }));
-        for (const item of result.models) if (isVideoCategory(item.metadata.category)) models.set(item.endpoint_id, summaryOf(item));
+        for (const item of result.models) if (matchesCreativeModality(item.metadata.category, 'all')) models.set(item.endpoint_id, summaryOf(item));
         if (!result.has_more) return [...models.values()];
         if (!result.next_cursor || cursors.has(result.next_cursor)) break;
         cursor = result.next_cursor; cursors.add(cursor);

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { creativeConfigSchema, creativePathSchema } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
 import { FalVideoProvider, falVideoInput, validateFalHandle } from '$lib/modules/creative-media/infrastructure/providers/FalVideoProvider.js';
+import { parseFalContract } from '$lib/modules/creative-media/application/services/FalModelCatalogService.js';
+import audioContracts from '../fixtures/fal-audio-contracts.json';
 
 const requestId = '01a0abcd-1234-7890-8abc-123456789012';
 const base = `https://queue.fal.run/fal-ai/wan-27-t2v/text-to-video/requests/${requestId}`;
@@ -81,6 +83,16 @@ describe('fal video adapter', () => {
     await expect(adapter.submit(credential, creativeConfigSchema.parse({}), 'A scene', {})).rejects.toThrow('creative_provider_unavailable');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it('uses an expiring link only when explicitly selected, without changing input privacy or saved IO', async () => {
+    const fetch = vi.fn().mockResolvedValue(json({ request_id: requestId, status_url: handle.statusUrl, response_url: handle.responseUrl, cancel_url: handle.cancelUrl }));
+    const adapter = new FalVideoProvider(fetch);
+    await adapter.submit(credential, creativeConfigSchema.parse({}), 'A calm ocean', {}, undefined, { falOutputAccess: 'temporary_link' });
+    const headers = fetch.mock.calls[0][1].headers;
+    expect(JSON.parse(headers['X-Fal-Object-Lifecycle-Preference'])).toEqual({ expiration_duration_seconds: 3600, initial_acl: { default: 'allow', rules: [] } });
+    expect(headers['X-Fal-Store-IO']).toBe('0');
+    expect(headers['X-Fal-No-Retry']).toBe('1');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it('rejects redirect, unknown status, mismatched job and HTML responses', async () => {
     for (const response of [new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/' } }), json({ status: 'OK' }), json({ status: 'COMPLETED', request_id: 'another-request-id-123' }), new Response('<html>private content</html>')]) {
       const fetch = vi.fn().mockResolvedValue(response);
@@ -108,6 +120,16 @@ describe('fal video adapter', () => {
     await expect(new FalVideoProvider(unknown).estimate(credential, creativeConfigSchema.parse({}))).rejects.toMatchObject({ code: 'creative_billing_units_required', billing: { unit: 'compute_unit', unitPrice: 0.05, currency: 'USD' } });
     expect(unknown).toHaveBeenCalledTimes(1);
   });
+  it('quotes MiniMax Music using the live plural audios billing unit without submitting a generation', async () => {
+    const endpoint = 'fal-ai/minimax-music/v2.6';
+    const contract = parseFalContract(audioContracts.models.find(model => model.endpoint_id === endpoint));
+    const fetch = vi.fn().mockResolvedValueOnce(json({ prices: [{ endpoint_id: endpoint, unit_price: 0.15, unit: 'audios', currency: 'USD' }] })).mockResolvedValueOnce(json({ total_cost: 0.15, currency: 'USD' }));
+    const config = creativeConfigSchema.parse({ modality: 'audio', modelId: endpoint, parameters: { lyrics: '[Chorus]\nAn original jingle', is_instrumental: false } });
+    expect(await new FalVideoProvider(fetch).estimate(credential, config, contract)).toEqual({ estimatedCents: 15, reservedCents: 60 });
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ estimate_type: 'unit_price', endpoints: { [endpoint]: { unit_quantity: 1 } } });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.every(call => String(call[0]).startsWith('https://api.fal.ai/v1/models/pricing'))).toBe(true);
+  });
   it('exchanges a short-lived CDN token without forwarding the API key to media hosts', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(json({ token: 'synthetic-cdn-token' })).mockResolvedValueOnce(new Response(new Uint8Array(32), { headers: { 'content-type': 'video/mp4' } }));
     const adapter = new FalVideoProvider(fetch);
@@ -123,6 +145,16 @@ describe('fal video adapter', () => {
     const endpoint = 'fal-ai/wan/v2.7/text-to-video';
     const fetch = vi.fn().mockResolvedValueOnce(json({ prices: [{ endpoint_id: endpoint, unit_price: 0, unit: 'second', currency: 'USD' }] })).mockResolvedValueOnce(json({ total_cost: 0, currency: 'USD' }));
     expect(await new FalVideoProvider(fetch).estimate(credential, creativeConfigSchema.parse({}))).toEqual({ estimatedCents: 0, reservedCents: 0 });
+  });
+  it.each([401, 403])('reports output access denial (%s) without retrying, changing privacy or exposing secrets', async status => {
+    const response = new Response(`Forbidden: ${credential}`, { status });
+    const cancel = vi.spyOn(response.body!, 'cancel');
+    const fetch = vi.fn().mockResolvedValueOnce(json({ token: 'synthetic-cdn-token' })).mockResolvedValueOnce(response);
+    await expect(new FalVideoProvider(fetch).download(credential, { url: 'https://v3b.fal.media/files/example/audio.mp3', mimeType: 'audio/mpeg', size: null, width: null, height: null, duration: null, fps: null })).rejects.toMatchObject({ code: 'creative_download_denied', message: 'creative_download_denied' });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(fetch.mock.calls[1])).not.toContain(credential);
+    expect(fetch.mock.calls.some(call => String(call[0]).includes('queue.fal.run'))).toBe(false);
   });
   it('refuses local outputs, oversized media and forwarded redirects', async () => {
     for (const url of ['http://127.0.0.1:5199/secret', 'file:///etc/passwd', 'https://v3b.fal.media.evil.test/a', 'https://user:pass@v3b.fal.media/a']) {

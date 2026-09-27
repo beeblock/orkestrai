@@ -85,6 +85,22 @@ character.
 
 <p align="center"><img src="docs/media/readme/image-flow.webp" alt="An image workflow turns a reference atlas into six consistent views of the same character" width="880"></p>
 
+### Create music, narration and sound effects
+
+Open **Images > Audio workflow** in Canvas or Workbench. Use fal.ai's published
+music, speech and sound-effects models with their own parameters, encrypted account,
+workspace permissions and cost preview. Results stay in `generated/audio` as playable
+media nodes and can feed compatible video workflows. Agents use `audio_workflow_*`
+or `orkestrai audio` through the same queue and budget controls. Higgsfield currently
+has no standalone audio API models; no Suno endpoint is assumed. Codex image
+workflows and local dictation/TTS remain unchanged.
+
+fal outputs are private by default. Workspace owners can explicitly choose
+link-accessible outputs with a requested one-hour expiration in **Configure access
+> Workspace permissions**. References remain private. This choice is pinned to
+the cost preview; it never automatically republishes or regenerates a failed
+output. Failed downloads show the provider request ID for recovery or support.
+
 ### Produce video with the provider you choose
 
 Approved scenes feed video flows on fal.ai, BytePlus ModelArk, or Higgsfield,

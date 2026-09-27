@@ -10,7 +10,7 @@
   let errors = $state<Record<string, boolean>>({});
   const fields = $derived(Object.entries(schema.properties ?? {}).filter(([name]) => !['prompt', 'text_prompt', 'sync_mode'].includes(name)));
   const unknown = $derived(Object.keys(value).filter(name => !schema.properties?.[name] && schema.additionalProperties === false));
-  const primary = new Set(['duration', 'resolution', 'aspect_ratio', 'generate_audio', 'prompt_expansion_mode']);
+  const primary = new Set(['duration', 'resolution', 'aspect_ratio', 'generate_audio', 'prompt_expansion_mode', 'text', 'voice', 'language_code', 'music_length_ms', 'duration_seconds', 'lyrics', 'force_instrumental', 'is_instrumental']);
   $effect(() => { const valid = unknown.length === 0 && !Object.values(errors).some(Boolean); untrack(() => onValidityChange(valid)); });
   function set(name: string, next: unknown) {
     const output = { ...value };

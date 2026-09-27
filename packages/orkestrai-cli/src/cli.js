@@ -1027,15 +1027,19 @@ export async function run(argv, options = {}) {
       }
       throw new Error('Uso: orkestrai api <list|reference|read|import|create|replace|sync-status|pull|push|export|run|run-runner> ...');
     }
+    case 'audio':
     case 'video': {
       const [command, id] = rest;
+      const { AUDIO_COMMANDS, audioWorkflowInput } = await import('./video-reference.js');
+      const audio = positional[0] === 'audio';
+      if (audio && !AUDIO_COMMANDS.includes(command)) throw new Error('Unknown audio command.');
       if (!['import', 'sequences', 'recipes', 'brands', 'assets', 'storyboards', 'characters', 'models', 'list', 'read', 'create', 'update', 'preview', 'run', 'cancel', 'retry_download', 'remove'].includes(command)) throw new Error('Unknown video command.');
       const videoFlags = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (flags));
       if (!selfAgent || !videoFlags.task) throw new Error('Video workflows require an active terminal identity and --task.');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/creative-media', {
         command, taskId: String(videoFlags.task),
         ...(id ? ['cancel', 'retry_download'].includes(command) ? { runId: id } : { nodeId: id } : {}),
-        ...(videoFlags.input ? { input: JSON.parse(String(videoFlags.input)) } : {}),
+        ...(audio ? { input: audioWorkflowInput(command, videoFlags.input ? JSON.parse(String(videoFlags.input)) : {}) } : videoFlags.input ? { input: JSON.parse(String(videoFlags.input)) } : {}),
       });
       out(JSON.stringify(data, null, 2));
       return 0;

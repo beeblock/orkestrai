@@ -67,6 +67,17 @@ describe('workspace video files', () => {
     expect(videoByteRange('bytes=-20', 100)).toEqual({ start:80,end:99 });
     for(const value of ['bytes=100-', 'bytes=4-2', 'bytes=0-1,4-5', 'bytes=-0', 'bytes=-', 'bytes=99999999999999999999-']) expect(() => videoByteRange(value,100)).toThrow();
   });
+  it('stores audio bytes unchanged under generated/audio and recovers downloads idempotently', async () => {
+    const f = await fixture();
+    f.run.snapshot.config = creativeConfigSchema.parse({ modality: 'audio', modelId: 'fal-ai/elevenlabs/music', outputDirectory: 'generated/audio', filePrefix: 'soundtrack' });
+    const bytes = Buffer.alloc(96); bytes.write('RIFF'); bytes.write('WAVE', 8);
+    const result = await f.files.store(f.run, { ...f.video, mimeType: 'audio/wav' }, new Response(bytes));
+    expect(result.path).toBe('generated/audio/soundtrack-test-run.wav');
+    expect(result.mimeType).toBe('audio/wav');
+    expect(await readFile(join(f.dir, result.path))).toEqual(bytes);
+    expect(await f.files.store(f.run, { ...f.video, mimeType: 'audio/wav' }, new Response(bytes))).toEqual(result);
+    await expect(f.files.store(f.run, { ...f.video, mimeType: 'audio/wav' }, new Response(f.bytes), 1)).rejects.toThrow('creative_video_invalid');
+  });
   it('accepts a workspace FLAC reference and detects changed audio before upload', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-video-audio-')); dirs.push(dir);
     const bytes = Buffer.alloc(96); bytes.write('fLaC');

@@ -332,7 +332,7 @@ async function runAction(action: TourAction): Promise<void> {
       case 'createVideoWorkflow': {
         if (await findNode(action.title)) break;
         await api(`/api/agent-room/workspaces/${workspaceId}/creative-media`, {
-          method: 'POST', body: JSON.stringify({ title: action.title, config: { modelId: 'wan-2.7-text', prompt: action.prompt, duration: 5, aspectRatio: '9:16', resolution: '720p', outputDirectory: 'generated/videos' } }),
+          method: 'POST', body: JSON.stringify({ title: action.title, config: action.modality === 'audio' ? { modality: 'audio', modelId: 'fal-ai/elevenlabs/music', prompt: action.prompt, parameters: { music_length_ms: 30000, force_instrumental: true }, outputDirectory: 'generated/audio', filePrefix: 'orkestrai-audio' } : { modelId: 'wan-2.7-text', prompt: action.prompt, duration: 5, aspectRatio: '9:16', resolution: '720p', outputDirectory: 'generated/videos' } }),
         });
         break;
       }

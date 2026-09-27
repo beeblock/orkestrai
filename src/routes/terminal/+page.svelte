@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
   import { onMount, tick } from 'svelte';
   import { goto, replaceState } from '$app/navigation';
   import { getCsrfToken } from '@beeblock/svelar/http';
@@ -22,6 +23,7 @@
     MessageCircleMore,
     Power,
     Film,
+    AudioLines,
     BookUser,
     Palette,
     Network,
@@ -399,12 +401,12 @@
     } catch (cause) { toast.error(creativeError((cause as Error).message)); }
     finally { placingCharacter = false; }
   }
-  async function addVideoWorkflow() {
+  async function addVideoWorkflow(audio = false) {
     if (!selectedWorkspaceId || addingVideo) return;
     addingVideo = true;
     const workspaceId = selectedWorkspaceId;
     try {
-      const node = await creativeApi<{ nodeId: string }>(`/api/agent-room/workspaces/${workspaceId}/creative-media`, 'POST', { title: m['creative.title'](), config: {} });
+      const node = await creativeApi<{ nodeId: string }>(`/api/agent-room/workspaces/${workspaceId}/creative-media`, 'POST', { title: audio ? m['creative_audio.title']() : m['creative.title'](), config: audio ? AUDIO_WORKFLOW_DRAFT : {} });
       await loadWorkspace(workspaceId);
       selectNode(workspaceId, node.nodeId);
     } catch (error) { toast.error(creativeError(error instanceof Error ? error.message : 'creative_request_failed')); }
@@ -722,7 +724,8 @@
     if (node.type === 'diff') return m['terminal_browser.kind_diff']();
     if (node.type === 'image') return m['terminal_browser.kind_image']();
     if (node.type === 'imageWorkflow') return m['image_workflow.title']();
-    if (node.type === 'videoWorkflow') return m['creative.title']();
+    if (node.type === 'video' && String(node.payload.mimeType ?? '').startsWith('audio/')) return m['creative_audio.asset']();
+    if (node.type === 'videoWorkflow') return node.payload.modality === 'audio' || (node.payload.draftConfig as { modality?: string } | undefined)?.modality === 'audio' ? m['creative_audio.title']() : m['creative.title']();
     if (node.type === 'sequence') return m['sequence.title']();
     if (node.type === 'storyboard') return m['storyboard.title']();
     if (node.type === 'video') return m['creative.video']();
@@ -1219,7 +1222,7 @@
         nodeId={isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId}
       />
       <AttentionCenter workspaceId={selectedWorkspaceId} />
-      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={addVideoWorkflow}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['sequence.title']()} onclick={addSequence}><Film size={15} />{m['sequence.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_recipe.title']()} onclick={() => showRecipes = true}><Workflow size={15} />{m['creative_recipe.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
+      <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={() => addVideoWorkflow()}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_audio.add']()} onclick={() => addVideoWorkflow(true)}><AudioLines size={15} />{m['creative_audio.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['sequence.title']()} onclick={addSequence}><Film size={15} />{m['sequence.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_recipe.title']()} onclick={() => showRecipes = true}><Workflow size={15} />{m['creative_recipe.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
 
     <div class="shrink-0 p-2.5">
@@ -1415,7 +1418,7 @@
                             </span>
                           {:else}
                             <span class={`shrink-0 ${selectedNodeId === item.id ? 'text-[var(--app-accent)]' : 'text-[var(--app-text-muted)]'}`}>
-                              <WorkbenchNodeIcon type={item.type} size={13} />
+                              <WorkbenchNodeIcon type={item.type} size={13} audio={item.payload.modality === 'audio' || String(item.payload.mimeType ?? '').startsWith('audio/')} />
                             </span>
                             <span class="min-w-0 flex-1 truncate">{item.title || nodeTypeLabel(item)}</span>
                             <span class="max-w-20 truncate text-ui-xs text-[var(--app-text-soft)]">{nodeTypeLabel(item)}</span>

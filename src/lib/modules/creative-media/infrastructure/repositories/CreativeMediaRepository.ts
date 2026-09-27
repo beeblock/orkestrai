@@ -26,12 +26,14 @@ function workflow(row: WorkflowModel): CreativeWorkflow {
   return { id: String(row.getAttribute('id')), nodeId: String(row.getAttribute('node_id')), workspaceId: String(row.getAttribute('workspace_id')), title: String(row.getAttribute('title')), config: creativeConfigSchema.parse(json(row.getAttribute('config_json'))), revision: Number(row.getAttribute('revision')) };
 }
 function run(row: RunModel): CreativeRun {
+  const requestId = row.getAttribute('remote_json') ? json(row.getAttribute('remote_json'))?.requestId : null;
   return {
     id: String(row.getAttribute('id')), workspaceId: String(row.getAttribute('workspace_id')), workflowId: String(row.getAttribute('workflow_id')),
     nodeId: String(row.getAttribute('node_id')), profileId: String(row.getAttribute('profile_id')), status: String(row.getAttribute('status')) as CreativeRunStatus,
     snapshot: json(row.getAttribute('snapshot_json')), reservedCents: Number(row.getAttribute('reserved_cents')),
     queuePosition: row.getAttribute('queue_position') == null ? null : Number(row.getAttribute('queue_position')),
     errorCode: row.getAttribute('error_code') == null ? null : String(row.getAttribute('error_code')),
+    ...(typeof requestId === 'string' && /^[a-zA-Z0-9_-]{16,128}$/.test(requestId) ? { providerRequestId: requestId } : {}),
     output: row.getAttribute('output_json') ? json(row.getAttribute('output_json')) : null,
     actor: json(row.getAttribute('actor_json')), createdAt: iso(row.getAttribute('created_at')), updatedAt: iso(row.getAttribute('updated_at')),
   };
@@ -147,6 +149,7 @@ export class CreativeMediaRepository {
       const current = await this.workflow(workspaceId, nodeId);
       if (!account?.enabled || account.revision !== preview.profileRevision || !grant?.enabled || !grant.allowExternalMedia || grant.revision !== preview.policyRevision || current?.revision !== preview.revision) throw new CreativeMediaError('creative_preview_expired', 409);
       if (!grant.modelIds.includes(preview.snapshot.config.modelId) || (actor.type === 'agent' && !grant.allowAgents)) throw new CreativeMediaError('creative_workspace_disabled', 403);
+      if (preview.snapshot.config.provider === 'fal' && (preview.snapshot.falOutputAccess ?? 'private') !== grant.falOutputAccess) throw new CreativeMediaError('creative_preview_expired', 409);
       const today = now().slice(0, 10);
       const recent = await RunModel.query().where('workspace_id', workspaceId).where('profile_id', preview.profileId).where('created_at', '>=', `${today}T00:00:00.000Z`).get();
       const pending = await RunModel.query().where('workspace_id', workspaceId).where('profile_id', preview.profileId).where('created_at', '<', `${today}T00:00:00.000Z`).whereIn('status', ACTIVE_CREATIVE_STATUSES).get();

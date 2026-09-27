@@ -54,7 +54,13 @@ export class CreativeMediaController extends Controller {
       const policy = await creativeProviderService.repository.policy(event.params.id, profile.id);
       if (policy) policies.push(policy);
     }
-    const inputs = (await creativeWorkspaceGateway.nodes(event.params.id)).filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => ({ id: node.id, type: node.type, title: node.title, ...(['image', 'video'].includes(node.type) && typeof (node.payload as { path?: unknown }).path === 'string' ? { path: (node.payload as { path: string }).path } : {}) }));
+    const inputs = (await creativeWorkspaceGateway.nodes(event.params.id)).filter(node => ['image', 'video', 'note'].includes(node.type)).map(node => {
+      const payload = node.payload as { path?: unknown; mimeType?: unknown };
+      return { id: node.id, type: node.type, title: node.title,
+        ...(['image', 'video'].includes(node.type) && typeof payload.path === 'string' ? { path: payload.path } : {}),
+        ...(node.type === 'video' && typeof payload.mimeType === 'string' && /^(?:video|audio)\/[a-z0-9.+-]{1,80}$/i.test(payload.mimeType) ? { mimeType: payload.mimeType } : {}),
+      };
+    });
     return { profiles, policies, inputs, catalog: Object.values(CREATIVE_MODELS), workflows: await creativeWorkflowService.list(event.params.id) };
   }); }
   savePolicy(event: any) { return this.respond(async () => {

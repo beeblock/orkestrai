@@ -12,6 +12,7 @@ import { creativeWorkflowService } from '$lib/modules/creative-media/application
 import { CreativeMediaDto } from '$lib/modules/creative-media/application/dto/CreativeMediaDto.js';
 import { ExecuteCreativeMediaAction } from '$lib/modules/creative-media/application/actions/ExecuteCreativeMediaAction.js';
 import { CreativeProviderService } from '$lib/modules/creative-media/application/services/CreativeProviderService.js';
+import type { CreativeVideoProvider } from '$lib/modules/creative-media/application/ports/CreativeVideoProvider.js';
 import { falModelCatalog, parseFalContract } from '$lib/modules/creative-media/application/services/FalModelCatalogService.js';
 import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 
@@ -65,12 +66,12 @@ describe('Creative video persistence and queue', () => {
       await expect(service.snapshot({ id: uuidv7(), workspaceId, nodeId, title: 'Invalid', revision: 1, config: { ...config, parameters: { duration: 30 } } })).rejects.toThrow('creative_model_parameters_invalid');
     } finally { lookup.mockRestore(); }
   });
-  async function fixture(provider: 'fal' | 'byteplus' | 'higgsfield' = 'fal') {
+  async function fixture(provider: 'fal' | 'byteplus' | 'higgsfield' = 'fal', overrides: Record<string, unknown> = {}) {
     const workspaceId = uuidv7(), nodeId = uuidv7(), profileId = uuidv7();
     const profile = await repository.saveProfile({ id: profileId, name: `Test ${provider}`, provider, enabled: true, hasCredential: true });
-    const modelId = provider === 'fal' ? 'wan-2.7-text' : provider === 'byteplus' ? 'dreamina-seedance-2-5-260628' : 'minimax/h3/text-to-video';
+    const modelId = String(overrides.modelId ?? (provider === 'fal' ? 'wan-2.7-text' : provider === 'byteplus' ? 'dreamina-seedance-2-5-260628' : 'minimax/h3/text-to-video'));
     const policy = await repository.savePolicy(workspaceId, profileId, creativePolicySchema.parse({ enabled: true, allowExternalMedia: true, allowAgents: true, modelIds: [modelId], maxRunCents: 400, maxDayCents: 600, maxConcurrentRuns: 2 }));
-    const config = creativeConfigSchema.parse({ provider, modelId, profileId, prompt: 'A test landscape' });
+    const config = creativeConfigSchema.parse({ provider, modelId, profileId, prompt: 'A test landscape', ...overrides });
     const workflow = await repository.saveWorkflow(workspaceId, nodeId, { title: 'Test video', config });
     const preview: CreativePreview = { id: uuidv7(), workflowId: workflow.id, revision: workflow.revision, profileId, profileRevision: profile.revision, policyRevision: policy.revision, estimatedCents: 100, reservedCents: 400, currency: 'USD', expiresAt: new Date(Date.now() + 300000).toISOString(), snapshot: { config, prompt: config.prompt, revision: 1, catalogRevision: 'test', startImage: null, endImage: null } };
     const key = uuidv7();
@@ -95,6 +96,37 @@ describe('Creative video persistence and queue', () => {
     await RunModel.query().where('id', run.id).update({ next_poll_at: new Date(0).toISOString(), lease_expires_at: null });
     return (await repository.run(run.workspaceId, run.id))!;
   }
+  it('defaults old policies to private and rejects delivery modes that do not match the owner grant', async () => {
+    expect(creativePolicySchema.parse({}).falOutputAccess).toBe('private');
+    const f = await fixture();
+    expect((await repository.policy(f.workspaceId, f.profileId))?.falOutputAccess).toBe('private');
+    const preview = { ...f.preview, snapshot: { ...f.preview.snapshot, falOutputAccess: 'temporary_link' as const } };
+    await expect(repository.reserve(f.workspaceId, f.nodeId, preview, { type: 'user' }, uuidv7())).rejects.toThrow('creative_preview_expired');
+    expect(() => creativeConfigSchema.parse({ falOutputAccess: 'temporary_link' })).toThrow();
+  });
+  it('passes the pinned output mode and exposes only the provider request ID, not remote URLs', async () => {
+    const f = await fixture();
+    await repository.savePolicy(f.workspaceId, f.profileId, { ...creativePolicySchema.strip().parse(f.policy), falOutputAccess: 'temporary_link' }, f.policy.revision);
+    await RunModel.query().where('id', f.run.id).update({ snapshot_json: JSON.stringify({ ...f.run.snapshot, falOutputAccess: 'temporary_link' }) });
+    const { queue, provider } = runtime(f.workflow);
+    await queue.process(await ready(f.run));
+    expect(provider.submit.mock.calls[0][5]).toEqual({ falOutputAccess: 'temporary_link' });
+    const run = (await repository.run(f.workspaceId, f.run.id))!;
+    expect(run.status).toBe('provider_running');
+    expect(run.providerRequestId).toBe(remote.requestId);
+    expect(JSON.stringify(run)).not.toContain('queue.fal.run');
+  });
+  it('does not widen a queued private run when policy changes or submit a revoked link-mode run', async () => {
+    for (const before of ['private', 'temporary_link'] as const) {
+      const f = await fixture();
+      await RunModel.query().where('id', f.run.id).update({ snapshot_json: JSON.stringify({ ...f.run.snapshot, falOutputAccess: before }) });
+      if (before === 'private') await repository.savePolicy(f.workspaceId, f.profileId, { ...creativePolicySchema.strip().parse(f.policy), falOutputAccess: 'temporary_link' }, f.policy.revision);
+      const { queue, provider } = runtime(f.workflow);
+      await queue.process(await ready(f.run));
+      expect(provider.submit).not.toHaveBeenCalled();
+      expect(await repository.run(f.workspaceId, f.run.id)).toMatchObject({ status: 'failed', errorCode: 'creative_preview_expired', reservedCents: 0 });
+    }
+  });
   it('keeps removed video outputs and snapshots out of agent reads, without erasing audit history', async () => {
     const f = await fixture();
     const output = { path: 'generated/videos/removed.mp4', runId: f.run.id, workflowNodeId: f.nodeId, additionalOutputs: [
@@ -150,7 +182,7 @@ describe('Creative video persistence and queue', () => {
     expect(edited.config.characterBindings).toEqual(config.characterBindings);
   });
   function runtime(workflow: unknown) {
-    const provider = { submit: vi.fn(async () => remote), status: vi.fn(async () => ({ status: 'completed', queuePosition: null })), cancel: vi.fn(async () => 'requested'), result: vi.fn(async () => ({ url: 'https://fal.media/video.mp4' })), download: vi.fn(async () => new Response('test')) };
+    const provider = { submit: vi.fn<CreativeVideoProvider['submit']>(async () => remote), status: vi.fn(async () => ({ status: 'completed', queuePosition: null })), cancel: vi.fn(async () => 'requested'), result: vi.fn(async () => ({ url: 'https://fal.media/video.mp4' })), download: vi.fn(async () => new Response('test')) };
     const output = { path: 'generated/videos/test.mp4', sha256: 'a'.repeat(64), size: 42, mimeType: 'video/mp4' };
     const service = { repository, provider, profiles: { credential: vi.fn(async () => ({ revealInsideTrustedExecutor: () => 'not-a-real-key' })) },
       workspace: { workspace: vi.fn(async () => ({ suspendedAt: null })), writablePath: vi.fn(async (_workspace: string, path: string) => `/workspace/${path}`), nodes: vi.fn(async () => []), createNode: vi.fn(), broadcast: vi.fn() },
@@ -165,6 +197,51 @@ describe('Creative video persistence and queue', () => {
     await expect(repository.saveWorkflow(f.workspaceId, f.nodeId, { title: 'Stale', config: f.workflow.config, revision: 2 })).rejects.toThrow('creative_revision_conflict');
     expect(JSON.stringify(f.run)).not.toMatch(/remote_json|credential|not-a-real-key/);
     await expect(repository.reserve(f.workspaceId, uuidv7(), f.preview, { type: 'user' }, f.key)).rejects.toThrow('creative_idempotency_conflict');
+  });
+  it('delivers standalone audio through the durable queue once and preserves workspace grants', async () => {
+    const f = await fixture('fal', { modality: 'audio', modelId: 'fal-ai/elevenlabs/music', outputDirectory: 'generated/audio' });
+    const r = runtime(f.workflow);
+    r.provider.result.mockResolvedValue({ url: 'https://fal.media/song.mp3', mimeType: 'audio/mpeg' } as never);
+    const output = { path: 'generated/audio/song.mp3', mimeType: 'audio/mpeg', runId: f.run.id, workflowNodeId: f.nodeId };
+    r.service.files.store.mockResolvedValue(output as never);
+    await r.queue.process(f.run);
+    await r.queue.process(await ready(f.run));
+    expect(await repository.run(f.workspaceId, f.run.id)).toMatchObject({ status: 'completed', output });
+    expect(r.service.workspace.createNode).toHaveBeenCalledWith(f.workspaceId, 'video', f.run.snapshot.config.filePrefix, output, f.nodeId);
+    expect(autonomyPolicyService.recordSemanticEffect).toHaveBeenCalledWith(expect.objectContaining({ operation: 'creative.audio.completed' }), expect.anything());
+    await r.queue.process(await ready(f.run));
+    expect(r.provider.submit).toHaveBeenCalledOnce();
+    expect(r.service.files.store).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await repository.run(f.workspaceId, f.run.id))).not.toContain('not-a-real-key');
+  });
+  it('refuses a video returned to an audio workflow without publishing or regenerating', async () => {
+    const f = await fixture('fal', { modality: 'audio', modelId: 'fal-ai/elevenlabs/music' });
+    const r = runtime(f.workflow);
+    r.provider.result.mockResolvedValue({ url: 'https://fal.media/wrong.mp4', mimeType: 'video/mp4' } as never);
+    await r.queue.process(f.run);
+    await r.queue.process(await ready(f.run));
+    expect(await repository.run(f.workspaceId, f.run.id)).toMatchObject({ status: 'download_failed', errorCode: 'creative_invalid_provider_response' });
+    expect(r.provider.download).not.toHaveBeenCalled();
+    expect(r.service.workspace.createNode).not.toHaveBeenCalled();
+    expect(r.provider.submit).toHaveBeenCalledOnce();
+  });
+  it('never appends production notes or shot directions to literal speech', async () => {
+    const id = 'fal-ai/elevenlabs/tts/eleven-v3';
+    const contract = { id, name: 'Eleven v3', category: 'text-to-audio', status: 'active', digest: 'audio-test', documentationUrl: `https://fal.ai/models/${id}/api`, schema: { type: 'object', required: ['text'], properties: { text: { type: 'string' } } }, outputSchema: { type: 'object' } };
+    const lookup = vi.spyOn(falModelCatalog, 'contract').mockResolvedValue(contract as never);
+    try {
+      const workspaceId = uuidv7(), nodeId = uuidv7(), noteId = uuidv7();
+      const workspace = { node: vi.fn(async (_ws, id) => id === noteId ? { type: 'note', payload: { content: 'Internal approval and model choice' } } : { type: 'videoWorkflow' }), writablePath: vi.fn(async () => '/workspace/generated/audio') };
+      const service = new CreativeWorkflowService(repository, {} as never, {} as never, workspace as never);
+      const config = creativeConfigSchema.parse({ modality: 'audio', modelId: id, parameters: { text: 'Only these words.' }, outputDirectory: 'generated/audio', shot: { motion: 'push_in' } });
+      const workflow = { id: uuidv7(), workspaceId, nodeId, title: 'Voice', revision: 1, config };
+      const snapshot = await service.snapshot(workflow);
+      expect(snapshot.prompt).toBe('');
+      expect(snapshot.config.parameters.text).toBe('Only these words.');
+      await expect(service.snapshot({ ...workflow, config: { ...config, contextNodeIds: [noteId] } })).rejects.toThrow('creative_audio_literal_input');
+      await expect(service.snapshot({ ...workflow, config: { ...config, prompt: 'Approval notes' } })).rejects.toThrow('creative_audio_literal_input');
+      await expect(service.snapshot({ ...workflow, config: { ...config, modality: 'video' } })).rejects.toThrow('creative_unsupported_input');
+    } finally { lookup.mockRestore(); }
   });
   it('materializes each output as a separate reusable node without resubmitting', async () => {
     const f = await fixture(); const r = runtime(f.workflow);
@@ -315,6 +392,7 @@ describe('Creative video persistence and queue', () => {
     await expect(service.preview(f.workspaceId, f.nodeId, actor)).rejects.toThrow('creative_workspace_disabled');
     expect(provider.estimate).not.toHaveBeenCalled();
     const preview = await service.preview(f.workspaceId, f.nodeId, { type: 'user' });
+    expect(preview.snapshot.falOutputAccess).toBe('private');
     expect(JSON.stringify(preview)).not.toContain('not-a-real-key');
     const input = { revision: preview.revision, previewId: preview.id, idempotencyKey: uuidv7() };
     const run = await service.run(f.workspaceId, f.nodeId, input, { type: 'user' });

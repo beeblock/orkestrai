@@ -29,6 +29,9 @@ export function creativeStatus(status: CreativeRunStatus) {
   return labels[status]?.() ?? m['creative.error']();
 }
 export function creativeError(code: string) {
+  if (code === 'creative_download_denied') return m['creative.download_denied']();
+  if (code === 'creative_audio_literal_input') return m['creative_audio.literal_input']();
+  if (code === 'creative_audio_format_unsupported') return m['creative_audio.format_unsupported']();
   if (code === 'creative_provider_mismatch') return m['creative.provider_mismatch']();
   if (code === 'creative_provider_model_required') return m['creative.provider_choose_model']();
   if (code === 'creative_byteplus_input_modes') return m['creative.byteplus_modes']();

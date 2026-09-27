@@ -1,9 +1,18 @@
 import type { CreativeConfig } from '../contracts/schemas/creative-media.schema.js';
 import type { FalModelContract } from './model-contract.js';
-import { concreteSchema } from './model-contract.js';
+import { concreteSchema, isAudioCategory } from './model-contract.js';
 
 function durationFor(config: CreativeConfig, contract?: FalModelContract) {
   if (!contract) return config.duration;
+  if (isAudioCategory(contract.category)) {
+    const plan = config.parameters.composition_plan as { sections?: Array<{ duration_ms?: number }> } | undefined;
+    if (Array.isArray(plan?.sections) && plan.sections.length && plan.sections.every(item => item && typeof item.duration_ms === 'number' && Number.isFinite(item.duration_ms) && item.duration_ms > 0)) return plan.sections.reduce((sum, item) => sum + item.duration_ms!, 0) / 1000;
+    for (const [key, scale] of [['music_length_ms', 1000], ['duration_ms', 1000], ['duration_seconds', 1], ['seconds_total', 1], ['duration', 1], ['audio_length', 1]] as const) {
+      const value = config.parameters[key] ?? concreteSchema(contract.schema.properties?.[key] ?? {}).default;
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value / scale;
+    }
+    return null;
+  }
   const raw = config.parameters.duration ?? config.parameters.video_length;
   const numeric = typeof raw === 'string' ? Number(raw.replace(/s$/, '')) : Number(raw);
   if (Number.isFinite(numeric) && numeric > 0) return numeric;
@@ -18,8 +27,13 @@ export function falBillingQuantity(config: CreativeConfig, unit: string, contrac
   const normalized = unit.toLowerCase().replace(/[ _-]/g, '');
   const outputs = Math.max(1, Number(config.parameters.num_videos ?? config.parameters.num_outputs ?? config.parameters.num_samples ?? 1));
   let quantity: number | null = null;
-  if (['second', 'seconds', 's', 'videosecond', 'videoseconds'].includes(normalized)) quantity = duration === null ? null : duration * outputs;
-  else if (['video', 'videos', 'request', 'requests'].includes(normalized)) quantity = outputs;
+  if (['second', 'seconds', 's', 'videosecond', 'videoseconds', 'audiosecond', 'audioseconds'].includes(normalized)) quantity = duration === null ? null : duration * outputs;
+  else if (['minute', 'minutes', 'audiominute', 'audiominutes', 'outputaudiominute'].includes(normalized)) quantity = duration === null ? null : Math.ceil(duration / 60) * outputs;
+  else if (['character', 'characters', '1000characters', '1000character', '1kcharacters'].includes(normalized)) {
+    const texts = typeof config.parameters.text === 'string' ? [config.parameters.text] : Array.isArray(config.parameters.inputs) ? config.parameters.inputs.map(item => item && typeof item === 'object' ? (item as { text?: unknown }).text : undefined) : [];
+    if (texts.length && texts.every(text => typeof text === 'string')) quantity = texts.reduce<number>((sum, text) => sum + (text as string).length, 0) * outputs / (normalized.startsWith('1000') || normalized.startsWith('1k') ? 1000 : 1);
+  }
+  else if (['video', 'videos', 'request', 'requests', 'generation', 'generations', 'audio', 'audios', 'song', 'songs'].includes(normalized)) quantity = outputs;
   else if (['frame', 'frames'].includes(normalized)) {
     const count = Number(config.parameters.num_frames ?? config.parameters.frames);
     const fps = Number(config.parameters.fps);

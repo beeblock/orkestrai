@@ -5,8 +5,13 @@ export const VIDEO_FORMATS = {
 } as const;
 export type VideoMime = keyof typeof VIDEO_FORMATS;
 
+export function canonicalMediaMime(value: unknown): unknown {
+  return typeof value === 'string' ? ({ 'audio/x-wav': 'audio/wav', 'audio/wave': 'audio/wav', 'audio/mp3': 'audio/mpeg', 'audio/x-flac': 'audio/flac', 'audio/opus': 'audio/ogg' } as Record<string, string>)[value] ?? value : value;
+}
+
 export function videoMimeFromPath(path: string): VideoMime {
   const extension = path.split('?')[0].split('.').at(-1)?.toLowerCase();
+  if (extension === 'opus') return 'audio/ogg';
   return (Object.entries(VIDEO_FORMATS).find(([, value]) => value === extension)?.[0] ?? 'video/mp4') as VideoMime;
 }
 

@@ -7,6 +7,14 @@ pt-BR, English, and Spanish translations.
 
 ## 0.37.0 - 2026-09-27
 
+### Added
+
+- Native fal.ai audio workflows for music, speech, dialogue and sound effects in Canvas and Workbench, with a searchable audio catalog, model-specific controls, workspace references and playable/downloadable output nodes.
+- Shared encrypted accounts, model permissions, cost previews, budget reservations, durable queue and agent CLI/MCP access. Audio files remain in the configured project, defaulting to `generated/audio`, and can feed compatible audio/video workflows.
+- Literal speech is isolated from production notes and camera directions. Estimate character/duration and per-audio billing (including MiniMax's `audios` unit), and reject unsupported raw audio before submission. Existing Codex image workflows and video defaults remain unchanged.
+- Use audio-specific generation controls and distinguish provider output-access failures from generation errors. Download retries preserve the paid result and never resubmit it or make private media public.
+- Let workspace owners explicitly choose private fal outputs or link-accessible outputs with a requested one-hour expiration. Pin that choice to cost previews and queued runs, keep references private, reject changed permissions before submission, and show provider request IDs for failed deliveries.
+
 ### Fixed
 
 - Let agents complete authorized logins in the same Portal with write-only password entry over HTTPS or loopback. Keep credentials out of snapshots, captures and audit records; retain explicit security gates, private-field and OTP protections.

@@ -16,7 +16,7 @@
 import { DESIGN_REFERENCE_TOPICS, designReference } from './design-reference.js';
 import { apiClientReference } from './api-client-reference.js';
 import { TOOL_MANIFEST_SCHEMA } from './workspace-tool-reference.js';
-import { VIDEO_CONFIG_SCHEMA, VIDEO_TOOL_DESCRIPTIONS } from './video-reference.js';
+import { AUDIO_COMMANDS, audioWorkflowInput, VIDEO_CONFIG_SCHEMA, VIDEO_TOOL_DESCRIPTIONS } from './video-reference.js';
 import { BRAND_COMMAND_SCHEMA } from './brand-reference.js';
 import { SEQUENCE_COMMAND_SCHEMA } from './sequence-reference.js';
 import { RECIPE_COMMAND_SCHEMA } from './recipe-reference.js';
@@ -473,7 +473,7 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
       ] } }, required: ['name'] },
     }, required: ['command'] }; required.push('input');
   }
-  if (command === 'models') properties.input = { type: 'object', additionalProperties: false, properties: { provider: { enum: ['fal', 'byteplus', 'higgsfield'], description: 'Provider whose catalog/contract to inspect; defaults to fal. Pricing uses the selected profile provider.' }, endpoint: { type: 'string', maxLength: 240 }, pricingIds: { type: 'array', minItems: 1, maxItems: 50, items: { type: 'string', maxLength: 240 } }, profileId: { type: 'string', format: 'uuid' }, query: { type: 'string', maxLength: 100 }, offset: { type: 'integer', minimum: 0, maximum: 10000 }, limit: { type: 'integer', minimum: 1, maximum: 5000 }, refresh: { type: 'boolean' } } };
+  if (command === 'models') properties.input = { type: 'object', additionalProperties: false, properties: { modality: { enum: ['video', 'audio', 'all'] }, provider: { enum: ['fal', 'byteplus', 'higgsfield'], description: 'Provider whose catalog/contract to inspect; defaults to fal. Pricing uses the selected profile provider.' }, endpoint: { type: 'string', maxLength: 240 }, pricingIds: { type: 'array', minItems: 1, maxItems: 50, items: { type: 'string', maxLength: 240 } }, profileId: { type: 'string', format: 'uuid' }, query: { type: 'string', maxLength: 100 }, offset: { type: 'integer', minimum: 0, maximum: 10000 }, limit: { type: 'integer', minimum: 1, maximum: 5000 }, refresh: { type: 'boolean' } } };
   if (['cancel', 'retry_download'].includes(command)) { properties.runId = { type: 'string', format: 'uuid' }; required.push('runId'); }
   if (['create', 'update'].includes(command)) {
     properties.input = { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1, maxLength: 120 }, config: VIDEO_CONFIG_SCHEMA, ...(command === 'update' ? { revision: { type: 'integer', minimum: 1 } } : {}) }, required: ['title', 'config'] };
@@ -486,7 +486,17 @@ for (const [command, description] of Object.entries(VIDEO_TOOL_DESCRIPTIONS)) {
   TOOLS.push({ name: `video_workflow_${command}`, description: `${description} Requires an active task assigned to this authenticated terminal. Existing Codex image_workflow_* remains unchanged.`, inputSchema: { type: 'object', additionalProperties: false, properties, required } });
 }
 
+for (const command of AUDIO_COMMANDS) {
+  const video = TOOLS.find(tool => tool.name === `video_workflow_${command}`);
+  TOOLS.push({ ...video, name: `audio_workflow_${command}`, description: `Standalone audio workflow: music, speech, dialogue and sound effects through fal.ai. Shares the native creative queue, workspace files, player and account/budget gates. Read the exact model contract first. Speech parameters.text/inputs are literal; do not put production notes in spoken content. Higgsfield has no standalone audio API; do not invent Suno endpoints. ${video.description}` });
+}
+
 async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
+  if (name.startsWith('audio_workflow_') && AUDIO_COMMANDS.includes(name.slice('audio_workflow_'.length))) {
+    if (!selfAgent) throw new Error('Audio workflows require an active Orkestrai terminal identity.');
+    const command = name.slice('audio_workflow_'.length);
+    return bridge('POST', '/api/agent-room/bridge/creative-media', { ...args, input: audioWorkflowInput(command, args.input), command });
+  }
   if (name.startsWith('video_workflow_') && Object.hasOwn(VIDEO_TOOL_DESCRIPTIONS, name.slice('video_workflow_'.length))) {
     if (!selfAgent) throw new Error('Video workflows require an active Orkestrai terminal identity.');
     return bridge('POST', '/api/agent-room/bridge/creative-media', { ...args, command: name.slice('video_workflow_'.length) });

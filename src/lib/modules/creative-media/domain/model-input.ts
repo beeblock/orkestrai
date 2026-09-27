@@ -1,5 +1,5 @@
 import type { CreativeConfig } from '../contracts/schemas/creative-media.schema.js';
-import { modelPromptField, type FalModelContract } from './model-contract.js';
+import { concreteSchema, modelDefaults, modelPromptField, type FalModelContract } from './model-contract.js';
 import { CreativeMediaError } from './types.js';
 
 export function bindModelMedia(input: Record<string, unknown>, pointer: string, value: string) {
@@ -21,6 +21,14 @@ export function bindModelMedia(input: Record<string, unknown>, pointer: string, 
 export function genericFalInput(config: CreativeConfig, prompt: string, media: Record<string, string>, contract: FalModelContract) {
   if (contract.id !== config.modelId || contract.status !== 'active') throw new CreativeMediaError('creative_model_not_found');
   const input = structuredClone(config.parameters);
+  // Raw PCM/telephony bytes have no self-describing container for playback or reuse.
+  // Refuse before billing rather than charging for an unusable output.
+  if (config.modality === 'audio') {
+    const defaults = modelDefaults(contract.schema);
+    const audioSettings = concreteSchema(contract.schema.properties?.audio_setting ?? {});
+    const formats = [input.output_format ?? defaults.output_format, input.format ?? defaults.format, (input.audio_setting as { format?: unknown } | undefined)?.format ?? modelDefaults(audioSettings).format];
+    if (formats.some(value => typeof value === 'string' && /^(?:pcm|ulaw|alaw|raw)(?:_|$)/i.test(value))) throw new CreativeMediaError('creative_audio_format_unsupported');
+  }
   for (const key of ['num_videos', 'num_outputs', 'num_samples']) {
     if (typeof input[key] === 'number' && input[key] > 10) throw new CreativeMediaError('creative_model_parameters_invalid');
   }
