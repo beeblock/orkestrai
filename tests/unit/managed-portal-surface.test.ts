@@ -50,17 +50,17 @@ class ContentsView extends View {
 }
 
 const active: Array<ReturnType<typeof createManagedPortalExecutor>> = [];
-afterEach(() => {
-  active.splice(0).forEach((executor) => executor.closeAll());
+afterEach(async () => {
+  await Promise.all(active.splice(0).map((executor) => executor.closeAll()));
   ContentsView.instances = [];
 });
 
 async function setup() {
-  const cookies = new EventEmitter();
+  const cookies = Object.assign(new EventEmitter(), { flushStore: vi.fn(async () => {}) });
   const onOpenRequest = vi.fn();
   const executor = createManagedPortalExecutor({
     WebContentsView: ContentsView, View,
-    session: { fromPartition: () => ({ cookies, setPermissionRequestHandler: vi.fn() }) },
+    session: { fromPartition: () => ({ cookies, flushStorageData: vi.fn(), setPermissionRequestHandler: vi.fn() }) },
     onOpenRequest,
   });
   active.push(executor);
@@ -83,6 +83,67 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('drains a pending native read before closing and rejects late work without recreating tabs', async () => {
+    const { executor, request, contents, parent, lease } = await setup();
+    let finish!: (result: []) => void;
+    contents.executeJavaScriptInIsolatedWorld.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = executor.execute(request);
+    await new Promise(resolve => setImmediate(resolve));
+    const count = ContentsView.instances.length;
+    const closing = executor.closeAll();
+    expect(executor.closeAll()).toBe(closing);
+    expect(contents.isDestroyed()).toBe(false);
+    expect(await executor.execute(request)).toMatchObject({ ok: false, error: expect.stringContaining('closing') });
+    await expect(executor.surface(request, parent, lease)).rejects.toThrow('closing');
+    expect(ContentsView.instances).toHaveLength(count);
+    finish([]);
+    expect(await pending).toMatchObject({ ok: false });
+    await closing;
+    expect(contents.isDestroyed()).toBe(true);
+    expect(parent.contentView.children.size).toBe(0);
+  });
+
+  it('does not run a second action while a timed-out renderer operation is unresolved', async () => {
+    const { executor, request, contents } = await setup();
+    vi.useFakeTimers();
+    try {
+      let finish!: (result: {}) => void;
+      contents.executeJavaScriptInIsolatedWorld.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+      const first = executor.execute({ ...request, action: 'click', args: { ref: 'button' }, timeoutMs: 10000 });
+      await vi.advanceTimersByTimeAsync(5100);
+      expect(await first).toMatchObject({ ok: false, error: expect.stringContaining('did not respond') });
+      const count = contents.executeJavaScriptInIsolatedWorld.mock.calls.length;
+      expect(await executor.execute({ ...request, action: 'click', args: { ref: 'button' } })).toMatchObject({ ok: false, error: expect.stringContaining('unresolved') });
+      expect(contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledTimes(count);
+      finish({});
+      await Promise.resolve();
+      expect(await executor.execute(request)).toMatchObject({ ok: true });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('fails reads promptly after a dev server load failure, then permits navigation and retry', async () => {
+    const { executor, request, contents } = await setup();
+    contents.emit('did-start-navigation', {}, request.initialUrl, false, true);
+    contents.emit('did-fail-load', {}, -102, 'ERR_CONNECTION_REFUSED', request.initialUrl, true);
+    contents.emit('dom-ready'); contents.emit('did-finish-load');
+    expect(await executor.execute(request)).toMatchObject({ ok: false, error: expect.stringContaining('unavailable') });
+    expect(await executor.execute({ ...request, action: 'navigate', args: { url: request.initialUrl } })).toMatchObject({ ok: true });
+    expect(await executor.execute(request)).toMatchObject({ ok: true });
+  });
+
+  it('bounds native compositor stalls so later commands are not stuck behind a screenshot forever', async () => {
+    const { executor, request, contents } = await setup();
+    vi.useFakeTimers();
+    try {
+      contents.capturePage.mockImplementation(() => new Promise(() => {}));
+      contents.debugger.sendCommand.mockImplementation(async () => { throw new Error('Current display surface not available'); });
+      const result = executor.execute({ ...request, action: 'screenshot' });
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(await result).toMatchObject({ ok: false });
+      expect(await executor.execute({ ...request, action: 'tabs', args: { operation: 'list' } })).toMatchObject({ ok: true });
+    } finally { vi.useRealTimers(); }
+  });
+
   it('does not present or capture a page between main-frame navigation and DOM readiness', async () => {
     const { executor, parent, request, lease, contents } = await setup();
     const calls = contents.debugger.sendCommand.mock.calls.length;
@@ -117,10 +178,10 @@ describe('embedded Portal surface lifecycle', () => {
     expect([...parent.contentView.children][0].visible).toBe(true);
   });
 
-  it('retries the initial missing compositor frame without exposing the page early', async () => {
+  it.each(['Current display surface not available for capture', 'UnknownVizError'])('retries transient compositor error %s without exposing the page early', async (error) => {
     const { executor, parent, request, lease, contents } = await setup();
     const captures = contents.capturePage.mock.calls.length;
-    contents.capturePage.mockRejectedValueOnce(new Error('Current display surface not available for capture'));
+    contents.capturePage.mockRejectedValueOnce(new Error(error));
     executor.setGeometry(request.workspaceId, request.nodeId, {
       bounds: { x: 100, y: 100, width: 400, height: 300 },
       clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true,
@@ -129,6 +190,29 @@ describe('embedded Portal surface lifecycle', () => {
     expect([...parent.contentView.children][0].visible).toBe(false);
     await vi.waitFor(() => expect([...parent.contentView.children][0].visible).toBe(true));
     expect(contents.capturePage).toHaveBeenCalledTimes(captures + 2);
+  });
+
+  it('recovers a failed presentation without requiring the user to change geometry', async () => {
+    const { executor, parent, request, lease, contents } = await setup();
+    contents.debugger.sendCommand.mockRejectedValueOnce(new Error('Temporary compositor failure'));
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 400, height: 300 },
+      clip: { x: 100, y: 100, width: 400, height: 300 }, viewport: { width: 800, height: 600 }, zoom: 0.5, visible: true,
+    }, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    expect([...parent.contentView.children][0].visible).toBe(false);
+    await vi.waitFor(() => expect([...parent.contentView.children][0].visible).toBe(true));
+  });
+
+  it('does not race native capture with the logical screenshot on a mounted Portal', async () => {
+    const { executor, request, contents } = await setup();
+    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
+    const before = contents.capturePage.mock.calls.length;
+    contents.debugger.sendCommand.mockImplementation(async method => {
+      if (method === 'Page.captureScreenshot') expect(contents.capturePage).toHaveBeenCalledTimes(before);
+      return { data: png.toString('base64') };
+    });
+    expect(await executor.execute({ ...request, action: 'screenshot' })).toMatchObject({ ok: true });
   });
 
   it('discards screenshots if navigation replaces the masked document', async () => {
@@ -254,7 +338,6 @@ describe('embedded Portal surface lifecycle', () => {
       return {};
     });
     let painted!: (image: Awaited<ReturnType<Contents['capturePage']>>) => void;
-    contents.capturePage.mockResolvedValueOnce({ toDataURL: () => '', getSize: () => ({ width: 400, height: 300 }) });
     contents.capturePage.mockImplementationOnce(() => new Promise(resolve => { painted = resolve; }));
     const capture = executor.userCommand(request, 'preview', {});
     const result = expect(capture).rejects.toThrow('Screenshot failed');

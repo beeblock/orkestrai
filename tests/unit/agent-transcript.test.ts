@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -17,7 +18,65 @@ import {
   transcriptContainsPrompt,
 } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 
+describe('async transcript lookup', () => {
+  it.each([false, true])('reads exact turns without synchronous filesystem scans (WSL: %s)', async (posixCwd) => {
+    const home = await mkdtemp(join(tmpdir(), 'ork-transcript-async-'));
+    const cwd = posixCwd ? '/home/test/project' : home;
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const dir = join(home, '.codex', 'sessions', '2026', '09', '27');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, `rollout-2026-09-27T12-00-00-${sessionId}.jsonl`), [
+      { type: 'session_meta', payload: { id: sessionId, cwd } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'first prompt' }], internal_chat_message_metadata_passthrough: { turn_id: 'turn-1' } } },
+      { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-1', last_agent_message: 'First answer' } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'second prompt' }] } },
+    ].map(event => JSON.stringify(event)).join('\n'));
+    const reads = [vi.spyOn(fs, 'readdirSync'), vi.spyOn(fs, 'readFileSync'), vi.spyOn(fs, 'openSync')];
+    try {
+      const options = { homeDir: home, posixCwd };
+      expect(await findPromptInTranscript('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toEqual({ sessionId });
+      expect(await findReplyToPrompt('codex', cwd, sessionId, 'first prompt', Date.now() - 1_000, options)).toEqual({ sessionId, text: 'First answer', complete: true });
+      expect(await findReplyToPrompt('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toBeNull();
+      await appendFile(join(dir, `rollout-2026-09-27T12-00-00-${sessionId}.jsonl`), '\n' + JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'New answer after poll' }] } }));
+      expect(await findReplyToPrompt('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toMatchObject({ sessionId, text: 'New answer after poll' });
+      for (const spy of reads) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      reads.forEach(spy => spy.mockRestore());
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('parseClaudeTranscriptReply', () => {
+  it('acknowledges a complete Claude bracketed-paste envelope and scopes its reply', () => {
+    const pasted = '\n\n<pasted_content id="ac6e">\nReview the assigned task\n</pasted_content id="ac6e">\n';
+    const events = [
+      { type: 'user', message: { content: pasted } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Reviewed the assigned task.' }], stop_reason: 'end_turn' } },
+    ];
+    const transcript = events.map(event => JSON.stringify(event)).join('\n');
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, 'Review the assigned task')).toBe(true);
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', transcript, 'Review the assigned task'))
+      .toEqual({ text: 'Reviewed the assigned task.', complete: true });
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, pasted)).toBe(true);
+    const nextTurn = JSON.stringify({ type: 'user', message: { content: 'Another task' } });
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript + '\n' + nextTurn, 'Review the assigned task')).toBe(false);
+    expect(parseTranscriptReplyForPrompt('claude-project-jsonl', transcript + '\n' + nextTurn, 'Review the assigned task'))
+      .toBe('Reviewed the assigned task.');
+  });
+
+  it.each([
+    '<pasted_content id="one">Expected</pasted_content id="two">',
+    'Extra <pasted_content id="one">Expected</pasted_content id="one">',
+    '<pasted_content id="one">Expected</pasted_content id="one"> extra',
+    '<pasted_content id="one">Expected</pasted_content id="one"><pasted_content id="two">Another</pasted_content id="two">',
+    '<pasted_content id="one">Expected and something else</pasted_content id="one">',
+  ])('does not accept a partial or mismatched paste: %s', content => {
+    const transcript = JSON.stringify({ type: 'user', message: { content } });
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, 'Expected')).toBe(false);
+    expect(parseTranscriptReplyForPrompt('claude-project-jsonl', transcript, 'Expected')).toBeNull();
+  });
+
   it('ignores non-event JSON and does not acknowledge a cancelled queued prompt', () => {
     const transcript = [
       { type: 'queue-operation', operation: 'enqueue', content: 'Cancelled' },

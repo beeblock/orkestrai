@@ -93,10 +93,10 @@ async function main() {
   console.log('Portal navigation regression passed.');
 }
 
-function finish(error) {
+async function finish(error) {
   clearTimeout(watchdog);
   if (error) console.error(error);
-  executor?.closeAll();
+  await executor?.closeAll();
   if (parent && !parent.isDestroyed()) parent.destroy();
   server?.closeAllConnections();
   server?.close();

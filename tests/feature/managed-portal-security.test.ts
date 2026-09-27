@@ -1,6 +1,7 @@
 import { mkdtemp, rm, symlink, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -153,6 +154,54 @@ describe('authenticated Portal control', () => {
     const events=await autonomyPolicyService.listAudit(f.workspace.id);
     expect(events.filter((event)=>event.capability==='browser' && event.eventType==='completed')).toHaveLength(0);
     expect(events.some((event)=>event.eventType==='failed')).toBe(true);
+  });
+
+  it('fills authorized login passwords without a manual handoff or credential persistence', async () => {
+    const f = await fixture();
+    const current = await autonomyPolicyService.get(f.workspace.id);
+    await autonomyPolicyService.update(f.workspace.id, { enabled: false, mode: 'observe', policy: current.policy });
+    runtime.__orkestraiExecutePortal = async (request) => {
+      await f.execute(request);
+      return request.inspect ? { ok: true, result: { url: 'https://example.test/login', element: { name: 'Protected field', tag: 'input', protected: true, writeOnly: true } } }
+        : { ok: true, result: { performed: 'type' } };
+    };
+    const args = { ref: 'e1', text: 'synthetic-password-qa', clear: true, submit: false };
+    await expect(managedPortalService.execute(f.workspace.id, f.command('type', args), f.context)).resolves.toMatchObject({ ok: true });
+    expect(f.execute.mock.calls.find(([request]) => !request.inspect)?.[0].args).toMatchObject({ passwordOrigin: 'https://example.test' });
+    const audit = JSON.stringify(await autonomyPolicyService.listAudit(f.workspace.id));
+    expect(audit).not.toContain(args.text);
+    const { ref: _ref, ...semantic } = args;
+    expect(audit).not.toContain(createHash('sha256').update(JSON.stringify(semantic)).digest('hex'));
+    expect(JSON.stringify(await workspaceRepository.getNode(f.portal.id))).not.toContain(args.text);
+    expect(await autonomyPolicyService.listGates(f.workspace.id)).toHaveLength(0);
+  });
+
+  it('keeps explicit credential gates and never echoes a password from a failed native action', async () => {
+    const f = await fixture();
+    const secret = 'synthetic-gated-password';
+    runtime.__orkestraiExecutePortal = async (request) => {
+      await f.execute(request);
+      if (!request.inspect) throw new Error(`Page rejected ${secret}`);
+      return { ok: true, result: { url: 'https://example.test/login', element: { name: 'Protected field', tag: 'input', protected: true, writeOnly: true } } };
+    };
+    const command = f.command('type', { ref: 'e1', text: secret });
+    await expect(managedPortalService.execute(f.workspace.id, command, f.context)).rejects.toBeInstanceOf(AutonomyGatePendingError);
+    expect(f.execute.mock.calls.every(([request]) => request.inspect)).toBe(true);
+    const [gate] = await autonomyPolicyService.listGates(f.workspace.id);
+    expect(gate.risk).toBe('account_permission');
+    expect(JSON.stringify(gate)).not.toContain(secret);
+    await autonomyPolicyService.resolveGate(f.workspace.id, gate.id, 'approved', 'owner');
+    await expect(managedPortalService.execute(f.workspace.id, command, f.context)).rejects.toThrow('Portal password entry could not be confirmed.');
+    expect(JSON.stringify(await autonomyPolicyService.listAudit(f.workspace.id))).not.toContain(secret);
+  });
+
+  it('rejects remote plaintext password transport and client-forged authorization', async () => {
+    const f = await fixture();
+    const current = await autonomyPolicyService.get(f.workspace.id);
+    await autonomyPolicyService.update(f.workspace.id, { enabled: false, mode: 'observe', policy: current.policy });
+    runtime.__orkestraiExecutePortal = async () => ({ ok: true, result: { url: 'http://example.test/login', element: { protected: true, writeOnly: true } } });
+    await expect(managedPortalService.execute(f.workspace.id, f.command('type', { ref: 'e1', text: 'private' }), f.context)).rejects.toThrow(/HTTPS/);
+    expect(() => f.command('type', { ref: 'e1', text: 'private', passwordOrigin: 'https://example.test' })).toThrow();
   });
 
   it.skipIf(process.platform==='win32')('rejects a download ancestor symlink before creating directories outside the workspace', async () => {

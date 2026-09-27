@@ -122,6 +122,7 @@ export class ControlCenterService {
    * blocked/error events in Workbench and resolves obsolete attention items.
    */
   async recordLifecycleActivity(input: RecordActivityInput): Promise<AgentActivity | null> {
+    input = { ...input, metadata: { ...input.metadata, lifecycle: true } };
     if (input.taskId) return this.recordActivity(input);
     const candidates = await AgentBoardTask.query()
       .where('workspace_id', input.workspaceId)
@@ -179,6 +180,9 @@ export class ControlCenterService {
     const previousWrite = this.writes.get(key) ?? Promise.resolve(null);
     const write = previousWrite.then(async () => {
       const previous = this.latest.get(key) ?? await controlCenterRepository.latestActivity(input.nodeId);
+      if (input.metadata?.lifecycle && ['idle', 'working'].includes(input.state)
+        && previous && !previous.metadata?.lifecycle
+        && ['blocked', 'waiting_permission', 'waiting_input', 'error'].includes(previous.state)) return null;
       const action = input.action?.trim() || null;
       const taskId = input.taskId ?? null;
       if (

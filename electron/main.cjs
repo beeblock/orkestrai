@@ -1438,11 +1438,25 @@ if (!gotLock) {
     if (process.platform !== 'darwin' && !shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) app.quit();
   });
 
-  app.on('before-quit', () => {
+  let quitReady = false;
+  let quitCleanup;
+  app.on('before-quit', (event) => {
     isQuitting = true;
-    managedPortalExecutor?.closeAll();
-    flushPortalStorage();
-    void stopServer();
+    if (quitReady) return;
+    event.preventDefault();
+    quitCleanup ??= Promise.allSettled([
+      managedPortalExecutor?.closeAll(),
+      stopServer(),
+    ]).then(() => {
+      try {
+        flushPortalStorage();
+      } catch (error) {
+        console.warn('[portal] Could not flush storage during shutdown:', error?.message ?? String(error));
+      } finally {
+        quitReady = true;
+        app.quit();
+      }
+    });
   });
   app.on('quit', () => {
     closeSplash();

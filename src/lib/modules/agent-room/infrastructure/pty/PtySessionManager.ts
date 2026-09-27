@@ -126,6 +126,8 @@ type PtySession = PtySessionInfo & {
   ownsProcessTree: boolean;
   initialIdleObserved: boolean;
   startupGuard: InteractiveStartupGuard | null;
+  bracketedPaste: boolean;
+  terminalModeTail: string;
   scrollback: string;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
@@ -155,6 +157,9 @@ type ComposerDelivery = {
   submitDelayMs: number;
   resolve: () => void;
   reject: (error: Error) => void;
+  requiresAcceptance: boolean;
+  confirmAcceptance?: () => Promise<boolean>;
+  confirmationPending?: boolean;
 };
 
 export type ComposerDeliveryHandle = {
@@ -299,6 +304,8 @@ export class PtySessionManager {
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       initialIdleObserved: false,
       startupGuard: interactiveStartupGuard(input.provider),
+      bracketedPaste: false,
+      terminalModeTail: '',
       scrollback: '',
       listeners: new Set(),
       exitListeners: new Set(),
@@ -329,6 +336,9 @@ export class PtySessionManager {
       session.lastOutputAt = Date.now();
       session.outputRevision += 1;
       session.scrollback = (session.scrollback + data).slice(-SCROLLBACK_LIMIT);
+      const modes = session.terminalModeTail + data;
+      for (const match of modes.matchAll(/\x1b\[\?2004([hl])/g)) session.bracketedPaste = match[1] === 'h';
+      session.terminalModeTail = modes.slice(-12);
       session.startupGuard?.observe(data);
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
@@ -496,6 +506,7 @@ export class PtySessionManager {
   resize(id: string, cols: number, rows: number): void {
     const session = this.requireSession(id);
     if (session.exited) return;
+    if (session.cols === cols && session.rows === rows) return;
     session.cols = cols;
     session.rows = rows;
     session.pty.resize(cols, rows);
@@ -587,28 +598,45 @@ export class PtySessionManager {
       submitDelayMs?: number;
       confirmationWindowMs?: number;
       maxAttempts?: number;
+      queueTimeoutMs?: number;
       isAccepted?: () => Promise<boolean>;
       isStillRelevant?: () => Promise<boolean>;
       signal?: AbortSignal;
     } = {},
   ): Promise<void> {
     const session = this.requireSession(id);
-    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200);
+    // Share an in-flight read with the barrier reconciler. UNC reads may hang;
+    // never accumulate another read for the same submission on every poll.
+    let acceptanceRead: Promise<boolean> | undefined;
+    const confirmAcceptance = options.isAccepted ? () => {
+      acceptanceRead ??= Promise.resolve().then(options.isAccepted!).finally(() => { acceptanceRead = undefined; });
+      return acceptanceRead;
+    } : undefined;
+    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance);
     if (options.signal?.aborted) {
       queued.cancel();
       throw new Error('Agent message delivery cancelled.');
     }
     const cancelQueuedDelivery = () => queued.cancel();
+    const queueDeadline = Date.now() + (options.queueTimeoutMs ?? 300_000);
     options.signal?.addEventListener('abort', cancelQueuedDelivery, { once: true });
     try {
       while (true) {
+        let poll: ReturnType<typeof setTimeout> | undefined;
         const submitted = await Promise.race([
           queued.submitted.then(() => true),
           new Promise<false>((resolvePromise) => {
-            setTimeout(() => resolvePromise(false), 200);
+            poll = setTimeout(() => resolvePromise(false), 200);
           }),
-        ]);
+        ]).finally(() => clearTimeout(poll));
         if (submitted) break;
+        if (Date.now() >= queueDeadline) {
+          const error = new Error('Terminal delivery queue timed out. The message was not submitted; check the terminal draft or startup dialog before retrying.');
+          if (queued.cancel(error)) {
+            await queued.submitted.catch(() => undefined);
+            throw error;
+          }
+        }
         if (options.signal?.aborted) {
           queued.cancel();
           throw new Error('Agent message delivery cancelled.');
@@ -631,26 +659,14 @@ export class PtySessionManager {
     }
     if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
     if (!session.provider) return;
-    if (!session.conptySubmitGuard) {
-      // Native delivery does not depend on transcript support. A bounded,
-      // optional match can release the queue even while a TUI keeps animating.
-      if (options.isAccepted) {
-        void this.waitForAcceptance(async () => {
-          if (session.exited || this.sessions.get(id) !== session) return true;
-          if (!(await options.isAccepted!())) return false;
-          queued.acknowledge();
-          return true;
-        }, 15_000, options.signal).catch(() => undefined);
-      }
-      return;
-    }
+    if (!session.conptySubmitGuard && !options.isAccepted) return;
 
-    const confirmationWindowMs = options.confirmationWindowMs ?? 4_000;
-    const maxAttempts = Math.max(1, options.maxAttempts ?? 3);
+    const confirmationWindowMs = options.confirmationWindowMs ?? (session.conptySubmitGuard ? 4_000 : 180_000);
+    const maxAttempts = Math.max(1, options.maxAttempts ?? (session.conptySubmitGuard ? 3 : 1));
     let revisionAtSubmit = session.lastSubmitOutputRevision;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const confirmed = options.isAccepted
-        ? await this.waitForAcceptance(options.isAccepted, confirmationWindowMs, options.signal)
+      const confirmed = confirmAcceptance
+        ? await this.waitForAcceptance(confirmAcceptance, confirmationWindowMs, options.signal)
         : await this.waitForOutputAfter(id, revisionAtSubmit, confirmationWindowMs, options.signal);
       if (confirmed) {
         if (options.isAccepted) queued.acknowledge();
@@ -664,6 +680,13 @@ export class PtySessionManager {
       if (!this.submitIfComposerFree(id)) {
         throw new Error(`A sessão PTY ${id} não pôde confirmar o envio porque o composer está ocupado.`);
       }
+    }
+    // A busy TUI can queue input internally and persist it only after its
+    // current tool/model turn ends. No further Enter is safe at this point.
+    if (confirmAcceptance && session.conptySubmitGuard && options.confirmationWindowMs === undefined
+      && await this.waitForAcceptance(confirmAcceptance, 180_000, options.signal)) {
+      queued.acknowledge();
+      return;
     }
     throw new Error(`A sessão PTY ${id} não confirmou o envio após ${maxAttempts} tentativas.`);
   }
@@ -698,7 +721,7 @@ export class PtySessionManager {
     return false;
   }
 
-  queueWithSubmit(id: string, text: string, submitDelayMs = 200): ComposerDeliveryHandle {
+  queueWithSubmit(id: string, text: string, submitDelayMs = 200, requiresAcceptance = false, confirmAcceptance?: () => Promise<boolean>): ComposerDeliveryHandle {
     const session = this.requireSession(id);
     if (session.exited) {
       return {
@@ -718,7 +741,7 @@ export class PtySessionManager {
 
     let delivery!: ComposerDelivery;
     const submitted = new Promise<void>((resolve, reject) => {
-      delivery = { text: sanitized, submitDelayMs, resolve, reject };
+      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance };
       session.deliveryQueue.push(delivery);
       this.drainDeliveryQueue(session);
     });
@@ -727,6 +750,9 @@ export class PtySessionManager {
       acknowledge: () => {
         if (session.exited || session.lastSubmittedDelivery !== delivery) return;
         session.lastDeliveryAccepted = true;
+        // Exact transcript acceptance replaces the conservative redraw delay.
+        // Waiting eight seconds again serializes independent team handoffs.
+        session.deliveryReadyAt = Date.now();
         this.releaseDeliveryBarrierWhenReady(session);
       },
       cancel: (reason = new Error('Entrega ao terminal cancelada antes do envio.')) => {
@@ -808,7 +834,11 @@ export class PtySessionManager {
     const outputRevisionAtWrite = session.outputRevision;
     const textWrittenAt = Date.now();
     try {
-      this.write(session.id, delivery.text);
+      // Explicit paste boundaries avoid provider heuristics turning a large
+      // handoff and its following Enter into a single never-submitted paste.
+      this.write(session.id, session.bracketedPaste
+        ? `\x1b[200~${delivery.text}\x1b[201~`
+        : delivery.text);
     } catch (error) {
       session.deliveryInProgress = false;
       session.activeDelivery = null;
@@ -881,7 +911,23 @@ export class PtySessionManager {
   ): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     while (!signal?.aborted && Date.now() < deadline) {
-      if (await isAccepted().catch(() => false)) return true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let cancel: (() => void) | undefined;
+      const pending = new Promise<never>((_resolve, reject) => {
+        cancel = () => reject(new Error('Agent message delivery cancelled.'));
+        signal?.addEventListener('abort', cancel, { once: true });
+        timer = setTimeout(() => reject(new Error('Transcript confirmation timed out. Delivery is uncertain; inspect the terminal before retrying.')), Math.max(1, deadline - Date.now()));
+      });
+      let accepted: boolean;
+      try {
+        // A stalled UNC/network read is unknown delivery, not a missing Enter.
+        // Never send another Enter while that confirmation is unresolved.
+        accepted = await Promise.race([isAccepted(), pending]);
+      } finally {
+        clearTimeout(timer);
+        if (cancel) signal?.removeEventListener('abort', cancel);
+      }
+      if (accepted) return true;
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
     }
     return false;
@@ -902,6 +948,24 @@ export class PtySessionManager {
 
   private releaseDeliveryBarrierWhenReady(session: PtySession): void {
     if (!session.awaitingDeliveryIdle || session.exited) return;
+    if (session.lastSubmittedDelivery?.requiresAcceptance && !session.lastDeliveryAccepted) {
+      const delivery = session.lastSubmittedDelivery;
+      if (delivery.confirmAcceptance && !delivery.confirmationPending) {
+        delivery.confirmationPending = true;
+        // The caller can time out or disconnect after a successful paste.
+        // Late exact acceptance must still release the session's queue.
+        void delivery.confirmAcceptance().then((accepted) => {
+          if (!accepted || session.exited || session.lastSubmittedDelivery !== delivery) return;
+          session.lastDeliveryAccepted = true;
+          session.deliveryReadyAt = Date.now();
+          this.releaseDeliveryBarrierWhenReady(session);
+        }).catch(() => undefined).finally(() => {
+          delivery.confirmationPending = false;
+          if (!session.exited && session.lastSubmittedDelivery === delivery) this.scheduleDeliveryBarrierFallback(session);
+        });
+      }
+      return;
+    }
     const now = Date.now();
     const outputQuiet = session.lastOutputAt === 0 || now - session.lastOutputAt >= SESSION_IDLE_MS;
     if (now < session.deliveryReadyAt || (!outputQuiet && !session.lastDeliveryAccepted)) {

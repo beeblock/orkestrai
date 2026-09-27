@@ -16,7 +16,11 @@ export class InteractiveStartupGuard {
     const clears = [...this.output.matchAll(/\x1b\[[23]J/g)];
     const lastClear = clears.at(-1);
     if (lastClear) this.output = this.output.slice(lastClear.index! + lastClear[0].length);
-    const text = stripVTControlCharacters(this.output);
+    // Full-screen Claude paints words at absolute columns instead of emitting
+    // spaces. Stripping CSI alone turns "bypass permissions on" into one word.
+    const text = stripVTControlCharacters(this.output
+      .replace(/\x1b\[[\d;]*[BHEFfd]/g, '\n')
+      .replace(/\x1b\[\d*[CG]/g, ' '));
     if (/Quick safety check:|Do you trust (?:the files in|this) (?:folder|directory)|Yes, I trust this folder|No, exit/i.test(text)) {
       this.blocked = true;
       return;

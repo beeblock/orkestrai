@@ -4,6 +4,24 @@ import { interactiveStartupGuard, InteractiveStartupGuard } from '$lib/modules/a
 const trust = 'Accessing workspace: /workspace\r\nQuick safety check: Is this a project you created or one you trust?\r\n\u276f No, exit\r\n  Yes, I trust this folder\r\nEnter to confirm';
 
 describe('interactive startup confirmation', () => {
+  it('recognizes the column-positioned composer from Claude 2.1.283, even in split chunks', () => {
+    const output = '\x1b[2J\x1b[H\r\x1b[12GClaude\x1b[19GCode\x1b[24Gv2.1.283'
+      + '\r\x1b[1B\u276f Try\x1b[7G"write\x1b[14Ga\x1b[16Gtest"'
+      + '\r\x1b[1B\x1b[6Gbypass\x1b[13Gpermissions\x1b[25Gon\x1b[28G(shift+tab\x1b[39Gto\x1b[42Gcycle)';
+    for (const chunks of [[output], [...output]]) {
+      const guard = new InteractiveStartupGuard();
+      for (const chunk of chunks) guard.observe(chunk);
+      expect(guard.canAcceptMessages).toBe(true);
+    }
+  });
+
+  it('still blocks a column-positioned trust dialog', () => {
+    const guard = new InteractiveStartupGuard();
+    guard.observe('\x1b[2JQuick\x1b[7Gsafety\x1b[14Gcheck:\r\x1b[1BNo,\x1b[5Gexit');
+    guard.observe('\x1b[2Jbypass\x1b[8Gpermissions\x1b[20Gon');
+    expect(guard.canAcceptMessages).toBe(false);
+  });
+
   it('recognizes the current Claude trust prompt across ANSI/chunk boundaries', () => {
     const guard = new InteractiveStartupGuard();
     const output = `\x1b[32m${trust}\x1b[0m`;

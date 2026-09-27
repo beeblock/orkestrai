@@ -42,6 +42,25 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it('exposes intentional task redispatch through the existing authenticated endpoint', async () => {
+    const server = startMcp();
+    const taskId = '00000000-0000-4000-8000-000000000001';
+    try {
+      server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'task_dispatch', arguments: { taskId } } });
+      const result = JSON.parse((await server.waitFor(1)).result.content[0].text);
+      expect(result).toMatchObject({ method: 'POST', path: `/api/agent-room/bridge/tasks/${taskId}/dispatch`, body: {} });
+      expect(MCP_TOOLS.find(tool => tool.name === 'task_assign')!.description).toContain('does NOT resend');
+    } finally { server.input.end(); await server.done; }
+  });
+  it('exposes assignment with explicit leader intent without a duplicate ask', async () => {
+    const server = startMcp();
+    try {
+      server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'task_assign', arguments: { taskId: 'task-1', assignee: 'Leader', leaderWork: 'review' } } });
+      const result = JSON.parse((await server.waitFor(1)).result.content[0].text);
+      expect(result).toMatchObject({ method: 'PATCH', path: '/api/agent-room/bridge/tasks/task-1', body: { assignee: 'Leader', leaderWork: 'review' } });
+      expect(MCP_TOOLS.find(tool => tool.name === 'task_add')!.description).toContain('dispatch');
+    } finally { server.input.end(); await server.done; }
+  });
   it('exposes per-model contracts and read-only pricing without presenting suggestions as hard constraints', () => {
     const tool = MCP_TOOLS.find(tool => tool.name === 'video_workflow_models')!;
     expect(tool.description).toContain('descriptions, examples, defaults');

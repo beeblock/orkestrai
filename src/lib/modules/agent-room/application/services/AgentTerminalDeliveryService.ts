@@ -2,6 +2,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracker.js';
 import { ObsoletePtyDeliveryError, ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
 import { findPromptInTranscript } from '../../infrastructure/transcript/AgentTranscript.js';
+import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 
 type DeliverAgentMessageInput = {
   workspaceId: string;
@@ -9,13 +10,14 @@ type DeliverAgentMessageInput = {
   sessionId: string;
   message: string;
   submitDelayMs?: number;
+  queueTimeoutMs?: number;
   signal?: AbortSignal;
   isStillRelevant?: () => Promise<boolean>;
 };
 
 /**
  * Single delivery path for every automatic message sent to an agent TUI.
- * ConPTY/WSL deliveries are acknowledged only after the provider persists the
+ * Transcript-capable deliveries are acknowledged only after the provider persists the
  * exact prompt, which distinguishes a real submit from a harmless redraw.
  */
 export class AgentTerminalDeliveryService {
@@ -24,16 +26,13 @@ export class AgentTerminalDeliveryService {
       throw new ObsoletePtyDeliveryError();
     }
     const startedAt = Date.now();
-    const requiresConfirmation = ptySessionManager.requiresSubmitConfirmation(input.sessionId);
     const provider = ptySessionManager.get(input.sessionId)?.provider;
-    const confirmAccepted = provider
-      ? await this.preparePromptConfirmation(input, startedAt).catch((error) => {
-        if (requiresConfirmation) throw error;
-        return undefined;
-      })
+    const confirmAccepted = provider && hasAgentAdapter(provider) && getAgentAdapter(provider).sessionStorage
+      ? await this.preparePromptConfirmation(input, startedAt)
       : undefined;
     await ptySessionManager.writeWithConfirmedSubmit(input.sessionId, input.message, {
       submitDelayMs: input.submitDelayMs ?? 200,
+      queueTimeoutMs: input.queueTimeoutMs,
       signal: input.signal,
       isAccepted: confirmAccepted,
       isStillRelevant: input.isStillRelevant,

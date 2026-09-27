@@ -47,9 +47,13 @@ describe('TaskBoardService', () => {
     const assigned = await taskBoardService.update(workspace.id, task.id, { assigneeNodeId: terminal.id });
     expect(assigned.assigneeNodeId).toBe(terminal.id);
     expect(assigned.status).toBe('doing'); // atribuir move para doing automaticamente
+    expect(assigned.assignmentDelivery).toEqual({ dispatched: true, reason: 'assigned_and_submitted', retryTool: null });
+    const sameAssignee = await taskBoardService.update(workspace.id, task.id, { assigneeNodeId: terminal.id });
+    expect(sameAssignee.assignmentDelivery).toEqual({ dispatched: false, reason: 'already_assigned_no_resend', retryTool: 'task_dispatch' });
 
     const done = await taskBoardService.update(workspace.id, task.id, { status: 'done' });
     expect(done.status).toBe('done');
+    expect(done.assignmentDelivery).toBeUndefined();
 
     expect(await taskBoardService.list(workspace.id)).toHaveLength(1);
     await taskBoardService.remove(workspace.id, task.id);

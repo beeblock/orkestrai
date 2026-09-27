@@ -3,12 +3,14 @@ import { FormRequest } from '@beeblock/svelar/forms';
 import {
   executeGitOperationSchema,
   fsWriteSchema,
+  terminalWriteSchema,
   gitOperationInputSchema,
   gitPathSchema,
 } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { portalService } from '$lib/modules/agent-room/application/services/PortalService.js';
 import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
 
@@ -23,6 +25,12 @@ class FsWriteRequest extends FormRequest {
   passedValidation(data: unknown) {
     return fsWriteSchema.parse(data);
   }
+}
+
+class TerminalWriteRequest extends FormRequest {
+  rules() { return terminalWriteSchema; }
+  authorize(): boolean { return true; }
+  passedValidation(data: unknown) { return terminalWriteSchema.parse(data); }
 }
 
 class GitPathRequest extends FormRequest {
@@ -272,15 +280,22 @@ export class FilesystemController extends Controller {
 
   async writeTerminal(event: any) {
     try {
-      const body = await event.request.json();
+      const body = await TerminalWriteRequest.validate(event);
       const node = await workspaceRepository.getNode(event.params.nodeId);
       if (!node || node.workspaceId !== event.params.id || node.type !== 'terminal') {
         throw new Error('Terminal não encontrado neste workspace.');
       }
       const sessionId = (node.payload as { sessionId?: string }).sessionId;
       if (!sessionId) throw new Error('O terminal não tem sessão PTY ativa.');
-      if (body.submit === true) await ptySessionManager.writeWithConfirmedSubmit(sessionId, String(body.data ?? ''));
-      else ptySessionManager.writeHumanInput(sessionId, String(body.data ?? ''));
+      if (body.submit === true) await agentTerminalDeliveryService.deliver({
+        workspaceId: event.params.id,
+        nodeId: node.id,
+        sessionId,
+        message: body.data,
+        queueTimeoutMs: 30_000,
+        signal: event.request.signal,
+      });
+      else ptySessionManager.writeHumanInput(sessionId, body.data);
       return this.json({ data: { written: true } });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao escrever no terminal.');

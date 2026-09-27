@@ -1,6 +1,6 @@
 import { Controller } from '@beeblock/svelar/routing';
 import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
-import { AutonomyGatePendingError } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
+import { AutonomyGatePendingError, autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
@@ -1591,6 +1591,7 @@ export class BridgeController extends Controller {
       const input = bridgeBoardTaskSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       const assigneeNodeId = await this.assigneeNodeId(workspace.id, input.assignee);
+      await bridgeService.assertTaskAssignment(workspace.id, assigneeNodeId, input.leaderWork);
       const caller = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
       const task = await taskBoardService.create(workspace.id, {
         title: input.title,
@@ -1614,10 +1615,12 @@ export class BridgeController extends Controller {
     try {
       const input = bridgeBoardTaskUpdateSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const assigneeNodeId = input.assignee !== undefined ? await this.assigneeNodeId(workspace.id, input.assignee) : undefined;
+      await bridgeService.assertTaskAssignment(workspace.id, assigneeNodeId, input.leaderWork);
       const task = await taskBoardService.update(workspace.id, event.params.taskId, {
         status: input.status,
         description: input.description,
-        assigneeNodeId: input.assignee !== undefined ? await this.assigneeNodeId(workspace.id, input.assignee) : undefined,
+        assigneeNodeId,
         noteId: await this.noteNodeId(workspace.id, input.note),
         notifyCompletion: true,
         completedBy: input.from,

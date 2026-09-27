@@ -7,6 +7,78 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it.each([false, true])('recovers the delivery queue after delayed acceptance (caller expired: %s)', async expired => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const fakePty = { write: (data: string) => writes.push(data), resize() {}, kill() {}, pid: 1,
+      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', provider: 'codex', cwd: process.cwd() });
+    let accepted = false;
+    try {
+      const first = manager.writeWithConfirmedSubmit(session.id, 'busy handoff', {
+        isAccepted: async () => accepted,
+        ...(expired ? { confirmationWindowMs: 1_000 } : {}),
+      });
+      const completion = expired ? expect(first).rejects.toThrow('confirm') : first;
+      await vi.advanceTimersByTimeAsync(2_000);
+      if (expired) await completion;
+      const next = manager.writeWithSubmit(session.id, 'next handoff');
+      await vi.advanceTimersByTimeAsync(130_000);
+      expect(writes).toEqual(['busy handoff', '\r']);
+      accepted = true;
+      await vi.advanceTimersByTimeAsync(4_000);
+      await completion;
+      await next;
+      expect(writes).toEqual(['busy handoff', '\r', 'next handoff', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('uses negotiated paste boundaries and waits for real acceptance on native terminals', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = { write: (data: string) => writes.push(data), resize() {}, kill() {}, pid: 1,
+      onData: (listener: typeof emitData) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', provider: 'codex', cwd: process.cwd() });
+    try {
+      emitData('\x1b[?20'); emitData('04h');
+      let accepted = false;
+      const delivery = manager.writeWithConfirmedSubmit(session.id, 'first message', { isAccepted: async () => accepted });
+      let finished = false; void delivery.then(() => { finished = true; });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(finished).toBe(false);
+      const next = manager.queueWithSubmit(session.id, 'second message');
+      const cancelled = next.submitted.catch(() => {});
+      expect(writes).toEqual(['\x1b[200~first message\x1b[201~', '\r']);
+      next.cancel(); await cancelled;
+      accepted = true; await vi.advanceTimersByTimeAsync(500); await delivery;
+      expect(finished).toBe(true);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('does not mix another automatic prompt into an unconfirmed native submission', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const fakePty = { write: (data: string) => writes.push(data), resize() {}, kill() {}, pid: 1,
+      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', provider: 'codex', cwd: process.cwd() });
+    try {
+      const first = manager.writeWithConfirmedSubmit(session.id, 'unconfirmed', { isAccepted: async () => false, confirmationWindowMs: 1000 });
+      const failed = expect(first).rejects.toThrow('confirm');
+      await vi.advanceTimersByTimeAsync(2000); await failed;
+      const next = manager.queueWithSubmit(session.id, 'must stay queued');
+      const cancelled = next.submitted.catch(() => {});
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(writes).toEqual(['unconfirmed', '\r']);
+      next.cancel(); await cancelled;
+      manager.writeHumanInput(session.id, 'human can still type');
+      expect(writes.at(-1)).toBe('human can still type');
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
   it.each(['native', 'wsl'] as const)('does not submit initial tasks to the Claude trust dialog in %s', async (runtime) => {
     vi.useFakeTimers();
     const writes: string[] = [];
@@ -88,14 +160,53 @@ describe('PtySessionManager', () => {
       await first;
       const second = manager.writeWithSubmit(session.id, 'second prompt');
       const spinner = setInterval(() => emitData('working...'), 100);
-      await vi.advanceTimersByTimeAsync(7_000);
-      expect(writes).toEqual(['first prompt', '\r']);
       await vi.advanceTimersByTimeAsync(1_000);
       expect(writes).toContain('second prompt');
       clearInterval(spinner);
       await vi.advanceTimersByTimeAsync(1_000);
       await second;
       expect(writes).toEqual(['first prompt', '\r', 'second prompt', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('expires queued delivery without submitting or blocking a human draft', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex' });
+    try {
+      manager.writeHumanInput(session.id, 'human draft');
+      const delivery = manager.writeWithConfirmedSubmit(session.id, 'expired handoff', { queueTimeoutMs: 1_000 });
+      const rejected = expect(delivery).rejects.toThrow('queue timed out');
+      await vi.advanceTimersByTimeAsync(1_200);
+      await rejected;
+      manager.writeHumanInput(session.id, '\x7f');
+      manager.writeHumanInput(session.id, '\r');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(writes).toEqual(['human draft', '\x7f', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('bounds stalled WSL transcript IO without sending another Enter', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const fakePty = {
+      write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
+      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }),
+    };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex', runtime: { kind: 'wsl', distribution: 'Ubuntu', linuxWorkingDir: '/project' } });
+    try {
+      const delivery = manager.writeWithConfirmedSubmit(session.id, 'one prompt', { isAccepted: () => new Promise(() => {}), confirmationWindowMs: 1_000 });
+      const rejected = expect(delivery).rejects.toThrow('Delivery is uncertain');
+      await vi.advanceTimersByTimeAsync(3_000);
+      await rejected;
+      manager.writeHumanInput(session.id, 'human input');
+      expect(writes).toEqual(['one prompt', '\r', 'human input']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -111,13 +222,14 @@ describe('PtySessionManager', () => {
     const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
     const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex' });
     try {
-      const first = manager.writeWithConfirmedSubmit(session.id, 'first', { isAccepted: async () => false });
+      const first = manager.writeWithConfirmedSubmit(session.id, 'first', { isAccepted: async () => false, confirmationWindowMs: 15_000 });
+      const failed = expect(first).rejects.toThrow('confirm');
       await vi.advanceTimersByTimeAsync(600);
-      await first;
       const second = manager.queueWithSubmit(session.id, 'second');
       const rejected = second.submitted.catch(() => undefined);
       const spinner = setInterval(() => emitData('working...'), 100);
       await vi.advanceTimersByTimeAsync(16_000);
+      await failed;
       expect(writes).toEqual(['first', '\r']);
       clearInterval(spinner);
       second.cancel();

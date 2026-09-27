@@ -13,6 +13,8 @@ const showWindow = process.argv.includes('--show-window');
 const html = `<!doctype html><html><head><title>Controlled Portal QA</title></head>
 <body style="margin:0;background:#168766;color:white;font:20px system-ui">
 <h1>Controlled Portal QA</h1><label>Password <input id="password" type="password" value="synthetic-password-qa"></label>
+<form id="login" action="/session" method="post"><input aria-label="Login email" name="email"><input aria-label="Login password" id="login-password" type="password" name="password" autocomplete="current-password"><button>Log in</button></form>
+<input aria-label="OTP" autocomplete="one-time-code">
 <input name="api_token" value="synthetic-token-qa"><input aria-label="Message" id="message">
 <section data-private><input aria-label="Private nested input" value="nested-private-qa"></section>
 <iframe title="Private frame" srcdoc="<p>Frame credentials</p>"></iframe>
@@ -26,7 +28,20 @@ const watchdog = setTimeout(() => { console.error('Managed Portal regression tim
 async function main() {
   await app.whenReady();
   if (!showWindow) app.dock?.hide();
-  server = http.createServer((_request, response) => { response.writeHead(200, { 'content-type': 'text/html' }); response.end(html); });
+  server = http.createServer((request, response) => {
+    if (request.url === '/offline') { response.destroy(); return; }
+    if (request.url === '/signed-in') assert.match(request.headers.cookie || '', /qa_session=active/);
+    if (request.url === '/session' && request.method === 'POST') {
+      let body = ''; request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const data = new URLSearchParams(body);
+        assert.equal(data.get('email'), 'qa@example.test');
+        assert.equal(data.get('password'), 'authorized-login-qa');
+        response.writeHead(302, { location: '/signed-in', 'set-cookie': 'qa_session=active; HttpOnly; SameSite=Strict; Path=/' }); response.end();
+      }); return;
+    }
+    response.writeHead(200, { 'content-type': 'text/html' }); response.end(html);
+  });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}/`;
   // Automated regression checks must not interrupt the user's current workspace.
@@ -38,6 +53,13 @@ async function main() {
     profile: { profileId: 'qa', profileScope: 'private', allowedHosts: ['127.0.0.1'], paused: false, allowBackground: !showWindow },
     action: 'snapshot', args: {}, timeoutMs: 5000 };
   const lease = randomUUID();
+  const failedLoad = { ...request, nodeId: randomUUID(), initialUrl: `${url}offline`, profile: { ...request.profile, allowBackground: true } };
+  console.log('Portal regression: unavailable dev server');
+  const unavailable = await executor.execute(failedLoad);
+  assert.equal(unavailable.ok, false, 'failed navigation must not hang a snapshot forever');
+  const recovered = await executor.execute({ ...failedLoad, action: 'navigate', args: { url } });
+  assert.equal(recovered.ok, true, recovered.error);
+  assert.equal((await executor.execute(failedLoad)).ok, true, 'a failed read must not block navigation and all later commands');
   const initial = await executor.surface(request, parent, lease);
   executor.setGeometry(request.workspaceId, request.nodeId, { bounds: {x:100,y:100,width:800,height:600}, clip:{x:200,y:160,width:500,height:350}, viewport:{width:800,height:600},zoom:1,visible:true }, lease);
   const command = async (action, args = {}) => {
@@ -74,6 +96,31 @@ async function main() {
   assert.equal((await executor.execute({ ...request, action: 'type', args: { ref: protectedRef, text:'blocked' } })).ok, false);
   assert.ok(!JSON.stringify(await command('dom')).includes('synthetic-password-qa'));
   assert.ok(!JSON.stringify(await command('extract', {kind:'text'})).includes('synthetic-token-qa'));
+  console.log('Portal regression: authorized write-only login');
+  const login = await command('snapshot');
+  const passwordRef = login.result.elements.filter(element => element.writeOnly)[1].ref;
+  await raw('document.getElementById("login").action = "https://other.example/session"');
+  assert.equal((await executor.execute({ ...request, action: 'type', args: { ref: passwordRef, text: 'must-not-leak', passwordOrigin: new URL(url).origin } })).ok, false);
+  assert.equal(await raw('document.getElementById("login-password").value'), '');
+  await raw('document.getElementById("login").action = "/session"');
+  await command('type', { ref: byName(login, 'Login email'), text: 'qa@example.test' });
+  await command('type', { ref: passwordRef, text: 'authorized-login-qa', passwordOrigin: new URL(url).origin });
+  assert.equal(await raw('document.getElementById("login-password").value'), 'authorized-login-qa');
+  assert.ok(!JSON.stringify(await command('snapshot')).includes('authorized-login-qa'));
+  assert.ok(!JSON.stringify(await command('dom')).includes('authorized-login-qa'));
+  await raw('document.getElementById("login-password").value = ""; document.getElementById("result").textContent = "authorized-login-qa"');
+  assert.ok(!JSON.stringify(await command('extract', { kind: 'text' })).includes('authorized-login-qa'), 'clearing the field must not expose an echoed password');
+  const refill = await command('snapshot');
+  await command('type', { ref: refill.result.elements.filter(element => element.writeOnly)[1].ref, text: 'authorized-login-qa', passwordOrigin: new URL(url).origin });
+  const submitSnapshot = await command('snapshot');
+  await command('click', { ref: byName(submitSnapshot, 'Log in') });
+  await command('wait', { urlIncludes: '/signed-in' });
+  assert.ok((await executor.inspect(request)).url.endsWith('/signed-in'));
+  // The login session belongs to this same Portal profile, not another browser.
+  assert.equal((await executor.inspect(request)).webContentsId, initial.webContentsId);
+  const privateTargets = await command('snapshot');
+  const otp = privateTargets.result.elements.find(element => element.protected && !element.writeOnly && element.tag === 'input');
+  assert.equal((await executor.execute({ ...request, action: 'type', args: { ref: otp.ref, text: '123456', passwordOrigin: new URL(url).origin } })).ok, false);
   const capture = await command('screenshot');
   assert.match(capture.result.dataUrl, /^data:image\/png;base64,/);
   const captured = nativeImage.createFromDataURL(capture.result.dataUrl);
@@ -114,9 +161,9 @@ async function main() {
 }
 
 main().then(() => finish(0), (error) => { console.error(error); finish(1); });
-function finish(code) {
+async function finish(code) {
   clearTimeout(watchdog);
-  executor?.closeAll(); parent?.destroy(); server?.close();
+  await executor?.closeAll(); parent?.destroy(); server?.close();
   fs.rmSync(profile, { recursive:true,force:true });
   app.exit(code);
 }

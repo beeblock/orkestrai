@@ -4,12 +4,25 @@ function portalDomRuntime() {
   if (globalThis[key]) return;
   let sequence = 0;
   const refs = new Map();
-  const sensitive = (el) => el.closest?.('[data-private]') || el.matches?.('input[type="password"],input[type="hidden"],[autocomplete="one-time-code"]')
+  const writtenSecrets = new Set();
+  const protectedInputs = new WeakSet();
+  const sensitive = (el) => protectedInputs.has(el) || el.closest?.('[data-private]') || el.matches?.('input[type="password"],input[type="hidden"],[autocomplete="one-time-code"]')
     || /password|passwd|secret|token|api.?key|credential|one.?time|otp/i.test([
       el.getAttribute?.('name'), el.getAttribute?.('id'), el.getAttribute?.('autocomplete'), el.getAttribute?.('aria-label'),
     ].filter(Boolean).join(' '));
-  const privateValues = () => [...document.querySelectorAll('input,textarea,[data-private]')]
-    .filter(sensitive).map((el) => String(el.value || el.textContent || '')).filter(Boolean).sort((a, b) => b.length - a.length);
+  const privateValues = () => [...writtenSecrets, ...[...document.querySelectorAll('input,textarea,[data-private]')]
+    .filter(sensitive).map((el) => String(el.value || el.textContent || ''))].filter(Boolean).sort((a, b) => b.length - a.length);
+  const passwordWritable = (el) => {
+    if (!el.matches?.('input[type="password"]') || el.closest('[data-private]') || /one.?time|otp|token|api.?key/i.test([
+      el.name, el.id, el.autocomplete, el.getAttribute('aria-label'),
+    ].filter(Boolean).join(' '))) return false;
+    const url = new URL(location.href);
+    const secure = url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
+    try {
+      const destination = new URL(el.form?.action || location.href, location.href);
+      return secure && !url.username && !url.password && !destination.username && !destination.password && destination.origin === url.origin;
+    } catch { return false; }
+  };
   const redact = (value) => privateValues().reduce((text, secret) => text.split(secret).join('[redacted]'), String(value || ''))
     .replace(/\bBearer\s+[\w.~+/-]+/gi, 'Bearer [redacted]')
     .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, '[redacted]');
@@ -36,22 +49,28 @@ function portalDomRuntime() {
         refs.set(ref, { element: el, fingerprint: fingerprint(el) });
         const rect = el.getBoundingClientRect();
         return { ref, role: el.getAttribute('role') || ({ A: 'link', BUTTON: 'button', INPUT: 'textbox', SELECT: 'combobox', TEXTAREA: 'textbox' }[el.tagName] || 'generic'),
-          name: label(el), tag: el.tagName.toLowerCase(), protected: Boolean(sensitive(el)), disabled: !!el.disabled,
+          name: label(el), tag: el.tagName.toLowerCase(), protected: Boolean(sensitive(el)), writeOnly: passwordWritable(el), disabled: !!el.disabled,
           value: sensitive(el) ? '[redacted]' : redact(el.value).slice(0, 1000),
           rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
       });
   };
   const inspect = (ref) => {
     const el = resolve(ref);
-    return { name: label(el), protected: Boolean(sensitive(el)), tag: el.tagName.toLowerCase(), type: el.getAttribute('type'), href: safeUrl(el.getAttribute('href') || location.href), form: Boolean(el.form), editable: el.matches('input,textarea,[contenteditable="true"]') };
+    return { name: label(el), protected: Boolean(sensitive(el)), writeOnly: passwordWritable(el), tag: el.tagName.toLowerCase(), type: el.getAttribute('type'), href: safeUrl(el.getAttribute('href') || location.href), form: Boolean(el.form), editable: el.matches('input,textarea,[contenteditable="true"]') };
   };
   const act = (ref, action, args) => {
     const el = resolve(ref);
-    if (sensitive(el)) throw new Error('Protected fields require the user to authenticate in the Portal.');
+    const passwordWrite = action === 'type' && args.passwordOrigin === location.origin && passwordWritable(el);
+    if (sensitive(el) && !passwordWrite) throw new Error('Protected field is read-only to agents. Passwords marked writeOnly accept authorized typing; OTP and private fields require the user.');
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') throw new Error('Portal element is disabled.');
     el.scrollIntoView({ block: 'center', inline: 'center' });
     if (action === 'click') el.click();
     else if (action === 'type') {
+      if (passwordWrite) {
+        if (writtenSecrets.size >= 100) throw new Error('Portal password entry limit reached. Reload before retrying.');
+        protectedInputs.add(el);
+        writtenSecrets.add(args.clear === false ? el.value + args.text : args.text);
+      }
       el.focus();
       if (el.matches('input,textarea')) {
         const setter = Object.getOwnPropertyDescriptor(el.tagName === 'INPUT' ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype, 'value')?.set;

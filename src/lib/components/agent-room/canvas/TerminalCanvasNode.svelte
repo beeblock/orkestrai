@@ -362,6 +362,8 @@
 
   // -- Composer com @mencoes ---------------------------------------------------
   let prompt = $state('');
+  let promptSending = $state(false);
+  let promptError = $state('');
   let mentionOpen = $state(false);
   let mentionFilter = $state('');
   let mentionTargets = $state<MentionTarget[]>([]);
@@ -411,18 +413,29 @@
 
   async function sendPrompt() {
     const text = prompt.trim();
-    if (!text) return;
-    const sessionId = (data.payload as TerminalNodePayload).sessionId ?? (agentRuntimeSleeping ? await wakeAgent() : null);
-    if (!sessionId) return;
-    prompt = '';
-    await fetch(`/api/agent-room/workspaces/${data.workspaceId}/terminals/${id}/write`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}),
-      },
-      body: JSON.stringify({ data: text, submit: true }),
-    }).catch(() => {});
+    if (!text || promptSending) return;
+    promptSending = true;
+    promptError = '';
+    try {
+      const sessionId = (data.payload as TerminalNodePayload).sessionId ?? (agentRuntimeSleeping ? await wakeAgent() : null);
+      if (!sessionId) throw new Error('Terminal unavailable');
+      const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/terminals/${id}/write`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}),
+        },
+        body: JSON.stringify({ data: text, submit: true }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.data?.written !== true) throw new Error('Delivery not confirmed');
+      // Preserve a new draft typed while the previous message was in flight.
+      if (prompt.trim() === text) prompt = '';
+    } catch {
+      promptError = m['term.prompt_delivery_failed']();
+    } finally {
+      promptSending = false;
+    }
   }
 
   function handlePromptKeydown(event: KeyboardEvent) {
@@ -890,6 +903,9 @@
   {#if providerError}
     <p class="voice-error">{providerError}</p>
   {/if}
+  {#if promptError}
+    <p class="voice-error" role="alert">{promptError}</p>
+  {/if}
   <VoiceConfirmDialog bind:open={voiceConfirmOpen} onConfirm={() => (voiceOn = true)} onCancel={() => {}} />
   <CouncilDialog bind:open={councilOpen} workspaceId={data.workspaceId} source={{ leaderNodeId: id }} />
   <TerminalRuntimeDialog
@@ -947,7 +963,7 @@
       placeholder={m['ph.quick_prompt']()}
       spellcheck="false"
     />
-    <button class="composer-send" class:ready={Boolean(prompt.trim())} aria-label={m['term.send']()} onclick={sendPrompt} disabled={!prompt.trim()}>
+    <button class="composer-send" class:ready={Boolean(prompt.trim())} aria-label={m['term.send']()} aria-busy={promptSending} onclick={sendPrompt} disabled={!prompt.trim() || promptSending}>
       <SendHorizontal size={14} />
     </button>
   </div>

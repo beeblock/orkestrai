@@ -2,9 +2,9 @@
 import { run } from '../src/cli.js';
 
 run(process.argv.slice(2)).then(
-  (code) => process.exit(code),
+  (code) => { process.exitCode = code; },
   (error) => {
     console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    process.exitCode = 1;
   }
 );

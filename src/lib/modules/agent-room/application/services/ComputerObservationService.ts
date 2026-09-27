@@ -144,7 +144,7 @@ export class ComputerObservationService {
     try {
       if (Date.now() - this.cleanedAt >= 300_000) {
         this.cleanedAt = Date.now();
-        await computerEvidenceService.sweep().catch(() => console.error('[computer-storage] Cleanup failed; inspect Computer storage status.'));
+        await computerEvidenceService.sweep().catch(error => console.error('[computer-storage]', error.message));
         const { conversationMemoryService } = await import('./ConversationMemoryService.js');
         await conversationMemoryService.sweep().catch(() => console.error('[conversation-memory] Retention cleanup failed.'));
         const { computerMediaService } = await import('./ComputerMediaService.js');
