@@ -5,11 +5,24 @@ import { agentSessionService } from '$lib/modules/agent-room/application/service
 import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { agentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/AgentSessionTracker.ts';
 
 describe('AgentSessionService provider profiles', () => {
   useSvelarTest({ refreshDatabase: true });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it.each([undefined, 'missing-conversation'])('does not silently create a fresh conversation when exact restoration is required (%s)', async agentSessionId => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'strict resume', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Saved agent',
+      payload: { command: 'codex', provider: 'codex', agentSessionId },
+    });
+    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockReturnValue(false);
+    const create = vi.spyOn(ptySessionManager, 'create');
+    await expect(agentSessionService.ensure(workspace.id, node.id, { requireResume: true })).rejects.toThrow('AGENT_SAVED_CONVERSATION_UNAVAILABLE');
+    expect(create).not.toHaveBeenCalled();
+    expect((await workspaceRepository.getNode(node.id))?.payload).toMatchObject({ provider: 'codex' });
+  });
 
   it('injects resolved profile values only into the spawned process', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'runtime profile', workingDir: '/tmp' });

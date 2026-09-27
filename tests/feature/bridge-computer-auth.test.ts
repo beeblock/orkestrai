@@ -39,6 +39,10 @@ describe('natural-language computer preparation through the authenticated bridge
     vi.spyOn(computerService as any, 'adapterSnapshot').mockResolvedValue({ platform: 'macos', available: true, reason: 'ready', detail: null, permissions: { accessibility: 'granted', screenRecording: 'granted' }, displays: [], windows: [], focusedWindowId: null });
     const create = vi.spyOn(taskBoardService, 'create');
     const controller = new BridgeController();
+    const inspected = await controller.computerList(event(token, 'desktop-agent-test-token', {}) as any) as Response;
+    expect(inspected.status, await inspected.clone().text()).toBe(200);
+    expect((await inspected.json()).data.replyGrants).toEqual([]);
+    expect((await controller.computerList(event(token, null, {}) as any) as Response).status).toBe(401);
     const response = await controller.taskCreate(event(token, 'desktop-agent-test-token', { title: 'Calculate 73 times 19', assignee: agent.id, from: agent.id }) as any) as Response;
     expect(response.status, await response.clone().text()).toBe(201);
     expect(create.mock.calls[0][1].dispatch).toBe(false);

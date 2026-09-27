@@ -39,7 +39,7 @@ export class ComputerEvidenceService {
 
   async capture(workspaceId: string, config: ComputerNodeConfig, temporary: boolean, write: (path: string) => Promise<{ width: number | null; height: number | null }>, accept?: (path: string) => Promise<boolean>) {
     return this.serial(async () => {
-      await this.sweepUnchecked();
+      await this.sweepUnchecked(undefined, workspaceId);
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       if (!workspace) throw new Error('Workspace not found.');
       const pending = await this.directory(workspace, 'pending');
@@ -59,7 +59,7 @@ export class ComputerEvidenceService {
         if (accept && !await accept(staging)) return null;
         if (!(await workspaceRepository.listNodes(workspaceId)).some((node) => node.type === 'computer')) throw new Error('The Computer node was removed during capture.');
         await rename(staging, destination);
-        await this.sweepUnchecked(destination);
+        await this.sweepUnchecked(destination, workspaceId);
         const remaining = await statfs(directory);
         if (remaining.bavail * remaining.bsize < COMPUTER_STORAGE_LIMITS.minimumFreeBytes) throw new Error('Computer capture paused: less than 1 GiB of free disk space.');
         return { evidenceId, path: `.orkestrai/computer/${temporary ? 'observations' : 'evidence'}/${evidenceId}.png`, ...dimensions };
@@ -104,10 +104,11 @@ export class ComputerEvidenceService {
     return kept;
   }
 
-  private async sweepUnchecked(protect?: string): Promise<void> {
+  private async sweepUnchecked(protect?: string, captureWorkspaceId?: string): Promise<void> {
     const workspaces = await workspaceRepository.listWorkspaces();
     const groups: { workspaceId: string; evidence: Entry[]; temporary: Entry[] }[] = [];
     const seen = new Set<string>();
+    const failures: string[] = [];
     for (const workspace of workspaces) {
       try {
         const node = (await workspaceRepository.listNodes(workspace.id)).find((candidate) => candidate.type === 'computer');
@@ -124,7 +125,7 @@ export class ComputerEvidenceService {
         groups.push({ workspaceId: workspace.id, evidence, temporary });
       } catch {
         this.stats.set(workspace.id, { ...this.usage(workspace.id), checkedAt: new Date().toISOString(), error: true });
-        throw new Error('Computer storage cleanup failed. Check workspace access and disk space.');
+        failures.push(workspace.id);
       }
     }
     const all = groups.flatMap((group) => [...group.evidence, ...group.temporary]).sort((a, b) => a.modified - b.modified || a.path.localeCompare(b.path));
@@ -135,6 +136,11 @@ export class ComputerEvidenceService {
       this.stats.set(group.workspaceId, { bytes: evidence.reduce((sum, e) => sum + e.bytes, 0), files: evidence.length, temporaryBytes: temporary.reduce((sum, e) => sum + e.bytes, 0), temporaryFiles: temporary.length, checkedAt: new Date().toISOString(), error: false });
     }
     for (const id of this.stats.keys()) if (!workspaces.some((workspace) => workspace.id === id)) this.stats.delete(id);
+    // An unavailable old workspace must not prevent retention or captures in
+    // healthy projects. Keep its failure visible and never traverse its paths.
+    if (failures.length && (!captureWorkspaceId || failures.includes(captureWorkspaceId))) {
+      throw new Error(`Computer storage cleanup failed for workspace(s): ${failures.join(', ')}. Check workspace access and disk space.`);
+    }
   }
 }
 

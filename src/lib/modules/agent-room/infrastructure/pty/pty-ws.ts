@@ -42,6 +42,8 @@ type ClientMessage =
   | { type: 'input'; sessionId: string; data: string }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
   | { type: 'kill'; sessionId: string }
+  | { type: 'ping' }
+  | { type: 'subscribe'; events: string[]; workspaceId?: string }
   | { type: 'list' };
 
 export function isPtyWsPath(pathname: string): boolean {
@@ -53,14 +55,19 @@ export function isPtyWsPath(pathname: string): boolean {
 // type-stripped carregam copias separadas deste módulo no mesmo processo.
 const wsGlobal = globalThis as unknown as {
   __orkestraiWsClients?: Set<WebSocket>;
+  __orkestraiWsSubscriptions?: WeakMap<WebSocket, { events: Set<string>; workspaceId?: string }>;
   __orkestraiBroadcast?: (payload: Record<string, unknown>) => void;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
 };
 const allSockets = (wsGlobal.__orkestraiWsClients ??= new Set<WebSocket>());
+const subscriptions = (wsGlobal.__orkestraiWsSubscriptions ??= new WeakMap());
 wsGlobal.__orkestraiBroadcast = (payload) => {
   const frame = JSON.stringify(payload);
   for (const client of allSockets) {
+    const subscription = subscriptions.get(client);
+    if (subscription && (!subscription.events.has(String(payload.type))
+      || (subscription.workspaceId && payload.workspaceId && payload.workspaceId !== subscription.workspaceId))) continue;
     if (client.readyState === client.OPEN) client.send(frame);
   }
 };
@@ -134,6 +141,17 @@ export function handlePtyConnection(socket: WebSocket): void {
 
     try {
       switch (message.type) {
+        case 'ping':
+          send({ type: 'pong' });
+          break;
+        case 'subscribe':
+          if (!Array.isArray(message.events) || message.events.length > 20
+            || message.events.some((event) => typeof event !== 'string' || event.length > 64)
+            || (message.workspaceId !== undefined && (typeof message.workspaceId !== 'string' || message.workspaceId.length > 128))) {
+            throw new Error('Invalid event subscription.');
+          }
+          subscriptions.set(socket, { events: new Set(message.events), workspaceId: message.workspaceId });
+          break;
         case 'create': {
           if (typeof message.command !== 'string' || !message.command.trim()) {
             throw new Error('Informe o comando da sessão PTY.');

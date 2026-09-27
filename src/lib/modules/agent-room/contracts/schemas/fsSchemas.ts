@@ -7,6 +7,11 @@ export const fsWriteSchema = z.object({
   content: z.string(),
 });
 
+export const terminalWriteSchema = z.object({
+  data: z.string().min(1).max(256 * 1024),
+  submit: z.boolean().default(false),
+});
+
 export const openWorkspaceFolderSchema = z.object({
   path: z.string().trim().min(1).max(4000)
     .refine(value => !/[\x00-\x1f\x7f]/.test(value), 'Invalid folder path.')

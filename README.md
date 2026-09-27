@@ -195,7 +195,11 @@ device access.
   The Core can operate the same protected profile with the Canvas closed through
   semantic snapshots and typed browser actions. Per-Portal host allowlists and
   workspace-confined files keep unattended runs bounded, Control Center records
-  each effect, and login remains a user-only handoff.
+  each effect. Agents can fill authorized test-account passwords over HTTPS or
+  loopback using write-only inputs, then verify login in the same Portal.
+  Passwords remain redacted in reads and audit. OTP, private fields, pauses and
+  explicitly enabled security gates remain protected; use manual login when
+  private credentials must stay out of provider conversation history.
 - **Configurable Workbench:** keep open terminals, boards, notes, portals,
   files, flows, and usage in vertical tabs by default or optional horizontal
   tabs, then arrange up to eight live artifacts in resizable right/down splits.
@@ -359,6 +363,10 @@ device access.
   Android uses Android Studio Platform Tools plus the bundled scrcpy server; the
   live screen is decoded with WebCodecs and fits either surface by default.
   Agents run the same workspace-scoped flow through the bundled CLI or MCP tools.
+  A previously attached virtual device resumes on the same Mobile node after a
+  Core restart. Unloaded workspaces stay stopped, another workspace's device is
+  not taken over, and physical devices still require confirmation. Recovery
+  failures are shown with a retry action instead of an endless loader.
 - **Operational Control Center:** inspect every agent's current task, state,
   state duration, provider, role, and usage. Its persistent communications inbox
   projects every handoff into a canonical, idempotent message envelope and proves
@@ -557,6 +565,11 @@ device access.
   work is done. Recruitment inherits the leader's active Floor and is confirmed
   only after the provider terminal starts; task assignment restores an offline
   agent and moves to progress only after the briefing is delivered.
+  Specialists implement; leader assignments through CLI/MCP require explicit
+  `leaderWork=coordination|review` (`--leader-work` in the CLI). Assignment
+  already dispatches the briefing, so a duplicate `ask` is unnecessary. An
+  approved plan includes routine owned dev-server and Portal verification work;
+  explicit security gates, provider exclusions and budgets still apply.
 - **Ready-made teams:** start or expand a workspace with complete Product,
   Campaign and launch, Brand and design, Content and SEO, React, Next.js,
   SvelteKit, Svelar, Laravel, and Orkestrai Contributing presets. Their agents

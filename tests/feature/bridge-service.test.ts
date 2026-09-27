@@ -14,7 +14,9 @@ import { promisify } from 'node:util';
 import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { agentSessionService } from '$lib/modules/agent-room/application/services/AgentSessionService.js';
+import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,6 +46,17 @@ async function createWorkspaceWithTerminal() {
 
 describe('BridgeService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('requires explicit coordination or review intent for leader assignments, not specialist work', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Delegation', workingDir: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Lead', payload: { maestro: true } });
+    const specialist = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Engineer', payload: {} });
+    await expect(bridgeService.assertTaskAssignment(workspace.id, leader.id)).rejects.toThrow('assign implementation to a specialist');
+    await expect(bridgeService.assertTaskAssignment(workspace.id, leader.id, 'coordination')).resolves.toBeUndefined();
+    await expect(bridgeService.assertTaskAssignment(workspace.id, leader.id, 'review')).resolves.toBeUndefined();
+    await expect(bridgeService.assertTaskAssignment(workspace.id, specialist.id)).resolves.toBeUndefined();
+    await expect(bridgeService.assertTaskAssignment('other-workspace', specialist.id)).rejects.toThrow('in this workspace');
+  });
 
   it('gera token por workspace, persiste e resolve por token', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'w', workingDir: '/tmp' });
@@ -196,6 +209,57 @@ describe('BridgeService', () => {
       state: 'working',
       taskId: unassigned.id,
     })).rejects.toThrow('não tem responsável');
+  });
+
+  it('resumes a known conversation before an ask when its Floor terminal was not mounted after restart', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    await workspaceRepository.updateNode(terminal.id, { payload: { command: 'codex', provider: 'codex', agentSessionId: 'saved-conversation' } });
+    vi.mocked(agentSessionService.ensure).mockResolvedValueOnce({ nodeId: terminal.id, sessionId: session.id, state: 'started' });
+    const delivery = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockRejectedValueOnce(new Error('delivery-reached-restored-session'));
+    try {
+      await expect(bridgeService.ask(workspace.id, { to: terminal.id, message: 'Continue the review' })).rejects.toThrow('delivery-reached-restored-session');
+      expect(agentSessionService.ensure).toHaveBeenCalledWith(workspace.id, terminal.id, { requireResume: true });
+      expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ sessionId: session.id, nodeId: terminal.id }));
+      expect((await workspaceRepository.getNode(terminal.id))?.payload).toMatchObject({ agentSessionId: 'saved-conversation' });
+    } finally { ptySessionManager.kill(session.id); }
+  });
+
+  it('restores structured one-way handoffs but never replays raw TUI bytes into a restarted terminal', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    await workspaceRepository.updateNode(terminal.id, { payload: { command: 'claude', provider: 'claude', agentSessionId: 'saved-conversation' } });
+    vi.mocked(agentSessionService.ensure).mockResolvedValueOnce({ nodeId: terminal.id, sessionId: session.id, state: 'started' });
+    vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      await expect(bridgeService.askRaw(workspace.id, { to: terminal.id, message: '\r' })).rejects.toThrow('PTY ativa');
+      expect(agentSessionService.ensure).not.toHaveBeenCalled();
+      await expect(bridgeService.sendOneWay(workspace.id, { to: terminal.id, message: 'Review feedback' })).resolves.toMatchObject({ sent: true });
+      expect(agentSessionService.ensure).toHaveBeenCalledTimes(1);
+    } finally { ptySessionManager.kill(session.id); }
+  });
+
+  it('does not wake suspended workspaces or invent conversations for disconnected shells', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    try {
+      await workspaceRepository.updateNode(terminal.id, { payload: { command: '/bin/cat' } });
+      await expect(bridgeService.ask(workspace.id, { to: terminal.id, message: 'hello' })).rejects.toThrow('PTY ativa');
+      await workspaceRepository.updateNode(terminal.id, { payload: { command: 'codex', provider: 'codex', agentSessionId: 'saved-conversation' } });
+      await workspaceRepository.setWorkspaceSuspended(workspace.id, true);
+      await expect(bridgeService.ask(workspace.id, { to: terminal.id, message: 'hello' })).rejects.toThrow('WORKSPACE_SUSPENDED');
+      expect(agentSessionService.ensure).not.toHaveBeenCalled();
+    } finally { ptySessionManager.kill(session.id); }
+  });
+
+  it('preserves configured usage limits before automatically restoring a message recipient', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    await workspaceRepository.updateNode(terminal.id, { payload: {
+      command: 'codex', provider: 'codex', agentSessionId: 'saved-conversation', agentRuntimeUsageLimit: 80,
+    } });
+    const allowed = vi.spyOn(agentRuntimeService, 'assertAutomaticWorkAllowed').mockRejectedValue(new Error('AGENT_USAGE_LIMIT'));
+    try {
+      await expect(bridgeService.ask(workspace.id, { to: terminal.id, message: 'hello' })).rejects.toThrow('AGENT_USAGE_LIMIT');
+      expect(allowed).toHaveBeenCalledWith(terminal.id);
+      expect(agentSessionService.ensure).not.toHaveBeenCalled();
+    } finally { ptySessionManager.kill(session.id); }
   });
 
   it('ask envia mensagem ao PTY e retorna a resposta apos silencio', async () => {
@@ -355,6 +419,32 @@ describe('BridgeService', () => {
     const { workspace, session } = await createWorkspaceWithTerminal();
     await expect(bridgeService.ask(workspace.id, { to: 'NaoExiste', message: 'oi' })).rejects.toThrow('não encontrado');
     ptySessionManager.kill(session.id);
+  });
+
+  it('keeps a verified delivery pending instead of reporting a broken transcript when the reply is late', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    await workspaceRepository.updateNode(terminal.id, { payload: { command: '/bin/cat', provider: 'codex', sessionId: session.id } });
+    // Exercise the bridge result contract after delivery has verified the prompt.
+    const internals = bridgeService as unknown as {
+      askAndWait: (...args: unknown[]) => Promise<{ text: string; timedOut: boolean }>;
+      waitForTranscriptReply: () => Promise<null>;
+      transcriptReply: () => Promise<null>;
+    };
+    vi.spyOn(internals, 'askAndWait').mockImplementation(async (...args) => {
+      await (args[7] as () => Promise<void>)();
+      return { text: '', timedOut: true };
+    });
+    vi.spyOn(internals, 'waitForTranscriptReply').mockResolvedValue(null);
+    vi.spyOn(internals, 'transcriptReply').mockResolvedValue(null);
+    try {
+      await expect(bridgeService.ask(workspace.id, { to: terminal.id, message: 'Review while working' })).resolves.toMatchObject({
+        delivered: true, replyConfirmed: false, timedOut: true, reply: '', deliveryState: 'delivered',
+      });
+      const deliveries = await controlCenterRepository.listDeliveries(workspace.id);
+      expect(deliveries.at(-1)).toMatchObject({ state: 'delivered', reply: null, error: null });
+      expect(deliveries.some(event => event.state === 'failed')).toBe(false);
+      expect((await controlCenterRepository.listActivity(workspace.id)).some(event => event.state === 'error')).toBe(false);
+    } finally { ptySessionManager.kill(session.id); }
   });
 
   it('le, escreve e edita notas por substring', async () => {

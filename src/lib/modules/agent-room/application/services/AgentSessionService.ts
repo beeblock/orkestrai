@@ -48,7 +48,7 @@ export class AgentSessionService {
     return this.ensure(workspaceId, target.id);
   }
 
-  async ensure(workspaceId: string, nodeId: string): Promise<EnsuredAgentSession> {
+  async ensure(workspaceId: string, nodeId: string, options: { requireResume?: boolean } = {}): Promise<EnsuredAgentSession> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
     if (workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
@@ -136,6 +136,9 @@ export class AgentSessionService {
       : freshAgentSessionId
         ? adapter!.freshSessionArgs!(freshAgentSessionId)
         : [];
+    if (options.requireResume && (!resumableAgentSessionId || !adapter || conversationArgs.length === 0)) {
+      throw new Error('AGENT_SAVED_CONVERSATION_UNAVAILABLE');
+    }
     if (freshAgentSessionId) tracker.claim(freshAgentSessionId);
 
     const profileEnv = payload.profileId && payload.provider
@@ -172,7 +175,7 @@ export class AgentSessionService {
       session.command === payload.command && (session.provider ?? null) === (payload.provider ?? null)
       && session.runtimeKey === executionRuntimeKey(runtime));
     if (appearedNodeSession || appearedConversations.some(session => session.command === payload.command)) {
-      return this.ensure(workspaceId, nodeId);
+      return this.ensure(workspaceId, nodeId, options);
     }
     const trackingStartedAt = Date.now();
     const session = ptySessionManager.create({

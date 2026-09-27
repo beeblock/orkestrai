@@ -56,6 +56,7 @@ const USAGE = `orkestrai — ponte entre agentes do Orkestrai
 Uso:
   orkestrai list [--agent <seuNodeId>] [--json]
   orkestrai usage [--json]
+  orkestrai audio <models|list|read|create|update|preview|run|cancel|retry_download|remove> [nodeId-or-runId] --task <taskId> [--input <json>]
   orkestrai video <list|read|import|create|update|preview|run|cancel|retry_download|remove> [nodeId-or-runId] --task <taskId> [--input <json>]
   orkestrai integration list [--json] | integration events [integrationId] [--limit <n>] [--json] | integration execute <integrationId> <action> --input <json> --task <taskId> --idempotency <key> [--json]
   orkestrai tool list [--json] | tool propose --name <nome> --slug <slug> --manifest <json> --task <taskId> | tool update <toolId> --manifest <json> --task <taskId> | tool execute <toolId> --input <json> --task <taskId> --idempotency <key> [--dry-run]
@@ -101,7 +102,9 @@ Uso:
   orkestrai task add <titulo> [--description <md>] [--assign <agente>] [--note <nota>] [--column <coluna>] [--from <agente>]
   orkestrai task done <taskId>
   orkestrai task move <taskId> <coluna>
-  orkestrai task assign <taskId> <agente>
+  orkestrai task assign <taskId> <agente> [--leader-work coordination|review]
+    Assignment dispatches the task automatically. Leaders coordinate/review; specialists implement.
+    task add also accepts --leader-work coordination|review for actual leader work.
   orkestrai task link <taskId> <nota> | unlink <taskId>
   orkestrai task archive <taskId> | archive-done | history [--json]
   orkestrai floor list [--json]
@@ -381,6 +384,8 @@ export async function run(argv, options = {}) {
       else if (data.replyConfirmed ?? (!data.timedOut && Boolean(data.reply))) {
         out(`Resposta confirmada de ${data.to} (mensagem ${data.messageId}):`);
         out(data.reply);
+      } else if (data.delivered && data.deliveryState === 'delivered') {
+        out(`Mensagem ${data.messageId} entregue a ${data.to}; resposta ainda nao confirmada no prazo. Nao reenvie a mensagem nem recarregue o terminal por isso. Acompanhe a tarefa; esta tentativa nao confirma uma conversa concluida.`);
       } else {
         out(`Resposta nao confirmada de ${data.to}: timeout ou interrupcao. Nao trate esta tentativa como uma conversa concluida.`);
       }
@@ -1556,6 +1561,7 @@ export async function run(argv, options = {}) {
           title,
           description: flags.description,
           assignee: flags.assign,
+          leaderWork: flags['leader-work'],
           note: flags.note,
           from: flags.from,
           status: flags.column,
@@ -1591,7 +1597,7 @@ export async function run(argv, options = {}) {
       if (action === 'assign') {
         const [taskId, assignee] = values;
         if (!taskId || !assignee) throw new Error('Uso: orkestrai task assign <taskId> <agente>');
-        await bridge(config, 'PATCH', `/api/agent-room/bridge/tasks/${taskId}`, { assignee });
+        await bridge(config, 'PATCH', `/api/agent-room/bridge/tasks/${taskId}`, { assignee, leaderWork: flags['leader-work'] });
         out('Tarefa atribuida.');
         return 0;
       }

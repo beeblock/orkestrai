@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { realpath, mkdir } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { CanvasNodePayload } from '../../domain/types.js';
@@ -22,9 +22,12 @@ type PendingPortalRequest = {
 const runtime = globalThis as typeof globalThis & {
   __orkestraiPortalPending?: Map<string, PendingPortalRequest>;
   __orkestraiPortalListenerReady?: boolean;
+  __orkestraiPortalDigestKey?: Buffer;
   __orkestraiExecutePortal?: (request: ManagedPortalExecutorRequest) => Promise<ManagedPortalExecutorResult>;
 };
 const pending = runtime.__orkestraiPortalPending ??= new Map<string, PendingPortalRequest>();
+// A persisted unkeyed digest of a short login password permits offline guessing.
+const digestKey = runtime.__orkestraiPortalDigestKey ??= randomBytes(32);
 
 if (!runtime.__orkestraiPortalListenerReady && typeof process.on === 'function') {
   process.on('message', (message: unknown) => {
@@ -149,7 +152,8 @@ export class ManagedPortalService {
     const actorId = context.actorId ?? command.from ?? null;
     const actorType = context.actorType ?? (command.from ? 'agent' : 'user');
     const { ref: _ref, ...semanticArgs } = command.args as Record<string, unknown>;
-    const requestDigest = createHash('sha256').update(JSON.stringify(semanticArgs)).digest('hex');
+    const requestDigest = (command.action === 'type' ? createHmac('sha256', digestKey) : createHash('sha256'))
+      .update(JSON.stringify(semanticArgs)).digest('hex');
     const operation: AutonomyOperation = {
       workspaceId,
       runId: context.runId ?? null,
@@ -176,13 +180,20 @@ export class ManagedPortalService {
         }
       }
       const inspection = await requestElectron(request, true);
-      const observed = inspection?.ok ? inspection.result as { url?: string; element?: { name?: string; tag?: string; href?: string; protected?: boolean } } : null;
+      const observed = inspection?.ok ? inspection.result as { url?: string; element?: { name?: string; tag?: string; href?: string; protected?: boolean; writeOnly?: boolean } } : null;
       const element = observed?.element;
-      if (element?.protected) throw new Error('Protected fields require the user to authenticate in the Portal.');
+      const passwordWrite = command.action === 'type' && element?.protected === true && element.writeOnly === true;
+      if (element?.protected && !passwordWrite) throw new Error('Protected field cannot be accessed. Only writeOnly password inputs accept typing; OTP and private fields require the user.');
       if (!inspection?.ok || !observed) throw new Error('Portal page is unavailable. Open the Portal and take another snapshot.');
+      if (passwordWrite) {
+        const destination = assertAllowedPortalUrl(observed.url ?? '', profile.allowedHosts, initialUrl);
+        const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(destination.hostname);
+        if (destination.protocol !== 'https:' && !loopback) throw new Error('Portal passwords require HTTPS or a loopback development server.');
+        args.passwordOrigin = destination.origin;
+      }
       const submits = command.action === 'type' && command.args.submit;
       // A generic click cannot prove that the destination is non-destructive.
-      const risk = command.action === 'upload' ? 'external_publication'
+      const risk = passwordWrite ? 'account_permission' : command.action === 'upload' ? 'external_publication'
         : command.action === 'click' || submits ? (/send|publish|post|enviar|publicar/i.test(element?.name ?? '') ? 'external_publication'
           : /delete|remove|excluir|apagar|eliminar/i.test(element?.name ?? '') ? 'bulk_destructive'
             : /buy|pay|purchase|comprar|pagar/i.test(element?.name ?? '') ? 'purchase' : 'irreversible') : null;
@@ -200,10 +211,15 @@ export class ManagedPortalService {
       if (command.action === 'download') {
         args.downloadDirectory = await preparePortalDirectory(root, String(args.downloadDirectory));
       }
-      const managed = await requestElectron(request);
+      let managed: ManagedPortalExecutorResult | null;
+      try { managed = await requestElectron(request); }
+      catch (error) {
+        if (passwordWrite) throw new Error('Portal password entry could not be confirmed. Take another snapshot before retrying.');
+        throw error;
+      }
       if (!managed) throw new Error('Managed Portal control requires the desktop Core.');
       const commandResult = managed;
-      if (!commandResult.ok) throw new Error(commandResult.error || 'Portal action could not be confirmed.');
+      if (!commandResult.ok) throw new Error(passwordWrite ? 'Portal password entry could not be confirmed. Take another snapshot before retrying.' : commandResult.error || 'Portal action could not be confirmed.');
       if (managed?.state) {
         await workspaceRepository.updateNode(portal.id, { payload: {
           ...(await workspaceRepository.getNode(portal.id))?.payload,

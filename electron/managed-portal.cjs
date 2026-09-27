@@ -8,6 +8,18 @@ const MAX_RESULT_CHARS = 500_000;
 const { INIT_SCRIPT, SNAPSHOT_SCRIPT } = require('./portal-dom.cjs');
 const WORLD = 734;
 
+async function boundedNative(operation, timeoutMs = 5000, onTimeout) {
+  let timer;
+  try {
+    return await Promise.race([operation, new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        onTimeout?.();
+        reject(new Error('Portal renderer did not respond. Reload this Portal before retrying.'));
+      }, timeoutMs);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
 function publicError(error) {
   return String(error?.message ?? error).replace(/[\r\n]+/g, ' ').slice(0, 2000) || 'Managed browser command failed.';
 }
@@ -22,20 +34,58 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   const sessions = new Map();
   const queues = new Map();
   const opening = new Map();
+  let closingAll;
+  let closed = false;
+
+  function nativeOperation(tab, operation) {
+    tab.nativeOperations ??= new Set();
+    tab.nativeOperations.add(operation);
+    const remove = () => tab.nativeOperations.delete(operation);
+    void operation.then(remove, remove);
+    return operation;
+  }
+
+  function requireOpen(tab) {
+    if (closed || tab.managed.disposed || tab.closing || tab.window.isDestroyed()) throw new Error('Portal is closing. No new action was performed.');
+  }
+
+  async function closeTab(tab) {
+    tab.closing = true;
+    clearTimeout(tab.presentationRetryTimer);
+    tab.documentReady = false;
+    tab.presentationEpoch++;
+    tab.view.setVisible(false);
+    tab.managed.clip.removeChildView(tab.view);
+    // Native capture callbacks must drain before their WebContents is destroyed.
+    // Marking the tab closed first prevents continuations from starting more work.
+    await boundedNative(Promise.allSettled([...tab.nativeOperations ?? []]), 5500).catch(() => {});
+    if (!tab.window.isDestroyed()) tab.window.destroy();
+  }
 
   function dispose(managed) {
+    if (managed.disposal) return managed.disposal;
     managed.disposed = true;
     managed.visible = false;
     managed.clip.setVisible(false);
     if (managed.parent && !managed.parent.isDestroyed()) managed.parent.contentView.removeChildView(managed.clip);
     managed.parent = null;
     managed.cleanup?.();
-    for (const tab of [...managed.tabs.values()]) if (!tab.window.isDestroyed()) tab.window.destroy();
-    sessions.delete(managed.key);
+    managed.disposal = Promise.all([...managed.tabs.values()].map(closeTab)).then(async () => {
+      await managed.flushStorage?.();
+      if (sessions.get(managed.key) === managed) sessions.delete(managed.key);
+    });
+    return managed.disposal;
   }
 
   function world(tab, expression) {
-    return tab.window.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: `${INIT_SCRIPT}; ${expression}` }], true);
+    requireOpen(tab);
+    if (!tab.documentReady || tab.loadError) throw new Error('Portal page is loading or unavailable. Navigate again after the server is ready.');
+    if (tab.pendingWorld) throw new Error('Portal previous command is still unresolved. Navigate again before retrying actions.');
+    const operation = nativeOperation(tab, tab.window.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: `${INIT_SCRIPT}; ${expression}` }], true));
+    void operation.then(() => { if (tab.pendingWorld === operation) tab.pendingWorld = null; }, () => {
+      if (tab.pendingWorld === operation) tab.pendingWorld = null;
+    });
+    return boundedNative(operation, 5000, () => { tab.pendingWorld = operation; });
   }
 
   function layout(managed) {
@@ -55,6 +105,11 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     const boundsKey = JSON.stringify(contentBounds);
     if (tab.boundsKey !== boundsKey) { tab.view.setBounds(contentBounds); tab.boundsKey = boundsKey; }
     const presentationKey = JSON.stringify(metrics);
+    if (tab.retryPresentationKey !== presentationKey) {
+      clearTimeout(tab.presentationRetryTimer);
+      tab.presentationRetryCount = 0;
+      tab.retryPresentationKey = presentationKey;
+    }
     if (tab.presentationKey !== presentationKey) {
       managed.clip.setVisible(false);
       if (tab.presentationPending || tab.failedPresentationKey === presentationKey) return;
@@ -68,10 +123,17 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
         if (epoch !== tab.presentationEpoch || !tab.documentReady) return;
         tab.presentationKey = presentationKey;
         tab.failedPresentationKey = undefined;
-      }).catch(() => {
-        if (epoch !== tab.presentationEpoch) return;
+      }).catch((error) => {
+        if (managed.disposed || epoch !== tab.presentationEpoch) return;
         tab.failedPresentationKey = presentationKey;
-        diagnostics?.write?.('warn', 'managed-portal', 'Could not apply Portal presentation.', { nodeId: managed.nodeId });
+        if ((tab.presentationRetryCount ?? 0) < 2) {
+          tab.presentationRetryCount = (tab.presentationRetryCount ?? 0) + 1;
+          tab.presentationRetryTimer = setTimeout(() => {
+            if (managed.disposed || tab.closing || epoch !== tab.presentationEpoch) return;
+            tab.failedPresentationKey = undefined;
+            layout(managed);
+          }, 250 * tab.presentationRetryCount);
+        } else diagnostics?.write?.('warn', 'managed-portal', 'Could not apply Portal presentation.', { nodeId: managed.nodeId, reason: publicError(error) });
       }).finally(() => {
         tab.presentationPending = false;
         if (!tab.window.isDestroyed()) layout(managed);
@@ -87,9 +149,10 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   async function debuggerCommand(tab, method, parameters) {
+    requireOpen(tab);
     const dbg = tab.window.webContents.debugger;
     if (!dbg.isAttached()) dbg.attach('1.3');
-    return dbg.sendCommand(method, parameters);
+    return boundedNative(nativeOperation(tab, dbg.sendCommand(method, parameters)));
   }
 
   async function capturePresentedPage(tab) {
@@ -97,9 +160,10 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     // transient native error; never wait indefinitely or retry a closed page.
     for (let attempt = 0; ; attempt++) {
       if (tab.managed.disposed || tab.window.isDestroyed() || !tab.documentReady) throw new Error('Portal page is loading or unavailable.');
-      try { return await tab.window.webContents.capturePage(); }
+      requireOpen(tab);
+      try { return await boundedNative(nativeOperation(tab, tab.window.webContents.capturePage()), 2000); }
       catch (error) {
-        if (attempt >= 19 || !String(error?.message).includes('Current display surface not available')) throw error;
+        if (attempt >= 19 || !/Current display surface not available|UnknownVizError/.test(String(error?.message))) throw error;
         await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
@@ -128,7 +192,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       if (managed.activeTabId === tab.id) managed.clip.setVisible(false);
       result = await captureLogicalPage(tab, rect, maxDimension, protect);
     } finally {
-      if (!managed.disposed && !tab.window.isDestroyed()) {
+      if (!managed.disposed && !tab.closing && !tab.window.isDestroyed()) {
         tab.boundsKey = undefined;
         tab.presentationKey = undefined;
         tab.failedPresentationKey = undefined;
@@ -144,25 +208,19 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   async function captureLogicalPage(tab, rect, maxDimension, protect) {
-    const scroll = await tab.window.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: '({ x: scrollX, y: scrollY, density: devicePixelRatio, width: innerWidth, height: innerHeight })' }]);
+    const scroll = await world(tab, '({ x: scrollX, y: scrollY, density: devicePixelRatio, width: innerWidth, height: innerHeight })');
     const viewport = tab.managed.geometry?.viewport ?? { width: scroll.width, height: scroll.height };
     const area = rect ?? { x: 0, y: 0, ...viewport };
     const scale = maxDimension ? Math.min(1, maxDimension / (Math.max(area.width, area.height) * scroll.density)) : 1;
     // Capture the logical page, not just the slice visible beside Canvas controls.
     const capture = async () => {
-      const paint = capturePresentedPage(tab).then(() => undefined, error => error);
-      if (!tab.managed.geometry) {
-        const error = await paint;
-        if (error) throw error;
-      }
-      try {
-        return await debuggerCommand(tab, 'Page.captureScreenshot', {
-          format: 'png', captureBeyondViewport: true, clip: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
-        });
-      } finally {
-        const error = await paint;
-        if (error) throw error;
-      }
+      // CDP produces the new logical frame itself. A parallel capturePage can
+      // target a surface which CDP just resized, and a preceding one can stall
+      // once the view has been detached from its host window.
+      if (!tab.managed.geometry) await capturePresentedPage(tab);
+      return debuggerCommand(tab, 'Page.captureScreenshot', {
+        format: 'png', captureBeyondViewport: true, clip: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
+      });
     };
     let result;
     if (protect) {
@@ -210,6 +268,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     });
     for (const event of ['did-navigate', 'did-navigate-in-page', 'did-finish-load', 'page-title-updated']) {
       contents.on(event, () => {
+        if (managed.disposed) return;
         if (event === 'did-finish-load') {
           const tab = managed.tabs.get(tabId);
           if (tab) tab.documentRevision++;
@@ -237,6 +296,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   async function load(tab, url, timeoutMs) {
+    requireOpen(tab);
     if (!hostAllowed(url, tab.managed.profile.allowedHosts, tab.window.webContents.getURL())) throw new Error('Navigation host is not allowed by this Portal.');
     let timer;
     try { await Promise.race([
@@ -248,6 +308,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   function createNativeTab(managed, activate, persistedId, preferences = {}, webContents) {
+    if (closed || managed.disposed) throw new Error('Portal is closing. No new tab was created.');
     const tabId = persistedId && !managed.tabs.has(persistedId) ? persistedId : crypto.randomUUID();
     if (managed.tabs.size >= 20) throw new Error('Portal tab limit reached.');
     const view = new WebContentsView({
@@ -271,7 +332,11 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     managed.tabs.set(tabId, tab);
     configureContents(window.webContents, managed, tabId);
     const invalidateDocument = () => {
+      clearTimeout(tab.presentationRetryTimer);
+      tab.presentationRetryCount = 0;
       tab.documentReady = false;
+      tab.loadError = false;
+      tab.pendingWorld = null;
       tab.presentationEpoch++;
       tab.presentationKey = undefined;
       tab.failedPresentationKey = undefined;
@@ -281,11 +346,20 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       if (isMainFrame && !isInPlace) invalidateDocument();
     });
     contents.on('render-process-gone', invalidateDocument);
+    contents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
+      if (isMainFrame && code !== -3) {
+        tab.loadError = true;
+        tab.documentReady = false;
+        layout(managed);
+      }
+    });
     contents.on('dom-ready', () => {
+      if (managed.disposed || tab.closing || tab.loadError) return;
       tab.documentReady = true;
       layout(managed);
     });
     contents.on('did-finish-load', () => {
+      if (managed.disposed || tab.closing || tab.loadError) return;
       // Older builds persisted Canvas scale as per-origin browser zoom.
       if (contents.getZoomFactor() !== 1) contents.setZoomFactor(1);
       tab.documentReady = true;
@@ -309,12 +383,15 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   async function getManagedNow(request) {
+    if (closed) throw new Error('Portal is closing. No new action was performed.');
     const key = `${request.workspaceId}:${request.nodeId}:${request.profile.profileScope}:${request.profile.profileId}`;
     let managed = sessions.get(key);
+    if (managed?.disposed) { await managed.disposal; managed = undefined; }
     if (!managed) {
       for (const old of sessions.values()) {
-        if (old.workspaceId === request.workspaceId && old.nodeId === request.nodeId) dispose(old);
+        if (old.workspaceId === request.workspaceId && old.nodeId === request.nodeId) await dispose(old);
       }
+      if (closed) throw new Error('Portal is closing. No new action was performed.');
       const partition = managedPortalPartition(request.workspaceId, request.nodeId, request.profile.profileId, request.profile.profileScope);
       managed = { key, partition, workspaceId: request.workspaceId, nodeId: request.nodeId,
         profile: request.profile, tabs: new Map(), activeTabId: null,
@@ -325,6 +402,12 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       const flushCookies = () => {
         void portalSession.flushStorageData();
         void Promise.resolve(portalSession.cookies.flushStore()).catch(() => undefined);
+      };
+      managed.flushStorage = () => {
+        portalSession.flushStorageData();
+        return boundedNative(Promise.resolve(portalSession.cookies.flushStore()), 2000).catch(() => {
+          diagnostics?.write?.('warn', 'managed-portal', 'Portal cookie flush did not complete before shutdown.', { nodeId: managed.nodeId });
+        });
       };
       portalSession.cookies.on('changed', flushCookies);
       managed.cleanup = () => portalSession.cookies.removeListener('changed', flushCookies);
@@ -354,11 +437,16 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   }
 
   async function getManaged(request) {
+    if (closed) throw new Error('Portal is closing. No new action was performed.');
     const key = `${request.workspaceId}:${request.nodeId}`;
     if (opening.has(key)) await opening.get(key);
     const promise = getManagedNow(request);
     opening.set(key, promise);
-    try { return await promise; } finally { if (opening.get(key) === promise) opening.delete(key); }
+    try {
+      const managed = await promise;
+      if (closed || managed.disposed) throw new Error('Portal is closing. No new action was performed.');
+      return managed;
+    } finally { if (opening.get(key) === promise) opening.delete(key); }
   }
 
   function activeTab(managed) {
@@ -429,7 +517,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
             if (managed.tabs.size <= 1) throw new Error('A Portal must keep at least one tab.');
             const closing = managed.tabs.get(request.args.tabId);
             if (!closing) throw new Error('Portal tab not found.');
-            closing.window.destroy();
+            await closeTab(closing);
             if (managed.activeTabId === request.args.tabId) managed.activeTabId = managed.tabs.keys().next().value;
           }
           result = state(managed).tabs;
@@ -504,10 +592,12 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
         case 'eval': throw new Error('Arbitrary scripts are disabled for managed agent control. Use typed Portal tools.');
         default: throw new Error('Unsupported managed Portal action.');
       }
+      if (managed.disposed) throw new Error('Portal closed before the result could be confirmed.');
       layout(managed);
       onState?.(managed.workspaceId, managed.nodeId, state(managed));
       return { ok: true, result: request.action === 'screenshot' ? result : bounded(result), state: state(managed) };
     } catch (error) {
+      if (request.action === 'type' && request.args.passwordOrigin) return { ok: false, error: 'Portal password entry could not be confirmed. Take another snapshot before retrying.' };
       return { ok: false, error: /^Portal |^Open this Portal|^Protected |^Navigation host|^Arbitrary /.test(error.message || '') ? publicError(error) : 'Portal action could not be confirmed.' };
     }
   }
@@ -544,7 +634,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   async function userCommand(request, method, args) {
     const managed = await getManaged(request); const tab = activeTab(managed);
     if (method === 'navigate') { await load(tab, args.url, 30000); return state(managed); }
-    if (method === 'inspectScript') return tab.window.webContents.executeJavaScript(String(args.code), true);
+    if (method === 'inspectScript') { requireOpen(tab); return nativeOperation(tab, tab.window.webContents.executeJavaScript(String(args.code), true)); }
     if (method === 'capture') return (await capturePage(tab, args.rect)).dataUrl;
     if (method === 'preview') return (await capturePage(tab, undefined, 1600)).dataUrl;
     if (method === 'state') return state(managed);
@@ -554,20 +644,27 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       managed.activeTabId = args.tabId; layout(managed); return state(managed);
     }
     if (method === 'close') {
-      dispose(managed); return null;
+      await dispose(managed); return null;
     }
     throw new Error('Unsupported Portal surface operation.');
   }
 
   async function queuedExecute(request) {
+    if (closed) return { ok: false, error: 'Portal is closing. No new action was performed.' };
     const key = `${request.workspaceId}:${request.nodeId}`;
-    const next = (queues.get(key) || Promise.resolve()).catch(() => {}).then(() => execute(request));
+    const deadline = Date.now() + request.timeoutMs;
+    const next = (queues.get(key) || Promise.resolve()).catch(() => {}).then(() => {
+      if (Date.now() >= deadline) return { ok: false, error: 'Portal command expired before execution. No action was performed.' };
+      return execute(request);
+    });
     queues.set(key, next);
     try { return await next; } finally { if (queues.get(key) === next) queues.delete(key); }
   }
 
   function closeAll() {
-    for (const managed of [...sessions.values()]) dispose(managed);
+    closed = true;
+    closingAll ??= Promise.all([...sessions.values()].map(dispose));
+    return closingAll;
   }
 
   return { execute: queuedExecute, inspect, surface, setGeometry, detach, userCommand, closeAll };

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { CreateDesignExplorationDto } from '$lib/modules/agent-room/application/dto/CreateDesignExplorationDto.js';
 import { designExplorationService } from '$lib/modules/agent-room/application/services/DesignExplorationService.js';
@@ -25,6 +25,11 @@ function exploration(overrides: Record<string, unknown> = {}) {
 
 describe('DesignExplorationService', () => {
   useSvelarTest({ refreshDatabase: true });
+  const sessions: string[] = [];
+  afterEach(() => {
+    for (const id of sessions.splice(0)) ptySessionManager.kill(id);
+    vi.restoreAllMocks();
+  });
 
   it('creates one staged package with a spec, three concepts, visual review and linked tasks', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Exploration', workingDir: '/tmp' });
@@ -72,13 +77,14 @@ describe('DesignExplorationService', () => {
     }))).rejects.toThrow('leader_inactive');
     expect((await workspaceRepository.listNodes(workspace.id)).filter((node) => node.type === 'design')).toHaveLength(0);
 
-    // Raw mode mirrors agent TUIs and avoids the macOS canonical TTY line limit.
+    // This tests workflow dispatch into a real PTY, not Claude acceptance.
+    // A cat process has no provider transcript; live-agent-delivery covers that.
     const session = ptySessionManager.create({
       command: '/bin/sh',
       args: ['-c', "printf '? for shortcuts\\n'; stty raw -echo; cat"],
       cwd: '/tmp',
-      provider: 'claude',
     });
+    sessions.push(session.id);
     await new Promise((resolve) => setTimeout(resolve, 100));
     await workspaceRepository.updateNode(inactive.id, {
       payload: { provider: 'claude', maestro: true, sessionId: session.id },
@@ -104,6 +110,7 @@ describe('DesignExplorationService', () => {
   it('removes the complete exploration package when its initial dispatch fails', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Atomic exploration', workingDir: '/tmp' });
     const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    sessions.push(session.id);
     const leader = await workspaceRepository.createNode({
       workspaceId: workspace.id,
       type: 'terminal',

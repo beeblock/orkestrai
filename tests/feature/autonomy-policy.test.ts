@@ -11,6 +11,7 @@ import { AgentSecretRef } from '$lib/modules/agent-room/domain/models/AgentSecre
 import { AutonomyPolicyController } from '$lib/modules/agent-room/interface/http/controllers/AutonomyPolicyController.js';
 import { FilesystemController } from '$lib/modules/agent-room/interface/http/controllers/FilesystemController.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 
 describe('AutonomyPolicyService', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -19,12 +20,12 @@ describe('AutonomyPolicyService', () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Composer', workingDir: '/tmp' });
     const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', payload: { sessionId: 'test-session' } });
     const raw = vi.spyOn(ptySessionManager, 'writeHumanInput').mockImplementation(() => {});
-    const submit = vi.spyOn(ptySessionManager, 'writeWithConfirmedSubmit').mockResolvedValue();
+    const submit = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
     try {
       const controller = new FilesystemController();
-      const event = (body: unknown) => ({ params: { id: workspace.id, nodeId: node.id }, request: new Request('http://localhost/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
+      const event = (body: unknown) => ({ url: new URL('http://localhost/api'), params: { id: workspace.id, nodeId: node.id }, request: new Request('http://localhost/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
       expect((await controller.writeTerminal(event({ data: 'Complete prompt', submit: true }))).status).toBe(200);
-      expect(submit).toHaveBeenCalledWith('test-session', 'Complete prompt');
+      expect(submit).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: workspace.id, nodeId: node.id, sessionId: 'test-session', message: 'Complete prompt' }));
       expect(raw).not.toHaveBeenCalled();
       expect((await controller.writeTerminal(event({ data: '\u001b' }))).status).toBe(200);
       expect(raw).toHaveBeenCalledWith('test-session', '\u001b');

@@ -24,6 +24,21 @@ async function write(path: string) { await writeFile(path, 'test capture'); retu
 describe('Computer capture retention', () => {
   useSvelarTest({ refreshDatabase: true });
 
+  it('continues cleanup and capture in healthy workspaces when an old project directory is gone', async () => {
+    const old = await fixture();
+    const active = await fixture();
+    await rm(old.folder, { recursive: true, force: true });
+    const dir = join(active.folder, '.orkestrai/computer/evidence'); await mkdir(dir, { recursive: true });
+    const expired = join(dir, `${uuidv7()}.png`); await write(expired); await utimes(expired, new Date(0), new Date(0));
+    await expect(active.service.sweep()).rejects.toThrow(old.workspace.id);
+    expect(await readdir(dir)).toEqual([]);
+    expect(active.service.usage(old.workspace.id).error).toBe(true);
+    expect(active.service.usage(active.workspace.id).error).toBe(false);
+    const capture = await active.service.capture(active.workspace.id, active.config, false, write);
+    expect(capture?.path).toContain('/evidence/');
+    await expect(active.service.capture(old.workspace.id, old.config, false, write)).rejects.toThrow(old.workspace.id);
+  });
+
   it('expires captures without needing another screenshot and preserves unrelated files', async () => {
     const { folder, workspace, service } = await fixture();
     const directory = join(folder, '.orkestrai/computer/evidence'); await mkdir(directory, { recursive: true });

@@ -67,10 +67,23 @@ export const deviceSessionSchema = z.object({
   lastError: z.string().nullable(),
 });
 
+export const deviceAttachmentSchema = z.object({
+  platform: devicePlatformSchema,
+  deviceId: z.string().min(1).max(160),
+  deviceName: z.string().min(1).max(300),
+  physical: z.boolean(),
+});
+
+export const deviceRecoverySchema = deviceAttachmentSchema.extend({
+  reason: z.enum(['unavailable', 'busy', 'failed', 'confirmation_required']),
+});
+
 export const deviceSnapshotSchema = z.object({
+  nodeId: z.string().uuid().nullable().optional(),
   platforms: z.array(devicePlatformAvailabilitySchema),
   devices: z.array(deviceDescriptorSchema),
   session: deviceSessionSchema.nullable(),
+  recovery: deviceRecoverySchema.nullable().optional(),
 });
 
 export const deviceCommandResultSchema = z.discriminatedUnion('kind', [
@@ -161,6 +174,8 @@ export type DeviceDescriptor = z.infer<typeof deviceDescriptorSchema>;
 export type DevicePlatformAvailability = z.infer<typeof devicePlatformAvailabilitySchema>;
 export type DeviceSession = z.infer<typeof deviceSessionSchema>;
 export type DeviceSnapshot = z.infer<typeof deviceSnapshotSchema>;
+export type DeviceAttachment = z.infer<typeof deviceAttachmentSchema>;
+export type DeviceRecovery = z.infer<typeof deviceRecoverySchema>;
 export type DeviceCommandInput = z.infer<typeof deviceCommandSchema>;
 export type DeviceCommandResult = z.infer<typeof deviceCommandResultSchema>;
 export type DeviceCommandResponse = z.infer<typeof deviceCommandResponseSchema>;

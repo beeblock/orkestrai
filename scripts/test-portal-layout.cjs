@@ -215,10 +215,10 @@ async function main() {
   console.log(JSON.stringify({ ok: true, actualNativeClipping: true, dropdownsUncovered: true, stableViewportAtAllZooms: true, sameOriginIsolated: true, nativeInputAligned: true, scrollPreserved: true, sessionPreserved: true, idleStable: true, presentedFrames, fullCaptures, exposedCaptures, captures, screenshot }));
 }
 main().then(() => finish(), finish);
-function finish(error) {
+async function finish(error) {
   clearTimeout(watchdog);
   if (error) console.error(error);
-  executor?.closeAll(); parent?.destroy(); server?.close();
+  await executor?.closeAll(); parent?.destroy(); server?.close();
   fs.rmSync(profile, { recursive: true, force: true });
   app.exit(error ? 1 : 0);
 }

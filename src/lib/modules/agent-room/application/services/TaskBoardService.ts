@@ -43,6 +43,11 @@ export type BoardTask = {
     status: 'queued' | 'leader_offline' | 'no_leader' | 'not_needed';
     leaderTitle: string | null;
   };
+  assignmentDelivery?: {
+    dispatched: boolean;
+    reason: 'assigned_and_submitted' | 'already_assigned_no_resend' | 'unassigned';
+    retryTool: 'task_dispatch' | null;
+  };
   learning?: { reflectionId: string; nodeId: string; taskId: string; instruction: string };
 };
 
@@ -532,7 +537,15 @@ export class TaskBoardService {
       }
       completionHandoff = await this.notifyLeaderCompletion(workspaceId, updated, input.completedBy ?? null);
     }
-    return completionHandoff ? { ...updated, completionHandoff } : updated;
+    return {
+      ...updated,
+      ...(completionHandoff ? { completionHandoff } : {}),
+      ...(input.assigneeNodeId !== undefined ? { assignmentDelivery: {
+        dispatched: assignedNow,
+        reason: assignedNow ? 'assigned_and_submitted' : input.assigneeNodeId ? 'already_assigned_no_resend' : 'unassigned',
+        retryTool: input.assigneeNodeId && !assignedNow ? 'task_dispatch' : null,
+      } } : {}),
+    };
   }
 
   async remove(workspaceId: string, taskId: string): Promise<boolean> {

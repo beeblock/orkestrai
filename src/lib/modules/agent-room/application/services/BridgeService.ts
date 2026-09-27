@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import type { AgentActivityState, CanvasNode, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { workspaceProjectContext } from '../../domain/runtime.js';
+import { LEADER_EXECUTION_CONTRACT } from '../../domain/leader-execution.js';
 import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/canvas-placement.js';
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
@@ -23,6 +24,7 @@ import { updateOrkestraiGitExclude } from '../../infrastructure/bridge-git-exclu
 import { controlCenterService } from './ControlCenterService.js';
 import { AutomationTriggerReceived } from '../../domain/events/AutomationTriggerReceived.js';
 import { agentSessionService } from './AgentSessionService.js';
+import { agentRuntimeService } from './AgentRuntimeService.js';
 import { roleService } from './RoleService.js';
 import { providerProfileService } from './ProviderProfileService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
@@ -93,7 +95,7 @@ type BridgeAskResult = {
   replyConfirmed: boolean;
   timedOut: boolean;
   messageId: string;
-  deliveryState: 'replied' | 'failed';
+  deliveryState: 'replied' | 'delivered' | 'failed';
 };
 
 function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPlacementRect[] {
@@ -102,7 +104,7 @@ function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPla
     .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
 }
 
-const MAX_ASK_QUEUE_WAIT_MS = 30_000;
+const MAX_ASK_QUEUE_WAIT_MS = 300_000;
 
 class AskQueueExpiredError extends Error {
   readonly code = 'AGENT_MESSAGE_QUEUE_EXPIRED';
@@ -271,10 +273,7 @@ export class BridgeService {
     workspaceId: string,
     input: { to: string; message: string; kind?: string },
   ): Promise<{ to: string; sent: boolean; messageId: string; deliveryState: 'delivered' }> {
-    const target = this.findAgent(await this.listAgents(workspaceId), input.to);
-    if (!target.sessionId || !target.sessionAlive) {
-      throw new Error(`O agente "${target.title}" não tem uma sessão PTY ativa.`);
-    }
+    const target = await this.messageTarget(workspaceId, this.findAgent(await this.listAgents(workspaceId), input.to));
     const messageId = uuidv7();
     const metadata = { oneWay: true, kind: input.kind ?? 'handoff' };
     await controlCenterService.recordDelivery({
@@ -356,10 +355,7 @@ export class BridgeService {
 
   private async performAsk(workspaceId: string, input: BridgeAskInput, releaseDelivery: () => void): Promise<BridgeAskResult> {
     const agents = await this.listAgents(workspaceId);
-    const target = this.findAgent(agents, input.to);
-    if (!target.sessionId || !target.sessionAlive) {
-      throw new Error(`O agente "${target.title}" não tem uma sessão PTY ativa.`);
-    }
+    const target = await this.messageTarget(workspaceId, this.findAgent(agents, input.to));
 
     const origin = input.from ? this.findAgent(agents, input.from) : null;
     if (origin) await this.ensureEdge(workspaceId, origin.nodeId, target.nodeId);
@@ -536,6 +532,12 @@ export class BridgeService {
       ? ptySessionManager.get(target.sessionId)?.provider ?? target.provider
       : target.provider;
     if (input.signal?.aborted) throw new Error('Agent request cancelled.');
+    // Delivery already verified this exact prompt in the provider transcript.
+    // A long model turn is not a broken session association or a confirmed reply.
+    if (terminalDelivered && !transcriptText && activeProvider && hasAgentAdapter(activeProvider)
+      && getAgentAdapter(activeProvider).sessionStorage) {
+      return { to: target.title, reply: '', delivered: true, replyConfirmed: false, timedOut: true, messageId, deliveryState: 'delivered' };
+    }
     const replyText = resolveAgentReplyText(transcriptText, reply.text, activeProvider, target.title);
     const replyConfirmed = Boolean(transcriptText) || (!activeProvider && !reply.timedOut && Boolean(replyText));
 
@@ -996,6 +998,18 @@ export class BridgeService {
 
   // -- Modo Maestro -----------------------------------------------------------
 
+  /** Automatic assignments keep implementation with specialists. Owner UI stays explicit. */
+  async assertTaskAssignment(workspaceId: string, assigneeId: string | null | undefined, leaderWork?: 'coordination' | 'review'): Promise<void> {
+    if (!assigneeId) return;
+    const assignee = await workspaceRepository.getNode(assigneeId);
+    if (!assignee || assignee.workspaceId !== workspaceId || assignee.type !== 'terminal') {
+      throw new Error('Task assignee must be a terminal in this workspace.');
+    }
+    if ((assignee.payload as { maestro?: boolean }).maestro && !leaderWork) {
+      throw new Error('The workspace leader coordinates and reviews; assign implementation to a specialist. For an actual coordination or review task, explicitly set leaderWork=coordination or leaderWork=review (CLI: --leader-work). Do not label implementation as review.');
+    }
+  }
+
   /** Garante que o agente `from` tem permissao de maestro no workspace. */
   private async requireMaestro(workspaceId: string, from: string): Promise<BridgeAgent> {
     const agents = await this.listAgents(workspaceId);
@@ -1402,6 +1416,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 - \`orkestrai task list\` — quadro de tarefas do workspace. Tarefas podem ter IMAGENS DE REFERÊNCIA (paths relativos ao workspace, ex.: .orkestrai/images/x.png) — leia o arquivo se a referência for útil para a execução.
 - \`orkestrai task columns\` — lista as etapas configuradas pelo usuário neste quadro. Nunca suponha que todo workspace usa somente "a fazer / fazendo / feito".
 - \`orkestrai task add "<título>" --assign "<Agente>" [--column "<etapa>"]\` — cria tarefa, opcionalmente numa etapa específica, e já despacha para o agente.
+- \`task_assign\` altera o responsável e já despacha. Repetir o mesmo responsável NÃO reenvia: confira \`assignmentDelivery\`. Para retomar intencionalmente uma tarefa, use \`task_dispatch\` / \`orkestrai run <taskId>\` depois de verificar a entrega anterior; não duplique mensagens incertas ou trabalho já aceito.
 - \`orkestrai task move <taskId> "<etapa>"\` — move o trabalho entre as etapas personalizadas. O líder deve refletir no quadro o estado real de cada entrega.
 - \`orkestrai task done <taskId>\` — marca a tarefa atribuída a você como concluída.
 - \`orkestrai task archive <taskId>\` / \`task archive-done\` — arquiva concluídas: saem do quadro, ficam no histórico. Lidere a limpeza do quadro ao fechar uma frente.
@@ -1409,12 +1424,12 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 - \`orkestrai task add "<título>" --note "<título-da-nota>"\` / \`task link <taskId> <nota>\` / \`task unlink <taskId>\` — vincula a tarefa à sua nota de spec. SEMPRE vincule: tarefa com spec vinculada é autossuficiente. Regras: UMA nota por tarefa (a mesma nota pode servir várias tarefas); ao arquivar a tarefa, a nota sai do canvas JUNTO (fica acessível pelo histórico); nota vinculada não é apagada pelo X do canvas — só sai de verdade junto com a tarefa (ou se desvinculada).
 - \`orkestrai portal create "<url>" [--title "<t>"] [--connect "<Agente>"|all] [--force-new]\` — antes de criar, rode \`orkestrai list\`. A mesma URL reutiliza o portal existente; se já houver outro portal, navegue-o para a URL desejada. Use \`--force-new\` SOMENTE quando o usuário pedir explicitamente mais um portal.
 - \`orkestrai portal <nome-ou-nodeId> navigate "<url>"\` — abre uma URL no portal escolhido por nome único ou id. \`eval\`, \`dom\` e \`screenshot\` aceitam o mesmo identificador.
-- \`orkestrai portal <nodeId> eval "<js>"\` — desabilitado para agentes. Use snapshot/click/type/select/extract: portais sem restrições explícitas pertencem a todo o time do workspace, incluindo novos recrutas. Não exija configuração de autonomia nem tarefa para navegar; taskId é opcional para rastreabilidade. Respeite pausas, listas explícitas de agentes, hosts e políticas de Segurança habilitadas. Login/senha/OTP continuam manuais. Nunca tente contornar gates com scripts.
+- \`orkestrai portal <nodeId> eval "<js>"\` — desabilitado para agentes. Use snapshot/click/type/select/extract: portais sem restrições explícitas pertencem a todo o time do workspace, incluindo novos recrutas. Não exija configuração de autonomia nem tarefa para navegar; taskId é opcional para rastreabilidade. Respeite pausas, listas explícitas de agentes, hosts e políticas de Segurança habilitadas. Login autorizado: obtenha snapshot e preencha email e senha fornecidos/autorizados pelo usuário com type; campos de senha writeOnly aceitam escrita em HTTPS ou localhost, nunca leitura. Clique Entrar e confirme a página autenticada na mesma sessão. Nunca devolva um login de teste autorizado ao usuário só por ser senha. Não exponha credenciais em notas, logs ou relatórios. OTP, CAPTCHA e campos privados exigem o usuário; gates explicitamente configurados continuam valendo. Nunca tente contornar gates com scripts.
 - \`orkestrai portal <nodeId> dom\` — devolve o HTML atual (ler telas, pesquisar, testar o que você está construindo).
 - \`orkestrai portal <nodeId> screenshot\` — captura a tela do portal.
 - \`orkestrai floor create "<nome>" [--clone]\` — cria um andar (worktree git com branch própria) para trabalho isolado.
 - \`orkestrai floor list\` / \`floor preview <id>\` / \`floor land <id>\` / \`floor remove <id>\` — gerencia andares; preview mostra conflitos ANTES do merge.
-- \`orkestrai device list\` / \`device attach <id>\` / \`device stop\` — lista e controla a sessão mobile visível no Workbench. iOS usa Simulator no Apple Silicon; Android usa AVD ou aparelho ADB já autorizado. Por segurança, o usuário precisa anexar aparelhos Android físicos pela UI e confirmar o acesso antes de o agente controlá-los.
+- \`orkestrai device list\` / \`device attach <id>\` / \`device stop\` — anexa a sessão mobile e cria/reutiliza seu nó visível no Canvas, também disponível no Workbench; retorna \`nodeId\`. iOS usa Simulator no Apple Silicon; Android usa AVD ou aparelho ADB já autorizado. Por segurança, o usuário precisa anexar aparelhos Android físicos pela UI e confirmar o acesso antes de o agente controlá-los.
 - \`computer_prepare/inspect/launch/focus/click/type/type_secret/shortcut/screenshot/wait\` / \`orkestrai computer ...\` — for a natural-language desktop request, YOU create the briefing note and an active Kanban task assigned to yourself, then prepare the Computer node and inspect it. Preparation creates/reuses and connects the node, inheriting only an existing enabled bounded computer/app grant; never enable a paused node or ask the user to manually assemble your workflow. Launch reuses an open authorized native app before opening a registered app ID. If the user mentions already signed-in desktop Chrome or a Remote request, operate that HOST session, not a new Portal/profile. Observe -> guarded act -> verify the actual result through native text; screenshot only when native evidence is unavailable or ambiguous -> update the note and task -> reply with evidence. Use stable idempotency keys, exact allowed windows and SecretRefs bound to computer.type_secret + the exact app. Declare risk=external_publication before sending mail/posting, purchase before buying, and the matching destructive/credential risk; wait for the configured gate. OS permissions and new grants need the owner. A failed partial action must be inspected, not blindly retried. Never bypass this boundary with shell desktop automation; never claim success before visible verification.
 - Desktop text: send the complete value in one \`computer_type\` call, including accents and emoji. Do not reconstruct words with multiple calls or dead-key shortcuts. Verify the composed text and exact recipient before submitting through the configured publication gate; typing alone is not delivery.
 - Responsive desktop control: use \`computer_batch\` for up to 12 already-known steps, preserving per-step risk, focus checks, audit and idempotency. Check completed, step status and gateId; stop at a gate or uncertain failure. Prefer computer_read and computer_interact for native controls without screenshots. Reuse exact selectors from the current read. Fill requires the existing draft value; before publication assert BOTH the exact recipient header and full draft in guards and declare the risk. Return current text after the action, and verify delivery instead of assuming it. Never take repeated captures while awaiting a gate. For continuous monitoring, create an enabled manual prompt_agent automation targeting yourself and use \`computer_watch\` with your active task only after owner allowAgentWatch opt-in. Auto observation sends settled native text deltas without PNGs, falling back to visual checks for unsupported UIs; do not also schedule model polling. Keep a short checkpoint, never reread unrelated task/note history every tick. Pixel change is not recipient verification. Preserve human drafts. Use screenshot retention=temporary for operational checks (15 minutes) and evidence for milestones (owner quota/retention). With owner-enabled allowConversationNavigation and temporary foreground access, the observer and reply preflight locate and reopen the exact recipient through native search. computer_open_conversation exposes the same bounded operation to the assigned agent; never ask the owner to search manually or bypass an ambiguous result. For owner-approved conversation replies, use computer_reply with grantId and inReplyToDigest from the event or computer_read.replyTargets, plus taskId, targetId, idempotencyKey and text. The server verifies the actual header and latest incoming message, preserves drafts, fills and submits in one call. Never use a sidebar contact as recipient proof. Do not substitute raw type/click/shortcut, poll screenshots, reread the whole workspace or add per-message approval loops. Stronger reviewer/Council gates still apply; completed confirms native submission, not delivery. No shell bypass or blanket send approval.
@@ -1443,20 +1458,22 @@ Use \`--json\` para saída estruturada em qualquer comando.
 
 ## Orquestrar times (Modo Maestro) — OBRIGATÓRIO para o líder
 
+${LEADER_EXECUTION_CONTRACT}
+
 Se você é o líder (Modo Maestro), você NUNCA executa o trabalho sozinho: você orquestra — isso vale INCLUSIVE quando o time trava, demora ou erra. Se der ruim, você DESBLOQUEIA o time (passo 7); assumir o trabalho é falha de orquestração, não solução. Ao receber um projeto/tarefa grande:
 
 PROIBIDO usar subagentes internos da sua CLI (Task, background agents, subagentes em segundo plano) para montar o time: eles NÃO aparecem no canvas, NÃO têm terminal próprio e o usuário não vê nem gerencia nada. TODO agente do time precisa existir no canvas — recrute SEMPRE com \`orkestrai recruit\`.
 
 Antes de propor o time e antes de cada nova rodada de delegação, consulte \`orkestrai usage\`. Cada perfil de multi-conta configurado na Central de Providers aparece como uma linha própria (\`profileId\`/\`profileName\`), roteável separadamente da conta padrão do mesmo provider. Se \`shouldFallback\` vier verdadeiro, use o \`recommendedProvider\` para novas tarefas — se ele tiver \`:profile:\`, passe o \`--provider\` base e o \`--profile\` (nome do perfil) juntos no recruit; ou reatribua somente tarefas que ainda não começaram. Se não houver fallback saudável, avise o usuário com \`orkestrai notify --kind attention\`; nunca invente estimativas de cota e nunca interrompa um agente no meio de uma tarefa apenas para trocar de provider ou perfil.
 
-1. PRIMEIRO proponha o time: liste os agentes sugeridos (título, provider, role de cada um) e pergunte quais ele quer criar — não crie nada sem aprovação. VARIE os providers instalados: times com 3+ agentes devem combinar perspectivas diferentes — NUNCA crie o time inteiro com um provider só.
+1. Reutilize o time/plano aprovado. Um pedido explícito para montar o time e entregar já autoriza recrutar dentro desse escopo; não peça a mesma aprovação novamente. Se o usuário pediu SOMENTE planejamento, proponha sem executar. Respeite os providers/contas permitidos e excluídos pelo usuário; diversidade é opcional, nunca imponha outro provider.
 2. Aprovado, crie com \`orkestrai recruit "<Título>" [--provider ${providerIds}] [--profile <nome-do-perfil>] [--model <id>] [--effort medium|high|xhigh] [--role <papel>]\`. \`--profile\` usa uma conta alternativa já cadastrada na Central de Providers para esse provider (multi-conta); sem isso, usa a conta padrão. Recrutas nascem CONECTADOS a você no organograma (não precisa de \`connect\`). Para composição visual estruturada, use \`medium\` ou \`high\`: \`xhigh\` aumenta muito a latência de payloads sem melhorar o gate visual. Use títulos CURTOS (2-3 palavras, ex.: "Dev API", "Designer UI") e roles de UMA palavra ("frontend", "qa", "design") — descrições longas vão para a nota de briefing.
 3. Escreva o spec/briefing do projeto numa nota: \`orkestrai note create "Spec — <projeto>" --content "..." --connect all\`. Sem \`--connect\`, a nota fica restrita ao agente que a criou.
 4. Trabalho em código? Cada agente trabalha no PRÓPRIO ANDAR (worktree isolada): \`orkestrai floor create "<frente>"\` antes do agente começar — NUNCA deixe vários agentes codando na mesma branch. Integre depois com \`orkestrai floor preview\` (vê conflitos) e \`orkestrai floor land\`.
-5. Distribua TODO trabalho com \`orkestrai task add --assign\` ANTES de usar \`orkestrai ask ... --task <taskId>\` para o handoff (o quadro kanban aparece no canvas sozinho na primeira tarefa). É PROIBIDO delegar trabalho apenas por mensagem direta ou agrupar tarefas independentes numa única cobrança. Use notas com \`orkestrai note create\`; cada task tem que ser AUTOSSUFICIENTE (a descrição diz o que fazer e onde está o spec) OU citar o id de uma nota que JÁ EXISTE e já está conectada ao agente — NUNCA atribua uma task que depende de uma nota/artefato que você ainda não criou. E cada agente PRODUZ os próprios artefatos: o designer CRIA a nota de design com \`orkestrai note create\`; não fica esperando o líder mandar uma — deixe isso explícito na descrição da task.
+5. Distribua TODO trabalho com \`orkestrai task add --assign\`: essa chamada JÁ entrega o briefing. NÃO duplique o handoff com \`ask\` ou \`run\`; use \`ask ... --task <taskId>\` somente para uma dúvida/revisão necessária. É PROIBIDO delegar trabalho apenas por mensagem direta ou agrupar tarefas independentes numa única cobrança. Reutilize a nota de plano aprovada; cada task deve ser AUTOSSUFICIENTE ou citar uma nota existente acessível ao agente. Cada especialista produz os próprios artefatos. O líder só atribui a si coordenação/revisão explícita, nunca implementação.
 6. Projeto web? Rode \`orkestrai list\` e REUTILIZE um Portal existente pelo nome/id, navegando-o para \`http://localhost:<porta-do-dev-server>\`. Só crie um se a listagem confirmar que não existe nenhum; nunca deduza ausência a partir do estado de conexão. Use \`orkestrai portal <nome-ou-nodeId> snapshot|dom|screenshot\` para testar o que o time está construindo. A porta do dev server vem de \`orkestrai port\` (NUNCA a padrão 5173/3000 — outro workspace pode estar usando).
-   Projeto mobile? Use \`orkestrai device list\`, anexe um iOS Simulator ou Android AVD e valide pelo ciclo tree/screenshot → ação → tree/screenshot. Aparelhos Android físicos exigem que o usuário inicie e confirme a sessão na UI. Instalações ficam confinadas ao workspace e o usuário acompanha a sessão ao vivo no Workbench.
-7. Acompanhe o quadro com \`orkestrai task list\`, \`orkestrai design list\`, cobre os agentes com \`orkestrai ask ... --task <taskId>\` e integre os andares com \`floor preview/land\`. \`design list\` marca o gate conceitual como \`stalled\` quando ele ultrapassa 5 minutos ou qualquer etapa como parada quando fica 5 minutos sem revisão; interrompa e reoriente para um conceito menor em vez de aguardar dezenas de minutos. Em exploração visual, \`audit\` sem erros NÃO é aprovação: abra o resultado e espere \`reviewStatus: approved\` na revisão atual. DESBLOQUEIO (regra dura): se um agente travar, ficar em silêncio ou pedir algo, resolva na hora; implementar você mesmo é o último recurso e reatribuir continua preferível. Um bloqueio só permanece enquanto a causa existe: depois de restart, instalação, login, permissão ou qualquer mudança de ambiente, verifique novamente imediatamente, registre \`orkestrai status working ... --task <id>\` e continue a execução. Se o provider mantiver goal/plano próprio, tire-o de \`blocked\` no mesmo momento. O líder não entrega ao usuário uma lista de passos executáveis por ele próprio; executa, valida, fecha as tasks e só então encerra o goal.
+   Projeto mobile? Use \`orkestrai device list\`, anexe um iOS Simulator ou Android AVD e valide pelo ciclo tree/screenshot → ação → tree/screenshot. O attach cria/reutiliza automaticamente o nó Mobile no Canvas; confira o \`nodeId\` retornado. Aparelhos Android físicos exigem que o usuário inicie e confirme a sessão na UI. Instalações ficam confinadas ao workspace e o usuário acompanha a sessão ao vivo no Canvas ou Workbench.
+7. Acompanhe o quadro com \`orkestrai task list\`, \`orkestrai design list\` e integre os andares com \`floor preview/land\`. Use \`ask\` para uma pergunta ou revisão concreta, não como polling nem para repetir um despacho. \`design list\` marca o gate conceitual como \`stalled\` quando ele ultrapassa 5 minutos ou qualquer etapa como parada quando fica 5 minutos sem revisão; reoriente para um conceito menor. Em exploração visual, \`audit\` sem erros NÃO é aprovação: abra o resultado e espere \`reviewStatus: approved\` na revisão atual. DESBLOQUEIO: investigue o impedimento e reoriente ou reatribua a um especialista; não absorva a implementação. Um bloqueio só permanece enquanto a causa existe: depois de restart, instalação, login, permissão ou mudança de ambiente, verifique novamente, registre \`orkestrai status working ... --task <id>\` e continue coordenando. Preserve os gates humanos explícitos. O líder valida a entrega, fecha as tasks e só então encerra o goal, sem devolver ao usuário passos rotineiros que o time pode executar.
 8. NUNCA afirme que consultou/falou com outro agente sem uma execução bem-sucedida de \`orkestrai ask\` e a confirmação explícita retornada pela ponte. Uma tarefa concluída é terminal: não volte a marcá-la como trabalhando por causa de uma mensagem atrasada. \`orkestrai task done\` avisa o líder automaticamente, além da notificação nativa de TAREFA CONCLUÍDA. Não duplique esse aviso. Quando precisar de atenção/aprovação, use \`orkestrai notify "<pedido>" --kind attention\`. Somente ao concluir o PROJETO inteiro, após conferir o quadro, use \`orkestrai notify "<resumo>" --kind project --title "<projeto>"\`.
 9. Mantenha o Control Center fiel: reporte somente MUDANÇAS semânticas com \`orkestrai status\` (trabalhando, bloqueado, aguardando entrada/permissão, concluído ou erro). O ciclo do PTY já cobre inicialização/atividade/ociosidade; não envie pulsos repetidos. Antes de responder que uma entrega acabou, confronte o estado do provider, do Control Center e do Kanban; corrija estados obsoletos em vez de apenas descrevê-los.
 10. Ao finalizar uma frente, dispense o que não precisa mais com \`orkestrai dismiss <agente>\` — o time nasce e morre sob demanda.
@@ -1589,6 +1606,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `design_figma_inspect/import/sync_preview/sync_apply` — interoperabilidade estrutural com Figma; combine com o MCP oficial `figma`, sempre revise conflitos antes de sincronizar e preserve Code Connect.',
       '- `fs_open_folder` / `orkestrai fs open-folder <path>` — open an existing workspace-relative or approved @alias folder in the host file manager when the user asks. This does not require Computer, Accessibility, or Screen Recording; filesystem restrictions and emergency stop still apply. No files, URLs, bundles, desktop input or capture. Use CLI if this MCP session lacks the tool. Report opened=true as OS acknowledgement, not visual verification; never automatically retry unconfirmed opening.',
       '- `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.',
+      `- Leader execution: ${LEADER_EXECUTION_CONTRACT}`,
       '- `orkestrai floor create/preview/land` — andares (worktrees git) isolados por frente.',
       '- `orkestrai device list/attach/tap/swipe/pinch/type/permissions/tree/screenshot/stop` — device mobile visivel no Workbench; aparelhos Android fisicos so podem ser anexados pelo usuario apos confirmacao na UI.',
       '- Desktop text: send the complete value in one `computer_type` call, including accents and emoji. Do not reconstruct words with multiple calls or dead-key shortcuts. Verify the composed text and exact recipient before submitting through the configured publication gate; typing alone is not delivery.',
@@ -1726,6 +1744,27 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
   }
 
   // -- Internos ---------------------------------------------------------------
+
+  private async messageTarget(workspaceId: string, target: BridgeAgent): Promise<BridgeAgent & { sessionId: string }> {
+    if (target.sessionId && target.sessionAlive) return { ...target, sessionId: target.sessionId };
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace || workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
+    const node = await workspaceRepository.getNode(target.nodeId);
+    const payload = node?.payload as { agentSessionId?: string; agentRuntimeMode?: string; agentRuntimeUsageLimit?: number } | undefined;
+    // Off-screen Floors are not mounted by the renderer after restart. Resume
+    // their known conversation through the same native/WSL launcher as recruit.
+    // Raw terminal bytes deliberately do not use this path: their TUI state died.
+    if (!target.provider || node?.workspaceId !== workspaceId || !payload?.agentSessionId) {
+      throw new Error(`O agente "${target.title}" não tem uma sessão PTY ativa.`);
+    }
+    if (payload.agentRuntimeUsageLimit !== undefined || ['on_demand', 'persistent'].includes(payload.agentRuntimeMode ?? '')) {
+      await agentRuntimeService.assertAutomaticWorkAllowed(target.nodeId);
+    }
+    const restored = await agentSessionService.ensure(workspaceId, target.nodeId, { requireResume: true });
+    const session = ptySessionManager.get(restored.sessionId);
+    if (!session || session.exited) throw new Error(`O agente "${target.title}" não tem uma sessão PTY ativa.`);
+    return { ...target, sessionId: restored.sessionId, sessionAlive: true };
+  }
 
   private findAgent(agents: BridgeAgent[], query: string): BridgeAgent {
     const normalized = query.trim().toLowerCase();

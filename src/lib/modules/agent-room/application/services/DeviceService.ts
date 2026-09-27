@@ -6,11 +6,15 @@ import type {
   DeviceCommandResult,
   DevicePlatform,
   DeviceSnapshot,
+  DeviceAttachment,
+  DeviceRecovery,
 } from '../../contracts/schemas/device.schema.js';
+import { deviceAttachmentSchema } from '../../contracts/schemas/device.schema.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { AndroidDeviceAdapter } from '../adapters/devices/AndroidDeviceAdapter.js';
 import { IosSimulatorAdapter } from '../adapters/devices/IosSimulatorAdapter.js';
 import type { DeviceAdapter, DeviceRuntimeSession } from '../adapters/devices/types.js';
+import { CreateCanvasNodeDto } from '../dto/WorkspaceDtos.js';
 
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 
@@ -28,6 +32,9 @@ function broadcast(workspaceId: string): void {
 export class DeviceService {
   private readonly adapters: Map<DevicePlatform, DeviceAdapter>;
   private readonly sessions = new Map<string, DeviceRuntimeSession>();
+  private lifecycle: Promise<unknown> = Promise.resolve();
+  private closing = false;
+  private readonly recovery = new Map<string, { key: string; result: DeviceRecovery | null }>();
   private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor(adapters: DeviceAdapter[] = [new IosSimulatorAdapter(), new AndroidDeviceAdapter()]) {
@@ -39,7 +46,10 @@ export class DeviceService {
   }
 
   async snapshot(workspaceId: string, touch = true): Promise<DeviceSnapshot> {
-    await this.requireWorkspace(workspaceId);
+    const workspace = await this.requireWorkspace(workspaceId);
+    if (touch && !workspace.suspendedAt && !this.closing && !this.sessions.has(workspaceId)) {
+      await this.serial(() => this.restore(workspaceId));
+    }
     const session = this.sessions.get(workspaceId) ?? null;
     if (session && touch) session.touchedAt = Date.now();
     const adapters = [...this.adapters.values()];
@@ -48,9 +58,11 @@ export class DeviceService {
       Promise.all(adapters.map((adapter) => adapter.list().catch(() => []))),
     ]);
     return {
+      nodeId: (await workspaceRepository.listNodes(workspaceId)).find(node => node.type === 'device')?.id ?? null,
       platforms,
       devices: deviceGroups.flat(),
       session: session?.public ?? null,
+      recovery: this.recovery.get(workspaceId)?.result ?? null,
     };
   }
 
@@ -101,7 +113,56 @@ export class DeviceService {
     deviceId: string,
     confirmPhysical = false,
   ): Promise<void> {
-    await this.requireWorkspace(workspaceId);
+    await this.serial(() => this.startDevice(workspaceId, platform, deviceId, confirmPhysical));
+  }
+
+  private serial<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.lifecycle.catch(() => undefined).then(operation);
+    this.lifecycle = next.catch(() => undefined);
+    return next;
+  }
+
+  private async ensureCanvasNode(workspaceId: string, attachment: DeviceAttachment, restoring = false): Promise<void> {
+    const { workspaceService } = await import('./WorkspaceService.js');
+    const existing = (await workspaceRepository.listNodes(workspaceId)).find(node => node.type === 'device');
+    if (restoring && !existing) throw new Error('The Mobile node was removed during restoration.');
+    const node = existing ?? await workspaceService.createNode(CreateCanvasNodeDto.from(workspaceId, {
+      type: 'device', title: attachment.deviceName, width: 560, height: 720, payload: {},
+    }));
+    await workspaceRepository.updateNode(node.id, { payload: { ...node.payload, deviceAttachment: attachment } });
+    this.recovery.delete(workspaceId);
+  }
+
+  private async restore(workspaceId: string): Promise<void> {
+    if (this.closing || this.sessions.has(workspaceId)) return;
+    const workspace = await this.requireWorkspace(workspaceId);
+    if (workspace.suspendedAt) return;
+    const node = (await workspaceRepository.listNodes(workspaceId)).find(node => node.type === 'device');
+    const parsed = deviceAttachmentSchema.safeParse((node?.payload as Record<string, unknown> | undefined)?.deviceAttachment);
+    if (!parsed.success) return;
+    const attachment = parsed.data;
+    const key = JSON.stringify([node!.id, attachment]);
+    if (this.recovery.get(workspaceId)?.key === key) return;
+    const entry: { key: string; result: DeviceRecovery | null } = { key, result: null };
+    this.recovery.set(workspaceId, entry);
+    const fail = (reason: DeviceRecovery['reason']) => { entry.result = { ...attachment, reason }; };
+    if (attachment.physical) return fail('confirmation_required');
+    try {
+      const adapter = this.requireAdapter(attachment.platform);
+      if (!(await adapter.availability()).available) return fail('unavailable');
+      const device = (await adapter.list()).find(candidate => candidate.id === attachment.deviceId);
+      if (!device?.available) return fail('unavailable');
+      if (device.physical) return fail('confirmation_required');
+      if ([...this.sessions.values()].some(active => active.public.platform === attachment.platform
+        && (active.public.deviceId === attachment.deviceId || active.restartDeviceId === attachment.deviceId))) return fail('busy');
+      await this.startDevice(workspaceId, attachment.platform, attachment.deviceId, false, true);
+    } catch { fail('failed'); }
+  }
+
+  private async startDevice(workspaceId: string, platform: DevicePlatform, deviceId: string, confirmPhysical: boolean, restoring = false): Promise<void> {
+    const workspace = await this.requireWorkspace(workspaceId);
+    if (this.closing) throw new Error('Device service is closing.');
+    if (workspace.suspendedAt) throw new Error('Workspace is suspended.');
     const adapter = this.requireAdapter(platform);
     const availability = await adapter.availability();
     if (!availability.available) throw new Error(`Device backend unavailable: ${availability.reason}.`);
@@ -110,19 +171,47 @@ export class DeviceService {
     if (device.physical && !confirmPhysical) {
       throw new Error('Physical Android devices require explicit user confirmation before attachment.');
     }
+    const attachment: DeviceAttachment = { platform, deviceId, deviceName: device.name, physical: device.physical };
+
+    const existing = this.sessions.get(workspaceId);
+    if (existing?.public.platform === platform && existing.public.status === 'streaming'
+      && (existing.public.deviceId === deviceId || existing.restartDeviceId === deviceId)) {
+      await this.ensureCanvasNode(workspaceId, attachment, restoring);
+      existing.touchedAt = Date.now();
+      return;
+    }
 
     for (const [ownerWorkspaceId, active] of this.sessions) {
-      if (ownerWorkspaceId === workspaceId || active.public.deviceId === deviceId) {
-        await this.stop(ownerWorkspaceId);
+      if (ownerWorkspaceId === workspaceId || (active.public.platform === platform
+        && (active.public.deviceId === deviceId || active.restartDeviceId === deviceId))) {
+        if (restoring && ownerWorkspaceId !== workspaceId) throw new Error('Device is already attached to another workspace.');
+        await this.stopDevice(ownerWorkspaceId);
       }
     }
 
     const session = await adapter.start(workspaceId, device);
+    try {
+      if (this.closing || (await this.requireWorkspace(workspaceId)).suspendedAt) throw new Error('Device attachment was cancelled.');
+      await this.ensureCanvasNode(workspaceId, attachment, restoring);
+    }
+    catch (error) { await adapter.stop(session).catch(() => undefined); throw error; }
     this.sessions.set(workspaceId, session);
     broadcast(workspaceId);
   }
 
   async stop(workspaceId: string): Promise<void> {
+    await this.serial(() => this.stopDevice(workspaceId));
+  }
+
+  private async stopDevice(workspaceId: string, preserveAttachment = false): Promise<void> {
+    if (!preserveAttachment) {
+      const node = (await workspaceRepository.listNodes(workspaceId)).find(candidate => candidate.type === 'device');
+      if (node) {
+        const { deviceAttachment: _attachment, ...payload } = node.payload as Record<string, unknown>;
+        await workspaceRepository.updateNode(node.id, { payload });
+      }
+      this.recovery.delete(workspaceId);
+    }
     const session = this.sessions.get(workspaceId);
     if (!session) return;
     this.sessions.delete(workspaceId);
@@ -131,16 +220,21 @@ export class DeviceService {
   }
 
   async restart(workspaceId: string): Promise<void> {
-    const session = this.requireSession(workspaceId);
-    const platform = session.public.platform;
-    const deviceId = session.restartDeviceId ?? session.public.deviceId;
-    await this.stop(workspaceId);
-    await this.start(workspaceId, platform, deviceId, true);
+    await this.serial(async () => {
+      const session = this.requireSession(workspaceId);
+      const platform = session.public.platform;
+      const deviceId = session.restartDeviceId ?? session.public.deviceId;
+      await this.stopDevice(workspaceId, true);
+      await this.startDevice(workspaceId, platform, deviceId, true);
+    });
   }
 
   async stopAll(): Promise<void> {
-    const workspaceIds = [...this.sessions.keys()];
-    await Promise.all(workspaceIds.map((workspaceId) => this.stop(workspaceId).catch(() => undefined)));
+    this.closing = true;
+    clearInterval(this.cleanupTimer);
+    await this.serial(async () => {
+      for (const workspaceId of this.sessions.keys()) await this.stopDevice(workspaceId, true).catch(() => undefined);
+    });
   }
 
   private async stopIdleSessions(): Promise<void> {

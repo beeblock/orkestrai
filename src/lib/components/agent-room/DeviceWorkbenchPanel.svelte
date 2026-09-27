@@ -79,8 +79,17 @@
   let confirmPhysicalOpen = $state(false);
 
   const session = $derived(snapshot?.session ?? null);
+  const recoveryMessage = $derived.by(() => {
+    switch (snapshot?.recovery?.reason) {
+      case 'unavailable': return m['device.recovery_unavailable']();
+      case 'busy': return m['device.recovery_busy']();
+      case 'failed': return m['device.recovery_failed']();
+      case 'confirmation_required': return m['device.recovery_confirmation']();
+      default: return null;
+    }
+  });
   const devices = $derived((snapshot?.devices ?? []).filter((device) => device.platform === selectedPlatform));
-  const selectedDevice = $derived(devices.find((device) => device.id === selectedDeviceId) ?? devices[0] ?? null);
+  const selectedDevice = $derived(devices.find((device) => device.id === selectedDeviceId) ?? (snapshot?.recovery ? null : devices[0]) ?? null);
   const activeAvailability = $derived(snapshot?.platforms.find((platform) => platform.platform === selectedPlatform) ?? null);
   const streamUrl = $derived(session
     ? `/api/agent-room/workspaces/${workspaceId}/devices/stream?session=${encodeURIComponent(session.attachedAt)}&v=${streamVersion}`
@@ -143,11 +152,14 @@
     snapshot = next;
     if (next.session) {
       selectedPlatform = next.session.platform;
+    } else if (next.recovery) {
+      selectedPlatform = next.recovery.platform;
+      selectedDeviceId = next.recovery.deviceId;
     } else if (!next.platforms.some((platform) => platform.platform === selectedPlatform && platform.available)) {
       selectedPlatform = next.platforms.find((platform) => platform.available)?.platform ?? selectedPlatform;
     }
     const candidates = next.devices.filter((device) => device.platform === selectedPlatform);
-    if (!candidates.some((device) => device.id === selectedDeviceId)) {
+    if (!next.recovery && !candidates.some((device) => device.id === selectedDeviceId)) {
       selectedDeviceId = candidates.find((device) => device.state === 'booted')?.id ?? candidates[0]?.id ?? '';
     }
   }
@@ -479,9 +491,9 @@
       {:else if !session}
         <NodeEmptyState
           icon={Smartphone}
-          tone={activeAvailability?.available ? 'neutral' : 'warning'}
+          tone={recoveryMessage || !activeAvailability?.available ? 'warning' : 'neutral'}
           title={availabilityLabel()}
-          description={activeAvailability?.available ? m['device.select_prompt']() : m['device.setup_required']()}
+          description={recoveryMessage ?? (activeAvailability?.available ? m['device.select_prompt']() : m['device.setup_required']())}
           actions={activeAvailability?.available ? startAction : activeAvailability?.setupUrl ? setupAction : undefined}
         />
       {:else}

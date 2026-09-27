@@ -169,13 +169,14 @@ describe('orkestrai CLI', () => {
           res.end(JSON.stringify({ data: { id: 'm1', title: 'Architecture' } }));
         } else if (req.url === '/api/agent-room/bridge/ask') {
           const request = JSON.parse(body || '{}');
-          const timedOut = request.to === 'SemResposta';
+          const timedOut = ['SemResposta', 'Trabalhando'].includes(request.to);
           res.end(JSON.stringify({ data: {
             to: request.to,
             reply: timedOut ? '' : 'resposta do claude',
             delivered: true,
             replyConfirmed: !timedOut,
             timedOut,
+            deliveryState: request.to === 'Trabalhando' ? 'delivered' : undefined,
           } }));
         } else if (req.url === '/api/agent-room/bridge/task-columns') {
           res.end(JSON.stringify({ data: [{ key: 'review', name: 'Revisão', color: '#9675ff' }] }));
@@ -287,6 +288,14 @@ describe('orkestrai CLI', () => {
     const timedOut = await run(['ask', 'SemResposta', 'ping'], { cwd, out, env: {} });
     expect(timedOut).toBe(2);
     expect(lines.join('\n')).toContain('Resposta nao confirmada');
+  });
+
+  it('distinguishes delivered messages awaiting a reply without advising duplicate submission', async () => {
+    const { lines, out } = capture();
+    expect(await run(['ask', 'Trabalhando', 'review'], { cwd, out, env: {} })).toBe(2);
+    expect(lines.join('\n')).toContain('entregue a Trabalhando');
+    expect(lines.join('\n')).toContain('Nao reenvie a mensagem');
+    expect(lines.join('\n')).not.toContain('Resposta confirmada');
   });
 
   it('usage mostra status e recomendacao de roteamento', async () => {
@@ -611,6 +620,13 @@ describe('orkestrai CLI', () => {
     const request = requests.filter((entry) => entry.url === '/api/agent-room/bridge/tasks/t1' && entry.method === 'PATCH').at(-1);
     expect(request.body).toEqual({ status: 'done', from: 'codex-node' });
     expect(lines.join('\n')).toContain('Tarefa marcada como concluida');
+  });
+
+  it('forwards leader review intent through the normal assignment path', async () => {
+    const { out } = capture();
+    await run(['task', 'assign', 't1', 'Leader', '--leader-work', 'review'], { env: {}, cwd, out });
+    const request = requests.filter(entry => entry.url === '/api/agent-room/bridge/tasks/t1' && entry.method === 'PATCH').at(-1);
+    expect(request.body).toEqual({ assignee: 'Leader', leaderWork: 'review' });
   });
 
   it('notify classifica atencao e conclusao de projeto sem ambiguidade', async () => {

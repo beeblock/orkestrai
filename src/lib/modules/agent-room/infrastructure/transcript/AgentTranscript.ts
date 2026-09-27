@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, posix, resolve } from 'node:path';
 import { getAgentAdapter, hasAgentAdapter } from '../../application/adapters/registry.js';
 import { AgentSessionTracker, agentSessionTracker } from '../pty/AgentSessionTracker.js';
+import { findTranscriptFile, recentTranscriptFiles, transcriptRevision, transcriptCwd, transcriptTail } from './TranscriptFiles.js';
 
 /**
  * Le a ULTIMA resposta do agente direto do transcrito da CLI (JSONL em disco)
@@ -214,6 +215,16 @@ function transcriptText(value: unknown): string | null {
 
 function normalizedPrompt(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function promptMatches(storage: string, actual: string, expected: string): boolean {
+  if (normalizedPrompt(actual) === normalizedPrompt(expected)) return true;
+  if (storage !== 'claude-project-jsonl') return false;
+  // Claude wraps a bracketed paste in the persisted user message. Match the
+  // entire envelope and its id, never a substring from several pasted prompts.
+  const pasted = /^\s*<pasted_content id="([a-zA-Z0-9_-]+)">\s*([\s\S]*?)\s*<\/pasted_content id="\1">\s*$/.exec(actual);
+  return Boolean(pasted && !/<\/?pasted_content\b/.test(pasted[2])
+    && normalizedPrompt(pasted[2]) === normalizedPrompt(expected));
 }
 
 function isClaudeUserPrompt(event: any): boolean {
@@ -473,7 +484,7 @@ function jsonlTurnForPrompt(storage: string, transcript: string, expectedPrompt:
     const prompt = promptFromJsonlEvent(storage, event);
     if (!prompt) continue;
     if (match >= 0) return lines.slice(match, index).join('\n');
-    if (normalizedPrompt(prompt) === expected) match = index;
+    if (promptMatches(storage, prompt, expected)) match = index;
   }
   return match >= 0 ? lines.slice(match).join('\n') : null;
 }
@@ -539,11 +550,11 @@ export function transcriptContainsPrompt(storage: string, transcript: string, ex
       let event: any;
       try { event = JSON.parse(line); } catch { continue; }
       const prompt = promptFromJsonlEvent(storage, event);
-      if (prompt) return normalizedPrompt(prompt) === expected;
+      if (prompt) return promptMatches(storage, prompt, expected);
       // Enqueue proves Enter was accepted, not that the model replied.
       // Removal confirms consumption only for the explicit mid-turn reason.
       if (event?.type === 'queue-operation' && typeof event.content === 'string'
-        && normalizedPrompt(event.content) === expected) {
+        && promptMatches(storage, event.content, expected)) {
         return event.operation === 'enqueue' || (event.operation === 'remove' && event.reason === 'absorbed_mid_turn');
       }
     }
@@ -584,7 +595,7 @@ export function parseTranscriptReplyStateForPrompt(
   const scopedTranscript = transcriptTurnForPrompt(storage, transcript, expectedPrompt);
   if (!scopedTranscript) return null;
   const turn = parser(scopedTranscript);
-  if (!turn.prompt || normalizedPrompt(turn.prompt) !== normalizedPrompt(expectedPrompt)) return null;
+  if (!turn.prompt || !promptMatches(storage, turn.prompt, expectedPrompt)) return null;
   const text = turn.reply?.trim();
   return text ? { text, complete: turn.complete } : null;
 }
@@ -1026,6 +1037,67 @@ function promptAtPath(storage: string | undefined, path: string, expectedPrompt:
   return Boolean(transcript && storage && transcriptContainsPrompt(storage, transcript, expectedPrompt));
 }
 
+const FILE_LOOKUP_STORAGES = new Set(['claude-project-jsonl', 'codex-rollout-jsonl', 'kimi-session-dir']);
+type FileTurn = { sessionId: string; reply: { text: string; complete: boolean } | null };
+const fileTurnCache = new Map<string, { revision: string; value: Promise<FileTurn | null> }>();
+
+/** The high-frequency delivery/reply path never walks local or WSL files synchronously. */
+async function findFileTurn(
+  storage: string, cwd: string, preferredSessionId: string | null, expectedPrompt: string,
+  since: number, options: TranscriptLookupOptions, promptOnly: boolean,
+): Promise<FileTurn | null> {
+  const actualCwd = await transcriptCwd(cwd, options.posixCwd);
+  const home = options.homeDir ?? homedir();
+  const root = storage === 'claude-project-jsonl'
+    ? join(home, '.claude', 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
+    : storage === 'codex-rollout-jsonl' ? join(home, '.codex', 'sessions')
+      : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
+  const read = async (path: string, sessionId: string) => {
+    const revision = await transcriptRevision(path, since);
+    if (!revision) return null;
+    const key = JSON.stringify([storage, path, sessionId, promptOnly, createHash('sha256').update(expectedPrompt).digest('hex')]);
+    const cached = fileTurnCache.get(key);
+    if (cached?.revision === revision) return cached.value;
+    const value = (async () => {
+      const text = await transcriptTail(path, MATCH_TAIL_BYTES);
+      if (!text || !(promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt) : transcriptTurnForPrompt(storage, text, expectedPrompt))) return null;
+      return { sessionId, reply: promptOnly ? null : parseTranscriptReplyStateForPrompt(storage, text, expectedPrompt) };
+    })();
+    fileTurnCache.set(key, { revision, value });
+    // Polling an unchanged long conversation must not parse megabytes again.
+    while (fileTurnCache.size > 16) fileTurnCache.delete(fileTurnCache.keys().next().value!);
+    return value;
+  };
+  const preferred = preferredSessionId
+    ? storage === 'claude-project-jsonl' ? join(root, `${preferredSessionId}.jsonl`)
+      : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, preferredSessionId, 4)
+        : join(root, preferredSessionId, 'agents', 'main', 'wire.jsonl')
+    : null;
+  if (preferred && preferredSessionId) {
+    const match = await read(preferred, preferredSessionId);
+    // The prompt is already here. Waiting for its reply is not a reason to
+    // search every other conversation, or to select a different agent's turn.
+    if (match) return match;
+  }
+  const paths = await recentTranscriptFiles(root, storage === 'claude-project-jsonl' ? 0 : 5);
+  for (const entry of paths) {
+    if (entry.mtime < since - 2_000 || entry.path === preferred) continue;
+    if (storage === 'codex-rollout-jsonl') {
+      const header = await transcriptTail(entry.path, 64 * 1024, true);
+      try {
+        const first = JSON.parse(header?.split('\n', 1)[0] ?? '');
+        if (first.type !== 'session_meta' || typeof first.payload?.cwd !== 'string'
+          || await transcriptCwd(first.payload.cwd, options.posixCwd) !== actualCwd) continue;
+      } catch { continue; }
+    }
+    const sessionId = sessionIdForPath(storage, entry.path);
+    if (!sessionId) continue;
+    const match = await read(entry.path, sessionId);
+    if (match) return match;
+  }
+  return null;
+}
+
 /**
  * Confirms that the provider persisted the exact injected prompt. Unlike a
  * terminal redraw, this is proof that Enter was accepted and a turn started.
@@ -1040,6 +1112,10 @@ export async function findPromptInTranscript(
 ): Promise<MatchedTranscriptPrompt | null> {
   try {
     const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
+    if (storage && FILE_LOOKUP_STORAGES.has(storage)) {
+      const match = await findFileTurn(storage, cwd, preferredSessionId, expectedPrompt, since, options, true);
+      return match ? { sessionId: match.sessionId } : null;
+    }
     if (storage === 'opencode-session-json') {
       const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
         .filter((sessionId): sessionId is string => Boolean(sessionId));
@@ -1091,6 +1167,10 @@ export async function findReplyToPrompt(
 ): Promise<MatchedTranscriptReply | null> {
   try {
     const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
+    if (storage && FILE_LOOKUP_STORAGES.has(storage)) {
+      const match = await findFileTurn(storage, cwd, preferredSessionId, expectedPrompt, since, options, false);
+      return match?.reply ? { sessionId: match.sessionId, ...match.reply } : null;
+    }
     if (storage === 'opencode-session-json') {
       const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
         .filter((sessionId): sessionId is string => Boolean(sessionId));

@@ -497,6 +497,9 @@
     let socket: WebSocket;
     let reconnectAttempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    let lastPongAt = 0;
+    let attached = false;
     let disposed = false;
     let resizeFrame: number | null = null;
     const pendingInput: string[] = [];
@@ -516,7 +519,7 @@
     const currentSessionId = () => createdSessionId ?? sessionId;
     const sendTerminalInput = (data: string) => {
       const id = currentSessionId();
-      if (!id || socket?.readyState !== WebSocket.OPEN) {
+      if (!id || !attached || socket?.readyState !== WebSocket.OPEN) {
         pendingInput.push(data);
         while (pendingInput.join('').length > 16_384) pendingInput.shift();
         return;
@@ -525,7 +528,7 @@
     };
     const flushPendingInput = () => {
       const id = currentSessionId();
-      if (!id || socket?.readyState !== WebSocket.OPEN) return;
+      if (!id || !attached || socket?.readyState !== WebSocket.OPEN) return;
       for (const data of pendingInput.splice(0)) send({ type: 'input', sessionId: id, data });
     };
 
@@ -554,7 +557,9 @@
       // xterm parses large ANSI histories asynchronously. Refit only after the
       // parser reaches the final cursor position, otherwise a remounted Canvas
       // can keep drawing the cursor with the previous renderer geometry.
-      terminal.write(replay, () => {
+      // Reattach sends the complete retained history, not an incremental delta.
+      // Reset in the parser queue so old queued output cannot duplicate it.
+      terminal.write(`\x1bc${replay}`, () => {
         if (disposed) return;
         terminal.clearTextureAtlas();
         scheduleFitAndReportSize();
@@ -581,9 +586,20 @@
     };
 
     const handleOpen = () => {
-      if (sessionId) {
+      lastPongAt = Date.now();
+      send({ type: 'subscribe', workspaceId, events: ['agentSession', 'agentReply', 'say', ...(onTalking ? ['talking'] : [])] });
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => {
+        if (Date.now() - lastPongAt > 30_000) {
+          socket.close();
+          return;
+        }
+        send({ type: 'ping' });
+      }, 10_000);
+      const existingId = currentSessionId();
+      if (existingId) {
         fitAddon.fit();
-        send({ type: 'attach', sessionId, cols: terminal.cols, rows: terminal.rows });
+        send({ type: 'attach', sessionId: existingId, cols: terminal.cols, rows: terminal.rows });
       } else if (createRequest) {
         send({
           type: 'create',
@@ -605,8 +621,12 @@
     const handleMessage = (event: MessageEvent) => {
       const message = JSON.parse(String(event.data));
       switch (message.type) {
+        case 'pong':
+          lastPongAt = Date.now();
+          break;
         case 'created':
           createdSessionId = message.session.id;
+          attached = true;
           void Promise.resolve(onSessionCreated?.(message.session.id))
             .then(() => onSessionReady?.(message.session.id, 'created'))
             .catch(() => undefined);
@@ -616,6 +636,7 @@
           flushPendingInput();
           break;
         case 'attached':
+          attached = true;
           replayScrollback(message.scrollback);
           statusMessage = '';
           reconnectAttempts = 0;
@@ -696,6 +717,8 @@
     };
 
     const handleClose = () => {
+      attached = false;
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (exited !== null || disposed) return;
       // Suspensao/hibernacao derruba a conexao (Windows em sleep): tenta
       // re-attach com backoff. Se a sessao PTY morreu junto, o 'error' do
@@ -752,6 +775,7 @@
       cancelDictation();
       if (speakTimer) clearTimeout(speakTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
       captureAfterDictation = false;
       pendingDictation = false;

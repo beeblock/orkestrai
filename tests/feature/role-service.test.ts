@@ -7,9 +7,61 @@ import { roleService } from '$lib/modules/agent-room/application/services/RoleSe
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
+import { LEADER_EXECUTION_CONTRACT } from '$lib/modules/agent-room/domain/leader-execution.js';
 
 describe('RoleService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it.each(['fresh', 'resume'] as const)('delivers open work with a free-form recruit role on %s startup', async mode => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Free-form recruit role', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({
+      workspaceId: workspace.id, type: 'terminal', title: 'QA specialist',
+      payload: { command: '/bin/cat', role: 'qa' },
+    });
+    const task = await taskBoardService.create(workspace.id, {
+      title: 'Continue assigned validation', assigneeNodeId: agent.id, createdBy: 'preset',
+    });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    await workspaceRepository.updateNode(agent.id, { payload: { command: '/bin/cat', sessionId: session.id, role: 'qa' } });
+    const ready = vi.spyOn(ptySessionManager, 'waitUntilIdle').mockResolvedValue(true);
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      expect(await roleService.applyToTerminal(workspace.id, agent.id, mode))
+        .toEqual({ applied: false, tasksDelivered: 1 });
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(deliver.mock.calls[0][0].message).toContain(task.id.slice(0, 8));
+      expect(deliver.mock.calls[0][0].message).not.toContain('.orkestrai/roles/qa/AGENTS.md');
+    } finally { ready.mockRestore(); deliver.mockRestore(); ptySessionManager.kill(session.id); }
+  });
+
+  it('still rejects an explicit application of a missing saved role', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Missing saved role', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({
+      workspaceId: workspace.id, type: 'terminal', payload: { role: 'qa' },
+    });
+    await expect(roleService.applyToTerminal(workspace.id, agent.id, 'role')).rejects.toThrow('não encontrada');
+  });
+
+  it('gives a fresh leader the delegation contract without waking an idle resumed leader', async () => {
+    expect(LEADER_EXECUTION_CONTRACT).toContain('ONLY to the node explicitly marked');
+    expect(LEADER_EXECUTION_CONTRACT).toContain('does not grant leadership');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Leader contract', workingDir: '/tmp' });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', payload: { sessionId: session.id, maestro: true } });
+    const ready = vi.spyOn(ptySessionManager, 'waitUntilIdle').mockResolvedValue(true);
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      await roleService.applyToTerminal(workspace.id, leader.id, 'fresh');
+      expect(deliver).toHaveBeenCalledTimes(1);
+      const message = deliver.mock.calls[0][0].message;
+      expect(message).toContain('specialists implement');
+      expect(message).toContain('dev server');
+      deliver.mockClear();
+      await roleService.applyToTerminal(workspace.id, leader.id, 'resume');
+      expect(deliver).not.toHaveBeenCalled();
+    } finally { ready.mockRestore(); deliver.mockRestore(); ptySessionManager.kill(session.id); }
+  });
 
   it.each(['fresh', 'resume'] as const)('does not deliver or claim initial tasks when %s readiness times out', async (mode) => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'trust confirmation', workingDir: '/tmp' });

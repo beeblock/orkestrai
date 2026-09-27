@@ -15,6 +15,20 @@ class FakeSocket extends EventEmitter {
 }
 
 describe('PTY WebSocket protocol', () => {
+  it('filters broadcasts per subscriber without filtering heartbeat or PTY replies', () => {
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+    try {
+      socket.emit('message', JSON.stringify({ type: 'subscribe', events: ['talking'], workspaceId: 'workspace-a' }));
+      const broadcast = (globalThis as any).__orkestraiBroadcast;
+      broadcast({ type: 'workspaceChanged', workspaceId: 'workspace-a' });
+      broadcast({ type: 'talking', workspaceId: 'workspace-b' });
+      broadcast({ type: 'talking', workspaceId: 'workspace-a' });
+      socket.emit('message', JSON.stringify({ type: 'ping' }));
+      expect(socket.frames).toEqual([{ type: 'talking', workspaceId: 'workspace-a' }, { type: 'pong' }]);
+    } finally { socket.emit('close'); }
+  });
+
   afterEach(() => {
     delete (globalThis as { __orkestraiResolveProviderProfileEnv?: unknown }).__orkestraiResolveProviderProfileEnv;
     delete (globalThis as { __orkestraiCanStartWorkspaceSession?: unknown }).__orkestraiCanStartWorkspaceSession;

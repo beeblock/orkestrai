@@ -13,6 +13,18 @@ import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/Agen
 describe('ControlCenterService', () => {
   useSvelarTest({ refreshDatabase: true });
 
+  it('does not let terminal redraws or silence erase a reported blocker', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'blocked terminal', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'blocked', action: 'Portal cannot load', attentionRequired: true });
+    for (const state of ['idle', 'working'] as const) {
+      await controlCenterService.recordLifecycleActivity({ workspaceId: workspace.id, nodeId: node.id, state });
+    }
+    expect(await controlCenterRepository.latestActivity(node.id)).toMatchObject({ state: 'blocked', action: 'Portal cannot load' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working', action: 'Portal repaired and verified' });
+    expect(await controlCenterRepository.latestActivity(node.id)).toMatchObject({ state: 'working', action: 'Portal repaired and verified' });
+  });
+
   it('reduz eventos append-only no estado atual sem apagar o histórico', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'control', workingDir: '/tmp' });
     const agent = await workspaceRepository.createNode({

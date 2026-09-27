@@ -22,6 +22,7 @@ export const updateBoardTaskSchema = z.object({
 });
 
 export const bridgeBoardTaskSchema = z.object({
+  leaderWork: z.enum(['coordination', 'review']).optional(),
   token: z.string().trim().min(1).nullish(),
   title: z.string().trim().min(1, 'Informe o titulo da tarefa.'),
   description: z.string().trim().nullish(),
@@ -32,6 +33,7 @@ export const bridgeBoardTaskSchema = z.object({
 });
 
 export const bridgeBoardTaskUpdateSchema = z.object({
+  leaderWork: z.enum(['coordination', 'review']).optional(),
   token: z.string().trim().min(1).nullish(),
   status: z.string().trim().min(1).max(48).optional(),
   description: z.string().trim().nullish(),

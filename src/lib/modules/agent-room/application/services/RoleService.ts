@@ -7,6 +7,7 @@ import { builtinRoleCatalog } from '../catalogs/BuiltinRoleCatalog.js';
 import type { AgentRoleLaunchContext } from '../adapters/types.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { LEADER_LAUNCH_CONTEXT } from '../../domain/leader-execution.js';
 
 export type AgentRole = {
   slug: string;
@@ -236,7 +237,9 @@ export class RoleService {
       maestro?: boolean;
     };
     const role = payload.role && mode !== 'resume' ? await this.get(workspaceId, payload.role) : null;
-    if (payload.role && mode !== 'resume' && !role) {
+    // Recruit accepts a free-form specialty as well as a saved role. A label
+    // without a role file must not prevent delivery of its existing task queue.
+    if (payload.role && mode === 'role' && !role) {
       throw new Error(`Responsabilidade "${payload.role}" não encontrada.`);
     }
     const configuredAtLaunch = Boolean(
@@ -250,7 +253,8 @@ export class RoleService {
           if (task.status === 'done') return false;
           return task.assigneeNodeId === nodeId || (payload.maestro && !task.assigneeNodeId);
         });
-    if (!shouldApplyRole && tasks.length === 0) return { applied: false, tasksDelivered: 0 };
+    const leaderContext = Boolean(payload.maestro && (mode === 'fresh' || (mode === 'resume' && tasks.length > 0)));
+    if (!shouldApplyRole && tasks.length === 0 && !leaderContext) return { applied: false, tasksDelivered: 0 };
     if (!payload.sessionId) throw new Error('O terminal ainda não tem sessão PTY.');
 
     const session = ptySessionManager.get(payload.sessionId);
@@ -272,7 +276,7 @@ export class RoleService {
       applied = true;
     }
 
-    if (tasks.length) {
+    if (tasks.length || leaderContext) {
       const briefs = tasks.map((task) => {
         const images = task.images.length ? task.images.map((image) => `- ${image}`).join('\n') : '(nenhuma)';
         const ownership = task.assigneeNodeId
@@ -294,7 +298,7 @@ export class RoleService {
         workspaceId,
         nodeId,
         sessionId: payload.sessionId,
-        message: `${instruction}\n\n${briefs}`,
+        message: `${leaderContext ? `[workspace leader]\n${LEADER_LAUNCH_CONTEXT}\n\n` : ''}${instruction}\n\n${briefs}`,
       });
     }
     return { applied, tasksDelivered: tasks.length };

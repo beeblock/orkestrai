@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import type { DeviceCommandInput, DeviceCommandResult, DeviceDescriptor, DeviceP
 import type { DeviceAdapter, DeviceAdapterContext, DeviceRuntimeSession } from '$lib/modules/agent-room/application/adapters/devices/types.js';
 import { DeviceService } from '$lib/modules/agent-room/application/services/DeviceService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { AgentWorkspace } from '$lib/modules/agent-room/domain/models/AgentWorkspace.js';
 
 class FakeIosAdapter implements DeviceAdapter {
   readonly platform: DevicePlatform;
@@ -68,8 +69,79 @@ describe('DeviceService', () => {
   const services: DeviceService[] = [];
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.all(services.splice(0).map((service) => service.stopAll()));
     for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  });
+
+  async function recoveryFixture(adapter = new FakeIosAdapter()) {
+    const directory = mkdtempSync(join(tmpdir(), 'orkestrai-device-recovery-'));
+    directories.push(directory);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Device recovery', workingDir: directory });
+    const before = new DeviceService([adapter]); services.push(before);
+    await before.start(workspace.id, adapter.platform, adapter.device.id, adapter.device.physical);
+    const node = (await workspaceRepository.listNodes(workspace.id)).find(n => n.type === 'device')!;
+    await before.stopAll();
+    const after = new DeviceService([adapter]); services.push(after);
+    return { adapter, workspace, node, before, after };
+  }
+
+  it.each(['ios', 'android'] as const)('restores the same %s simulator and node once after restarting the Core', async (platform) => {
+    const f = await recoveryFixture(new FakeIosAdapter(platform, false, platform === 'android' ? 'emulator-5554' : null));
+    expect((await f.after.snapshot(f.workspace.id, false)).session).toBeNull();
+    const snapshots = await Promise.all([f.after.snapshot(f.workspace.id), f.after.snapshot(f.workspace.id)]);
+    for (const snapshot of snapshots) expect(snapshot).toMatchObject({ nodeId: f.node.id, session: { status: 'streaming' }, recovery: null });
+    expect(f.adapter.started).toBe(2);
+    expect((await workspaceRepository.listNodes(f.workspace.id)).filter(node => node.type === 'device')).toHaveLength(1);
+    await f.after.stop(f.workspace.id);
+    const third = new DeviceService([f.adapter]); services.push(third);
+    expect((await third.snapshot(f.workspace.id)).session).toBeNull();
+    expect(f.adapter.started).toBe(2);
+  });
+
+  it('does not wake an unloaded workspace', async () => {
+    const f = await recoveryFixture();
+    await AgentWorkspace.query().where('id', f.workspace.id).update({ suspended_at: new Date() });
+    expect((await f.after.snapshot(f.workspace.id)).session).toBeNull();
+    await expect(f.after.start(f.workspace.id, 'ios', f.adapter.device.id)).rejects.toThrow(/suspended/);
+    expect(f.adapter.started).toBe(1);
+  });
+
+  it('does not steal a simulator from another workspace while restoring', async () => {
+    const f = await recoveryFixture();
+    const other = await workspaceRepository.createWorkspace({ name: 'Other device workspace', workingDir: f.workspace.workingDir });
+    await f.after.start(other.id, 'ios', f.adapter.device.id);
+    expect((await f.after.snapshot(f.workspace.id)).recovery?.reason).toBe('busy');
+    expect((await f.after.snapshot(other.id)).session?.status).toBe('streaming');
+    expect(f.adapter.stopped).toBe(1);
+  });
+
+  it('requires physical confirmation again, including when persisted metadata claims a virtual device', async () => {
+    const f = await recoveryFixture(new FakeIosAdapter('android', true));
+    const payload = f.node.payload as any;
+    await workspaceRepository.updateNode(f.node.id, { payload: { ...payload, deviceAttachment: { ...payload.deviceAttachment, physical: false } } });
+    expect((await f.after.snapshot(f.workspace.id)).recovery?.reason).toBe('confirmation_required');
+    expect(f.adapter.started).toBe(1);
+  });
+
+  it('reports an unavailable simulator without endless automatic retries', async () => {
+    const f = await recoveryFixture();
+    vi.spyOn(f.adapter, 'start').mockRejectedValue(new Error('Failed to boot'));
+    expect((await f.after.snapshot(f.workspace.id)).recovery?.reason).toBe('failed');
+    expect((await f.after.snapshot(f.workspace.id)).recovery?.reason).toBe('failed');
+    expect(f.adapter.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not recreate a Mobile node removed during restoration', async () => {
+    const f = await recoveryFixture();
+    const original = f.adapter.start.bind(f.adapter);
+    vi.spyOn(f.adapter, 'start').mockImplementation(async (...args) => {
+      await workspaceRepository.deleteNode(f.node.id);
+      return original(...args);
+    });
+    expect((await f.after.snapshot(f.workspace.id)).session).toBeNull();
+    expect((await workspaceRepository.listNodes(f.workspace.id)).filter(n => n.type === 'device')).toHaveLength(0);
+    expect(f.adapter.stopped).toBe(2);
   });
 
   it('keeps one traceable device session per workspace and stops owned runtimes', async () => {
@@ -82,6 +154,14 @@ describe('DeviceService', () => {
 
     const started = await service.execute(workspace.id, { command: 'start', platform: 'ios', deviceId: adapter.device.id });
     expect(started.snapshot.session).toMatchObject({ deviceName: 'Test iPhone', status: 'streaming', startedByOrkestrai: true });
+    expect(started.snapshot.nodeId).toBeTruthy();
+    expect(await workspaceRepository.getNode(started.snapshot.nodeId!)).toMatchObject({ type: 'device', workspaceId: workspace.id });
+    await Promise.all([
+      service.execute(workspace.id, { command: 'start', platform: 'ios', deviceId: adapter.device.id }),
+      service.execute(workspace.id, { command: 'start', platform: 'ios', deviceId: adapter.device.id }),
+    ]);
+    expect((await workspaceRepository.listNodes(workspace.id)).filter(n => n.type === 'device')).toHaveLength(1);
+    expect(adapter.started).toBe(1);
 
     const tree = await service.execute(workspace.id, { command: 'tree' });
     expect(tree.result).toEqual({ kind: 'tree', tree: [{ label: 'Login' }], truncated: false });

@@ -5,6 +5,26 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.37.0 - 2026-09-27
+
+### Fixed
+
+- Let agents complete authorized logins in the same Portal with write-only password entry over HTTPS or loopback. Keep credentials out of snapshots, captures and audit records; retain explicit security gates, private-field and OTP protections.
+- Restore the previously attached virtual mobile device and its existing Canvas node after restarting the Core, without waking suspended workspaces, taking devices from other workspaces or bypassing physical-device confirmation.
+- Avoid competing native/compositor screenshots and recover transient Portal presentation failures without requiring another resize.
+- Keep implementation delegated to specialists while the leader coordinates and reviews. Automatic leader assignments require explicit coordination/review intent; assigned tasks are dispatched once, without a duplicate ask. Approved scope includes routine work on owned development servers, preserving budgets and security gates.
+- Reduce terminal input stalls through asynchronous, revision-cached transcript lookup, bounded unsent delivery queues, coalesced Canvas updates, stable unchanged nodes, same-size PTY resize suppression and WebSocket reconnection to the existing session. Quick prompts use the shared delivery path, retain failed drafts and display errors.
+- Recognize Claude's position-rendered composer and bracketed-paste transcripts. Frame automatic terminal pastes explicitly and require exact transcript acceptance on macOS as well as Windows/WSL before acknowledging supported providers; uncertain deliveries cannot concatenate another task into the pending draft.
+- Allow busy providers time to persist queued prompts and recover the terminal delivery queue when exact confirmation arrives after a caller timeout, without replaying the message.
+- Resume saved agent conversations for structured messages after restart, including terminals on off-screen Floors, without requiring the user to open that Floor first. Suspended workspaces remain stopped and raw terminal commands are never replayed into a replacement session.
+- A verified delivery awaiting a reply no longer reports a broken transcript or asks users to reload a busy leader; CLI output distinguishes delivery from a confirmed conversation without encouraging duplicate submission.
+- Preserve complete CLI JSON output in pipes, distinguish unchanged task assignments from actual dispatches, and expose explicit task redispatch through MCP. Preserve semantic blockers in Control Center until an explicit state change instead of clearing them on terminal redraws.
+- Restore assigned work for freshly opened recruits with free-form specialties, without requiring an unrelated saved role template. Explicit application of a missing saved role still reports an error.
+- Create or reuse the visible Mobile Canvas node when attaching a simulator, without restarting an already attached session. Keep physical-device confirmation unchanged.
+- Bound stalled native Portal captures and renderer commands, reject expired queued actions, and report failed page loads instead of treating blank error pages as successful reads. Allow explicit navigation to recover without duplicating uncertain actions.
+- Drain pending native Portal operations and persist browser cookies before shutdown; reject late requests instead of recreating tabs while the application is closing.
+- Restore authenticated Computer inspection and isolate evidence-retention failures per workspace so an unavailable old project directory cannot stop cleanup or capture for other projects.
+
 ## 0.36.3 - 2026-09-26
 
 ### Fixed

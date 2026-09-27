@@ -1011,19 +1011,64 @@
   async function refreshCanvasGraph(workspaceId: string): Promise<boolean> {
     const requestId = ++graphRefreshRequestId;
     const refreshStartedAt = performance.now();
-    const previousById = new Map(nodes.map((node) => [node.id, node]));
     const [canvasNodes, canvasEdges, floorList] = await Promise.all([
       api<CanvasNode[]>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
       api<CanvasEdge[]>(`/api/agent-room/workspaces/${workspaceId}/edges`),
       api<Floor[]>(`/api/agent-room/workspaces/${workspaceId}/floors`),
     ]);
     if (requestId !== graphRefreshRequestId || activeWorkspace?.id !== workspaceId) return false;
+    const previousById = new Map(nodes.map((node) => [node.id, node]));
     floors = floorList;
+    const incomingById = new Map(canvasNodes.map(node => [node.id, node]));
+    const changedConnectionTargets = new Set(canvasNodes.filter(node => {
+      const previous = previousById.get(node.id);
+      return !previous || previous.type !== node.type || previous.data.title !== (node.title ?? '')
+        || JSON.stringify(previous.data.payload) !== JSON.stringify(node.payload);
+    }).map(node => node.id));
+    const connections = new Map<string, ReturnType<typeof connectionsFor>>();
+    const changedNeighbors = new Set<string>();
+    for (const edge of canvasEdges) {
+      for (const [id, targetId, direction] of [[edge.sourceNodeId, edge.targetNodeId, 'out'], [edge.targetNodeId, edge.sourceNodeId, 'in']] as const) {
+        const target = incomingById.get(targetId);
+        if (!target) continue;
+        const links = connections.get(id) ?? [];
+        links.push({ edgeId: edge.id, targetId, direction, targetTitle: target.title ?? target.type,
+          targetType: target.type, targetPayload: (localPayloadOverrides.get(targetId)?.payload ?? target.payload) as Record<string, unknown> });
+        connections.set(id, links);
+        if (changedConnectionTargets.has(targetId) || localPayloadOverrides.has(targetId)) changedNeighbors.add(id);
+      }
+    }
+    const previousEdges = new Map(edges.map((edge) => [edge.id, edge]));
+    const changedConnections = new Set<string>();
+    const incomingEdgeIds = new Set(canvasEdges.map(edge => edge.id));
+    for (const edge of canvasEdges) {
+      const previous = previousEdges.get(edge.id);
+      if (!previous || previous.source !== edge.sourceNodeId || previous.target !== edge.targetNodeId) {
+        changedConnections.add(edge.sourceNodeId);
+        changedConnections.add(edge.targetNodeId);
+        if (previous) { changedConnections.add(previous.source); changedConnections.add(previous.target); }
+      }
+    }
+    for (const edge of edges) if (!incomingEdgeIds.has(edge.id)) {
+      changedConnections.add(edge.source);
+      changedConnections.add(edge.target);
+    }
     nodes = canvasNodes
       .filter((node) => (node.floorId ?? null) === visibleFloorId)
       .map((node) => {
-        const refreshed = toFlowNode(node);
         const previous = previousById.get(node.id);
+        // Keep live terminal/component inputs stable when a different node or
+        // task changed. Rebuilding every node remeasures every connected edge.
+        if (previous && !changedConnections.has(node.id) && !changedNeighbors.has(node.id) && !localPayloadOverrides.has(node.id)
+          && !localPositionOverrides.has(node.id) && !draggingNodeIds.has(node.id)
+          && previous.type === node.type && previous.position.x === node.x && previous.position.y === node.y
+          && previous.width === node.width && previous.height === node.height
+          && previous.zIndex === (node.type === 'group' ? 0 : 20 + Math.max(0, node.zIndex ?? 0))
+          && previous.data.title === (node.title ?? '')
+          && previous.data.workingDir === (floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.')
+          && JSON.stringify(previous.data.payload) === JSON.stringify(node.payload)) return previous;
+        const refreshed = toFlowNode(node);
+        refreshed.data.connections = connections.get(node.id) ?? [];
         const payloadOverride = localPayloadOverrides.get(node.id);
         if (payloadOverride) {
           if (payloadOverride.confirmedAt !== null && payloadOverride.confirmedAt <= refreshStartedAt) {
@@ -1047,7 +1092,11 @@
         return refreshed;
       });
     const visibleIds = new Set(nodes.map((node) => node.id));
-    edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+    edges = canvasEdges.map((edge) => {
+      const previous = previousEdges.get(edge.id);
+      return previous && previous.source === edge.sourceNodeId && previous.target === edge.targetNodeId
+        ? previous : toFlowEdge(edge);
+    }).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
     writeWorkspaceViewCache({ workspace: activeWorkspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
     return true;
   }
@@ -1063,10 +1112,36 @@
 
   function connectWorkspaceEvents() {
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    const socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let activityTimer: ReturnType<typeof setTimeout> | null = null;
+    let activityInFlight = false;
+    let activityDirty = false;
+    let socket: WebSocket;
+    const scheduleActivity = () => {
+      activityDirty = true;
+      if (disposed || activityInFlight || activityTimer) return;
+      activityTimer = setTimeout(async () => {
+        activityTimer = null;
+        activityInFlight = true;
+        activityDirty = false;
+        try { await refreshActivity(); }
+        finally {
+          activityInFlight = false;
+          if (activityDirty) scheduleActivity();
+        }
+      }, 250);
+    };
+    const connect = () => {
+    if (disposed) return;
+    socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking'] }));
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(String(event.data));
+        if (message.type === 'talking' && message.workspaceId === activeWorkspace?.id) {
+          handleTalking({ from: message.from ?? null, to: String(message.to), talking: Boolean(message.talking) });
+        }
         if (message.type === 'workspaceChanged' && message.workspaceId === activeWorkspace?.id) {
           if (refreshDebounce) clearTimeout(refreshDebounce);
           refreshDebounce = setTimeout(() => {
@@ -1083,7 +1158,7 @@
             : node);
         }
         if (message.type === 'controlCenterChanged' || message.type === 'messageDelivery') {
-          void refreshActivity();
+          scheduleActivity();
         }
       } catch {
         // frame nao-JSON: ignora
@@ -1091,9 +1166,18 @@
     };
     socket.onclose = () => {
       // Reconecta com backoff simples enquanto a pagina estiver aberta.
-      setTimeout(connectWorkspaceEvents, 3_000);
+      if (!disposed) reconnectTimer = setTimeout(connect, 3_000);
     };
-    return socket;
+    };
+    connect();
+    return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (activityTimer) clearTimeout(activityTimer);
+      if (refreshDebounce) clearTimeout(refreshDebounce);
+      socket.onclose = null;
+      socket.close();
+    };
   }
 
   onMount(() => {
@@ -1192,8 +1276,7 @@
     })();
     return () => {
       toolbarResizeObserver?.disconnect();
-      eventsSocket.onclose = null;
-      eventsSocket.close();
+      eventsSocket();
     };
   });
 
@@ -1279,7 +1362,6 @@
         onUngroup: (id: string) => ungroup(id),
         onPayloadDraftChange: (id: string, partial: Record<string, unknown>) => stageNodePayload(id, partial),
         onPayloadChange: (id: string, partial: Record<string, unknown>) => updateNodePayload(id, partial),
-        onTalking: handleTalking,
       },
     };
   }
@@ -1292,7 +1374,7 @@
         ? (edge.source === payload.from && edge.target === payload.to) ||
           (edge.target === payload.from && edge.source === payload.to)
         : edge.source === payload.to || edge.target === payload.to;
-      if (!matches) return edge;
+      if (!matches || edge.data?.talking === payload.talking) return edge;
       return { ...edge, data: { ...(edge.data ?? {}), talking: payload.talking } };
     });
   }
