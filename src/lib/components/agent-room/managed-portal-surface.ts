@@ -99,14 +99,18 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   const updateState = (state: State) => {
     if (disposed) return;
     const changed = state.url !== current?.url;
-    const documentChanged = changed || state.activeTabId !== current?.activeTabId || state.documentRevision !== current?.documentRevision;
+    // History API/hash updates keep the same document. Capturing on every SPA
+    // route detaches the live native view and looks like a full page reload.
+    const documentChanged = !current || state.activeTabId !== current.activeTabId
+      || state.webContentsId !== current.webContentsId || state.documentRevision !== current.documentRevision;
     current = state; input.state?.(state);
     if (changed) {
-      preview.style.visibility = 'hidden';
       Object.assign(host, { src: state.url });
-      const event = new Event('did-navigate'); Object.assign(event, { url: state.url, isMainFrame: true }); host.dispatchEvent(event);
+      const event = new Event(documentChanged ? 'did-navigate' : 'did-navigate-in-page');
+      Object.assign(event, { url: state.url, isMainFrame: true }); host.dispatchEvent(event);
     }
     if (documentChanged) {
+      preview.style.visibility = 'hidden';
       host.dispatchEvent(new Event('did-finish-load'));
       // Reads and title updates are not navigations and must not capture at idle.
       clearTimeout(previewTimer);
