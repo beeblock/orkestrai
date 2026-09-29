@@ -119,6 +119,9 @@
   }
 
   function sender(thread: AgentMessageThread): string {
+    if (!thread.fromNodeId && thread.events.some((event) => event.metadata.kind === 'leader_supervision')) {
+      return m['control_center.automatic_supervisor']();
+    }
     return thread.fromTitle ?? m['control_center.workspace_user']();
   }
 

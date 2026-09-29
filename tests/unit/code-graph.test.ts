@@ -28,7 +28,8 @@ describe('CodeGraphFileScanner', () => {
     const excluded = ['node_modules/pkg/index.ts', 'packages/web/node_modules/pkg/index.js',
       '.svelte-kit/generated/client.js', 'packages/web/.svelte-kit/types/route.ts',
       'build/server.js', 'packages/web/dist/bundle.js', 'vendor/library/file.php',
-      'packages/api/storage/framework/views/compiled.php', '.git/hooks/script.js', 'src/bundle.min.js'];
+      'packages/api/storage/framework/views/compiled.php', '.git/hooks/script.js', 'src/bundle.min.js',
+      '.orkestrai/floors/feature/src/app.ts', '.orkestrai/reviews/review/src/app.ts'];
     try {
       for (const path of [...included, ...excluded]) {
         await mkdir(join(root, path, '..'), { recursive: true });
@@ -37,6 +38,8 @@ describe('CodeGraphFileScanner', () => {
       const result = await new CodeGraphFileScanner().scan(root);
       expect(result.files.map((file) => file.relativePath)).toEqual(included.sort());
       expect(result.diagnostics).toEqual([]);
+      const floor = await new CodeGraphFileScanner().scan(join(root, '.orkestrai/floors/feature'));
+      expect(floor.files.map((file) => file.relativePath)).toEqual(['src/app.ts']);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

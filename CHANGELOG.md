@@ -5,6 +5,16 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.38.0 - 2026-09-29
+
+### Added
+
+- Supervise idle workspace leaders while unarchived Kanban cards remain in `todo` or `doing`. The Core checks every 15 seconds, requires two minutes of inactivity and a completed provider turn (or an explicit completion signal), and records reminders at least five minutes apart in Control Center. Completed boards stay quiet. Suspension, emergency stop, operating windows, provider quotas, human drafts, permission requests, restricted companions, and pending deliveries remain guarded; uncertain submissions are not blindly retried.
+
+### Fixed
+
+- Avoid native FSEvents crashes under file-descriptor pressure on macOS by polling Code Intelligence source metadata. Exclude nested `.orkestrai` Floors and review copies from scans and watchers while preserving explicitly approved roots. Filesystem exhaustion now closes each watcher once, backs off progressively and switches to polling, while agent reads still refresh an unwatched graph.
+
 ## 0.37.0 - 2026-09-27
 
 ### Added

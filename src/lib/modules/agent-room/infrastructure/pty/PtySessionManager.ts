@@ -765,6 +765,15 @@ export class PtySessionManager {
     };
   }
 
+  /** Read-only gate for optional supervision, not a reservation or delivery receipt. */
+  canAcceptAutomaticMessage(id: string): boolean {
+    const session = this.sessions.get(id);
+    return Boolean(session && !session.exited && session.waiting && session.scrollback.length > 0
+      && !session.deliveryInProgress && !session.awaitingDeliveryIdle && !session.deliveryQueue.length
+      && session.humanComposerLength === 0
+      && (!session.startupGuard || session.startupGuard.canAcceptMessages));
+  }
+
   /** Reenvia Enter apenas se não houver um rascunho humano em andamento. */
   submitIfComposerFree(id: string): boolean {
     const session = this.requireSession(id);

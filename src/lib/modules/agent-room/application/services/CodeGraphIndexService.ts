@@ -27,12 +27,12 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { codeGraphSemanticService } from './CodeGraphSemanticService.js';
 
 const execFileAsync = promisify(execFile);
-const INDEXER_VERSION = 4;
+const INDEXER_VERSION = 5;
 const PARSE_CONCURRENCY = 4;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
 const WATCHED_SOURCE = /\.(?:[cm]?[jt]sx?|svelte|php)$/i;
 const WATCHED_CONTRACT = /(?:^|[._-])(openapi|swagger)(?:[._-]|$).*\.(?:json|ya?ml)$/i;
-const IGNORED_WATCH_SEGMENT = /(^|[\\/])(\.git|node_modules|vendor|\.svelte-kit|\.next|\.nuxt|build|dist|release|coverage|target|\.cache)([\\/]|$)/;
+const IGNORED_WATCH_SEGMENT = /(^|[\\/])(\.git|\.orkestrai|node_modules|vendor|\.svelte-kit|\.next|\.nuxt|build|dist|release|coverage|target|\.cache)([\\/]|$)/;
 
 export class CodeGraphAccessError extends Error {
   readonly status = 403;
@@ -49,6 +49,9 @@ type IndexState = {
   inFlight: Map<string, Promise<CodeGraphProject>>;
   watchers: Map<string, { workspaceId: string; rootPath: string; watcher: FSWatcher; ready: Promise<void> }>;
   watcherRetryAt: Map<string, number>;
+  watcherFailures: Map<string, number>;
+  watcherClosing: Map<string, Promise<void>>;
+  pollingProjects: Set<string>;
   staleTimers: Map<string, ReturnType<typeof setTimeout>>;
   semanticTimers: Map<string, ReturnType<typeof setTimeout>>;
   parseCache: Map<string, Map<string, { contentHash: string; file: ParsedCodeFile }>>;
@@ -64,6 +67,9 @@ function indexState(): IndexState {
     inFlight: new Map(),
     watchers: new Map(),
     watcherRetryAt: new Map(),
+    watcherFailures: new Map(),
+    watcherClosing: new Map(),
+    pollingProjects: new Set(),
     staleTimers: new Map(),
     semanticTimers: new Map(),
     parseCache: new Map(),
@@ -75,6 +81,9 @@ function indexState(): IndexState {
   // Preserve development HMR state created by an older module shape.
   global.__orkestraiCodeGraphIndexState.parseCache ??= new Map();
   global.__orkestraiCodeGraphIndexState.watcherRetryAt ??= new Map();
+  global.__orkestraiCodeGraphIndexState.watcherFailures ??= new Map();
+  global.__orkestraiCodeGraphIndexState.watcherClosing ??= new Map();
+  global.__orkestraiCodeGraphIndexState.pollingProjects ??= new Set();
   global.__orkestraiCodeGraphIndexState.semanticTimers ??= new Map();
   global.__orkestraiCodeGraphIndexState.changeVersions ??= new Map();
   global.__orkestraiCodeGraphIndexState.indexedChangeVersions ??= new Map();
@@ -140,7 +149,7 @@ export class CodeGraphIndexService {
       const version = this.state.changeVersions.get(project.id) ?? 0;
       const indexedVersion = this.state.indexedChangeVersions.get(project.id) ?? 0;
       const firstCheckThisProcess = !this.state.freshnessCheckedProjects.has(project.id);
-      if (firstCheckThisProcess || project.status !== 'ready' || version > indexedVersion) {
+      if (firstCheckThisProcess || !this.state.watchers.has(project.id) || project.status !== 'ready' || version > indexedVersion) {
         const timer = this.state.staleTimers.get(project.id);
         if (timer) clearTimeout(timer);
         this.state.staleTimers.delete(project.id);
@@ -391,6 +400,7 @@ export class CodeGraphIndexService {
       if (entry.workspaceId === workspaceId && !active.has(projectId)) await this.closeWatcher(projectId);
     }
     for (const project of projects) {
+      await this.state.watcherClosing.get(project.id);
       const current = this.state.watchers.get(project.id);
       const retryAt = this.state.watcherRetryAt.get(project.id) ?? 0;
       if (!current && retryAt > Date.now()) continue;
@@ -401,9 +411,17 @@ export class CodeGraphIndexService {
       }
       if (current) await this.closeWatcher(project.id);
       const watcher = watch(project.rootPath, {
-        ignored: ignoreWatchPath,
+        // Match descendants, not ancestors: an explicitly approved Floor root
+        // inside .orkestrai must still be indexable in its own right.
+        ignored: (path, info) => ignoreWatchPath(relative(project.rootPath, path), info),
         ignoreInitial: true,
         followSymlinks: false,
+        // macOS fs.watch uses native FSEvents; descriptor pressure can abort the
+        // Electron server before JavaScript can catch an error. Poll source
+        // metadata instead, also as a fallback on exhausted Linux/Windows hosts.
+        usePolling: process.platform === 'darwin' || this.state.pollingProjects.has(project.id),
+        interval: 1_000,
+        binaryInterval: 1_000,
         awaitWriteFinish: { stabilityThreshold: 250, pollInterval: 100 },
       });
       const ready = new Promise<void>((resolveReady) => {
@@ -424,7 +442,9 @@ export class CodeGraphIndexService {
         if (prior) clearTimeout(prior);
         this.state.staleTimers.set(project.id, setTimeout(() => {
           this.state.staleTimers.delete(project.id);
-          void this.handleProjectChange(workspaceId, project.id, version);
+          void this.handleProjectChange(workspaceId, project.id, version).catch(() => {
+            this.state.freshnessCheckedProjects.delete(project.id);
+          });
         }, 350));
       };
       this.state.watchers.set(project.id, { workspaceId, rootPath: project.rootPath, watcher, ready });
@@ -433,14 +453,28 @@ export class CodeGraphIndexService {
         .on('change', changed)
         .on('unlink', changed)
         .on('error', (error) => {
+          // A failing traversal can emit hundreds of errors. Close once and
+          // never overlap its teardown with a replacement watcher.
+          if (this.state.watchers.get(project.id)?.watcher !== watcher) return;
           const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'unknown';
-          console.warn(`[orkestrai] Code graph watcher entered a 30-second backoff after filesystem error (${code}) for project ${project.id}.`);
-          this.state.watcherRetryAt.set(project.id, Date.now() + 30_000);
-          if (this.state.watchers.get(project.id)?.watcher === watcher) this.state.watchers.delete(project.id);
-          void watcher.close().catch(() => undefined);
+          const failures = (this.state.watcherFailures.get(project.id) ?? 0) + 1;
+          this.state.watcherFailures.set(project.id, failures);
+          const backoff = Math.min(300_000, 30_000 * 2 ** Math.min(failures - 1, 4));
+          console.warn(`[orkestrai] Code graph watcher paused for ${backoff / 1_000}s after filesystem error (${code}) for project ${project.id}.`);
+          this.state.watcherRetryAt.set(project.id, Date.now() + backoff);
+          if (['EMFILE', 'ENFILE', 'ENOSPC'].includes(code)) this.state.pollingProjects.add(project.id);
+          this.state.watchers.delete(project.id);
+          this.state.freshnessCheckedProjects.delete(project.id);
+          const closing = watcher.close().catch(() => undefined).finally(() => {
+            if (this.state.watcherClosing.get(project.id) === closing) this.state.watcherClosing.delete(project.id);
+          });
+          // Chokidar.close removes listeners synchronously, but already-running
+          // filesystem callbacks may still emit errors during teardown.
+          watcher.on('error', () => undefined);
+          this.state.watcherClosing.set(project.id, closing);
           void codeGraphRepository.markStale(workspaceId, project.id).then((didChange) => {
             if (didChange) this.broadcast(workspaceId);
-          });
+          }).catch(() => undefined);
         });
       await ready;
     }
@@ -508,13 +542,20 @@ export class CodeGraphIndexService {
     if (timer) clearTimeout(timer);
     this.state.staleTimers.delete(projectId);
     this.state.watcherRetryAt.delete(projectId);
+    this.state.watcherFailures.delete(projectId);
+    this.state.pollingProjects.delete(projectId);
+    await this.state.watcherClosing.get(projectId);
     this.state.changeVersions.delete(projectId);
     this.state.indexedChangeVersions.delete(projectId);
     this.state.freshnessCheckedProjects.delete(projectId);
     const entry = this.state.watchers.get(projectId);
     this.state.watchers.delete(projectId);
     this.state.parseCache.delete(projectId);
-    await entry?.watcher.close();
+    if (entry) {
+      const closing = entry.watcher.close();
+      entry.watcher.on('error', () => undefined);
+      await closing;
+    }
   }
 
   private async assertWorkspace(workspaceId: string, requireAgentAccess = false): Promise<Workspace> {
