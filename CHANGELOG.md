@@ -21,6 +21,10 @@ pt-BR, English, and Spanish translations.
 - Update reviewed development dependencies from Dependabot #54, including Electron 42 patch releases, Svelte, Paraglide, icons and YAML tooling. Keep the existing Electron major version and native ABI.
 - Integrate reviewed production dependency updates from Dependabot #57 for storage, parsers, UI components, queues, native graphics, the pinned Cua SDK and embedded voice.
 
+### Security
+
+- Patch transitive fast-uri to 3.1.7, ip-address to 10.5.1 and undici 6 to 6.28.1 to address the reported URI parsing/serialization, IPv6 classification and WebSocket decompression advisories. Preserve the existing undici 7 runtime.
+
 ## 0.37.0 - 2026-09-27
 
 ### Added
