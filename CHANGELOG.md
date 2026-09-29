@@ -16,6 +16,10 @@ pt-BR, English, and Spanish translations.
 - Preserve the live Portal document during SPA route, query, hash and history changes. Same-document navigation no longer triggers detached preview captures or synthetic full-load events that make the page flash; explicit navigation still loads normally.
 - Avoid native FSEvents crashes under file-descriptor pressure on macOS by polling Code Intelligence source metadata. Exclude nested `.orkestrai` Floors and review copies from scans and watchers while preserving explicitly approved roots. Filesystem exhaustion now closes each watcher once, backs off progressively and switches to polling, while agent reads still refresh an unwatched graph.
 
+### Changed
+
+- Update reviewed development dependencies from Dependabot #54, including Electron 42 patch releases, Svelte, Paraglide, icons and YAML tooling. Keep the existing Electron major version and native ABI.
+
 ## 0.37.0 - 2026-09-27
 
 ### Added
