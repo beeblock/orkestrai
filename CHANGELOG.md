@@ -13,6 +13,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Preserve the live Portal document during SPA route, query, hash and history changes. Same-document navigation no longer triggers detached preview captures or synthetic full-load events that make the page flash; explicit navigation still loads normally.
 - Avoid native FSEvents crashes under file-descriptor pressure on macOS by polling Code Intelligence source metadata. Exclude nested `.orkestrai` Floors and review copies from scans and watchers while preserving explicitly approved roots. Filesystem exhaustion now closes each watcher once, backs off progressively and switches to polling, while agent reads still refresh an unwatched graph.
 
 ## 0.37.0 - 2026-09-27

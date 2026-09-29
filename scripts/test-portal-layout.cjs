@@ -102,6 +102,44 @@ async function main() {
     await pause(300);
   }
   assert.equal(captures, idleCaptures, 'title changes and agent reads must not recapture an idle Portal');
+  // Exercise the renderer action and native guest together: URL changes alone
+  // must not turn history navigation into detached captures or new documents.
+  const spaIdentity = await raw('window.identity');
+  const spaCaptures = captures;
+  const spaRevision = (await executor.userCommand(request, 'state', {})).documentRevision;
+  await dom(`window.spaEvents={inPage:0,finished:0};const host=document.getElementById('host');host.addEventListener('did-navigate-in-page',()=>window.spaEvents.inPage++);host.addEventListener('did-finish-load',()=>window.spaEvents.finished++);`);
+  await raw(`document.getElementById('message').value='Unsaved SPA draft'`);
+  for (const [code, suffix] of [
+    [`history.pushState({},'', '/settings')`, '/settings'],
+    [`history.replaceState({},'', '/settings?tab=team')`, '/settings?tab=team'],
+    [`location.hash='members'`, '/settings?tab=team#members'],
+    [`history.back()`, '/settings?tab=team'],
+    [`history.forward()`, '/settings?tab=team#members'],
+  ]) {
+    await raw(code);
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if ((await dom(`document.getElementById('host').src`)).endsWith(suffix)) break;
+      await pause(25);
+    }
+    await pause(350);
+    assert.ok((await dom(`document.getElementById('host').src`)).endsWith(suffix), 'SPA address must follow history');
+    assert.equal(await raw('window.identity'), spaIdentity, 'SPA navigation must preserve the document');
+    assert.equal(await raw(`document.getElementById('message').value`), 'Unsaved SPA draft');
+    assert.equal((await executor.userCommand(request, 'state', {})).documentRevision, spaRevision);
+    assert.equal(captures, spaCaptures, 'SPA navigation must not detach the native page for a preview');
+    assert.equal(clip.getVisible(), true);
+    assert.ok(clip.children.includes(nativeView));
+  }
+  assert.deepEqual(await dom('window.spaEvents'), { inPage: 5, finished: 0 });
+  await executor.userCommand(request, 'navigate', { url: request.initialUrl });
+  await pause(400);
+  assert.notEqual(await raw('window.identity'), spaIdentity, 'explicit navigation must still load a new document');
+  assert.ok((await dom('window.spaEvents.finished')) > 0);
+  if (process.argv.includes('--spa-only')) {
+    nativeView.webContents.endFrameSubscription();
+    console.log(JSON.stringify({ ok: true, spaNavigationStable: true, draftPreserved: true, explicitNavigationWorks: true }));
+    return;
+  }
   function assertNativeContained() {
     const parentBounds = clip.getBounds(), child = nativeView.getBounds();
     assert.deepEqual(child, { x: 0, y: 0, width: parentBounds.width, height: parentBounds.height },

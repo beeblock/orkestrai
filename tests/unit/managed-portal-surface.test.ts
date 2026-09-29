@@ -83,6 +83,32 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('preserves the live document and native presentation during same-document SPA navigation', async () => {
+    const { executor, request, contents, parent } = await setup();
+    const before = await executor.userCommand(request, 'state', {});
+    const load = vi.spyOn(contents, 'loadURL');
+    const captures = contents.capturePage.mock.calls.length;
+    const presentations = contents.debugger.sendCommand.mock.calls.length;
+    const view = ContentsView.instances[0];
+    const clip = [...parent.contentView.children][0];
+    for (const path of ['/settings', '/settings?tab=team', '/settings?tab=team#members', '/']) {
+      contents.url = `https://example.com${path}`;
+      contents.emit('did-start-navigation', {}, contents.url, true, true);
+      contents.emit('did-navigate-in-page', {}, contents.url, true);
+      const current = await executor.userCommand(request, 'state', {});
+      expect(current).toMatchObject({ url: contents.url, documentRevision: before.documentRevision,
+        activeTabId: before.activeTabId, webContentsId: before.webContentsId });
+      expect(clip.visible).toBe(true);
+      expect(clip.children.has(view)).toBe(true);
+    }
+    expect(load).not.toHaveBeenCalled();
+    expect(contents.capturePage).toHaveBeenCalledTimes(captures);
+    expect(contents.debugger.sendCommand).toHaveBeenCalledTimes(presentations);
+    await executor.userCommand(request, 'navigate', { url: 'https://example.com/next-document' });
+    expect(load).toHaveBeenCalledOnce();
+    expect((await executor.userCommand(request, 'state', {})).documentRevision).toBe(before.documentRevision + 1);
+  });
+
   it('drains a pending native read before closing and rejects late work without recreating tabs', async () => {
     const { executor, request, contents, parent, lease } = await setup();
     let finish!: (result: []) => void;
