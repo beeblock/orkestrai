@@ -19,6 +19,7 @@ pt-BR, English, and Spanish translations.
 ### Changed
 
 - Update reviewed development dependencies from Dependabot #54, including Electron 42 patch releases, Svelte, Paraglide, icons and YAML tooling. Keep the existing Electron major version and native ABI.
+- Integrate reviewed production dependency updates from Dependabot #57 for storage, parsers, UI components, queues, native graphics, the pinned Cua SDK and embedded voice.
 
 ## 0.37.0 - 2026-09-27
 
