@@ -7,6 +7,29 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it('only offers an idle, initialized and empty composer to optional supervision', async () => {
+    vi.useFakeTimers();
+    let emitData!: (data: string) => void;
+    const fakePty = { write() {}, resize() {}, kill() {}, pid: 1,
+      onData: (listener: typeof emitData) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: '/bin/cat', cwd: '/tmp' });
+    try {
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(true);
+      manager.writeHumanInput(session.id, 'unfinished human draft');
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+      const queued = manager.queueWithSubmit(session.id, 'automatic message');
+      const cancelled = queued.submitted.catch(() => {});
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+      queued.cancel();
+      await cancelled;
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+    expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+  });
+
   it.each([false, true])('recovers the delivery queue after delayed acceptance (caller expired: %s)', async expired => {
     vi.useFakeTimers();
     const writes: string[] = [];

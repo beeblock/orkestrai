@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import {
   findPromptInTranscript,
   findReplyToPrompt,
+  latestTurnComplete,
+  parseLatestTurnComplete,
   parseClaudeTranscriptReply,
   parseCodexTranscriptReply,
   parseCodexTranscriptReplyForPrompt,
@@ -35,6 +37,8 @@ describe('async transcript lookup', () => {
     try {
       const options = { homeDir: home, posixCwd };
       expect(await findPromptInTranscript('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toEqual({ sessionId });
+      expect(await latestTurnComplete('codex', cwd, sessionId, options)).toBe(false);
+      expect(await latestTurnComplete('codex', cwd, 'missing-session', options)).toBeNull();
       expect(await findReplyToPrompt('codex', cwd, sessionId, 'first prompt', Date.now() - 1_000, options)).toEqual({ sessionId, text: 'First answer', complete: true });
       expect(await findReplyToPrompt('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toBeNull();
       await appendFile(join(dir, `rollout-2026-09-27T12-00-00-${sessionId}.jsonl`), '\n' + JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'New answer after poll' }] } }));
@@ -44,6 +48,27 @@ describe('async transcript lookup', () => {
       reads.forEach(spy => spy.mockRestore());
       await rm(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe('latest turn completion for supervision', () => {
+  it('does not mistake an earlier final answer for completion of a repeated prompt', () => {
+    const prompt = { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Continue' }] } };
+    const complete = { type: 'event_msg', payload: { type: 'task_complete', last_agent_message: 'Done' } };
+    const transcript = [prompt, complete].map((event) => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', transcript)).toBe(true);
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', transcript + '\n' + JSON.stringify(prompt))).toBe(false);
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', JSON.stringify(complete))).toBe(true);
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', JSON.stringify(complete) + '\n' + JSON.stringify({ type: 'event_msg', payload: { type: 'task_started' } }))).toBe(false);
+  });
+
+  it('requires a real end_turn rather than Claude commentary or tool output', () => {
+    const prompt = { type: 'user', message: { content: 'Continue' } };
+    const answer = { type: 'assistant', message: { content: [{ type: 'text', text: 'Checking' }] } };
+    expect(parseLatestTurnComplete('claude-project-jsonl', [prompt, answer].map((event) => JSON.stringify(event)).join('\n'))).toBe(false);
+    expect(parseLatestTurnComplete('claude-project-jsonl', [prompt, { ...answer, message: { ...answer.message, stop_reason: 'end_turn' } }].map((event) => JSON.stringify(event)).join('\n'))).toBe(true);
+    expect(parseLatestTurnComplete('unregistered', '{}')).toBeNull();
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', '{}')).toBeNull();
   });
 });
 

@@ -19,7 +19,7 @@ const SOURCE_EXTENSIONS = new Map<string, CodeGraphLanguage>([
 const CONTRACT_FILE = /(?:^|[._-])(openapi|swagger)(?:[._-]|$)/i;
 const CONTRACT_GLOBS = ['*openapi*.json', '*openapi*.yaml', '*openapi*.yml', '*swagger*.json', '*swagger*.yaml', '*swagger*.yml'];
 const IGNORED_GLOBS = [
-  '**/.git/**', '**/node_modules/**', '**/vendor/**', '**/.svelte-kit/**', '**/.next/**', '**/.nuxt/**',
+  '**/.git/**', '**/.orkestrai/**', '**/node_modules/**', '**/vendor/**', '**/.svelte-kit/**', '**/.next/**', '**/.nuxt/**',
   '**/build/**', '**/dist/**', '**/release/**', '**/coverage/**', '**/target/**', '**/.cache/**',
   '**/storage/framework/**', '**/bootstrap/cache/**', '**/*.min.js', '**/*.map',
 ];

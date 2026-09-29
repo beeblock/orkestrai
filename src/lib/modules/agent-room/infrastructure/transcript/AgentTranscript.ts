@@ -1038,6 +1038,61 @@ function promptAtPath(storage: string | undefined, path: string, expectedPrompt:
 }
 
 const FILE_LOOKUP_STORAGES = new Set(['claude-project-jsonl', 'codex-rollout-jsonl', 'kimi-session-dir']);
+
+/** A quiet PTY is not proof that a provider has finished its latest turn. */
+export function parseLatestTurnComplete(storage: string, transcript: string): boolean | null {
+  if (!FILE_LOOKUP_STORAGES.has(storage)) return null;
+  const lines = transcript.trim().split('\n');
+  const records = lines.map((line) => {
+    try { return JSON.parse(line); } catch { return null; }
+  });
+  // Scope to the LAST prompt, including repeated prompts. Never reuse an older
+  // final answer while a new turn is running or waiting for tool approval.
+  const start = records.findLastIndex((event) => event && typeof event === 'object' && promptFromJsonlEvent(storage, event));
+  const scoped = records.slice(Math.max(0, start));
+  if (storage === 'claude-project-jsonl') {
+    // Legacy reply extraction tolerates missing stop_reason; proactive work
+    // requires an actual completed assistant turn and no queued user input.
+    const queue = scoped.findLast((record) => record?.type === 'queue-operation');
+    if (queue?.operation === 'enqueue') return false;
+    const assistant = scoped.findLast((record) => record?.type === 'assistant');
+    if (assistant?.message?.stop_reason !== 'end_turn') return false;
+  }
+  if (storage === 'codex-rollout-jsonl') {
+    const lifecycle = scoped.findLast((record) => ['task_started', 'task_complete', 'turn_aborted'].includes(record?.payload?.type));
+    if (lifecycle && lifecycle.payload.type !== 'task_complete') return false;
+  }
+  // Long tool output can push the original prompt outside the bounded tail;
+  // a newer end-of-turn record is still evidence, not a reason to stall forever.
+  const turn = parserForStorage(storage)!(lines.slice(Math.max(0, start)).join('\n'));
+  if (start < 0 && !turn.reply) return null;
+  return Boolean(turn.reply && turn.complete);
+}
+
+/** Bound to this PTY's conversation and host-visible home (including WSL). */
+export async function latestTurnComplete(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
+): Promise<boolean | null> {
+  if (!sessionId || !hasAgentAdapter(provider)) return null;
+  const storage = getAgentAdapter(provider).sessionStorage;
+  if (!storage || !FILE_LOOKUP_STORAGES.has(storage)) return null;
+  try {
+    const actualCwd = await transcriptCwd(cwd, options.posixCwd);
+    const home = options.homeDir ?? homedir();
+    const root = storage === 'claude-project-jsonl'
+      ? join(home, '.claude', 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
+      : storage === 'codex-rollout-jsonl' ? join(home, '.codex', 'sessions')
+        : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
+    const path = storage === 'claude-project-jsonl' ? join(root, `${sessionId}.jsonl`)
+      : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
+        : join(root, sessionId, 'agents', 'main', 'wire.jsonl');
+    const text = path ? await transcriptTail(path, TAIL_BYTES) : null;
+    return text ? parseLatestTurnComplete(storage, text) : null;
+  } catch {
+    return null;
+  }
+}
+
 type FileTurn = { sessionId: string; reply: { text: string; complete: boolean } | null };
 const fileTurnCache = new Map<string, { revision: string; value: Promise<FileTurn | null> }>();
 

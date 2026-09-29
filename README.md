@@ -144,6 +144,17 @@ device access.
   on-demand agents resume only for messages or durable automations, or ask the
   Core to supervise a persistent process. Each agent has idle, concurrency,
   and provider-usage safeguards plus explicit wake and sleep controls.
+- **Automatic leader supervision:** the Core checks every 15 seconds for
+  unarchived `todo`/`doing` cards and a live, idle workspace leader. After two
+  quiet minutes and a completed provider turn, it requests a board/team review,
+  with at least five minutes between reminders and persisted delivery receipts
+  in Control Center. Providers without a reliable turn-end signal require an
+  explicit `done` activity in the current session. Empty/completed boards stay
+  quiet; custom review columns do not independently trigger reminders. This
+  does not wake manually sleeping agents or override human drafts, pending
+  deliveries, input/permission requests, quotas, suspension, emergency stop,
+  operating windows or restricted conversation profiles. Keep approvals and
+  blockers explicit so unattended work does not repeatedly request them.
 - **Bounded autonomy and encrypted Vault:** approve the routine workspace
   perimeter once instead of supervising every command. Capabilities, roots,
   hosts, quiet hours, and concurrency form the standing grant; destructive or

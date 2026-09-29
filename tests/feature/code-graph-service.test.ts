@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { FSWatcher } from 'chokidar';
 import { codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
 import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/application/services/CodeGraphChangeIntelligenceService.js';
 import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
@@ -110,6 +111,74 @@ describe('CodeGraphIndexService', () => {
     expect(status.projects[0].status).toBe('stale');
     await expect(codeGraphIndexService.ensureFresh(workspace.id)).rejects.toThrow(/manual mode/i);
     await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
+  it('excludes nested Floors and reviews from watchers while allowing an explicit Floor root', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-internal-'));
+    directories.push(directory);
+    const floor = join(directory, '.orkestrai/floors/example');
+    const review = join(directory, '.orkestrai/reviews/example');
+    await mkdir(floor, { recursive: true });
+    await mkdir(review, { recursive: true });
+    await writeFile(join(directory, 'package.json'), '{}');
+    await writeFile(join(directory, 'source.ts'), 'export const root = 1;');
+    await writeFile(join(floor, 'source.ts'), 'export const floor = 1;');
+    await writeFile(join(review, 'source.ts'), 'export const review = 1;');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Internal roots', workingDir: directory, codeIntelligenceMode: 'manual', repositoryRoots: [{ alias: 'floor', path: floor }] });
+    try {
+      const indexed = await codeGraphIndexService.index(workspace.id);
+      expect(indexed.stats.files).toBe(2);
+      const state = (globalThis as unknown as { __orkestraiCodeGraphIndexState: { watchers: Map<string, { watcher: FSWatcher }> } }).__orkestraiCodeGraphIndexState;
+      const rootProject = indexed.projects.find((project) => project.name !== 'floor')!;
+      const watched = state.watchers.get(rootProject.id)!.watcher;
+      expect(Object.keys(watched.getWatched()).some((path) => path.includes('.orkestrai'))).toBe(false);
+      if (process.platform === 'darwin') expect(watched.options.usePolling).toBe(true);
+      await writeFile(join(floor, 'source.ts'), 'export const floorChanged = 2;');
+      await vi.waitFor(async () => {
+        const status = await codeGraphIndexService.status(workspace.id);
+        expect(status.projects.find((project) => project.name === 'floor')?.status).toBe('stale');
+        expect(status.projects.find((project) => project.id === rootProject.id)?.status).toBe('ready');
+      }, { timeout: 5_000 });
+    } finally {
+      await codeGraphIndexService.removeWorkspace(workspace.id);
+    }
+  });
+
+  it('closes an exhausted watcher once and keeps agent reads fresh during its backoff', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-exhausted-'));
+    directories.push(directory);
+    const path = join(directory, 'source.ts');
+    await writeFile(path, 'export function beforeFailure() {}');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Exhausted watch', workingDir: directory });
+    try {
+      const indexed = await codeGraphIndexService.index(workspace.id);
+      const projectId = indexed.projects[0].id;
+      const state = (globalThis as unknown as { __orkestraiCodeGraphIndexState: {
+        watchers: Map<string, { watcher: FSWatcher }>; watcherClosing: Map<string, Promise<void>>;
+        watcherRetryAt: Map<string, number>; pollingProjects: Set<string>;
+      } }).__orkestraiCodeGraphIndexState;
+      const watcher = state.watchers.get(projectId)!.watcher;
+      const close = vi.spyOn(watcher, 'close');
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const error = Object.assign(new Error('Too many open files'), { code: 'EMFILE' });
+      watcher.emit('error', error);
+      watcher.emit('error', error);
+      await state.watcherClosing.get(projectId);
+      expect(close).toHaveBeenCalledOnce();
+      expect(warning).toHaveBeenCalledOnce();
+      expect(state.pollingProjects.has(projectId)).toBe(true);
+      expect(state.watcherRetryAt.get(projectId)).toBeGreaterThan(Date.now());
+      await codeGraphIndexService.ensureFresh(workspace.id);
+      await writeFile(path, 'export function afterFailure() {}');
+      await codeGraphIndexService.ensureFresh(workspace.id);
+      expect(await codeGraphIndexService.search(workspace.id, { query: 'afterFailure' })).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'afterFailure' })]));
+      expect(state.watchers.has(projectId)).toBe(false);
+      state.watcherRetryAt.set(projectId, 0);
+      await codeGraphIndexService.status(workspace.id);
+      expect(state.watchers.get(projectId)!.watcher.options.usePolling).toBe(true);
+    } finally {
+      await codeGraphIndexService.removeWorkspace(workspace.id);
+    }
   });
 
   it('incrementally refreshes assisted workspaces and makes freshness reads wait for the newest source', async () => {

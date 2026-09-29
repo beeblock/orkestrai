@@ -295,6 +295,17 @@ export class ControlCenterRepository {
     return rows.map(mapEnvelope);
   }
 
+  async latestLeaderSupervision(workspaceId: string, nodeId: string): Promise<AgentMessageEnvelopeData | null> {
+    const row = await AgentMessageEnvelope.query()
+      .where('workspace_id', workspaceId)
+      .where('to_node_id', nodeId)
+      .where('kind', 'leader_supervision')
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .first();
+    return row ? mapEnvelope(row) : null;
+  }
+
   async findEnvelopes(messageIds: string[]): Promise<AgentMessageEnvelopeData[]> {
     if (!messageIds.length) return [];
     const models = await AgentMessageEnvelope.query().whereIn('id', messageIds).get();

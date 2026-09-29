@@ -2328,6 +2328,7 @@
   "control_center.elapsed_minutes": "{count}min",
   "control_center.elapsed_hours": "{count}h",
   "control_center.workspace_user": "Usuario del workspace",
+  "control_center.automatic_supervisor": "Orkestrai (supervisión automática)",
   "control_center.shell": "Shell",
   "control_center.no_current_task": "Sin tarea actual",
   "control_center.provider_usage": "uso del proveedor",

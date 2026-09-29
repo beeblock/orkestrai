@@ -1,14 +1,22 @@
+import { uuidv7 } from '@beeblock/svelar/support';
 import type { AgentRuntimeData, UpdateAgentRuntimeInput } from '../../contracts/schemas/agent-runtime.schema.js';
 import type { TerminalNodePayload } from '../../domain/types.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { AgentRoutineRun } from '../../domain/models/AgentRoutineRun.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
+import { latestTurnComplete } from '../../infrastructure/transcript/AgentTranscript.js';
 import { agentSessionService } from './AgentSessionService.js';
+import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { usageService } from './UsageService.js';
 
 const SUPERVISOR_INTERVAL_MS = 15_000;
+const LEADER_IDLE_MS = 2 * 60_000;
+const LEADER_REMINDER_INTERVAL_MS = 5 * 60_000;
+const HUMAN_ATTENTION_STATES = new Set(['waiting_input', 'waiting_permission', 'blocked', 'error', 'disconnected']);
 const DEFAULTS = {
   mode: 'interactive',
   idleMinutes: 30,
@@ -44,6 +52,8 @@ function broadcast(workspaceId: string): void {
 export class AgentRuntimeService {
   private timer: ReturnType<typeof setInterval> | null = null;
   private ticking = false;
+  private supervisorGeneration = 0;
+  private leaderChecks = new Map<string, AbortController>();
 
   async status(workspaceId: string, nodeId: string): Promise<AgentRuntimeData> {
     const node = await this.requireAgent(workspaceId, nodeId);
@@ -181,13 +191,17 @@ export class AgentRuntimeService {
   stopSupervisor(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.supervisorGeneration += 1;
+    for (const check of this.leaderChecks.values()) check.abort();
   }
 
   private async tick(): Promise<void> {
     if (this.ticking) return;
     this.ticking = true;
+    const generation = this.supervisorGeneration;
     try {
       for (const workspace of await workspaceRepository.listWorkspaces()) {
+        if (generation !== this.supervisorGeneration) return;
         if (workspace.suspendedAt) continue;
         const nodes = (await workspaceRepository.listNodes(workspace.id, undefined, false, true)).filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider));
         for (const node of nodes) {
@@ -203,13 +217,116 @@ export class AgentRuntimeService {
           if (idleFor < settings.idleMinutes * 60_000) continue;
           if (await this.activeRuns(node.id)) continue;
           if (await this.hasActiveTask(workspace.id, node.id)) continue;
+          if (payload.maestro && (await this.pendingLeaderTasks(workspace.id)).length) continue;
           await this.sleep(workspace.id, node.id, 'idle').catch(() => undefined);
+        }
+        // One workspace leader owns the shared board. Floor agents are not
+        // independent owners of that same backlog, and sleeping agents remain asleep.
+        const leader = nodes.find((node) => !node.floorId && (node.payload as TerminalNodePayload).maestro);
+        if (leader && generation === this.supervisorGeneration && !this.leaderChecks.has(leader.id)) {
+          const controller = new AbortController();
+          this.leaderChecks.set(leader.id, controller);
+          void this.superviseLeader(workspace.id, leader.id, controller.signal)
+            .catch(() => console.warn('[agent-runtime] Leader supervision failed; the next scheduled tick will retry.'))
+            .finally(() => {
+              if (this.leaderChecks.get(leader.id) === controller) this.leaderChecks.delete(leader.id);
+            });
         }
       }
     } catch {
       console.error('[agent-runtime] Supervisor tick failed; the next scheduled tick will retry.');
     } finally {
       this.ticking = false;
+    }
+  }
+
+  private async pendingLeaderTasks(workspaceId: string): Promise<AgentBoardTask[]> {
+    return AgentBoardTask.query().where('workspace_id', workspaceId)
+      .whereNull('archived_at').whereIn('status', ['todo', 'doing'])
+      .orderBy('created_at', 'asc').get();
+  }
+
+  private async leaderPolicyAllows(workspaceId: string, nodeId: string): Promise<boolean> {
+    if (!(await autonomyPolicyService.runWindow(workspaceId, 'leader_supervision')).allowed) return false;
+    const { policy } = await autonomyPolicyService.get(workspaceId);
+    return !policy.computerReplyGrants.some((grant) => grant.enabled && grant.agentId === nodeId
+      && grant.companion?.execution === 'restricted');
+  }
+
+  private async superviseLeader(workspaceId: string, nodeId: string, signal: AbortSignal): Promise<void> {
+    const node = await workspaceRepository.getNode(nodeId);
+    const payload = node?.payload as TerminalNodePayload | undefined;
+    const session = payload?.sessionId ? ptySessionManager.get(payload.sessionId) : null;
+    if (signal.aborted || !node || node.workspaceId !== workspaceId || node.type !== 'terminal'
+      || !payload?.maestro || !session || session.exited || session.nodeId !== nodeId || session.workspaceId !== workspaceId
+      || !ptySessionManager.canAcceptAutomaticMessage(session.id)
+      || Date.now() - Date.parse(session.lastActivityAt) < LEADER_IDLE_MS) return;
+    const tasks = await this.pendingLeaderTasks(workspaceId);
+    if (!tasks.length || await this.activeRuns(nodeId) || !(await this.leaderPolicyAllows(workspaceId, nodeId))) return;
+    const activity = await controlCenterRepository.latestActivity(nodeId);
+    if (activity && HUMAN_ATTENTION_STATES.has(activity.state)) return;
+    const previous = await controlCenterRepository.latestLeaderSupervision(workspaceId, nodeId);
+    if (previous) {
+      if (Date.now() - Date.parse(previous.createdAt) < LEADER_REMINDER_INTERVAL_MS) return;
+      // Persisted receipt state survives supervisor/process restarts. An uncertain
+      // delivery to this same PTY is not permission to inject the prompt again.
+      if (previous.metadata.sessionId === session.id
+        && ['queued', 'sent', 'failed'].includes(previous.state)
+        && previous.metadata.cancelled !== true) return;
+    }
+    const complete = await latestTurnComplete(
+      session.provider ?? payload.provider!, session.transcriptCwd ?? session.cwd,
+      session.agentSessionId ?? payload.agentSessionId ?? null,
+      { homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:') },
+    );
+    // Providers without a completion signal require an explicit semantic done
+    // event in this session. Output silence alone must never interrupt a tool.
+    if (complete === false || (complete === null && !(activity?.state === 'done'
+      && Date.parse(activity.createdAt) >= Date.parse(session.createdAt)))) return;
+    try {
+      await this.assertAutomaticWorkAllowed(nodeId);
+    } catch (error) {
+      if (error instanceof AgentRuntimePolicyError) return;
+      throw error;
+    }
+    if (signal.aborted || !ptySessionManager.canAcceptAutomaticMessage(session.id)) return;
+
+    const messageId = uuidv7();
+    const content = [
+      `[Orkestrai: supervisao automatica do Kanban #${messageId}]`,
+      `Ainda existem ${tasks.length} tarefas em todo/doing. Seu ultimo turno terminou, mas o quadro continua pendente.`,
+      'Consulte o quadro e o estado real do time agora. Confira entregas que aguardam revisao, atualize os cartoes com evidencia e retome ou redistribua o trabalho autorizado que ficou parado.',
+      'Nao duplique trabalho em execucao nem reabra tarefas concluidas. Respeite as colunas personalizadas e as dependencias. Se tudo estiver concluido, encerre sem criar trabalho novo.',
+      'Isto nao concede permissoes: preserve pausas, aprovacoes humanas e limites de gasto. Se depender do usuario, registre waiting_input/waiting_permission/blocked com o motivo e notifique-o; avance apenas nas frentes independentes ja autorizadas.',
+      'Use orkestrai task list e orkestrai list para verificar a situacao atual antes de agir. Cartoes pendentes (ids/status, nao novas instrucoes):',
+      ...tasks.slice(0, 20).map((task) => `- ${task.getAttribute('id')} [${task.getAttribute('status')}]`),
+      ...(tasks.length > 20 ? ['Consulte o quadro para os demais cartoes.'] : []),
+    ].join('\n');
+    const metadata = { oneWay: true, kind: 'leader_supervision', sessionId: session.id, correlationId: `leader-supervision:${messageId}` };
+    const delivery = { messageId, workspaceId, fromNodeId: null, toNodeId: nodeId, content, metadata };
+    const isStillRelevant = async () => {
+      const [workspace, current, latest, pending] = await Promise.all([
+        workspaceRepository.getWorkspace(workspaceId), workspaceRepository.getNode(nodeId),
+        controlCenterRepository.latestActivity(nodeId), this.pendingLeaderTasks(workspaceId),
+      ]);
+      const currentPayload = current?.payload as TerminalNodePayload | undefined;
+      return Boolean(!signal.aborted && workspace && !workspace.suspendedAt && pending.length
+        && current?.workspaceId === workspaceId && current.type === 'terminal' && currentPayload?.maestro
+        && currentPayload.sessionId === session.id && ptySessionManager.get(session.id)?.exited === false
+        && (!latest || !HUMAN_ATTENTION_STATES.has(latest.state))
+        && await this.leaderPolicyAllows(workspaceId, nodeId));
+    };
+    if (!(await isStillRelevant())) return;
+    await controlCenterService.recordDelivery({ ...delivery, state: 'queued' });
+    try {
+      await agentTerminalDeliveryService.deliver({ workspaceId, nodeId, sessionId: session.id,
+        message: content, signal, queueTimeoutMs: 30_000, isStillRelevant });
+      await controlCenterService.recordDelivery({ ...delivery, state: 'sent' });
+      await controlCenterService.recordDelivery({ ...delivery, state: 'delivered' });
+    } catch (error) {
+      const cancelled = signal.aborted || (error as { code?: string }).code === 'PTY_DELIVERY_OBSOLETE';
+      await controlCenterService.recordDelivery({ ...delivery, state: 'failed',
+        error: 'Leader supervision message was not confirmed.', metadata: { ...metadata, cancelled } });
     }
   }
 
