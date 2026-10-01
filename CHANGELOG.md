@@ -10,7 +10,7 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Resume the three historical workspace-group migrations after an interrupted upgrade. Validate existing columns, foreign keys and indexes, preserve saved data, restore a missing index or column, and refuse incompatible schemas rather than silently marking them complete.
-- Commit pending desktop SQLite migrations and their history atomically. Before changing an existing database, create and verify a private, standalone backup including committed WAL data; retain only the newest completed automatic backup and avoid making another copy when no migrations are pending.
+- Commit pending desktop SQLite migrations and their history atomically. Before changing an existing database, create and verify a private, standalone backup including committed WAL data; retain only the newest completed automatic backup and avoid making another copy when no migrations are pending. Explicitly install the exact Electron/CPU SQLite prebuild even when packaging strips native build descriptors.
 - Keep update discovery independent of server startup. If the internal server fails, offer a native, localized recovery dialog with download, retry and logs instead of silently exiting; detect child exits promptly and safely close an already-destroyed splash.
 
 ### Changed
