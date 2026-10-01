@@ -1,4 +1,11 @@
 {
+  "startup.recovery_title": "No se pudo iniciar Orkestrai",
+  "startup.recovery_message": "El servidor interno no pudo iniciar. Tus datos no se han restablecido.",
+  "startup.recovery_detail": "Descarga el instalador más reciente y reemplaza solo la aplicación, conservando tu carpeta de datos. También puedes reintentar o abrir los logs para compartirlos con soporte. No borres la base de datos para resolver este error.",
+  "startup.recovery_download": "Descargar última versión",
+  "startup.recovery_retry": "Reintentar",
+  "startup.recovery_logs": "Abrir carpeta de logs",
+  "startup.recovery_quit": "Salir",
   "floor.error_remove": "No se pudo eliminar el piso. Revisa los bloqueos e inténtalo de nuevo.",
   "floor.remove_confirm_title": "¿Eliminar el piso {name}?",
   "floor.remove_confirm_description": "Solo se puede eliminar una worktree integrada, limpia y sin uso. Los archivos locales e ignorados, tareas pendientes y terminales activos bloquean la eliminación. La acción seleccionada determina si se conserva la rama integrada.",

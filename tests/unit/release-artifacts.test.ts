@@ -81,8 +81,15 @@ describe('release artifact validation', () => {
     const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
     expect(workflow.jobs['build-macos']['runs-on']).toBe('macos-15-intel');
     const packaging = workflow.jobs['build-macos'].steps.find((step: { name?: string }) => step.name === 'Package macOS installers');
-    expect(packaging.run).toContain('scripts/package-macos.sh --arm64 --x64');
+    expect(packaging.run).toContain('scripts/package-macos.sh "--$TARGET_ARCH"');
     expect(packaging.env.ORKESTRAI_REQUIRE_MAC_SIGNING).toBe('true');
+    expect(workflow.jobs['build-macos'].strategy).toMatchObject({ 'fail-fast': false, 'max-parallel': 2 });
+    expect(workflow.jobs['build-macos'].strategy.matrix.arch).toBe('${{ fromJSON(needs.validate.outputs.macos_arches) }}');
+    const upload = workflow.jobs['build-macos'].steps.find((step: { name?: string }) => step.name === 'Upload macOS artifacts');
+    expect(upload.with.name).toBe('release-macos-${{ matrix.arch }}');
+    expect(upload.with.path).toContain('latest-mac-${{ matrix.arch }}.yml');
+    const validation = workflow.jobs.publish.steps.find((step: { name?: string }) => step.name === 'Validate installers and update manifests').run;
+    expect(validation.indexOf('merge-macos-manifests')).toBeLessThan(validation.indexOf('validate-release-artifacts'));
   });
 
   it('builds QA from an immutable tested SHA without enabling release publication', () => {
@@ -224,7 +231,7 @@ describe('packaged updater', () => {
     expect(nodePtyPatch).toContain('error.message.includes("AttachConsole failed")');
     expect(nodePtyPatch).toContain('consoleProcessList = [shellPid];');
     expect(workflow).toContain("ORKESTRAI_REQUIRE_MAC_SIGNING: 'true'");
-    expect(workflow).toContain('scripts/package-macos.sh --arm64 --x64');
+    expect(workflow).toContain('scripts/package-macos.sh "--$TARGET_ARCH"');
     expect(workflow).toContain('codesign --verify --deep --strict');
     expect(workflow).toContain('Authority=Developer ID Application:');
     expect(workflow).toContain('TeamIdentifier=$APPLE_TEAM_ID');

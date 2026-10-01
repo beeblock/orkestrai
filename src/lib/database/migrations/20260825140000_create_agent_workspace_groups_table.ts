@@ -1,8 +1,9 @@
 import { Migration } from '@beeblock/svelar/database';
+import { createResumableWorkspaceGroups } from '../resumable-workspace-schema.ts';
 
 export default class CreateAgentWorkspaceGroupsTable extends Migration {
   async up() {
-    await this.schema.createTable('agent_workspace_groups', (table) => {
+    await createResumableWorkspaceGroups(this.schema, (table) => {
       table.uuid('id').primary();
       table.string('name');
       table.uuid('parent_id').nullable().references('id', 'agent_workspace_groups').onDelete('set null');

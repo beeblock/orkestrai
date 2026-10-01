@@ -8,13 +8,14 @@
  * modulos .ts do PTY).
  */
 import http from 'node:http';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
+import { delimiter, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { installOrkestraiShim, writeOrkestraiRuntimeFile } from './install-orkestrai-shim.mjs';
 import { holdBackgroundStartup } from '../src/lib/modules/agent-room/infrastructure/background-startup.ts';
+import { runStartupMigrations } from './run-startup-migrations.mjs';
 
 // App Electron aberto pelo Finder recebe um PATH minimo do macOS; sem os
 // locais comuns de CLIs a deteccao e o spawn dos agentes falham com ENOENT.
@@ -103,23 +104,7 @@ if (process.env.ORKESTRAI_DATA_DIR) {
 installOrkestraiShim();
 
 const dbFile = process.env.DB_PATH ?? resolve('database.db');
-
-// Backup rotativo do SQLite no boot (mantem os ultimos 5) — protege contra
-// corrupcao em quedas de energia/updates problematicos.
-if (existsSync(dbFile)) {
-  try {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    copyFileSync(dbFile, `${dbFile}.bak-${stamp}`);
-    const backups = readdirSync(dirname(dbFile))
-      .filter((name) => name.startsWith(`${basename(dbFile)}.bak-`))
-      .sort();
-    for (const old of backups.slice(0, Math.max(0, backups.length - 5))) {
-      rmSync(resolve(dirname(dbFile), old), { force: true });
-    }
-  } catch {
-    // backup e conveniencia; nao bloqueia o boot
-  }
-}
+const existingDatabase = existsSync(dbFile);
 
 // Import tardio: o handler avalia APP_KEY e ORIGIN na carga, entao so depois
 // do .env e da definicao de ORIGIN abaixo.
@@ -174,8 +159,7 @@ const { handler } = await import('../build/handler.js');
     const mod = await import(pathToFileURL(resolve(migrationsDir, file)).href);
     migrations.push({ name: file.replace(/\.ts$/, ''), migration: new mod.default() });
   }
-  const { Migrator } = await import('@beeblock/svelar/database');
-  await new Migrator().run(migrations);
+  await runStartupMigrations(migrations, { databasePath: dbFile, existingDatabase });
 }
 releaseBackgroundStartup();
 

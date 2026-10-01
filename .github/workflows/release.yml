@@ -39,6 +39,9 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
       source_sha: ${{ steps.release.outputs.source_sha }}
+      macos_arches: ${{ steps.release.outputs.macos_arches }}
+      production_artifact_id: ${{ steps.ci.outputs.production_artifact_id }}
+      production_run_id: ${{ steps.ci.outputs.production_run_id }}
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
@@ -73,8 +76,14 @@ jobs:
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [[ "$BUILD_ONLY" == "true" ]]; then
+            echo 'macos_arches=["arm64"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'macos_arches=["x64","arm64"]' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Require successful CI for tagged commit
+        id: ci
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -98,6 +107,11 @@ jobs:
             if [[ "$STATUS" == "completed" ]]; then
               if [[ "$CONCLUSION" == "success" ]]; then
                 echo "CI passed for $SHA: $URL"
+                RUN_ID="$(jq -r '.id' <<<"$RUN")"
+                echo "production_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+                ARTIFACT_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --paginate \
+                  --jq ".artifacts[] | select(.name == \"production-build-$SHA\" and .expired == false) | .id" | tail -n 1)"
+                echo "production_artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
               echo "::error::CI for tagged commit $SHA concluded with '$CONCLUSION': $URL"
@@ -112,11 +126,18 @@ jobs:
           exit 1
 
   build-macos:
-    name: Build macOS (Apple Silicon + Intel)
+    name: Build macOS (${{ matrix.arch }})
     needs: validate
     # The standard Intel runner has 14 GB RAM; the M1 label only has 7 GB.
-    # Packaging selects target-architecture binaries for both installers.
+    # Independent runners sign/notarize each CPU concurrently, with 14 GB each.
     runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        arch: ${{ fromJSON(needs.validate.outputs.macos_arches) }}
+    env:
+      TARGET_ARCH: ${{ matrix.arch }}
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v7
@@ -135,16 +156,33 @@ jobs:
           path: |
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: macos-electron-${{ hashFiles('package-lock.json') }}
-          restore-keys: macos-electron-
+          key: macos-${{ matrix.arch }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: macos-${{ matrix.arch }}-electron-
 
       - name: Install dependencies
         run: |
           npm install --global "npm@$NPM_VERSION"
           npm ci --no-audit --no-fund
 
-      - name: Build application
-        run: npm run build
+      - name: Download tested production bundle
+        if: needs.validate.outputs.production_artifact_id != ''
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.production_artifact_id }}
+          run-id: ${{ needs.validate.outputs.production_run_id }}
+          github-token: ${{ github.token }}
+          path: build
+          digest-mismatch: error
+
+      - name: Build application when the tested bundle has expired
+        if: needs.validate.outputs.production_artifact_id == ''
+        shell: bash
+        run: |
+          npm run build
+          node scripts/production-bundle.mjs stamp build "${{ needs.validate.outputs.source_sha }}"
+
+      - name: Verify production bundle source and file hashes
+        run: node scripts/production-bundle.mjs verify build "${{ needs.validate.outputs.source_sha }}"
 
       - name: Package macOS installers
         env:
@@ -155,16 +193,13 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           ORKESTRAI_REQUIRE_MAC_SIGNING: 'true'
         run: |
-          if [[ "$BUILD_ONLY" == "true" ]]; then
-            scripts/package-macos.sh --arm64
-          else
-            scripts/package-macos.sh --arm64 --x64
-          fi
+          scripts/package-macos.sh "--$TARGET_ARCH"
 
       - name: Verify macOS packages
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          set -euo pipefail
           verify_trusted_app() {
             local app="$1"
             local signature
@@ -179,21 +214,25 @@ jobs:
             xcrun stapler validate "$app"
           }
 
-          test -f release/mac-arm64/Orkestrai.app/Contents/Resources/app/node_modules/electron-updater/package.json
-          verify_trusted_app release/mac-arm64/Orkestrai.app
-          hdiutil verify release/Orkestrai-${{ needs.validate.outputs.version }}-arm64.dmg
-          unzip -tq release/Orkestrai-${{ needs.validate.outputs.version }}-arm64-mac.zip
-          if [[ "$BUILD_ONLY" != "true" ]]; then
-            test -f release/mac/Orkestrai.app/Contents/Resources/app/node_modules/electron-updater/package.json
-            verify_trusted_app release/mac/Orkestrai.app
-            hdiutil verify release/Orkestrai-${{ needs.validate.outputs.version }}.dmg
-            unzip -tq release/Orkestrai-${{ needs.validate.outputs.version }}-mac.zip
+          if [[ "$TARGET_ARCH" == "arm64" ]]; then
+            APP_DIR=release/mac-arm64/Orkestrai.app
+            SUFFIX=-arm64
+          else
+            APP_DIR=release/mac/Orkestrai.app
+            SUFFIX=
           fi
+          test -f "$APP_DIR/Contents/Resources/app/node_modules/electron-updater/package.json"
+          test -f "$APP_DIR/Contents/Resources/app/build/desktop-messages/index.cjs"
+          test -f "$APP_DIR/Contents/Resources/app/scripts/run-startup-migrations.mjs"
+          verify_trusted_app "$APP_DIR"
+          hdiutil verify "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX.dmg"
+          unzip -tq "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX-mac.zip"
+          mv release/latest-mac.yml "release/latest-mac-$TARGET_ARCH.yml"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: release-macos
+          name: release-macos-${{ matrix.arch }}
           retention-days: 7
           if-no-files-found: error
           path: |
@@ -201,7 +240,7 @@ jobs:
             release/*.dmg.blockmap
             release/*-mac.zip
             release/*-mac.zip.blockmap
-            release/latest-mac.yml
+            release/latest-mac-${{ matrix.arch }}.yml
 
   build-windows:
     name: Build Windows (x64)
@@ -238,8 +277,25 @@ jobs:
       - name: Verify native desktop command transport
         run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts
 
-      - name: Build application
-        run: npm run build
+      - name: Download tested production bundle
+        if: needs.validate.outputs.production_artifact_id != ''
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.production_artifact_id }}
+          run-id: ${{ needs.validate.outputs.production_run_id }}
+          github-token: ${{ github.token }}
+          path: build
+          digest-mismatch: error
+
+      - name: Build application when the tested bundle has expired
+        if: needs.validate.outputs.production_artifact_id == ''
+        shell: bash
+        run: |
+          npm run build
+          node scripts/production-bundle.mjs stamp build "${{ needs.validate.outputs.source_sha }}"
+
+      - name: Verify production bundle source and file hashes
+        run: node scripts/production-bundle.mjs verify build "${{ needs.validate.outputs.source_sha }}"
 
       - name: Rebuild Electron native dependency
         run: npm run electron:rebuild
@@ -297,8 +353,25 @@ jobs:
           npm install --global "npm@$NPM_VERSION"
           npm ci --no-audit --no-fund
 
-      - name: Build application
-        run: npm run build
+      - name: Download tested production bundle
+        if: needs.validate.outputs.production_artifact_id != ''
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.production_artifact_id }}
+          run-id: ${{ needs.validate.outputs.production_run_id }}
+          github-token: ${{ github.token }}
+          path: build
+          digest-mismatch: error
+
+      - name: Build application when the tested bundle has expired
+        if: needs.validate.outputs.production_artifact_id == ''
+        shell: bash
+        run: |
+          npm run build
+          node scripts/production-bundle.mjs stamp build "${{ needs.validate.outputs.source_sha }}"
+
+      - name: Verify production bundle source and file hashes
+        run: node scripts/production-bundle.mjs verify build "${{ needs.validate.outputs.source_sha }}"
 
       - name: Install RPM build tools
         run: sudo apt-get update && sudo apt-get install -y rpm
@@ -360,7 +433,9 @@ jobs:
           merge-multiple: true
 
       - name: Validate installers and update manifests
-        run: node scripts/validate-release-artifacts.mjs release "${{ needs.validate.outputs.version }}"
+        run: |
+          node scripts/merge-macos-manifests.mjs release "${{ needs.validate.outputs.version }}"
+          node scripts/validate-release-artifacts.mjs release "${{ needs.validate.outputs.version }}"
 
       - name: Prepare release notes
         run: node scripts/release-notes.mjs "${{ needs.validate.outputs.version }}" CHANGELOG.md "$RUNNER_TEMP/release-notes.md"

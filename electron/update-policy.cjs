@@ -1,4 +1,4 @@
-const { spawnSync } = require('node:child_process');
+const { spawnSync, execFile } = require('node:child_process');
 const path = require('node:path');
 
 function macBundlePath(execPath) {
@@ -41,4 +41,18 @@ function isNewerVersion(candidate, current) {
   return false;
 }
 
-module.exports = { canInstallUpdatesAutomatically, isNewerVersion, macBundlePath };
+async function canInstallUpdatesAutomaticallyAsync({
+  platform = process.platform, execPath = process.execPath, assess = execFile,
+} = {}) {
+  if (platform !== 'darwin') return true;
+  const bundlePath = macBundlePath(execPath);
+  if (!bundlePath) return false;
+  try {
+    return await new Promise((resolve) => {
+      assess('/usr/sbin/spctl', ['--assess', '--type', 'execute', bundlePath],
+        { timeout: 30_000, maxBuffer: 32_768, windowsHide: true }, (error) => resolve(!error));
+    });
+  } catch { return false; }
+}
+
+module.exports = { canInstallUpdatesAutomatically, canInstallUpdatesAutomaticallyAsync, isNewerVersion, macBundlePath };
