@@ -16,7 +16,7 @@ pt-BR, English, and Spanish translations.
 
 ### Changed
 
-- Reuse the portable production bundle that passed CI and E2E for the exact release commit, verifying provenance, lockfile and every file hash instead of repeating the web build on each OS. Native dependencies remain target-specific. Build, sign and notarize Apple Silicon and Intel macOS installers on independent concurrent runners; validate and combine their updater manifests before publication, preserving all signing, notarization and artifact-integrity gates.
+- Reuse the portable production bundle that passed CI and E2E for the exact release commit, verifying provenance, lockfile and every file hash instead of repeating the web build on each OS. Pin lockfile checkouts to LF on every OS and test Windows-style Git conversion without relaxing exact hash verification. Native dependencies remain target-specific. Build, sign and notarize Apple Silicon and Intel macOS installers on independent concurrent runners; validate and combine their updater manifests before publication, preserving all signing, notarization and artifact-integrity gates.
 
 ## 0.39.0 - 2026-10-01
 
