@@ -1,5 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 test.describe('workbench accessibility', () => {
   test('shows complete agent names and roles in the explorer and vertical tabs', async ({ page, request }) => {
@@ -7,8 +10,9 @@ test.describe('workbench accessibility', () => {
     const originalSettings = (await settingsResponse.json()).data as Record<string, string>;
     const title = 'Engenheiro de integrações e experiência multiplataforma';
     const role = 'Engenheiro de frontend Svelar especializado em acessibilidade';
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-readable-agents-'));
     const workspaceResponse = await request.post('/api/agent-room/workspaces', {
-      data: { name: `E2E readable agents ${Date.now()}`, workingDir: '/tmp' },
+      data: { name: `E2E readable agents ${Date.now()}`, workingDir: dir },
     });
     const workspace = (await workspaceResponse.json()).data as { id: string };
     const nodeResponse = await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
@@ -57,20 +61,44 @@ test.describe('workbench accessibility', () => {
         data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'vertical' },
       });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
   test('has no serious accessibility violations in light or dark themes', async ({ page, request }) => {
     const settingsResponse = await request.get('/api/agent-room/settings');
     const originalSettings = (await settingsResponse.json()).data as Record<string, string>;
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-accessibility-'));
+    let workspaceId: string | undefined;
 
     try {
+      const workspaceResponse = await request.post('/api/agent-room/workspaces', {
+        data: { name: `E2E accessibility ${Date.now()}`, workingDir: dir },
+      });
+      expect(workspaceResponse.ok()).toBe(true);
+      workspaceId = (await workspaceResponse.json()).data.id;
+      const nodeResponse = await request.post(`/api/agent-room/workspaces/${workspaceId}/nodes`, {
+        data: {
+          type: 'terminal', title: 'Accessibility agent', x: 100, y: 100, width: 480, height: 320,
+          payload: { command: '/bin/cat', args: [], role: 'Reviewer' },
+        },
+      });
+      expect(nodeResponse.ok()).toBe(true);
+      const bridge = JSON.parse(readFileSync(join(dir, '.orkestrai', 'workspace.json'), 'utf8')) as { token: string };
+      const activityResponse = await request.post('/api/agent-room/bridge/activity', {
+        headers: { Authorization: `Bearer ${bridge.token}` },
+        data: { from: 'Accessibility agent', state: 'idle', action: 'Accessibility audit event' },
+      });
+      expect(activityResponse.ok()).toBe(true);
+
       for (const appTheme of ['orkestrai-light', 'orkestrai-dark']) {
         await request.put('/api/agent-room/settings', {
           data: { ...originalSettings, appTheme, workbenchTabPlacement: 'vertical' },
         });
-        await page.goto('/terminal');
+        await page.goto(`/terminal?workspace=${workspaceId}&node=workbench-control-center%3A${workspaceId}`);
         await expect(page.getByTestId('workbench-shell')).toBeVisible();
+        // Always audit populated activity: an empty fresh database hid the badge regression.
+        await expect(page.getByTestId('control-center-activity-category').first()).toBeVisible();
 
         const results = await new AxeBuilder({ page })
           .include('[data-testid="workbench-shell"]')
@@ -80,11 +108,15 @@ test.describe('workbench accessibility', () => {
           violation.impact === 'serious' || violation.impact === 'critical'
         ));
         expect(serious, `${appTheme}: ${serious.map((item) => item.id).join(', ')}`).toEqual([]);
+        await test.info().attach(appTheme, { body: await page.screenshot(), contentType: 'image/png' });
       }
     } finally {
+      await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', {
         data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'vertical' },
       });
+      if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`);
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
