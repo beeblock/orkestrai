@@ -1,0 +1,2 @@
+# The tested production bundle hashes this file byte-for-byte on every OS.
+package-lock.json text eol=lf

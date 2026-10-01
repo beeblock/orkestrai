@@ -79,6 +79,10 @@ Um artifact encontrado, mas com digest ou procedência inválidos, bloqueia
 o pipeline; não é tratado como ausência e não recebe fallback silencioso.
 Artifacts de CI não substituem instaladores públicos assinados.
 
+O `.gitattributes` mantém `package-lock.json` em LF em todos os checkouts,
+inclusive no Windows com `core.autocrlf=true`, sem relaxar a comparação exata
+do hash. A CI e o empacotamento Windows exercitam essa conversão com Git real.
+
 O hook do SQLite instala explicitamente o prebuild da versão Electron e CPU
 do pacote e verifica a ABI antes de assinar. Não dependa apenas de
 `electron-rebuild --force` depois da cópia: o empacotador remove `binding.gyp`,
