@@ -9,7 +9,7 @@ import { packageSqliteRuntime } from '../../scripts/package-sqlite-runtime.mjs';
 const require = createRequire(import.meta.url);
 
 describe('packaged SQLite Electron runtime', () => {
-  it('repairs a copied Node binary and leaves the checkout binary unchanged', async () => {
+  it('repairs a copied Node binary after packaging strips binding.gyp and leaves checkout unchanged', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'ork-sqlite-package-'));
     const resources = process.platform === 'darwin'
       ? join(directory, 'Orkestrai.app/Contents/Resources') : join(directory, 'resources');
@@ -28,6 +28,7 @@ describe('packaged SQLite Electron runtime', () => {
         await cp(dirname(require.resolve(`${name}/package.json`)), join(app, 'node_modules', name), { recursive: true });
       }
       await writeFile(join(app, 'package.json'), JSON.stringify({ name: 'sqlite-package-test', version: '1.0.0', dependencies: { 'better-sqlite3': require('better-sqlite3/package.json').version } }));
+      await rm(join(app, 'node_modules/better-sqlite3/binding.gyp'));
       expect(invoke().status).not.toBe(0);
       await packageSqliteRuntime({ appOutDir: directory, electronPlatformName: process.platform, arch: process.arch,
         packager: { appInfo: { productFilename: 'Orkestrai' }, info: { framework: { version: electronVersion } } } });

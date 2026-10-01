@@ -79,6 +79,12 @@ Um artifact encontrado, mas com digest ou procedência inválidos, bloqueia
 o pipeline; não é tratado como ausência e não recebe fallback silencioso.
 Artifacts de CI não substituem instaladores públicos assinados.
 
+O hook do SQLite instala explicitamente o prebuild da versão Electron e CPU
+do pacote e verifica a ABI antes de assinar. Não dependa apenas de
+`electron-rebuild --force` depois da cópia: o empacotador remove `binding.gyp`,
+e a descoberta pode terminar sem reconstruir o módulo. Ausência do prebuild
+correto bloqueia a release; o binário do checkout para testes não é alterado.
+
 1. Atualize a versão em `package.json` e `package-lock.json`:
 
    ```bash
