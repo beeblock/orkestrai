@@ -5,7 +5,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentEnv } from '../../infrastructure/agent-path.js';
 import { buildWorkspaceRuntimeLaunch } from '../../infrastructure/WslRuntime.js';
-import { floorService } from './FloorService.js';
+import { floorService, withFloorGitSlot } from './FloorService.js';
 import { taskBoardService, type BoardTask } from './TaskBoardService.js';
 
 const execFileAsync = promisify(execFile);
@@ -71,12 +71,12 @@ function tasksFor(nodes: CanvasNode[], tasks: BoardTask[], includeUnassigned: bo
 
 async function runGit(workspace: Workspace, path: string, args: string[]): Promise<string> {
   const launch = buildWorkspaceRuntimeLaunch({ workspace, command: 'git', args, hostCwd: path, hostEnv: agentEnv() });
-  const { stdout } = await execFileAsync(launch.command, launch.args, {
+  const { stdout } = await withFloorGitSlot(() => execFileAsync(launch.command, launch.args, {
     cwd: launch.cwd,
     env: launch.env,
     timeout: 10_000,
     windowsHide: true,
-  });
+  }));
   return stdout;
 }
 
@@ -111,7 +111,19 @@ async function worktreeOverview(workspace: Workspace, path: string): Promise<Wor
 
 /** Read model for the floor panel; lifecycle mutations remain in FloorService. */
 export class FloorOverviewService {
+  private inFlight = new Map<string, Promise<WorkspaceFloorOverview>>();
+
   async get(workspaceId: string): Promise<WorkspaceFloorOverview> {
+    const existing = this.inFlight.get(workspaceId);
+    if (existing) return existing;
+    const pending = this.load(workspaceId).finally(() => {
+      if (this.inFlight.get(workspaceId) === pending) this.inFlight.delete(workspaceId);
+    });
+    this.inFlight.set(workspaceId, pending);
+    return pending;
+  }
+
+  private async load(workspaceId: string): Promise<WorkspaceFloorOverview> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('Workspace não encontrado.');
     const [floors, nodes, tasks] = await Promise.all([

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
+import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
@@ -79,5 +80,31 @@ describe('Bridge Git terminal authentication', () => {
     const accepted = await controller.gitExecute(event(token, 'assigned-terminal-token', operation) as any) as Response;
     expect(accepted.status, await accepted.clone().text()).toBe(200);
     expect((await gitService.status(workspace.id)).branch).toBe('review/authenticated');
+
+    const floor = await floorService.create(workspace.id, { name: 'retire' });
+    const entries = await floorService.audit(workspace.id);
+    const cleanup = { from: agent.id, taskId: task.id, entries: entries.map(({ floorId, revision }) => ({ floorId, revision })) };
+    const denied = await controller.floorCleanup(event(token, null, cleanup) as any) as Response;
+    expect(denied.status).toBe(400);
+    expect((await denied.json()).error).toContain('terminal ativo');
+    const otherActor = await controller.floorCleanup(event(token, 'assigned-terminal-token', { ...cleanup, from: other.id }) as any) as Response;
+    expect(otherActor.status).toBe(400);
+    const cleaned = await controller.floorCleanup(event(token, 'assigned-terminal-token', cleanup) as any) as Response;
+    expect(cleaned.status, await cleaned.clone().text()).toBe(200);
+    expect((await cleaned.json()).data).toEqual([{ floorId: floor.id, removed: true }]);
+  });
+
+  it.each(['floorPreview', 'floorLand', 'floorRemove'] as const)('confines %s to the authenticated workspace', async (method) => {
+    const first = await workspaceRepository.createWorkspace({ name: 'first', workingDir: '/tmp' });
+    const second = await workspaceRepository.createWorkspace({ name: 'second', workingDir: '/tmp' });
+    const { AgentFloor } = await import('$lib/modules/agent-room/domain/models/AgentFloor.js');
+    const { uuidv7 } = await import('@beeblock/svelar/support');
+    const floorId = uuidv7();
+    await AgentFloor.create({ id: floorId, workspace_id: second.id, name: 'foreign', branch: 'orkestrai/foreign', path: '/not-a-real-worktree', status: 'active' });
+    const token = await bridgeService.getOrCreateToken(first.id);
+    const input = { ...event(token, null, {}), params: { floorId } };
+    const response = await new BridgeController()[method](input) as Response;
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain('neste workspace');
   });
 });

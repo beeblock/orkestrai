@@ -7,6 +7,7 @@ import { roleService } from '$lib/modules/agent-room/application/services/RoleSe
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { boardColumnService } from '$lib/modules/agent-room/application/services/BoardColumnService.js';
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
+import { cleanupFloorsSchema } from '$lib/modules/agent-room/contracts/schemas/floorSchemas.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { OpenWorkspaceFolderRequest } from '$lib/modules/agent-room/interface/http/requests/OpenWorkspaceFolderRequest.js';
@@ -1736,6 +1737,40 @@ export class BridgeController extends Controller {
 
   // -- Andares (worktrees) via bridge ------------------------------------------
 
+  async floorAudit(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await floorService.audit(workspace.id) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao auditar andares.');
+    }
+  }
+
+  async floorCleanup(event: any) {
+    try {
+      const input = cleanupFloorsSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.requireFloorCleanupActor(event, workspace.id, input);
+      const result = await floorService.cleanup(workspace.id, input.entries);
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: actor, taskId: input.taskId,
+        state: 'working', action: 'floor:cleanup', category: 'git', verb: 'executed', objectType: 'repository',
+        metadata: { removed: result.filter((item) => item.removed).length, preserved: result.filter((item) => !item.removed).length } });
+      return this.json({ data: result });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao limpar andares.');
+    }
+  }
+
+  private async requireFloorCleanupActor(event: any, workspaceId: string, input: { from: string; taskId: string }) {
+    const actor = await this.resolveAgentActor(workspaceId, input.from);
+    const authenticated = ptySessionManager.resolveBridgeAgent(workspaceId, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+    if (!authenticated || authenticated !== actor) throw new Error('A limpeza exige a identidade do terminal ativo.');
+    const task = (await taskBoardService.list(workspaceId)).find((item) => item.id === input.taskId);
+    if (!task || task.assigneeNodeId !== actor || ['todo', 'done'].includes(task.status)) throw new Error('A limpeza exige uma tarefa ativa atribuida ao agente.');
+    if (!(await autonomyPolicyService.runWindow(workspaceId, 'floor_cleanup')).allowed) throw new Error('A limpeza esta pausada pela politica do workspace.');
+    return actor;
+  }
+
   async floorList(event: any) {
     try {
       const token = this.requireToken(event);
@@ -1765,7 +1800,8 @@ export class BridgeController extends Controller {
   async floorPreview(event: any) {
     try {
       const token = this.requireToken(event);
-      await bridgeService.resolveWorkspaceByToken(token);
+      const workspace = await bridgeService.resolveWorkspaceByToken(token);
+      await floorService.requireFloor(workspace.id, event.params.floorId);
       const target = event.url.searchParams.get('target') ?? undefined;
       return this.json({ data: await floorService.landingPreview(event.params.floorId, target) });
     } catch (error) {
@@ -1776,7 +1812,8 @@ export class BridgeController extends Controller {
   async floorLand(event: any) {
     try {
       const input = bridgeFloorLandSchema.parse(await event.request.json());
-      await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      await floorService.requireFloor(workspace.id, event.params.floorId);
       return this.json({ data: await floorService.land(event.params.floorId, input.targetBranch ?? undefined) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao aterrissar andar.');
@@ -1786,9 +1823,16 @@ export class BridgeController extends Controller {
   async floorRemove(event: any) {
     try {
       const token = this.requireToken(event);
-      await bridgeService.resolveWorkspaceByToken(token);
+      const workspace = await bridgeService.resolveWorkspaceByToken(token);
+      await floorService.requireFloor(workspace.id, event.params.floorId);
+      const input = cleanupFloorsSchema.parse({ from: event.url.searchParams.get('from'), taskId: event.url.searchParams.get('taskId'),
+        entries: [{ floorId: event.params.floorId, revision: event.url.searchParams.get('revision') }] });
+      const actor = await this.requireFloorCleanupActor(event, workspace.id, input);
       const deleteBranch = event.url.searchParams.get('deleteBranch') === 'true';
-      return this.json({ data: await floorService.remove(event.params.floorId, deleteBranch) });
+      const result = await floorService.remove(event.params.floorId, deleteBranch, input.entries[0].revision);
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: actor, taskId: input.taskId,
+        state: 'working', action: 'floor:remove', category: 'git', verb: 'executed', objectType: 'repository', metadata: { floorId: event.params.floorId } });
+      return this.json({ data: result });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao remover andar.');
     }

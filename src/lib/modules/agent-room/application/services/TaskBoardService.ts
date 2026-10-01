@@ -685,13 +685,25 @@ export class TaskBoardService {
     const hint = assigned
       ? `O usuário atribuiu direto para um agente — acompanhe com: orkestrai task list`
       : `SEM responsável. Distribua: orkestrai task assign ${taskId} "<Agente>" (ou coordene como achar melhor)`;
-    await agentTerminalDeliveryService.deliver({
+    const content = `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`;
+    const receipt = { messageId: uuidv7(), workspaceId, fromNodeId: null, toNodeId: leader.id, content,
+      metadata: { kind: 'task_created', taskId, correlationId: `task:${taskId}` } };
+    await controlCenterService.recordDelivery({ ...receipt, state: 'queued' });
+    // The card already exists. A busy leader must not hold the UI request open
+    // for its composer/confirmation timeout; the receipt tracks delivery separately.
+    void agentTerminalDeliveryService.deliver({
       workspaceId,
       nodeId: leader.id,
       sessionId: session.id,
-      message: `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`,
+      message: content,
       isStillRelevant: () => this.isTaskDeliveryActive(workspaceId, taskId, undefined, true),
-    });
+    }).then(async () => {
+      await controlCenterService.recordDelivery({ ...receipt, state: 'sent' });
+      await controlCenterService.recordDelivery({ ...receipt, state: 'delivered' });
+    }).catch(async (error) => {
+      await controlCenterService.recordDelivery({ ...receipt, state: 'failed', error: 'Task notification was not confirmed.',
+        metadata: { ...receipt.metadata, cancelled: (error as { code?: string }).code === 'PTY_DELIVERY_OBSOLETE' } });
+    }).catch(() => console.warn('[task-board] Could not persist the task notification receipt.'));
   }
 
   /**
@@ -782,7 +794,7 @@ export class TaskBoardService {
     const content =
       `[tarefa concluida no quadro #${task.id.slice(0, 8)}] Titulo: ${task.title}. Concluida por: ${author}. ` +
       'Verifique o resultado e o quadro agora; se estiver correto, integre o andar quando houver e distribua o proximo trabalho. ' +
-      'Use orkestrai task list e orkestrai ask para qualquer confirmacao necessaria.';
+      'Use os dados desta entrega para decidir a proxima acao; consulte o quadro ou pergunte ao agente somente se faltar evidencia. Nao repita list/usage/learning_search como checklist.';
     const messageId = uuidv7();
     const isStillRelevant = async () => {
       const [currentTask, currentLeader] = await Promise.all([
@@ -972,7 +984,9 @@ export class TaskBoardService {
       session = ptySessionManager.get(sessionId);
       if (!session || session.exited) throw new Error(`O agente "${node.title ?? node.id}" não iniciou uma sessão PTY funcional.`);
     }
-    const ready = await ptySessionManager.waitUntilInitialIdle(sessionId, 30_000);
+    const activeSessionId = sessionId;
+    if (!activeSessionId) throw new Error(`O agente "${node.title ?? node.id}" não possui uma sessão PTY para receber a tarefa.`);
+    const ready = await ptySessionManager.waitUntilInitialIdle(activeSessionId, 30_000);
     if (!ready) throw new Error(`O agente "${node.title ?? node.id}" não ficou pronto para receber a tarefa.`);
     const designNodeId = designNodeIdFromTask(task);
     if (designNodeId) {
@@ -1001,8 +1015,6 @@ export class TaskBoardService {
     // A entrega espera o composer estabilizar e, em ConPTY/WSL, confirma no
     // transcript que o provider realmente iniciou o turno.
     const prompt = `[nova tarefa do quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\nQuando terminar, marque com: orkestrai task done ${taskId}`;
-    const activeSessionId = sessionId;
-    if (!activeSessionId) throw new Error(`O agente "${node.title ?? node.id}" não possui uma sessão PTY para receber a tarefa.`);
     await agentTerminalDeliveryService.deliver({
       workspaceId,
       nodeId: node.id,

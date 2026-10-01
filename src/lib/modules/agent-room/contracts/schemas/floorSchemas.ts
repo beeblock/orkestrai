@@ -12,6 +12,12 @@ export const createFloorSchema = z.object({
 export const renameFloorSchema = z.object({ name: z.string().trim().min(1) });
 export const landFloorSchema = z.object({ targetBranch: z.string().trim().optional() });
 
+export const cleanupFloorsSchema = z.object({
+  from: z.string().trim().min(1).max(120),
+  taskId: z.string().uuid(),
+  entries: z.array(z.object({ floorId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/) })).min(1).max(100),
+});
+
 export const hooksSchema = z.object({
   setup: z.array(z.object({ command: z.string() })).optional(),
   run: z.array(z.object({ command: z.string() })).optional(),

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createNodeOnCanvas, selectCanvasTool } from './helpers.js';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -55,12 +55,24 @@ test.describe('andares e rotinas', () => {
     await panel.getByRole('article').filter({ hasText: 'Térreo' }).getByRole('button', { name: /Térreo/ }).click();
     await expect(page.locator('.canvas-note')).toHaveCount(1);
 
-    // Exclui o andar
+    // Refuses local files and shows the error without dropping the floor.
+    const draftPath = join(dir, '.orkestrai', 'floors', 'feature-x', 'draft.txt');
+    writeFileSync(draftPath, 'preserve this draft');
     await featureFloor.getByRole('button', { name: /feature-x/ }).click();
     await featureFloor.getByRole('button', { name: 'Excluir (manter branch)' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Excluir (manter branch)' }).click();
+    await expect(panel.getByRole('alert')).toContainText('local_changes');
+    expect(existsSync(draftPath)).toBe(true);
+    await expect(featureFloor).toBeVisible();
+
+    // Remove only this test-owned draft, then confirm the clean worktree cleanup.
+    rmSync(draftPath);
+    await featureFloor.getByRole('button', { name: 'Excluir (manter branch)' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Excluir (manter branch)' }).click();
     await expect(featureFloor).toHaveCount(0);
 
     await cleanup(request, workspaceName);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   test('automacao manual dispara prompt no terminal alvo', async ({ page, request }) => {
