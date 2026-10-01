@@ -31,7 +31,7 @@ describe('background database startup barrier', () => {
     const server = readFileSync('scripts/orkestrai-server.mjs', 'utf8');
     const hold = server.indexOf('const releaseBackgroundStartup = holdBackgroundStartup()');
     const handler = server.indexOf("await import('../build/handler.js')");
-    const migrate = server.indexOf('await new Migrator().run(migrations)');
+    const migrate = server.indexOf('await runStartupMigrations(migrations,');
     const release = server.indexOf('releaseBackgroundStartup();');
     expect(hold).toBeGreaterThan(-1);
     expect(handler).toBeGreaterThan(hold);

@@ -5,6 +5,27 @@ atualização ficam em `beeblock/orkestrai`. O repositório público legado
 `beeblock/orkestrai-releases` é preservado somente como ponte para instalações
 que ainda consultam o feed antigo.
 
+## Falha na inicialização e migrações interrompidas
+
+Desde a 0.39.1, as três migrações históricas de pastas de workspaces podem
+retomar um estado parcial compatível, sem apagar registros. Colunas, chave
+estrangeira e índice existentes são verificados antes da recuperação. Uma
+estrutura incompatível continua bloqueada e exige análise; não deve ser
+convertida automaticamente em um banco vazio.
+
+O lote SQLite e seu histórico ficam na mesma transação. Antes de migrar um
+banco existente, a API de backup do SQLite inclui páginas confirmadas no WAL,
+o snapshot passa por quick_check e usa permissões privadas. Apenas o backup
+automático concluído mais recente é mantido. Inicializações sem migrações
+pendentes não criam outra cópia. Isso substitui a cópia simples do arquivo no
+boot, que não incluía necessariamente os dados do WAL.
+
+O atualizador inicia antes do servidor. Uma falha abre um diálogo nativo em
+pt-BR/en/es para baixar a versão atual, tentar novamente ou acessar os logs,
+mesmo sem HTTP ou renderer. A 0.23.0 distribuída não pode receber esse novo
+fluxo enquanto falha antes de iniciar seu atualizador: é necessária uma
+substituição manual única do aplicativo. Preserve a pasta de dados.
+
 Agentes responsáveis por uma release devem usar a skill
 `.agents/skills/orkestrai-release` (espelhada para Claude em
 `.claude/skills/orkestrai-release`). Ela cobre preflight, publicação, recuperação
@@ -46,6 +67,18 @@ instalação antiga pode permanecer offline por meses antes de fazer a migraçã
 
 ## Criar uma versão
 
+A CI envia um artifact `production-build-<SHA>` somente depois de testes e E2E
+bem-sucedidos em um push de `main`. A release resolve o ID desse artifact no
+run concluído do mesmo commit e verifica o digest do download, a versão, o
+hash do lockfile e o SHA-256 de cada arquivo. Assim, não repete o build web
+em macOS, Windows e Linux. O bundle contém somente código/assets portáveis;
+binários nativos são recusados no artifact e continuam sendo preparados
+para o Electron e a arquitetura de cada pacote. Se o artifact já expirou
+ou uma CI antiga não o enviou, cada target faz o build do checkout verificado.
+Um artifact encontrado, mas com digest ou procedência inválidos, bloqueia
+o pipeline; não é tratado como ausência e não recebe fallback silencioso.
+Artifacts de CI não substituem instaladores públicos assinados.
+
 1. Atualize a versão em `package.json` e `package-lock.json`:
 
    ```bash
@@ -82,6 +115,15 @@ runner M1 de 7 GB. O heap do build web permite até 12 GB; os binários nativos
 são selecionados pela arquitetura de cada instalador, não pela do runner.
 Os dois pacotes continuam exigindo assinatura Developer ID e notarização.
 Consulte as [especificações dos runners do GitHub](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+Apple Silicon e Intel agora usam duas instâncias independentes desse runner,
+com `max-parallel: 2` e `fail-fast: false`. Assinatura e notarização podem
+acontecer ao mesmo tempo; cada CPU conserva todos os gates. Cada artifact
+leva um manifest com nome próprio. O publisher verifica ambos os manifests,
+tamanhos e SHA-512 antes de combiná-los em um único `latest-mac.yml` e executar
+a validação completa. Não use merge de artifacts com manifests de mesmo nome:
+isso perderia uma arquitetura. O tempo final ainda depende da fila dos
+runners e da Apple; meça o workflow concluído antes de prometer um prazo.
 
 Depois dos builds, `scripts/validate-release-artifacts.mjs` confere versão,
 arquivos referenciados, tamanho e SHA-512 dos manifests `latest-mac.yml`,
@@ -151,8 +193,9 @@ gh workflow run release.yml --repo beeblock/orkestrai --ref main -f tag="$(git r
 ```
 
 Esse modo gera apenas o instalador Apple Silicon assinado e notarizado, verifica
-as permissões reais do app e helpers e disponibiliza o artifact `release-macos`
-no run. Não cria tag, release pública nem altera feeds de atualização. Baixe o
+as permissões reais do app e helpers e disponibiliza o artifact
+`release-macos-arm64` no run. Não cria tag, release pública nem altera feeds de
+atualização. Baixe o
 artifact desse run, instale o DMG exato e valide hardware/interação. As etapas
 seguintes fazem checkout do SHA resolvido na validação, nunca de uma referência
 que possa avançar durante o build. O fluxo normal por tag mantém as cinco etapas

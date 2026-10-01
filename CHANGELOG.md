@@ -5,6 +5,18 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.39.1 - 2026-10-01
+
+### Fixed
+
+- Resume the three historical workspace-group migrations after an interrupted upgrade. Validate existing columns, foreign keys and indexes, preserve saved data, restore a missing index or column, and refuse incompatible schemas rather than silently marking them complete.
+- Commit pending desktop SQLite migrations and their history atomically. Before changing an existing database, create and verify a private, standalone backup including committed WAL data; retain only the newest completed automatic backup and avoid making another copy when no migrations are pending.
+- Keep update discovery independent of server startup. If the internal server fails, offer a native, localized recovery dialog with download, retry and logs instead of silently exiting; detect child exits promptly and safely close an already-destroyed splash.
+
+### Changed
+
+- Reuse the portable production bundle that passed CI and E2E for the exact release commit, verifying provenance, lockfile and every file hash instead of repeating the web build on each OS. Native dependencies remain target-specific. Build, sign and notarize Apple Silicon and Intel macOS installers on independent concurrent runners; validate and combine their updater manifests before publication, preserving all signing, notarization and artifact-integrity gates.
+
 ## 0.39.0 - 2026-10-01
 
 ### Added

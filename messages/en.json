@@ -1,4 +1,11 @@
 {
+  "startup.recovery_title": "Orkestrai could not start",
+  "startup.recovery_message": "The internal server could not start. Your data has not been reset.",
+  "startup.recovery_detail": "Download the latest installer and replace only the application, keeping your data folder. You can also retry or open the logs to share with support. Do not delete the database to solve this error.",
+  "startup.recovery_download": "Download latest version",
+  "startup.recovery_retry": "Try again",
+  "startup.recovery_logs": "Open logs folder",
+  "startup.recovery_quit": "Quit",
   "floor.error_remove": "Could not remove the Floor. Review its blockers and try again.",
   "floor.remove_confirm_title": "Remove Floor {name}?",
   "floor.remove_confirm_description": "Only an integrated, clean and unused worktree can be removed. Local and ignored files, pending tasks and live terminals block deletion. The selected action determines whether the merged branch is kept.",

@@ -13,3 +13,14 @@ await build({
   },
   ssr: { external: ['@trycua/cua-driver', '@beeblock/svelar/validation'] },
 });
+
+await build({
+  configFile: false,
+  root,
+  build: {
+    ssr: 'src/lib/i18n/desktop-messages.ts',
+    outDir: 'build/desktop-messages',
+    emptyOutDir: true,
+    rollupOptions: { output: { format: 'cjs', entryFileNames: 'index.cjs' } },
+  },
+});

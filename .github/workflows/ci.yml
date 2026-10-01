@@ -83,6 +83,21 @@ jobs:
       - name: Run end-to-end tests
         run: npm run test:e2e
 
+      - name: Stamp tested production bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node scripts/production-bundle.mjs stamp build "$GITHUB_SHA"
+
+      - name: Upload tested production bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-build-${{ github.sha }}
+          overwrite: true
+          path: build/
+          retention-days: 7
+          if-no-files-found: error
+          include-hidden-files: true
+
       - name: Upload Playwright failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7

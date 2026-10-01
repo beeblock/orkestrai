@@ -28,6 +28,15 @@ Devin, shells, tasks, notes,
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
+## Startup recovery
+
+If the app cannot start, use its native recovery dialog to download the latest
+installer, retry, or open the logs. Replace only the application; do not delete
+the data folder or database. Versions such as 0.23.0 that fail before their
+updater starts require one manual installation. Version 0.39.1 safely resumes
+compatible interrupted workspace-group migrations after a verified backup;
+incompatible schemas remain preserved for diagnosis.
+
 ## See it in action
 
 Every clip below is recorded from the real app: real terminals, real commands,

@@ -14,13 +14,14 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
-const { canInstallUpdatesAutomatically, isNewerVersion } = require('./update-policy.cjs');
+const { canInstallUpdatesAutomaticallyAsync, isNewerVersion } = require('./update-policy.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
+const { waitForInternalServer, showStartupRecovery } = require('./startup-recovery.cjs');
 const { openWorkspaceFolder } = require('./workspace-folder.cjs');
 const decodeAudio = createAudioDecoder();
 const { createDesktopCapture } = require('./computer-capture.cjs');
@@ -52,6 +53,7 @@ let pendingCollaborationInvite = null;
 let portalStorageFlushTimer = null;
 let diagnostics = null;
 let isQuitting = false;
+let recoveringStartup = false;
 let serverRestartTimer = null;
 let corePreferences = normalizeCorePreferences();
 let serverRestartCount = 0;
@@ -362,13 +364,15 @@ function createSplash() {
   });
   splashWindow.center();
   splashWindow.loadFile(path.join(__dirname, 'splash.html'));
-  splashWindow.once('ready-to-show', () => splashWindow?.show());
+  const createdSplash = splashWindow;
+  createdSplash.once('ready-to-show', () => { if (!createdSplash.isDestroyed()) createdSplash.show(); });
+  createdSplash.once('closed', () => { if (splashWindow === createdSplash) splashWindow = null; });
 }
 
 function closeSplash() {
-  if (!splashWindow) return;
-  splashWindow.close();
+  const closingSplash = splashWindow;
   splashWindow = null;
+  if (closingSplash && !closingSplash.isDestroyed()) closingSplash.close();
 }
 
 /**
@@ -442,20 +446,6 @@ function findFreePort(start = 4173, attempts = 20) {
     };
     tryPort();
   });
-}
-
-async function waitForServer(url, timeoutMs = 30_000, headers = undefined) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch(url, { headers, signal: AbortSignal.timeout(1_000) });
-      if (response.ok) return;
-    } catch {
-      // ainda subindo
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`Servidor interno não respondeu em ${url}`);
 }
 
 function coreHealthUrl(port = serverPort) {
@@ -722,16 +712,15 @@ async function startServer(port) {
     }
   });
 
-  await waitForServer(
+  await waitForInternalServer(
     `http://127.0.0.1:${port}/api/agent-room/core/health`,
-    30_000,
-    { 'x-orkestrai-core-token': coreToken },
+    { timeoutMs: 30_000, headers: { 'x-orkestrai-core-token': coreToken }, server: startedServerProcess },
   );
   return port;
 }
 
 function scheduleServerRecovery(delayMs = 1_000) {
-  if (serverRestartTimer || isQuitting) return;
+  if (serverRestartTimer || isQuitting || recoveringStartup) return;
   serverRestartTimer = setTimeout(() => {
     serverRestartTimer = null;
     void recoverServer();
@@ -1021,7 +1010,7 @@ const MAC_LATEST_RELEASE_API = 'https://api.github.com/repos/beeblock/orkestrai/
 
 function sendUpdate(payload) {
   latestUpdateState = payload;
-  mainWindow?.webContents.send('orkestrai:update', payload);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('orkestrai:update', payload);
 }
 
 function updateErrorPayload(error) {
@@ -1077,9 +1066,17 @@ async function checkForUpdates() {
   return updateCheckPromise;
 }
 
-function setupAutoUpdater() {
-  if (!autoUpdater) return;
-  automaticUpdateInstallSupported = canInstallUpdatesAutomatically();
+let updaterConfigured = false;
+async function setupAutoUpdater() {
+  if (!autoUpdater || updaterConfigured) return;
+  updaterConfigured = true;
+  // Trust assessment can take seconds on a large bundle. It must not block
+  // the main thread, native recovery controls, or starting the HTTP child.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.on('error', (error) => sendUpdate(updateErrorPayload(error)));
+  automaticUpdateInstallSupported = await canInstallUpdatesAutomaticallyAsync();
+  if (isQuitting) return;
   autoUpdater.autoDownload = automaticUpdateInstallSupported;
   autoUpdater.autoInstallOnAppQuit = automaticUpdateInstallSupported;
   // Repeated Windows delta checksum failures already fall back to a complete
@@ -1099,7 +1096,6 @@ function setupAutoUpdater() {
   autoUpdater.on('update-not-available', () => sendUpdate({ status: 'none' }));
   autoUpdater.on('download-progress', (progress) => sendUpdate({ status: 'downloading', percent: Math.round(progress.percent) }));
   autoUpdater.on('update-downloaded', (info) => sendUpdate({ status: 'downloaded', version: info.version }));
-  autoUpdater.on('error', (error) => sendUpdate(updateErrorPayload(error)));
   void checkForUpdates();
   // Re-checa a cada 6h com o app aberto.
   setInterval(() => void checkForUpdates(), 6 * 60 * 60 * 1000).unref();
@@ -1348,6 +1344,44 @@ function createTray() {
   });
 }
 
+async function recoverStartup(error) {
+  console.error('Falha ao iniciar o Orkestrai:', error);
+  if (recoveringStartup || isQuitting) return;
+  recoveringStartup = true;
+  try {
+    await stopServer();
+    closeSplash();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    const { startupRecoveryCopy } = require(path.join(appRoot, 'build/desktop-messages/index.cjs'));
+    await showStartupRecovery({
+      dialog, copy: startupRecoveryCopy(menuLocale),
+      shouldContinue: () => !isQuitting,
+      openDownload: () => shell.openExternal('https://github.com/beeblock/orkestrai/releases/latest'),
+      openLogs: openLogsDirectory,
+      quit: () => app.quit(),
+      onError: (failure) => console.error('Startup recovery action failed:', failure),
+      retry: async () => {
+        try {
+          await ensureServer();
+          await refreshCorePreferences();
+          createSplash();
+          await createWindow();
+        } catch (failure) {
+          await stopServer();
+          closeSplash();
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+          throw failure;
+        }
+      },
+    });
+  } catch (failure) {
+    console.error('Startup recovery could not open:', failure);
+    app.quit();
+  } finally {
+    recoveringStartup = false;
+  }
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -1362,6 +1396,7 @@ if (!gotLock) {
       // Never log raw argv: bridge commands may contain user prompts or paths.
       return;
     }
+    if (recoveringStartup) return;
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -1404,6 +1439,9 @@ if (!gotLock) {
     });
     buildApplicationMenu();
     createTray();
+    // Update discovery and the native recovery dialog do not depend on HTTP,
+    // migrations, or a working renderer.
+    void setupAutoUpdater().catch((error) => sendUpdate(updateErrorPayload(error)));
     const initialInvite = findCollaborationInvite(process.argv);
     await ensureServer();
     await refreshCorePreferences();
@@ -1421,21 +1459,16 @@ if (!gotLock) {
         if (!health) scheduleServerRecovery(0);
       });
     });
-    setupAutoUpdater();
-  }).catch((error) => {
-    console.error('Falha ao iniciar o Orkestrai:', error);
-    closeSplash();
-    app.exit(1);
-  });
+  }).catch(recoverStartup);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow().catch((error) => console.error(error));
+    if (!recoveringStartup && BrowserWindow.getAllWindows().length === 0) {
+      createWindow().catch(recoverStartup);
     }
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin' && !shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) app.quit();
+    if (!recoveringStartup && process.platform !== 'darwin' && !shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) app.quit();
   });
 
   let quitReady = false;
