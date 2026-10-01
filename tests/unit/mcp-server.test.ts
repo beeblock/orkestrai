@@ -42,6 +42,19 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it('exposes native floor audit and revision-bound batch cleanup without tool discovery round trips', async () => {
+    const server = startMcp();
+    const entries = [{ floorId: 'floor-1', revision: 'a'.repeat(64) }];
+    try {
+      for (const name of ['floor_audit', 'floor_cleanup', 'floor_remove']) expect(MCP_TOOLS.some((tool) => tool.name === name)).toBe(true);
+      server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'floor_audit', arguments: {} } });
+      expect(JSON.parse((await server.waitFor(1)).result.content[0].text)).toMatchObject({ method: 'GET', path: '/api/agent-room/bridge/floors/audit' });
+      server.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'floor_cleanup', arguments: { entries, taskId: 'task-1' } } });
+      expect(JSON.parse((await server.waitFor(2)).result.content[0].text)).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/floors/cleanup', body: { entries, from: 'n1', taskId: 'task-1' } });
+      server.send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'floor_remove', arguments: { ...entries[0], taskId: 'task-1' } } });
+      expect(JSON.parse((await server.waitFor(3)).result.content[0].text)).toMatchObject({ body: { entries, from: 'n1', taskId: 'task-1' } });
+    } finally { server.input.end(); await server.done; }
+  });
   it('exposes intentional task redispatch through the existing authenticated endpoint', async () => {
     const server = startMcp();
     const taskId = '00000000-0000-4000-8000-000000000001';

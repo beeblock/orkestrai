@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { PassThrough } from 'node:stream';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isPortFree, run } from '../../packages/orkestrai-cli/src/cli.js';
@@ -29,6 +29,14 @@ describe('orkestrai CLI', () => {
           agentToken: req.headers['x-orkestrai-agent-token'],
         });
         res.setHeader('content-type', 'application/json');
+        if (req.url === '/api/agent-room/bridge/floors/audit') {
+          res.end(JSON.stringify({ data: [{ floorId: 'floor-1', revision: 'a'.repeat(64), safeToRemove: true }] }));
+          return;
+        }
+        if (req.url === '/api/agent-room/bridge/floors/cleanup') {
+          res.end(JSON.stringify({ data: JSON.parse(body).entries.map((entry: { floorId: string; revision: string }) => ({ floorId: entry.floorId, removed: entry.revision === 'a'.repeat(64) })) }));
+          return;
+        }
         if (req.url === '/api/agent-room/bridge/git' && req.method === 'GET') {
           res.end(JSON.stringify({ data: { status: { branch: 'main', changes: [{ path: 'README.md', status: 'M', staged: false }] }, commits: [{ hash: 'a'.repeat(40) }] } }));
         } else if (req.url === '/api/agent-room/bridge/git/preview' && req.method === 'POST') {
@@ -214,7 +222,20 @@ describe('orkestrai CLI', () => {
     writeFileSync(join(cwd, '.orkestrai', 'workspace.json'), JSON.stringify({ token: 'tok123', apiUrl }));
   });
 
-  afterAll(() => server.close());
+  afterAll(() => { server.close(); if (cwd) rmSync(cwd, { recursive: true, force: true }); });
+
+  it('audits and cleans selected Floors in one call and returns a failure code for preserved entries', async () => {
+    const lines: string[] = [];
+    const out = (line: string) => lines.push(line);
+    const env = { ORKESTRAI_NODE_ID: 'leader', ORKESTRAI_AGENT_TOKEN: 'test-live-token' };
+    expect(await run(['floor', 'audit'], { cwd, out, env })).toBe(0);
+    expect(JSON.parse(lines.at(-1)!)[0].safeToRemove).toBe(true);
+    const entries = [{ floorId: 'floor-1', revision: 'a'.repeat(64) }, { floorId: 'floor-2', revision: 'b'.repeat(64) }];
+    writeFileSync(join(cwd, 'selected-floors.json'), JSON.stringify(entries));
+    expect(await run(['floor', 'cleanup', '--file', 'selected-floors.json', '--task', 'task-1'], { cwd, out, env })).toBe(1);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/floors/cleanup', agentToken: 'test-live-token', body: { entries, taskId: 'task-1', from: 'leader' } });
+    expect(JSON.parse(lines.at(-1)!)).toEqual([{ floorId: 'floor-1', removed: true }, { floorId: 'floor-2', removed: false }]);
+  });
 
   function capture() {
     const lines = [];

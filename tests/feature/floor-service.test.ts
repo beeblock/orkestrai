@@ -1,14 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useSvelarTest } from '@beeblock/svelar/testing';
-import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
+import { floorService, withFloorGitSlot } from '$lib/modules/agent-room/application/services/FloorService.js';
+import { floorOverviewService } from '$lib/modules/agent-room/application/services/FloorOverviewService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
+
+const repos: string[] = [];
 
 function makeRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'orkestrai-floor-'));
+  repos.push(dir);
   execFileSync('git', ['init', '-b', 'main'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'teste@orkestrai.local'], { cwd: dir });
   execFileSync('git', ['config', 'user.name', 'Teste'], { cwd: dir });
@@ -24,6 +30,10 @@ function git(cwd: string, args: string[]) {
 
 describe('FloorService', () => {
   useSvelarTest({ refreshDatabase: true });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    for (const dir of repos.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
 
   it('cria andar com worktree e branch, lista e renomeia', async () => {
     const dir = makeRepo();
@@ -116,8 +126,193 @@ describe('FloorService', () => {
 
     writeFileSync(join(dir, 'app.ts'), 'const v = 99;\n');
     await expect(floorService.land(floor.id)).rejects.toThrow('nao commitadas');
-    await floorService.remove(floor.id, true);
+    await expect(floorService.remove(floor.id, true)).rejects.toThrow('unmerged_commits_review_required');
+    expect(existsSync(floor.path)).toBe(true);
   });
+
+  it('audits and cleans merged floors in one revision-bound batch, retaining branches', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const first = await floorService.create(workspace.id, { name: 'one' });
+    const second = await floorService.create(workspace.id, { name: 'two' });
+    const audit = await floorService.audit(workspace.id);
+    expect(audit).toHaveLength(2);
+    expect(audit.every((item) => item.safeToRemove && item.merged)).toBe(true);
+    expect(await floorService.cleanup(workspace.id, audit)).toEqual([
+      { floorId: first.id, removed: true }, { floorId: second.id, removed: true },
+    ]);
+    expect(existsSync(first.path)).toBe(false);
+    expect(git(dir, ['branch', '--list'])).toContain(first.branch);
+  });
+
+  it.each(['tracked', 'untracked', 'ignored'])('preserves %s files even when HEAD is merged', async (kind) => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: kind });
+    if (kind === 'ignored') writeFileSync(join(dir, '.git/info/exclude'), '.orkestrai/\nlocal-secret\n');
+    writeFileSync(join(floor.path, kind === 'tracked' ? 'app.ts' : 'local-secret'), 'do not lose');
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ merged: true, safeToRemove: false });
+    await expect(floorService.remove(floor.id)).rejects.toThrow('local_changes');
+    expect(existsSync(floor.path)).toBe(true);
+    expect((await floorService.get(floor.id))?.status).toBe('active');
+  });
+
+  it.each(['--assume-unchanged', '--skip-worktree'])('preserves files hidden from Git status by %s', async (flag) => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'hidden-changes' });
+    git(floor.path, ['update-index', flag, 'app.ts']);
+    writeFileSync(join(floor.path, 'app.ts'), 'private local configuration');
+    expect(git(floor.path, ['status', '--porcelain'])).toBe('');
+    await expect(floorService.remove(floor.id)).rejects.toThrow('hidden_index_flags');
+    expect(existsSync(join(floor.path, 'app.ts'))).toBe(true);
+  });
+
+  it('detects stale revisions and continues the batch without deleting the changed floor', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'changed' });
+    const audit = await floorService.audit(workspace.id);
+    writeFileSync(join(floor.path, 'new-file'), 'new work');
+    expect(await floorService.cleanup(workspace.id, audit)).toEqual([
+      expect.objectContaining({ floorId: floor.id, removed: false, error: expect.stringContaining('mudou') }),
+    ]);
+    expect(existsSync(floor.path)).toBe(true);
+  });
+
+  it('reports actual merge-tree conflicts instead of claiming a clean preview', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'conflict' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    git(floor.path, ['commit', '-am', 'floor change']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 3;\n');
+    git(dir, ['commit', '-am', 'root change']);
+    expect((await floorService.landingPreview(floor.id)).conflicts).toEqual(['app.ts']);
+    await expect(floorService.land(floor.id)).rejects.toThrow('app.ts');
+    expect((await floorService.get(floor.id))?.status).toBe('active');
+  });
+
+  it('does not abort an integration that the user already started', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'pending-merge' });
+    writeFileSync(join(floor.path, 'new-file'), 'feature');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'feature']);
+    git(dir, ['merge', '--no-ff', '--no-commit', floor.branch]);
+    const pendingHead = git(dir, ['rev-parse', 'MERGE_HEAD']);
+    await expect(floorService.land(floor.id)).rejects.toThrow('integracao em andamento');
+    expect(git(dir, ['rev-parse', 'MERGE_HEAD'])).toBe(pendingHead);
+  });
+
+  it('does not archive floor nodes or hide Git removal failures', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'locked' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, floorId: floor.id, type: 'note', title: 'Keep' });
+    git(dir, ['worktree', 'lock', floor.path]);
+    await expect(floorService.remove(floor.id)).rejects.toThrow();
+    expect((await floorService.get(floor.id))?.status).toBe('active');
+    expect((await workspaceRepository.listNodes(workspace.id)).map((item) => item.id)).toContain(node.id);
+  });
+
+  it('keeps successfully merged but unremoved floors visible and permits a cleanup retry', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'retry' });
+    git(dir, ['worktree', 'lock', floor.path]);
+    await expect(floorService.land(floor.id)).rejects.toThrow('Merge concluido');
+    expect(await floorService.list(workspace.id)).toHaveLength(1);
+    git(dir, ['worktree', 'unlock', floor.path]);
+    await floorService.cleanup(workspace.id, await floorService.audit(workspace.id));
+    expect(await floorService.list(workspace.id)).toHaveLength(0);
+  });
+
+  it.each(['landed', 'deleted'])('recovers legacy %s records whose worktrees were never removed', async (status) => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'legacy', workingDir: makeRepo() });
+    const floor = await floorService.create(workspace.id, { name: 'leftover' });
+    await AgentFloor.query().where('id', floor.id).update({ status });
+    const audit = await floorService.audit(workspace.id);
+    expect(audit).toHaveLength(1);
+    expect(audit[0].safeToRemove).toBe(true);
+    expect(await floorService.cleanup(workspace.id, audit)).toEqual([{ floorId: floor.id, removed: true }]);
+    expect(await floorService.list(workspace.id)).toHaveLength(0);
+  });
+
+  it('rejects mixed-workspace cleanup before touching any floor', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: makeRepo() });
+    const other = await workspaceRepository.createWorkspace({ name: 'other', workingDir: makeRepo() });
+    const floor = await floorService.create(workspace.id, { name: 'ours' });
+    const foreign = await floorService.create(other.id, { name: 'theirs' });
+    const audit = [...await floorService.audit(workspace.id), ...await floorService.audit(other.id)];
+    await expect(floorService.cleanup(workspace.id, audit)).rejects.toThrow('neste workspace');
+    expect(existsSync(floor.path)).toBe(true);
+    expect(existsSync(foreign.path)).toBe(true);
+    await expect(floorService.requireFloor(workspace.id, foreign.id)).rejects.toThrow();
+  });
+
+  it('preserves worktrees used by a live terminal even if no floor node references it', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: makeRepo() });
+    const floor = await floorService.create(workspace.id, { name: 'busy' });
+    vi.spyOn(ptySessionManager, 'list').mockReturnValue([{ cwd: floor.path, exited: false }] as never);
+    await expect(floorService.remove(floor.id)).rejects.toThrow('live_terminal');
+  });
+
+  it('refuses a persisted path outside managed floors', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: makeRepo() });
+    const floor = await floorService.create(workspace.id, { name: 'invalid' });
+    await AgentFloor.query().where('id', floor.id).update({ path: workspace.workingDir });
+    await expect(floorService.remove(floor.id)).rejects.toThrow('unavailable');
+    expect(existsSync(floor.path)).toBe(true);
+  });
+
+  it('shares simultaneous audits and overview scans but does not reuse stale results', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: makeRepo() });
+    const floor = await floorService.create(workspace.id, { name: 'shared' });
+    const list = vi.spyOn(floorService, 'list');
+    const [first, second] = await Promise.all([floorService.audit(workspace.id), floorService.audit(workspace.id)]);
+    expect(first).toBe(second);
+    expect(list).toHaveBeenCalledTimes(1);
+    await Promise.all([floorOverviewService.get(workspace.id), floorOverviewService.get(workspace.id)]);
+    expect(list).toHaveBeenCalledTimes(2);
+    writeFileSync(join(floor.path, 'new-file'), 'changed');
+    expect((await floorService.audit(workspace.id))[0].safeToRemove).toBe(false);
+    expect(list).toHaveBeenCalledTimes(3);
+  });
+
+  it('caps concurrent Floor Git work at four, releasing slots even after failures', async () => {
+    let active = 0;
+    let peak = 0;
+    const releases: Array<() => void> = [];
+    const work = Array.from({ length: 24 }, (_, index) => withFloorGitSlot(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise<void>((release) => releases.push(release));
+      active--;
+      if (index === 3) throw new Error('test failure');
+    }).catch(() => undefined));
+    for (let batch = 0; batch < 6; batch++) {
+      await vi.waitFor(() => expect(releases).toHaveLength(4));
+      for (const release of releases.splice(0)) release();
+    }
+    await Promise.all(work);
+    expect(peak).toBe(4);
+    expect(active).toBe(0);
+    await expect(withFloorGitSlot(async () => 'ready')).resolves.toBe('ready');
+  });
+
+  it('audits 24 worktrees in a single native request', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'audit-benchmark', workingDir: makeRepo() });
+    for (let index = 0; index < 24; index++) await floorService.create(workspace.id, { name: `batch-${index}` });
+    const started = performance.now();
+    const result = await floorService.audit(workspace.id);
+    const elapsedMs = Math.round(performance.now() - started);
+    expect(result).toHaveLength(24);
+    expect(result.every((item) => item.safeToRemove)).toBe(true);
+    console.info(`[floor-audit benchmark] 24 clean merged worktrees: ${elapsedMs} ms; one service call, maximum four Git processes.`);
+  }, 30_000);
 
   it('hooks recebem variaveis ORKESTRAI_*', async () => {
     const dir = makeRepo();

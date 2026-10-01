@@ -6,6 +6,7 @@ import { workspaceService } from '$lib/modules/agent-room/application/services/W
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
+import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 
 async function createWorkspaceWithTerminal() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'board', workingDir: '/tmp' });
@@ -33,6 +34,21 @@ async function createWorkspaceWithLeader() {
 
 describe('TaskBoardService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('returns a new card while the leader notification waits and records a later delivery failure', async () => {
+    const { workspace, leaderSession } = await createWorkspaceWithLeader();
+    let rejectDelivery!: (error: Error) => void;
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDelivery = reject; }));
+    const receipts = vi.spyOn(controlCenterService, 'recordDelivery');
+    try {
+      const task = await taskBoardService.create(workspace.id, { title: 'Do not block on a busy leader' });
+      expect(task.status).toBe('todo');
+      expect(receipts).toHaveBeenCalledWith(expect.objectContaining({ state: 'queued', metadata: expect.objectContaining({ kind: 'task_created', taskId: task.id }) }));
+      rejectDelivery(new Error('Timed out'));
+      await vi.waitFor(() => expect(receipts).toHaveBeenCalledWith(expect.objectContaining({ state: 'failed', error: 'Task notification was not confirmed.' })));
+      expect((await taskBoardService.list(workspace.id)).map((item) => item.id)).toContain(task.id);
+    } finally { deliver.mockRestore(); receipts.mockRestore(); ptySessionManager.kill(leaderSession.id); }
+  });
 
   it('cria, move, atribui e remove tarefas', async () => {
     const { workspace, terminal, session } = await createWorkspaceWithTerminal();
@@ -419,6 +435,7 @@ describe('TaskBoardService', () => {
 
   it('task nova avisa o lider no terminal dele; task da ponte nao ecoa', async () => {
     const { workspace, leaderSession } = await createWorkspaceWithLeader();
+    const deliveries = vi.spyOn(agentTerminalDeliveryService, 'deliver');
 
     await taskBoardService.create(workspace.id, {
       title: 'Refinar hero',
@@ -442,9 +459,13 @@ describe('TaskBoardService', () => {
     await taskBoardService.create(workspace.id, { title: 'Task do lider', createdBy: 'Lider' });
     await new Promise((resolve) => setTimeout(resolve, 300));
     const after = ptySessionManager.attach(leaderSession.id, () => {});
-    expect(after.scrollback).toBe(before.scrollback);
+    // The first async notification can still produce its final cat/TTY echo.
+    // Count actual submissions, not identical intermediate screen buffers.
+    expect(after.scrollback).not.toContain('Task do lider');
+    expect(deliveries).toHaveBeenCalledTimes(1);
     after.detach();
 
     ptySessionManager.kill(leaderSession.id);
+    deliveries.mockRestore();
   });
 });

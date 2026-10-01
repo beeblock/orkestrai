@@ -1,4 +1,7 @@
 {
+  "floor.error_remove": "Could not remove the Floor. Review its blockers and try again.",
+  "floor.remove_confirm_title": "Remove Floor {name}?",
+  "floor.remove_confirm_description": "Only an integrated, clean and unused worktree can be removed. Local and ignored files, pending tasks and live terminals block deletion. The selected action determines whether the merged branch is kept.",
   "term.prompt_delivery_failed": "Delivery could not be confirmed. Your draft was kept. Check the terminal before retrying to avoid sending it twice.",
   "creative.output_access": "fal.ai output access",
   "creative.output_private": "Private (authenticated download)",

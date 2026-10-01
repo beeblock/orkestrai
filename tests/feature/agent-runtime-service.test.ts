@@ -3,6 +3,7 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import { agentRuntimeService, AgentRuntimeService, AgentRuntimePolicyError } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
+import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
@@ -60,6 +61,29 @@ describe('AgentRuntimeService', () => {
     vi.useRealTimers();
     ptySessionManager.killAll();
     vi.restoreAllMocks();
+  });
+
+  it('supervises unfinished floor retirement even when all cards are done, without running Git', async () => {
+    const { workspace, deliver } = await setupLeader('done');
+    await AgentFloor.create({ id: uuidv7(), workspace_id: workspace.id, name: 'Pending integration', branch: 'orkestrai/pending', path: '/not-a-real-worktree', status: 'active' });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver.mock.calls[0][0].message).toContain('floor_audit');
+    expect(deliver.mock.calls[0][0].message).toContain('0 tarefas em todo/doing e 1 andares ativos');
+  });
+
+  it('cancels a maintenance reminder if all pending floors have already retired', async () => {
+    const { workspace, deliver } = await setupLeader('done');
+    const id = uuidv7();
+    await AgentFloor.create({ id, workspace_id: workspace.id, name: 'Completed', branch: 'orkestrai/completed', path: '/not-a-real-worktree', status: 'active' });
+    deliver.mockImplementationOnce(async (input) => {
+      await AgentFloor.query().where('id', id).update({ status: 'deleted' });
+      expect(await input.isStillRelevant?.()).toBe(false);
+    });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledTimes(1);
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledTimes(1);
   });
 
   it('persists safeguards and wakes or sleeps the same resumable agent node', async () => {

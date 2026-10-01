@@ -8,6 +8,7 @@
   import { Textarea } from '$lib/components/ui/textarea';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Button } from '$lib/components/ui/button';
+  import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { CheckCircle2, CircleDot, GitBranch, Layers, ListChecks, Plane, Play, Trash2, Users, X, Zap } from '@lucide/svelte';
   import { createFloorSchema } from '$lib/modules/agent-room/contracts/schemas/floorSchemas.js';
   import type { Floor, Workspace, WorkspaceHooks } from '$lib/modules/agent-room/domain/types.js';
@@ -39,6 +40,8 @@
   let overview = $state<WorkspaceFloorOverview | null>(null);
   const floors = $derived(overview?.floors ?? []);
   let errorMessage = $state('');
+  let removal = $state<{ floor: Floor; deleteBranch: boolean } | null>(null);
+  let removing = $state(false);
   let landingPreview = $state<{ floor: Floor; from: string; to: string; stat: string; conflicts: string[]; targetDirty: boolean } | null>(null);
   let hooks = $state<WorkspaceHooks>({});
   let showHooks = $state(false);
@@ -86,11 +89,17 @@
   }
 
   async function removeFloor(floor: Floor, deleteBranch: boolean) {
-    await api(`/api/agent-room/workspaces/${workspace.id}/floors/${floor.id}?deleteBranch=${deleteBranch}`, {
-      method: 'DELETE',
-    });
-    if (visibleFloorId === floor.id) onSelectFloor(null);
-    await refresh();
+    if (removing) return;
+    removing = true;
+    errorMessage = '';
+    try {
+      const result = await api<{ removed: boolean; warning?: string }>(`/api/agent-room/workspaces/${workspace.id}/floors/${floor.id}?deleteBranch=${deleteBranch}`, { method: 'DELETE' });
+      if (visibleFloorId === floor.id) onSelectFloor(null);
+      await refresh();
+      if (result.warning) errorMessage = result.warning;
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : m['floor.error_remove']();
+    } finally { removing = false; }
   }
 
   async function previewLanding(floor: Floor) {
@@ -172,6 +181,10 @@
     <HeaderIconButton label={m['floor.hooks']()} class="node-action-btn" side="left" active={showHooks} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></HeaderIconButton>
   {/snippet}
 
+  {#if errorMessage}
+    <p role="alert" aria-live="polite" class="break-words text-sm text-destructive">{errorMessage}</p>
+  {/if}
+
   {#if overview}
     <article class="rounded-md border border-[var(--app-border)] bg-[var(--app-surface)] p-3 {visibleFloorId === null ? 'border-[var(--app-secondary)]' : ''}" data-tour="floor-overview">
       <button class="flex w-full items-center justify-between gap-2 border-0 bg-transparent p-0 text-left text-[var(--app-text)]" onclick={() => onSelectFloor(null)}>
@@ -229,8 +242,8 @@
           <div class="floor-actions">
             <HeaderIconButton label={m['floor.preview_landing']()} onclick={() => previewLanding(floor)}><Plane size={13} /></HeaderIconButton>
             <HeaderIconButton label={m['floor.run_hooks']()} onclick={() => runHooksNow(floor, 'run')}><Play size={13} /></HeaderIconButton>
-            <HeaderIconButton label={m['floor.delete_keep_branch']()} onclick={() => removeFloor(floor, false)}><X size={13} /></HeaderIconButton>
-            <HeaderIconButton label={m['floor.delete_branch']()} danger onclick={() => removeFloor(floor, true)}><Trash2 size={13} /></HeaderIconButton>
+            <HeaderIconButton label={m['floor.delete_keep_branch']()} disabled={removing} onclick={() => (removal = { floor, deleteBranch: false })}><X size={13} /></HeaderIconButton>
+            <HeaderIconButton label={m['floor.delete_branch']()} disabled={removing} danger onclick={() => (removal = { floor, deleteBranch: true })}><Trash2 size={13} /></HeaderIconButton>
           </div>
         </div>
 
@@ -263,8 +276,8 @@
         {/if}
 
         <div class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--app-border)] pt-2 text-ui-xs">
-          <span class={item.git.dirty ? 'text-amber-300' : 'text-emerald-400'}>
-            {item.git.available ? (item.git.dirty ? m['floor.changed_files']({ count: item.git.changedFiles }) : m['floor.ready_to_land']()) : m['floor.git_unavailable']()}
+          <span class={!item.git.available ? 'text-[var(--app-text-muted)]' : item.git.dirty ? 'text-[var(--app-warning)]' : 'text-[var(--app-success)]'}>
+            {item.git.available ? (item.git.dirty ? m['floor.changed_files']({ count: item.git.changedFiles }) : m['floor.clean_worktree']()) : m['floor.git_unavailable']()}
           </span>
           {#if item.git.ahead || item.git.behind}
             <span class="text-[var(--app-text-muted)]">↑{item.git.ahead} ↓{item.git.behind}</span>
@@ -307,10 +320,6 @@
       <Form.FieldErrors />
     </Form.Field>
 
-    {#if errorMessage}
-      <p class="text-sm text-destructive">{errorMessage}</p>
-    {/if}
-
     <Button type="submit" size="sm">{m['floor.create']()}</Button>
   </form>
 
@@ -350,6 +359,21 @@
     </div>
   {/if}
 </SidePanel>
+
+<AlertDialog.Root open={removal !== null} onOpenChange={(open) => { if (!open) removal = null; }}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{m['floor.remove_confirm_title']({ name: removal?.floor.name ?? '' })}</AlertDialog.Title>
+      <AlertDialog.Description>{m['floor.remove_confirm_description']()}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>{m['settings.cancel']()}</AlertDialog.Cancel>
+      <AlertDialog.Action onclick={() => { const selected = removal; removal = null; if (selected) void removeFloor(selected.floor, selected.deleteBranch); }}>
+        {removal?.deleteBranch ? m['floor.delete_branch']() : m['floor.delete_keep_branch']()}
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
 
 <style>
 

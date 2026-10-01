@@ -26,6 +26,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'companion-orchestration': 'companion-orchestration',
   'workspace-tool-workshop': 'workspace-tool-workshop',
   'parallel-features': 'duas-features',
+  'floor-cleanup': 'floor-cleanup',
   'council-decision': 'council-perspectives',
   'api-client-workflow': 'api-client',
   'visual-annotations': 'visual-annotations',

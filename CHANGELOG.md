@@ -5,6 +5,26 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.39.0 - 2026-10-01
+
+### Added
+
+- Audit all managed Floors in one native `floor_audit` call and retire explicitly selected, integrated, clean and unused worktrees through revision-bound `floor_cleanup`. Batch cleanup authenticates the live assigned agent, retains branches and reports each preserved floor separately. Ignored files, local edits, untracked files, `assume-unchanged`/`skip-worktree` index flags, pending tasks and live terminals block cleanup; non-ancestor branches require review even when their patches may have been cherry-picked.
+
+### Fixed
+
+- Stop force-removing Floor worktrees or suppressing Git errors. Preserve floor nodes until worktree removal succeeds, keep failed retirements visible, report merge-tree conflicts from nonzero exits, and confine Floor operations to their workspace and managed paths.
+- Confirm Floor removal in the panel, surface refusals and branch-retention warnings in an accessible alert, and distinguish clean or unavailable Git state from a verified merge preview.
+- Bound Floor Git concurrency to four processes across audit and overview requests; coalesce overlapping reads instead of starting duplicate scans.
+- Remove the extra 90-second transcript wait after the configured reply deadline. Partial provider turns remain unconfirmed, cancellations interrupt polling, and uncertain deliveries are never resent automatically.
+- Return newly created Kanban cards without waiting for a busy leader's terminal to accept their notification; track queued, delivered and failed notification receipts separately without losing the card.
+- Include active Floor integration/retirement in idle-leader supervision after Kanban cards finish. Supply task details in reminders and eliminate mandatory repeated status, usage and memory preflights for deterministic maintenance; existing pause, quota, human-input and delivery safeguards remain in force.
+- Rebuild the copied SQLite dependency for each package's exact Electron version and CPU before signing, and verify its exported ABI entry point. Stale Node rebuild markers can no longer produce an installer with an incompatible SQLite runtime.
+
+### Security
+
+- Patch newly reported dependency advisories with axios 1.20.0, DOMPurify 3.4.16, fast-uri 3.1.8, ip-address 10.7.2 and moment 2.31.0. Update brace-expansion within its existing 1.x, 2.x and 5.x dependency branches to 1.1.21, 2.1.7 and 5.0.12, preserving the parent packages' major-version contracts.
+
 ## 0.38.0 - 2026-09-29
 
 ### Added

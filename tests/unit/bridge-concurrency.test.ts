@@ -57,6 +57,15 @@ describe('agent conversation concurrency', () => {
     expect(await second).toMatchObject({ reply: 'second response', replyConfirmed: true });
   });
 
+  it('honors the reply timeout without adding 90 seconds or confirming a partial turn', async () => {
+    vi.spyOn(bridge as any, 'transcriptReply').mockResolvedValue({ sessionId: 'leader', text: 'Still checking', complete: false });
+    const pending = bridge.ask('workspace', { from: 'claude', to: 'leader', message: 'Bounded wait', timeoutMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(1_001);
+    expect(await pending).toMatchObject({ delivered: true, replyConfirmed: false, timedOut: true, reply: 'Still checking' });
+    expect(controlCenterService.recordDelivery).not.toHaveBeenCalledWith(expect.objectContaining({ state: 'replied' }));
+    expect(delivered).toEqual(['leader:Bounded wait']);
+  });
+
   it('unblocks a leader waiting on an agent when that agent asks the leader back', async () => {
     const outgoing = bridge.ask('workspace', { from: 'leader', to: 'claude', message: 'Review this change' });
     await vi.advanceTimersByTimeAsync(1);

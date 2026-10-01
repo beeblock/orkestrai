@@ -325,6 +325,9 @@ const TOOLS = [
   { name: 'portal_wait', description: 'Aguarda elemento, texto, URL ou atraso limitado no Portal.', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Optional traceability: when provided, must be an active task assigned to this terminal.' }, nodeId: { type: 'string' }, ref: { type: 'string' }, text: { type: 'string' }, urlIncludes: { type: 'string' }, delayMs: { type: 'number' } }, required: ['nodeId'] } },
   { name: 'portal_extract', description: 'Extrai texto, links, tabela ou atributo de forma limitada e estruturada.', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Optional traceability: when provided, must be an active task assigned to this terminal.' }, nodeId: { type: 'string' }, kind: { type: 'string', enum: ['text', 'links', 'table', 'attribute'], default: 'text' }, ref: { type: 'string' }, attribute: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'floor_list', description: 'Lista andares (worktrees git) do workspace.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'floor_audit', description: 'Audit all workspace Floors in one call. Returns merged ancestry, local/ignored file and live-agent blockers, safeToRemove and revision. Read-only; never treats a merged HEAD as proof that local files can be discarded.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'floor_cleanup', description: 'Remove explicitly selected merged, clean, unused Floors from floor_audit in one batch. Requires current revisions and an active assigned task. Rechecks before each removal, preserves branches, reports partial failures; never forces deletion. Do not poll or delegate a separate source audit for Floors already classified safe.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, entries: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', properties: { floorId: { type: 'string' }, revision: { type: 'string' } }, required: ['floorId', 'revision'] } } }, required: ['taskId', 'entries'] } },
+  { name: 'floor_remove', description: 'Safely remove one merged, clean, unused Floor using its floor_audit revision. Keeps its branch and refuses local changes or active work. For several Floors prefer floor_cleanup.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, floorId: { type: 'string' }, revision: { type: 'string' } }, required: ['taskId', 'floorId', 'revision'] } },
   { name: 'floor_create', description: 'Cria um andar (worktree isolada com branch propria).', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
   { name: 'floor_preview', description: 'Previa da aterrissagem (merge) com conflitos.', inputSchema: { type: 'object', properties: { floorId: { type: 'string' } }, required: ['floorId'] } },
   { name: 'floor_land', description: 'Aterrissa o andar (merge da branch).', inputSchema: { type: 'object', properties: { floorId: { type: 'string' } }, required: ['floorId'] } },
@@ -1080,6 +1083,12 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('POST', '/api/agent-room/bridge/portal', { taskId: args.taskId, nodeId: args.nodeId, action: 'extract', args: { kind: args.kind ?? 'text', ...(args.ref ? { ref: args.ref } : {}), ...(args.attribute ? { attribute: args.attribute } : {}) }, from: selfAgent });
     case 'floor_list':
       return bridge('GET', '/api/agent-room/bridge/floors');
+    case 'floor_audit':
+      return bridge('GET', '/api/agent-room/bridge/floors/audit');
+    case 'floor_cleanup':
+      return bridge('POST', '/api/agent-room/bridge/floors/cleanup', { from: selfAgent, taskId: args.taskId, entries: args.entries });
+    case 'floor_remove':
+      return bridge('POST', '/api/agent-room/bridge/floors/cleanup', { from: selfAgent, taskId: args.taskId, entries: [{ floorId: args.floorId, revision: args.revision }] });
     case 'floor_create':
       return bridge('POST', '/api/agent-room/bridge/floors', { name: args.name });
     case 'floor_preview':

@@ -145,12 +145,12 @@ device access.
   Core to supervise a persistent process. Each agent has idle, concurrency,
   and provider-usage safeguards plus explicit wake and sleep controls.
 - **Automatic leader supervision:** the Core checks every 15 seconds for
-  unarchived `todo`/`doing` cards and a live, idle workspace leader. After two
+  unarchived `todo`/`doing` cards or active Floors and a live, idle workspace leader. After two
   quiet minutes and a completed provider turn, it requests a board/team review,
   with at least five minutes between reminders and persisted delivery receipts
   in Control Center. Providers without a reliable turn-end signal require an
-  explicit `done` activity in the current session. Empty/completed boards stay
-  quiet; custom review columns do not independently trigger reminders. This
+  explicit `done` activity in the current session. Empty/completed boards with
+  no active Floors stay quiet; custom review columns do not independently trigger reminders. This
   does not wake manually sleeping agents or override human drafts, pending
   deliveries, input/permission requests, quotas, suspension, emergency stop,
   operating windows or restricted conversation profiles. Keep approvals and
@@ -237,6 +237,25 @@ device access.
   label. The global voice orb follows its active workspace and leader. Its
   footer keeps every reported Claude, Codex, and Kimi quota window visible
   without opening a panel.
+- **Safe Floor retirement:** `orkestrai floor audit` (MCP `floor_audit`) checks
+  all managed worktrees in one call, including ancestry, patch equivalence,
+  local/ignored files, hidden index flags (`assume-unchanged`/`skip-worktree`)
+  and live work. Use `floor_cleanup` or
+  `orkestrai floor cleanup --file selected-audit-entries.json --task <taskId>`
+  for the explicitly selected safe `{floorId, revision}` entries. Cleanup
+  requires the live assigned agent, rechecks each worktree, preserves branches,
+  and reports partial failures. It never force-deletes files or treats
+  cherry-pick equivalence as deletion authorization. Resolve blockers and audit
+  again; do not bypass them with shell deletion. Failed retirements stay visible.
+  Active Floors remain part of idle-leader supervision after the board finishes;
+  this reminder does not grant new deletion authority. Git scans share a
+  four-process budget and overlapping reads are coalesced. Agent response
+  deadlines no longer acquire an extra 90-second wait; partial turns are not
+  confirmed replies.
+  New Kanban cards also return without waiting for the leader to accept a
+  notification; Control Center records queued, delivered or failed delivery
+  separately. CLI `floor remove` now requires `--task` and `--revision` from
+  the audit, matching the authenticated MCP cleanup contract.
 - **Native code intelligence graph:** safely index approved TypeScript,
   JavaScript, Svelte, and PHP repositories without running project code. Search
   symbols, paths, signatures, and docblocks, then explore bounded incoming and

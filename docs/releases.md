@@ -19,6 +19,12 @@ no `package-lock.json`, com verificação SHA-512 antes da extração, sem execu
 scripts do pacote. Binários, metadados e aviso de licença são incluídos antes da
 assinatura; pacote ausente, incompatível ou adulterado interrompe o build.
 
+O mesmo hook recompila o SQLite já copiado para o runtime e a arquitetura exatos
+do Electron, antes da assinatura, e verifica o entry point da ABI no binário.
+Isso evita reutilizar um binário do Node por causa de marcadores antigos de
+rebuild, inclusive ao gerar o pacote Intel em Apple Silicon. A verificação local
+usa um banco em memória sob o Electron e não altera os dados do usuário.
+
 ## Credenciais
 
 O workflow usa o `GITHUB_TOKEN` automático do próprio repositório, com

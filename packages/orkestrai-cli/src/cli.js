@@ -111,7 +111,9 @@ Uso:
   orkestrai floor create <nome> [--branch <b>] [--existing] [--clone]
   orkestrai floor preview <floorId> [--target <branch>]
   orkestrai floor land <floorId> [--target <branch>]
-  orkestrai floor remove <floorId> [--delete-branch]
+  orkestrai floor audit
+  orkestrai floor cleanup --file <selected-audit-entries.json> --task <taskId>
+  orkestrai floor remove <floorId> --task <taskId> --revision <revision> [--delete-branch]
   orkestrai device list [--json]
   orkestrai device attach <deviceId> [--platform ios|android]
   orkestrai device tap <x> <y> | swipe <x1> <y1> <x2> <y2> [--duration <ms>]
@@ -1651,6 +1653,20 @@ export async function run(argv, options = {}) {
     }
     case 'floor': {
       const [action, ...values] = rest;
+      const floorFlags = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (flags));
+      if (action === 'audit') {
+        out(JSON.stringify(await bridge(config, 'GET', '/api/agent-room/bridge/floors/audit'), null, 2));
+        return 0;
+      }
+      if (action === 'cleanup') {
+        if (typeof floorFlags.file !== 'string' || typeof floorFlags.task !== 'string') throw new Error('Uso: orkestrai floor cleanup --file <selected-audit-entries.json> --task <taskId>');
+        const entries = JSON.parse(readFileSync(resolve(cwd, floorFlags.file), 'utf8'));
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/floors/cleanup', {
+          entries, taskId: floorFlags.task, from: floorFlags.from || env.ORKESTRAI_NODE_ID || env.ORKESTRAI_AGENT_TITLE,
+        });
+        out(JSON.stringify(data, null, 2));
+        return Array.isArray(data) && data.every((item) => item?.removed === true) ? 0 : 1;
+      }
       if (action === 'list') {
         const data = await bridge(config, 'GET', '/api/agent-room/bridge/floors');
         if (flags.json) {
@@ -1695,13 +1711,15 @@ export async function run(argv, options = {}) {
       }
       if (action === 'remove') {
         const floorId = values[0];
-        if (!floorId) throw new Error('Uso: orkestrai floor remove <floorId> [--delete-branch]');
-        const query = flags['delete-branch'] ? '?deleteBranch=true' : '';
-        await bridge(config, 'DELETE', `/api/agent-room/bridge/floors/${floorId}${query}`);
+        if (!floorId || typeof floorFlags.task !== 'string' || typeof floorFlags.revision !== 'string') throw new Error('Uso: orkestrai floor remove <floorId> --task <taskId> --revision <floor_audit revision> [--delete-branch]');
+        const query = new URLSearchParams({ taskId: floorFlags.task, revision: floorFlags.revision,
+          from: String(floorFlags.from || env.ORKESTRAI_NODE_ID || env.ORKESTRAI_AGENT_TITLE || ''), deleteBranch: String(Boolean(floorFlags['delete-branch'])) });
+        const result = await bridge(config, 'DELETE', `/api/agent-room/bridge/floors/${encodeURIComponent(floorId)}?${query}`);
         out('Andar removido.');
+        if (result.warning) out(result.warning);
         return 0;
       }
-      throw new Error('Uso: orkestrai floor <list|create|preview|land|remove> ...');
+      throw new Error('Uso: orkestrai floor <list|audit|cleanup|create|preview|land|remove> ...');
     }
     case 'device': {
       const [action, ...values] = rest;

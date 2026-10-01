@@ -60,6 +60,7 @@ export class FloorController extends Controller {
 
   async renameFloor(event: any) {
     try {
+      await floorService.requireFloor(event.params.id, event.params.floorId);
       const input = await (requestOf(renameFloorSchema)).validate(event);
       return this.json({ data: await floorService.rename(event.params.floorId, input.name) });
     } catch (error) {
@@ -69,6 +70,7 @@ export class FloorController extends Controller {
 
   async landingPreview(event: any) {
     try {
+      await floorService.requireFloor(event.params.id, event.params.floorId);
       const target = event.url.searchParams.get('target') ?? undefined;
       return this.json({ data: await floorService.landingPreview(event.params.floorId, target) });
     } catch (error) {
@@ -78,6 +80,7 @@ export class FloorController extends Controller {
 
   async landFloor(event: any) {
     try {
+      await floorService.requireFloor(event.params.id, event.params.floorId);
       const input = await (requestOf(landFloorSchema)).validate(event);
       return this.json({ data: await floorService.land(event.params.floorId, input.targetBranch) });
     } catch (error) {
@@ -87,6 +90,7 @@ export class FloorController extends Controller {
 
   async removeFloor(event: any) {
     try {
+      await floorService.requireFloor(event.params.id, event.params.floorId);
       const deleteBranch = event.url.searchParams.get('deleteBranch') === 'true';
       return this.json({ data: await floorService.remove(event.params.floorId, deleteBranch) });
     } catch (error) {
@@ -110,8 +114,7 @@ export class FloorController extends Controller {
   async runHooks(event: any) {
     try {
       const input = await (requestOf(runHooksSchema)).validate(event);
-      const floor = await floorService.get(event.params.floorId);
-      if (!floor) throw new Error('Andar nao encontrado.');
+      const floor = await floorService.requireFloor(event.params.id, event.params.floorId);
       const workspace = await workspaceRepository.getWorkspace(floor.workspaceId);
       const kind = input.kind as 'setup' | 'run' | 'teardown';
       const commands = workspace?.hooks?.[kind] ?? [];

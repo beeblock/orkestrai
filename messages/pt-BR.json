@@ -1,4 +1,7 @@
 {
+  "floor.error_remove": "Não foi possível remover o andar. Revise os bloqueios e tente novamente.",
+  "floor.remove_confirm_title": "Remover o andar {name}?",
+  "floor.remove_confirm_description": "Somente uma worktree integrada, limpa e sem uso pode ser removida. Arquivos locais e ignorados, tarefas pendentes e terminais vivos bloqueiam a exclusão. A ação selecionada determina se a branch integrada será mantida.",
   "term.prompt_delivery_failed": "Não foi possível confirmar a entrega. Seu texto foi mantido. Confira o terminal antes de tentar novamente para não enviar duas vezes.",
   "creative.output_access": "Acesso aos resultados da fal.ai",
   "creative.output_private": "Privado (download autenticado)",

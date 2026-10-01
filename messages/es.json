@@ -1,4 +1,7 @@
 {
+  "floor.error_remove": "No se pudo eliminar el piso. Revisa los bloqueos e inténtalo de nuevo.",
+  "floor.remove_confirm_title": "¿Eliminar el piso {name}?",
+  "floor.remove_confirm_description": "Solo se puede eliminar una worktree integrada, limpia y sin uso. Los archivos locales e ignorados, tareas pendientes y terminales activos bloquean la eliminación. La acción seleccionada determina si se conserva la rama integrada.",
   "term.prompt_delivery_failed": "No se pudo confirmar la entrega. Se conservó el texto. Revisa el terminal antes de reintentar para evitar enviarlo dos veces.",
   "creative.output_access": "Acceso a los resultados de fal.ai",
   "creative.output_private": "Privado (descarga autenticada)",
