@@ -309,7 +309,7 @@
                     </div>
                     {#if event.outcome}<p class="mt-1 text-ui-xs leading-4 text-[var(--app-text-soft)]">{event.outcome}</p>{/if}
                     <div class="mt-1.5 flex min-w-0 items-center gap-1.5 text-ui-xs text-[var(--app-text-muted)]">
-                      <span class="rounded-md bg-[var(--app-hover)] px-1.5 py-0.5">{categoryLabel(event.category)}</span>
+                      <span data-testid="control-center-activity-category" class="rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 text-[var(--app-text-soft)]">{categoryLabel(event.category)}</span>
                       <span>{stateLabel(event.state)}</span>
                       {#if event.objectType}<span>·</span><span class="truncate">{event.objectType}</span>{/if}
                     </div>
