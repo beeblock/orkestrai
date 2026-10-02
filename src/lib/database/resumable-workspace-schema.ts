@@ -15,13 +15,29 @@ function normalizedDefault(value: unknown): string | null {
   return String(value).trim().replace(/^\((.*)\)$/, '$1').replace(/^false$/i, '0').replace(/^true$/i, '1');
 }
 
+function columnDiagnostic(column: SqliteColumn | ColumnDefinition) {
+  const type = column.type.toUpperCase();
+  const safeType = ['TEXT', 'UUID', 'INTEGER', 'BOOLEAN', 'VARCHAR(255)', 'TIMESTAMP'].includes(type) ? type : 'unsupported';
+  const isActual = 'dflt_value' in column;
+  const value = normalizedDefault(isActual ? column.dflt_value : column.defaultValue);
+  return {
+    type: safeType,
+    notnull: isActual ? column.notnull : Number(!column.nullable && !column.primaryKey),
+    pk: isActual ? column.pk : Number(column.primaryKey),
+    hidden: isActual ? column.hidden : 0,
+    // Defaults may contain arbitrary text: never put them or row values in logs.
+    default: value === null ? 'none' : value === '0' || value === '1' ? value : 'unsupported',
+  };
+}
+
 function assertColumn(table: string, actual: SqliteColumn | undefined, expected: ColumnDefinition) {
   const type = expected.type === 'UUID' ? 'TEXT' : expected.type === 'BOOLEAN' ? 'INTEGER' : expected.type;
   if (!actual || actual.hidden !== 0 || actual.type.toUpperCase() !== type.toUpperCase()
     || actual.pk !== Number(expected.primaryKey)
     || actual.notnull !== Number(!expected.nullable && !expected.primaryKey)
     || normalizedDefault(actual.dflt_value) !== normalizedDefault(expected.defaultValue)) {
-    throw new Error(`Cannot safely resume workspace migration: incompatible ${table}.${expected.name}. Data was preserved.`);
+    const diagnostic = JSON.stringify({ expected: columnDiagnostic(expected), actual: actual ? columnDiagnostic(actual) : 'missing' });
+    throw new Error(`Cannot safely resume workspace migration: incompatible ${table}.${expected.name}. ${diagnostic}. Data was preserved.`);
   }
 }
 
@@ -39,7 +55,20 @@ export async function createResumableWorkspaceGroups(schema: Schema, define: (ta
   const blueprint = new TableBuilder();
   define(blueprint);
   const columns = await tableColumns(name);
-  for (const column of blueprint.getColumns()) assertColumn(name, columns.find((item) => item.name === column.name), column);
+  // Only additive, recoverable fields may be missing. Never invent identity or
+  // names, overwrite an existing definition, or replace the table to recover.
+  const repairs: Record<string, (table: TableBuilder) => void> = {
+    parent_id: (table) => { table.uuid('parent_id').nullable(); },
+    position: (table) => { table.integer('position').default(0); },
+    created_at: (table) => { table.timestamp('created_at').nullable(); },
+    updated_at: (table) => { table.timestamp('updated_at').nullable(); },
+  };
+  const missing: string[] = [];
+  for (const column of blueprint.getColumns()) {
+    const actual = columns.find((item) => item.name === column.name);
+    if (!actual && repairs[column.name]) missing.push(column.name);
+    else assertColumn(name, actual, column);
+  }
   // A later historical migration may already have added collapsed.
   const later = new TableBuilder();
   later.boolean('collapsed').default(false);
@@ -49,10 +78,18 @@ export async function createResumableWorkspaceGroups(schema: Schema, define: (ta
   if (columns.some((column) => !allowed.has(column.name))) throw new Error('Cannot safely resume workspace migration: unknown group columns. Data was preserved.');
 
   const foreignKeys = await Connection.raw(`PRAGMA foreign_key_list(${identifier(name)})`);
-  if (foreignKeys.length !== 1 || foreignKeys[0].from !== 'parent_id' || foreignKeys[0].to !== 'id'
+  // Legacy parent_id added with SQLite ALTER TABLE has no FK. The existing
+  // WorkspaceGroupService validates parents and detaches children before a
+  // deletion. Preserve that schema instead of destructively rebuilding it.
+  if (foreignKeys.length > 0 && (foreignKeys.length !== 1 || foreignKeys[0].from !== 'parent_id' || foreignKeys[0].to !== 'id'
     || foreignKeys[0].table !== name || foreignKeys[0].on_delete !== 'SET NULL'
-    || foreignKeys[0].on_update !== 'NO ACTION') {
+    || foreignKeys[0].on_update !== 'NO ACTION')) {
     throw new Error('Cannot safely resume workspace migration: incompatible group foreign key. Data was preserved.');
+  }
+  if (foreignKeys.length === 0 && columns.some((column) => column.name === 'parent_id')) {
+    const orphan = await Connection.raw(`SELECT 1 FROM ${identifier(name)} AS child WHERE child.parent_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM ${identifier(name)} AS parent WHERE parent.id = child.parent_id) LIMIT 1`);
+    if (orphan.length) throw new Error('Cannot safely resume workspace migration: unresolved group parent reference. Data was preserved.');
   }
 
   const indexName = 'idx_agent_workspace_groups_parent_id_position';
@@ -64,7 +101,11 @@ export async function createResumableWorkspaceGroups(schema: Schema, define: (ta
       || indexed.map((item: { name: string }) => item.name).join(',') !== 'parent_id,position') {
       throw new Error('Cannot safely resume workspace migration: incompatible group index. Data was preserved.');
     }
-  } else {
+  }
+  // Validate all existing columns, constraints and index ownership before any
+  // write. The startup transaction also rolls these additions back on failure.
+  for (const column of missing) await schema.table(name, repairs[column]);
+  if (!existing) {
     // Reuse the exact Svelar-generated index statement; never drop/recreate data.
     await Connection.raw(blueprint.toSQL(name, 'sqlite')[1]);
   }

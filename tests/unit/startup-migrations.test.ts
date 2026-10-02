@@ -9,6 +9,7 @@ import Groups from '../../src/lib/database/migrations/20260825140000_create_agen
 import GroupColumns from '../../src/lib/database/migrations/20260825140100_add_group_id_to_agent_workspaces_table.ts';
 import Collapsed from '../../src/lib/database/migrations/20260825150000_add_collapsed_to_agent_workspace_groups_table.ts';
 import { runStartupMigrations } from '../../scripts/run-startup-migrations.mjs';
+import { createReportedWorkspaceSchema, reportedGroupsDDL } from '../fixtures/reported-workspace-schema.mjs';
 
 const directories: string[] = [];
 const migrations = [
@@ -30,6 +31,96 @@ afterEach(async () => {
 });
 
 describe('atomic desktop startup migrations', () => {
+  it('repairs the actual reported legacy tables without replacing rows or later columns', async () => {
+    await Connection.disconnect();
+    Connection.configure({ default: 'sqlite', connections: { sqlite: { driver: 'sqlite', filename: ':memory:' } } });
+    await createReportedWorkspaceSchema(Connection);
+    const originalGroups = await Connection.raw('SELECT * FROM agent_workspace_groups ORDER BY id');
+    const originalWorkspaces = await Connection.raw('SELECT * FROM agent_workspaces');
+    expect(await runStartupMigrations(migrations)).toHaveLength(3);
+    expect(await Connection.raw('SELECT * FROM agent_workspace_groups ORDER BY id')).toEqual(originalGroups.map((row) => ({ ...row, position: 0, collapsed: 0 })));
+    expect(await Connection.raw('SELECT * FROM agent_workspaces')).toEqual(originalWorkspaces.map((row) => ({ ...row, position: 0 })));
+    expect((await Connection.raw('PRAGMA index_list(agent_workspace_groups)')).some((row: { name: string }) => row.name === 'idx_agent_workspace_groups_parent_id_position')).toBe(true);
+    expect(await runStartupMigrations(migrations)).toEqual([]);
+    // Legacy ALTER TABLE parent_id has no FK; the existing service must still
+    // validate parents and detach children/workspaces before removing a group.
+    const { WorkspaceGroupService } = await import('../../src/lib/modules/agent-room/application/services/WorkspaceGroupService.ts');
+    const service = new WorkspaceGroupService();
+    await expect(service.create({ name: 'Invalid', parentId: 'missing' })).rejects.toThrow();
+    expect(await service.remove('parent')).toEqual({ removed: true });
+    expect(await Connection.raw('SELECT id, parent_id FROM agent_workspace_groups')).toEqual([{ id: 'child', parent_id: null }]);
+    expect(await Connection.raw('SELECT id, group_id FROM agent_workspaces')).toEqual([{ id: 'workspace', group_id: null }]);
+  });
+
+  it('validates later existing columns before repairing the missing group position', async () => {
+    await Connection.raw(reportedGroupsDDL);
+    await new Schema().table('agent_workspace_groups', (table) => { table.text('collapsed').default('private-default-do-not-log'); });
+    await Connection.raw('INSERT INTO agent_workspace_groups (id, name) VALUES (?, ?)', ['group', 'Private group name']);
+    let error: Error | undefined;
+    try { await runStartupMigrations(migrations); } catch (failure) { error = failure as Error; }
+    expect(error?.message).toContain('agent_workspace_groups.collapsed');
+    expect(error?.message).toContain('expected');
+    expect(error?.message).toContain('actual');
+    expect(error?.message).not.toContain('private-default-do-not-log');
+    expect(error?.message).not.toContain('Private group name');
+    expect((await Connection.raw('PRAGMA table_xinfo(agent_workspace_groups)')).some((row: { name: string }) => row.name === 'position')).toBe(false);
+    expect(await new Schema().hasTable('migrations')).toBe(false);
+  });
+
+  it('can add nullable group metadata but never invents missing identity or names', async () => {
+    await Connection.raw('CREATE TABLE agent_workspace_groups (id TEXT PRIMARY KEY, name VARCHAR(255) NOT NULL)');
+    await Connection.raw('INSERT INTO agent_workspace_groups (id, name) VALUES (?, ?)', ['group', 'Keep this name']);
+    await runStartupMigrations(migrations);
+    expect(await Connection.raw('SELECT * FROM agent_workspace_groups')).toEqual([
+      { id: 'group', name: 'Keep this name', parent_id: null, position: 0, created_at: null, updated_at: null, collapsed: 0 },
+    ]);
+  });
+
+  it('rejects a missing identity before adding recoverable columns', async () => {
+    await Connection.raw('CREATE TABLE agent_workspace_groups (name VARCHAR(255) NOT NULL)');
+    await Connection.raw('INSERT INTO agent_workspace_groups (name) VALUES (?)', ['Keep this row']);
+    await expect(runStartupMigrations(migrations)).rejects.toThrow('agent_workspace_groups.id');
+    expect(await Connection.raw('SELECT * FROM agent_workspace_groups')).toEqual([{ name: 'Keep this row' }]);
+  });
+
+  it('preserves an unresolved legacy parent rather than silently clearing it', async () => {
+    await Connection.raw(reportedGroupsDDL);
+    await Connection.raw('INSERT INTO agent_workspace_groups (id, name, parent_id) VALUES (?, ?, ?)', ['child', 'Preserve', 'unresolved']);
+    await expect(runStartupMigrations(migrations)).rejects.toThrow('unresolved group parent reference');
+    expect(await Connection.raw('SELECT parent_id FROM agent_workspace_groups')).toEqual([{ parent_id: 'unresolved' }]);
+    expect((await Connection.raw('PRAGMA table_xinfo(agent_workspace_groups)')).some((row: { name: string }) => row.name === 'position')).toBe(false);
+  });
+
+  it('rejects an unsafe legacy foreign key before adding the missing position', async () => {
+    await Connection.raw(reportedGroupsDDL.replace('parent_id TEXT', 'parent_id TEXT REFERENCES agent_workspace_groups(id) ON DELETE CASCADE'));
+    await expect(runStartupMigrations(migrations)).rejects.toThrow('incompatible group foreign key');
+    expect((await Connection.raw('PRAGMA table_xinfo(agent_workspace_groups)')).some((row: { name: string }) => row.name === 'position')).toBe(false);
+  });
+
+  it('rolls back a legacy repair and preserves its verified pre-repair backup on a later failure', async () => {
+    await Connection.disconnect();
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-reported-schema-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'database.db');
+    Connection.configure({ default: 'sqlite', connections: { sqlite: { driver: 'sqlite', filename: databasePath } } });
+    await createReportedWorkspaceSchema(Connection);
+    class Failing extends Migration {
+      async up() { throw new Error('Failure after legacy repair'); }
+      async down() {}
+    }
+    await expect(runStartupMigrations([...migrations, { name: 'failing', migration: new Failing() }], { databasePath, existingDatabase: true }))
+      .rejects.toThrow('Failure after legacy repair');
+    expect((await Connection.raw('PRAGMA table_xinfo(agent_workspace_groups)')).some((row: { name: string }) => row.name === 'position')).toBe(false);
+    expect(await new Schema().hasTable('migrations')).toBe(false);
+    const [backupFile] = (await readdir(directory)).filter((name) => name.startsWith('database.db.bak-'));
+    const backup = new Database(join(directory, backupFile), { readonly: true });
+    try {
+      expect(backup.prepare('SELECT name FROM agent_workspace_groups ORDER BY id').all()).toEqual([{ name: 'Keep this child' }, { name: 'Keep this parent' }]);
+      expect(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some((row: { name: string }) => row.name === 'position')).toBe(false);
+    } finally { backup.close(); }
+    expect(await runStartupMigrations(migrations, { databasePath, existingDatabase: true })).toHaveLength(3);
+  });
+
   it('upgrades the full historical schema after an interrupted workspace-group migration', async () => {
     await Connection.disconnect();
     Connection.configure({ default: 'sqlite', connections: { sqlite: { driver: 'sqlite', filename: ':memory:' } } });
@@ -43,8 +134,9 @@ describe('atomic desktop startup migrations', () => {
     const interrupted = all.findIndex((entry) => entry.name === '20260825140000_create_agent_workspace_groups_table');
     expect(interrupted).toBeGreaterThan(0);
     await runStartupMigrations(all.slice(0, interrupted));
-    // Exactly the reported state: DDL exists, but its history row does not.
-    await all[interrupted].migration.up();
+    // Independent legacy DDL, not generated by the migration under test.
+    await Connection.raw(reportedGroupsDDL);
+    await new Schema().table('agent_workspaces', (table) => { table.uuid('group_id').nullable(); });
     await Connection.raw('INSERT INTO agent_workspace_groups (id, name) VALUES (?, ?)', ['saved-group', 'Keep this folder']);
     await Connection.raw('INSERT INTO agent_workspaces (id, name, working_dir) VALUES (?, ?, ?)', ['saved-workspace', 'Keep this project', '/fixture/project']);
     await runStartupMigrations(all);

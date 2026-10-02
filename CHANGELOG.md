@@ -5,6 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.39.2 - 2026-10-02
+
+### Fixed
+
+- Repair incomplete historical workspace-group schemas instead of treating missing ordering columns as incompatible. Add recoverable parent, ordering and timestamp columns and the missing index only after validating existing definitions; retain legacy application-managed parent relationships, saved rows and unrelated workspace columns. Restore missing collapsed state through its historical migration. Never recreate tables, invent identities or silently clear unresolved references.
+- Include bounded schema-only expected/actual metadata in startup validation errors without logging row values or arbitrary defaults. Test independent DDL from the reported database, the complete historical migration chain, backup preservation and rollback; verify startup of the signed Intel macOS package against that legacy fixture before uploading installers.
+
 ## 0.39.1 - 2026-10-01
 
 ### Fixed
