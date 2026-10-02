@@ -1,0 +1,11 @@
+diff --git a/node_modules/node-forge/lib/rsa.js b/node_modules/node-forge/lib/rsa.js
+--- a/node_modules/node-forge/lib/rsa.js
++++ b/node_modules/node-forge/lib/rsa.js
+@@ -1176,6 +1176,7 @@ pki.setRsaPublicKey = pki.rsa.setPublicKey = function(n, e) {
+           var errors = [];
+           if(!asn1.validate(obj, digestInfoValidator, capture, errors) ||
+             obj.value.length !== 2 ||
++            (('parameters' in capture) && capture.parameters !== '') ||
+             obj.value[0].value.length !==
+               (('parameters' in capture) ? 2 : 1)) {
+             var error = new Error(
