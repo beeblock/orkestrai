@@ -198,6 +198,7 @@
     "ip-address": "10.7.2",
     "moment": "2.31.0",
     "nanoid": "3.3.18",
+    "node-forge": "https://codeload.github.com/digitalbazaar/forge/tar.gz/ceba34402e329f0365134f23fe19898756527d65",
     "qs": "6.16.0",
     "uuid": "11.1.1",
     "undici@6": "6.28.1"
