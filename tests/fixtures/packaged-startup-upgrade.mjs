@@ -9,12 +9,14 @@ import { pathToFileURL } from 'node:url';
 import { createServer } from 'node:net';
 import assert from 'node:assert/strict';
 import { reportedGroupsDDL } from './reported-workspace-schema.mjs';
+import { verifyForgeSignatureValidation } from './forge-signature-validation.mjs';
 
 const appRoot = resolve(process.argv[2]);
 const require = createRequire(join(appRoot, 'package.json'));
 const { Connection, Schema } = await import(pathToFileURL(require.resolve('@beeblock/svelar/database')).href);
 const { runStartupMigrations } = await import(pathToFileURL(join(appRoot, 'scripts/run-startup-migrations.mjs')).href);
 const { startupRecoveryCopy } = require(join(appRoot, 'build/desktop-messages/index.cjs'));
+const signatureValidation = verifyForgeSignatureValidation(require('node-forge'));
 for (const locale of ['pt-BR', 'en', 'es']) assert.ok(startupRecoveryCopy(locale).detail.length > 20);
 
 const scratch = await mkdtemp(join(tmpdir(), 'orkestrai-packaged-startup-'));
@@ -96,7 +98,7 @@ try {
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some(column => column.name === 'position'), false);
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspaces)').all().some(column => column.name === 'position'), false);
   } finally { backup.close(); }
-  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed' }));
+  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
 } finally {
   await stopChild();
   await Connection.disconnect();

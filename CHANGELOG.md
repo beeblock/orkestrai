@@ -12,6 +12,10 @@ pt-BR, English, and Spanish translations.
 - Repair incomplete historical workspace-group schemas instead of treating missing ordering columns as incompatible. Add recoverable parent, ordering and timestamp columns and the missing index only after validating existing definitions; retain legacy application-managed parent relationships, saved rows and unrelated workspace columns. Restore missing collapsed state through its historical migration. Never recreate tables, invent identities or silently clear unresolved references.
 - Include bounded schema-only expected/actual metadata in startup validation errors without logging row values or arbitrary defaults. Test independent DDL from the reported database, the complete historical migration chain, backup preservation and rollback; verify startup of the signed Intel macOS package against that legacy fixture before uploading installers.
 
+### Security
+
+- Reject extra nested RSA DigestAlgorithm elements in node-forge using the reviewed patch from upstream pull request #1152, pinned by immutable commit and SHA-512 archive integrity. The patch is not yet an official upstream release. Preserve the current Postman runtime and full dependency audit policy; independently test malformed and valid signatures, private-key imports and the packaged dependency.
+
 ## 0.39.1 - 2026-10-01
 
 ### Fixed

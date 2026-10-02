@@ -52,6 +52,26 @@ Agentes responsáveis por uma release devem usar a skill
 `.claude/skills/orkestrai-release`). Ela cobre preflight, publicação, recuperação
 de falhas e auditoria do feed público.
 
+## Pin temporário de segurança do node-forge
+
+A 0.39.2 fixa o código revisado do PR upstream
+https://github.com/digitalbazaar/forge/pull/1152 no commit imutável
+ceba34402e329f0365134f23fe19898756527d65, com SHA-512 no lockfile. O PR ainda
+não foi integrado nem publicado oficialmente: não é uma versão oficial
+estável. Comparado à 1.4.0, só muda o controle de elementos do DigestAlgorithm,
+o teste upstream, o changelog e o número de pré-release já existente no upstream.
+Não há dependências de runtime ou scripts de instalação adicionais.
+
+Isso corrige https://github.com/advisories/GHSA-86w9-cpqp-85rv sem fazer o
+downgrade incompatível de Postman sugerido pelo npm audit. O bloqueio
+`npm audit --audit-level=moderate` permanece intacto. O teste independente
+`tests/fixtures/forge-signature-validation.mjs` gera chaves efêmeras sem
+persisti-las, verifica assinaturas válidas, recusa três formatos malformados
+e confirma importação de chave privada. Ele roda também contra a dependência
+do pacote Intel assinado antes do upload. É uma regressão de parsing, não uma
+demonstração de ataque sem chave privada. Substitua esse pin pela release
+oficial quando ela incorporar o fix e passar pelos mesmos testes.
+
 ## Runtime nativo do Computer
 
 O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema
