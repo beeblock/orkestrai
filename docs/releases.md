@@ -62,11 +62,17 @@ estável. Comparado à 1.4.0, só muda o controle de elementos do DigestAlgorith
 o teste upstream, o changelog e o número de pré-release já existente no upstream.
 Não há dependências de runtime ou scripts de instalação adicionais.
 
+O patch local `patches/node-forge+1.4.1-0.patch`, aplicado pelo postinstall
+existente, também exige valor vazio para parâmetros NULL presentes. Um teste
+independente mostrou que o PR ainda aceitava bytes em NULL; a verificação
+adicional recusa essa estrutura inválida sem mudar assinaturas válidas.
+Referência de codificação: https://www.rfc-editor.org/rfc/rfc8017.html#section-9.2.
+
 Isso corrige https://github.com/advisories/GHSA-86w9-cpqp-85rv sem fazer o
 downgrade incompatível de Postman sugerido pelo npm audit. O bloqueio
 `npm audit --audit-level=moderate` permanece intacto. O teste independente
 `tests/fixtures/forge-signature-validation.mjs` gera chaves efêmeras sem
-persisti-las, verifica assinaturas válidas, recusa três formatos malformados
+persisti-las, verifica assinaturas válidas, recusa cinco formatos malformados
 e confirma importação de chave privada. Ele roda também contra a dependência
 do pacote Intel assinado antes do upload. É uma regressão de parsing, não uma
 demonstração de ataque sem chave privada. Substitua esse pin pela release

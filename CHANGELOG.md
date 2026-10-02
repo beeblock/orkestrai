@@ -14,7 +14,7 @@ pt-BR, English, and Spanish translations.
 
 ### Security
 
-- Reject extra nested RSA DigestAlgorithm elements in node-forge using the reviewed patch from upstream pull request #1152, pinned by immutable commit and SHA-512 archive integrity. The patch is not yet an official upstream release. Preserve the current Postman runtime and full dependency audit policy; independently test malformed and valid signatures, private-key imports and the packaged dependency.
+- Reject extra nested RSA DigestAlgorithm elements in node-forge using the reviewed patch from upstream pull request #1152, pinned by immutable commit and SHA-512 archive integrity; additionally require present NULL parameters to be empty through a local install-time patch. The upstream patch is not yet an official release. Preserve the current Postman runtime and full dependency audit policy; independently test malformed and valid signatures, private-key imports and the packaged dependency.
 
 ## 0.39.1 - 2026-10-01
 

@@ -26,7 +26,7 @@ export function verifyForgeSignatureValidation(forge) {
     assert.equal(key.verify(digest.toString('latin1'), signed), true);
     assert.equal(key.verify(createHash('sha256').update('different message').digest('latin1'), signed), false);
   }
-  for (const algorithm of [[oid(), garbage()], [oid(), parameter(), garbage()], [oid(), parameter(), garbage(), garbage()]]) {
+  for (const algorithm of [[oid(), garbage()], [oid(), parameter(), garbage()], [oid(), parameter(), garbage(), garbage()], [oid(), value(asn1.Type.NULL, false, 'unexpected bytes')], [oid(), value(asn1.Type.NULL, false, '\u0000')]]) {
     const signed = signature(algorithm);
     assert.throws(() => key.verify(digest.toString('latin1'), signed), /valid RSASSA-PKCS1-v1_5 DigestInfo/);
   }
@@ -34,5 +34,5 @@ export function verifyForgeSignatureValidation(forge) {
   const imported = forge.pki.privateKeyFromPem(privateKey.export({ type: 'pkcs8', format: 'pem' }));
   const message = forge.md.sha256.create().update('compatible private-key import');
   assert.equal(key.verify(message.digest().getBytes(), imported.sign(message)), true);
-  return { validSignatures: 2, rejectedMalformedSignatures: 3, privateKeyImport: 'passed' };
+  return { validSignatures: 2, rejectedMalformedSignatures: 5, privateKeyImport: 'passed' };
 }
