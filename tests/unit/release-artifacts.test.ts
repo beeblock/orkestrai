@@ -240,6 +240,10 @@ describe('packaged updater', () => {
     expect(workflow).toContain('xcrun stapler validate');
     expect(workflow).toContain('hdiutil verify');
     expect(workflow).toContain('unzip -tq');
+    expect(workflow).toContain('Verify signed packaged startup with the reported legacy schema');
+    expect(workflow).toContain("if: matrix.arch == 'x64'");
+    expect(workflow).toContain('--conditions=import tests/fixtures/packaged-startup-upgrade.mjs');
+    expect(workflow.indexOf('Verify signed packaged startup with the reported legacy schema')).toBeLessThan(workflow.indexOf('name: Upload macOS artifacts'));
     expect(workflow).toContain('Require successful CI for tagged commit');
     expect(workflow).toContain('actions/workflows/ci.yml/runs');
     expect(workflow).toContain('-f head_sha="$SHA"');

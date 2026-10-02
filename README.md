@@ -33,9 +33,12 @@ coders, designers, marketers, and creators can direct an AI team in real time.
 If the app cannot start, use its native recovery dialog to download the latest
 installer, retry, or open the logs. Replace only the application; do not delete
 the data folder or database. Versions such as 0.23.0 that fail before their
-updater starts require one manual installation. Version 0.39.1 safely resumes
-compatible interrupted workspace-group migrations after a verified backup;
-incompatible schemas remain preserved for diagnosis.
+updater starts require one manual installation. Version 0.39.2 safely resumes
+compatible interrupted workspace-group migrations after a verified backup and
+adds missing ordering, parent, timestamp and collapsed-state columns without
+replacing tables or saved records. Legacy application-managed parent links are
+preserved. Incompatible definitions remain preserved for diagnosis; errors
+include schema-only mismatch details, never row values or arbitrary defaults.
 
 ## See it in action
 

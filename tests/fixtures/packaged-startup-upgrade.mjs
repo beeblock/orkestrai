@@ -8,10 +8,11 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'node:net';
 import assert from 'node:assert/strict';
+import { reportedGroupsDDL } from './reported-workspace-schema.mjs';
 
 const appRoot = resolve(process.argv[2]);
 const require = createRequire(join(appRoot, 'package.json'));
-const { Connection } = await import(pathToFileURL(require.resolve('@beeblock/svelar/database')).href);
+const { Connection, Schema } = await import(pathToFileURL(require.resolve('@beeblock/svelar/database')).href);
 const { runStartupMigrations } = await import(pathToFileURL(join(appRoot, 'scripts/run-startup-migrations.mjs')).href);
 const { startupRecoveryCopy } = require(join(appRoot, 'build/desktop-messages/index.cjs'));
 for (const locale of ['pt-BR', 'en', 'es']) assert.ok(startupRecoveryCopy(locale).detail.length > 20);
@@ -45,9 +46,11 @@ try {
   const interrupted = entries.findIndex((entry) => entry.name === '20260825140000_create_agent_workspace_groups_table');
   assert.ok(interrupted > 0);
   await runStartupMigrations(entries.slice(0, interrupted));
-  await entries[interrupted].migration.up();
+  await Connection.raw(reportedGroupsDDL);
+  await new Schema().table('agent_workspaces', (table) => { table.uuid('group_id').nullable(); });
   await Connection.raw('INSERT INTO agent_workspace_groups (id, name) VALUES (?, ?)', ['01900000-0000-7000-8000-000000000001', 'Preserved group']);
-  await Connection.raw('INSERT INTO agent_workspaces (id, name, working_dir) VALUES (?, ?, ?)', ['01900000-0000-7000-8000-000000000002', 'Preserved workspace', projectRoot]);
+  await Connection.raw('INSERT INTO agent_workspace_groups (id, name, parent_id) VALUES (?, ?, ?)', ['01900000-0000-7000-8000-000000000003', 'Preserved child', '01900000-0000-7000-8000-000000000001']);
+  await Connection.raw('INSERT INTO agent_workspaces (id, name, working_dir, group_id) VALUES (?, ?, ?, ?)', ['01900000-0000-7000-8000-000000000002', 'Preserved workspace', projectRoot, '01900000-0000-7000-8000-000000000001']);
   await Connection.disconnect();
 
   const reservation = createServer();
@@ -80,11 +83,20 @@ try {
   assert.equal(health?.data?.status, 'ok', `Packaged startup failed: ${output}`);
   await stopChild();
   configure();
-  assert.deepEqual(await Connection.raw('SELECT name, collapsed FROM agent_workspace_groups'), [{ name: 'Preserved group', collapsed: 0 }]);
-  assert.deepEqual(await Connection.raw('SELECT name FROM agent_workspaces'), [{ name: 'Preserved workspace' }]);
+  assert.deepEqual(await Connection.raw('SELECT name, position, collapsed FROM agent_workspace_groups ORDER BY id'), [{ name: 'Preserved group', position: 0, collapsed: 0 }, { name: 'Preserved child', position: 0, collapsed: 0 }]);
+  assert.deepEqual(await Connection.raw('SELECT name, position, group_id FROM agent_workspaces'), [{ name: 'Preserved workspace', position: 0, group_id: '01900000-0000-7000-8000-000000000001' }]);
+  assert.deepEqual(await Connection.raw('SELECT parent_id FROM agent_workspace_groups WHERE name = ?', ['Preserved child']), [{ parent_id: '01900000-0000-7000-8000-000000000001' }]);
   assert.equal((await Connection.raw('SELECT migration FROM migrations')).length, entries.length);
   assert.equal((await readdir(scratch)).filter((name) => /^database\.db\.bak-.*Z$/.test(name)).length, 1);
-  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', historicalMigrationRecovery: 'passed', preservedRows: 2, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3 }));
+  const [backupFile] = (await readdir(scratch)).filter((name) => /^database\.db\.bak-.*Z$/.test(name));
+  const Database = require('better-sqlite3');
+  const backup = new Database(join(scratch, backupFile), { readonly: true });
+  try {
+    assert.equal(backup.prepare('SELECT COUNT(*) AS count FROM agent_workspace_groups').get().count, 2);
+    assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some(column => column.name === 'position'), false);
+    assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspaces)').all().some(column => column.name === 'position'), false);
+  } finally { backup.close(); }
+  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed' }));
 } finally {
   await stopChild();
   await Connection.disconnect();

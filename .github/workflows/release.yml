@@ -229,6 +229,15 @@ jobs:
           unzip -tq "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX-mac.zip"
           mv release/latest-mac.yml "release/latest-mac-$TARGET_ARCH.yml"
 
+      - name: Verify signed packaged startup with the reported legacy schema
+        # Both packaging runners are Intel. Only execute their native target;
+        # Apple Silicon is also exercised locally on actual Apple Silicon.
+        if: matrix.arch == 'x64'
+        run: |
+          ELECTRON_RUN_AS_NODE=1 release/mac/Orkestrai.app/Contents/MacOS/Orkestrai \
+            --conditions=import tests/fixtures/packaged-startup-upgrade.mjs \
+            release/mac/Orkestrai.app/Contents/Resources/app
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
         with:

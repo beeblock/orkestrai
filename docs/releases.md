@@ -13,6 +13,27 @@ estrangeira e índice existentes são verificados antes da recuperação. Uma
 estrutura incompatível continua bloqueada e exige análise; não deve ser
 convertida automaticamente em um banco vazio.
 
+A 0.39.2 também recupera o schema incompleto observado em uma instalação real:
+grupos com id, name, created_at, updated_at e parent_id, mas sem position ou
+collapsed; workspaces com group_id, mas sem position. Colunas recuperáveis
+ausentes são adicionadas pelo Schema do Svelar, sem recriar tabelas ou alterar
+valores existentes. Todas as definições e a propriedade do índice são
+validadas antes de escrever. Identidade e nome não são inventados.
+
+Um parent_id legado adicionado por ALTER TABLE pode não ter a FK declarada.
+Esse formato é preservado: WorkspaceGroupService já valida pais e remove os
+vínculos de filhos/workspaces antes de excluir uma pasta. Referências órfãs
+ou FKs incompatíveis continuam bloqueadas sem apagar ou reatribuir dados.
+Falhas de coluna incluem automaticamente metadados esperados/atuais limitados,
+sem valores de registros nem defaults arbitrários, para diagnóstico pelo log.
+
+O fixture tests/fixtures/reported-workspace-schema.mjs é DDL independente
+transcrito das capturas do schema real; não é criado pelas migrações em teste.
+O teste empacotado usa a cadeia histórica completa e verifica registros,
+relações, novas colunas e o backup anterior à recuperação. A release executa
+esse teste no pacote Intel já assinado/notarizado. O runner macOS é Intel e
+não executa o binário ARM: o pacote ARM é testado localmente em Apple Silicon.
+
 O lote SQLite e seu histórico ficam na mesma transação. Antes de migrar um
 banco existente, a API de backup do SQLite inclui páginas confirmadas no WAL,
 o snapshot passa por quick_check e usa permissões privadas. Apenas o backup
