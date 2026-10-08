@@ -78,6 +78,30 @@ do pacote Intel assinado antes do upload. É uma regressão de parsing, não uma
 demonstração de ataque sem chave privada. Substitua esse pin pela release
 oficial quando ela incorporar o fix e passar pelos mesmos testes.
 
+## Dependências de segurança na 0.39.3
+
+O gate `npm audit --audit-level=moderate` permanece completo. http-cache-semantics
+4.3.0, Joi 17.13.8 e source-map-js 1.2.2 corrigem os avisos publicados desde a
+última release. O downloader legado do empacotador continua usando a mesma
+API `bootstrap` de global-agent 4.1.3; um teste local de proxy HTTP confirma a
+compatibilidade. Essa versão remove roarr/sprintf-js, ainda sem correção oficial.
+
+O braces sem correção oficial era trazido exclusivamente pelo patch-package.
+Os cinco patches existentes continuam em `patches/`, sem alterações. O novo
+`scripts/apply-dependency-patches.mjs` usa jsdiff 9.0.0 e o contrato versionado
+`patches/dependency-patches.json`: verifica as versões e os SHA-256 exatos antes
+e depois dos oito arquivos, confina os alvos, recusa symlinks e valida tudo antes
+de escrever. Arquivos temporários são preparados antes das trocas atômicas;
+ENOSPC não trunca os módulos instalados. A aplicação é idempotente e preserva
+LF/CRLF. Mudança de versão ou fonte desconhecida bloqueia a instalação e exige
+revisão dos patches, nunca aplicação com contexto aproximado. Os testes cobrem
+todos os patches, fonte inesperada, arquivo ausente, versão divergente, symlink,
+hash incompatível, patch sem contrato e falta de espaço.
+
+Não há advisories ignorados nem pacote renomeado para ocultar vulnerabilidade.
+O install-time check de NULL do node-forge permanece obrigatório e é testado
+novamente no pacote Intel assinado antes da publicação.
+
 ## Runtime nativo do Computer
 
 O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema

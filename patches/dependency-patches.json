@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    { "patch": "@electron+osx-sign+1.3.3.patch", "file": "node_modules/@electron/osx-sign/dist/cjs/util.js", "before": "9c7fad52d41d72b4c5c2ccd85a9bbdf3bc88d72b98c2de4eae2a029a4a3e1595", "after": "6926df98985ca070eef2a409b246945f267e32b9fbe6afd4cd6f9947ffca8b3c" },
+    { "patch": "@electron+osx-sign+1.3.3.patch", "file": "node_modules/@electron/osx-sign/dist/esm/util.js", "before": "bf55590eb9562c8b9bbdcfabb5fcc885c721cf9732b87dff8377a5fb93697428", "after": "5ccd61b895b9aab09f0f65055366a15303e63cb9207ee177e918af51d5ba0c6c" },
+    { "patch": "node-forge+1.4.1-0.patch", "file": "node_modules/node-forge/lib/rsa.js", "before": "acc22e5d36e27832c34e02dd3933aad7977d45b047eead5016520735efedc9c5", "after": "4437d0b997682db8247eeb663a281555179c79387d858c7dd9adfed060a03a85" },
+    { "patch": "node-pty+1.1.0.patch", "file": "node_modules/node-pty/lib/conpty_console_list_agent.js", "before": "0d010879bb6680a0253d44363183d53e631f42972594eb6dcb1fb842c8c85e52", "after": "c8eb121ba10ba3c8a9109f65959e2c8b71aa8cfb9340799b97b421e55ee0a609" },
+    { "patch": "postman-collection+5.3.1.patch", "file": "node_modules/postman-collection/lib/superstring/dynamic-variables.js", "before": "ca69ee0ba81a191d1fd0edcc2eeaa24e461c14f5cd8bfc6bd7fb7f6a423798a1", "after": "d05f0f7c12c849ac2888c8c0304e6a5d55142ecc9087e26861da9db21731304e" },
+    { "patch": "sigma+3.0.3.patch", "file": "node_modules/sigma/dist/sigma.cjs.dev.js", "before": "382252a2404c3fcfff8e7b5ca7991c50b58262178ea34230a0300790ff0a1932", "after": "057285589d94a23e400b3ac70323d84406d2eec0eadffc9c028cbdca7992f935" },
+    { "patch": "sigma+3.0.3.patch", "file": "node_modules/sigma/dist/sigma.cjs.prod.js", "before": "a5ecf34f458b4cb28087b3167dc2145dcbee61b4366c872311f1a35b014f8d24", "after": "aad2b4d423997674b61e5f9a4fefc469040c12ddc22f28808b05cf1928e9500a" },
+    { "patch": "sigma+3.0.3.patch", "file": "node_modules/sigma/dist/sigma.esm.js", "before": "d9c0d02f446fc3c06b55ca6034d9cfbc5c2850968adfb673793bd0108f0511f1", "after": "2a454bb554dd7b6a3bf289bcac7ad8f0156465ce17a9658c2bc1dc4f39ffdb30" }
+  ]
+}

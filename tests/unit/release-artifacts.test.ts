@@ -223,8 +223,9 @@ describe('packaged updater', () => {
     expect(packageScript).toContain('ORKESTRAI_MAC_OPEN_FILE_LIMIT:-unlimited');
     expect(packageScript).toContain('ulimit -n "$requested_open_file_limit"');
     expect(packageScript).toContain('macOS open-file limit: %s');
-    expect(packageJson.scripts?.postinstall).toBe('patch-package && node scripts/ensure-node-pty-helper.mjs');
-    expect(packageJson.devDependencies?.['patch-package']).toBeTruthy();
+    expect(packageJson.scripts?.postinstall).toBe('node scripts/apply-dependency-patches.mjs && node scripts/ensure-node-pty-helper.mjs');
+    expect(packageJson.devDependencies?.['diff']).toBe('9.0.0');
+    expect(packageJson.devDependencies?.['patch-package']).toBeUndefined();
     expect(signerPatch).toContain('const binaryFileCheckLimit = 64;');
     expect(signerPatch).toContain('await acquireBinaryFileCheck();');
     expect(signerPatch).toContain('releaseBinaryFileCheck();');

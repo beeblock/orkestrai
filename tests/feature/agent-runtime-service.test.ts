@@ -63,22 +63,24 @@ describe('AgentRuntimeService', () => {
     vi.restoreAllMocks();
   });
 
-  it('supervises unfinished floor retirement even when all cards are done, without running Git', async () => {
-    const { workspace, deliver } = await setupLeader('done');
+  it('keeps a completed board quiet even when Floors remain active for cleanup or promotion', async () => {
+    const { workspace, deliver, complete } = await setupLeader('done');
     await AgentFloor.create({ id: uuidv7(), workspace_id: workspace.id, name: 'Pending integration', branch: 'orkestrai/pending', path: '/not-a-real-worktree', status: 'active' });
     await supervisorTick(new AgentRuntimeService());
-    expect(deliver).toHaveBeenCalledTimes(1);
-    expect(deliver.mock.calls[0][0].message).toContain('floor_audit');
-    expect(deliver.mock.calls[0][0].message).toContain('0 tarefas em todo/doing e 1 andares ativos');
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5 * 60 * 60_000);
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+    expect(usageService.getAll).not.toHaveBeenCalled();
   });
 
-  it('cancels a maintenance reminder if all pending floors have already retired', async () => {
-    const { workspace, deliver } = await setupLeader('done');
-    const id = uuidv7();
-    await AgentFloor.create({ id, workspace_id: workspace.id, name: 'Completed', branch: 'orkestrai/completed', path: '/not-a-real-worktree', status: 'active' });
+  it('cancels a reminder when the last card finishes even if a Floor remains active', async () => {
+    const { workspace, deliver, taskId } = await setupLeader();
+    await AgentFloor.create({ id: uuidv7(), workspace_id: workspace.id, name: 'Development', branch: 'orkestrai/dev', path: '/not-a-real-worktree', status: 'active' });
     deliver.mockImplementationOnce(async (input) => {
-      await AgentFloor.query().where('id', id).update({ status: 'deleted' });
+      await AgentBoardTask.query().where('id', taskId).update({ status: 'done' });
       expect(await input.isStillRelevant?.()).toBe(false);
+      throw Object.assign(new Error('Obsolete'), { code: 'PTY_DELIVERY_OBSOLETE' });
     });
     await supervisorTick(new AgentRuntimeService());
     expect(deliver).toHaveBeenCalledTimes(1);
@@ -172,7 +174,7 @@ describe('AgentRuntimeService', () => {
     expect(configured).toMatchObject({ mode: 'persistent', state: 'awake' });
   });
 
-  it.each(['todo', 'doing'])('reminds an idle leader about %s and persists the cooldown across supervisor restarts', async (status) => {
+  it.each(['todo', 'doing'])('reminds an idle leader about %s once per board state, across five hours and supervisor restarts', async (status) => {
     const { workspace, node, deliver } = await setupLeader(status);
     await supervisorTick(new AgentRuntimeService());
     expect(deliver).toHaveBeenCalledOnce();
@@ -180,9 +182,86 @@ describe('AgentRuntimeService', () => {
     expect(await controlCenterRepository.latestLeaderSupervision(workspace.id, node.id)).toMatchObject({ state: 'delivered', kind: 'leader_supervision' });
     await supervisorTick(new AgentRuntimeService());
     expect(deliver).toHaveBeenCalledOnce();
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now');
+    for (let reminder = 1; reminder <= 60; reminder += 1) {
+      clock.mockReturnValue(now + reminder * 5 * 60_000);
+      await supervisorTick(new AgentRuntimeService());
+    }
+    expect(deliver).toHaveBeenCalledOnce();
+  });
+
+  it('does not repeat unchanged work after a PTY restart or a timestamp-only card update', async () => {
+    const { workspace, node, taskId, session, deliver } = await setupLeader();
+    await supervisorTick(new AgentRuntimeService());
+    const receipt = await controlCenterRepository.latestLeaderSupervision(workspace.id, node.id);
+    expect(receipt?.metadata.workFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    session.id = uuidv7();
+    await workspaceRepository.updateNode(node.id, { payload: { ...node.payload, maestro: true, sessionId: session.id } });
+    await AgentBoardTask.query().where('id', taskId).update({ updated_at: new Date().toISOString() });
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 360_000);
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledOnce();
+  });
+
+  it.each(['title', 'description', 'assignee_node_id', 'status'])('allows a new reminder after a meaningful %s change, subject to cooldown', async (field) => {
+    const { workspace, node, taskId, deliver } = await setupLeader();
+    await supervisorTick(new AgentRuntimeService());
+    const before = await controlCenterRepository.latestLeaderSupervision(workspace.id, node.id);
+    await AgentBoardTask.query().where('id', taskId).update({ [field]: field === 'status' ? 'doing' : field === 'assignee_node_id' ? node.id : 'New authorized work' });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledOnce();
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 360_000);
     await supervisorTick(new AgentRuntimeService());
     expect(deliver).toHaveBeenCalledTimes(2);
+    const after = await controlCenterRepository.latestLeaderSupervision(workspace.id, node.id);
+    expect(after?.metadata.workFingerprint).not.toBe(before?.metadata.workFingerprint);
+  });
+
+  it('bounds reminder context while tracking changes beyond its five-card sample', async () => {
+    const { workspace, deliver } = await setupLeader();
+    let lastId = '';
+    for (let index = 0; index < 25; index += 1) {
+      lastId = uuidv7();
+      await AgentBoardTask.query().insert({ id: lastId, workspace_id: workspace.id, title: 'Long task '.repeat(50), status: 'todo',
+        created_by: 'user', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    }
+    await supervisorTick(new AgentRuntimeService());
+    const message = deliver.mock.calls[0][0].message;
+    expect(message.length).toBeLessThan(2_000);
+    expect(message).toContain('26 tarefas');
+    expect(message).not.toContain(lastId);
+    expect(message).not.toContain('floor_audit');
+    await AgentBoardTask.query().where('id', lastId).update({ title: 'Changed work outside the sample' });
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 360_000);
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels queued context if pending work changes before delivery', async () => {
+    const { workspace, node, taskId, deliver } = await setupLeader();
+    deliver.mockImplementationOnce(async (input) => {
+      await AgentBoardTask.query().where('id', taskId).update({ title: 'Different authorized work' });
+      expect(await input.isStillRelevant?.()).toBe(false);
+      throw Object.assign(new Error('Obsolete'), { code: 'PTY_DELIVERY_OBSOLETE' });
+    });
+    await supervisorTick(new AgentRuntimeService());
+    expect(await controlCenterRepository.latestLeaderSupervision(workspace.id, node.id)).toMatchObject({ state: 'failed', metadata: { cancelled: true } });
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 360_000);
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets an on-demand leader sleep after board completion despite active Floors', async () => {
+    const { workspace, node, session, deliver } = await setupLeader('done');
+    await workspaceRepository.updateNode(node.id, { payload: { ...node.payload, maestro: true, sessionId: session.id, agentRuntimeMode: 'on_demand' } });
+    session.lastActivityAt = new Date(Date.now() - 40 * 60_000).toISOString();
+    await AgentFloor.create({ id: uuidv7(), workspace_id: workspace.id, name: 'Development', branch: 'orkestrai/dev', path: '/not-a-real-worktree', status: 'active' });
+    const service = new AgentRuntimeService();
+    const sleep = vi.spyOn(service, 'sleep');
+    await supervisorTick(service);
+    expect(sleep).toHaveBeenCalledWith(workspace.id, node.id, 'idle');
+    expect(deliver).not.toHaveBeenCalled();
   });
 
   it.each(['done', 'review'])('does not invent work when the board only contains %s cards', async (status) => {
