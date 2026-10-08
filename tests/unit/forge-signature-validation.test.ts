@@ -17,7 +17,7 @@ describe('RSA signature validation', () => {
     expect(metadata.resolved).toBe(archive);
     expect(metadata.integrity).toBe('sha512-fYRFJf8ymZNJ5jGirbhuwAljM0rSJG03cldnAK3sJRMDHSS+tG8DPosOB8he34pGWMylVCMOtnIxUEepsME2Rg==');
     expect(readFileSync('.github/workflows/ci.yml', 'utf8')).toContain('npm audit --audit-level=moderate');
-    expect(manifest.scripts.postinstall).toContain('patch-package');
+    expect(manifest.scripts.postinstall).toContain('scripts/apply-dependency-patches.mjs');
     expect(readFileSync('patches/node-forge+1.4.1-0.patch', 'utf8')).toContain("(('parameters' in capture) && capture.parameters !== '')");
     expect(readFileSync('tests/fixtures/packaged-startup-upgrade.mjs', 'utf8')).toContain("verifyForgeSignatureValidation(require('node-forge'))");
   });

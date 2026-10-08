@@ -613,7 +613,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     {
       id: 'floor-cleanup',
       title: 'Retire integrated worktrees without repeated audits',
-      body: 'Ask the leader to free worktrees already integrated into the current root branch. floor_audit checks all managed Floors in one call and returns safeToRemove, blockers and a revision. The leader uses floor_cleanup with only the selected safe entries and an active assigned coordination task. Branches are retained. Local, untracked and ignored files, live terminals and pending tasks block deletion; cherry-picked but non-ancestor commits still require review. A failed removal remains visible. The Core reminds an idle leader about active Floors even after cards finish, without authorizing deletion or inventing implementation work.',
+      body: 'Ask the leader to free worktrees already integrated into the current root branch through an explicit authorized coordination task. floor_audit checks all managed Floors in one call and returns safeToRemove, blockers and a revision. The leader uses floor_cleanup with only the selected safe entries and an active assigned coordination task. Branches are retained. Local, untracked and ignored files, live terminals and pending tasks block deletion; cherry-picked but non-ancestor commits still require review. A failed removal remains visible. With no todo/doing cards, the Core stays quiet even if Floors remain active for later cleanup or promotion. Unchanged pending work receives only one compact reminder; do not create placeholder tasks to keep an idle agent answering.',
       tags: ['Floors/worktrees', 'floor_audit', 'floor_cleanup'],
     },
     {
@@ -981,6 +981,12 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'October 8, 2026 · 0.39.3', title: 'Orkestrai 0.39.3: Stop repeated idle-leader prompts', summary: 'Keep completed boards quiet and prevent unchanged supervision from consuming provider quotas.', items: [
+      'Keep automatic supervision silent with no todo/doing cards, even with active Floors awaiting cleanup or promotion. Worktrees alone no longer request model turns or keep an on-demand leader awake; maintenance requires an explicit authorized task.',
+      'Persist a semantic board fingerprint with delivery receipts. Remind once for unchanged work across Core and terminal restarts; ignore timestamp-only updates and card ordering. Meaningful changes can trigger another guarded reminder after the cooldown; cancel stale queued context while preserving completion, uncertain-delivery, human-blocker, pause and quota safeguards.',
+      'Use a compact reminder with at most five shortened card summaries while deduplicating against the full pending board. Test five hours of unchanged work, completed boards with active Floors, restarts, task changes and stale delivery cancellation.',
+      'Update http-cache-semantics 4.3.0, Joi 17.13.8 and source-map-js 1.2.2; use global-agent 4.1.3 with a tested legacy Electron proxy bootstrap to remove sprintf-js. Replace the patch-package/braces chain with a confined jsdiff 9.0.0 runner: validate versions and exact before/after hashes for all eight existing patched files before writing, preserve LF/CRLF and idempotence, and stage atomic replacements resilient to disk exhaustion. Keep all patches and the full audit gate.',
+    ] },
     { date: 'October 2, 2026 · 0.39.2', title: 'Orkestrai 0.39.2: Repair incomplete workspace schemas', summary: 'Recover missing columns automatically while preserving saved data.', items: [
       'Repair incomplete historical workspace-group schemas by adding missing parent, ordering, timestamp and collapsed-state columns and the index after validating existing definitions. Preserve rows, later workspace columns and legacy application-managed parent links. Never recreate tables, invent identities or silently clear unresolved references.',
       'Include bounded schema-only expected/actual details in startup errors without logging row values or arbitrary defaults. Test independent DDL from the reported database, the full migration chain, backup preservation and rollback; verify signed Intel macOS packaged startup against that fixture before uploading installers.',

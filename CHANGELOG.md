@@ -5,6 +5,18 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.39.3 - 2026-10-08
+
+### Fixed
+
+- Keep automatic leader supervision silent when no unarchived `todo`/`doing` cards remain, even with active Floors awaiting cleanup or branch promotion. Worktrees alone no longer trigger model turns or keep an on-demand leader awake; maintenance still requires an explicit authorized task.
+- Persist a semantic board fingerprint with each supervision receipt. Send at most one reminder for unchanged work across Core and terminal restarts, ignoring timestamp-only updates and card ordering. Meaningful task changes can trigger a new guarded reminder after the existing cooldown; cancel queued context if the board changes before delivery. Preserve provider completion checks, uncertain-delivery protection, human blockers, pauses and quota limits.
+- Replace the repeated long supervision checklist with a compact reminder and at most five shortened card summaries. Track the full pending board for deduplication, including cards outside the sample. Regression tests reproduce five hours of unchanged work without repeated prompts and verify completed boards, active Floors, restarts, changed tasks and stale delivery cancellation.
+
+### Security
+
+- Update http-cache-semantics to 4.3.0, Joi to 17.13.8 and source-map-js to 1.2.2. Use global-agent 4.1.3 with a tested legacy Electron downloader proxy bootstrap, removing the vulnerable sprintf-js chain. Replace patch-package's vulnerable braces dependency chain with a confined jsdiff 9.0.0 patch runner that verifies package versions and exact before/after SHA-256 hashes for all eight existing patched files before writing, preserves LF/CRLF and idempotence, and stages atomic replacements without truncating modules on disk exhaustion. Keep every existing patch and the full npm audit gate; do not suppress advisories or invent an upstream fix.
+
 ## 0.39.2 - 2026-10-02
 
 ### Fixed

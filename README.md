@@ -157,12 +157,14 @@ device access.
   Core to supervise a persistent process. Each agent has idle, concurrency,
   and provider-usage safeguards plus explicit wake and sleep controls.
 - **Automatic leader supervision:** the Core checks every 15 seconds for
-  unarchived `todo`/`doing` cards or active Floors and a live, idle workspace leader. After two
-  quiet minutes and a completed provider turn, it requests a board/team review,
-  with at least five minutes between reminders and persisted delivery receipts
-  in Control Center. Providers without a reliable turn-end signal require an
-  explicit `done` activity in the current session. Empty/completed boards with
-  no active Floors stay quiet; custom review columns do not independently trigger reminders. This
+  unarchived `todo`/`doing` cards and a live, idle workspace leader. After two
+  quiet minutes and a completed provider turn, it sends one compact reminder
+  per semantic board state, with at least five minutes between changed-work
+  reminders and persisted fingerprints/receipts in Control Center. Unchanged
+  cards, timestamp-only updates and Core/terminal restarts do not repeat the
+  reminder. Providers without a reliable turn-end signal require an explicit
+  `done` activity in the current session. Empty/completed boards stay quiet even
+  with active Floors; custom review columns do not independently trigger reminders. This
   does not wake manually sleeping agents or override human drafts, pending
   deliveries, input/permission requests, quotas, suspension, emergency stop,
   operating windows or restricted conversation profiles. Keep approvals and
@@ -259,8 +261,9 @@ device access.
   and reports partial failures. It never force-deletes files or treats
   cherry-pick equivalence as deletion authorization. Resolve blockers and audit
   again; do not bypass them with shell deletion. Failed retirements stay visible.
-  Active Floors remain part of idle-leader supervision after the board finishes;
-  this reminder does not grant new deletion authority. Git scans share a
+  Request maintenance through an explicit authorized Kanban task. Active Floors
+  alone do not trigger idle-leader reminders after the board finishes or grant
+  deletion/promotion authority. Git scans share a
   four-process budget and overlapping reads are coalesced. Agent response
   deadlines no longer acquire an extra 90-second wait; partial turns are not
   confirmed replies.
