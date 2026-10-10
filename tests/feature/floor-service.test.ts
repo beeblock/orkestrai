@@ -318,6 +318,24 @@ describe('FloorService', () => {
     expect(git(dir, ['status', '--porcelain']).trim()).toBe('M app.ts');
   });
 
+  it('treats landed paths literally, never committing an ignored private file a pattern would match', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, '.gitignore'), 'configa.env\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'ignore private config']);
+    writeFileSync(join(dir, 'configa.env'), 'SECRET=do-not-commit\n');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'bracket-path' });
+    writeFileSync(join(floor.path, 'config[ab].env'), 'PUBLIC=1\n');
+    git(floor.path, ['add', '--', ':(literal)config[ab].env']);
+    git(floor.path, ['commit', '-m', 'bracket config']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 1;\nconst local = true;\n');
+    const result = await floorService.land(floor.id);
+    expect(result).toMatchObject({ merged: true, mode: 'patch', commit: expect.any(String) });
+    expect(git(dir, ['show', '--name-only', '--format=', 'HEAD']).trim()).toBe('config[ab].env');
+    expect(git(dir, ['ls-files', '--', ':(literal)configa.env']).trim()).toBe('');
+  });
+
   it('keeps a floor where a process still runs, such as a preview server', async () => {
     const dir = makeRepo();
     const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });

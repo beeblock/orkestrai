@@ -271,7 +271,7 @@ export class FloorService {
         if (size <= SNAPSHOT_MAX_UNTRACKED_BYTES) included.push(path);
       }
       for (let index = 0; index < included.length; index += 200) {
-        await this.git(workspace, workspace.workingDir, ['add', '--', ...included.slice(index, index + 200)], env);
+        await this.git(workspace, workspace.workingDir, ['add', '--', ...included.slice(index, index + 200)], { ...env, GIT_LITERAL_PATHSPECS: '1' });
       }
       const tree = (await this.git(workspace, workspace.workingDir, ['write-tree'], env)).trim();
       const identity = await this.identityArgs(workspace, workspace.workingDir);
@@ -350,9 +350,12 @@ export class FloorService {
     }
     // A deletion can already be staged by an earlier, refused attempt: only
     // paths HEAD still has need recording, and git rm tolerates the rest.
+    // Paths are file names, never patterns: `config[ab].env` must not also
+    // match an ignored `configa.env` (with --force it would be committed).
+    const literal = { GIT_LITERAL_PATHSPECS: '1' };
     const inHead = new Set<string>();
     for (let index = 0; index < removed.length; index += 200) {
-      const listed = await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...removed.slice(index, index + 200)]);
+      const listed = await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...removed.slice(index, index + 200)], literal);
       for (const path of listed.split('\0').filter(Boolean)) inHead.add(path);
     }
     const commitPaths = [...present, ...removed.filter((path) => inHead.has(path))];
@@ -366,11 +369,11 @@ export class FloorService {
     };
     try {
       // Tracked in the floor means tracked here, even if the checkout ignores the path.
-      if (present.length) await this.git(workspace, workspace.workingDir, ['add', '-A', '--force', ...(await specFile(present))]);
-      if (removed.length) await this.git(workspace, workspace.workingDir, ['rm', '-q', '--cached', '--ignore-unmatch', ...(await specFile(removed))]);
+      if (present.length) await this.git(workspace, workspace.workingDir, ['add', '-A', '--force', ...(await specFile(present))], literal);
+      if (removed.length) await this.git(workspace, workspace.workingDir, ['rm', '-q', '--cached', '--ignore-unmatch', ...(await specFile(removed))], literal);
       const identity = await this.identityArgs(workspace, workspace.workingDir);
       try {
-        await this.git(workspace, workspace.workingDir, [...identity, 'commit', '--only', '-m', message, ...(await specFile(commitPaths))]);
+        await this.git(workspace, workspace.workingDir, [...identity, 'commit', '--only', '-m', message, ...(await specFile(commitPaths))], literal);
       } catch (error) {
         // Already committed (a retried landing): nothing left to record.
         const output = `${(error as { stdout?: unknown }).stdout ?? ''}${(error as { stderr?: unknown }).stderr ?? ''}`;

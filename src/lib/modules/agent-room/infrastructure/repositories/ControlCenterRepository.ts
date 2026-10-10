@@ -387,14 +387,13 @@ export class ControlCenterRepository {
     return rows[0] ? mapEnvelope(rows[0]) : null;
   }
 
-  /** Answers recorded since a time whose forward to the asker has not been written yet. */
-  async pendingForwards(sinceIso: string): Promise<AgentMessageEnvelopeData[]> {
-    const rows = await AgentMessageEnvelope.query()
+  /** Answers recorded since a time whose forward to the asker is still pending, one page after a cursor (id order). */
+  async pendingForwards(sinceIso: string, afterId: string | null = null, limit = 200): Promise<AgentMessageEnvelopeData[]> {
+    const base = AgentMessageEnvelope.query()
       .where('state', 'replied')
       .where('replied_at', '>=', sinceIso)
-      .where('metadata_json', 'like', '%"forwardPending":true%')
-      .limit(200)
-      .get();
+      .where('metadata_json', 'like', '%"forwardPending":true%');
+    const rows = await (afterId ? base.where('id', '>', afterId) : base).orderBy('id', 'asc').limit(limit).get();
     return rows.map(mapEnvelope);
   }
 

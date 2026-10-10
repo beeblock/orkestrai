@@ -276,6 +276,16 @@ Problems found live and fixed (each rebuilt, reinstalled and retested):
    - ask wait: default 8 s (was 120 s); a delivered question returns and the answer arrives in the
      asker's inbox; `--timeout` keeps explicit blocking available. Skill/AGENTS text updated.
 
+17. Third Codex review (cfdc377e), three findings, all fixed with regression tests:
+   - P1 pathspec globbing: every Git call that takes landed or snapshot paths runs with
+     `GIT_LITERAL_PATHSPECS=1` (add --force, rm --cached, commit --only, ls-tree, snapshot add);
+     test: `config[ab].env` lands alone, the ignored `configa.env` is never committed (the test
+     fails without the fix).
+   - P2 recovery flag: `recoverForwards` clears `forwardsPending` only after a complete pass without
+     errors; a failed lookup or item keeps it armed and the timer running.
+   - P2 pagination: `pendingForwards(since, afterId, limit)` pages by id cursor until a short page;
+     test pages of two reach all three pending forwards.
+
 Test evidence for the final build (installed 2026-10-10 04:51 UTC): full `vitest run` 2106 passed /
 0 failed / 13 skipped (run with `--maxWorkers=2`: at load average 11–17 from the team's own suites,
 the default worker count timed out three timing-sensitive tests and lost a worker; each passes alone); type-check clean for the changed services; `npm run build` ok; Playwright on the
