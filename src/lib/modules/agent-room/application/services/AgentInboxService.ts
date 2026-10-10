@@ -104,6 +104,7 @@ const PENDING_HORIZON_MS = 48 * 60 * 60_000;
 const CLAIM_LIMIT = 10;
 /** Terminal deliveries running at once; each still waits for its own agent's turn boundary. */
 const MAX_PARALLEL_DELIVERIES = 6;
+const FORWARD_PAGE_SIZE = 200;
 const CLAIM_CHARS = 24_000;
 
 const UNCERTAIN_DELIVERY = /Transcript confirmation timed out|não confirmou o envio|did not confirm/i;
@@ -452,15 +453,32 @@ export class AgentInboxService {
     return { routed: true, via: 'inbox', envelope: await controlCenterRepository.findEnvelope(envelope.id) };
   }
 
-  /** Forwards left pending by a failure or a restart. */
-  private async recoverForwards(): Promise<void> {
-    this.forwardsPending = false;
-    for (const envelope of await controlCenterRepository.pendingForwards(new Date(Date.now() - PENDING_HORIZON_MS).toISOString())) {
-      await this.withLock(`reply:${envelope.id}`, async () => {
-        const current = await controlCenterRepository.findEnvelope(envelope.id);
-        if (current?.state === 'replied' && current.metadata.forwardPending === true) await this.forwardAnswer(current);
-      }).catch(() => { this.forwardsPending = true; });
+  /**
+   * Forwards left pending by a failure or a restart, page by page. The flag is
+   * cleared only after a complete pass without errors, so a failed query or
+   * a failed item is retried by the next sweep.
+   */
+  private async recoverForwards(pageSize = FORWARD_PAGE_SIZE): Promise<void> {
+    const since = new Date(Date.now() - PENDING_HORIZON_MS).toISOString();
+    let after: string | null = null;
+    let failed = false;
+    try {
+      for (;;) {
+        const page = await controlCenterRepository.pendingForwards(since, after, pageSize);
+        for (const envelope of page) {
+          await this.withLock(`reply:${envelope.id}`, async () => {
+            const current = await controlCenterRepository.findEnvelope(envelope.id);
+            if (current?.state === 'replied' && current.metadata.forwardPending === true) await this.forwardAnswer(current);
+          }).catch(() => { failed = true; });
+        }
+        if (page.length < pageSize) break;
+        after = page[page.length - 1].id;
+      }
+    } catch {
+      failed = true;
     }
+    this.forwardsPending = failed;
+    if (failed) this.ensureTimer();
   }
 
   // -- Dispatcher ---------------------------------------------------------------

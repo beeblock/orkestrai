@@ -431,4 +431,30 @@ describe('Agent inbox', () => {
     expect(Date.now() - startedAt).toBeLessThan(12_000);
     expect(result).toMatchObject({ inbox: true, delivered: true, replyConfirmed: false });
   }, 20_000);
+
+  it('keeps retrying pending forwards after a failed lookup and pages through all of them', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const asked: string[] = [];
+    for (const question of ['Endpoint?', 'Schema?', 'Prazo?']) {
+      asked.push((await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: question, busyGraceMs: 20 })).messageId);
+    }
+    const spy = vi.spyOn(agentInboxService, 'enqueue').mockImplementation(async () => { throw new Error('database is locked'); });
+    for (const messageId of asked) {
+      await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId, message: `Resposta ${messageId.slice(-4)}` })).rejects.toThrow();
+    }
+    spy.mockRestore();
+
+    // A failed lookup must leave the recovery armed for the next sweep.
+    const lookup = vi.spyOn(controlCenterRepository, 'pendingForwards').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+    await agentInboxService.sweepNow();
+    expect((agentInboxService as unknown as { forwardsPending: boolean }).forwardsPending).toBe(true);
+    lookup.mockRestore();
+
+    // Pages of two still reach the third pending forward.
+    await (agentInboxService as unknown as { recoverForwards(pageSize: number): Promise<void> }).recoverForwards(2);
+    const forwarded = (await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered'])).filter((envelope) => envelope.kind === 'reply');
+    expect(forwarded).toHaveLength(3);
+    expect((agentInboxService as unknown as { forwardsPending: boolean }).forwardsPending).toBe(false);
+  });
 });
