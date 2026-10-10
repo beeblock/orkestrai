@@ -377,6 +377,32 @@ export class ControlCenterRepository {
     return rows.length;
   }
 
+  /** The first item of a delivery batch, which carries the typed prompt, in any state. */
+  async batchLead(batchId: string): Promise<AgentMessageEnvelopeData | null> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('metadata_json', 'like', `%${JSON.stringify({ batchId }).slice(1, -1)}%`)
+      .where('metadata_json', 'like', '%"batchPrompt"%')
+      .limit(1)
+      .get();
+    return rows[0] ? mapEnvelope(rows[0]) : null;
+  }
+
+  /** Answers recorded since a time whose forward to the asker has not been written yet. */
+  async pendingForwards(sinceIso: string): Promise<AgentMessageEnvelopeData[]> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('state', 'replied')
+      .where('replied_at', '>=', sinceIso)
+      .where('metadata_json', 'like', '%"forwardPending":true%')
+      .limit(200)
+      .get();
+    return rows.map(mapEnvelope);
+  }
+
+  /** Metadata-only update: no delivery event, no state change. */
+  async updateEnvelopeMetadata(messageId: string, metadata: Record<string, unknown>): Promise<void> {
+    await AgentMessageEnvelope.query().where('id', messageId).update({ metadata_json: JSON.stringify(metadata), updated_at: new Date().toISOString() });
+  }
+
   /** Questions from agents delivered since a time and still unanswered (reply capture survives restarts). */
   async awaitingReplies(sinceIso: string): Promise<AgentMessageEnvelopeData[]> {
     const rows = await AgentMessageEnvelope.query()

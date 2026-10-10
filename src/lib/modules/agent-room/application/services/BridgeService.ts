@@ -107,7 +107,12 @@ type BridgeAskResult = {
 };
 
 /** Agent asks wait this long for an answer; later answers reach the caller's inbox. */
-const DEFAULT_AGENT_ASK_WAIT_MS = 120_000;
+/**
+ * An ask returns once the message is placed (and a near-immediate answer is
+ * captured); the answer otherwise arrives in the asker's inbox. A caller that
+ * really must block passes timeoutMs (CLI --timeout) explicitly.
+ */
+const DEFAULT_AGENT_ASK_WAIT_MS = 8_000;
 
 function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPlacementRect[] {
   return nodes
@@ -1484,7 +1489,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 
 - \`orkestrai list\` — lista os agentes do workspace (título, provider, sessão viva), suas notas/designs conectados e TODOS os portais do workspace. \`workspace.repository\` descreve o repositório principal (\`.\`), inclusive se Git foi confirmado no runtime nativo/WSL; \`repositories\` contém SOMENTE aliases adicionais, portanto uma lista vazia nunca significa que o workspace principal está ausente. Cada portal informa nome, URL, id e se está conectado a você; "não conectado" significa que ele JÁ EXISTE, não que deve ser criado. O agente marcado com [LIDER] e o maestro do time: "Maestro" e o PAPEL, não um título — fale com o líder pelo TITULO dele (ex.: \`orkestrai ask "Líder" ...\`), nunca por \`orkestrai ask "Maestro"\` (esse agente não existe).
 - \`orkestrai usage\` — consulta as cotas reais e a política do nó Usage; perfis de multi-conta aparecem como linhas próprias (\`profileId\`/\`profileName\`). Quando \`shouldFallback\` for verdadeiro, direcione NOVAS tarefas e tarefas ainda pendentes ao \`recommendedProvider\` (se ele tiver \`:profile:\`, use \`--provider\` + \`--profile\` juntos no recruit). Não troque silenciosamente o provider ou perfil de um terminal que já executa trabalho.
-- \`orkestrai ask "<TituloDoAgente>" "<mensagem>" --task <taskId>\` — envia uma mensagem a outro agente. Agente livre: entrega na hora e aguarda a resposta por até 2 minutos. Agente ocupado: a mensagem fica na caixa de entrada dele e é entregue no próximo intervalo; você é liberado na hora. Em trabalho do quadro, passe SEMPRE o id da tarefa: mensagens de tarefas que terminam ou mudam de responsável são canceladas antes da entrega. Só diga que falou/consultou o agente quando o comando imprimir \`Resposta confirmada de ...\`. Se a resposta não vier no prazo, NÃO reenvie: ela chega à sua caixa de entrada.
+- \`orkestrai ask "<TituloDoAgente>" "<mensagem>" --task <taskId>\` — envia uma mensagem a outro agente. Agente livre: entrega na hora e você é liberado em segundos; a resposta chega à sua caixa de entrada (use --timeout <ms> só se precisar mesmo bloquear). Agente ocupado: a mensagem fica na caixa de entrada dele e é entregue no próximo intervalo; você é liberado na hora. Em trabalho do quadro, passe SEMPRE o id da tarefa: mensagens de tarefas que terminam ou mudam de responsável são canceladas antes da entrega. Só diga que falou/consultou o agente quando o comando imprimir \`Resposta confirmada de ...\`. Se a resposta não vier no prazo, NÃO reenvie: ela chega à sua caixa de entrada.
 - \`orkestrai reply <messageId> "<resposta>"\` — responde a uma mensagem recebida (\`[orkestrai:message:<id>]\`). Vai para quem perguntou: na hora se ele estiver aguardando, senão na caixa de entrada dele.
 - \`orkestrai inbox\` — lê as mensagens pendentes (perguntas, respostas, tarefas e avisos que chegaram enquanto você trabalhava). Elas também chegam anexadas às respostas de qualquer comando da ponte.
 - \`orkestrai heavy -- <comando>\` — executa builds, E2E e empacotamento na fila da máquina. Espera a vez sem mensagens, renova a reserva enquanto roda e libera ao terminar.
@@ -1701,7 +1706,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `orkestrai list` — agentes do workspace, notas e portais conectados. O [LIDER] marcado e o maestro do time: fale com ele pelo TITULO ("Maestro" e o papel, não um nome de agente).',
       '- Repositórios adicionais aprovados aparecem em `orkestrai list` como aliases `@nome`; use esses aliases em caminhos de tools como `api_client_import`, nunca tente escapar com `../`.',
       '- `orkestrai usage` — cotas reais e recomendação do nó Usage; líderes consultam antes de delegar e roteiam novas tarefas ao recommendedProvider quando shouldFallback=true.',
-      '- `orkestrai ask "<Agente>" "<mensagem>" --task <taskId>` — fala com outro agente. Livre: entrega e aguarda até 2 min. Ocupado: vai para a caixa de entrada dele e você é liberado na hora; a resposta chega à SUA caixa. Não reenvie nem fique esperando.',
+      '- `orkestrai ask "<Agente>" "<mensagem>" --task <taskId>` — fala com outro agente. Livre: entrega e libera você em segundos; a resposta chega à sua caixa. Ocupado: vai para a caixa de entrada dele e você é liberado na hora; a resposta chega à SUA caixa. Não reenvie nem fique esperando.',
       '- `orkestrai reply <messageId> "<resposta>"` — responde a uma mensagem recebida (`[orkestrai:message:<id>]`); `orkestrai inbox` lê as pendentes (elas também chegam anexadas às respostas da ponte).',
       '- `orkestrai heavy -- <comando>` — builds, E2E e empacotamento esperam a vez na fila da máquina; nunca negocie janelas, slots ou freezes por mensagem. `orkestrai stats` mostra latência e filas.',
       '- Especialista: implemente, valide e conclua com `orkestrai task done <id>` (no andar, o trabalho pendente é commitado). Não peça GO a cada etapa; peça decisão só para o irreversível ou fora do escopo.',

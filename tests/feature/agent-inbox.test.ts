@@ -363,4 +363,72 @@ describe('Agent inbox', () => {
     // The question itself was never typed into the leader's terminal again.
     expect(prompts.filter((prompt) => prompt.nodeId === nodes.Lider)).toHaveLength(1);
   });
+
+  it('forwards a recorded answer later when writing it to the asker inbox failed', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const asked = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Qual endpoint?', busyGraceMs: 20 });
+    const enqueue = agentInboxService.enqueue.bind(agentInboxService);
+    const spy = vi.spyOn(agentInboxService, 'enqueue').mockImplementationOnce(async () => { throw new Error('database is locked'); });
+    await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: asked.messageId, message: 'Use /api/v2.' })).rejects.toThrow('database is locked');
+    expect(await controlCenterRepository.findEnvelope(asked.messageId)).toMatchObject({ state: 'replied', metadata: expect.objectContaining({ forwardPending: true }) });
+    spy.mockImplementation(enqueue);
+
+    // Retrying the same answer forwards it once; it is not recorded twice.
+    await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: asked.messageId, message: 'Use /api/v2.' }))
+      .resolves.toMatchObject({ via: 'inbox' });
+    await agentInboxService.sweepNow();
+    const forwarded = (await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered'])).filter((envelope) => envelope.kind === 'reply');
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0].content).toContain('Use /api/v2.');
+    expect(await controlCenterRepository.findEnvelope(asked.messageId)).toMatchObject({ metadata: expect.objectContaining({ forwardPending: false }) });
+  });
+
+  it('recovers a pending forward without any retry, from the dispatcher sweep', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const asked = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Qual endpoint?', busyGraceMs: 20 });
+    vi.spyOn(agentInboxService, 'enqueue').mockImplementationOnce(async () => { throw new Error('disk I/O error'); });
+    await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: asked.messageId, message: 'Use /api/v3.' })).rejects.toThrow();
+    vi.mocked(agentInboxService.enqueue).mockRestore();
+    await agentInboxService.sweepNow();
+    const forwarded = (await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered'])).filter((envelope) => envelope.kind === 'reply');
+    expect(forwarded).toHaveLength(1);
+  });
+
+  it.each(['notice first', 'first question answered'])('restores reply capture for a batch after a restart (%s)', async (shape) => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    let answered: string | null = null;
+    if (shape === 'notice first') {
+      await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: nodes.Lider, kind: 'handoff', content: 'Aviso: build verde.', metadata: { wake: false } });
+    } else {
+      answered = (await bridgeService.ask(workspace.id, { from: nodes.Mobile, to: nodes.Lider, message: 'Pode revisar o mobile?', busyGraceMs: 20 })).messageId;
+    }
+    const asked = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Qual endpoint?', busyGraceMs: 20 });
+    session(nodes.Lider).ready = true;
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    expect(prompts.filter((prompt) => prompt.nodeId === nodes.Lider)).toHaveLength(1);
+    if (answered) await bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: answered, message: 'Sim, revisado.' });
+
+    agentInboxService.reset();
+    const restarted = { ...session(nodes.Lider), id: uuidv7(), createdAt: new Date().toISOString() };
+    sessions.set(restarted.id, restarted);
+    await workspaceRepository.updateNode(nodes.Lider, { payload: { command: 'codex', provider: 'codex', sessionId: restarted.id, maestro: true } });
+    agentInboxService.start();
+    await vi.waitFor(() => expect((agentInboxService as unknown as { replyWatches: Map<string, unknown> }).replyWatches.size).toBe(1));
+    replies.set('conversation-Lider', 'Use /api/v2/company.');
+    await agentInboxService.sweepNow();
+    expect(await controlCenterRepository.findEnvelope(asked.messageId)).toMatchObject({ state: 'replied', reply: 'Use /api/v2/company.' });
+    expect(prompts.filter((prompt) => prompt.nodeId === nodes.Lider)).toHaveLength(1);
+  });
+
+  it('releases the asker in seconds when an idle recipient does not answer right away', async () => {
+    const { workspace, nodes } = await team();
+    const startedAt = Date.now();
+    // Default wait: the asker is never held for minutes by a delivered question.
+    const result = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Revisa o backend?' });
+    expect(Date.now() - startedAt).toBeLessThan(12_000);
+    expect(result).toMatchObject({ inbox: true, delivered: true, replyConfirmed: false });
+  }, 20_000);
 });

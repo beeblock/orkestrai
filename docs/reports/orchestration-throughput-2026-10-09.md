@@ -261,6 +261,21 @@ Problems found live and fixed (each rebuilt, reinstalled and retested):
      (native view is hidden behind its preview during motion anyway).
    - Kanban: leader contract says a card whose work is landed and committed is closed at once,
      coordination cards included; owner-only checks go on a separate card.
+16. Second Codex review (6fb3316f), four findings plus the ask wait, all fixed with regression tests:
+   - P1 mode changes: `planDelta` compares base/head modes; a floor-side 644<->755 change is a
+     write even with identical content (`executable` = floor's mode change, else the checkout's
+     current mode); `applyDelta` sets or clears the exec bits; `git add` records the mode.
+   - P1 lost forward: the replied transition stores `forwardId`/`forwardPending`; `forwardAnswer`
+     enqueues the reply with that fixed id (idempotent), then clears the mark. A retry of the same
+     reply, the sweep (`forwardsPending`) or `restorePending` (`pendingForwards`) completes it.
+   - P2 batch restore: the batch prompt is found with `batchLead(batchId)` in any state, so batches
+     led by a notice or an answered question keep reply capture.
+   - P2 retry with deletions: `commitLanded` adds present paths (`--force` for floor-tracked
+     paths the checkout ignores), stages removals with `git rm --cached --ignore-unmatch`, and
+     commits present paths plus removals HEAD still has.
+   - ask wait: default 8 s (was 120 s); a delivered question returns and the answer arrives in the
+     asker's inbox; `--timeout` keeps explicit blocking available. Skill/AGENTS text updated.
+
 Test evidence for the final build (installed 2026-10-10 04:51 UTC): full `vitest run` 2106 passed /
 0 failed / 13 skipped (run with `--maxWorkers=2`: at load average 11–17 from the team's own suites,
 the default worker count timed out three timing-sensitive tests and lost a worker; each passes alone); type-check clean for the changed services; `npm run build` ok; Playwright on the

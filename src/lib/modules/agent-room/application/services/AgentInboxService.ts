@@ -139,6 +139,7 @@ export class AgentInboxService {
   private readonly deliveredHooks = new Map<string, DeliveredHook>();
   private readonly restoreAttempts = new Map<string, number>();
   private activeDeliveries = 0;
+  private forwardsPending = false;
   private readonly deliverySlots: Array<() => void> = [];
   private restorer: Restorer | null = null;
 
@@ -365,11 +366,17 @@ export class AgentInboxService {
     }
     const answer = text.trim();
     if (!answer) throw new Error('A resposta está vazia.');
+    // An answer recorded earlier whose forward never reached the asker's inbox
+    // (a failed write, a crash) is forwarded now instead of being lost.
+    if (envelope.state === 'replied' && envelope.metadata.forwardPending === true) return this.forwardAnswer(envelope);
     if (envelope.state === 'replied' || envelope.state === 'failed') return { routed: false, via: 'none', envelope };
+    const waiting = this.waiters.get(messageId)?.size ?? 0;
+    const forward = !waiting && Boolean(envelope.fromNodeId && envelope.fromNodeId !== envelope.toNodeId);
     const updated = await controlCenterService.recordInboxTransition(messageId, {
       state: 'replied',
       reply: answer,
-      metadata: { ...envelope.metadata, replySource: input.source, ...input.metadata },
+      // The forward is recorded with the answer: its id makes retries idempotent.
+      metadata: { ...envelope.metadata, replySource: input.source, ...input.metadata, ...(forward ? { forwardId: uuidv7(), forwardPending: true } : {}) },
       fromStates: ['queued', 'sent', 'delivered', 'acknowledged'],
     });
     if (!updated) {
@@ -411,21 +418,49 @@ export class AgentInboxService {
     }
     // Any message from an agent can be answered, including a reply to a reply:
     // an explicit answer is part of the conversation and must reach its sender.
-    if (envelope.fromNodeId && envelope.fromNodeId !== envelope.toNodeId) {
-      const responder = titles.get(envelope.toNodeId) ?? 'agente';
+    if (updated.metadata.forwardPending === true) {
+      try {
+        return await this.forwardAnswer(updated);
+      } catch (error) {
+        // The answer is recorded with a pending forward: a retry or the sweep delivers it.
+        this.forwardsPending = true;
+        this.ensureTimer();
+        throw error;
+      }
+    }
+    return { routed: false, via: 'none', envelope: updated };
+  }
+
+  /** Puts a recorded answer in the asker's inbox exactly once (fixed id), then clears the pending mark. */
+  private async forwardAnswer(envelope: AgentMessageEnvelope): Promise<{ routed: boolean; via: 'inbox'; envelope: AgentMessageEnvelope | null }> {
+    const forwardId = asString(envelope.metadata.forwardId) ?? uuidv7();
+    if (envelope.fromNodeId && !(await controlCenterRepository.findEnvelope(forwardId))) {
+      const titles = await this.titles(envelope.workspaceId);
       await this.enqueue({
+        messageId: forwardId,
         workspaceId: envelope.workspaceId,
         fromNodeId: envelope.toNodeId,
         toNodeId: envelope.fromNodeId,
         kind: 'reply',
-        replyTo: messageId,
-        dedupKey: `reply-forward:${messageId}`,
+        replyTo: envelope.id,
+        dedupKey: `reply-forward:${envelope.id}`,
         taskId: asString(envelope.metadata.taskId),
-        content: `Resposta de ${responder} à sua mensagem ${messageId}: ${answer}`,
+        content: `Resposta de ${titles.get(envelope.toNodeId) ?? 'agente'} à sua mensagem ${envelope.id}: ${envelope.reply ?? ''}`,
       });
-      return { routed: true, via: 'inbox', envelope: updated };
     }
-    return { routed: false, via: 'none', envelope: updated };
+    await controlCenterRepository.updateEnvelopeMetadata(envelope.id, { ...envelope.metadata, forwardId, forwardPending: false });
+    return { routed: true, via: 'inbox', envelope: await controlCenterRepository.findEnvelope(envelope.id) };
+  }
+
+  /** Forwards left pending by a failure or a restart. */
+  private async recoverForwards(): Promise<void> {
+    this.forwardsPending = false;
+    for (const envelope of await controlCenterRepository.pendingForwards(new Date(Date.now() - PENDING_HORIZON_MS).toISOString())) {
+      await this.withLock(`reply:${envelope.id}`, async () => {
+        const current = await controlCenterRepository.findEnvelope(envelope.id);
+        if (current?.state === 'replied' && current.metadata.forwardPending === true) await this.forwardAnswer(current);
+      }).catch(() => { this.forwardsPending = true; });
+    }
   }
 
   // -- Dispatcher ---------------------------------------------------------------
@@ -447,7 +482,8 @@ export class AgentInboxService {
         batches.set(batchId, [...(batches.get(batchId) ?? []), envelope]);
       }
       for (const [batchId, envelopes] of batches) {
-        const lead = envelopes.find((envelope) => typeof envelope.metadata.batchPrompt === 'string');
+        const lead = envelopes.find((envelope) => typeof envelope.metadata.batchPrompt === 'string')
+          ?? await controlCenterRepository.batchLead(batchId);
         const sessionId = asString(lead?.metadata.sessionId);
         if (lead && sessionId) {
           this.confirmations.set(batchId, {
@@ -464,6 +500,7 @@ export class AgentInboxService {
         }
       }
     }
+    await this.recoverForwards();
     // Questions delivered before a restart still get their answer captured
     // from the transcript; the prompt is never typed again.
     const watchHorizon = new Date(Date.now() - REPLY_WATCH_MS).toISOString();
@@ -473,8 +510,11 @@ export class AgentInboxService {
       delivered.set(batchId, [...(delivered.get(batchId) ?? []), envelope]);
     }
     for (const [batchId, envelopes] of delivered) {
-      const lead = envelopes.find((envelope) => typeof envelope.metadata.batchPrompt === 'string');
-      const deliveredAt = Date.parse(lead?.deliveredAt ?? '');
+      // The prompt lives on the batch's first item, which can be a notice or an
+      // already answered question: look it up by batch, whatever its state.
+      const lead = envelopes.find((envelope) => typeof envelope.metadata.batchPrompt === 'string')
+        ?? await controlCenterRepository.batchLead(batchId);
+      const deliveredAt = Date.parse(lead?.deliveredAt ?? envelopes[0]?.deliveredAt ?? '');
       if (!lead || !Number.isFinite(deliveredAt) || this.replyWatches.has(batchId)) continue;
       this.replyWatches.set(batchId, {
         workspaceId: lead.workspaceId,
@@ -482,6 +522,7 @@ export class AgentInboxService {
         sessionId: asString(lead.metadata.sessionId) ?? '',
         prompt: String(lead.metadata.batchPrompt),
         since: deliveredAt - CONFIRMATION_WINDOW_MS,
+        // Only the questions still waiting; answered ones and notices are done.
         messageIds: envelopes.map((envelope) => envelope.id),
         deadline: deliveredAt + REPLY_WATCH_MS,
       });
@@ -500,7 +541,8 @@ export class AgentInboxService {
       }
       await Promise.all([...this.confirmations].map(([batchId, tracking]) => this.checkConfirmation(batchId, tracking).catch(() => undefined)));
       await Promise.all([...this.replyWatches].map(([batchId, tracking]) => this.checkReply(batchId, tracking).catch(() => undefined)));
-      if (!this.recipients.size && !this.confirmations.size && !this.replyWatches.size && !this.waiters.size) this.stop();
+      if (this.forwardsPending) await this.recoverForwards();
+      if (!this.recipients.size && !this.confirmations.size && !this.replyWatches.size && !this.waiters.size && !this.forwardsPending) this.stop();
     } catch {
       console.warn('[agent-inbox] Sweep failed; the next tick retries.');
     } finally {
