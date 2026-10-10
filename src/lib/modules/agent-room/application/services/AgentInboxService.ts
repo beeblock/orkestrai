@@ -102,6 +102,8 @@ const CONFIRMATION_WINDOW_MS = 10 * 60_000;
 const RESTORE_RETRY_MS = 60_000;
 const PENDING_HORIZON_MS = 48 * 60 * 60_000;
 const CLAIM_LIMIT = 10;
+/** Terminal deliveries running at once; each still waits for its own agent's turn boundary. */
+const MAX_PARALLEL_DELIVERIES = 6;
 const CLAIM_CHARS = 24_000;
 
 const UNCERTAIN_DELIVERY = /Transcript confirmation timed out|não confirmou o envio|did not confirm/i;
@@ -136,6 +138,8 @@ export class AgentInboxService {
   private readonly relevance = new Map<string, RelevanceCheck>();
   private readonly deliveredHooks = new Map<string, DeliveredHook>();
   private readonly restoreAttempts = new Map<string, number>();
+  private activeDeliveries = 0;
+  private readonly deliverySlots: Array<() => void> = [];
   private restorer: Restorer | null = null;
 
   registerRelevance(kind: InboxKind, check: RelevanceCheck): void {
@@ -174,12 +178,15 @@ export class AgentInboxService {
     this.replyWatches.clear();
     this.waiters.clear();
     this.restoreAttempts.clear();
+    this.activeDeliveries = 0;
+    for (const next of this.deliverySlots.splice(0)) next();
     this.restored = false;
   }
 
   /** One dispatcher pass: deliveries, confirmations and reply capture. */
   async sweepNow(): Promise<void> {
     await this.sweep();
+    await Promise.allSettled([...this.drainRuns.values()]);
   }
 
   async enqueue(input: InboxEnqueueInput): Promise<AgentMessageEnvelope> {
@@ -345,6 +352,12 @@ export class AgentInboxService {
    * caller, or to the asker's inbox when nobody is waiting anymore.
    */
   async routeReply(messageId: string, text: string, input: { source: string; responderNodeId?: string | null; metadata?: Record<string, unknown> }): Promise<{ routed: boolean; via: 'waiter' | 'inbox' | 'none'; envelope: AgentMessageEnvelope | null }> {
+    // Concurrent answers (an explicit reply racing the transcript capture, two
+    // reply calls) are serialized per message: exactly one is recorded and forwarded.
+    return this.withLock(`reply:${messageId}`, () => this.routeReplyOnce(messageId, text, input));
+  }
+
+  private async routeReplyOnce(messageId: string, text: string, input: { source: string; responderNodeId?: string | null; metadata?: Record<string, unknown> }): Promise<{ routed: boolean; via: 'waiter' | 'inbox' | 'none'; envelope: AgentMessageEnvelope | null }> {
     const envelope = await controlCenterRepository.findEnvelope(messageId);
     if (!envelope) throw new Error('Mensagem não encontrada.');
     if (input.responderNodeId && envelope.toNodeId !== input.responderNodeId) {
@@ -357,7 +370,12 @@ export class AgentInboxService {
       state: 'replied',
       reply: answer,
       metadata: { ...envelope.metadata, replySource: input.source, ...input.metadata },
+      fromStates: ['queued', 'sent', 'delivered', 'acknowledged'],
     });
+    if (!updated) {
+      const current = await controlCenterRepository.findEnvelope(messageId);
+      return { routed: false, via: 'none', envelope: current };
+    }
     const titles = await this.titles(envelope.workspaceId);
     await controlCenterService.recordActivity({
       workspaceId: envelope.workspaceId,
@@ -401,6 +419,7 @@ export class AgentInboxService {
         toNodeId: envelope.fromNodeId,
         kind: 'reply',
         replyTo: messageId,
+        dedupKey: `reply-forward:${messageId}`,
         taskId: asString(envelope.metadata.taskId),
         content: `Resposta de ${responder} à sua mensagem ${messageId}: ${answer}`,
       });
@@ -445,6 +464,28 @@ export class AgentInboxService {
         }
       }
     }
+    // Questions delivered before a restart still get their answer captured
+    // from the transcript; the prompt is never typed again.
+    const watchHorizon = new Date(Date.now() - REPLY_WATCH_MS).toISOString();
+    const delivered = new Map<string, AgentMessageEnvelope[]>();
+    for (const envelope of await controlCenterRepository.awaitingReplies(watchHorizon)) {
+      const batchId = asString(envelope.metadata.batchId) ?? envelope.id;
+      delivered.set(batchId, [...(delivered.get(batchId) ?? []), envelope]);
+    }
+    for (const [batchId, envelopes] of delivered) {
+      const lead = envelopes.find((envelope) => typeof envelope.metadata.batchPrompt === 'string');
+      const deliveredAt = Date.parse(lead?.deliveredAt ?? '');
+      if (!lead || !Number.isFinite(deliveredAt) || this.replyWatches.has(batchId)) continue;
+      this.replyWatches.set(batchId, {
+        workspaceId: lead.workspaceId,
+        nodeId: lead.toNodeId,
+        sessionId: asString(lead.metadata.sessionId) ?? '',
+        prompt: String(lead.metadata.batchPrompt),
+        since: deliveredAt - CONFIRMATION_WINDOW_MS,
+        messageIds: envelopes.map((envelope) => envelope.id),
+        deadline: deliveredAt + REPLY_WATCH_MS,
+      });
+    }
     this.ensureTimer();
   }
 
@@ -452,9 +493,13 @@ export class AgentInboxService {
     if (this.sweeping) return;
     this.sweeping = true;
     try {
-      for (const [nodeId, workspaceId] of [...this.recipients]) await this.drain(workspaceId, nodeId);
-      for (const [batchId, tracking] of [...this.confirmations]) await this.checkConfirmation(batchId, tracking);
-      for (const [batchId, tracking] of [...this.replyWatches]) await this.checkReply(batchId, tracking);
+      // Every agent drains on its own (bounded by delivery slots): a terminal
+      // slow to accept or confirm a prompt never delays the other inboxes.
+      for (const [nodeId, workspaceId] of [...this.recipients]) {
+        if (!this.drainRuns.has(nodeId)) void this.drain(workspaceId, nodeId);
+      }
+      await Promise.all([...this.confirmations].map(([batchId, tracking]) => this.checkConfirmation(batchId, tracking).catch(() => undefined)));
+      await Promise.all([...this.replyWatches].map(([batchId, tracking]) => this.checkReply(batchId, tracking).catch(() => undefined)));
       if (!this.recipients.size && !this.confirmations.size && !this.replyWatches.size && !this.waiters.size) this.stop();
     } catch {
       console.warn('[agent-inbox] Sweep failed; the next tick retries.');
@@ -497,12 +542,29 @@ export class AgentInboxService {
   }
 
   private async drainOnce(workspaceId: string, nodeId: string): Promise<void> {
+    await this.acquireDeliverySlot();
     try {
       const prepared = await this.withLock(nodeId, () => this.prepareBatch(workspaceId, nodeId));
       if (prepared) await this.deliverBatch(prepared);
     } catch {
       console.warn('[agent-inbox] Delivery attempt failed; it will be retried.');
+    } finally {
+      this.releaseDeliverySlot();
     }
+  }
+
+  private async acquireDeliverySlot(): Promise<void> {
+    if (this.activeDeliveries < MAX_PARALLEL_DELIVERIES) {
+      this.activeDeliveries++;
+      return;
+    }
+    await new Promise<void>((resolvePromise) => this.deliverySlots.push(resolvePromise));
+  }
+
+  private releaseDeliverySlot(): void {
+    const next = this.deliverySlots.shift();
+    if (next) next();
+    else this.activeDeliveries = Math.max(0, this.activeDeliveries - 1);
   }
 
   private async prepareBatch(workspaceId: string, nodeId: string): Promise<(BatchTracking & { envelopes: AgentMessageEnvelope[]; batchId: string; context: TranscriptContext }) | null> {
@@ -690,14 +752,17 @@ export class AgentInboxService {
       this.replyWatches.delete(batchId);
       return;
     }
-    const session = ptySessionManager.get(tracking.sessionId);
-    if (!session || session.exited) {
-      this.replyWatches.delete(batchId);
-      return;
-    }
-    if (!session.waiting) return;
+    // After a restart the conversation continues in a new terminal (or none
+    // yet): the answer is read from the same transcript either way.
+    const tracked = ptySessionManager.get(tracking.sessionId);
+    const node = tracked && !tracked.exited ? null : await workspaceRepository.getNode(tracking.nodeId);
+    const currentId = (node?.payload as { sessionId?: string } | undefined)?.sessionId;
+    const current = currentId ? ptySessionManager.get(currentId) : null;
+    const session = tracked && !tracked.exited ? tracked : current && !current.exited ? current : null;
+    if (session && !session.waiting) return;
     const context = await this.transcriptContext(tracking.workspaceId, tracking.nodeId, session);
-    if (!context.provider) {
+    if (!context.provider || !context.agentSessionId) {
+      if (!session) return;
       this.replyWatches.delete(batchId);
       return;
     }
@@ -815,9 +880,19 @@ export class AgentInboxService {
     return open === false && released === true;
   }
 
-  private async transcriptContext(workspaceId: string, nodeId: string, session: PtySessionInfo): Promise<TranscriptContext> {
+  private async transcriptContext(workspaceId: string, nodeId: string, session: PtySessionInfo | null): Promise<TranscriptContext> {
     const node = await workspaceRepository.getNode(nodeId);
     const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };
+    if (!session) {
+      // No live terminal: the saved conversation of the node, in its own folder.
+      const workspace = await workspaceRepository.getWorkspace(workspaceId);
+      let cwd = workspace?.workingDir ?? '';
+      if (node?.floorId) {
+        const floor = await floorService.get(node.floorId).catch(() => null);
+        if (floor?.path) cwd = floor.path;
+      }
+      return { provider: payload.provider ?? null, cwd, agentSessionId: payload.agentSessionId ?? null, options: {} };
+    }
     let cwd = session.transcriptCwd ?? null;
     if (!cwd) {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);

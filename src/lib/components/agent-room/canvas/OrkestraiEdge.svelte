@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { EdgeLabel, useEdges, useNodes, useViewport, type EdgeProps } from '@xyflow/svelte';
+  import { EdgeLabel, useEdges, useNodes, type EdgeProps } from '@xyflow/svelte';
   import { X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { floatingAnchorFor, nodeIndexFor } from './floating-anchor.js';
@@ -17,7 +17,6 @@
 
   const nodesStore = useNodes();
   const edgesStore = useEdges();
-  const viewportStore = useViewport();
 
   type RopePoint = { x: number; y: number; px: number; py: number };
 
@@ -186,9 +185,15 @@
   const currentAnchors = $derived(anchors());
   const currentSourceBox = $derived(boxOf(source));
   const currentTargetBox = $derived(boxOf(target));
-  const inViewport = $derived(currentAnchors
-    ? edgeIntersectsViewport(currentAnchors, viewportStore.current, canvasEdgeRuntime.current.width, canvasEdgeRuntime.current.height)
-    : false);
+  // The settled snapshot, not the live store: with hundreds of edges, reading
+  // the live viewport made every edge recompute (and flip between line, curve
+  // and physics) on every pan/zoom frame. Until the canvas reports a viewport,
+  // assume visible so the first paint matches the static rendering policy.
+  const inViewport = $derived.by(() => {
+    if (!currentAnchors) return false;
+    const runtime = canvasEdgeRuntime.current;
+    return runtime.viewport ? edgeIntersectsViewport(currentAnchors, runtime.viewport, runtime.width, runtime.height) : true;
+  });
   const profile = $derived(edgePerformanceProfile({
     edgeCount: edgesStore.current.length,
     documentVisible: canvasEdgeRuntime.current.documentVisible,

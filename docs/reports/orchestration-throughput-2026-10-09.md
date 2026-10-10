@@ -230,6 +230,37 @@ Problems found live and fixed (each rebuilt, reinstalled and retested):
    committed on main, never wait on the owner to commit/land/review visually/free disk, owner-only
    checks are non-blocking follow-ups; (e) a parked leader is supervised again when cards finished
    after its wait, and the reminder lists them with "floor land".
+15. Codex review of 196663f2 (eight findings, all confirmed and fixed) plus owner reports:
+   - P1 symlink escape: `planDelta`/`applyDelta` refuse any delta path whose existing component in
+     the main checkout is a symbolic link (`reachesThroughLink`, re-checked before the first write).
+   - P1 disposable artifacts: allowlist reduced to test reports and tool caches (test-results,
+     playwright-report, blob-report, coverage, .nyc_output, .svelte-kit, .vite, .turbo, .parcel-cache,
+     Python caches) plus `*.log`; folders are walked (bounded, 10k entries) and any secret/data-like
+     name (.env*, keys, certificates, sqlite/db, credentials, secrets) or symlink keeps the floor;
+     `node_modules` only next to a lockfile. build/dist/out/target are never disposable.
+   - P1 heavy process group: `stopHeavyTree` signals only the command's own descendants (one
+     `ps -A -o pid=,ppid=` snapshot, deepest first), escalates to SIGKILL, reaps survivors after
+     exit. No `process.kill(0)`.
+   - P1 lost reservation: heartbeat carries label/task; `HeavyRunService.renew` reinstates an
+     unknown lease only when a slot is free, otherwise returns `{alive:false, stop}`; the CLI stops
+     the run on `stop` or `alive:false`.
+   - P1 failed landing commit: the floor is kept (`merged:false`, `cleanupReason:'commit_failed'`,
+     `landed_head` not recorded, audit keeps it unmerged); landing again commits every delta path
+     (`plan.paths`), treating "nothing to commit" as already recorded. FloorPanel shows
+     `commitError` / kept-floor reasons (new i18n keys, 3 languages).
+   - P1 sequential sweep: drains are scheduled per agent without awaiting each other, bounded by
+     6 delivery slots; confirmations and reply checks run concurrently; `sweepNow` awaits drains.
+   - P2 duplicate replies: `routeReply` is serialized per message (`withLock('reply:<id>')`), the
+     DB transition is conditional (`fromStates`), and the forward has `dedupKey reply-forward:<id>`.
+   - P2 reply capture after restart: `restorePending` rebuilds reply watches from delivered,
+     unanswered asks (`awaitingReplies`); `checkReply` follows the node's current terminal or reads
+     the saved conversation without one.
+   - Canvas pan/zoom CPU (552 nodes, 876 edges): edges no longer subscribe to the live viewport
+     (settled snapshot after 150 ms, published by ZoomBridge); the code graph re-syncs once per
+     settle; terminals flush only after 200 ms visible; Portal nodes skip occlusion/IPC while moving
+     (native view is hidden behind its preview during motion anyway).
+   - Kanban: leader contract says a card whose work is landed and committed is closed at once,
+     coordination cards included; owner-only checks go on a separate card.
 Test evidence for the final build (installed 2026-10-10 04:51 UTC): full `vitest run` 2106 passed /
 0 failed / 13 skipped (run with `--maxWorkers=2`: at load average 11–17 from the team's own suites,
 the default worker count timed out three timing-sensitive tests and lost a worker; each passes alone); type-check clean for the changed services; `npm run build` ok; Playwright on the

@@ -243,6 +243,7 @@ export class ControlCenterService {
     reply?: string | null;
     metadata?: Record<string, unknown>;
     countAttempt?: boolean;
+    fromStates?: AgentMessageDeliveryState[];
   }) {
     const result = await controlCenterRepository.transitionEnvelope(messageId, input);
     if (!result) return null;

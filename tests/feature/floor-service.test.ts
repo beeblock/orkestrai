@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useSvelarTest } from '@beeblock/svelar/testing';
@@ -209,6 +209,74 @@ describe('FloorService', () => {
     expect(audit).toMatchObject({ merged: true, safeToRemove: true, blockers: [] });
     expect(audit.changes.ignored).toBe(2);
     await expect(floorService.remove(floor.id)).resolves.toMatchObject({ removed: true });
+    expect(existsSync(floor.path)).toBe(false);
+  });
+
+  it('refuses to land through a symbolic link that leaves the workspace', async () => {
+    const dir = makeRepo();
+    const outside = mkdtempSync(join(tmpdir(), 'orkestrai-outside-'));
+    repos.push(outside);
+    writeFileSync(join(outside, 'config.ts'), 'export const external = true;\n');
+    mkdirSync(join(dir, 'shared'));
+    writeFileSync(join(dir, 'shared', 'config.ts'), 'export const external = false;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'shared']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'linked' });
+    writeFileSync(join(floor.path, 'shared', 'config.ts'), 'export const external = "overwritten";\n');
+    // The main checkout's folder now points outside the repository.
+    rmSync(join(dir, 'shared'), { recursive: true });
+    symlinkSync(outside, join(dir, 'shared'));
+    await expect(floorService.land(floor.id)).rejects.toThrow('link simbólico');
+    expect(readFileSync(join(outside, 'config.ts'), 'utf8')).toBe('export const external = true;\n');
+    expect(existsSync(floor.path)).toBe(true);
+  });
+
+  it('keeps ignored files that are not reports or caches, even inside a build folder', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, '.gitignore'), 'build/\ntest-results/\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'ignore']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'build-env' });
+    mkdirSync(join(floor.path, 'build'));
+    writeFileSync(join(floor.path, 'build', '.env'), 'API_KEY=secret');
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ merged: true, safeToRemove: false });
+    await expect(floorService.remove(floor.id)).rejects.toThrow('local_changes');
+    expect(readFileSync(join(floor.path, 'build', '.env'), 'utf8')).toBe('API_KEY=secret');
+    // A secret-looking name inside a report folder is kept as well.
+    rmSync(join(floor.path, 'build'), { recursive: true });
+    mkdirSync(join(floor.path, 'test-results'));
+    writeFileSync(join(floor.path, 'test-results', '.env'), 'TOKEN=secret');
+    await expect(floorService.remove(floor.id)).rejects.toThrow('local_changes');
+  });
+
+  it('keeps the floor and retries the commit when a repository hook refuses it', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'app.ts'), 'const v = 1;\nconst local = true;\n');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'hooked' });
+    writeFileSync(join(floor.path, 'feature.ts'), 'export const feature = 1;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'feature']);
+    const hook = join(dir, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\necho "lint failed" >&2\nexit 1\n');
+    chmodSync(hook, 0o755);
+    const headBefore = git(dir, ['rev-parse', 'HEAD']).trim();
+
+    const refused = await floorService.land(floor.id);
+    expect(refused).toMatchObject({ merged: false, commit: null, cleanup: 'pending', cleanupReason: 'commit_failed' });
+    expect(refused.commitError).toContain('lint failed');
+    expect(git(dir, ['rev-parse', 'HEAD']).trim()).toBe(headBefore);
+    expect(existsSync(floor.path)).toBe(true);
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit.safeToRemove).toBe(false);
+
+    rmSync(hook);
+    const retried = await floorService.land(floor.id);
+    expect(retried).toMatchObject({ merged: true, commit: expect.any(String), cleanup: 'removed' });
+    expect(git(dir, ['show', '--name-only', '--format=', 'HEAD']).trim()).toBe('feature.ts');
     expect(existsSync(floor.path)).toBe(false);
   });
 

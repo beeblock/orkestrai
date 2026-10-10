@@ -179,21 +179,66 @@ export function heavyOwnerGone(owner, current = process.ppid, probe = (pid) => p
   }
 }
 
-/** Ends a heavy command and its descendants, escalating if it ignores SIGTERM. */
-function stopHeavyTree(child) {
+/** Every descendant of a process (POSIX), deepest first, from one process-table snapshot. */
+export function descendantPids(root, table = null) {
+  let rows = table;
+  if (rows === null) {
+    try {
+      rows = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' });
+    } catch {
+      return [];
+    }
+  }
+  const children = new Map();
+  for (const line of rows.split('\n')) {
+    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+    if (!pid || !ppid || pid === ppid) continue;
+    if (!children.has(ppid)) children.set(ppid, []);
+    children.get(ppid).push(pid);
+  }
+  const order = [];
+  const seen = new Set([root]);
+  const visit = (pid) => {
+    for (const child of children.get(pid) ?? []) {
+      if (seen.has(child)) continue;
+      seen.add(child);
+      visit(child);
+      order.push(child);
+    }
+  };
+  visit(root);
+  return order;
+}
+
+/**
+ * Ends a heavy command and only its own descendants: never the process
+ * group, which can include the caller's shell and unrelated jobs. Returns the
+ * snapshot so survivors can be killed after the command exits.
+ */
+export function stopHeavyTree(child) {
   if (process.platform === 'win32') {
     try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { child.kill(); }
-    return;
+    return [];
   }
-  child.kill('SIGTERM');
-  // Agent CLIs start each command as its own session, so this group is the
-  // run's own tree; our SIGTERM listener keeps this process alive to release the slot.
-  try { process.kill(0, 'SIGTERM'); } catch { /* group already gone */ }
-  setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) {
-      try { child.kill('SIGKILL'); } catch { /* exited */ }
+  const tree = descendantPids(child.pid);
+  const signal = (name) => {
+    for (const pid of tree) {
+      try { process.kill(pid, name); } catch { /* already gone */ }
     }
+    try { child.kill(name); } catch { /* exited */ }
+  };
+  signal('SIGTERM');
+  setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) signal('SIGKILL');
   }, 10_000).unref();
+  return tree;
+}
+
+/** Descendants that ignored SIGTERM and outlived the command are not left running. */
+function reapHeavyTree(tree) {
+  for (const pid of tree) {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  }
 }
 
 function readBridgeConfig(candidate, required = false) {
@@ -543,17 +588,23 @@ async function runCommand(argv, options, sink) {
         err(`[orkestrai heavy] Vaga liberada: ${label}`);
         let child = null;
         let stopped = false;
+        let stoppedTree = [];
+        const stop = (reason) => {
+          if (!child || stopped) return;
+          stopped = true;
+          err(`[orkestrai heavy] ${reason}`);
+          stoppedTree = stopHeavyTree(child);
+        };
         const heartbeat = setInterval(() => {
-          void bridge(config, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`)
+          void bridge(config, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`, { label, taskId: flags.task ?? null })
             .then((data) => {
-              // The server stops a running build or suite before the disk fills.
-              if (!data?.stop || !child || stopped) return;
-              stopped = true;
-              err(`[orkestrai heavy] ${data.stop}`);
-              stopHeavyTree(child);
+              // A lost reservation the server cannot restore, or a nearly full
+              // disk, ends the run: the machine never runs more than its slots.
+              if (data?.stop) stop(data.stop);
+              else if (data?.alive === false) stop('A reserva desta execução pesada foi perdida: execução interrompida.');
             })
             .catch(() => undefined);
-        }, 20_000);
+        }, Number(env.ORKESTRAI_HEAVY_HEARTBEAT_MS) || 20_000);
         let ownerWatch = null;
         try {
           child = spawn(commandLine[0], commandLine.slice(1), { stdio: 'inherit', shell: commandLine.length === 1, env: process.env });
@@ -565,14 +616,14 @@ async function runCommand(argv, options, sink) {
           ownerWatch = setInterval(() => {
             if (!heavyOwnerGone(owner)) return;
             clearInterval(ownerWatch);
-            err('[orkestrai heavy] O processo que pediu esta execucao terminou; encerrando o comando.');
-            stopHeavyTree(child);
+            stop('O processo que pediu esta execucao terminou; encerrando o comando.');
           }, 5_000);
           const code = await new Promise((resolvePromise) => {
             child.on('error', (error) => { err(error.message); resolvePromise(127); });
             child.on('exit', (exitCode, signal) => resolvePromise(exitCode ?? (signal ? 1 : 0)));
           });
           process.off('SIGTERM', forward);
+          if (stopped) reapHeavyTree(stoppedTree);
           return code;
         } finally {
           clearInterval(heartbeat);

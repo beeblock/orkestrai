@@ -118,7 +118,7 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     }
   };
   const ready = call('attach').then((state: State) => {
-    updateState(state); lastGeometry = ''; position();
+    updateState(state); lastGeometry = ''; sentMoving = false; position();
   });
   const frame = Object.assign(host, {
     src: '', getWebContentsId: () => current?.webContentsId ?? 0,
@@ -137,12 +137,17 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     if (event.workspaceId === input.workspaceId && event.nodeId === input.nodeId) updateState(event.state);
   });
 
+  let sentMoving = false;
   function position() {
     if (disposed || !host.isConnected) return;
     const rect = host.getBoundingClientRect();
     const boundsKey = [rect.x, rect.y, rect.width, rect.height].map(value => Math.round(value * 100) / 100).join(':');
     if (lastBounds && boundsKey !== lastBounds) { moving = true; settle(); }
     lastBounds = boundsKey;
+    // While the Canvas moves, the native view stays hidden behind its DOM
+    // preview: one "moving" update is enough. Occlusion, clipping and IPC wait
+    // for the settle, so panning many Portals costs one rect read per frame.
+    if (moving && sentMoving) return;
     let left = Math.max(0, rect.left), top = Math.max(0, rect.top), right = Math.min(innerWidth, rect.right), bottom = Math.min(innerHeight, rect.bottom);
     for (let parent = host.parentElement; parent; parent = parent.parentElement) {
       const style = getComputedStyle(parent);
@@ -174,6 +179,7 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     };
     const serialized = JSON.stringify(geometry);
     if (serialized !== lastGeometry) { lastGeometry = serialized; desktop.portalLayout({ ...identity, geometry }); }
+    sentMoving = geometry.moving;
   }
   // Observe the actual transformed ancestors before paint. Polling trails the
   // Canvas by several frames and native views do not inherit DOM transforms.

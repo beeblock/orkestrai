@@ -304,4 +304,63 @@ describe('Agent inbox', () => {
     await agentInboxService.drain(workspace.id, nodes.Web);
     expect(toWeb().filter((prompt) => prompt.message.includes('automatic task recovery'))).toHaveLength(1);
   });
+
+  it('records and forwards concurrent answers to the same message exactly once', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const asked = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Qual endpoint?', busyGraceMs: 20 });
+    const answers = await Promise.all([
+      bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: asked.messageId, message: 'Use /api/v2.' }),
+      bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: asked.messageId, message: 'Use /api/v3.' }),
+    ]);
+    expect(answers.filter((answer) => answer.via === 'inbox')).toHaveLength(1);
+    expect(answers.filter((answer) => answer.alreadyAnswered)).toHaveLength(1);
+    const forwarded = await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered']);
+    expect(forwarded.filter((envelope) => envelope.kind === 'reply')).toHaveLength(1);
+  });
+
+  it('keeps delivering to other agents while one terminal is slow to accept a prompt', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    session(nodes.Mobile).ready = false;
+    await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Revisa o backend?', busyGraceMs: 20 });
+    await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Mobile, message: 'Revisa o mobile?', busyGraceMs: 20 });
+    let releaseLeader!: () => void;
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementation(async (input) => {
+      if (input.nodeId === nodes.Lider) await new Promise<void>((resolvePromise) => { releaseLeader = resolvePromise; });
+      prompts.push({ nodeId: input.nodeId, message: input.message });
+    });
+    session(nodes.Lider).ready = true;
+    session(nodes.Mobile).ready = true;
+    await (agentInboxService as unknown as { sweep(): Promise<void> }).sweep();
+    await vi.waitFor(() => expect(prompts.map((prompt) => prompt.nodeId)).toContain(nodes.Mobile));
+    expect(prompts.map((prompt) => prompt.nodeId)).not.toContain(nodes.Lider);
+    releaseLeader();
+    await vi.waitFor(() => expect(prompts.map((prompt) => prompt.nodeId)).toContain(nodes.Lider));
+  });
+
+  it('still captures the answer to a question delivered before a restart, without typing it again', async () => {
+    const { workspace, nodes } = await team();
+    const pending = bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Qual endpoint?', timeoutMs: 200, busyGraceMs: 20 });
+    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    await pending.catch(() => undefined);
+    const [asked] = await controlCenterRepository.inboxEnvelopes(nodes.Lider, ['delivered']);
+    expect(asked).toBeTruthy();
+
+    // Restart: dispatcher memory is gone and the agent resumes in a new terminal.
+    agentInboxService.reset();
+    const restarted = { ...session(nodes.Lider), id: uuidv7(), createdAt: new Date().toISOString() };
+    sessions.set(restarted.id, restarted);
+    await workspaceRepository.updateNode(nodes.Lider, { payload: { command: 'codex', provider: 'codex', sessionId: restarted.id, maestro: true } });
+    agentInboxService.start();
+    await vi.waitFor(() => expect((agentInboxService as unknown as { replyWatches: Map<string, unknown> }).replyWatches.size).toBe(1));
+
+    replies.set('conversation-Lider', 'Use /api/v2/company.');
+    await agentInboxService.sweepNow();
+    expect(await controlCenterRepository.findEnvelope(asked.id)).toMatchObject({ state: 'replied', reply: 'Use /api/v2/company.' });
+    const toWeb = await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered']);
+    expect(toWeb.some((envelope) => envelope.kind === 'reply' && envelope.content.includes('Use /api/v2/company.'))).toBe(true);
+    // The question itself was never typed into the leader's terminal again.
+    expect(prompts.filter((prompt) => prompt.nodeId === nodes.Lider)).toHaveLength(1);
+  });
 });

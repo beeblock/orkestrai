@@ -184,6 +184,12 @@ export const bridgeFloorCreateSchema = z.object({
   cloneLayout: z.boolean().default(false),
 });
 
+/** Heartbeat of a running heavy command; label/task let a lost lease be reinstated. */
+export const bridgeHeavyHeartbeatSchema = z.object({
+  label: z.string().trim().max(120).optional(),
+  taskId: z.string().trim().max(64).nullish(),
+});
+
 export const bridgeFloorLandSchema = z.object({
   token: z.string().trim().min(1).nullish(),
   targetBranch: z.string().trim().nullish(),

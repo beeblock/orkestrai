@@ -4,7 +4,8 @@ import { PassThrough } from 'node:stream';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { formatInbox, heavyOwnerGone, run } from '../../packages/orkestrai-cli/src/cli.js';
+import { spawn } from 'node:child_process';
+import { descendantPids, formatInbox, heavyOwnerGone, run, stopHeavyTree } from '../../packages/orkestrai-cli/src/cli.js';
 import { runMcpServer } from '../../packages/orkestrai-cli/src/mcp.js';
 
 const QUESTION = { messageId: '00000000-0000-7000-8000-000000000011', kind: 'ask', fromNodeId: 'lead', fromTitle: 'Lider', taskId: null, replyTo: null, content: 'Qual endpoint?', createdAt: '2026-10-09T00:00:00.000Z' };
@@ -14,6 +15,7 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
   let cwd: string;
   let pendingInbox = 0;
   let heavyPolls = 0;
+  let heartbeat: Record<string, unknown> | null = null;
   const requests: Array<{ method?: string; url?: string; body?: any; agentToken?: string | string[] }> = [];
 
   beforeAll(async () => {
@@ -32,6 +34,8 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
           res.end(JSON.stringify({ data: { to: body.to, reply: '', delivered: false, replyConfirmed: false, timedOut: false, deliveryState: 'queued', inbox: true, messageId: 'm-1' } }));
         } else if (req.url?.endsWith('/reply')) {
           res.end(JSON.stringify({ data: { messageId: QUESTION.messageId, to: 'Lider', via: 'waiter', alreadyAnswered: false } }));
+        } else if (heartbeat && req.url?.endsWith('/heartbeat')) {
+          res.end(JSON.stringify({ data: heartbeat }));
         } else if (req.url === '/api/agent-room/bridge/heavy' && req.method === 'POST') {
           heavyPolls += 1;
           res.end(JSON.stringify({ data: heavyPolls === 1
@@ -97,6 +101,22 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
   it('formats an empty inbox as nothing to print', () => {
     expect(formatInbox([], 0)).toBe('');
   });
+  it('stops a heavy run whose reservation was lost and cannot be restored', async () => {
+    heavyPolls = 1;
+    heartbeat = { alive: false, stop: null };
+    const io = capture();
+    const started = Date.now();
+    try {
+      const code = await run(['heavy', '--label', 'e2e', '--', process.execPath, '-e', 'setTimeout(() => {}, 30000)'], {
+        ...io.options, env: { ...io.options.env, ORKESTRAI_HEAVY_HEARTBEAT_MS: '150' },
+      });
+      expect(code).not.toBe(0);
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(io.err.join('\n')).toContain('reserva');
+    } finally {
+      heartbeat = null;
+    }
+  });
 });
 
 describe('MCP inbox hand-off', () => {
@@ -155,5 +175,31 @@ describe('orkestrai heavy owner watch', () => {
   it('notices when that shell dies', () => {
     expect(heavyOwnerGone(4242, 4242, gone)).toBe(true);
     if (process.platform !== 'win32') expect(heavyOwnerGone(4242, 1, alive)).toBe(true);
+  });
+});
+
+describe('orkestrai heavy process tree', () => {
+  it('orders descendants deepest first from a process table', () => {
+    expect(descendantPids(10, ' 11 10\n 12 11\n 13 10\n 20 1\n')).toEqual([12, 11, 13]);
+  });
+
+  it.skipIf(process.platform === 'win32')('ends only the command tree, never a sibling in the same process group', async () => {
+    const sibling = spawn('sleep', ['30'], { stdio: 'ignore' });
+    const command = spawn('sh', ['-c', 'sleep 30 & sleep 30; wait'], { stdio: 'ignore' });
+    const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    try {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 300));
+      const tree = descendantPids(command.pid!);
+      expect(tree.length).toBeGreaterThanOrEqual(2);
+      const exited = new Promise((resolvePromise) => command.on('exit', resolvePromise));
+      stopHeavyTree(command);
+      await exited;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
+      expect(tree.filter(alive)).toEqual([]);
+      expect(alive(sibling.pid!)).toBe(true);
+    } finally {
+      sibling.kill();
+      command.kill('SIGKILL');
+    }
   });
 });

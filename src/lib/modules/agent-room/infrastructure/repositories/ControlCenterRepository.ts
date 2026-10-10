@@ -308,9 +308,12 @@ export class ControlCenterRepository {
     reply?: string | null;
     metadata?: Record<string, unknown>;
     countAttempt?: boolean;
+    /** Only transition from these states; anything else leaves the envelope untouched. */
+    fromStates?: AgentMessageDeliveryState[];
   }): Promise<{ envelope: AgentMessageEnvelopeData; event: AgentMessageDeliveryEvent } | null> {
     const existing = await AgentMessageEnvelope.find(messageId);
     if (!existing) return null;
+    if (input.fromStates && !input.fromStates.includes(existing.getAttribute('state') as AgentMessageDeliveryState)) return null;
     const now = new Date().toISOString();
     const metadata = input.metadata ?? parseMetadata(existing.getAttribute('metadata_json'));
     const changes: Record<string, unknown> = {
@@ -325,7 +328,9 @@ export class ControlCenterRepository {
     if (input.state === 'acknowledged') changes.acknowledged_at = now;
     if (input.state === 'replied') changes.replied_at = now;
     if (input.state === 'failed') changes.failed_at = now;
-    await AgentMessageEnvelope.query().where('id', messageId).update(changes);
+    await (input.fromStates
+      ? AgentMessageEnvelope.query().where('id', messageId).whereIn('state', input.fromStates)
+      : AgentMessageEnvelope.query().where('id', messageId)).update(changes);
     const model = await AgentMessageDelivery.create({
       id: uuidv7(),
       message_id: messageId,
@@ -370,6 +375,20 @@ export class ControlCenterRepository {
       .where('metadata_json', 'like', '%"kind":"ask"%')
       .get();
     return rows.length;
+  }
+
+  /** Questions from agents delivered since a time and still unanswered (reply capture survives restarts). */
+  async awaitingReplies(sinceIso: string): Promise<AgentMessageEnvelopeData[]> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('state', 'delivered')
+      .whereNotNull('from_node_id')
+      .where('delivered_at', '>=', sinceIso)
+      .where('metadata_json', 'like', '%"inbox":true%')
+      .where('metadata_json', 'like', '%"kind":"ask"%')
+      .orderBy('delivered_at', 'asc')
+      .limit(500)
+      .get();
+    return rows.map(mapEnvelope);
   }
 
   /** Inbox items for one agent carrying an exact dedup key, newest first. */

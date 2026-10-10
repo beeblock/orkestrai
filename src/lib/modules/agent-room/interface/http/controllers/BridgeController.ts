@@ -12,7 +12,7 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { OpenWorkspaceFolderRequest } from '$lib/modules/agent-room/interface/http/requests/OpenWorkspaceFolderRequest.js';
 import { OpenWorkspaceFolderDto } from '$lib/modules/agent-room/application/dto/OpenWorkspaceFolderDto.js';
-import { bridgeHeavyAcquireSchema, bridgeInboxQuerySchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
+import { bridgeHeavyAcquireSchema, bridgeHeavyHeartbeatSchema, bridgeInboxQuerySchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 import { heavyRunService } from '$lib/modules/agent-room/application/services/HeavyRunService.js';
 import { orchestrationStatsService } from '$lib/modules/agent-room/application/services/OrchestrationStatsService.js';
 import { bridgeDesignApplySchema, bridgeFigmaSelectionSchema, bridgeReassignSchema, bridgeRoleEditSchema, bridgeRoleWriteSchema, bridgeFloorCreateSchema, bridgeFloorLandSchema, bridgeNoteCreateSchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
@@ -1370,8 +1370,10 @@ export class BridgeController extends Controller {
 
   async heavyHeartbeat(event: any) {
     try {
-      await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
-      return this.json({ data: await heavyRunService.renew(String(event.params.leaseId)) });
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const input = bridgeHeavyHeartbeatSchema.parse(await event.request.json().catch(() => ({})));
+      const nodeId = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      return this.json({ data: await heavyRunService.renew(String(event.params.leaseId), { workspaceId: workspace.id, nodeId, label: input.label, taskId: input.taskId }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao renovar execução pesada.', 401);
     }
