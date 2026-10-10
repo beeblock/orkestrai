@@ -258,8 +258,10 @@ export class PtySessionManager {
     // internally and does not expose it to the Windows child process. Full-
     // screen CLIs such as Codex use these capabilities to enable mouse-wheel
     // navigation, so keep the child contract identical on every platform.
-    if (!env.TERM) env.TERM = 'xterm-256color';
-    if (!env.COLORTERM) env.COLORTERM = 'truecolor';
+    // Inherited values describe the outer terminal (often TERM=dumb), not
+    // this canvas xterm. Only an explicit session override changes its contract.
+    env.TERM = input.env?.TERM || 'xterm-256color';
+    env.COLORTERM = input.env?.COLORTERM || 'truecolor';
     const target = input.runtime?.kind === 'wsl'
       ? buildWslLaunch({
           runtime: input.runtime,

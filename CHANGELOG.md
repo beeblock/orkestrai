@@ -28,6 +28,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Initialize PTYs with the canvas xterm capabilities instead of inheriting `TERM=dumb` or other outer-terminal values. Preserve explicit session overrides and forward `TERM`/`COLORTERM` to WSL; regression tests cover absent, dumb and vt100 parent terminals.
 - Never attribute one agent's new conversation to another when two agents of the same provider start together in the same folder. Discovery no longer guesses between ambiguous launches; the first delivered prompt confirmed in an agent's own transcript binds its conversation and ends any guess.
 - Reconcile late provider confirmations from the transcript instead of reporting a delivered message as failed, and requeue attempts that never reached the provider without sending duplicates. A prompt submitted to a live terminal is never typed again, even when its provider records the turn late; it is marked delivered without proof instead.
 - Keep the saved conversation of Claude agents working in a Floor when a workspace opens. Resumability was checked in the workspace folder instead of the Floor folder where Claude stores the conversation, so every app start discarded it and the agent started over without its context.

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node-pty';
 import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
@@ -7,6 +7,7 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  afterEach(() => vi.unstubAllEnvs());
   it.each(['\x1b[1;1R', '\x1b[I', '\x1b[O', '\x1b[<0;10;20M', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\', '\x1bOA'])('does not mistake fragmented terminal controls for a human draft: %j', async control => {
     vi.useFakeTimers();
     const writes: string[] = [];
@@ -359,7 +360,9 @@ describe('PtySessionManager', () => {
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
-  it('exposes xterm capabilities to native and WSL terminal children', () => {
+  it.each(['dumb', 'vt100', undefined])('exposes xterm capabilities despite inherited TERM=%s', (inheritedTerm) => {
+    vi.stubEnv('TERM', inheritedTerm);
+    vi.stubEnv('COLORTERM', 'inherited-fixture');
     let spawnedOptions: { env?: Record<string, string> } | undefined;
     const fakePty = {
       write: () => {},
