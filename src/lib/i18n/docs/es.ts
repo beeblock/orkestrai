@@ -1007,6 +1007,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Un especialista inactivo durante 10 minutos con una tarjeta aún en curso recibe el recordatorio de continuar, cerrarla o informar el bloqueo: como máximo dos veces por tarjeta, nunca mientras espera a alguien.",
       "Los builds y suites de prueba en orkestrai heavy se detienen cuando el disco libre baja de 1 GB, en lugar de llenar el disco.",
       "orkestrai heavy detiene un build o prueba cuyo agente murió junto con la app, en lugar de dejarlo corriendo fuera de la cola junto a la ejecución que el agente retomado inicia de nuevo.",
+      "Actualiza Handlebars a la corrección oficial 4.7.10 en Postman y Bruno sin degradar sus runtimes. Rechaza AST malformados y accesos prohibidos al constructor, escapa terminadores de script en el código precompilado inline, conserva las visualizaciones normales del Cliente de API y mantiene la auditoría completa de dependencias.",
     ] },
     { date: '8 de octubre de 2026 · 0.39.3', title: 'Orkestrai 0.39.3: detener recordatorios repetidos al líder inactivo', summary: 'Mantiene los tableros completados silenciosos y evita gastar cuotas en supervisión sin cambios.', items: [
       'Mantener la supervisión automática silenciosa sin tarjetas todo/doing, incluso con pisos activos esperando limpieza o promoción. Las worktrees por sí solas no solicitan turnos del modelo ni mantienen despierto al líder bajo demanda; el mantenimiento exige una tarea explícita y autorizada.',

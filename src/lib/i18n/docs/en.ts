@@ -1007,6 +1007,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "A specialist idle for 10 minutes with a card still in progress is reminded to continue, close it or report what blocks it: at most twice per card, never while it waits on someone.",
       "Builds and test suites under orkestrai heavy stop when free disk space drops below 1 GB, instead of filling the disk.",
       "orkestrai heavy stops a build or test run whose agent died with the app, instead of leaving it running outside the queue next to the run the resumed agent starts again.",
+      "Update Handlebars to the official 4.7.10 patch in Postman and Bruno without downgrading their runtimes. Reject malformed compiler ASTs and forbidden constructor lookups, escape inline precompiled script terminators, preserve ordinary API Client visualizations and keep the full dependency audit gate.",
     ] },
     { date: 'October 8, 2026 · 0.39.3', title: 'Orkestrai 0.39.3: Stop repeated idle-leader prompts', summary: 'Keep completed boards quiet and prevent unchanged supervision from consuming provider quotas.', items: [
       'Keep automatic supervision silent with no todo/doing cards, even with active Floors awaiting cleanup or promotion. Worktrees alone no longer request model turns or keep an on-demand leader awake; maintenance requires an explicit authorized task.',
