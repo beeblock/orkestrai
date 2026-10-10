@@ -343,15 +343,34 @@ export class FloorService {
   private async commitLanded(workspace: Workspace, paths: string[], message: string): Promise<string | null> {
     const gitDir = (await this.git(workspace, workspace.workingDir, ['rev-parse', '--git-dir'])).trim();
     const pathApi = workspace.runtimeKind === 'wsl' ? win32 : { resolve };
-    const name = `orkestrai-land-${uuidv7()}`;
-    const file = pathApi.resolve(workspace.workingDir, gitDir, name);
+    const present: string[] = [];
+    const removed: string[] = [];
+    for (const path of paths) {
+      (await lstat(pathApi.resolve(workspace.workingDir, path)).then(() => true, () => false) ? present : removed).push(path);
+    }
+    // A deletion can already be staged by an earlier, refused attempt: only
+    // paths HEAD still has need recording, and git rm tolerates the rest.
+    const inHead = new Set<string>();
+    for (let index = 0; index < removed.length; index += 200) {
+      const listed = await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...removed.slice(index, index + 200)]);
+      for (const path of listed.split('\0').filter(Boolean)) inHead.add(path);
+    }
+    const commitPaths = [...present, ...removed.filter((path) => inHead.has(path))];
+    if (!commitPaths.length) return null;
+    const files: string[] = [];
+    const specFile = async (list: string[]) => {
+      const name = `orkestrai-land-${uuidv7()}`;
+      files.push(pathApi.resolve(workspace.workingDir, gitDir, name));
+      await writeFile(files.at(-1)!, list.join('\0') + '\0');
+      return [`--pathspec-from-file=${gitDir}/${name}`, '--pathspec-file-nul'];
+    };
     try {
-      await writeFile(file, paths.join('\0') + '\0');
-      const spec = [`--pathspec-from-file=${gitDir}/${name}`, '--pathspec-file-nul'];
-      await this.git(workspace, workspace.workingDir, ['add', '-A', ...spec]);
+      // Tracked in the floor means tracked here, even if the checkout ignores the path.
+      if (present.length) await this.git(workspace, workspace.workingDir, ['add', '-A', '--force', ...(await specFile(present))]);
+      if (removed.length) await this.git(workspace, workspace.workingDir, ['rm', '-q', '--cached', '--ignore-unmatch', ...(await specFile(removed))]);
       const identity = await this.identityArgs(workspace, workspace.workingDir);
       try {
-        await this.git(workspace, workspace.workingDir, [...identity, 'commit', '--only', '-m', message, ...spec]);
+        await this.git(workspace, workspace.workingDir, [...identity, 'commit', '--only', '-m', message, ...(await specFile(commitPaths))]);
       } catch (error) {
         // Already committed (a retried landing): nothing left to record.
         const output = `${(error as { stdout?: unknown }).stdout ?? ''}${(error as { stderr?: unknown }).stderr ?? ''}`;
@@ -360,7 +379,7 @@ export class FloorService {
       }
       return (await this.git(workspace, workspace.workingDir, ['rev-parse', '--verify', 'HEAD'])).trim();
     } finally {
-      await rm(file, { force: true }).catch(() => undefined);
+      await Promise.all(files.map((file) => rm(file, { force: true }).catch(() => undefined)));
     }
   }
 
@@ -380,12 +399,18 @@ export class FloorService {
     const changes: DeltaChange[] = [];
     for (let index = 0; index + 1 < fields.length; index += 2) changes.push({ status: fields[index], path: fields[index + 1] });
     const plan: DeltaPlan = { writes: [], deletes: [], conflicts: [], unsafe: [], paths: [], unchanged: 0 };
-    const modes = new Map<string, string>();
-    const tree = await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', head]);
-    for (const record of tree.split('\0').filter(Boolean)) {
-      const tab = record.indexOf('\t');
-      if (tab > 0) modes.set(record.slice(tab + 1), record.split(' ')[0]);
-    }
+    const treeModes = async (rev: string) => {
+      const modes = new Map<string, string>();
+      const tree = await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', rev]);
+      for (const record of tree.split('\0').filter(Boolean)) {
+        const tab = record.indexOf('\t');
+        if (tab > 0) modes.set(record.slice(tab + 1), record.split(' ')[0]);
+      }
+      return modes;
+    };
+    const [modes, baseModes] = await Promise.all([treeModes(head), treeModes(base)]);
+    // The executable bit is part of the change; Windows checkouts do not track it.
+    const tracksMode = !IS_WIN && workspace.runtimeKind !== 'wsl';
     const pathApi = workspace.runtimeKind === 'wsl' ? win32 : { resolve };
     for (const change of changes) {
       const absolute = pathApi.resolve(workspace.workingDir, change.path);
@@ -408,14 +433,20 @@ export class FloorService {
         change.status === 'D' ? Promise.resolve(null) : this.gitBlob(workspace, head, change.path),
       ]);
       const ours = await readFile(absolute).catch(() => null);
+      const oursExecutable = tracksMode && ours ? await stat(absolute).then((info) => (info.mode & 0o111) !== 0, () => false) : false;
+      const theirsExecutable = mode === '100755';
+      // The floor's own mode change wins; otherwise the checkout keeps its mode.
+      const executable = tracksMode && theirsExecutable !== ((baseModes.get(change.path) ?? '100644') === '100755')
+        ? theirsExecutable : tracksMode ? oursExecutable : theirsExecutable;
       const same = (a: Buffer | null, b: Buffer | null) => (a === null && b === null) || Boolean(a && b && a.equals(b));
       if (same(ours, theirs)) {
-        plan.unchanged++;
+        if (ours && tracksMode && oursExecutable !== executable) plan.writes.push({ path: change.path, content: ours, executable });
+        else plan.unchanged++;
         continue;
       }
       if (same(ours, baseBlob)) {
         if (theirs === null) plan.deletes.push(change.path);
-        else plan.writes.push({ path: change.path, content: theirs, executable: mode === '100755' });
+        else plan.writes.push({ path: change.path, content: theirs, executable });
         continue;
       }
       // Both sides changed the file: only text merges cleanly.
@@ -425,7 +456,7 @@ export class FloorService {
       }
       const merged = await this.mergeText(workspace, ours, baseBlob, theirs);
       if (merged === null) plan.conflicts.push(change.path);
-      else plan.writes.push({ path: change.path, content: merged, executable: mode === '100755' });
+      else plan.writes.push({ path: change.path, content: merged, executable });
     }
     return plan;
   }
@@ -484,7 +515,11 @@ export class FloorService {
       const absolute = pathApi.resolve(workspace.workingDir, write.path);
       await mkdir(pathApi.dirname(absolute), { recursive: true });
       await writeFile(absolute, write.content);
-      if (write.executable && !IS_WIN) await chmod(absolute, 0o755).catch(() => undefined);
+      if (!IS_WIN) {
+        const current = await stat(absolute).then((info) => info.mode & 0o777, () => null);
+        const next = current === null ? null : write.executable ? current | 0o111 : current & ~0o111;
+        if (current !== null && next !== current) await chmod(absolute, next!).catch(() => undefined);
+      }
     }
     for (const path of plan.deletes) await unlink(pathApi.resolve(workspace.workingDir, path)).catch(() => undefined);
     return plan.writes.length + plan.deletes.length;

@@ -280,6 +280,44 @@ describe('FloorService', () => {
     expect(existsSync(floor.path)).toBe(false);
   });
 
+  it.skipIf(process.platform === 'win32')('lands a mode-only change and records it in the commit', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'deploy.sh'), '#!/bin/sh\necho deploy\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'script']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 1;\nconst local = true;\n');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'exec-bit' });
+    chmodSync(join(floor.path, 'deploy.sh'), 0o755);
+    const result = await floorService.land(floor.id);
+    expect(result).toMatchObject({ merged: true, commit: expect.any(String), cleanup: 'removed' });
+    expect(lstatSync(join(dir, 'deploy.sh')).mode & 0o111).not.toBe(0);
+    expect(git(dir, ['ls-tree', 'HEAD', 'deploy.sh'])).toMatch(/^100755 /);
+  });
+
+  it('retries a refused landing that deletes a file', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'legacy.ts'), 'export const legacy = 1;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'legacy']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 1;\nconst local = true;\n');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'remove-legacy' });
+    rmSync(join(floor.path, 'legacy.ts'));
+    writeFileSync(join(floor.path, 'feature.ts'), 'export const feature = 1;\n');
+    git(floor.path, ['add', '-A']);
+    git(floor.path, ['commit', '-m', 'replace legacy']);
+    const hook = join(dir, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\nexit 1\n');
+    chmodSync(hook, 0o755);
+    await expect(floorService.land(floor.id)).resolves.toMatchObject({ merged: false, cleanupReason: 'commit_failed' });
+    rmSync(hook);
+    const retried = await floorService.land(floor.id);
+    expect(retried).toMatchObject({ merged: true, commit: expect.any(String), cleanup: 'removed' });
+    expect(git(dir, ['show', '--name-status', '--format=', 'HEAD']).trim().split('\n').sort()).toEqual(['A\tfeature.ts', 'D\tlegacy.ts']);
+    expect(git(dir, ['status', '--porcelain']).trim()).toBe('M app.ts');
+  });
+
   it('keeps a floor where a process still runs, such as a preview server', async () => {
     const dir = makeRepo();
     const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
