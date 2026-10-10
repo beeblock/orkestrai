@@ -119,13 +119,22 @@
     if (!landingPreview) return;
     errorMessage = '';
     try {
-      await api(`/api/agent-room/workspaces/${workspace.id}/floors/${landingPreview.floor.id}/land`, {
+      const result = await api<{ commitError?: string; cleanup?: string; cleanupReason?: string } | null>(`/api/agent-room/workspaces/${workspace.id}/floors/${landingPreview.floor.id}/land`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
-      if (visibleFloorId === landingPreview.floor.id) onSelectFloor(null);
       landingPreview = null;
       await refresh();
+      // Applied but not committed: the floor stays so landing it again records the commit.
+      if (result?.commitError) {
+        errorMessage = m['floor.land_commit_failed']({ error: result.commitError });
+        return;
+      }
+      if (result?.cleanup === 'pending' && result.cleanupReason) {
+        errorMessage = m['floor.land_kept']({ reason: result.cleanupReason });
+        return;
+      }
+      if (visibleFloorId && !overview?.floors.some((item) => item.floorId === visibleFloorId)) onSelectFloor(null);
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : m['floor.error_land']();
     }

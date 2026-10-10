@@ -120,11 +120,25 @@ export class HeavyRunService {
   }
 
   /**
-   * Renews a lease. The queue only keeps new runs from starting on a nearly
-   * full disk; a run already writing is told to stop before the disk fills.
+   * Renews a lease. A lease lost while its command kept running (an app
+   * restart, an expiry) is reinstated only when a slot is free; otherwise the
+   * run is told to stop so the machine never runs more than its slots. On a
+   * nearly full disk a running command is told to stop as well.
    */
-  async renew(leaseId: string): Promise<{ alive: boolean; stop: string | null }> {
-    const alive = this.heartbeat(leaseId);
+  async renew(leaseId: string, owner?: { workspaceId: string; nodeId: string | null; label?: string; taskId?: string | null }): Promise<{ alive: boolean; stop: string | null }> {
+    this.expire();
+    let alive = this.heartbeat(leaseId);
+    if (!alive) {
+      const capacity = owner ? await this.capacity() : null;
+      if (!owner || !capacity || this.leases.size >= capacity.slots) {
+        return { alive: false, stop: 'A reserva desta execução pesada foi perdida e não há vaga livre: execução interrompida para respeitar o limite da máquina. Rode de novo com orkestrai heavy.' };
+      }
+      this.leases.set(leaseId, {
+        leaseId, workspaceId: owner.workspaceId, nodeId: owner.nodeId, label: (owner.label ?? 'heavy run').slice(0, 120),
+        taskId: owner.taskId ?? null, acquiredAt: new Date().toISOString(), heartbeatAt: Date.now(),
+      });
+      alive = true;
+    }
     const free = await freeDiskBytes(this.diskProbePath);
     if (free === null || free >= DISK_LIMITS.critical) return { alive, stop: null };
     this.noticeDisk(free);

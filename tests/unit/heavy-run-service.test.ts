@@ -82,4 +82,15 @@ describe('HeavyRunService', () => {
     vi.mocked(diskGuard.freeDiskBytes).mockResolvedValue(null);
     await expect(service.renew(leaseId)).resolves.toEqual({ alive: true, stop: null });
   });
+
+  it('reinstates a lease lost while its command kept running only when a slot is free', async () => {
+    const service = new HeavyRunService();
+    await expect(service.renew('lost-lease', { workspaceId: 'w', nodeId: 'a', label: 'e2e' })).resolves.toEqual({ alive: true, stop: null });
+    // The restored run holds the only slot: a new caller waits.
+    await expect(service.acquire({ workspaceId: 'w', nodeId: 'b', label: 'build' })).resolves.toMatchObject({ granted: false });
+    // Another lost run finds no free slot and is told to stop.
+    const other = await service.renew('other-lost', { workspaceId: 'w', nodeId: 'c', label: 'package' });
+    expect(other.alive).toBe(false);
+    expect(other.stop).toContain('perdida');
+  });
 });

@@ -75,6 +75,7 @@
   } from '$lib/modules/agent-room/domain/code-graph.js';
   import * as m from '$lib/paraglide/messages.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
+  import { VIEWPORT_SETTLE_MS } from './viewport-settle.js';
 
   export type CodeGraphNodeData = {
     title: string;
@@ -1214,7 +1215,17 @@
     const graphResizeObserver = new ResizeObserver(synchronizeGraphViewport);
     graphResizeObserver.observe(graphHost);
     const flowViewport = graphHost.closest('.svelte-flow__viewport');
-    const graphScaleObserver = new MutationObserver(synchronizeGraphViewport);
+    // The flow viewport style changes on every pan/zoom frame. Resizing Sigma's
+    // buffers each frame redraws the whole graph; align them once it settles.
+    let graphScaleTimer: ReturnType<typeof setTimeout> | null = null;
+    const settleGraphScale = () => {
+      if (graphScaleTimer !== null) clearTimeout(graphScaleTimer);
+      graphScaleTimer = setTimeout(() => {
+        graphScaleTimer = null;
+        synchronizeGraphViewport();
+      }, VIEWPORT_SETTLE_MS);
+    };
+    const graphScaleObserver = new MutationObserver(settleGraphScale);
     if (flowViewport) graphScaleObserver.observe(flowViewport, { attributes: true, attributeFilter: ['style'] });
     const storedCamera = sessionStorage.getItem(`orkestrai:code-graph-camera:${data.workspaceId}:${id}`);
     if (storedCamera) {
@@ -1282,6 +1293,7 @@
       if (graphResizeFrame !== null) cancelAnimationFrame(graphResizeFrame);
       graphResizeObserver.disconnect();
       graphScaleObserver.disconnect();
+      if (graphScaleTimer !== null) clearTimeout(graphScaleTimer);
       window.removeEventListener('orkestrai:editor-location', handleEditorLocation);
       socket?.close();
       renderSequence += 1;

@@ -474,11 +474,25 @@
       if (hiddenBytes > 1_000_000) flushHiddenOutput();
       else hiddenFlushTimer ??= setTimeout(flushHiddenOutput, 15_000);
     };
+    // A terminal swept past while panning or zooming stays buffered: only one
+    // that remains in view is painted, so a pan never parses every backlog.
+    let revealTimer: ReturnType<typeof setTimeout> | null = null;
     const visibilityObserver = new IntersectionObserver((entries) => {
       const visibleNow = entries.some((entry) => entry.isIntersecting);
-      if (visibleNow === onScreen) return;
-      onScreen = visibleNow;
-      if (onScreen) flushHiddenOutput();
+      if (revealTimer) {
+        clearTimeout(revealTimer);
+        revealTimer = null;
+      }
+      if (!visibleNow) {
+        onScreen = false;
+        return;
+      }
+      if (onScreen) return;
+      revealTimer = setTimeout(() => {
+        revealTimer = null;
+        onScreen = true;
+        flushHiddenOutput();
+      }, 200);
     });
     visibilityObserver.observe(container);
 
@@ -821,6 +835,7 @@
       pendingDictation = false;
       resizeObserver.disconnect();
       visibilityObserver.disconnect();
+      if (revealTimer) clearTimeout(revealTimer);
       if (hiddenFlushTimer) clearTimeout(hiddenFlushTimer);
       socket?.close();
       terminal.dispose();
