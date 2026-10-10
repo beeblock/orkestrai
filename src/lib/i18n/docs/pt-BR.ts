@@ -1012,6 +1012,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Builds e suítes de teste no orkestrai heavy param quando o disco livre cai abaixo de 1 GB, em vez de encher o disco.",
       "O orkestrai heavy encerra um build ou teste cujo agente morreu junto com o app, em vez de deixá-lo rodando fora da fila ao lado da execução que o agente retomado inicia de novo.",
       "Atualiza o Handlebars para a correção oficial 4.7.10 no Postman e no Bruno sem rebaixar seus runtimes. Recusa ASTs malformadas e acesso proibido ao construtor, escapa terminadores de script no código pré-compilado inline, preserva visualizações normais do Cliente de API e mantém a auditoria completa de dependências.",
+      "Os terminais recebem as capacidades do xterm do canvas, mesmo quando o app herda TERM=dumb ou vt100 de um processo externo. Preserva configurações explícitas por sessão e encaminha TERM e COLORTERM para WSL.",
     ] },
     { date: '8 de outubro de 2026 · 0.39.3', title: 'Orkestrai 0.39.3: parar cobranças repetidas ao líder ocioso', summary: 'Mantém quadros concluídos quietos e evita consumir cotas com supervisão inalterada.', items: [
       'Mantém a supervisão automática silenciosa sem cartões todo/doing, mesmo com andares ativos aguardando limpeza ou promoção. Worktrees sozinhas não solicitam turnos do modelo nem mantêm um líder sob demanda acordado; manutenção exige uma tarefa explícita e autorizada.',
