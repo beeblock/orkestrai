@@ -16,6 +16,11 @@ import { agentRuntimeService } from '$lib/modules/agent-room/application/service
 import { afterDatabaseReady } from '$lib/modules/agent-room/infrastructure/background-startup.js';
 import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 import { creativeQueueService } from '$lib/modules/creative-media/application/services/CreativeQueueService.js';
+import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
+import { startDatabaseMaintenance } from '$lib/modules/agent-room/infrastructure/database-maintenance.js';
+import { agentSessionRotationService } from '$lib/modules/agent-room/application/services/AgentSessionRotationService.js';
+import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
+import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
 const globalRef = globalThis as unknown as {
@@ -46,6 +51,11 @@ if (!building) {
       agentRuntimeService.startSupervisor();
       globalRef.__orkestraiAgentRuntimeSupervisor = true;
     }
+    void agentSessionRotationService.rotateOversized()
+      .then((rotated) => { for (const item of rotated) console.log(`[agent-runtime] Fresh conversation for ${item.title}: previous transcript ${Math.round(item.sizeBytes / 1024 / 1024)} MB.`); })
+      .catch(() => console.warn('[agent-runtime] Oversized conversation check failed.'))
+      .finally(() => agentInboxService.start());
+    void startDatabaseMaintenance().catch(() => console.warn('[database] WAL maintenance could not start.'));
   }).catch(() => console.error('[agent-runtime] Background services failed to start.'));
 }
 
@@ -63,6 +73,28 @@ const svelar = createSvelarApp({
   authThrottleCacheStore: process.env.RATE_LIMIT_CACHE_STORE || process.env.CACHE_DRIVER,
   csrfExcludePaths: ['/api/webhooks', '/api/internal/', '/api/agent-room'],
 });
+
+/**
+ * Every bridge response tells an authenticated agent terminal how many inbox
+ * items wait for it, so the CLI/MCP can hand them over mid-turn instead of
+ * waiting for the next turn boundary.
+ */
+async function annotateInbox(event: Parameters<Handle>[0]['event'], response: Response): Promise<void> {
+  const path = event.url.pathname;
+  if (!path.startsWith('/api/agent-room/bridge/') || path.startsWith('/api/agent-room/bridge/inbox')) return;
+  const agentToken = event.request.headers.get('x-orkestrai-agent-token');
+  const authorization = event.request.headers.get('authorization');
+  if (!agentToken || !authorization?.startsWith('Bearer ')) return;
+  try {
+    const workspace = await bridgeService.resolveWorkspaceByToken(authorization.slice('Bearer '.length).trim());
+    const nodeId = ptySessionManager.resolveBridgeAgent(workspace.id, agentToken);
+    if (!nodeId) return;
+    const pending = await agentInboxService.pendingCount(nodeId);
+    if (pending > 0) response.headers.set('x-orkestrai-inbox', String(pending));
+  } catch {
+    // Advisory only: never fail the bridge call itself.
+  }
+}
 
 /**
  * App local: localhost/127.0.0.1/[::1] apontando para o MESMO host e porta da
@@ -117,6 +149,7 @@ const normalizeLoopbackOrigin: Handle = async ({ event, resolve }) => {
       response.headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
       response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
       response.headers.set('Origin-Agent-Cluster', '?1');
+      await annotateInbox(requestEvent, response);
       if (figmaPluginOrigin) {
         response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
         response.headers.set('Access-Control-Allow-Origin', origin!);

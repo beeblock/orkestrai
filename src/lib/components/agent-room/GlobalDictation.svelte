@@ -53,6 +53,7 @@
   let placementModifier = $state('Ctrl');
   let drag = $state<{ pointerId: number; offsetX: number; offsetY: number; moved: boolean } | null>(null);
   let suppressNextClick = false;
+  let canvasSurface: HTMLElement | null = null;
   const hotkey = $derived(appSettingsStore.values.dictationHotkey || DEFAULT_DICTATION_HOTKEY);
   const displayedPlacement = $derived(
     placement.pinned && dockPosition ? { ...placement, ...dockPosition } : placement
@@ -63,19 +64,18 @@
     && Boolean(navigator.mediaDevices?.getUserMedia);
 
   function availableRect() {
-    const canvas = document.querySelector<HTMLElement>('.canvas-area .svelte-flow');
-    const rect = canvas?.getBoundingClientRect();
+    const rect = canvasSurface?.isConnected ? canvasSurface.getBoundingClientRect() : null;
     if (rect && rect.width >= BUTTON_SIZE && rect.height >= BUTTON_SIZE) return rect;
     return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight, width: window.innerWidth, height: window.innerHeight };
   }
 
   function clampPlacement(next = placement) {
     const rect = availableRect();
-    placement = {
-      ...next,
-      x: Math.max(rect.left + EDGE_GAP, Math.min(rect.right - BUTTON_SIZE - EDGE_GAP, next.x)),
-      y: Math.max(rect.top + EDGE_GAP, Math.min(rect.bottom - BUTTON_SIZE - EDGE_GAP, next.y)),
-    };
+    const x = Math.max(rect.left + EDGE_GAP, Math.min(rect.right - BUTTON_SIZE - EDGE_GAP, next.x));
+    const y = Math.max(rect.top + EDGE_GAP, Math.min(rect.bottom - BUTTON_SIZE - EDGE_GAP, next.y));
+    if (placement.x !== x || placement.y !== y || placement.pinned !== next.pinned) {
+      placement = { ...next, x, y };
+    }
   }
 
   function defaultPlacement() {
@@ -354,6 +354,7 @@
   }
 
   onMount(() => {
+    canvasSurface = document.querySelector<HTMLElement>('.canvas-area .svelte-flow');
     placementModifier = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     try {
       const saved = JSON.parse(localStorage.getItem(PLACEMENT_KEY) ?? 'null') as Partial<typeof placement> | null;
@@ -366,21 +367,21 @@
     clampPlacement();
     placementReady = true;
     let observedSurface: HTMLElement | null = null;
+    let placementFrame: number | null = null;
     const syncPlacementSurface = () => {
       hiddenBySurface = Boolean(document.querySelector('[data-dictation-hidden]'));
       const dock = document.querySelector<HTMLElement>('[data-dictation-dock]');
       if (dock) {
         const rect = dock.getBoundingClientRect();
         const footprint = BUTTON_SIZE + 4;
-        dockPosition = {
-          x: rect.left + Math.max(0, (rect.width - footprint) / 2),
-          y: rect.top + Math.max(0, (rect.height - footprint) / 2),
-        };
+        const x = rect.left + Math.max(0, (rect.width - footprint) / 2);
+        const y = rect.top + Math.max(0, (rect.height - footprint) / 2);
+        if (dockPosition?.x !== x || dockPosition?.y !== y) dockPosition = { x, y };
       } else {
         dockPosition = null;
       }
-      const canvas = document.querySelector<HTMLElement>('.canvas-area .svelte-flow');
-      const surface = dock ?? canvas;
+      canvasSurface = document.querySelector<HTMLElement>('.canvas-area .svelte-flow');
+      const surface = dock ?? canvasSurface;
       if (surface !== observedSurface) {
         if (observedSurface) placementObserver.unobserve(observedSurface);
         observedSurface = surface;
@@ -390,8 +391,27 @@
     };
     const placementObserver = new ResizeObserver(syncPlacementSurface);
     syncPlacementSurface();
-    const surfaceObserver = new MutationObserver(syncPlacementSurface);
-    surfaceObserver.observe(document.body, { childList: true, subtree: true });
+    const surfaceSelector = '[data-dictation-hidden], [data-dictation-dock], .canvas-area, .svelte-flow';
+    const schedulePlacement = () => {
+      if (placementFrame !== null) return;
+      placementFrame = requestAnimationFrame(() => {
+        placementFrame = null;
+        syncPlacementSurface();
+      });
+    };
+    const surfaceObserver = new MutationObserver(records => {
+      // Terminal rows change many times per second. They cannot move the dock,
+      // and a body-wide query/layout read for each redraw stalls large canvases.
+      const relevant = records.some(record => {
+        if (record.type === 'attributes') return true;
+        if (record.target instanceof Element && record.target.closest('.xterm, [data-dictation-trigger]')) return false;
+        return [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element
+          && (node.matches(surfaceSelector) || Boolean(node.querySelector(surfaceSelector))));
+      });
+      if (relevant) schedulePlacement();
+    });
+    surfaceObserver.observe(document.body, { childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-dictation-hidden', 'data-dictation-dock'] });
     const clampOnResize = () => syncPlacementSurface();
     window.addEventListener('resize', clampOnResize);
     const focusIn = (event: FocusEvent) => {
@@ -450,6 +470,8 @@
       window.removeEventListener('resize', clampOnResize);
       placementObserver.disconnect();
       surfaceObserver.disconnect();
+      if (placementFrame !== null) cancelAnimationFrame(placementFrame);
+      canvasSurface = null;
       cancelTextDictation();
     };
   });

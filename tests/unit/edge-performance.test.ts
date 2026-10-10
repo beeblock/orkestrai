@@ -29,6 +29,12 @@ describe('adaptive canvas edge performance', () => {
     expect(normalizeEdgeRenderingPreference('invalid')).toBe('auto');
   });
 
+  it('keeps communication color without continuous SVG painting in very large automatic canvases', () => {
+    expect(edgePerformanceProfile({ edgeCount: 876, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: true })).toMatchObject({
+      mode: 'curve', fps: 0, animateActivity: false,
+    });
+  });
+
   it('pauses work outside the viewport and respects reduced motion', () => {
     expect(edgePerformanceProfile({ edgeCount: 20, documentVisible: false, inViewport: true, reducedMotion: false, emphasized: true }).fps).toBe(0);
     expect(edgePerformanceProfile({ edgeCount: 20, documentVisible: true, inViewport: false, reducedMotion: false, emphasized: true }).mode).toBe('line');

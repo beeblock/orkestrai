@@ -214,13 +214,38 @@ describe('BridgeService', () => {
   it('resumes a known conversation before an ask when its Floor terminal was not mounted after restart', async () => {
     const { workspace, terminal, session } = await createWorkspaceWithTerminal();
     await workspaceRepository.updateNode(terminal.id, { payload: { command: 'codex', provider: 'codex', agentSessionId: 'saved-conversation' } });
-    vi.mocked(agentSessionService.ensure).mockResolvedValueOnce({ nodeId: terminal.id, sessionId: session.id, state: 'started' });
-    const delivery = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockRejectedValueOnce(new Error('delivery-reached-restored-session'));
+    vi.mocked(agentSessionService.ensure).mockImplementation(async (_workspaceId, nodeId) => {
+      // The real launcher records the restored PTY on the node.
+      const current = await workspaceRepository.getNode(nodeId);
+      await workspaceRepository.updateNode(nodeId, { payload: { ...(current?.payload ?? {}), sessionId: session.id } as never });
+      return { nodeId, sessionId: session.id, state: 'started' };
+    });
+    vi.spyOn(ptySessionManager, 'canAcceptAutomaticMessage').mockReturnValue(true);
+    const delivery = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
     try {
-      await expect(bridgeService.ask(workspace.id, { to: terminal.id, message: 'Continue the review' })).rejects.toThrow('delivery-reached-restored-session');
+      const result = await bridgeService.ask(workspace.id, { to: terminal.id, message: 'Continue the review', timeoutMs: 1_000 });
+      expect(result).toMatchObject({ inbox: true, delivered: true });
       expect(agentSessionService.ensure).toHaveBeenCalledWith(workspace.id, terminal.id, { requireResume: true });
       expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ sessionId: session.id, nodeId: terminal.id }));
       expect((await workspaceRepository.getNode(terminal.id))?.payload).toMatchObject({ agentSessionId: 'saved-conversation' });
+    } finally { ptySessionManager.kill(session.id); }
+  });
+
+  it('starts a fresh session for an ask when the agent never saved a conversation', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    await workspaceRepository.updateNode(terminal.id, { payload: { command: 'claude', provider: 'claude' } });
+    vi.mocked(agentSessionService.ensure).mockImplementation(async (_workspaceId, nodeId) => {
+      const current = await workspaceRepository.getNode(nodeId);
+      await workspaceRepository.updateNode(nodeId, { payload: { ...(current?.payload ?? {}), sessionId: session.id } as never });
+      return { nodeId, sessionId: session.id, state: 'started' };
+    });
+    vi.spyOn(ptySessionManager, 'canAcceptAutomaticMessage').mockReturnValue(true);
+    const delivery = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      const result = await bridgeService.ask(workspace.id, { to: terminal.id, message: 'Review the profile screen', timeoutMs: 1_000 });
+      expect(result).toMatchObject({ inbox: true, delivered: true });
+      expect(agentSessionService.ensure).toHaveBeenCalledWith(workspace.id, terminal.id, { requireResume: false });
+      expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ sessionId: session.id, nodeId: terminal.id }));
     } finally { ptySessionManager.kill(session.id); }
   });
 

@@ -10,6 +10,8 @@ import { getAgentAdapter } from '$lib/modules/agent-room/application/adapters/re
 import { agentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/AgentSessionTracker.ts';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
 import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
+import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
+import { uuidv7 } from '@beeblock/svelar/support';
 
 describe('WorkspaceService.reloadNode', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -159,6 +161,27 @@ describe('WorkspaceService.reloadNode', () => {
     const persisted = (await workspaceRepository.getNode(node.id))!.payload as Record<string, unknown>;
     expect(persisted.sessionId).toBeUndefined();
     expect(persisted.agentSessionId).toBe('conversa-real-123');
+  });
+
+  it('procura a conversa Claude de um agente de Floor na pasta do Floor', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'floor resume', workingDir: '/tmp' });
+    const floorId = uuidv7();
+    const floorPath = '/tmp/.orkestrai/floors/company-profile-web';
+    await AgentFloor.create({ id: floorId, workspace_id: workspace.id, name: 'company-profile-web', branch: 'orkestrai/company-profile-web', path: floorPath, status: 'active' });
+    const node = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Claude Web UX',
+      floorId,
+      payload: { command: 'claude', provider: 'claude', sessionId: 'pty-anterior', agentSessionId: 'conversa-no-floor' },
+    });
+    // The transcript exists only under the Floor folder, as Claude stores it.
+    const resumable = vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockImplementation((_storage, cwd) => cwd === floorPath);
+
+    const listed = await workspaceService.listNodes(workspace.id);
+    const payload = listed.find((item) => item.id === node.id)!.payload as Record<string, unknown>;
+    expect(resumable).toHaveBeenCalledWith('claude-project-jsonl', floorPath, 'conversa-no-floor');
+    expect(payload.agentSessionId).toBe('conversa-no-floor');
   });
 
   it('preserva o ultimo diretorio valido de shell e descarta um caminho removido', async () => {

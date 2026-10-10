@@ -9,13 +9,14 @@
  */
 import http from 'node:http';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { statfs } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { delimiter, isAbsolute, resolve } from 'node:path';
+import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { installOrkestraiShim, writeOrkestraiRuntimeFile } from './install-orkestrai-shim.mjs';
 import { holdBackgroundStartup } from '../src/lib/modules/agent-room/infrastructure/background-startup.ts';
-import { runStartupMigrations } from './run-startup-migrations.mjs';
+import { compactStartupDatabase, runStartupMigrations } from './run-startup-migrations.mjs';
 
 // App Electron aberto pelo Finder recebe um PATH minimo do macOS; sem os
 // locais comuns de CLIs a deteccao e o spawn dos agentes falham com ENOENT.
@@ -160,6 +161,13 @@ const { handler } = await import('../build/handler.js');
     migrations.push({ name: file.replace(/\.ts$/, ''), migration: new mod.default() });
   }
   await runStartupMigrations(migrations, { databasePath: dbFile, existingDatabase });
+  try {
+    const stats = await statfs(dirname(dbFile)).catch(() => null);
+    const result = await compactStartupDatabase({ freeDiskBytes: stats ? Number(stats.bavail) * Number(stats.bsize) : null });
+    if (result.compacted) console.log(`[database] Compacted ${Math.round(result.reclaimedBytes / 1024 / 1024)} MB of free pages.`);
+  } catch (error) {
+    console.warn(`[database] Startup compaction skipped: ${error instanceof Error ? error.message : error}`);
+  }
 }
 releaseBackgroundStartup();
 

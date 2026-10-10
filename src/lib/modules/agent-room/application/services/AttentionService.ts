@@ -53,6 +53,41 @@ export class AttentionService {
     broadcast(activity.workspaceId, item);
   }
 
+  /** An attention item that does not change the related agent's activity state. */
+  async raise(input: {
+    workspaceId: string;
+    nodeId: string | null;
+    taskId?: string | null;
+    category: AgentActivity['category'];
+    severity: AgentActivitySeverity;
+    title: string;
+    body?: string | null;
+    sourceType: string;
+    sourceId: string;
+    correlationId: string;
+  }): Promise<void> {
+    const item = await attentionRepository.save({
+      workspaceId: input.workspaceId,
+      activityEventId: null,
+      nodeId: input.nodeId,
+      taskId: input.taskId ?? null,
+      category: input.category,
+      severity: input.severity,
+      title: input.title,
+      body: input.body ?? null,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      correlationId: input.correlationId,
+      action: input.nodeId ? {
+        target: input.taskId ? 'task' : 'node',
+        workspaceId: input.workspaceId,
+        nodeId: input.nodeId,
+        taskId: input.taskId ?? null,
+      } : undefined,
+    });
+    broadcast(input.workspaceId, item);
+  }
+
   async list(input: { workspaceId?: string | null; includeResolved?: boolean; limit?: number } = {}): Promise<AgentAttentionItem[]> {
     const items = await attentionRepository.list(input);
     const workspaces = await workspaceRepository.listWorkspaces();

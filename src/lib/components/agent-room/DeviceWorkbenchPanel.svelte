@@ -91,7 +91,10 @@
   const devices = $derived((snapshot?.devices ?? []).filter((device) => device.platform === selectedPlatform));
   const selectedDevice = $derived(devices.find((device) => device.id === selectedDeviceId) ?? (snapshot?.recovery ? null : devices[0]) ?? null);
   const activeAvailability = $derived(snapshot?.platforms.find((platform) => platform.platform === selectedPlatform) ?? null);
-  const streamUrl = $derived(session
+  // The device screen streams only while visible: an off-screen Canvas node or
+  // a minimized window must not keep decoding (and serving) frames.
+  let streamVisible = $state(true);
+  const streamUrl = $derived(session && streamVisible
     ? `/api/agent-room/workspaces/${workspaceId}/devices/stream?session=${encodeURIComponent(session.attachedAt)}&v=${streamVersion}`
     : '');
   const fittedViewportScale = $derived(fitDeviceViewportScale({
@@ -359,6 +362,23 @@
   $effect(() => {
     const element = viewportElement;
     if (!element) return;
+    let intersecting = true;
+    const update = () => { streamVisible = intersecting && !document.hidden; };
+    const observer = new IntersectionObserver((entries) => {
+      intersecting = entries.some((entry) => entry.isIntersecting);
+      update();
+    });
+    observer.observe(element);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', update);
+    };
+  });
+
+  $effect(() => {
+    const element = viewportElement;
+    if (!element) return;
     const updateSize = () => {
       const rect = element.getBoundingClientRect();
       viewportWidth = rect.width;
@@ -516,7 +536,7 @@
                 onpointerup={pointerUp}
                 onpointercancel={() => (pointerStart = null)}
               />
-            {:else}
+            {:else if streamUrl}
               <img
                 src={streamUrl}
                 alt={m['device.stream_alt']({ device: session.deviceName })}

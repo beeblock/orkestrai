@@ -7,6 +7,8 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
+import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
+import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 
 async function createWorkspaceWithTerminal() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'board', workingDir: '/tmp' });
@@ -152,7 +154,7 @@ describe('TaskBoardService', () => {
     ptySessionManager.kill(session.id);
   });
 
-  it('aguarda o primeiro idle de uma sessao viva antes de despachar a tarefa', async () => {
+  it('assigns work to a busy or booting agent without blocking and delivers it at the turn boundary', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'agent-bootstrap', workingDir: '/tmp' });
     const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', provider: 'claude' });
     const terminal = await workspaceRepository.createNode({
@@ -161,20 +163,56 @@ describe('TaskBoardService', () => {
       title: 'Newly recruited designer',
       payload: { command: 'claude', provider: 'claude', sessionId: session.id },
     });
-    const waitUntilInitialIdle = vi.spyOn(ptySessionManager, 'waitUntilInitialIdle').mockResolvedValue(true);
+    let ready = false;
+    const canAccept = vi.spyOn(ptySessionManager, 'canAcceptAutomaticMessage').mockImplementation(() => ready);
     const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      const task = await taskBoardService.create(workspace.id, {
+        title: 'Create the first visual direction',
+        assigneeNodeId: terminal.id,
+      });
+      expect(task).toMatchObject({ status: 'doing', assigneeNodeId: terminal.id });
+      expect(deliver).not.toHaveBeenCalled();
 
-    await taskBoardService.create(workspace.id, {
-      title: 'Create the first visual direction',
-      assigneeNodeId: terminal.id,
-    });
+      ready = true;
+      await agentInboxService.drain(workspace.id, terminal.id);
+      expect(deliver).toHaveBeenCalledOnce();
+      // Without an agent creator or leader there is nobody to route a reply to.
+      expect((await controlCenterRepository.inboxEnvelopes(terminal.id, ['delivered']))[0]).toMatchObject({ kind: 'task', fromNodeId: null });
+      expect(deliver.mock.calls[0][0].message).toContain('[nova tarefa do quadro');
+      expect(deliver.mock.calls[0][0].message).toContain('Create the first visual direction');
+      await vi.waitFor(async () => expect(await controlCenterRepository.latestActivity(terminal.id)).toMatchObject({ action: 'system:task_working', taskId: task.id }));
+    } finally {
+      canAccept.mockRestore();
+      deliver.mockRestore();
+      agentInboxService.reset();
+      ptySessionManager.kill(session.id);
+    }
+  });
 
-    expect(waitUntilInitialIdle).toHaveBeenCalledWith(session.id, 30_000);
-    expect(deliver).toHaveBeenCalledOnce();
-    expect(waitUntilInitialIdle.mock.invocationCallOrder[0]).toBeLessThan(deliver.mock.invocationCallOrder[0]);
-    waitUntilInitialIdle.mockRestore();
-    deliver.mockRestore();
-    ptySessionManager.kill(session.id);
+  it('routes a reply to a task briefing to the leader who coordinates it', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'briefing-replies', workingDir: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Lider', payload: { command: 'codex', provider: 'codex', maestro: true } });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', provider: 'claude' });
+    const worker = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Web', payload: { command: 'claude', provider: 'claude', sessionId: session.id } });
+    const canAccept = vi.spyOn(ptySessionManager, 'canAcceptAutomaticMessage').mockReturnValue(true);
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      await taskBoardService.create(workspace.id, { title: 'Logo da empresa', assigneeNodeId: worker.id, createdBy: leader.id });
+      await agentInboxService.drain(workspace.id, worker.id);
+      const [briefing] = await controlCenterRepository.inboxEnvelopes(worker.id, ['delivered']);
+      expect(briefing).toMatchObject({ kind: 'task', fromNodeId: leader.id });
+      const { bridgeService } = await import('$lib/modules/agent-room/application/services/BridgeService.js');
+      await expect(bridgeService.reply(workspace.id, { from: worker.id, messageId: briefing.id, message: 'Checkpoint: upload pronto, falta QA.' }))
+        .resolves.toMatchObject({ via: 'inbox', to: 'Lider' });
+      const toLeader = await controlCenterRepository.inboxEnvelopes(leader.id, ['queued', 'sent', 'delivered']);
+      expect(toLeader.some((envelope) => envelope.kind === 'reply' && envelope.content.includes('Checkpoint: upload pronto'))).toBe(true);
+    } finally {
+      canAccept.mockRestore();
+      deliver.mockRestore();
+      agentInboxService.reset();
+      ptySessionManager.kill(session.id);
+    }
   });
 
   it('retoma uma tarefa bloqueada quando a nova PTY fica pronta', async () => {

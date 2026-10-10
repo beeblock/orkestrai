@@ -149,7 +149,9 @@ export class ControlCenterService {
       event
       && input.state === 'starting'
       && previous?.taskId === taskId
-      && ['blocked', 'waiting_permission', 'error'].includes(previous.state)
+      // `working` covers an agent cut off mid-task by a quit or crash; the
+      // recovery checks its transcript before nudging it.
+      && ['blocked', 'waiting_permission', 'error', 'working'].includes(previous.state)
     ) {
       const sessionId = typeof input.metadata?.sessionId === 'string' ? input.metadata.sessionId : null;
       const lifecycle = globalThis as unknown as {
@@ -227,27 +229,75 @@ export class ControlCenterService {
       state: event.state,
       event,
     });
-    if (event.state === 'failed' && event.metadata.cancelled !== true) {
-      await this.recordActivity({
-        workspaceId: event.workspaceId,
-        nodeId: event.toNodeId,
-        state: 'error',
-        action: 'system:message_failed',
-        category: 'message',
-        verb: 'failed',
-        objectType: 'message',
-        objectId: event.messageId,
-        objectTitle: event.content.slice(0, 120),
-        outcome: event.error,
-        severity: 'error',
-        correlationId: typeof event.metadata.correlationId === 'string' ? event.metadata.correlationId : `message:${event.messageId}`,
-        sourceType: 'bridge',
-        sourceId: event.messageId,
-        attentionRequired: true,
-        metadata: event.metadata,
-      });
-    }
+    if (event.state === 'failed' && event.metadata.cancelled !== true) await this.recordMessageFailure(event);
     return event;
+  }
+
+  /**
+   * Audited inbox state change. Unlike recordDelivery, a message may return to
+   * the queue after an attempt that never reached the provider.
+   */
+  async recordInboxTransition(messageId: string, input: {
+    state: AgentMessageDeliveryState;
+    error?: string | null;
+    reply?: string | null;
+    metadata?: Record<string, unknown>;
+    countAttempt?: boolean;
+  }) {
+    const result = await controlCenterRepository.transitionEnvelope(messageId, input);
+    if (!result) return null;
+    broadcast({
+      type: 'messageDelivery',
+      workspaceId: result.envelope.workspaceId,
+      messageId,
+      state: result.event.state,
+      event: result.event,
+    });
+    if (result.event.state === 'failed' && result.event.metadata.cancelled !== true) await this.recordMessageFailure(result.event);
+    return result.envelope;
+  }
+
+  /**
+   * A transport failure belongs to the conversation, not to the recipient's
+   * work: marking the recipient as error hid its real progress and suspended
+   * leader supervision. Keep the sender's state and only annotate the failure.
+   */
+  private async recordMessageFailure(event: AgentMessageDeliveryEvent): Promise<void> {
+    const correlationId = typeof event.metadata.correlationId === 'string' ? event.metadata.correlationId : `message:${event.messageId}`;
+    // The owner still sees the undelivered message, linked to its recipient.
+    await attentionService.raise({
+      workspaceId: event.workspaceId,
+      nodeId: event.toNodeId,
+      taskId: typeof event.metadata.taskId === 'string' ? event.metadata.taskId : null,
+      category: 'message',
+      severity: 'warning',
+      title: event.content.slice(0, 120),
+      body: event.error,
+      sourceType: 'bridge',
+      sourceId: event.messageId,
+      correlationId: `message-failure:${event.messageId}`,
+    }).catch(() => undefined);
+    if (!event.fromNodeId) return;
+    const current = this.latest.get(`${event.workspaceId}:${event.fromNodeId}`)
+      ?? await controlCenterRepository.latestActivity(event.fromNodeId);
+    await this.recordActivity({
+      workspaceId: event.workspaceId,
+      nodeId: event.fromNodeId,
+      state: current?.state ?? 'idle',
+      action: 'system:message_failed',
+      taskId: current?.taskId ?? null,
+      category: 'message',
+      verb: 'failed',
+      objectType: 'message',
+      objectId: event.messageId,
+      objectTitle: event.content.slice(0, 120),
+      outcome: event.error,
+      severity: 'warning',
+      correlationId,
+      sourceType: 'bridge',
+      sourceId: event.messageId,
+      metadata: { ...event.metadata, lifecycle: current?.metadata?.lifecycle === true },
+    });
   }
 
   async settleWorkspace(workspaceId: string): Promise<void> {

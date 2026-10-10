@@ -46,6 +46,8 @@ export type AgentSessionStorage =
  */
 export class AgentSessionTracker {
   private watchers = new Map<string, ReturnType<typeof setInterval>>();
+  /** Discovery watches still guessing a session id, used to detect ambiguous launches. */
+  private pending = new Map<string, { storage: string | undefined; cwd: string; startedAt: number }>();
   private sessionsByPty = new Map<string, string>();
   /** Ids ja atribuidos a algum terminal — dois agentes no mesmo diretorio
       nao podem receber o mesmo session-id. */
@@ -64,6 +66,9 @@ export class AgentSessionTracker {
   }
 
   bind(ptySessionId: string, agentSessionId: string): void {
+    // An exact binding (prompt confirmed in the transcript, resume or reserved
+    // id) ends any discovery guess for this terminal.
+    this.unwatch(ptySessionId);
     this.sessionsByPty.set(ptySessionId, agentSessionId);
     this.claim(agentSessionId);
   }
@@ -155,10 +160,19 @@ export class AgentSessionTracker {
   ): void {
     this.unwatch(ptySessionId);
     const started = Date.now();
+    const target = { storage, cwd: this.realCwd(cwd), startedAt };
+    this.pending.set(ptySessionId, target);
     const timer = setInterval(() => {
+      // Two terminals of the same provider launched together in the same cwd
+      // cannot be told apart by "oldest new transcript": whichever polls first
+      // would take the other's conversation. Wait for an exact binding instead
+      // (the first delivered prompt confirmed in its own transcript).
+      if (this.isAmbiguousLaunch(ptySessionId)) {
+        if (Date.now() - started > timeoutMs) this.unwatch(ptySessionId);
+        return;
+      }
       const found = this.findAgentSessionId(storage, cwd, startedAt);
       if (found) {
-        this.unwatch(ptySessionId);
         this.bind(ptySessionId, found);
         onFound(found);
         return;
@@ -169,6 +183,16 @@ export class AgentSessionTracker {
     }, 3_000);
     timer.unref?.();
     this.watchers.set(ptySessionId, timer);
+  }
+
+  private isAmbiguousLaunch(ptySessionId: string): boolean {
+    const own = this.pending.get(ptySessionId);
+    if (!own) return false;
+    for (const [otherId, other] of this.pending) {
+      if (otherId === ptySessionId) continue;
+      if (other.storage === own.storage && other.cwd === own.cwd && Math.abs(other.startedAt - own.startedAt) < 60_000) return true;
+    }
+    return false;
   }
 
   /**
@@ -207,6 +231,7 @@ export class AgentSessionTracker {
     const timer = this.watchers.get(ptySessionId);
     if (timer) clearInterval(timer);
     this.watchers.delete(ptySessionId);
+    this.pending.delete(ptySessionId);
   }
 
   /** Caminho real do cwd (resolve symlinks como /tmp -> /private/tmp no macOS). */

@@ -5,7 +5,7 @@ export class AgentFloor extends Model {
   static primaryKey = 'id';
   static incrementing = false;
   static timestamps = true;
-  static fillable = ['id', 'workspace_id', 'name', 'branch', 'path', 'status'];
+  static fillable = ['id', 'workspace_id', 'name', 'branch', 'path', 'status', 'base_commit', 'base_kind', 'landed_head'];
 
   static casts = {
     created_at: 'date' as const,
@@ -18,6 +18,9 @@ export class AgentFloor extends Model {
   declare branch: string;
   declare path: string;
   declare status: string;
+  declare base_commit: string | null;
+  declare base_kind: string | null;
+  declare landed_head: string | null;
   declare created_at: Date;
   declare updated_at: Date;
 }

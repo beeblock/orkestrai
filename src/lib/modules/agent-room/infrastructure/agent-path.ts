@@ -126,6 +126,33 @@ const ALWAYS_PRIVATE_CHILD_ENV_KEYS = [
   'ORKESTRAI_PRIVATE_ENV_KEYS',
 ] as const;
 
+/**
+ * Session-scoped variables of an outer agent CLI that launched Orkestrai (for
+ * example `open -a Orkestrai` or `npm run electron:dev` from a Claude Code or
+ * Codex terminal). Inherited, they make every Orkestrai agent a child of that
+ * outer session: Claude stops persisting its own transcript (breaking delivery
+ * confirmation, reply capture and resume) and receives the outer session's
+ * messaging token. User configuration such as CLAUDE_CODE_USE_BEDROCK stays.
+ */
+const OUTER_AGENT_SESSION_ENV_KEYS = [
+  'CLAUDECODE',
+  'CLAUDE_PID',
+  'CLAUDE_EFFORT',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_SESSION_ATTENDED',
+  'CLAUDE_CODE_VERSION',
+  'CLAUDE_CODE_SSE_PORT',
+  'CODEX_SANDBOX',
+  'CODEX_SANDBOX_NETWORK_DISABLED',
+  'CODEX_THREAD_ID',
+  'CODEX_SESSION_ID',
+] as const;
+
 const REQUIRED_AGENT_ENV_KEYS = new Set([
   'ORKESTRAI_API_URL',
   'ORKESTRAI_SHIM_DIR',
@@ -149,6 +176,7 @@ export function sanitizeAgentEnvironment(
   );
   const privateKeys = new Set([
     ...ALWAYS_PRIVATE_CHILD_ENV_KEYS,
+    ...OUTER_AGENT_SESSION_ENV_KEYS,
     ...(source.ORKESTRAI_PRIVATE_ENV_KEYS ?? '').split(',').map((key) => key.trim()).filter(Boolean),
   ]);
   for (const key of privateKeys) {

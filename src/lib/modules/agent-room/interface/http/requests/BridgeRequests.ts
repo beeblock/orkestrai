@@ -1,6 +1,8 @@
 import { FormRequest } from '@beeblock/svelar/forms';
 import {
   bridgeAskSchema,
+  bridgeReplySchema,
+  type BridgeReplyInput,
   bridgeRoleEditSchema,
   bridgeRoleWriteSchema,
   type BridgeRoleEditInput,
@@ -33,6 +35,20 @@ export class BridgeAskRequest extends FormRequest {
 
   passedValidation(data: unknown): BridgeAskInput {
     return bridgeAskSchema.parse(data);
+  }
+}
+
+export class BridgeReplyRequest extends FormRequest {
+  rules() {
+    return bridgeReplySchema;
+  }
+
+  authorize(): boolean {
+    return true;
+  }
+
+  passedValidation(data: unknown): BridgeReplyInput {
+    return bridgeReplySchema.parse(data);
   }
 }
 

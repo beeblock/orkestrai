@@ -70,6 +70,31 @@ describe('latest turn completion for supervision', () => {
     expect(parseLatestTurnComplete('unregistered', '{}')).toBeNull();
     expect(parseLatestTurnComplete('codex-rollout-jsonl', '{}')).toBeNull();
   });
+
+  it('releases a turn left open by a process that quit mid-turn', () => {
+    const at = (iso: string) => `2026-10-10T${iso}Z`;
+    const restartedAt = Date.parse(at('01:09:53'));
+    const interrupted = [
+      { timestamp: at('01:07:00'), type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Continue' }] } },
+      { timestamp: at('01:07:01'), type: 'event_msg', payload: { type: 'task_started' } },
+      { timestamp: at('01:07:34'), type: 'response_item', payload: { type: 'reasoning' } },
+      // Written by the resumed CLI: settings, not turn work.
+      { timestamp: at('01:09:55'), type: 'event_msg', payload: { type: 'thread_settings_applied' } },
+    ].map((event) => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', interrupted)).toBe(false);
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', interrupted, restartedAt)).toBe(true);
+    // A turn running in the live process is still running.
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', interrupted, Date.parse(at('01:07:20')))).toBe(false);
+    const claude = [
+      { timestamp: at('01:07:00'), type: 'user', message: { content: 'Continue' } },
+      { timestamp: at('01:07:05'), type: 'assistant', message: { content: [{ type: 'tool_use' }], stop_reason: 'tool_use' } },
+    ].map((event) => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnComplete('claude-project-jsonl', claude, restartedAt)).toBe(true);
+    expect(parseLatestTurnComplete('claude-project-jsonl', claude, Date.parse(at('01:07:02')))).toBe(false);
+    // Without timestamps there is no evidence the turn is stale.
+    const untimed = interrupted.replace(/"timestamp":"[^"]+",/g, '');
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', untimed, restartedAt)).toBe(false);
+  });
 });
 
 describe('parseClaudeTranscriptReply', () => {

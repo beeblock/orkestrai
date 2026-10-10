@@ -13,6 +13,7 @@ import { usageService } from '$lib/modules/agent-room/application/services/Usage
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
+import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 
 async function setup() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'agent runtime', workingDir: '/tmp' });
@@ -238,6 +239,23 @@ describe('AgentRuntimeService', () => {
     expect(deliver).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps a leader waiting on the owner quiet until teammates finish work it can integrate', async () => {
+    const { workspace, node, deliver } = await setupLeader('doing');
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'waiting_input', action: 'Waiting for the owner' });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).not.toHaveBeenCalled();
+
+    const finished = uuidv7();
+    const later = new Date(Date.now() + 1_000).toISOString();
+    await AgentBoardTask.query().insert({ id: finished, workspace_id: workspace.id, title: 'Company bio settings', status: 'done',
+      created_by: 'user', created_at: later, updated_at: later });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledTimes(1);
+    const message = deliver.mock.calls[0][0].message;
+    expect(message).toContain('Company bio settings');
+    expect(message).toContain('floor land');
+  });
+
   it('cancels queued context if pending work changes before delivery', async () => {
     const { workspace, node, taskId, deliver } = await setupLeader();
     deliver.mockImplementationOnce(async (input) => {
@@ -352,5 +370,87 @@ describe('AgentRuntimeService', () => {
     await supervisorTick(new AgentRuntimeService());
     expect(deliver).not.toHaveBeenCalled();
     expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it('reminds an idle specialist about its open card at most twice, and never while it waits', async () => {
+    const start = Date.parse('2026-10-10T03:00:00.000Z');
+    vi.useFakeTimers({ toFake: ['Date'], now: start });
+    const { workspace, node } = await setup();
+    const sessionId = uuidv7();
+    await workspaceRepository.updateNode(node.id, { payload: { ...node.payload, sessionId } });
+    const session = {
+      id: sessionId, workspaceId: workspace.id, nodeId: node.id, provider: 'runtime-test',
+      command: '/bin/cat', args: [], cols: 80, rows: 24, cwd: '/tmp', runtimeKey: 'native',
+      createdAt: new Date(start - 3_600_000).toISOString(), lastActivityAt: new Date(start).toISOString(),
+      exited: false, exitCode: null, waiting: true, hasOutput: true,
+    };
+    vi.spyOn(ptySessionManager, 'get').mockImplementation((id) => (id === sessionId ? session : null));
+    vi.spyOn(ptySessionManager, 'canAcceptAutomaticMessage').mockReturnValue(true);
+    vi.spyOn(transcript, 'latestTurnComplete').mockResolvedValue(true);
+    vi.spyOn(transcript, 'findPromptInTranscript').mockResolvedValue(null);
+    vi.spyOn(usageService, 'getAll').mockResolvedValue([]);
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    const taskId = uuidv7();
+    await AgentBoardTask.query().insert({ id: taskId, workspace_id: workspace.id, title: 'Company bio settings', status: 'doing',
+      assignee_node_id: node.id, created_by: 'user', created_at: new Date(start).toISOString(), updated_at: new Date(start).toISOString() });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working', action: 'Wiring the form', taskId });
+    const at = (minutes: number) => vi.setSystemTime(start + minutes * 60_000);
+    const nudge = async () => {
+      const sent = await agentRuntimeService.nudgeIdleAssignee(workspace.id, node.id);
+      await agentInboxService.drain(workspace.id, node.id);
+      return sent;
+    };
+    try {
+      at(5);
+      await expect(nudge()).resolves.toBe(false);
+
+      at(15);
+      await expect(nudge()).resolves.toBe(true);
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(deliver.mock.calls[0][0].message).toContain('idle card');
+      expect(deliver.mock.calls[0][0].message).toContain(`orkestrai task done ${taskId}`);
+      // Nothing happened since: no second reminder.
+      at(40);
+      await expect(nudge()).resolves.toBe(false);
+
+      // The agent worked again and went idle again: one more reminder, then none.
+      at(41);
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working', action: 'Back on the form', taskId });
+      session.lastActivityAt = new Date(start + 41 * 60_000).toISOString();
+      at(55);
+      await expect(nudge()).resolves.toBe(true);
+      at(56);
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working', action: 'Still on it', taskId });
+      session.lastActivityAt = new Date(start + 56 * 60_000).toISOString();
+      at(90);
+      await expect(nudge()).resolves.toBe(false);
+      expect(deliver).toHaveBeenCalledTimes(2);
+
+      // A new card: waiting on a teammate's answer is not idling.
+      const other = uuidv7();
+      await AgentBoardTask.query().where('id', taskId).update({ status: 'done' });
+      at(100);
+      await AgentBoardTask.query().insert({ id: other, workspace_id: workspace.id, title: 'Logo upload', status: 'doing',
+        assignee_node_id: node.id, created_by: 'user', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working', action: 'Uploading', taskId: other });
+      session.lastActivityAt = new Date(start + 100 * 60_000).toISOString();
+      const teammate = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Teammate', payload: { command: '/bin/cat' } });
+      const askId = uuidv7();
+      await controlCenterService.recordDelivery({ messageId: askId, workspaceId: workspace.id, fromNodeId: node.id, toNodeId: teammate.id,
+        state: 'queued', content: 'Which endpoint?', metadata: { inbox: true, kind: 'ask' } });
+      at(115);
+      await expect(nudge()).resolves.toBe(false);
+      await controlCenterService.recordInboxTransition(askId, { state: 'replied', metadata: { inbox: true, kind: 'ask' } });
+      await expect(nudge()).resolves.toBe(true);
+
+      // A specialist that reported it is waiting is never reminded.
+      at(116);
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'waiting_input', action: 'Need the logo file', taskId: other });
+      session.lastActivityAt = new Date(start + 116 * 60_000).toISOString();
+      at(200);
+      await expect(nudge()).resolves.toBe(false);
+    } finally {
+      agentInboxService.reset();
+    }
   });
 });

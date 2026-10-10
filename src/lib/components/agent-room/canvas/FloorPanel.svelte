@@ -42,7 +42,8 @@
   let errorMessage = $state('');
   let removal = $state<{ floor: Floor; deleteBranch: boolean } | null>(null);
   let removing = $state(false);
-  let landingPreview = $state<{ floor: Floor; from: string; to: string; stat: string; conflicts: string[]; targetDirty: boolean } | null>(null);
+  type LandingPreview = { from: string; to: string; stat: string; conflicts: string[]; targetDirty: boolean; mode?: 'merge' | 'patch'; pendingInFloor?: number };
+  let landingPreview = $state<(LandingPreview & { floor: Floor }) | null>(null);
   let hooks = $state<WorkspaceHooks>({});
   let showHooks = $state(false);
   let hooksText = $state({ setup: '', run: '', teardown: '' });
@@ -105,7 +106,7 @@
   async function previewLanding(floor: Floor) {
     errorMessage = '';
     try {
-      const preview = await api<{ from: string; to: string; stat: string; conflicts: string[]; targetDirty: boolean }>(
+      const preview = await api<LandingPreview>(
         `/api/agent-room/workspaces/${workspace.id}/floors/${floor.id}/preview`
       );
       landingPreview = { floor, ...preview };
@@ -335,12 +336,15 @@
       {#if landingPreview.conflicts.length}
         <p class="conflict">{m['floor.conflicts']({ list: landingPreview.conflicts.join(', ') })}</p>
       {/if}
-      {#if landingPreview.targetDirty}
-        <p class="conflict">{m['floor.dirty_warning']()}</p>
+      {#if landingPreview.targetDirty || landingPreview.mode === 'patch'}
+        <p class="muted">{m['floor.dirty_warning']()}</p>
+      {/if}
+      {#if landingPreview.pendingInFloor}
+        <p class="muted">{m['floor.pending_commit']({ count: landingPreview.pendingInFloor })}</p>
       {/if}
       <div class="preview-actions">
         <Button variant="outline" size="sm" onclick={() => (landingPreview = null)}>{m['settings.cancel']()}</Button>
-        <Button size="sm" onclick={confirmLanding} disabled={landingPreview.targetDirty}>{m['floor.land']()}</Button>
+        <Button size="sm" onclick={confirmLanding} disabled={landingPreview.conflicts.length > 0}>{m['floor.land']()}</Button>
       </div>
     </div>
   {/if}

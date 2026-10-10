@@ -5,7 +5,7 @@
  * sobe os diretorios procurando `.orkestrai/workspace.json` ({ token, apiUrl }).
  * ORKESTRAI_TOKEN e ORKESTRAI_API_URL tem precedencia.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer as createNetServer } from 'node:net';
 import { homedir } from 'node:os';
@@ -27,6 +27,24 @@ const DESIGN_TYPOGRAPHY_FIELDS = new Set([
   'textDecoration', 'textTransform', 'textAutoResize',
 ]);
 const BRIDGE_AGENT_TOKEN = Symbol('bridgeAgentToken');
+const INBOX_SINK = Symbol('inboxSink');
+
+/** Readable digest of inbox items handed over by the bridge. */
+export function formatInbox(items, remaining = 0) {
+  if (!items?.length) return '';
+  const lines = [`--- Orkestrai: ${items.length} mensagem(ns) nova(s) na sua caixa de entrada ---`];
+  for (const item of items) {
+    const from = item.fromTitle ? `De ${item.fromTitle}` : 'Orkestrai';
+    const task = item.taskId ? ` (tarefa ${item.taskId})` : '';
+    const kind = item.kind === 'ask' && item.fromTitle ? ' [pergunta]' : item.kind === 'reply' ? ' [resposta]' : '';
+    lines.push(`[${item.messageId}] ${from}${task}${kind}: ${item.content}`);
+  }
+  if (items.some((item) => item.kind === 'ask' && item.fromTitle)) {
+    lines.push('Responda perguntas com: orkestrai reply <messageId> "<resposta>". Nao reenvie mensagens ja recebidas.');
+  }
+  if (remaining > 0) lines.push(`(+${remaining} pendentes: orkestrai inbox)`);
+  return lines.join('\n');
+}
 
 /** Porta livre de verdade: binda na efemera, le o numero e libera. */
 export async function findFreePort() {
@@ -71,6 +89,12 @@ Uso:
   orkestrai huddle list [--json]
   orkestrai huddle say <huddleId> <mensagem> [--json]
   orkestrai ask <agente> <mensagem> [--from <agente>] [--task <id>] [--timeout <ms>] [--raw] [--json]
+    Agentes ocupados recebem a mensagem pela caixa de entrada; a resposta chega a sua caixa sem reenvio.
+  orkestrai inbox [--limit <n>] [--json]
+  orkestrai reply <messageId> <resposta>
+  orkestrai heavy [--label <texto>] [--task <id>] -- <comando...>
+    Builds, E2E e empacotamento aguardam vaga na fila da maquina (sem negociar janelas por mensagem).
+  orkestrai stats [--hours <n>] [--json]
   orkestrai note read <nodeId>
   orkestrai note write <nodeId> <conteudo>
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
@@ -142,6 +166,35 @@ Uso:
 Config: ORKESTRAI_WORKSPACE_CONFIG, .orkestrai/workspace.json (token, apiUrl) ou env ORKESTRAI_TOKEN/ORKESTRAI_API_URL.
 Identidade: ORKESTRAI_NODE_ID/ORKESTRAI_AGENT_TITLE definem --from/--agent; ORKESTRAI_AGENT_TOKEN autentica mutacoes Git do PTY ativo.
 `;
+
+/** The agent shell that started `heavy` is gone (reparented on POSIX, or no longer exists). */
+export function heavyOwnerGone(owner, current = process.ppid, probe = (pid) => process.kill(pid, 0)) {
+  if (!owner || owner <= 1) return false;
+  if (process.platform !== 'win32' && current !== owner) return true;
+  try {
+    probe(owner);
+    return false;
+  } catch (error) {
+    return error?.code === 'ESRCH';
+  }
+}
+
+/** Ends a heavy command and its descendants, escalating if it ignores SIGTERM. */
+function stopHeavyTree(child) {
+  if (process.platform === 'win32') {
+    try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { child.kill(); }
+    return;
+  }
+  child.kill('SIGTERM');
+  // Agent CLIs start each command as its own session, so this group is the
+  // run's own tree; our SIGTERM listener keeps this process alive to release the slot.
+  try { process.kill(0, 'SIGTERM'); } catch { /* group already gone */ }
+  setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) {
+      try { child.kill('SIGKILL'); } catch { /* exited */ }
+    }
+  }, 10_000).unref();
+}
 
 function readBridgeConfig(candidate, required = false) {
   if (!existsSync(candidate)) {
@@ -215,6 +268,19 @@ async function bridge(config, method, path, body) {
   if (!response.ok || payload.error) {
     throw new Error(payload.error || payload.data?.error || `Falha na ponte (HTTP ${response.status}).`);
   }
+  // Messages that arrived while this agent works ride along with any bridge
+  // call, so a busy agent reads them now instead of at its next turn.
+  const pending = Number(response.headers?.get?.('x-orkestrai-inbox') ?? 0);
+  const sink = config[INBOX_SINK];
+  if (pending > 0 && sink && config[BRIDGE_AGENT_TOKEN] && !path.startsWith('/api/agent-room/bridge/inbox')) {
+    try {
+      const inbox = await bridge({ ...config, [INBOX_SINK]: null }, 'GET', '/api/agent-room/bridge/inbox');
+      sink.items.push(...(inbox?.items ?? []));
+      sink.remaining = Number(inbox?.remaining ?? 0);
+    } catch {
+      // Advisory: the items stay queued and reach the agent at its next turn.
+    }
+  }
   return payload.data;
 }
 
@@ -255,9 +321,25 @@ function apiCollectionFromDocument(document) {
 }
 
 export async function run(argv, options = {}) {
+  const sink = { items: [], remaining: 0 };
+  try {
+    return await runCommand(argv, options, sink);
+  } finally {
+    const digest = formatInbox(sink.items, sink.remaining);
+    // stderr keeps --json output parseable while the agent still sees it.
+    if (digest) (options.err ?? console.error)(digest);
+  }
+}
+
+async function runCommand(argv, options, sink) {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
   const out = options.out ?? console.log;
+  const err = options.err ?? console.error;
+  // `orkestrai heavy [flags] -- <command...>`: everything after `--` is the command.
+  const separator = argv.indexOf('--');
+  const passthrough = separator >= 0 ? argv.slice(separator + 1) : [];
+  if (separator >= 0) argv = argv.slice(0, separator);
 
   const { flags, positional } = parseFlags(argv);
   const [command, ...rest] = positional;
@@ -305,17 +387,24 @@ export async function run(argv, options = {}) {
   // o handshake nunca morre por falta de .orkestrai/workspace.json.
   if (command === 'mcp') {
     const { runMcpServer } = await import('./mcp.js');
+    const mcpSink = { items: [], remaining: 0 };
     await runMcpServer({
       input: options.input ?? process.stdin,
       write: options.write ?? ((chunk) => process.stdout.write(chunk)),
-      bridge: (method, path, body) => bridge(resolveConfig(env, cwd), method, path, body),
+      bridge: (method, path, body) => bridge({ ...resolveConfig(env, cwd), [INBOX_SINK]: mcpSink }, method, path, body),
+      drainInbox: () => {
+        const digest = formatInbox(mcpSink.items, mcpSink.remaining);
+        mcpSink.items = [];
+        mcpSink.remaining = 0;
+        return digest;
+      },
       findFreePort,
       selfAgent: selfAgent ?? null,
     });
     return 0;
   }
 
-  const config = resolveConfig(env, cwd);
+  const config = { ...resolveConfig(env, cwd), [INBOX_SINK]: sink };
 
   switch (command) {
     case 'list': {
@@ -386,13 +475,130 @@ export async function run(argv, options = {}) {
       else if (data.replyConfirmed ?? (!data.timedOut && Boolean(data.reply))) {
         out(`Resposta confirmada de ${data.to} (mensagem ${data.messageId}):`);
         out(data.reply);
+      } else if (data.answeredMessageId) {
+        out(`Mensagem ${data.messageId} entregue a ${data.to} como resposta a pergunta ${data.answeredMessageId} que ele aguardava.`);
+      } else if (data.inbox && data.deliveryState === 'queued') {
+        out(`Mensagem ${data.messageId} na caixa de entrada de ${data.to}, que esta no meio de um turno. Ela sera entregue no proximo intervalo do agente e a resposta chegara a sua caixa de entrada (junto das proximas respostas da ponte ou em orkestrai inbox). Nao reenvie; continue seu trabalho.`);
+      } else if (data.inbox && data.delivered) {
+        out(`Mensagem ${data.messageId} entregue a ${data.to}; a resposta ainda nao veio neste prazo e chegara a sua caixa de entrada. Nao reenvie; continue seu trabalho.`);
       } else if (data.delivered && data.deliveryState === 'delivered') {
         out(`Mensagem ${data.messageId} entregue a ${data.to}; resposta ainda nao confirmada no prazo. Nao reenvie a mensagem nem recarregue o terminal por isso. Acompanhe a tarefa; esta tentativa nao confirma uma conversa concluida.`);
       } else {
         out(`Resposta nao confirmada de ${data.to}: timeout ou interrupcao. Nao trate esta tentativa como uma conversa concluida.`);
       }
       if (flags.raw) return data.sent ? 0 : 2;
+      // The inbox owns delivery and the eventual answer: not a failure.
+      if (data.inbox || data.answeredMessageId) return 0;
       return (data.replyConfirmed ?? (!data.timedOut && Boolean(data.reply))) ? 0 : 2;
+    }
+    case 'inbox': {
+      const data = await bridge(config, 'GET', `/api/agent-room/bridge/inbox${flags.limit ? `?limit=${encodeURIComponent(flags.limit)}` : ''}`);
+      if (flags.json) out(JSON.stringify(data, null, 2));
+      else out(formatInbox(data.items, data.remaining) || '(caixa de entrada vazia)');
+      return 0;
+    }
+    case 'reply': {
+      const [messageId, ...messageParts] = rest;
+      const message = messageParts.join(' ').trim();
+      if (!messageId || !message) throw new Error('Uso: orkestrai reply <messageId> <resposta>');
+      const data = await bridge(config, 'POST', `/api/agent-room/bridge/messages/${encodeURIComponent(messageId)}/reply`, { from: flags.from, message });
+      if (flags.json) out(JSON.stringify(data, null, 2));
+      else if (data.alreadyAnswered) out(`A mensagem ${messageId} ja tinha resposta registrada; nada foi reenviado.`);
+      else if (data.via === 'none') out(`Resposta registrada, mas a mensagem ${messageId} nao veio de um agente: nada foi encaminhado. Use orkestrai ask para falar com alguem.`);
+      else out(`Resposta registrada para ${data.to ?? 'o remetente'} (${data.via === 'waiter' ? 'entregue agora' : 'na caixa de entrada dele'}).`);
+      return 0;
+    }
+    case 'heavy': {
+      const commandLine = passthrough.length ? passthrough : rest;
+      if (!commandLine.length) throw new Error('Uso: orkestrai heavy [--label <texto>] [--task <id>] -- <comando...>');
+      const label = String(flags.label ?? commandLine.join(' ')).slice(0, 120);
+      let ticket = null;
+      let lease = null;
+      let lastDetail = '';
+      let cancelled = false;
+      let released = false;
+      const owner = process.ppid;
+      const leave = async () => {
+        const id = lease ?? ticket;
+        if (!id || released) return;
+        released = true;
+        await bridge(config, 'DELETE', `/api/agent-room/bridge/heavy/${encodeURIComponent(id)}`).catch(() => undefined);
+      };
+      const interrupt = () => {
+        cancelled = true;
+        if (!lease) void leave();
+      };
+      process.on('SIGINT', interrupt);
+      try {
+        while (!lease) {
+          if (cancelled) throw new Error('Execucao pesada cancelada antes de iniciar.');
+          const slot = await bridge(config, 'POST', '/api/agent-room/bridge/heavy', { label, taskId: flags.task ?? null, ticket, waitMs: 20_000 });
+          if (slot.granted) lease = slot.leaseId;
+          else {
+            ticket = slot.ticket;
+            if (slot.detail !== lastDetail) err(`[orkestrai heavy] ${slot.detail}`);
+            lastDetail = slot.detail;
+          }
+        }
+        err(`[orkestrai heavy] Vaga liberada: ${label}`);
+        let child = null;
+        let stopped = false;
+        const heartbeat = setInterval(() => {
+          void bridge(config, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`)
+            .then((data) => {
+              // The server stops a running build or suite before the disk fills.
+              if (!data?.stop || !child || stopped) return;
+              stopped = true;
+              err(`[orkestrai heavy] ${data.stop}`);
+              stopHeavyTree(child);
+            })
+            .catch(() => undefined);
+        }, 20_000);
+        let ownerWatch = null;
+        try {
+          child = spawn(commandLine[0], commandLine.slice(1), { stdio: 'inherit', shell: commandLine.length === 1, env: process.env });
+          const forward = (signal) => child.kill(signal);
+          process.on('SIGTERM', forward);
+          // A run belongs to the agent that waits for it. When that agent dies
+          // (Orkestrai quit, crash or update), nobody reads the result: stop the
+          // whole command tree instead of running orphaned outside the queue.
+          ownerWatch = setInterval(() => {
+            if (!heavyOwnerGone(owner)) return;
+            clearInterval(ownerWatch);
+            err('[orkestrai heavy] O processo que pediu esta execucao terminou; encerrando o comando.');
+            stopHeavyTree(child);
+          }, 5_000);
+          const code = await new Promise((resolvePromise) => {
+            child.on('error', (error) => { err(error.message); resolvePromise(127); });
+            child.on('exit', (exitCode, signal) => resolvePromise(exitCode ?? (signal ? 1 : 0)));
+          });
+          process.off('SIGTERM', forward);
+          return code;
+        } finally {
+          clearInterval(heartbeat);
+          if (ownerWatch) clearInterval(ownerWatch);
+        }
+      } finally {
+        process.off('SIGINT', interrupt);
+        await leave();
+      }
+    }
+    case 'stats': {
+      const hours = flags.hours ? Number(flags.hours) : 24;
+      const data = await bridge(config, 'GET', `/api/agent-room/bridge/stats?hours=${encodeURIComponent(hours)}`);
+      if (flags.json) {
+        out(JSON.stringify(data, null, 2));
+        return 0;
+      }
+      const seconds = (value) => (value === null || value === undefined ? '-' : `${Math.round(value)}s`);
+      out(`Ultimas ${data.windowHours}h`);
+      out(`Mensagens: ${data.messages.total} (respondidas ${data.messages.replied}, falhas ${data.messages.failed}, na fila ${data.messages.queued})`);
+      out(`Entrega: p50 ${seconds(data.messages.deliverySeconds.p50)} / p95 ${seconds(data.messages.deliverySeconds.p95)}; resposta: p50 ${seconds(data.messages.replySeconds.p50)} / p95 ${seconds(data.messages.replySeconds.p95)}`);
+      for (const inbox of data.inboxes ?? []) out(`Caixa de ${inbox.title}: ${inbox.queued} na fila${inbox.oldestSeconds ? `, mais antiga ha ${seconds(inbox.oldestSeconds)}` : ''}`);
+      out(`Tarefas: ${data.tasks.created} criadas, ${data.tasks.done} concluidas, ${data.tasks.open} abertas`);
+      out(`Andares: ${data.floors.active} ativos, ${data.floors.landed} aterrissados na janela`);
+      out(`Execucoes pesadas: ${data.heavy.active}/${data.heavy.slots} em uso, ${data.heavy.queued} na fila`);
+      return 0;
     }
     case 'usage': {
       const data = await bridge(config, 'GET', '/api/agent-room/bridge/usage');
@@ -1704,9 +1910,13 @@ export async function run(argv, options = {}) {
       }
       if (action === 'land') {
         const floorId = values[0];
-        if (!floorId) throw new Error('Uso: orkestrai floor land <floorId> [--target <branch>]');
-        const data = await bridge(config, 'POST', `/api/agent-room/bridge/floors/${floorId}/land`, { targetBranch: flags.target });
-        out(`Aterrissado: ${data.branch} → ${data.into}`);
+        if (!floorId) throw new Error('Uso: orkestrai floor land <floorId> [--target <branch>] [--message "<commit subject>"]');
+        const data = await bridge(config, 'POST', `/api/agent-room/bridge/floors/${floorId}/land`, {
+          targetBranch: flags.target, ...(typeof flags.message === 'string' ? { message: flags.message } : {}),
+        });
+        out(`Aterrissado: ${data.branch} → ${data.into}${data.commit ? ` (commit ${String(data.commit).slice(0, 10)})` : ''}`);
+        if (data.commitError) out(`Arquivos integrados, mas o commit falhou: ${data.commitError}`);
+        if (data.cleanup === 'pending' && data.cleanupReason) out(`Andar mantido: ${data.cleanupReason}`);
         return 0;
       }
       if (action === 'remove') {

@@ -77,6 +77,9 @@ export class AgentTerminalDeliveryService {
       );
       if (!match) return false;
 
+      // The exact prompt in this transcript proves which conversation belongs
+      // to this terminal; it overrides and ends any discovery guess.
+      agentSessionTracker.bind(input.sessionId, match.sessionId);
       ptySessionManager.bindAgentSession(input.sessionId, match.sessionId);
       if (payload.agentSessionId !== match.sessionId && payload.sessionId === input.sessionId) {
         const currentNode = await workspaceRepository.getNode(node.id);

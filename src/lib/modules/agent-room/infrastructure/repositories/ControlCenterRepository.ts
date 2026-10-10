@@ -178,6 +178,16 @@ export class ControlCenterRepository {
     return model ? mapActivity(model) : null;
   }
 
+  /** Latest statuses an agent reported itself (PTY lifecycle noise excluded), newest first. */
+  async latestSemanticActivities(nodeId: string, limit = 10): Promise<AgentActivity[]> {
+    const rows = await AgentActivityEvent.query()
+      .where('node_id', nodeId)
+      .orderBy('created_at', 'desc')
+      .limit(Math.max(limit * 5, 20))
+      .get();
+    return rows.map(mapActivity).filter((activity) => activity.metadata.lifecycle !== true).slice(0, limit);
+  }
+
   async latestSemanticTaskActivity(nodeId: string, taskId: string): Promise<AgentActivity | null> {
     const rows = await AgentActivityEvent.query()
       .where('node_id', nodeId)
@@ -246,7 +256,9 @@ export class ControlCenterRepository {
         workspace_id: input.workspaceId,
         from_node_id: input.fromNodeId ?? null,
         to_node_id: input.toNodeId,
-        kind: input.metadata?.raw ? 'raw' : input.metadata?.oneWay ? String(input.metadata.kind ?? 'handoff') : 'ask',
+        kind: input.metadata?.inbox === true && typeof input.metadata.kind === 'string'
+          ? input.metadata.kind
+          : input.metadata?.raw ? 'raw' : input.metadata?.oneWay ? String(input.metadata.kind ?? 'handoff') : 'ask',
         state: input.state,
         content: input.content,
         reply: input.reply ?? null,
@@ -284,6 +296,138 @@ export class ControlCenterRepository {
     if (input.state === 'replied') changes.replied_at = now;
     if (input.state === 'failed') changes.failed_at = now;
     await AgentMessageEnvelope.query().where('id', input.messageId).update(changes);
+  }
+
+  /**
+   * Inbox transitions are not idempotent per state: a message can return to
+   * the queue after an unsubmitted attempt. Every transition is audited.
+   */
+  async transitionEnvelope(messageId: string, input: {
+    state: AgentMessageDeliveryState;
+    error?: string | null;
+    reply?: string | null;
+    metadata?: Record<string, unknown>;
+    countAttempt?: boolean;
+  }): Promise<{ envelope: AgentMessageEnvelopeData; event: AgentMessageDeliveryEvent } | null> {
+    const existing = await AgentMessageEnvelope.find(messageId);
+    if (!existing) return null;
+    const now = new Date().toISOString();
+    const metadata = input.metadata ?? parseMetadata(existing.getAttribute('metadata_json'));
+    const changes: Record<string, unknown> = {
+      state: input.state,
+      updated_at: now,
+      error: input.error === undefined ? existing.getAttribute('error') : input.error,
+      reply: input.reply === undefined ? existing.getAttribute('reply') : input.reply,
+      metadata_json: JSON.stringify(metadata),
+    };
+    if (input.countAttempt) changes.attempts = Number(existing.getAttribute('attempts') ?? 0) + 1;
+    if (input.state === 'delivered') changes.delivered_at = now;
+    if (input.state === 'acknowledged') changes.acknowledged_at = now;
+    if (input.state === 'replied') changes.replied_at = now;
+    if (input.state === 'failed') changes.failed_at = now;
+    await AgentMessageEnvelope.query().where('id', messageId).update(changes);
+    const model = await AgentMessageDelivery.create({
+      id: uuidv7(),
+      message_id: messageId,
+      workspace_id: existing.getAttribute('workspace_id'),
+      from_node_id: existing.getAttribute('from_node_id') ?? null,
+      to_node_id: existing.getAttribute('to_node_id'),
+      state: input.state,
+      content: existing.getAttribute('content'),
+      reply: input.reply ?? null,
+      error: input.error ?? null,
+      metadata_json: JSON.stringify(metadata),
+      created_at: now,
+    });
+    const fresh = await AgentMessageEnvelope.find(messageId);
+    return fresh ? { envelope: mapEnvelope(fresh), event: mapDelivery(model) } : null;
+  }
+
+  async findEnvelope(messageId: string): Promise<AgentMessageEnvelopeData | null> {
+    const model = await AgentMessageEnvelope.find(messageId);
+    return model ? mapEnvelope(model) : null;
+  }
+
+  /** Inbox items addressed to one agent, oldest first. */
+  async inboxEnvelopes(toNodeId: string, states: AgentMessageDeliveryState[], limit = 50): Promise<AgentMessageEnvelopeData[]> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('to_node_id', toNodeId)
+      .whereIn('state', states)
+      .where('metadata_json', 'like', '%"inbox":true%')
+      .orderBy('created_at', 'asc')
+      .orderBy('id', 'asc')
+      .limit(limit)
+      .get();
+    return rows.map(mapEnvelope);
+  }
+
+  /** Questions this agent asked that are still unanswered, since a given time. */
+  async openAsksFrom(fromNodeId: string, sinceIso: string): Promise<number> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('from_node_id', fromNodeId)
+      .whereIn('state', ['queued', 'sent', 'delivered'])
+      .where('created_at', '>=', sinceIso)
+      .where('metadata_json', 'like', '%"kind":"ask"%')
+      .get();
+    return rows.length;
+  }
+
+  /** Inbox items for one agent carrying an exact dedup key, newest first. */
+  async inboxByDedupKey(toNodeId: string, dedupKey: string): Promise<AgentMessageEnvelopeData[]> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('to_node_id', toNodeId)
+      .where('metadata_json', 'like', `%${JSON.stringify({ dedupKey }).slice(1, -1)}%`)
+      .orderBy('created_at', 'desc')
+      .limit(5)
+      .get();
+    return rows.map(mapEnvelope).filter((envelope) => envelope.metadata.dedupKey === dedupKey);
+  }
+
+  async countInbox(toNodeId: string, states: AgentMessageDeliveryState[]): Promise<number> {
+    return AgentMessageEnvelope.query()
+      .where('to_node_id', toNodeId)
+      .whereIn('state', states)
+      .where('metadata_json', 'like', '%"inbox":true%')
+      .count();
+  }
+
+  /** Recipients that still have undelivered or unconfirmed inbox items. */
+  async pendingInboxRecipients(createdAfter: string): Promise<Array<{ workspaceId: string; nodeId: string }>> {
+    const rows = await AgentMessageEnvelope.query()
+      .whereIn('state', ['queued', 'sent'])
+      .where('metadata_json', 'like', '%"inbox":true%')
+      .where('created_at', '>=', createdAfter)
+      .get();
+    const unique = new Map<string, { workspaceId: string; nodeId: string }>();
+    for (const row of rows) {
+      const nodeId = String(row.getAttribute('to_node_id'));
+      unique.set(nodeId, { workspaceId: String(row.getAttribute('workspace_id')), nodeId });
+    }
+    return [...unique.values()];
+  }
+
+  /** Latest asks from one agent to another that still wait for an answer. */
+  async openAsks(fromNodeId: string, toNodeId: string, createdAfter: string): Promise<AgentMessageEnvelopeData[]> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('from_node_id', fromNodeId)
+      .where('to_node_id', toNodeId)
+      .where('kind', 'ask')
+      .whereIn('state', ['queued', 'sent', 'delivered', 'acknowledged'])
+      .where('created_at', '>=', createdAfter)
+      .orderBy('created_at', 'desc')
+      .limit(20)
+      .get();
+    return rows.map(mapEnvelope);
+  }
+
+  async inboxStats(workspaceId: string, createdAfter: string): Promise<AgentMessageEnvelopeData[]> {
+    const rows = await AgentMessageEnvelope.query()
+      .where('workspace_id', workspaceId)
+      .where('created_at', '>=', createdAfter)
+      .orderBy('created_at', 'asc')
+      .limit(5_000)
+      .get();
+    return rows.map(mapEnvelope);
   }
 
   async listEnvelopes(workspaceId: string, limit = 200): Promise<AgentMessageEnvelopeData[]> {

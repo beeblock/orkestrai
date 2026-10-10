@@ -2,6 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeAgentEnvironment } from '$lib/modules/agent-room/infrastructure/agent-path.ts';
 
 describe('agent environment isolation', () => {
+  it('does not turn Orkestrai agents into children of an outer agent CLI session', () => {
+    const env = sanitizeAgentEnvironment({
+      CLAUDECODE: '1',
+      CLAUDE_PID: '71115',
+      CLAUDE_EFFORT: 'xhigh',
+      CLAUDE_CODE_SESSION_ID: 'outer-session',
+      CLAUDE_CODE_CHILD_SESSION: '1',
+      CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/cc-socks/71115.sock',
+      CLAUDE_CODE_MESSAGING_TOKEN: 'outer-secret',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      CODEX_SANDBOX: 'seatbelt',
+      CLAUDE_CODE_USE_BEDROCK: '1',
+      CODEX_HOME: '/Users/developer/.codex',
+      PATH: '/usr/bin',
+    });
+    for (const key of ['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_MESSAGING_SOCKET', 'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_SANDBOX']) {
+      expect(env).not.toHaveProperty(key);
+    }
+    expect(env).toMatchObject({ CLAUDE_CODE_USE_BEDROCK: '1', CODEX_HOME: '/Users/developer/.codex', PATH: '/usr/bin' });
+  });
+
   it('removes Orkestrai server configuration without hiding the user environment or bridge', () => {
     const env = sanitizeAgentEnvironment({
       APP_KEY: 'base64:orkestrai-key',
