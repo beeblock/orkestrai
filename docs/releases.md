@@ -102,6 +102,19 @@ Não há advisories ignorados nem pacote renomeado para ocultar vulnerabilidade.
 O install-time check de NULL do node-forge permanece obrigatório e é testado
 novamente no pacote Intel assinado antes da publicação.
 
+## Dependências de segurança na 0.40.0
+
+Handlebars fica fixado na versão oficial 4.7.10 para os consumidores Postman e
+Bruno, sem rebaixar seus runtimes. Esse patch corrige os advisories
+[GHSA-xw65-4hp5-5hc7](https://github.com/advisories/GHSA-xw65-4hp5-5hc7),
+[GHSA-8r5x-fm3f-whwj](https://github.com/advisories/GHSA-8r5x-fm3f-whwj) e
+[GHSA-p8wg-vrv2-v86f](https://github.com/advisories/GHSA-p8wg-vrv2-v86f).
+Os testes verificam a versão resolvida por cada consumidor, renderização
+compatível, rejeição de AST malformada e de acesso ao construtor, e escape de
+terminadores de script pré-compilado. Os testes existentes também executam
+as visualizações do Postman e os scripts do Bruno. O gate completo
+`npm audit --audit-level=moderate` permanece obrigatório, sem exceções.
+
 ## Runtime nativo do Computer
 
 O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema

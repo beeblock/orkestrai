@@ -47,6 +47,10 @@ pt-BR, English, and Spanish translations.
 - Track terminal input controls incrementally across chunks so cursor, focus, mouse and color replies cannot create phantom human drafts and stall queued agent handoffs. Keep genuine drafts, exact provider receipts and uncertain-submission protections intact; bound malformed control sequences without retaining their contents.
 - Highlight only actual agent-to-agent connections during message delivery. Human and system prompts no longer animate every note and image connected to their recipient, and repeated activity events preserve unchanged graph snapshots. Very large canvases in automatic rendering mode retain activity colors without continuous SVG dash repainting.
 
+### Security
+
+- Override Handlebars to the official 4.7.10 patch for Postman and Bruno without downgrading their runtimes. Reject malformed compiler ASTs and forbidden constructor lookups, escape inline precompiled script terminators, and preserve ordinary API Client visualizations. Keep the complete dependency audit gate enabled.
+
 ## 0.39.3 - 2026-10-08
 
 ### Fixed
