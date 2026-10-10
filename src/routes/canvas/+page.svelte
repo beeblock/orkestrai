@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { applyEdgeActivity } from '$lib/components/agent-room/canvas/edge-activity.js';
   import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
   import { onMount, tick } from 'svelte';
   import { goto } from '$app/navigation';
@@ -1371,14 +1372,7 @@
   // A edge entre dois terminais acende (verde + fluxo animado) enquanto a
   // bridge esta levando uma mensagem entre eles.
   function handleTalking(payload: { from: string | null; to: string; talking: boolean }) {
-    edges = edges.map((edge) => {
-      const matches = payload.from
-        ? (edge.source === payload.from && edge.target === payload.to) ||
-          (edge.target === payload.from && edge.source === payload.to)
-        : edge.source === payload.to || edge.target === payload.to;
-      if (!matches || edge.data?.talking === payload.talking) return edge;
-      return { ...edge, data: { ...(edge.data ?? {}), talking: payload.talking } };
-    });
+    edges = applyEdgeActivity(edges, nodes, payload);
   }
 
   function exactResumeArgsFor(node: CanvasNode): ((agentSessionId: string) => string[] | null) | undefined {

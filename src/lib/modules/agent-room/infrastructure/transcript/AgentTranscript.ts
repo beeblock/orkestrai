@@ -42,6 +42,11 @@ export type TranscriptLookupOptions = {
   homeDir?: string;
   /** WSL transcripts store Linux cwd values even when read through a UNC path. */
   posixCwd?: boolean;
+  /**
+   * Start of the live PTY process (epoch ms). A turn whose recorded activity is
+   * all older was left open by a process that no longer exists.
+   */
+  processStartedAt?: number;
 };
 
 type ParsedTranscriptTurn = {
@@ -911,6 +916,20 @@ function preferredTranscriptPath(storage: string | undefined, cwd: string, sessi
   return null;
 }
 
+/**
+ * Size of an agent conversation's persisted transcript, or null when it
+ * cannot be located. Used to retire conversations too large to resume well.
+ */
+export function transcriptSizeBytes(provider: string, cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): number | null {
+  try {
+    const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
+    const path = preferredTranscriptPath(storage, cwd, sessionId, options);
+    return path ? statSync(path).size : null;
+  } catch {
+    return null;
+  }
+}
+
 function recentFiles(
   root: string,
   since: number,
@@ -1040,7 +1059,7 @@ function promptAtPath(storage: string | undefined, path: string, expectedPrompt:
 const FILE_LOOKUP_STORAGES = new Set(['claude-project-jsonl', 'codex-rollout-jsonl', 'kimi-session-dir']);
 
 /** A quiet PTY is not proof that a provider has finished its latest turn. */
-export function parseLatestTurnComplete(storage: string, transcript: string): boolean | null {
+export function parseLatestTurnComplete(storage: string, transcript: string, processStartedAt?: number): boolean | null {
   if (!FILE_LOOKUP_STORAGES.has(storage)) return null;
   const lines = transcript.trim().split('\n');
   const records = lines.map((line) => {
@@ -1050,6 +1069,10 @@ export function parseLatestTurnComplete(storage: string, transcript: string): bo
   // final answer while a new turn is running or waiting for tool approval.
   const start = records.findLastIndex((event) => event && typeof event === 'object' && promptFromJsonlEvent(storage, event));
   const scoped = records.slice(Math.max(0, start));
+  // Quitting or crashing mid-turn leaves the turn open forever: a resumed CLI
+  // starts idle without closing it. Activity older than this process cannot be
+  // a running turn, so it must not hold queued work back.
+  if (processStartedAt && turnActivityBefore(storage, scoped, processStartedAt)) return true;
   if (storage === 'claude-project-jsonl') {
     // Legacy reply extraction tolerates missing stop_reason; proactive work
     // requires an actual completed assistant turn and no queued user input.
@@ -1067,6 +1090,22 @@ export function parseLatestTurnComplete(storage: string, transcript: string): bo
   const turn = parserForStorage(storage)!(lines.slice(Math.max(0, start)).join('\n'));
   if (start < 0 && !turn.reply) return null;
   return Boolean(turn.reply && turn.complete);
+}
+
+/** Resume and settings records are not turn work; prompts, tools and answers are. */
+function turnActivityBefore(storage: string, records: unknown[], before: number): boolean {
+  let latest = 0;
+  for (const record of records as Array<Record<string, any> | null>) {
+    if (!record || typeof record !== 'object') continue;
+    const activity = storage === 'claude-project-jsonl'
+      ? ['user', 'assistant', 'queue-operation'].includes(record.type)
+      : storage === 'codex-rollout-jsonl'
+        ? record.type === 'response_item' || (record.type === 'event_msg' && record.payload?.type !== 'thread_settings_applied')
+        : false;
+    const at = activity && typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : Number.NaN;
+    if (Number.isFinite(at) && at > latest) latest = at;
+  }
+  return latest > 0 && latest < before;
 }
 
 /** Bound to this PTY's conversation and host-visible home (including WSL). */
@@ -1087,7 +1126,7 @@ export async function latestTurnComplete(
       : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
         : join(root, sessionId, 'agents', 'main', 'wire.jsonl');
     const text = path ? await transcriptTail(path, TAIL_BYTES) : null;
-    return text ? parseLatestTurnComplete(storage, text) : null;
+    return text ? parseLatestTurnComplete(storage, text, options.processStartedAt) : null;
   } catch {
     return null;
   }

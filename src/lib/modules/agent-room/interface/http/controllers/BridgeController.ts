@@ -12,6 +12,9 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { OpenWorkspaceFolderRequest } from '$lib/modules/agent-room/interface/http/requests/OpenWorkspaceFolderRequest.js';
 import { OpenWorkspaceFolderDto } from '$lib/modules/agent-room/application/dto/OpenWorkspaceFolderDto.js';
+import { bridgeHeavyAcquireSchema, bridgeInboxQuerySchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
+import { heavyRunService } from '$lib/modules/agent-room/application/services/HeavyRunService.js';
+import { orchestrationStatsService } from '$lib/modules/agent-room/application/services/OrchestrationStatsService.js';
 import { bridgeDesignApplySchema, bridgeFigmaSelectionSchema, bridgeReassignSchema, bridgeRoleEditSchema, bridgeRoleWriteSchema, bridgeFloorCreateSchema, bridgeFloorLandSchema, bridgeNoteCreateSchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 import { bridgeBoardTaskSchema, bridgeBoardTaskUpdateSchema } from '$lib/modules/agent-room/contracts/schemas/taskSchemas.js';
 import { managedPortalService } from '$lib/modules/agent-room/application/services/ManagedPortalService.js';
@@ -24,6 +27,7 @@ import { buildUsageRoutingReport } from '$lib/modules/agent-room/domain/usage-ro
 import { z } from 'zod';
 import {
   BridgeAskRequest,
+  BridgeReplyRequest,
   BridgeConnectRequest,
   BridgeDismissRequest,
   BridgeRecruitRequest,
@@ -1325,6 +1329,86 @@ export class BridgeController extends Controller {
     }
   }
 
+  /** Explicit answer to a received message (orkestrai reply <messageId>). */
+  async reply(event: any) {
+    try {
+      const input = await BridgeReplyRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      // A live terminal answers only as itself; `from` is the fallback for shells without a PTY token.
+      const authenticated = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      const from = authenticated ?? input.from;
+      return this.json({ data: await bridgeService.reply(workspace.id, { from, messageId: event.params.messageId, message: input.message }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao responder a mensagem.');
+    }
+  }
+
+  /** Pending inbox items for the authenticated agent terminal; reading them marks them delivered. */
+  async inbox(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!actor) return this.json({ error: 'A caixa de entrada exige a identidade do terminal do agente.' }, 403);
+      const query = bridgeInboxQuerySchema.parse({ limit: event.url.searchParams.get('limit') ?? undefined });
+      return this.json({ data: await bridgeService.claimInbox(workspace.id, actor, query.limit) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao ler a caixa de entrada.');
+    }
+  }
+
+  /** Machine-wide slot for a heavy command (orkestrai heavy -- <command>). */
+  async heavyAcquire(event: any) {
+    try {
+      const input = bridgeHeavyAcquireSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const nodeId = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      return this.json({ data: await heavyRunService.acquire({ workspaceId: workspace.id, nodeId, label: input.label, taskId: input.taskId, ticket: input.ticket, waitMs: input.waitMs }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao reservar execução pesada.');
+    }
+  }
+
+  async heavyHeartbeat(event: any) {
+    try {
+      await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await heavyRunService.renew(String(event.params.leaseId)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao renovar execução pesada.', 401);
+    }
+  }
+
+  async heavyRelease(event: any) {
+    try {
+      await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const id = String(event.params.leaseId);
+      const released = heavyRunService.release(id);
+      if (!released) heavyRunService.leave(id);
+      return this.json({ data: { released } });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao liberar execução pesada.', 401);
+    }
+  }
+
+  async heavyStatus(event: any) {
+    try {
+      await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await heavyRunService.status() });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao consultar execuções pesadas.', 401);
+    }
+  }
+
+  /** Message latency, inbox depth and throughput for the workspace (orkestrai stats). */
+  async stats(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const hours = Number(event.url.searchParams.get('hours') ?? 24);
+      return this.json({ data: await orchestrationStatsService.workspace(workspace.id, Number.isFinite(hours) ? hours : 24) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao calcular as métricas.', 401);
+    }
+  }
+
   async readNote(event: any) {
     try {
       const token = this.requireToken(event);
@@ -1814,7 +1898,7 @@ export class BridgeController extends Controller {
       const input = bridgeFloorLandSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       await floorService.requireFloor(workspace.id, event.params.floorId);
-      return this.json({ data: await floorService.land(event.params.floorId, input.targetBranch ?? undefined) });
+      return this.json({ data: await floorService.land(event.params.floorId, input.targetBranch ?? undefined, { commitPending: input.commitPending, message: input.message ?? undefined }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao aterrissar andar.');
     }

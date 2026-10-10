@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -170,6 +170,34 @@ describe('AgentSessionTracker', () => {
     tracker.claim(ownId);
     expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
     expect(tracker.findLatestAgentSessionId(codexAdapter.sessionStorage, cwd, new Set([ownId]))).toBe(oldId);
+  });
+
+  it('never guesses between two Codex terminals launched together in the same cwd', async () => {
+    vi.useFakeTimers();
+    try {
+      const { home, tracker } = isolatedTracker();
+      const sessions = join(home, '.codex', 'sessions', '2026', '10', '09');
+      mkdirSync(sessions, { recursive: true });
+      const cwd = home;
+      const startedAt = Date.now() - 1_000;
+      const leaderId = '33333333-3333-4333-8333-333333333333';
+      const directorId = '44444444-4444-4444-8444-444444444444';
+      const found: Record<string, string> = {};
+      tracker.watch('pty-director', codexAdapter.sessionStorage, cwd, startedAt, (id) => { found.director = id; });
+      tracker.watch('pty-leader', codexAdapter.sessionStorage, cwd, startedAt + 200, (id) => { found.leader = id; });
+      // Only the leader transcript exists when the director polls first.
+      writeFileSync(join(sessions, `rollout-a-${leaderId}.jsonl`), `${JSON.stringify({ type: 'session_meta', payload: { cwd, timestamp: new Date().toISOString() } })}\n`);
+      await vi.advanceTimersByTimeAsync(3_100);
+      expect(found).toEqual({});
+      // The leader's first delivered prompt is confirmed in its own transcript.
+      tracker.bind('pty-leader', leaderId);
+      writeFileSync(join(sessions, `rollout-b-${directorId}.jsonl`), `${JSON.stringify({ type: 'session_meta', payload: { cwd, timestamp: new Date().toISOString() } })}\n`);
+      await vi.advanceTimersByTimeAsync(3_100);
+      expect(found).toEqual({ director: directorId });
+      expect(tracker.agentSessionIdForPty('pty-leader')).toBe(leaderId);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('vincula a sessao do Kimi pelo hash exato mesmo com pastas de mesmo nome', () => {

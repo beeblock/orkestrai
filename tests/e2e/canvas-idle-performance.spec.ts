@@ -57,8 +57,22 @@ test('pans and zooms a 290-node, 727-edge creative canvas without unmounting its
   }));
   const edges = Array.from({ length: 727 }, (_, i) => ({ id: randomUUID(), workspaceId: workspace.id, sourceNodeId: nodes[i % 290].id, targetNodeId: nodes[(i % 290 + 1 + Math.floor(i / 290)) % 290].id }));
   const errors: string[] = [];
+  let activitySocket: import('@playwright/test').WebSocketRoute | undefined;
+  await page.routeWebSocket('**/ws/agent-room/pty', socket => {
+    const server = socket.connectToServer();
+    server.onMessage(message => socket.send(message));
+    socket.onMessage(message => {
+      const request = JSON.parse(String(message));
+      if (request.type === 'subscribe' && request.events?.includes('workspaceChanged')) activitySocket = socket;
+      server.send(message);
+    });
+  });
   page.on('pageerror', error => errors.push(error.message));
-  await page.route(`**/workspaces/${workspace.id}/nodes`, route => route.fulfill({ json: { data: nodes } }));
+  let nodeReads = 0;
+  await page.route(`**/workspaces/${workspace.id}/nodes`, route => {
+    nodeReads++;
+    return route.fulfill({ json: { data: nodes } });
+  });
   await page.route(`**/workspaces/${workspace.id}/edges`, route => route.fulfill({ json: { data: edges } }));
   await page.route(`**/workspaces/${workspace.id}/image-workflows/*`, route => route.fulfill({ json: { data: { running: false, runId: null, lastError: null, executorReady: false, executorNodeId: null, executorTitle: null } } }));
   try {
@@ -67,6 +81,17 @@ test('pans and zooms a 290-node, 727-edge creative canvas without unmounting its
     await page.goto(`/canvas?workspace=${workspace.id}`);
     await expect(page.locator('.svelte-flow__node')).toHaveCount(290);
     await expect(page.locator('.svelte-flow__edge')).toHaveCount(727);
+    await expect.poll(() => Boolean(activitySocket)).toBe(true);
+    const readsBeforeActivity = nodeReads;
+    activitySocket!.send(JSON.stringify({ type: 'talking', workspaceId: workspace.id, from: null, to: nodes[0].id, talking: true }));
+    activitySocket!.send(JSON.stringify({ type: 'workspaceChanged', workspaceId: workspace.id }));
+    // A prompt to a recipient must not animate all of its unrelated assets.
+    // Both frames share an ordered socket. Observing the refresh proves the
+    // preceding activity frame was consumed before checking rendered classes.
+    await expect.poll(() => nodeReads).toBeGreaterThan(readsBeforeActivity);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(page.locator('.orkestrai-edge.talking')).toHaveCount(0);
+    await expect(page.locator('.edge-line.animated')).toHaveCount(0);
     const deferred = await page.locator('.canvas-image .node-body').first().evaluate(element => getComputedStyle(element).contentVisibility);
     expect(deferred).toBe('auto');
     await page.evaluate(() => {

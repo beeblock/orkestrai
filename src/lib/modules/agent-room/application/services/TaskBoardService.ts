@@ -15,6 +15,8 @@ import {
 import { AutomationTriggerReceived } from '../../domain/events/AutomationTriggerReceived.js';
 import { agentSessionService } from './AgentSessionService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { agentInboxService, taskRecoveryKey } from './AgentInboxService.js';
+import { floorService } from './FloorService.js';
 import { designDocumentService } from './DesignDocumentService.js';
 import { designDeliveryReadiness } from '../../domain/design-delivery-readiness.js';
 
@@ -43,6 +45,8 @@ export type BoardTask = {
     status: 'queued' | 'leader_offline' | 'no_leader' | 'not_needed';
     leaderTitle: string | null;
   };
+  /** Floor work committed automatically when its assignee finished the task. */
+  completionFloor?: { id: string; name: string; commit: string | null; error?: string };
   assignmentDelivery?: {
     dispatched: boolean;
     reason: 'assigned_and_submitted' | 'already_assigned_no_resend' | 'unassigned';
@@ -317,6 +321,46 @@ export class TaskBoardService {
     return model;
   }
 
+  /**
+   * A finished task's floor work is committed on its branch so the leader can
+   * land it in one call; uncommitted floors were the reason nothing landed.
+   */
+  private async commitAssigneeFloor(workspaceId: string, task: BoardTask): Promise<BoardTask['completionFloor'] | null> {
+    const node = task.assigneeNodeId ? await workspaceRepository.getNode(task.assigneeNodeId) : null;
+    if (!node?.floorId || node.workspaceId !== workspaceId) return null;
+    const floor = await floorService.get(node.floorId);
+    if (!floor || floor.workspaceId !== workspaceId || floor.status !== 'active') return null;
+    try {
+      const commit = await floorService.commitPending(floor.id, `${task.title}\n\nOrkestrai-Task: ${task.id}`);
+      return { id: floor.id, name: floor.name, commit };
+    } catch (error) {
+      return { id: floor.id, name: floor.name, commit: null, error: (error instanceof Error ? error.message : String(error)).slice(0, 300) };
+    }
+  }
+
+  /** The agent who created the task, or the workspace leader, never the assignee itself. */
+  private async briefingSender(workspaceId: string, task: AgentBoardTask, assigneeNodeId: string): Promise<string | null> {
+    const createdBy = String(task.getAttribute('created_by') ?? '');
+    const creator = createdBy ? await workspaceRepository.getNode(createdBy) : null;
+    if (creator?.type === 'terminal' && creator.workspaceId === workspaceId && creator.id !== assigneeNodeId) return creator.id;
+    const leader = (await workspaceRepository.listNodes(workspaceId)).find((candidate) =>
+      candidate.type === 'terminal' && Boolean((candidate.payload as { maestro?: boolean }).maestro));
+    return leader && leader.id !== assigneeNodeId ? leader.id : null;
+  }
+
+  /** Inbox relevance: the task is still open (and still assigned to the recipient when given). */
+  async isInboxTaskActive(workspaceId: string, taskId: string, assigneeNodeId?: string, allowTodo = false): Promise<boolean> {
+    return this.isTaskDeliveryActive(workspaceId, taskId, assigneeNodeId, allowTodo);
+  }
+
+  /** A completion notice stays relevant while the task remains done and the recipient still leads. */
+  async isInboxTaskDone(workspaceId: string, taskId: string, leaderNodeId: string): Promise<boolean> {
+    const [task, leader] = await Promise.all([AgentBoardTask.find(taskId), workspaceRepository.getNode(leaderNodeId)]);
+    return Boolean(task && task.getAttribute('workspace_id') === workspaceId && task.getAttribute('status') === 'done'
+      && !task.getAttribute('archived_at') && leader?.workspaceId === workspaceId && leader.type === 'terminal'
+      && (leader.payload as { maestro?: boolean }).maestro);
+  }
+
   private async isTaskDeliveryActive(
     workspaceId: string,
     taskId: string,
@@ -469,6 +513,10 @@ export class TaskBoardService {
     }
     notifyWorkspaceChanged(workspaceId);
     const updated = await this.mapWithTitles(await this.requireTask(workspaceId, taskId));
+    if (!wasDone && updated.status === 'done' && updated.assigneeNodeId) {
+      const completionFloor = await this.commitAssigneeFloor(workspaceId, updated);
+      if (completionFloor) updated.completionFloor = completionFloor;
+    }
     if (!wasDone && updated.assigneeNodeId && (updated.status === 'done' || /^(blocked|error|failed)$/.test(updated.status))) {
       const reflection = await agentLearningService.capture(workspaceId, updated.assigneeNodeId, taskId);
       if (reflection) updated.learning = { reflectionId: reflection.id, nodeId: updated.assigneeNodeId, taskId, instruction: 'Reflect now with learning_reflect using this task and your own nodeId: record a reusable correction/procedure, its trigger and concrete evidence. No fabricated lessons. Use learning_skip with this reflectionId and revision 1 if nothing reusable was learned. Existing security gates still apply.' };
@@ -680,12 +728,22 @@ export class TaskBoardService {
     if (!leader) return;
     const sessionId = (leader.payload as { sessionId?: string }).sessionId;
     const session = sessionId ? ptySessionManager.get(sessionId) : null;
-    if (!session || session.exited) return;
+    const leaderIsAgent = session && !session.exited ? Boolean(session.provider) : Boolean((leader.payload as { provider?: string }).provider);
+    if ((!session || session.exited) && !leaderIsAgent) return;
     const task = await this.requireTask(workspaceId, taskId);
     const hint = assigned
       ? `O usuário atribuiu direto para um agente — acompanhe com: orkestrai task list`
       : `SEM responsável. Distribua: orkestrai task assign ${taskId} "<Agente>" (ou coordene como achar melhor)`;
     const content = `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`;
+    if (leaderIsAgent) {
+      // A busy leader reads it at its next turn boundary; an offline one on resume.
+      await agentInboxService.enqueue({
+        workspaceId, toNodeId: leader.id, kind: 'task_created', taskId, content,
+        dedupKey: `task-created:${taskId}:${leader.id}`, metadata: { wake: false },
+      });
+      return;
+    }
+    if (!session || session.exited) return;
     const receipt = { messageId: uuidv7(), workspaceId, fromNodeId: null, toNodeId: leader.id, content,
       metadata: { kind: 'task_created', taskId, correlationId: `task:${taskId}` } };
     await controlCenterService.recordDelivery({ ...receipt, state: 'queued' });
@@ -786,15 +844,25 @@ export class TaskBoardService {
 
     const sessionId = (leader.payload as { sessionId?: string }).sessionId;
     const session = sessionId ? ptySessionManager.get(sessionId) : null;
+    const leaderIsAgent = session && !session.exited ? Boolean(session.provider) : Boolean((leader.payload as { provider?: string }).provider);
+    const author = completer?.title ?? task.assigneeTitle ?? completedBy ?? 'agente';
+    const floorNote = task.completionFloor
+      ? ` Andar ${task.completionFloor.name}: ${task.completionFloor.commit ? `commit ${task.completionFloor.commit.slice(0, 10)}` : 'sem alteracoes'}; integre com orkestrai floor land ${task.completionFloor.id}.`
+      : '';
+    const content =
+      `[tarefa concluida no quadro #${task.id.slice(0, 8)}] Titulo: ${task.title}. Concluida por: ${author}.${floorNote} ` +
+      'Revise a evidencia entregue; se estiver correta, integre o andar quando houver e distribua o proximo trabalho completo. ' +
+      'Consulte o quadro ou pergunte ao agente somente se faltar evidencia. Nao repita list/usage/learning_search como checklist.';
+    if (leaderIsAgent) {
+      await agentInboxService.enqueue({
+        workspaceId, toNodeId: leader.id, fromNodeId: completer?.id ?? null, kind: 'task_completion', taskId: task.id, content,
+        dedupKey: `task-completion:${task.id}:${leader.id}`, metadata: { wake: false, taskTitle: task.title },
+      });
+      return { status: session && !session.exited ? 'queued' : 'leader_offline', leaderTitle: leader.title ?? 'Lider' };
+    }
     if (!session || session.exited) {
       return { status: 'leader_offline', leaderTitle: leader.title ?? 'Lider' };
     }
-
-    const author = completer?.title ?? task.assigneeTitle ?? completedBy ?? 'agente';
-    const content =
-      `[tarefa concluida no quadro #${task.id.slice(0, 8)}] Titulo: ${task.title}. Concluida por: ${author}. ` +
-      'Verifique o resultado e o quadro agora; se estiver correto, integre o andar quando houver e distribua o proximo trabalho. ' +
-      'Use os dados desta entrega para decidir a proxima acao; consulte o quadro ou pergunte ao agente somente se faltar evidencia. Nao repita list/usage/learning_search como checklist.';
     const messageId = uuidv7();
     const isStillRelevant = async () => {
       const [currentTask, currentLeader] = await Promise.all([
@@ -917,6 +985,28 @@ export class TaskBoardService {
         || node.type !== 'terminal'
         || String((node.payload as { sessionId?: string }).sessionId ?? '') !== input.sessionId
       ) return;
+      // A working agent only needs a nudge when its turn really died with the
+      // previous process; one that finished its turn idle is left alone.
+      const interrupted = input.previousState === 'working';
+      if (interrupted && !(await agentInboxService.interruptedTurn(input.workspaceId, input.nodeId, input.sessionId))) return;
+      const recoveredSession = ptySessionManager.get(input.sessionId);
+      if (recoveredSession?.provider) {
+        await agentInboxService.enqueue({
+          workspaceId: input.workspaceId, toNodeId: input.nodeId, kind: 'task_recovery', taskId: input.taskId,
+          dedupKey: taskRecoveryKey(input.taskId, input.sessionId),
+          content: [
+            `[automatic task recovery #${input.taskId.slice(0, 8)}]`,
+            `The previous state was ${input.previousState}: ${input.previousAction ?? '(no details)'}.`,
+            interrupted
+              ? 'Your previous session ended in the middle of this task (Orkestrai restarted or the terminal closed). Check what is already done in the working tree and on the board, then continue from there through validation and completion. You own this delivery: do not return executable install, test, review, or cleanup steps to the user.'
+              : 'The session and environment are available again. Recheck the former blocker now. If it no longer exists, report working with the same taskId and resume execution through validation and completion. You own this delivery: do not return executable install, test, review, or cleanup steps to the user. Reconcile any provider-native goal or plan that remained blocked with the Orkestrai Control Center and Kanban state.',
+            await taskBrief(task),
+            `Only after the delivery is genuinely validated, finish it with: orkestrai task done ${input.taskId}`,
+          ].join('\n'),
+          metadata: { previousState: input.previousState, taskTitle: String(task.getAttribute('title')) },
+        });
+        return;
+      }
       const ready = await ptySessionManager.waitUntilIdle(input.sessionId, 30_000);
       if (!ready) throw new Error(`The resumed agent "${node.title ?? node.id}" did not become ready.`);
       const prompt = [
@@ -986,8 +1076,14 @@ export class TaskBoardService {
     }
     const activeSessionId = sessionId;
     if (!activeSessionId) throw new Error(`O agente "${node.title ?? node.id}" não possui uma sessão PTY para receber a tarefa.`);
-    const ready = await ptySessionManager.waitUntilInitialIdle(activeSessionId, 30_000);
-    if (!ready) throw new Error(`O agente "${node.title ?? node.id}" não ficou pronto para receber a tarefa.`);
+    const agentSession = Boolean(session?.provider);
+    // Agent TUIs receive the brief through the inbox at their next turn
+    // boundary: assigning work never blocks on (or fails because of) a busy
+    // or still-booting assignee. Plain shells keep immediate delivery.
+    if (!agentSession) {
+      const ready = await ptySessionManager.waitUntilInitialIdle(activeSessionId, 30_000);
+      if (!ready) throw new Error(`O agente "${node.title ?? node.id}" não ficou pronto para receber a tarefa.`);
+    }
     const designNodeId = designNodeIdFromTask(task);
     if (designNodeId) {
       const designNode = await workspaceRepository.getNode(designNodeId);
@@ -1015,6 +1111,15 @@ export class TaskBoardService {
     // A entrega espera o composer estabilizar e, em ConPTY/WSL, confirma no
     // transcript que o provider realmente iniciou o turno.
     const prompt = `[nova tarefa do quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\nQuando terminar, marque com: orkestrai task done ${taskId}`;
+    if (agentSession) {
+      await agentInboxService.enqueue({
+        workspaceId, toNodeId: node.id, kind: 'task', taskId, content: prompt,
+        // Replies to a briefing (checkpoints, questions) must reach whoever coordinates it.
+        fromNodeId: await this.briefingSender(workspaceId, task, node.id),
+        dedupKey: `task-dispatch:${taskId}:${node.id}`, metadata: { taskTitle: String(task.getAttribute('title')) },
+      });
+      return;
+    }
     await agentTerminalDeliveryService.deliver({
       workspaceId,
       nodeId: node.id,
@@ -1043,6 +1148,88 @@ export class TaskBoardService {
 }
 
 export const taskBoardService = new TaskBoardService();
+
+function inboxTaskId(envelope: { metadata: Record<string, unknown> }): string | null {
+  return typeof envelope.metadata.taskId === 'string' ? envelope.metadata.taskId : null;
+}
+agentInboxService.registerRelevance('task', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  return Boolean(taskId && await taskBoardService.isInboxTaskActive(envelope.workspaceId, taskId, envelope.toNodeId));
+});
+agentInboxService.registerRelevance('task_recovery', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  return Boolean(taskId && await taskBoardService.isInboxTaskActive(envelope.workspaceId, taskId, envelope.toNodeId));
+});
+agentInboxService.registerRelevance('task_created', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  return Boolean(taskId && await taskBoardService.isInboxTaskActive(envelope.workspaceId, taskId, undefined, true));
+});
+agentInboxService.registerRelevance('task_completion', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  return Boolean(taskId && await taskBoardService.isInboxTaskDone(envelope.workspaceId, taskId, envelope.toNodeId));
+});
+agentInboxService.onDelivered('task', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  if (!taskId) return;
+  await controlCenterService.recordActivity({
+    workspaceId: envelope.workspaceId,
+    nodeId: envelope.toNodeId,
+    state: 'working',
+    action: 'system:task_working',
+    taskId,
+    metadata: { taskTitle: envelope.metadata.taskTitle ?? null },
+    category: 'task',
+    verb: 'started',
+    objectType: 'task',
+    objectId: taskId,
+    objectTitle: typeof envelope.metadata.taskTitle === 'string' ? envelope.metadata.taskTitle : null,
+    outcome: null,
+    correlationId: `task:${taskId}`,
+    sourceType: 'kanban',
+    sourceId: taskId,
+  });
+});
+agentInboxService.onDelivered('task_recovery', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  if (!taskId) return;
+  await controlCenterService.recordActivity({
+    workspaceId: envelope.workspaceId,
+    nodeId: envelope.toNodeId,
+    state: 'working',
+    action: 'system:task_recovery_dispatched',
+    taskId,
+    metadata: { taskTitle: envelope.metadata.taskTitle ?? null, previousState: envelope.metadata.previousState ?? null },
+    category: 'task',
+    verb: 'resumed',
+    objectType: 'task',
+    objectId: taskId,
+    objectTitle: typeof envelope.metadata.taskTitle === 'string' ? envelope.metadata.taskTitle : null,
+    correlationId: `task:${taskId}`,
+    sourceType: 'kanban',
+    sourceId: taskId,
+  });
+});
+agentInboxService.onDelivered('task_completion', async (envelope) => {
+  const taskId = inboxTaskId(envelope);
+  if (!taskId) return;
+  await controlCenterService.recordActivity({
+    workspaceId: envelope.workspaceId,
+    nodeId: envelope.toNodeId,
+    state: 'working',
+    action: 'system:task_review',
+    taskId: null,
+    metadata: { taskTitle: envelope.metadata.taskTitle ?? null },
+    category: 'review',
+    verb: 'requested',
+    objectType: 'task',
+    objectId: taskId,
+    objectTitle: typeof envelope.metadata.taskTitle === 'string' ? envelope.metadata.taskTitle : null,
+    outcome: null,
+    correlationId: `task:${taskId}`,
+    sourceType: 'kanban',
+    sourceId: taskId,
+  });
+});
 
 const recoveryLifecycle = globalThis as unknown as {
   __orkestraiRecoverBlockedTask?: (input: Parameters<TaskBoardService['recoverBlockedTask']>[0]) => void;

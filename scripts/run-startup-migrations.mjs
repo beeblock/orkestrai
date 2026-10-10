@@ -16,12 +16,13 @@ export async function runStartupMigrations(migrations, { databasePath, existingD
     if (!databasePath) throw new Error('A database backup path is required before startup migrations.');
     const client = await Connection.rawClient();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    // SQLite's backup API includes committed WAL pages. A plain file copy does
-    // not, and cannot be relied on before automatically repairing a schema.
+    // VACUUM INTO writes a consistent snapshot including committed WAL pages,
+    // like the backup API, but only live pages: a mostly-free 1.9 GB database
+    // backs up as its few hundred MB of data. A plain file copy is never used.
     const backupPath = `${databasePath}.bak-${stamp}`;
     const reserved = await open(backupPath, 'wx', 0o600);
     await reserved.close();
-    await client.backup(backupPath);
+    client.prepare('VACUUM INTO ?').run(backupPath);
     // Make the backup independently restorable as one file, not a DB/WAL pair.
     const snapshot = new Database(backupPath);
     try {
@@ -39,4 +40,28 @@ export async function runStartupMigrations(migrations, { databasePath, existingD
   // Table/column/index changes and their migration records commit together.
   // A failed statement or interrupted process cannot leave another half-batch.
   return Connection.transaction(() => new Migrator().run(migrations));
+}
+
+/**
+ * Reclaims free pages left by deleted data (the desktop database reached
+ * 1.9 GB with 84% free pages) and truncates the WAL. Runs at boot, before the
+ * server accepts requests, only when it is worth it and the disk has room.
+ */
+export async function compactStartupDatabase({ minFreeBytes = 256 * 1024 * 1024, minFreeRatio = 0.25, freeDiskBytes = null } = {}) {
+  if (Connection.getDriver() !== 'sqlite') return { compacted: false };
+  const client = await Connection.rawClient();
+  client.pragma('journal_size_limit = 67108864');
+  const pageSize = Number(client.pragma('page_size', { simple: true }));
+  const pageCount = Number(client.pragma('page_count', { simple: true }));
+  const freePages = Number(client.pragma('freelist_count', { simple: true }));
+  const liveBytes = (pageCount - freePages) * pageSize;
+  const reclaimable = freePages * pageSize;
+  let compacted = false;
+  if (reclaimable >= minFreeBytes && freePages / Math.max(1, pageCount) >= minFreeRatio
+    && (freeDiskBytes === null || freeDiskBytes > liveBytes * 2)) {
+    client.exec('VACUUM');
+    compacted = true;
+  }
+  client.pragma('wal_checkpoint(TRUNCATE)');
+  return { compacted, reclaimedBytes: compacted ? reclaimable : 0 };
 }

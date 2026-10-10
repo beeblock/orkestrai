@@ -1047,6 +1047,11 @@ export type Floor = {
   branch: string;
   path: string;
   status: 'active' | 'landed' | 'deleted';
+  /** Commit the floor started from; a working-tree snapshot when main had uncommitted changes. */
+  baseCommit?: string | null;
+  baseKind?: 'head' | 'snapshot' | null;
+  /** Floor HEAD applied to a dirty main checkout without a merge commit. */
+  landedHead?: string | null;
   createdAt: string;
   updatedAt: string;
 };

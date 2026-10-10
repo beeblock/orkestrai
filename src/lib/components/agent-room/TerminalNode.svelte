@@ -445,6 +445,43 @@
     });
     fitAddon.fit();
 
+    // Off-screen terminals do not paint: agent TUIs redraw spinners and timers
+    // several times a second, and every write mutates the DOM renderer. Output
+    // is kept in order and written when the node scrolls back into view, with
+    // a bounded background flush so the parser never falls far behind.
+    let onScreen = true;
+    let hiddenOutput: string[] = [];
+    let hiddenBytes = 0;
+    let hiddenFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushHiddenOutput = () => {
+      if (hiddenFlushTimer) {
+        clearTimeout(hiddenFlushTimer);
+        hiddenFlushTimer = null;
+      }
+      if (!hiddenOutput.length || disposed) return;
+      const data = hiddenOutput.join('');
+      hiddenOutput = [];
+      hiddenBytes = 0;
+      terminal.write(data);
+    };
+    const writeOutput = (data: string) => {
+      if (onScreen) {
+        terminal.write(data);
+        return;
+      }
+      hiddenOutput.push(data);
+      hiddenBytes += data.length;
+      if (hiddenBytes > 1_000_000) flushHiddenOutput();
+      else hiddenFlushTimer ??= setTimeout(flushHiddenOutput, 15_000);
+    };
+    const visibilityObserver = new IntersectionObserver((entries) => {
+      const visibleNow = entries.some((entry) => entry.isIntersecting);
+      if (visibleNow === onScreen) return;
+      onScreen = visibleNow;
+      if (onScreen) flushHiddenOutput();
+    });
+    visibilityObserver.observe(container);
+
     // OSC 7 e o contrato padrao de shells integrados para publicar o cwd.
     // A deteccao no servidor cobre zsh/bash sem integracao no macOS/Linux.
     terminal.parser.registerOscHandler(7, (payload) => {
@@ -559,6 +596,9 @@
       // can keep drawing the cursor with the previous renderer geometry.
       // Reattach sends the complete retained history, not an incremental delta.
       // Reset in the parser queue so old queued output cannot duplicate it.
+      // The full history supersedes any output batched while off-screen.
+      hiddenOutput = [];
+      hiddenBytes = 0;
       terminal.write(`\x1bc${replay}`, () => {
         if (disposed) return;
         terminal.clearTextureAtlas();
@@ -649,7 +689,7 @@
           }
           break;
         case 'output':
-          terminal.write(message.data);
+          writeOutput(String(message.data));
           if (captureAfterDictation) {
             captureBuf = (captureBuf + String(message.data)).slice(-32_000);
             scheduleSpeakFromCapture();
@@ -780,6 +820,8 @@
       captureAfterDictation = false;
       pendingDictation = false;
       resizeObserver.disconnect();
+      visibilityObserver.disconnect();
+      if (hiddenFlushTimer) clearTimeout(hiddenFlushTimer);
       socket?.close();
       terminal.dispose();
       xtermInstance = null;
@@ -880,6 +922,10 @@
     height: 100%;
     background: #090820;
     overflow: hidden;
+    /* A TUI redraw must not rerasterize the entire creative canvas behind it.
+       Contain layout/paint and give each live terminal its own compositor layer. */
+    contain: layout paint;
+    transform: translateZ(0);
   }
 
   .terminal-container {

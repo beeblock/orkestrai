@@ -74,7 +74,7 @@ export function edgePerformanceProfile(input: {
       : { mode: 'curve', segments: 0, iterations: 0, fps: 0, animateActivity: false };
   }
   return input.emphasized
-    ? { mode: 'curve', segments: 0, iterations: 0, fps: 0, animateActivity: true }
+    ? { mode: 'curve', segments: 0, iterations: 0, fps: 0, animateActivity: input.edgeCount <= 500 }
     : { mode: input.edgeCount > 500 ? 'line' : 'curve', segments: 0, iterations: 0, fps: 0, animateActivity: false };
 }
 

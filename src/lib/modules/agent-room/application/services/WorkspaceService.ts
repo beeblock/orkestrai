@@ -353,9 +353,11 @@ export class WorkspaceService {
         let resumable: boolean | null = null;
         try {
           let tracker = agentSessionTracker;
-          let trackingCwd = workspace.workingDir;
+          // Claude stores a conversation under the folder it was launched in:
+          // a Floor agent's transcript lives under the Floor, not the workspace.
+          const floor = node.floorId ? await floorService.get(node.floorId).catch(() => null) : null;
+          let trackingCwd = floor?.path ?? workspace.workingDir;
           if (executionRuntime.kind === 'wsl') {
-            const floor = node.floorId ? await floorService.get(node.floorId) : null;
             const hostCwd = floor?.path ?? workspace.workingDir;
             const context = await resolveWslTrackingContext({ runtime: executionRuntime, hostCwd, workspaceRoot: workspace.workingDir });
             tracker = agentSessionTrackerForRuntime(

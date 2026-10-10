@@ -156,14 +156,29 @@ device access.
   on-demand agents resume only for messages or durable automations, or ask the
   Core to supervise a persistent process. Each agent has idle, concurrency,
   and provider-usage safeguards plus explicit wake and sleep controls.
+- **Continuous team delivery:** agent messages go through a persistent inbox.
+  A recipient in the middle of a model turn gets everything pending as one
+  prompt at its next turn boundary, or attached to the response of any bridge
+  call, while the sender is released at once; answers are routed exactly once
+  to the waiting caller or to the asker's inbox (`orkestrai inbox`,
+  `orkestrai reply <messageId>`). Task briefings never block the leader on a
+  busy assignee. Builds, E2E suites and packaging wait in a machine-wide queue
+  with `orkestrai heavy -- <command>`, and `orkestrai stats` reports delivery
+  and reply latency, inbox depth and throughput.
+- **Floors that land:** a Floor starts from the current main checkout,
+  including uncommitted work, and shares installed dependencies. Finishing a
+  task commits its Floor work; `floor land` merges on a clean checkout or, with
+  local changes, applies only the Floor delta with a per-file three-way merge
+  and changes nothing on conflict.
 - **Automatic leader supervision:** the Core checks every 15 seconds for
-  unarchived `todo`/`doing` cards and a live, idle workspace leader. After two
-  quiet minutes and a completed provider turn, it sends one compact reminder
-  per semantic board state, with at least five minutes between changed-work
-  reminders and persisted fingerprints/receipts in Control Center. Unchanged
-  cards, timestamp-only updates and Core/terminal restarts do not repeat the
-  reminder. Providers without a reliable turn-end signal require an explicit
-  `done` activity in the current session. Empty/completed boards stay quiet even
+  unarchived `todo`/`doing` cards and a live, idle workspace leader with an
+  empty inbox. After two quiet minutes and a completed provider turn, it
+  reminds the leader when cards changed or a teammate reported a new blocker or
+  result, at least five minutes apart, with persisted fingerprints/receipts in
+  Control Center. Unchanged work gets at most three reminders 30 minutes apart,
+  only while a teammate has been waiting for more than ten minutes. Providers
+  without a reliable turn-end signal require an explicit `done` activity in
+  the current session. Empty/completed boards stay quiet even
   with active Floors; custom review columns do not independently trigger reminders. This
   does not wake manually sleeping agents or override human drafts, pending
   deliveries, input/permission requests, quotas, suspension, emergency stop,

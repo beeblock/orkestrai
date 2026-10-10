@@ -252,6 +252,33 @@ describe('ControlCenterService', () => {
     expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
   });
 
+  it('oferece retomada a um agente que estava trabalhando quando a PTY caiu', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'resume interrupted work', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Currency' });
+    const taskId = uuidv7();
+    const now = new Date().toISOString();
+    await AgentBoardTask.query().insert({
+      id: taskId, workspace_id: workspace.id, title: 'Currency symbol upload', description: null, status: 'doing',
+      assignee_node_id: agent.id, image_path: null, images_json: null, attachments_json: null, note_node_id: null,
+      created_by: 'automation', created_at: now, updated_at: now,
+    });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: agent.id, state: 'working', action: 'Wiring the upload', taskId });
+
+    const recoveries: unknown[] = [];
+    const lifecycle = globalThis as unknown as { __orkestraiRecoverBlockedTask?: (input: unknown) => void };
+    const previousRecovery = lifecycle.__orkestraiRecoverBlockedTask;
+    try {
+      lifecycle.__orkestraiRecoverBlockedTask = (input) => recoveries.push(input);
+      await controlCenterService.recordLifecycleActivity({
+        workspaceId: workspace.id, nodeId: agent.id, state: 'starting', action: 'system:pty_resumed', metadata: { sessionId: 'resumed-session' },
+      });
+    } finally {
+      if (previousRecovery) lifecycle.__orkestraiRecoverBlockedTask = previousRecovery;
+      else delete lifecycle.__orkestraiRecoverBlockedTask;
+    }
+    expect(recoveries).toEqual([expect.objectContaining({ taskId, sessionId: 'resumed-session', previousState: 'working' })]);
+  });
+
   it('preserva a recuperação até o TaskBoard registrar o handler global', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'pending recovery', workingDir: '/tmp' });
     const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Release lead' });

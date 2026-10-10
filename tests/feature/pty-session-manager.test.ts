@@ -7,6 +7,47 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
  * Nao depende de nenhuma CLI de agente.
  */
 describe('PtySessionManager', () => {
+  it.each(['\x1b[1;1R', '\x1b[I', '\x1b[O', '\x1b[<0;10;20M', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\', '\x1bOA'])('does not mistake fragmented terminal controls for a human draft: %j', async control => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = { write: (data: string) => writes.push(data), resize() {}, kill() {}, pid: 1,
+      onData: (listener: typeof emitData) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: '/bin/cat', cwd: '/tmp' });
+    try {
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      for (const char of control) manager.writeHumanInput(session.id, char);
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(true);
+      const delivery = manager.queueWithSubmit(session.id, 'handoff');
+      await vi.advanceTimersByTimeAsync(1_000);
+      await delivery.submitted;
+      expect(writes.slice(-2)).toEqual(['handoff', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('keeps a real human draft protected across split control and paste sequences', async () => {
+    vi.useFakeTimers();
+    let emitData!: (data: string) => void;
+    const fakePty = { write() {}, resize() {}, kill() {}, pid: 1,
+      onData: (listener: typeof emitData) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: '/bin/cat', cwd: '/tmp' });
+    try {
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      for (const char of '\x1b[200~draft\x1b[201~\x1b[D') manager.writeHumanInput(session.id, char);
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+      manager.writeHumanInput(session.id, '\x15');
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(true);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
   it('only offers an idle, initialized and empty composer to optional supervision', async () => {
     vi.useFakeTimers();
     let emitData!: (data: string) => void;

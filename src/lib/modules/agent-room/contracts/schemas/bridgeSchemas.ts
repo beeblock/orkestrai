@@ -29,9 +29,30 @@ export const bridgeAskSchema = z.object({
   from: z.string().trim().nullish(),
   /** Vincula a mensagem a uma tarefa para cancelar handoffs obsoletos antes do envio. */
   taskId: z.string().uuid().nullish(),
-  timeoutMs: z.coerce.number().int().min(1_000).max(600_000).default(180_000),
+  /** Espera máxima pela resposta; agentes ocupados liberam o chamador antes e a resposta chega à caixa de entrada. */
+  timeoutMs: z.coerce.number().int().min(1_000).max(600_000).optional(),
   /** Envia bytes brutos ao TUI (sem espera de resposta, sem CR extra). */
   raw: z.boolean().default(false),
+});
+
+export const bridgeReplySchema = z.object({
+  token: z.string().trim().min(1).nullish(),
+  /** Quem responde: deve ser o destinatário da mensagem original. */
+  from: z.string().trim().min(1, 'Informe quem responde (--from ou ORKESTRAI_NODE_ID).'),
+  message: z.string().trim().min(1, 'Informe a resposta.').max(20_000),
+});
+
+export const bridgeHeavyAcquireSchema = z.object({
+  /** What will run, shown to the team while it holds or waits for a slot. */
+  label: z.string().trim().min(1).max(120),
+  taskId: z.string().uuid().nullish(),
+  /** Keeps the caller's place in the queue across long polls. */
+  ticket: z.string().uuid().nullish(),
+  waitMs: z.coerce.number().int().min(0).max(25_000).default(20_000),
+});
+
+export const bridgeInboxQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(10),
 });
 
 export const bridgeNoteWriteSchema = z.object({
@@ -82,6 +103,7 @@ export const bridgeActivitySchema = z.object({
 });
 
 export type BridgeAskInput = z.infer<typeof bridgeAskSchema>;
+export type BridgeReplyInput = z.infer<typeof bridgeReplySchema>;
 export type BridgeNoteWriteInput = z.infer<typeof bridgeNoteWriteSchema>;
 export type BridgeNoteEditInput = z.infer<typeof bridgeNoteEditSchema>;
 export type BridgeNotifyInput = z.infer<typeof bridgeNotifySchema>;
@@ -165,6 +187,10 @@ export const bridgeFloorCreateSchema = z.object({
 export const bridgeFloorLandSchema = z.object({
   token: z.string().trim().min(1).nullish(),
   targetBranch: z.string().trim().nullish(),
+  /** Subject of the landing commit; defaults to a conventional floor subject. */
+  message: z.string().trim().max(200).nullish(),
+  /** Commit the floor agent's uncommitted work before landing (default). */
+  commitPending: z.boolean().default(true),
 });
 
 export type BridgeFloorCreateInput = z.infer<typeof bridgeFloorCreateSchema>;

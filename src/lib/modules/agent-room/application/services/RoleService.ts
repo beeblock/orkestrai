@@ -7,6 +7,7 @@ import { builtinRoleCatalog } from '../catalogs/BuiltinRoleCatalog.js';
 import type { AgentRoleLaunchContext } from '../adapters/types.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
+import { agentInboxService } from './AgentInboxService.js';
 import { LEADER_LAUNCH_CONTEXT } from '../../domain/leader-execution.js';
 
 export type AgentRole = {
@@ -247,13 +248,13 @@ export class RoleService {
       && payload.roleConfiguredAtLaunch?.toLowerCase() === role.name.toLowerCase()
     );
     const shouldApplyRole = mode !== 'resume' && Boolean(role) && !(mode === 'fresh' && configuredAtLaunch);
-    const tasks = mode === 'role'
+    let tasks = mode === 'role'
       ? []
       : (await taskBoardService.list(workspaceId)).filter((task) => {
           if (task.status === 'done') return false;
           return task.assigneeNodeId === nodeId || (payload.maestro && !task.assigneeNodeId);
         });
-    const leaderContext = Boolean(payload.maestro && (mode === 'fresh' || (mode === 'resume' && tasks.length > 0)));
+    let leaderContext = Boolean(payload.maestro && (mode === 'fresh' || (mode === 'resume' && tasks.length > 0)));
     if (!shouldApplyRole && tasks.length === 0 && !leaderContext) return { applied: false, tasksDelivered: 0 };
     if (!payload.sessionId) throw new Error('O terminal ainda não tem sessão PTY.');
 
@@ -261,6 +262,14 @@ export class RoleService {
     if (!session || session.exited) throw new Error('Sessão PTY não está ativa.');
     if (!(await ptySessionManager.waitUntilIdle(payload.sessionId))) {
       return { applied: false, tasksDelivered: 0 };
+    }
+    const sessionId = payload.sessionId;
+    if (mode === 'resume' && tasks.length) {
+      // An automatic recovery that already reached this session covers its card.
+      const covered = await Promise.all(tasks.map((task) => agentInboxService.recoveryDelivered(nodeId, task.id, sessionId).catch(() => false)));
+      tasks = tasks.filter((_, index) => !covered[index]);
+      leaderContext = Boolean(payload.maestro && tasks.length > 0);
+      if (!shouldApplyRole && tasks.length === 0) return { applied: false, tasksDelivered: 0 };
     }
 
     let applied = false;
@@ -300,6 +309,11 @@ export class RoleService {
         sessionId: payload.sessionId,
         message: `${leaderContext ? `[workspace leader]\n${LEADER_LAUNCH_CONTEXT}\n\n` : ''}${instruction}\n\n${briefs}`,
       });
+      // This prompt already says to continue these cards: a queued recovery
+      // would only make the agent start over on the same work.
+      if (mode === 'resume') {
+        for (const task of tasks) await agentInboxService.withdrawRecovery(nodeId, task.id, sessionId).catch(() => false);
+      }
     }
     return { applied, tasksDelivered: tasks.length };
   }

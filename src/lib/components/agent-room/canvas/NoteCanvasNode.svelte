@@ -186,6 +186,7 @@
   {id}
   {selected}
   class="canvas-note"
+  deferOffscreen
   accent={noteColor.color}
   minWidth={220}
   minHeight={140}

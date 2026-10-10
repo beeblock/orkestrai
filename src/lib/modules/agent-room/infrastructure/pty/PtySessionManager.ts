@@ -9,6 +9,7 @@ import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch } from '../WslRuntime.ts';
 import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
+import { HumanComposerInput } from './HumanComposerInput.ts';
 
 // PATH aumentado e resolucao de comando (registro/PATHEXT/.cmd) foram movidos
 // para ../agent-path.ts, compartilhado com o Modo Maestro (application/agents.ts)
@@ -146,6 +147,7 @@ type PtySession = PtySessionInfo & {
   deliveryReadyAt: number;
   deferredHumanInput: string[];
   humanComposerLength: number;
+  humanComposerInput: HumanComposerInput;
   lastOutputAt: number;
   outputRevision: number;
   lastSubmitOutputRevision: number;
@@ -324,6 +326,7 @@ export class PtySessionManager {
       deliveryReadyAt: 0,
       deferredHumanInput: [],
       humanComposerLength: 0,
+      humanComposerInput: new HumanComposerInput(),
       lastOutputAt: 0,
       outputRevision: 0,
       lastSubmitOutputRevision: 0,
@@ -995,9 +998,8 @@ export class PtySessionManager {
   }
 
   private writeHumanInputNow(session: PtySession, data: string): void {
-    const submitted = /[\r\n]/.test(data);
     session.startupGuard?.humanInput(data);
-    this.updateHumanComposerState(session, data);
+    const submitted = this.updateHumanComposerState(session, data);
     this.write(session.id, data);
     if (session.provider && submitted) {
       session.lastSubmittedDelivery = null;
@@ -1016,14 +1018,8 @@ export class PtySessionManager {
     if (session.humanComposerLength === 0) queueMicrotask(() => this.drainDeliveryQueue(session));
   }
 
-  private updateHumanComposerState(session: PtySession, data: string): void {
-    // Remove sequencias CSI/OSC antes de estimar o conteúdo visivel. Não e um
-    // parser de terminal: só precisamos distinguir rascunho de controles.
-    const visible = data
-      .replace(/\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g, '')
-      .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '')
-      .replace(/\u001B./g, '');
-    for (const char of visible) {
+  private updateHumanComposerState(session: PtySession, data: string): boolean {
+    return session.humanComposerInput.consume(data, char => {
       const code = char.charCodeAt(0);
       if (char === '\r' || char === '\n' || code === 0x03 || code === 0x15 || code === 0x1b) {
         session.humanComposerLength = 0;
@@ -1032,7 +1028,7 @@ export class PtySessionManager {
       } else if (code >= 0x20) {
         session.humanComposerLength += 1;
       }
-    }
+    });
   }
 
   private rejectDeliveries(session: PtySession, error: Error): void {

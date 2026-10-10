@@ -135,7 +135,10 @@ const TOOLS = [
   { name: 'code_graph_handoff', description: 'Cria um artefato rastreavel a partir de mudancas ou contexto: review, tarefa, envio ao lider/agente ou Council.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['review', 'task', 'leader', 'agent', 'council'] }, scopeId: { type: 'string', pattern: '^(workspace|floor:[0-9a-f-]{36})$' }, title: { type: 'string', minLength: 1, maxLength: 160 }, locale: { type: 'string', enum: ['en', 'pt-BR', 'es'], default: 'en' }, context: { type: 'object', properties: { selection: { type: 'object', properties: { symbolIds: { type: 'array', maxItems: 24, items: { type: 'string', format: 'uuid' } }, scopeId: { type: 'string' }, findingId: { type: 'string' } } }, purpose: { type: 'string', enum: ['investigate', 'implement', 'review', 'test'] }, maxTokens: { type: 'integer', minimum: 500, maximum: 16000 }, depth: { type: 'integer', minimum: 1, maximum: 3 }, includeSource: { type: 'boolean' } }, required: ['selection', 'purpose'] }, targetNodeId: { type: 'string', format: 'uuid' }, targetNodeIds: { type: 'array', minItems: 2, maxItems: 5, items: { type: 'string', format: 'uuid' } } }, required: ['kind', 'title'] } },
   { name: 'huddle_list', description: 'Lista huddles e retorna a sessao selecionada com participantes e transcricao.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' } } } },
   { name: 'huddle_say', description: 'Registra uma fala deste agente em um huddle ativo, sem disparar respostas recursivas.', inputSchema: { type: 'object', properties: { huddleId: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 10000 } }, required: ['huddleId', 'text'] } },
-  { name: 'ask', description: 'Envia mensagem a outro agente e aguarda resposta confirmada. Mensagens sobre trabalho do quadro devem informar taskId para serem canceladas se ficarem obsoletas. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' }, taskId: { type: 'string', format: 'uuid', description: 'Tarefa ativa que torna este handoff valido.' } }, required: ['agent', 'message'] } },
+  { name: 'ask', description: 'Envia mensagem a outro agente. Agentes ocupados recebem pela caixa de entrada no proximo intervalo; com deliveryState=queued, ou sem resposta no prazo, NAO reenvie e continue trabalhando: a resposta chega na sua caixa (anexada as proximas respostas das tools ou via inbox). Para RESPONDER a uma mensagem recebida use reply, nao ask. Informe taskId em trabalho do quadro. So afirme que conversou quando replyConfirmed for true.', inputSchema: { type: 'object', properties: { agent: { type: 'string', description: 'Titulo do agente' }, message: { type: 'string' }, taskId: { type: 'string', format: 'uuid', description: 'Tarefa ativa que torna este handoff valido.' } }, required: ['agent', 'message'] } },
+  { name: 'reply', description: 'Responde a uma mensagem recebida pelo messageId mostrado no prompt ([orkestrai:message:<id>]) ou na caixa de entrada. A resposta vai para quem perguntou: na hora se ele estiver aguardando, senao na caixa de entrada dele. Responda uma vez; nao use ask para responder.', inputSchema: { type: 'object', properties: { messageId: { type: 'string', format: 'uuid' }, message: { type: 'string' } }, required: ['messageId', 'message'] } },
+  { name: 'inbox', description: 'Le as mensagens pendentes da sua caixa de entrada (perguntas, respostas, tarefas e avisos que chegaram enquanto voce trabalhava). Ler marca como entregue; responda perguntas com reply.', inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 50 } } } },
+  { name: 'stats', description: 'Metricas da orquestracao do workspace: latencia de entrega e resposta, filas das caixas de entrada, tarefas, andares e execucoes pesadas.', inputSchema: { type: 'object', properties: { hours: { type: 'integer', minimum: 1, maximum: 168 } } } },
   { name: 'note_list', description: 'Lista notas acessiveis com nodeId, titulo e previa. Use antes de criar para atualizar a nota existente com note_read, note_write ou note_edit.', inputSchema: { type: 'object', properties: {} } },
   { name: 'note_read', description: 'Le uma nota pelo nodeId.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' } }, required: ['nodeId'] } },
   { name: 'note_write', description: 'Substitui o conteudo de uma nota.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, content: { type: 'string' } }, required: ['nodeId', 'content'] } },
@@ -330,7 +333,7 @@ const TOOLS = [
   { name: 'floor_remove', description: 'Safely remove one merged, clean, unused Floor using its floor_audit revision. Keeps its branch and refuses local changes or active work. For several Floors prefer floor_cleanup.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, floorId: { type: 'string' }, revision: { type: 'string' } }, required: ['taskId', 'floorId', 'revision'] } },
   { name: 'floor_create', description: 'Cria um andar (worktree isolada com branch propria).', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
   { name: 'floor_preview', description: 'Previa da aterrissagem (merge) com conflitos.', inputSchema: { type: 'object', properties: { floorId: { type: 'string' } }, required: ['floorId'] } },
-  { name: 'floor_land', description: 'Aterrissa o andar (merge da branch).', inputSchema: { type: 'object', properties: { floorId: { type: 'string' } }, required: ['floorId'] } },
+  { name: 'floor_land', description: 'Integra o andar na branch atual e registra um commit com exatamente os arquivos do andar; depois retira o andar se nada o usa.', inputSchema: { type: 'object', properties: { floorId: { type: 'string' }, message: { type: 'string', description: 'Assunto do commit (padrao: chore(floor): land <andar>).' } }, required: ['floorId'] } },
   { name: 'device_list', description: 'Lista simuladores/dispositivos e a sessao Device ativa do workspace.', inputSchema: { type: 'object', properties: {} } },
   { name: 'device_attach', description: 'Starts or reuses the mobile session and creates/reuses its visible Canvas node, also available in Workbench. Returns nodeId. Physical Android devices still require owner attachment and confirmation.', inputSchema: { type: 'object', properties: { deviceId: { type: 'string' }, platform: { type: 'string', enum: ['ios', 'android'] } }, required: ['deviceId', 'platform'] } },
   { name: 'device_tap', description: 'Toca coordenadas normalizadas 0..1 no device ativo.', inputSchema: { type: 'object', properties: { x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 } }, required: ['x', 'y'] } },
@@ -663,6 +666,12 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     }
     case 'ask':
       return bridge('POST', '/api/agent-room/bridge/ask', { to: args.agent, message: args.message, from: selfAgent, taskId: args.taskId });
+    case 'reply':
+      return bridge('POST', `/api/agent-room/bridge/messages/${encodeURIComponent(String(args.messageId ?? ''))}/reply`, { from: selfAgent, message: args.message });
+    case 'inbox':
+      return bridge('GET', `/api/agent-room/bridge/inbox${args.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`);
+    case 'stats':
+      return bridge('GET', `/api/agent-room/bridge/stats?hours=${encodeURIComponent(args.hours ?? 24)}`);
     case 'note_list': {
       const query = selfAgent ? `?agentNodeId=${encodeURIComponent(selfAgent)}` : '';
       return bridge('GET', `/api/agent-room/bridge/notes${query}`);
@@ -1094,7 +1103,7 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'floor_preview':
       return bridge('GET', `/api/agent-room/bridge/floors/${encodeURIComponent(args.floorId)}/preview`);
     case 'floor_land':
-      return bridge('POST', `/api/agent-room/bridge/floors/${encodeURIComponent(args.floorId)}/land`, {});
+      return bridge('POST', `/api/agent-room/bridge/floors/${encodeURIComponent(args.floorId)}/land`, typeof args.message === 'string' ? { message: args.message } : {});
     case 'device_list':
       return bridge('GET', '/api/agent-room/bridge/devices');
     case 'device_attach':
@@ -1233,7 +1242,7 @@ function writeMessage(write, message) {
  * }} options
  */
 export async function runMcpServer(options) {
-  const { input, write, bridge, findFreePort, selfAgent = null, version = '0.0.1' } = options;
+  const { input, write, bridge, findFreePort, selfAgent = null, version = '0.0.1', drainInbox = () => '' } = options;
   let buffer = Buffer.alloc(0);
   const pending = [];
   let waiter = null;
@@ -1325,11 +1334,16 @@ export async function runMcpServer(options) {
         reply({ tools: TOOLS });
       } else if (message.method === 'tools/call') {
         const { name, arguments: toolArgs } = message.params ?? {};
+        // Messages that arrived while the agent works are appended to the tool result.
+        const withInbox = (content) => {
+          const digest = drainInbox();
+          return digest ? [...content, { type: 'text', text: digest }] : content;
+        };
         try {
           const data = await callTool(bridge, findFreePort, selfAgent, name, toolArgs);
-          reply({ content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] });
+          reply({ content: withInbox([{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }]) });
         } catch (error) {
-          reply({ content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }], isError: true });
+          reply({ content: withInbox([{ type: 'text', text: error instanceof Error ? error.message : String(error) }]), isError: true });
         }
       } else {
         writeMessage(write, { jsonrpc: '2.0', id: message.id, error: { code: -32601, message: `Metodo nao suportado: ${message.method}` } });
