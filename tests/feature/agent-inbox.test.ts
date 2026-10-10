@@ -457,4 +457,42 @@ describe('Agent inbox', () => {
     expect(forwarded).toHaveLength(3);
     expect((agentInboxService as unknown as { forwardsPending: boolean }).forwardsPending).toBe(false);
   });
+
+  it('keeps a forward that fails during a recovery pass armed for the next one', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const a = (await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Endpoint?', busyGraceMs: 20 })).messageId;
+    const b = (await bridgeService.ask(workspace.id, { from: nodes.Mobile, to: nodes.Lider, message: 'Schema?', busyGraceMs: 20 })).messageId;
+    const real = agentInboxService.enqueue.bind(agentInboxService);
+    let mode: 'fail-a' | 'gate-a' = 'fail-a';
+    let reachedGate = false;
+    let releaseA!: () => void;
+    const gate = new Promise<void>((resolvePromise) => { releaseA = resolvePromise; });
+    const spy = vi.spyOn(agentInboxService, 'enqueue').mockImplementation(async (input) => {
+      if (input.kind === 'reply' && input.replyTo === a) {
+        if (mode === 'fail-a') throw new Error('database is locked');
+        reachedGate = true;
+        await gate;
+      }
+      if (input.kind === 'reply' && input.replyTo === b) throw new Error('database is locked');
+      return real(input);
+    });
+    await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: a, message: 'Use /api/v2.' })).rejects.toThrow();
+
+    mode = 'gate-a';
+    const internal = agentInboxService as unknown as { recoverForwards(pageSize?: number): Promise<void>; forwardsPending: boolean };
+    const pass = internal.recoverForwards();
+    await vi.waitFor(() => expect(reachedGate).toBe(true));
+    // B fails while the pass is still forwarding A.
+    await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId: b, message: 'Use schema v2.' })).rejects.toThrow();
+    releaseA();
+    await pass;
+    expect(internal.forwardsPending).toBe(true);
+
+    spy.mockRestore();
+    await internal.recoverForwards();
+    expect(internal.forwardsPending).toBe(false);
+    expect((await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered'])).filter((envelope) => envelope.kind === 'reply')).toHaveLength(1);
+    expect((await controlCenterRepository.inboxEnvelopes(nodes.Mobile, ['queued', 'sent', 'delivered'])).filter((envelope) => envelope.kind === 'reply')).toHaveLength(1);
+  });
 });

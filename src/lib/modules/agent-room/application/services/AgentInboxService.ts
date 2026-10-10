@@ -141,6 +141,8 @@ export class AgentInboxService {
   private readonly restoreAttempts = new Map<string, number>();
   private activeDeliveries = 0;
   private forwardsPending = false;
+  /** Bumped by every pending-forward signal, so a recovery pass never clears a newer one. */
+  private forwardSignals = 0;
   private readonly deliverySlots: Array<() => void> = [];
   private restorer: Restorer | null = null;
 
@@ -424,8 +426,7 @@ export class AgentInboxService {
         return await this.forwardAnswer(updated);
       } catch (error) {
         // The answer is recorded with a pending forward: a retry or the sweep delivers it.
-        this.forwardsPending = true;
-        this.ensureTimer();
+        this.markForwardsPending();
         throw error;
       }
     }
@@ -459,6 +460,7 @@ export class AgentInboxService {
    * a failed item is retried by the next sweep.
    */
   private async recoverForwards(pageSize = FORWARD_PAGE_SIZE): Promise<void> {
+    const generation = this.forwardSignals;
     const since = new Date(Date.now() - PENDING_HORIZON_MS).toISOString();
     let after: string | null = null;
     let failed = false;
@@ -477,8 +479,15 @@ export class AgentInboxService {
     } catch {
       failed = true;
     }
-    this.forwardsPending = failed;
-    if (failed) this.ensureTimer();
+    if (failed) this.markForwardsPending();
+    // A forward that failed while this pass ran (a newer signal) keeps the flag.
+    else if (this.forwardSignals === generation) this.forwardsPending = false;
+  }
+
+  private markForwardsPending(): void {
+    this.forwardSignals += 1;
+    this.forwardsPending = true;
+    this.ensureTimer();
   }
 
   // -- Dispatcher ---------------------------------------------------------------

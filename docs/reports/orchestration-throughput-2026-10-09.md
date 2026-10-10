@@ -286,6 +286,13 @@ Problems found live and fixed (each rebuilt, reinstalled and retested):
    - P2 pagination: `pendingForwards(since, afterId, limit)` pages by id cursor until a short page;
      test pages of two reach all three pending forwards.
 
+18. Fourth Codex review (e7521193), one P2, fixed with a regression test: a recovery pass ended
+   with `forwardsPending = failed`, erasing a pending signal raised by another reply whose forward
+   failed during the pass. Every signal now bumps `forwardSignals`; a pass clears the flag only when
+   it finished without errors and no newer signal arrived (generation unchanged). Test: A is
+   recovered while B's forward fails mid-pass → the flag stays armed and the next pass forwards B
+   (fails with the previous rule, passes with the generation check).
+
 Test evidence for the final build (installed 2026-10-10 04:51 UTC): full `vitest run` 2106 passed /
 0 failed / 13 skipped (run with `--maxWorkers=2`: at load average 11–17 from the team's own suites,
 the default worker count timed out three timing-sensitive tests and lost a worker; each passes alone); type-check clean for the changed services; `npm run build` ok; Playwright on the
