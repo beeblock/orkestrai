@@ -169,7 +169,9 @@ device access.
   including uncommitted work, and shares installed dependencies. Finishing a
   task commits its Floor work; `floor land` merges on a clean checkout or, with
   local changes, applies only the Floor delta with a per-file three-way merge
-  and changes nothing on conflict.
+  and changes nothing on conflict. Landing records a commit containing only
+  that Floor's paths. Failed hooks preserve the Floor for retry; automatic
+  retirement preserves local data and active work.
 - **Automatic leader supervision:** the Core checks every 15 seconds for
   unarchived `todo`/`doing` cards and a live, idle workspace leader with an
   empty inbox. After two quiet minutes and a completed provider turn, it

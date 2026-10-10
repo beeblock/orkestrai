@@ -149,6 +149,43 @@ Cadastre o token em `beeblock/orkestrai` como secret de Actions chamado
 `RELEASES_TOKEN`. Não remova o repositório legado nem a release `0.1.4`: uma
 instalação antiga pode permanecer offline por meses antes de fazer a migração.
 
+## Proteções de desempenho contra regressão
+
+A CI obrigatória do mesmo SHA da release executa os testes abaixo; não remova
+esses casos nem flexibilize limites para contornar uma falha de publicação.
+
+- `tests/feature/agent-inbox.test.ts`: ask padrão retorna em menos de 12 s
+  (espera configurada de 8 s), um terminal lento não serializa outros agentes,
+  respostas concorrentes não duplicam e a recuperação cobre reinício, lotes,
+  falha de consulta, paginação e sinais novos durante uma recuperação.
+- `tests/feature/floor-service.test.ts`: integração e commit na main com
+  alterações locais, repetição após hook recusado, exclusões, permissões de
+  execução e caminhos literais sem incluir arquivos privados ignorados.
+- `tests/unit/heavy-run-service.test.ts` e
+  `tests/unit/orkestrai-cli-inbox.test.ts`: limite da fila, perda de reserva,
+  encerramento da árvore do comando e parada por falta de espaço.
+- `tests/e2e/canvas-idle-performance.spec.ts`: arestas elásticas convergem e
+  ficam sem alterações no path em repouso; um canvas de 290 nós e 727 arestas
+  passa por pan/zoom sem desmontar nós, erros de página ou intervalo entre
+  frames de 500 ms ou mais. Esse limite detecta travamentos graves, não prova
+  60 FPS nem mede CPU do Electron no workspace real.
+
+Execute as suítes e o build em sequência. O Playwright usa banco e diretórios
+de usuário isolados e um build estável; remova seus traces depois. A tag só
+pode ser criada com a CI completa verde no mesmo SHA. O pacote portátil
+testado é verificado por procedência e hash antes do empacotamento nativo.
+
+Para acompanhar o time real, use `orkestrai stats` para latências p50/p95,
+idade das caixas de entrada, cards, Floors e fila pesada. Cruze esses números
+com os eventos do Control Center e os commits para separar comunicação,
+tempo trabalhando e tempo esperando integração; esses dois últimos tempos
+não são contadores prontos do `stats`. Compare janelas
+equivalentes, número de agentes, tamanho do canvas e carga de builds; não use
+quantidade de ferramentas ou cards done como substituto de commits
+integrados. Arraste/zoom no Moedex, CPU do Electron e tempo de conclusão de
+trabalho arbitrário continuam exigindo validação em uso real. Testes verdes
+não garantem um prazo do modelo ou do provider.
+
 ## Criar uma versão
 
 A CI envia um artifact `production-build-<SHA>` somente depois de testes e E2E
