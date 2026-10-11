@@ -306,6 +306,42 @@ describe('AgentRuntimeService', () => {
     expect(deliver).not.toHaveBeenCalled();
   });
 
+  it.each(['waiting_input', 'waiting_permission', 'blocked'] as const)('does not let a task-scoped %s park unrelated authorized work', async (state) => {
+    const { workspace, node, taskId, deliver, session } = await setupLeader();
+    await AgentBoardTask.query().where('id', taskId).update({ assignee_node_id: node.id });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, taskId, state, action: 'One card needs an owner decision' });
+    const runnableId = uuidv7();
+    await AgentBoardTask.create({ id: runnableId, workspace_id: workspace.id, title: 'Independent authorized work', status: 'todo', created_by: 'user', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledOnce();
+    expect(deliver.mock.calls[0][0].message).toContain(runnableId);
+    expect(deliver.mock.calls[0][0].message).toContain('nao bloqueia');
+    expect(await agentRuntimeService.supervisionStillRelevant(workspace.id, node.id,
+      (await controlCenterRepository.latestLeaderSupervision(workspace.id, node.id))?.metadata.workFingerprint,
+      session.id)).toBe(true);
+  });
+
+  it('stays quiet when every leader card is waiting for a real owner decision', async () => {
+    const { workspace, node, taskId, deliver } = await setupLeader();
+    await AgentBoardTask.query().where('id', taskId).update({ assignee_node_id: node.id });
+    const otherId = uuidv7();
+    await AgentBoardTask.create({ id: otherId, workspace_id: workspace.id, title: 'Also needs owner', status: 'doing', assignee_node_id: node.id, created_by: 'user', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    for (const id of [taskId, otherId]) await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id,
+      taskId: id, state: 'waiting_permission', action: 'Explicit owner-only action' });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old unscoped owner wait veto a new task brief', async () => {
+    const { workspace, node, deliver } = await setupLeader();
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'waiting_input', action: 'Old decision' });
+    const now = Date.now() + 1000;
+    await AgentBoardTask.create({ id: uuidv7(), workspace_id: workspace.id, title: 'New owner brief', status: 'todo', created_by: 'user',
+      created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString() });
+    await supervisorTick(new AgentRuntimeService());
+    expect(deliver).toHaveBeenCalledOnce();
+  });
+
   it('does not confuse quiet output with a running or unknown provider turn', async () => {
     const { complete, deliver, ready, session } = await setupLeader();
     complete.mockResolvedValue(false);
@@ -335,9 +371,12 @@ describe('AgentRuntimeService', () => {
   });
 
   it('does not blindly retry an unconfirmed delivery after the cooldown', async () => {
-    const { deliver } = await setupLeader();
-    deliver.mockRejectedValue(new Error('Not confirmed'));
+    const { deliver, workspace, node } = await setupLeader();
+    // Use the real post-submission error, not an arbitrary transport failure
+    // that the inbox is explicitly allowed to retry before submission.
+    deliver.mockRejectedValue(new Error('Transcript confirmation timed out'));
     await supervisorTick(new AgentRuntimeService());
+    await agentInboxService.drain(workspace.id, node.id);
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 360_000);
     await supervisorTick(new AgentRuntimeService());
     expect(deliver).toHaveBeenCalledOnce();
@@ -449,6 +488,15 @@ describe('AgentRuntimeService', () => {
       session.lastActivityAt = new Date(start + 116 * 60_000).toISOString();
       at(200);
       await expect(nudge()).resolves.toBe(false);
+
+      // The wait belongs to that card, not another executable assignment.
+      const next = uuidv7();
+      await AgentBoardTask.create({ id: next, workspace_id: workspace.id, title: 'Independent work', status: 'doing',
+        assignee_node_id: node.id, created_by: 'user', created_at: new Date(start + 110 * 60_000).toISOString(), updated_at: new Date().toISOString() });
+      await controlCenterService.recordDelivery({ messageId: uuidv7(), workspaceId: workspace.id, fromNodeId: node.id, toNodeId: teammate.id,
+        state: 'queued', content: 'Question about the blocked card', metadata: { inbox: true, kind: 'ask', taskId: other } });
+      await expect(nudge()).resolves.toBe(true);
+      expect(deliver.mock.calls.at(-1)![0].message).toContain(`orkestrai task done ${next}`);
     } finally {
       agentInboxService.reset();
     }

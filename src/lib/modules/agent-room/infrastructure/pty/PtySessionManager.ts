@@ -124,6 +124,7 @@ type PtySession = PtySessionInfo & {
   pty: IPty;
   /** Per-process bridge credential. It must never leave this private record. */
   bridgeAgentToken: string | null;
+  managedStartupState: 'none' | 'submitted' | 'uncertain';
   ownsProcessTree: boolean;
   initialIdleObserved: boolean;
   startupGuard: InteractiveStartupGuard | null;
@@ -305,6 +306,7 @@ export class PtySessionManager {
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
       bridgeAgentToken: input.bridgeAgentToken ?? null,
+      managedStartupState: 'none',
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       initialIdleObserved: false,
       startupGuard: interactiveStartupGuard(input.provider),
@@ -365,6 +367,12 @@ export class PtySessionManager {
 
     this.sessions.set(id, session);
     this.recordLifecycle(session, 'starting');
+    if (!session.provider && session.workspaceId && session.nodeId) {
+      const startup = (globalThis as { __orkestraiStartManagedShell?: (workspaceId: string, nodeId: string, sessionId: string) => Promise<boolean> }).__orkestraiStartManagedShell;
+      void startup?.(session.workspaceId, session.nodeId, id).catch(() => {
+        this.recordLifecycle(session, 'error', 'Shell startup submission failed; command was not automatically replayed.');
+      });
+    }
     return this.toInfo(session);
   }
 
@@ -464,6 +472,17 @@ export class PtySessionManager {
         if (onWorkingDirectory) session.workingDirectoryListeners.delete(onWorkingDirectory);
       },
     };
+  }
+
+  writeStartupOnce(id: string, input: string): boolean {
+    const session = this.requireSession(id);
+    if (session.provider || session.exited) throw new Error('Managed startup requires a live pure Shell.');
+    if (session.managedStartupState === 'submitted') return true;
+    if (session.managedStartupState === 'uncertain') throw new Error('Shell startup submission is uncertain; automatic replay is disabled.');
+    session.managedStartupState = 'uncertain';
+    this.write(id, input);
+    session.managedStartupState = 'submitted';
+    return true;
   }
 
   write(id: string, data: string): void {

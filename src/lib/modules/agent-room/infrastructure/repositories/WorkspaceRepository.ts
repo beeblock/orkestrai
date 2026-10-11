@@ -334,6 +334,11 @@ export class WorkspaceRepository {
     await AgentCanvasNode.query().where('id', id).update({ archived_at: new Date().toISOString() });
   }
 
+  async setNodeArchived(workspaceId: string, id: string, archived: boolean): Promise<void> {
+    await AgentCanvasNode.query().where('workspace_id', workspaceId).where('id', id)
+      .update({ archived_at: archived ? new Date().toISOString() : null });
+  }
+
   async archiveFloorNodes(workspaceId: string, floorId: string): Promise<CanvasNode[]> {
     const nodes = await this.listNodes(workspaceId, floorId, true, true);
     const nodeIds = nodes.map((node) => node.id);
@@ -353,7 +358,13 @@ export class WorkspaceRepository {
     return model ? mapNode(model) : null;
   }
 
+  async getActiveNode(workspaceId: string, id: string): Promise<CanvasNode | null> {
+    const model = await AgentCanvasNode.query().where('workspace_id', workspaceId).where('id', id).whereNull('archived_at').first();
+    return model ? mapNode(model) : null;
+  }
+
   async createNode(input: {
+    id?: string;
     workspaceId: string;
     type: CanvasNodeType;
     title?: string | null;
@@ -366,7 +377,7 @@ export class WorkspaceRepository {
     floorId?: string | null;
   }): Promise<CanvasNode> {
     const model = await AgentCanvasNode.create({
-      id: uuidv7(),
+      id: input.id ?? uuidv7(),
       workspace_id: input.workspaceId,
       type: input.type,
       title: input.title ?? null,

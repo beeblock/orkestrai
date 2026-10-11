@@ -44,16 +44,16 @@ if (!runtime.__orkestraiPortalListenerReady && typeof process.on === 'function')
 
 export { portalProfileFromPayload } from '../../contracts/schemas/managed-portal.schema.js';
 
-export function assertAllowedPortalUrl(candidate: string, allowedHosts: string[], currentUrl?: string): URL {
+export function assertAllowedPortalUrl(candidate: string, allowedHosts: string[], _currentUrl?: string): URL {
   if (candidate.length > 4_096) throw new Error('Portal URL is too long.');
   let url: URL;
   try { url = new URL(candidate); } catch { throw new Error('Portal URL is invalid.'); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
     throw new Error('Portal navigation only accepts credential-free HTTP(S) URLs.');
   }
-  let baseline = '';
-  try { baseline = currentUrl ? new URL(currentUrl).hostname.toLowerCase() : ''; } catch { baseline = ''; }
-  const allowed = new Set([...allowedHosts, baseline].filter(Boolean).map((host) => host.toLowerCase()));
+  // Empty is unrestricted HTTP(S), not an implicit lock to the initial URL.
+  // A nonempty owner list is exact, including redirects and local IPv6 hosts.
+  const allowed = new Set(allowedHosts.filter(Boolean).map((host) => host.toLowerCase()));
   if (allowed.size > 0 && !allowed.has(url.hostname.toLowerCase())) {
     throw new Error(`Host ${url.hostname} is not allowed by this Portal.`);
   }

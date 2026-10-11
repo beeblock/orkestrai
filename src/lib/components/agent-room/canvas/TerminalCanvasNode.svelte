@@ -196,6 +196,7 @@
 
   async function handleSessionReady(sessionId: string) {
     if (!isPureShell || !sessionId || !terminalNode) return;
+    if ((data.payload as TerminalNodePayload).shellStartupManaged) return;
     await getAppSettings();
     const input = resumeTerminalCommandInput(
       [...globalCommands(), ...terminalCommands()],

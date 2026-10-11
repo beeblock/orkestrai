@@ -8,6 +8,7 @@ import { executionRuntimeKey } from '../../domain/runtime.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { defaultShell } from '../../infrastructure/workspace.js';
+import { restoreAgentLaunchSelection } from '../../infrastructure/transcript/AgentLaunchSelection.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker, agentSessionTrackerForRuntime } from '../../infrastructure/pty/AgentSessionTracker.ts';
 import { bridgeService } from './BridgeService.js';
@@ -38,6 +39,7 @@ import {
   resolveWorkspaceRuntime,
   terminalExecutionRuntime,
   withWorkspaceExecutionRuntime,
+  wslHostPath,
   workspaceExecutionRuntime,
 } from '../../infrastructure/WslRuntime.js';
 
@@ -357,6 +359,8 @@ export class WorkspaceService {
           // a Floor agent's transcript lives under the Floor, not the workspace.
           const floor = node.floorId ? await floorService.get(node.floorId).catch(() => null) : null;
           let trackingCwd = floor?.path ?? workspace.workingDir;
+          let trackingHome: string | undefined;
+          let linuxHome: string | undefined;
           if (executionRuntime.kind === 'wsl') {
             const hostCwd = floor?.path ?? workspace.workingDir;
             const context = await resolveWslTrackingContext({ runtime: executionRuntime, hostCwd, workspaceRoot: workspace.workingDir });
@@ -366,12 +370,23 @@ export class WorkspaceService {
               (candidate) => posix.normalize(candidate),
             );
             trackingCwd = context.linuxWorkingDir;
+            trackingHome = context.homeHostPath;
+            linuxHome = context.linuxHomePath;
           }
           resumable = tracker.isAgentSessionResumable(
             getAgentAdapter(provider).sessionStorage,
             trackingCwd,
             agentSessionId,
           );
+          if (resumable !== false) {
+            const profileEnv = provider === 'codex' && typeof payload.profileId === 'string'
+              ? await providerProfileService.resolveEnv(payload.profileId, provider, { runtimeHome: linuxHome }) : {};
+            const env = payload.env as Record<string, string> | undefined;
+            const codexHome = profileEnv.CODEX_HOME ?? env?.CODEX_HOME ?? (executionRuntime.kind === 'native' ? process.env.CODEX_HOME : undefined);
+            const selected = await restoreAgentLaunchSelection(payload, trackingCwd, { homeDir: trackingHome, posixCwd: executionRuntime.kind === 'wsl',
+              codexHome: codexHome && executionRuntime.kind === 'wsl' ? wslHostPath(executionRuntime.distribution, codexHome) : codexHome });
+            if (selected !== payload) { payload = selected; changed = true; }
+          }
         } catch {
           // Providers removidos ou desconhecidos nao devem impedir a abertura do workspace.
         }
@@ -520,7 +535,23 @@ export class WorkspaceService {
   async reloadNode(workspaceId: string, nodeId: string) {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId) throw new Error('No nao encontrado.');
-    const payload = { ...((node.payload ?? {}) as Record<string, unknown>) };
+    let payload = { ...((node.payload ?? {}) as Record<string, unknown>) };
+    const live = typeof payload.sessionId === 'string' ? ptySessionManager.get(payload.sessionId) : null;
+    if (live && payload.provider === 'codex') {
+      const workspace = await workspaceRepository.getWorkspace(workspaceId);
+      if (!workspace) throw new Error('Workspace nao encontrado.');
+      const executionRuntime = terminalExecutionRuntime(workspace, payload as never);
+      const context = executionRuntime.kind === 'wsl'
+        ? await resolveWslTrackingContext({ runtime: executionRuntime, hostCwd: live.cwd, workspaceRoot: workspace.workingDir }) : null;
+      const profileEnv = typeof payload.profileId === 'string'
+        ? await providerProfileService.resolveEnv(payload.profileId, 'codex', { runtimeHome: context?.linuxHomePath }) : {};
+      const codexHome = profileEnv.CODEX_HOME ?? (payload.env as Record<string, string> | undefined)?.CODEX_HOME
+        ?? (executionRuntime.kind === 'native' ? process.env.CODEX_HOME : undefined);
+      payload = await restoreAgentLaunchSelection(payload, live.transcriptCwd ?? live.cwd, {
+        homeDir: live.transcriptHome ?? undefined, posixCwd: executionRuntime.kind === 'wsl',
+        codexHome: codexHome && executionRuntime.kind === 'wsl' ? wslHostPath(executionRuntime.distribution, codexHome) : codexHome,
+      });
+    }
     this.killTerminalSessions(workspaceId, nodeId, payload);
     delete payload.sessionId;
     await workspaceRepository.updateNode(nodeId, { payload: payload as never });

@@ -1321,6 +1321,7 @@
   "portal.managed_scope_workspace": "Workspace",
   "portal.managed_scope_private": "Solo este Portal",
   "portal.managed_hosts": "Hosts permitidos",
+  "portal.managed_host_error": "Usa hosts exactos, como app.example.com o [::1], sin URL, puerto ni credenciales.",
   "portal.managed_downloads": "Carpeta de descargas en el workspace",
   "portal.managed_login_handoff": "Usa una cuenta de prueba autorizada con el agente o inicia sesión privada aquí. Las contraseñas son de solo escritura. OTP, campos privados y controles explícitos siguen protegidos.",
   "portal.managed_path_error": "Elige una carpeta de descargas dentro del workspace.",

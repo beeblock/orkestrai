@@ -286,11 +286,10 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     });
   }
 
-  function hostAllowed(candidate, allowedHosts, currentUrl) {
+  function hostAllowed(candidate, allowedHosts, _currentUrl) {
     try {
       const url = new URL(candidate);
-      const current = currentUrl && isAllowedPortalUrl(currentUrl) ? new URL(currentUrl).hostname.toLowerCase() : '';
-      const allowed = new Set([...(allowedHosts ?? []), current].filter(Boolean).map((host) => String(host).toLowerCase()));
+      const allowed = new Set((allowedHosts ?? []).filter(Boolean).map((host) => String(host).toLowerCase()));
       return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && (allowed.size === 0 || allowed.has(url.hostname.toLowerCase()));
     } catch { return false; }
   }

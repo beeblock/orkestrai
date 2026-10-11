@@ -1,5 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'native-shell-repair': 'native-shell-repair',
+  'native-canvas-delivery': 'native-canvas-delivery',
   'leader-supervision': 'leader-supervision',
   'continuous-delivery': 'continuous-delivery',
   'creative-audio-workflow': 'creative-audio-workflow',

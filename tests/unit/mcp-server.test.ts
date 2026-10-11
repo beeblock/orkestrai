@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { runMcpServer, MCP_TOOLS } from '../../packages/orkestrai-cli/src/mcp.js';
+import { bridgeCanvasCommandSchema } from '$lib/modules/agent-room/contracts/schemas/bridge-canvas.schema.js';
 
 /** Roda o servidor MCP com streams em memoria + bridge fake (captura o body). */
 function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
@@ -42,6 +43,47 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it('has a dispatcher for every advertised tool and no duplicate tool ids', async () => {
+    expect(new Set(MCP_TOOLS.map(tool => tool.name)).size).toBe(MCP_TOOLS.length);
+    const server = startMcp({}, '00000000-0000-7000-8000-000000000001');
+    try {
+      for (const [index, tool] of MCP_TOOLS.entries()) {
+        server.send({ jsonrpc: '2.0', id: index + 1, method: 'tools/call', params: { name: tool.name, arguments: {} } });
+        const result = await server.waitFor(index + 1);
+        // Invalid empty arguments may be rejected; a catalog-only tool may not.
+        expect(JSON.stringify(result), tool.name).not.toContain(`Tool desconhecida: ${tool.name}`);
+        expect(result.error, tool.name).toBeUndefined();
+      }
+    } finally { server.input.end(); await server.done; }
+  });
+
+  it('exposes native Canvas delivery operations with the real backend schema', async () => {
+    const server = startMcp({}, '00000000-0000-7000-8000-000000000001');
+    const taskId = '00000000-0000-7000-8000-000000000002';
+    const nodeId = '00000000-0000-7000-8000-000000000003';
+    const cases = [
+      ['canvas_update_layout', { updates: [{ nodeId, revision: 'a'.repeat(64), changes: { y: 800 } }] }],
+      ['shell_create', { nodeId, title: 'Client', startupCommand: 'npm run dev' }],
+      ['shell_update', { nodeId, revision: 'b'.repeat(64), changes: { startupCommand: 'npm run start' } }],
+      ['shell_restart', { nodeId, revision: 'b'.repeat(64), expectedSessionId: null }],
+      ['note_archive', { nodeId }], ['note_restore', { nodeId }],
+    ] as const;
+    const dispatched = new Set<string>();
+    try {
+      server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'canvas_list', arguments: { includeArchived: true, limit: 10 } } });
+      expect(JSON.parse((await server.waitFor(1)).result.content[0].text)).toMatchObject({ method: 'GET', path: '/api/agent-room/bridge/canvas?includeArchived=true&limit=10' });
+      for (const [index, [name, args]] of cases.entries()) {
+        expect(MCP_TOOLS.some(tool => tool.name === name)).toBe(true);
+        server.send({ jsonrpc: '2.0', id: index + 2, method: 'tools/call', params: { name, arguments: { ...args, taskId } } });
+        const result = JSON.parse((await server.waitFor(index + 2)).result.content[0].text);
+        expect(result).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/canvas' });
+        expect(bridgeCanvasCommandSchema.safeParse(result.body).success).toBe(true);
+        dispatched.add(result.body.input.command);
+      }
+      // Adding a native command without its agent contract makes this fail.
+      expect([...dispatched].sort()).toEqual(bridgeCanvasCommandSchema.shape.input.options.map(option => option.shape.command.value).sort());
+    } finally { server.input.end(); await server.done; }
+  });
   it('exposes native floor audit and revision-bound batch cleanup without tool discovery round trips', async () => {
     const server = startMcp();
     const entries = [{ floorId: 'floor-1', revision: 'a'.repeat(64) }];

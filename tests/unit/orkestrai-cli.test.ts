@@ -242,6 +242,26 @@ describe('orkestrai CLI', () => {
     return { lines, out: (line) => lines.push(String(line)) };
   }
 
+  it('exposes native Canvas operations to any assigned agent without Computer', async () => {
+    const { out } = capture();
+    const env = { ORKESTRAI_NODE_ID: '00000000-0000-7000-8000-000000000001', ORKESTRAI_AGENT_TOKEN: 'terminal-token' };
+    const taskId = '00000000-0000-7000-8000-000000000099';
+    const nodeId = '00000000-0000-7000-8000-000000000002';
+    expect(await run(['canvas', 'list', '--archived', '--limit', '20'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'GET', url: '/api/agent-room/bridge/canvas?includeArchived=true&limit=20' });
+    for (const [command, input, expected] of [
+      ['layout', { updates: [{ nodeId, revision: 'a'.repeat(64), changes: { x: 1, y: 2 } }] }, 'layout'],
+      ['shell', { nodeId, title: 'Dev server', startupCommand: 'npm run dev', start: false }, 'create_shell'],
+      ['shell-update', { nodeId, revision: 'b'.repeat(64), changes: { startupCommand: 'npm run start' } }, 'update_shell'],
+      ['shell-restart', { nodeId, revision: 'b'.repeat(64), expectedSessionId: null }, 'restart_shell'],
+      ['archive', { nodeId }, 'archive_note'], ['restore', { nodeId }, 'restore_note'],
+    ] as const) {
+      expect(await run(['canvas', command, '--task', taskId, '--input', JSON.stringify(input)], { cwd, out, env })).toBe(0);
+      expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/canvas', agentToken: 'terminal-token',
+        body: { from: env.ORKESTRAI_NODE_ID, taskId, input: { ...input, command: expected } } });
+    }
+  });
+
   it('routes audio creation and discovery through the same authenticated creative bridge', async () => {
     const { out } = capture();
     const env = { ORKESTRAI_NODE_ID: '00000000-0000-7000-8000-000000000001', ORKESTRAI_AGENT_TOKEN: 'terminal-token' };

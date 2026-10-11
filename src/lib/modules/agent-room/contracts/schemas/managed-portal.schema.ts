@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizePortalHost } from '../../domain/portal-hosts.js';
 
 const portalRefSchema = z.string().trim().regex(/^e\d{1,6}$/);
 const safeRelativePathSchema = z.string().trim().min(1).max(1_024).refine(
@@ -9,7 +10,10 @@ const safeRelativePathSchema = z.string().trim().min(1).max(1_024).refine(
 export const portalProfileSchema = z.object({
   profileId: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/).default('default'),
   profileScope: z.enum(['private', 'workspace']).default('workspace'),
-  allowedHosts: z.array(z.string().trim().min(1).max(253).toLowerCase()).max(64).default([]),
+  // Preserve invalid legacy entries as nonmatching restrictions, never drop
+  // them into an unrestricted empty list or crash the Canvas during reads.
+  allowedHosts: z.array(z.string().trim().min(1).max(253)
+    .transform(value => normalizePortalHost(value) ?? value.toLowerCase())).max(64).default([]),
   downloadDirectory: safeRelativePathSchema.default('.orkestrai/downloads'),
   control: z.enum(['disabled', 'read', 'interact']).default('interact'),
   agentAccess: z.enum(['workspace', 'selected']).default('workspace'),
