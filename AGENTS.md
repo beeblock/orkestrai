@@ -33,6 +33,10 @@
 
 ## Agent Room Module
 
+- **Agent capability parity is a shipping requirement:** every new workspace feature must expose its applicable operations to both leaders and specialists through the native bridge and CLI/MCP in the same change, with shared validation, identity/scope checks, contract tests, docs and a guided use case. UI-only functionality is incomplete. Never require Computer to manipulate the app's own canvas, Shell nodes or notes; external OS consent remains a separate capability, not a global blocker.
+- **Autonomy is workspace-wide:** a direct owner task authorizes its normal implementation, validation and integration until delivery. Explicit owner restrictions (workspace instructions, notes/Markdown, configured gates or pauses) remain authoritative. A task-specific blocker must not suspend other executable cards; supervision tests must cover leaders and specialists, independent cards, and a completely blocked or completed board.
+- **Terminal settings are authoritative:** confirmed model/effort selections inside the provider terminal must survive reload/restart; never silently restore stale launch overrides. Read the exact conversation with bounded asynchronous I/O, preserve unrelated flags, and test native/WSL restoration without touching the owner's provider config.
+
 - Agent CLIs (claude, codex, kimi, opencode) are accessed only through adapters in `src/lib/modules/agent-room/application/adapters/`. Register new providers via `registerAgentAdapter` in `registry.ts` — never hardcode provider ids outside `domain/types.ts` defaults.
 - Agent Room persistence uses Svelar ORM models in `domain/models/` (tables `agent_*`) and repositories in `infrastructure/repositories/`. The legacy better-sqlite3 store (`data/app.sqlite`) was migrated by `npm run migrate:agent-room-data`.
 - IDs are UUID v7 (`uuidv7()` from `@beeblock/svelar/support`).

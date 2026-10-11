@@ -90,12 +90,40 @@ import { computerService } from '$lib/modules/agent-room/application/services/Co
 import { secretRefService } from '$lib/modules/agent-room/application/services/SecretRefService.js';
 import { agentWorkspaceToolService, toolExecutionService } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
 import { createWorkspaceToolSchema, executeWorkspaceToolSchema, updateWorkspaceToolSchema } from '$lib/modules/agent-room/contracts/schemas/agent-workspace-tool.schema.js';
+import { BridgeCanvasCommandRequest } from '../requests/BridgeCanvasCommandRequest.js';
+import { bridgeCanvasListSchema } from '../../../contracts/schemas/bridge-canvas.schema.js';
+import { bridgeCanvasService } from '../../../application/services/BridgeCanvasService.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
  * workspace, sem CSRF — ver hooks.server.ts csrfExcludePaths).
  */
 export class BridgeController extends Controller {
+  async canvasList(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const query = bridgeCanvasListSchema.parse(Object.fromEntries(event.url.searchParams));
+      return this.json({ data: await bridgeCanvasService.list(workspace.id, query) });
+    } catch (error) { return this.errorResponse(error, 'Failed to read the canvas.'); }
+  }
+
+  async canvasCommand(event: any) {
+    try {
+      const dto = await BridgeCanvasCommandRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = await this.resolveAgentActor(workspace.id, dto.request.from);
+      if (ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? '')) !== actor) {
+        throw new Error('Canvas actions require the active terminal identity.');
+      }
+      const task = (await taskBoardService.list(workspace.id)).find(item => item.id === dto.request.taskId);
+      if (!task || task.assigneeNodeId !== actor || ['todo', 'done'].includes(task.status)) throw new Error('Canvas actions require an active task assigned to this agent.');
+      const data = await bridgeCanvasService.execute(workspace.id, actor, dto);
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: actor, taskId: task.id,
+        state: 'working', action: `canvas:${dto.request.input.command}`, category: 'workflow', verb: 'updated' });
+      return this.json({ data });
+    } catch (error) { return this.errorResponse(error, 'Failed to operate the canvas.'); }
+  }
+
   async listAgents(event: any) {
     try {
       const token = this.requireToken(event);

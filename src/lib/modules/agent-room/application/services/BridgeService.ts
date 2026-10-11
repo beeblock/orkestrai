@@ -1345,7 +1345,9 @@ export class BridgeService {
         url,
         portalProfileId: 'default',
         portalProfileScope: 'workspace',
-        portalAllowedHosts: [new URL(url).hostname.toLowerCase()],
+        // No owner-defined restriction: initial URL is a destination, not a
+        // domain grant. Explicit nonempty allowlists remain restrictive.
+        portalAllowedHosts: [],
         portalDownloadDirectory: '.orkestrai/downloads',
         portalAllowScripts: false,
       },
@@ -1470,6 +1472,8 @@ description: Ponte com o canvas do Orkestrai. Use SEMPRE que precisar falar com 
 ## Entrega contínua (leia primeiro)
 
 O time só rende quando cada agente trabalha em paralelo, sem esperar autorizações em sequência.
+- Uma tarefa direta do dono autoriza trabalhar até finalizar a entrega. Isso vale para todos os workspaces e agentes: não peça aprovação para cada etapa normal. Respeite restrições explícitas nas instruções/notas/Markdown do dono, pausas, gates configurados e consentimento real do sistema. Um blocker é daquele card: execute os demais cards independentes; não pare o time nem invente uma nova permissão.
+- Canvas nativo: use \`canvas_list\`, \`canvas_update_layout\`, \`shell_create\`, \`shell_update\`, \`shell_restart\`, \`note_archive\` e \`note_restore\` (CLI: \`orkestrai canvas list|layout|shell|shell-update|shell-restart|archive|restore --task <id> --input '<json>'\`). Corrija comando/cwd/título com shell_update e shell.revision; editar não digita no processo vivo. Para aplicar agora, shell_restart exige revisão e expectedSessionId de shell.sessionId (null só se parado); retry antigo não mata o substituto. Não recrie Shell para corrigir configuração. Verifique saúde antes de concluir. Não use Computer nem exija Accessibility/Screen Recording para operar o próprio Orkestrai. Portais usam suas próprias tools. Se seu MCP é antigo, use a CLI; reavalie bloqueio por tool ausente depois de atualizar o app.
 - Mensagens são assíncronas. \`ask\` entrega na hora a quem está livre; quem está no meio de um turno recebe pela caixa de entrada no próximo intervalo. Se o resultado vier \`queued\` ou sem resposta no prazo, NÃO reenvie e não fique esperando: continue o trabalho. A resposta chega à sua caixa de entrada (anexada às próximas respostas da ponte e das tools, ou via \`orkestrai inbox\`).
 - Mensagens recebidas trazem \`[orkestrai:message:<id>]\`. Responda perguntas com \`orkestrai reply <id> "<resposta>"\` (tool MCP \`reply\`), uma única vez. Nunca use \`ask\` para responder.
 - Especialista: feche o ciclo da sua tarefa — implemente, valide e conclua com \`orkestrai task done <id>\`. Em um andar, o trabalho pendente é commitado automaticamente ao concluir. Não peça "GO" ao líder a cada etapa; peça decisão só para o que é irreversível, arriscado ou fora do escopo.
@@ -1703,6 +1707,8 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '## Ponte Orkestrai (agentes)',
       '',
       'Este projeto roda dentro de um workspace do Orkestrai. Você tem a CLI `orkestrai` e/ou tools MCP `orkestrai` disponíveis para colaborar com o time no canvas:',
+      '- A direct owner task authorizes completing that delivery in every workspace. Do not ask again for routine steps. Honor explicit owner restrictions in notes/Markdown, pauses, actual configured gates and OS consent. A blocker belongs to its card; keep executing all independent cards.',
+      '- Native Canvas: canvas_list, canvas_update_layout, shell_create, shell_update, shell_restart, note_archive/note_restore, or `orkestrai canvas list|layout|shell|shell-update|shell-restart|archive|restore --task <id> --input <json>`. Correct existing Shell commands with shell_update and shell.revision; edits never type into a live process. Explicit shell_restart checks configuration plus expectedSessionId from shell.sessionId, rejecting stale retries. Verify health before task completion. Never require Computer or macOS input grants for internal Canvas work. Use the CLI if an older MCP lacks the tool; recheck missing-tool blockers after app updates.',
       '- `orkestrai list` — agentes do workspace, notas e portais conectados. O [LIDER] marcado e o maestro do time: fale com ele pelo TITULO ("Maestro" e o papel, não um nome de agente).',
       '- Repositórios adicionais aprovados aparecem em `orkestrai list` como aliases `@nome`; use esses aliases em caminhos de tools como `api_client_import`, nunca tente escapar com `../`.',
       '- `orkestrai usage` — cotas reais e recomendação do nó Usage; líderes consultam antes de delegar e roteiam novas tarefas ao recommendedProvider quando shouldFallback=true.',

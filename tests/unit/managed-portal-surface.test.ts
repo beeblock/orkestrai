@@ -83,6 +83,14 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('does not invent a host restriction from the initial URL, but retains explicit restrictions', async () => {
+    const { executor, request, contents } = await setup();
+    const unrestricted = { ...request, profile: { ...request.profile, allowedHosts: [] } };
+    await executor.userCommand(unrestricted, 'navigate', { url: 'http://[::1]:53455/login' });
+    expect(contents.getURL()).toBe('http://[::1]:53455/login');
+    await expect(executor.userCommand({ ...request, initialUrl: contents.getURL(),
+      profile: { ...request.profile, allowedHosts: ['127.0.0.1'] } }, 'navigate', { url: contents.getURL() })).rejects.toThrow(/host is not allowed/);
+  });
   it('preserves the live document and native presentation during same-document SPA navigation', async () => {
     const { executor, request, contents, parent } = await setup();
     const before = await executor.userCommand(request, 'state', {});

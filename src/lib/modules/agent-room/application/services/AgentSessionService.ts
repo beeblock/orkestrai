@@ -5,7 +5,7 @@ import { agentSessionTracker, agentSessionTrackerForRuntime } from '../../infras
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 import { floorService } from './FloorService.js';
-import { preflightWslLaunch, terminalExecutionRuntime } from '../../infrastructure/WslRuntime.js';
+import { preflightWslLaunch, terminalExecutionRuntime, wslHostPath } from '../../infrastructure/WslRuntime.js';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { executionRuntimeKey } from '../../domain/runtime.js';
 import { providerProfileService } from './ProviderProfileService.js';
@@ -15,6 +15,9 @@ import {
   codexWorkspaceTrustOverrideArgs,
 } from '../../infrastructure/codex-mcp-config.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
+import { normalizeSavedTerminalCommands, resumeTerminalCommandInput } from '../../domain/terminal-commands.js';
+import { settingsService } from './SettingsService.js';
+import { restoreAgentLaunchSelection } from '../../infrastructure/transcript/AgentLaunchSelection.js';
 
 type AgentNodePayload = {
   sessionId?: string;
@@ -27,6 +30,8 @@ type AgentNodePayload = {
   initialRoleArgs?: string[];
   env?: Record<string, string>;
   executionRuntime?: WorkspaceExecutionRuntime | null;
+  shellStartupManaged?: boolean;
+  currentWorkingDir?: string;
 };
 
 export type EnsuredAgentSession = {
@@ -41,6 +46,22 @@ function notifyWorkspaceChanged(workspaceId: string): void {
 }
 
 export class AgentSessionService {
+  /** The process-owned PTY singleton deduplicates across server module copies. */
+  async startManagedShell(workspaceId: string, nodeId: string, sessionId: string): Promise<boolean> {
+    const [workspace, node] = await Promise.all([workspaceRepository.getWorkspace(workspaceId), workspaceRepository.getNode(nodeId)]);
+    const payload = node?.payload as import('../../domain/types.js').TerminalNodePayload | undefined;
+    const session = ptySessionManager.get(sessionId);
+    if (!workspace || workspace.suspendedAt || node?.workspaceId !== workspaceId || !payload?.shellStartupManaged
+      || payload.provider || !session || session.exited || session.provider || session.nodeId !== nodeId || session.workspaceId !== workspaceId) return false;
+    if (!(await autonomyPolicyService.runWindow(workspaceId, 'shell_startup')).allowed) return false;
+    const commands = [...normalizeSavedTerminalCommands(await settingsService.get('terminalGlobalCommands')),
+      ...normalizeSavedTerminalCommands(payload.savedCommands)];
+    const input = resumeTerminalCommandInput(commands, payload.command ?? '');
+    if (!input) return false;
+    // A successful write is submission, not evidence that the dev server loads.
+    // Keep the promise even on failure: an uncertain command is never replayed.
+    return ptySessionManager.writeStartupOnce(sessionId, input);
+  }
   async ensureByTitle(workspaceId: string, title: string): Promise<EnsuredAgentSession> {
     const nodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
     const target = nodes.find((node) => node.type === 'terminal' && (node.title ?? '').trim() === title.trim());
@@ -57,7 +78,7 @@ export class AgentSessionService {
       throw new Error('AGENT_NOT_FOUND');
     }
     const title = target.title ?? 'Terminal';
-    const payload = (target.payload ?? {}) as AgentNodePayload;
+    let payload = (target.payload ?? {}) as AgentNodePayload;
     const runtime = terminalExecutionRuntime(workspace, payload);
     const liveNodeSessions = ptySessionManager.listLiveForNode(workspaceId, target.id);
     const compatibleLiveSession = liveNodeSessions.find(
@@ -105,9 +126,11 @@ export class AgentSessionService {
     if (existing && !existing.exited && ptySessionManager.claimNode(existing.id, workspaceId, target.id)) {
       return { nodeId: target.id, sessionId: existing.id, state: 'existing' };
     }
-    if (!payload.command) throw new Error('AGENT_COMMAND_UNAVAILABLE');
+    const command = payload.command;
+    if (!command) throw new Error('AGENT_COMMAND_UNAVAILABLE');
 
-    let cwd = workspace.workingDir;
+    let cwd = !payload.provider && payload.shellStartupManaged && payload.currentWorkingDir
+      ? payload.currentWorkingDir : workspace.workingDir;
     if (target.floorId) {
       const floor = await floorService.get(target.floorId);
       if (floor?.path) cwd = floor.path;
@@ -115,7 +138,7 @@ export class AgentSessionService {
 
     const adapter = payload.provider && hasAgentAdapter(payload.provider) ? getAgentAdapter(payload.provider) : null;
     const wslContext = runtime.kind === 'wsl'
-      ? await preflightWslLaunch({ runtime, command: payload.command, hostCwd: cwd, workspaceRoot: workspace.workingDir })
+      ? await preflightWslLaunch({ runtime, command, hostCwd: cwd, workspaceRoot: workspace.workingDir })
       : null;
     const tracker = wslContext && runtime.kind === 'wsl'
       ? agentSessionTrackerForRuntime(
@@ -125,6 +148,17 @@ export class AgentSessionService {
         )
       : agentSessionTracker;
     const trackingCwd = wslContext?.linuxWorkingDir ?? cwd;
+    const profileEnv = payload.profileId && payload.provider
+      ? await providerProfileService.resolveEnv(payload.profileId, payload.provider, { runtimeHome: wslContext?.linuxHomePath })
+      : {};
+    const codexHome = profileEnv.CODEX_HOME ?? payload.env?.CODEX_HOME ?? (runtime.kind === 'native' ? process.env.CODEX_HOME : undefined);
+    const selected = await restoreAgentLaunchSelection(payload as Record<string, unknown>, trackingCwd,
+      { homeDir: wslContext?.homeHostPath, posixCwd: runtime.kind === 'wsl',
+        codexHome: codexHome && runtime.kind === 'wsl' ? wslHostPath(runtime.distribution, codexHome) : codexHome });
+    if (selected !== payload) {
+      payload = selected as AgentNodePayload;
+      await workspaceRepository.updateNode(target.id, { payload: payload as never });
+    }
     let resumableAgentSessionId = payload.agentSessionId ?? null;
     if (resumableAgentSessionId && adapter) {
       const valid = tracker.isAgentSessionResumable(adapter.sessionStorage, trackingCwd, resumableAgentSessionId);
@@ -141,11 +175,6 @@ export class AgentSessionService {
     }
     if (freshAgentSessionId) tracker.claim(freshAgentSessionId);
 
-    const profileEnv = payload.profileId && payload.provider
-      ? await providerProfileService.resolveEnv(payload.profileId, payload.provider, {
-          runtimeHome: wslContext?.linuxHomePath,
-        })
-      : {};
     const mcpArgs = payload.provider === 'codex'
       ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
       : [];
@@ -179,7 +208,7 @@ export class AgentSessionService {
     }
     const trackingStartedAt = Date.now();
     const session = ptySessionManager.create({
-      command: payload.command,
+      command,
       args: [
         ...(payload.args ?? []),
         ...mcpArgs,
@@ -268,3 +297,6 @@ export class AgentSessionService {
 }
 
 export const agentSessionService = new AgentSessionService();
+
+(globalThis as { __orkestraiStartManagedShell?: (workspaceId: string, nodeId: string, sessionId: string) => Promise<boolean> })
+  .__orkestraiStartManagedShell = (workspaceId, nodeId, sessionId) => agentSessionService.startManagedShell(workspaceId, nodeId, sessionId);

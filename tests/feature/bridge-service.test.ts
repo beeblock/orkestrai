@@ -753,6 +753,7 @@ describe('Modo Maestro', () => {
     const node = await workspaceRepository.getNode(portal.nodeId);
     expect(node!.type).toBe('portal');
     expect((node!.payload as { url?: string }).url).toBe('http://localhost:5173');
+    expect((node!.payload as { portalAllowedHosts?: string[] }).portalAllowedHosts).toEqual([]);
 
     const edges = await workspaceRepository.listEdges(workspace.id);
     expect(edges).toHaveLength(1);

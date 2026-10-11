@@ -367,14 +367,18 @@ export class ControlCenterRepository {
   }
 
   /** Questions this agent asked that are still unanswered, since a given time. */
-  async openAsksFrom(fromNodeId: string, sinceIso: string): Promise<number> {
+  async openAsksFrom(fromNodeId: string, sinceIso: string, taskId?: string): Promise<number> {
     const rows = await AgentMessageEnvelope.query()
       .where('from_node_id', fromNodeId)
       .whereIn('state', ['queued', 'sent', 'delivered'])
       .where('created_at', '>=', sinceIso)
       .where('metadata_json', 'like', '%"kind":"ask"%')
       .get();
-    return rows.length;
+    return taskId ? rows.filter(row => {
+      const askedTask = parseMetadata(row.getAttribute('metadata_json')).taskId;
+      // An unscoped legacy question cannot be safely attributed to another card.
+      return !askedTask || askedTask === taskId;
+    }).length : rows.length;
   }
 
   /** The first item of a delivery batch, which carries the typed prompt, in any state. */

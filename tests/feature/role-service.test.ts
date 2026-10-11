@@ -248,12 +248,20 @@ describe('RoleService', () => {
 
   it('entrega ao maestro todos os dados das tarefas iniciais sem responsavel', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'fila inicial', workingDir: '/tmp' });
-    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });
+    // Agent TUIs consume raw input. Canonical macOS cat truncates long flattened
+    // briefings at MAX_CANON (and rings BEL), before the task details arrive.
+    const session = ptySessionManager.create({ command: '/bin/sh',
+      args: ['-c', "stty raw -echo; printf 'ready\\n'; exec /bin/cat"], cwd: '/tmp' });
+    await vi.waitFor(() => {
+      const { scrollback, detach } = ptySessionManager.attach(session.id, () => {});
+      detach();
+      expect(scrollback).toContain('ready');
+    });
     const leader = await workspaceRepository.createNode({
       workspaceId: workspace.id,
       type: 'terminal',
       title: 'Lider',
-      payload: { command: '/bin/cat', sessionId: session.id, maestro: true },
+      payload: { command: '/bin/sh', sessionId: session.id, maestro: true },
     });
     const task = await taskBoardService.create(workspace.id, {
       title: 'Revisar onboarding',

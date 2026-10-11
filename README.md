@@ -28,6 +28,22 @@ Devin, shells, tasks, notes,
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
+## Autonomous workspace delivery
+
+A direct task authorizes its normal implementation, validation and integration
+until delivery, unless your instructions, notes or configured policy explicitly
+restrict it. A blocker on one card does not pause other executable cards.
+Leaders and specialists can use `canvas_list`, `canvas_update_layout`,
+`shell_create`, `shell_update`, `shell_restart`, `note_archive` and `note_restore` (or `orkestrai canvas`) to
+operate the native canvas without Computer permissions. Layout updates require
+current revisions; note archival preserves content and references. Shell
+configuration edits preserve other settings without interrupting a live process;
+explicit restart checks both configuration and session identity. New Portals do
+not invent host restrictions; existing owner host lists remain exact, including IPv6.
+Managed startup is submitted once per live PTY, including off-screen nodes, and is not
+proof that the server is healthy. Explicit pauses and external OS consent remain
+separate. Confirmed Codex terminal `/model` choices survive cold resume and reload.
+
 ## Startup recovery
 
 If the app cannot start, use its native recovery dialog to download the latest

@@ -5,7 +5,24 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.41.0 - 2026-10-11
+
+### Added
+
+- Expose native Canvas inventory and revision-checked layout batches, idempotent Shell creation with background startup, and reversible note archival to leaders and specialists through CLI/MCP. These operations use the same workspace records as the UI and do not depend on Computer or macOS input permissions. Preserve assigned-task identity, workspace confinement, explicit policies and private payloads.
+- Document native Canvas delivery with a guided tour in all three languages and make agent capability parity a requirement for future workspace features.
+
+### Fixed
+
+- Add the missing managed Shell editing and restart operations to the agent bridge: revision-checked command/cwd/title edits preserve unrelated settings without injecting into a running terminal; explicit restart checks the live session and submits startup once. Expose both operations in CLI/MCP so a wrong initial command no longer requires owner intervention.
+- Stop turning a new Portal's initial URL into an automatic host restriction. Empty host lists permit credential-free HTTP(S) navigation; explicit nonempty restrictions remain exact in both the Core and Electron, including redirects. Preserve bracketed IPv6 hosts such as `[::1]` when saving Portal settings.
+- Scope a leader's or specialist's reported wait and unanswered task questions to their card instead of parking other executable work. Keep fully blocked and completed boards quiet and preserve explicit workspace stops, usage limits, human drafts and uncertain-delivery protections.
+- Restore Codex model and reasoning effort confirmed through terminal `/model` before cold resume or terminal reload, instead of reapplying stale node launch arguments. Read only the exact conversation and launch directory with bounded asynchronous I/O, support native and WSL transcript roots, and retain unrelated launch configuration.
+
+### Known limitations
+
+- Sustained high Electron renderer CPU observed after hours of use remains under investigation. This release does not claim to resolve that issue.
+- Native tool availability is not functional acceptance of a project's journeys. Real authentication challenges, explicit owner restrictions and macOS permission requirements remain separate.
 
 ## 0.40.0 - 2026-10-10
 

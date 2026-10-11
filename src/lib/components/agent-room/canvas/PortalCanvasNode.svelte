@@ -14,6 +14,7 @@
   import { portalScriptExpression, unwrapPortalScriptResult } from './portal-script.js';
   import { managedPortalSurface } from '../managed-portal-surface.js';
   import { portalProfileFromPayload } from '$lib/modules/agent-room/contracts/schemas/managed-portal.schema.js';
+  import { normalizePortalHost, normalizePortalHosts } from '$lib/modules/agent-room/domain/portal-hosts.js';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import { Button } from '$lib/components/ui/button';
@@ -117,6 +118,7 @@
   let profileId = $state(data.payload.portalProfileId ?? 'default');
   let profileScope = $state<'private' | 'workspace'>(data.payload.portalProfileScope ?? 'workspace');
   let allowedHosts = $state((data.payload.portalAllowedHosts ?? []).join('\n'));
+  let hostError = $state(false);
   let downloadDirectory = $state(data.payload.portalDownloadDirectory ?? '.orkestrai/downloads');
   let control = $state<'disabled' | 'read' | 'interact'>(data.payload.portalControl ?? 'interact');
   let agentAccess = $state(portalProfileFromPayload(data.payload).agentAccess);
@@ -391,8 +393,13 @@
   }
 
   function savePortalSettings() {
+    hostError = allowedHosts.split(/[\s,]+/).filter(Boolean).some(host => normalizePortalHost(host) === null);
+    if (hostError) {
+      document.getElementById(`portal-hosts-${id}`)?.focus();
+      return;
+    }
     const cleanProfile = profileId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
-    const hosts = [...new Set(allowedHosts.split(/[\s,]+/).map((host: string) => host.trim().toLowerCase()).filter((host: string) => /^[a-z0-9.-]+$/.test(host)))].slice(0, 64);
+    const hosts = normalizePortalHosts(allowedHosts);
     const cleanDirectory = downloadDirectory.trim() || '.orkestrai/downloads';
     if (cleanDirectory.startsWith('/') || cleanDirectory.startsWith('\\') || /(^|[\\/])\.\.([\\/]|$)/.test(cleanDirectory)) {
       toast.error(m['portal.managed_path_error']());
@@ -812,8 +819,11 @@
       </fieldset>
       <label class="grid gap-1.5 text-ui-sm font-medium">
         <span>{m['portal.managed_hosts']()}</span>
-        <Textarea bind:value={allowedHosts} rows={4} placeholder="app.example.com&#10;api.example.com" />
+        <Textarea id={`portal-hosts-${id}`} name="portalAllowedHosts" bind:value={allowedHosts} rows={4} spellcheck={false}
+          aria-invalid={hostError} aria-describedby={hostError ? `portal-host-error-${id}` : undefined}
+          placeholder="app.example.com&#10;[::1]" />
       </label>
+      {#if hostError}<span id={`portal-host-error-${id}`} role="alert" class="text-ui-sm text-destructive">{m['portal.managed_host_error']()}</span>{/if}
       <label class="grid gap-1.5 text-ui-sm font-medium">
         <span>{m['portal.managed_downloads']()}</span>
         <Input class="font-mono" bind:value={downloadDirectory} />

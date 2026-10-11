@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useSvelarTest } from '@beeblock/svelar/testing';
@@ -161,6 +161,38 @@ describe('WorkspaceService.reloadNode', () => {
     const persisted = (await workspaceRepository.getNode(node.id))!.payload as Record<string, unknown>;
     expect(persisted.sessionId).toBeUndefined();
     expect(persisted.agentSessionId).toBe('conversa-real-123');
+  });
+
+  it('persists terminal /model and effort before a cold restart, independently per workspace', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ork-model-restart-'));
+    const codexHome = join(dir, 'provider-profile');
+    const sessionId = uuidv7();
+    await mkdir(join(codexHome, 'sessions'), { recursive: true });
+    await writeFile(join(codexHome, 'sessions', `rollout-${sessionId}.jsonl`), [
+      { type: 'session_meta', payload: { id: sessionId, cwd: dir } },
+      { type: 'turn_context', payload: { model: 'gpt-6-astra', effort: 'xhigh' } },
+      { type: 'event_msg', payload: { type: 'thread_settings_applied', thread_settings: { model: 'gpt-6.1-sol', reasoning_effort: 'high' } } },
+    ].map(item => JSON.stringify(item)).join('\n'));
+    // Never provision bridge/provider config in the real owner's home.
+    vi.spyOn(workspaceService, 'get').mockImplementation(id => workspaceRepository.getWorkspace(id) as never);
+    try {
+      const workspaces = await Promise.all(['First', 'Second'].map(name => workspaceRepository.createWorkspace({ name, workingDir: dir })));
+      for (const workspace of workspaces) {
+        const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Codex',
+          payload: { provider: 'codex', command: 'codex', agentSessionId: sessionId, sessionId: 'dead-pty', env: { CODEX_HOME: codexHome },
+            args: ['--dangerously-bypass-approvals-and-sandbox', '--model', 'gpt-6-astra', '-c', 'model_reasoning_effort="xhigh"'] } });
+        await workspaceService.listNodes(workspace.id);
+        const payload = (await workspaceRepository.getNode(node.id))!.payload as Record<string, unknown>;
+        expect(payload.sessionId).toBeUndefined();
+        expect(payload.agentSessionId).toBe(sessionId);
+        expect(payload.args).toContain('gpt-6.1-sol');
+        expect(payload.args).toContain('model_reasoning_effort="high"');
+        expect(payload.args).not.toContain('gpt-6-astra');
+        // A second cold restoration keeps the exact persisted choice.
+        await workspaceService.listNodes(workspace.id);
+        expect((await workspaceRepository.getNode(node.id))!.payload).toEqual(payload);
+      }
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
 
   it('procura a conversa Claude de um agente de Floor na pasta do Floor', async () => {

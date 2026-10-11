@@ -665,6 +665,8 @@ export type TerminalNodePayload = {
   theme?: string;
   /** Comandos salvos exclusivamente para este node terminal. */
   savedCommands?: SavedTerminalCommand[];
+  /** Agent-created Shell startup is submitted once per PTY by the Core, not the renderer. */
+  shellStartupManaged?: boolean;
   /** Controls whether the provider process follows the UI or the background Core. */
   agentRuntimeMode?: 'interactive' | 'on_demand' | 'persistent';
   /** Idle time before an on-demand process is suspended, in minutes. */

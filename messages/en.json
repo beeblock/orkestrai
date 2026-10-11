@@ -1321,6 +1321,7 @@
   "portal.managed_scope_workspace": "Workspace",
   "portal.managed_scope_private": "Only this Portal",
   "portal.managed_hosts": "Allowed hosts",
+  "portal.managed_host_error": "Use exact hostnames, such as app.example.com or [::1], without a URL, port or credentials.",
   "portal.managed_downloads": "Download folder in workspace",
   "portal.managed_login_handoff": "Use an authorized test account with the agent, or sign in privately here. Passwords are write-only. OTP, private fields and explicit security gates remain protected.",
   "portal.managed_path_error": "Choose a download folder inside the workspace.",
