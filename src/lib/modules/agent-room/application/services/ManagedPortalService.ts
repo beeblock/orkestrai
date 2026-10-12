@@ -222,11 +222,10 @@ export class ManagedPortalService {
       if (!commandResult.ok) throw new Error(passwordWrite ? 'Portal password entry could not be confirmed. Take another snapshot before retrying.' : commandResult.error || 'Portal action could not be confirmed.');
       if (managed?.state) {
         await workspaceRepository.updateNode(portal.id, { payload: {
-          ...(await workspaceRepository.getNode(portal.id))?.payload,
           ...(managed.state.url ? { url: managed.state.url } : {}),
           portalActiveTabId: managed.state.activeTabId,
           portalTabs: managed.state.tabs,
-        } });
+        } }, { mergePortalPayload: true });
       }
       return { id: request.requestId, ...commandResult };
       });

@@ -987,7 +987,7 @@ export class BridgeService {
           control: portalProfileFromPayload(node.payload).control,
           granted: agentNodeId ? nodes.some((agent) => agent.id === agentNodeId && agent.type === 'terminal') && portalGrantsAgent(portalProfileFromPayload(node.payload), agentNodeId) : null,
           paused: (node.payload as Record<string, unknown>).portalPaused === true,
-          allowBackground: (node.payload as Record<string, unknown>).portalAllowBackground === true,
+          allowBackground: portalProfileFromPayload(node.payload).allowBackground,
         },
       }));
   }
@@ -1548,6 +1548,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 - \`orkestrai task history\` — histórico do workspace (concluídas + arquivadas, da mais recente): o "o que já foi feito" do projeto.
 - \`orkestrai task add "<título>" --note "<título-da-nota>"\` / \`task link <taskId> <nota>\` / \`task unlink <taskId>\` — vincula a tarefa à sua nota de spec. SEMPRE vincule: tarefa com spec vinculada é autossuficiente. Regras: UMA nota por tarefa (a mesma nota pode servir várias tarefas); ao arquivar a tarefa, a nota sai do canvas JUNTO (fica acessível pelo histórico); nota vinculada não é apagada pelo X do canvas — só sai de verdade junto com a tarefa (ou se desvinculada).
 - \`orkestrai portal create "<url>" [--title "<t>"] [--connect "<Agente>"|all] [--force-new]\` — antes de criar, rode \`orkestrai list\`. A mesma URL reutiliza o portal existente; se já houver outro portal, navegue-o para a URL desejada. Use \`--force-new\` SOMENTE quando o usuário pedir explicitamente mais um portal.
+- Portal visibility is presentation, not an implicit permission: unconfigured Portals allow background control while the Core runs, including offscreen, detached and minimized windows. Read list/portals access.allowBackground before claiming a visibility blocker. Existing explicit visibility-only restrictions, pauses and Security gates remain binding. Navigation and tabs do not revoke the grant. Use the same Portal; do not request Computer or another profile to unlock it.
 - \`orkestrai portal <nome-ou-nodeId> navigate "<url>"\` — abre uma URL no portal escolhido por nome único ou id. \`eval\`, \`dom\` e \`screenshot\` aceitam o mesmo identificador.
 - \`orkestrai portal <nodeId> eval "<js>"\` — desabilitado para agentes. Use snapshot/click/type/select/extract: portais sem restrições explícitas pertencem a todo o time do workspace, incluindo novos recrutas. Não exija configuração de autonomia nem tarefa para navegar; taskId é opcional para rastreabilidade. Respeite pausas, listas explícitas de agentes, hosts e políticas de Segurança habilitadas. Login autorizado: obtenha snapshot e preencha email e senha fornecidos/autorizados pelo usuário com type; campos de senha writeOnly aceitam escrita em HTTPS ou localhost, nunca leitura. Clique Entrar e confirme a página autenticada na mesma sessão. Nunca devolva um login de teste autorizado ao usuário só por ser senha. Não exponha credenciais em notas, logs ou relatórios. OTP, CAPTCHA e campos privados exigem o usuário; gates explicitamente configurados continuam valendo. Nunca tente contornar gates com scripts.
 - \`orkestrai portal <nodeId> dom\` — devolve o HTML atual (ler telas, pesquisar, testar o que você está construindo).

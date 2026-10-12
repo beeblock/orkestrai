@@ -17,6 +17,7 @@ test('Portal settings retain IPv6 and invalid input cannot silently remove a res
       payload: { url: 'http://127.0.0.1:5199/api/agent-room/workspaces', portalAllowedHosts: ['127.0.0.1'] } } })).json()).data;
     await page.goto(`/canvas?workspace=${workspace.id}`);
     await page.getByRole('button', { name: /Configurações do navegador gerenciado/ }).click();
+    await expect(page.getByRole('switch', { name: 'Permitir controle em background', exact: true })).toBeChecked();
     const hosts = page.getByLabel('Hosts permitidos', { exact: true });
     await hosts.fill('127.0.0.1\n[::1]');
     await page.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
@@ -28,6 +29,32 @@ test('Portal settings retain IPv6 and invalid input cannot silently remove a res
     await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Use hosts exatos');
     await expect(hosts).toBeFocused();
     expect(await saved()).toEqual(['127.0.0.1', '[::1]']);
+  } finally {
+    await page.goto('about:blank').catch(() => {});
+    await request.delete(base).catch(() => {});
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Portal URL edits send only changed fields and retain newer owner grants', async ({ page, request }) => {
+  const root = await mkdtemp(join(tmpdir(), 'ork-portal-grants-'));
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E Portal grants', workingDir: root } })).json()).data;
+  const base = `/api/agent-room/workspaces/${workspace.id}`;
+  try {
+    const initialUrl = 'http://127.0.0.1:5199/api/agent-room/workspaces';
+    const portal = (await (await request.post(`${base}/nodes`, { data: { type: 'portal', title: 'Grant fixture', x: 80, y: 80,
+      payload: { url: initialUrl, portalAllowBackground: false, portalAllowedHosts: ['127.0.0.1'] } } })).json()).data;
+    await page.goto(`/canvas?workspace=${workspace.id}`);
+    await request.patch(`${base}/nodes/${portal.id}`, { data: { payload: { portalAllowBackground: true, portalPaused: true } } });
+    const savedRequest = page.waitForRequest(r => r.method() === 'PATCH' && r.url().endsWith(`/nodes/${portal.id}`) && r.postDataJSON()?.payload?.url?.includes('portal-regression'));
+    const address = page.getByRole('textbox', { name: 'Endereço do portal', exact: true });
+    await address.fill(initialUrl + '?portal-regression=1');
+    await address.press('Enter');
+    const payload = (await savedRequest).postDataJSON().payload;
+    expect(payload).toEqual({ url: initialUrl + '?portal-regression=1' });
+    await expect.poll(async () => (await (await request.get(`${base}/nodes/${portal.id}`)).json()).data.payload).toMatchObject({
+      url: initialUrl + '?portal-regression=1', portalAllowBackground: true, portalPaused: true, portalAllowedHosts: ['127.0.0.1'],
+    });
   } finally {
     await page.goto('about:blank').catch(() => {});
     await request.delete(base).catch(() => {});

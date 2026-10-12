@@ -40,6 +40,20 @@ import { reviewCenterRepository } from './ReviewCenterRepository.js';
 import { councilRepository } from './CouncilRepository.js';
 import { codeGraphRepository } from './CodeGraphRepository.js';
 
+// SSR and the Core transport can load separate copies of this repository.
+// Serialize Portal read/merge/write operations by id across both copies.
+const portalRuntime = globalThis as typeof globalThis & {
+  __orkestraiPortalPayloadWrites?: Map<string, Promise<unknown>>;
+};
+const portalPayloadWrites = portalRuntime.__orkestraiPortalPayloadWrites ??= new Map<string, Promise<unknown>>();
+
+async function serializePortalWrite<T>(id: string, write: () => Promise<T>): Promise<T> {
+  const queued = (portalPayloadWrites.get(id) ?? Promise.resolve()).catch(() => undefined).then(write);
+  portalPayloadWrites.set(id, queued);
+  try { return await queued; }
+  finally { if (portalPayloadWrites.get(id) === queued) portalPayloadWrites.delete(id); }
+}
+
 function toIso(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   return String(value);
@@ -394,21 +408,37 @@ export class WorkspaceRepository {
 
   async updateNode(
     id: string,
-    input: Partial<Pick<CanvasNode, 'title' | 'x' | 'y' | 'width' | 'height' | 'zIndex' | 'type'>> & { payload?: CanvasNodePayload }
+    input: Partial<Pick<CanvasNode, 'title' | 'x' | 'y' | 'width' | 'height' | 'zIndex' | 'type'>> & { payload?: CanvasNodePayload },
+    options: { mergePortalPayload?: boolean } = {},
   ): Promise<CanvasNode | null> {
     const model = await AgentCanvasNode.find(id);
     if (!model) return null;
-    const changes: Record<string, unknown> = {};
-    if (input.title !== undefined) changes.title = input.title;
-    if (input.type !== undefined) changes.type = input.type;
-    if (input.x !== undefined) changes.x = input.x;
-    if (input.y !== undefined) changes.y = input.y;
-    if (input.width !== undefined) changes.width = input.width;
-    if (input.height !== undefined) changes.height = input.height;
-    if (input.zIndex !== undefined) changes.z_index = input.zIndex;
-    if (input.payload !== undefined) changes.payload_json = JSON.stringify(input.payload);
-    if (Object.keys(changes).length) await model.update(changes);
-    return this.getNode(id);
+    const write = async (current: AgentCanvasNode): Promise<CanvasNode | null> => {
+      const changes: Record<string, unknown> = {};
+      if (input.title !== undefined) changes.title = input.title;
+      if (input.type !== undefined) changes.type = input.type;
+      if (input.x !== undefined) changes.x = input.x;
+      if (input.y !== undefined) changes.y = input.y;
+      if (input.width !== undefined) changes.width = input.width;
+      if (input.height !== undefined) changes.height = input.height;
+      if (input.zIndex !== undefined) changes.z_index = input.zIndex;
+      if (input.payload !== undefined) {
+        if (options.mergePortalPayload && current.type === 'portal' && (input.type === undefined || input.type === 'portal')) {
+          let saved: Record<string, unknown>;
+          try { saved = current.payload_json ? JSON.parse(current.payload_json) : {}; }
+          catch { throw new Error('Portal payload is invalid. No state was changed.'); }
+          if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Portal payload must be an object.');
+          changes.payload_json = JSON.stringify({ ...saved, ...input.payload });
+        } else changes.payload_json = JSON.stringify(input.payload);
+      }
+      if (Object.keys(changes).length) await current.update(changes);
+      return this.getNode(id);
+    };
+    if (model.type === 'portal' && input.payload !== undefined) return serializePortalWrite(id, async () => {
+      const latest = await AgentCanvasNode.find(id);
+      return latest ? write(latest) : null;
+    });
+    return write(model);
   }
 
   async deleteNode(id: string): Promise<boolean> {

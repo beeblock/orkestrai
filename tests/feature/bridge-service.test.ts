@@ -780,6 +780,22 @@ describe('Modo Maestro', () => {
     ]);
   });
 
+  it('reports the effective background policy to leaders and specialists in every workspace', async () => {
+    for (let i = 0; i < 2; i++) {
+      const workspace = await workspaceRepository.createWorkspace({ name: `Background ${i}`, workingDir: '/tmp' });
+      const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Lead', payload: { maestro: true } });
+      const specialist = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'QA', payload: {} });
+      const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal', title: 'App', payload: { url: 'https://example.com' } });
+      for (const actor of [leader, specialist]) expect(await bridgeService.listPortals(workspace.id, actor.id)).toEqual([
+        expect.objectContaining({ id: portal.id, access: { control: 'interact', granted: true, paused: false, allowBackground: true } }),
+      ]);
+      await workspaceRepository.updateNode(portal.id, { payload: { url: 'https://example.com', portalAllowBackground: false, portalPaused: true } as never });
+      expect(await bridgeService.listPortals(workspace.id, leader.id)).toEqual([
+        expect.objectContaining({ id: portal.id, access: { control: 'interact', granted: true, paused: true, allowBackground: false } }),
+      ]);
+    }
+  });
+
   it('reutiliza a mesma URL e exige intencao explicita para criar outro portal', async () => {
     const { workspace } = await setupMaestro(true);
     const original = await bridgeService.createPortal(workspace.id, {

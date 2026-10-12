@@ -497,7 +497,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     try {
       const managed = await getManaged(request);
       if (managed.profile.paused || managed.pauseLocked) throw new Error('Portal control is paused by the user.');
-      if (!managed.profile.allowBackground && (!managed.parent?.isVisible() || !managed.visible)) throw new Error('Open this Portal or explicitly enable background control.');
+      if (managed.profile.allowBackground !== true && (!managed.parent?.isVisible() || !managed.visible)) throw new Error('Open this Portal or explicitly enable background control.');
       let tab = activeTab(managed);
       let result;
       switch (request.action) {

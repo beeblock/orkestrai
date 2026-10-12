@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { portalProfileFromPayload } from '../../src/lib/modules/agent-room/contracts/schemas/managed-portal.schema.js';
 
 const require = createRequire(import.meta.url);
 const { createManagedPortalExecutor } = require('../../electron/managed-portal.cjs');
@@ -83,6 +84,31 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it.each(['outside the viewport', 'minimized window', 'detached surface'])('operates an unconfigured Portal in %s without focusing or replacing its page', async reason => {
+    const { executor, request, contents, parent, lease } = await setup();
+    const profile = portalProfileFromPayload({ portalProfileScope: 'private', portalAllowedHosts: ['example.com'] });
+    const views = ContentsView.instances.length;
+    const load = vi.spyOn(contents, 'loadURL');
+    if (reason === 'outside the viewport') executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 800, height: 600 }, zoom: 1, visible: false,
+    }, lease);
+    if (reason === 'minimized window') vi.spyOn(parent, 'isVisible').mockReturnValue(false);
+    if (reason === 'detached surface') executor.detach(request.workspaceId, request.nodeId, lease);
+    expect(await executor.execute({ ...request, profile })).toMatchObject({ ok: true });
+    expect(await executor.execute({ ...request, profile, action: 'click', args: { ref: 'e1' } })).toMatchObject({ ok: true });
+    expect(ContentsView.instances).toHaveLength(views);
+    expect(load).not.toHaveBeenCalled();
+    expect(contents.getURL()).toBe(request.initialUrl);
+    const reads = contents.executeJavaScriptInIsolatedWorld.mock.calls.length;
+    expect(await executor.execute({ ...request, profile: { ...profile, allowBackground: false } })).toMatchObject({
+      ok: false, error: 'Open this Portal or explicitly enable background control.',
+    });
+    expect(contents.executeJavaScriptInIsolatedWorld).toHaveBeenCalledTimes(reads);
+    expect(await executor.execute({ ...request, profile: { ...profile, paused: true } })).toMatchObject({
+      ok: false, error: 'Portal control is paused by the user.',
+    });
+  });
+
   it('does not invent a host restriction from the initial URL, but retains explicit restrictions', async () => {
     const { executor, request, contents } = await setup();
     const unrestricted = { ...request, profile: { ...request.profile, allowedHosts: [] } };

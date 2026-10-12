@@ -234,7 +234,9 @@ device access.
   operations; validate JSON contracts and fixtures, dry-run the draft, then
   publish an immutable revision. Agents can activate bounded tools only through
   an explicit standing publication grant; commands always require owner review.
-  Browser tools operate the same visible Portal, with background access opt-in.
+  Browser tools operate the same persistent Portal page, with background access
+  enabled by default while the Core runs. Offscreen nodes and minimized windows
+  do not pause agents; explicit visibility-only settings and pauses still apply.
   Automations and task-assigned agents execute only the approved
   revision with idempotency, bounded runtime/output, destination-bound
   SecretRefs, redacted history, and the same security gates and audit trail.

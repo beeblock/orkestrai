@@ -1130,7 +1130,7 @@ async function portalSurfaceRequest(event, input) {
     profile: { profileId: payload.portalProfileId || 'default', profileScope: payload.portalProfileScope || 'workspace',
       allowedHosts: Array.isArray(payload.portalAllowedHosts) ? payload.portalAllowedHosts : [],
       downloadDirectory: payload.portalDownloadDirectory || '.orkestrai/downloads',
-      paused: payload.portalPaused === true, allowBackground: payload.portalAllowBackground === true } };
+      paused: payload.portalPaused === true, allowBackground: payload.portalAllowBackground ?? true } };
 }
 
 ipcMain.handle('orkestrai:portal-surface', async (event, input) => {

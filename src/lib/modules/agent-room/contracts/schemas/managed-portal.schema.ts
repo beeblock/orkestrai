@@ -19,7 +19,7 @@ export const portalProfileSchema = z.object({
   agentAccess: z.enum(['workspace', 'selected']).default('workspace'),
   agentIds: z.array(z.string().uuid()).max(100).default([]),
   paused: z.boolean().default(false),
-  allowBackground: z.boolean().default(false),
+  allowBackground: z.boolean().default(true),
 }).strict();
 
 const common = {
@@ -66,7 +66,9 @@ export function portalProfileFromPayload(values: Record<string, unknown>): Porta
     agentAccess: values.portalAgentAccess ?? (Array.isArray(values.portalAgentIds) ? 'selected' : 'workspace'),
     agentIds: values.portalAgentIds ?? [],
     paused: values.portalPaused ?? false,
-    allowBackground: values.portalAllowBackground ?? false,
+    // Visibility is presentation, not an implicit agent permission. Existing
+    // unconfigured Portals inherit autonomy; an explicit false remains binding.
+    allowBackground: values.portalAllowBackground ?? true,
   });
 }
 
