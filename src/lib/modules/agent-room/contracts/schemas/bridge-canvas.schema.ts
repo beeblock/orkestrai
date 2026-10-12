@@ -1,4 +1,5 @@
 import { z } from '@beeblock/svelar/validation';
+import { normalizePortalHost } from '../../domain/portal-hosts.js';
 
 export const canvasLayoutChangesSchema = z.object({
   x: z.number().finite().min(-1_000_000).max(1_000_000).optional(),
@@ -17,6 +18,12 @@ export const bridgeCanvasCommandSchema = z.object({
     }).strict()).min(1).max(50) }).strict(),
     z.object({ command: z.literal('archive_note'), nodeId: z.string().uuid() }).strict(),
     z.object({ command: z.literal('restore_note'), nodeId: z.string().uuid() }).strict(),
+    z.object({ command: z.literal('configure_portal_hosts'), nodeId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/),
+      allowedHosts: z.array(z.string().trim().min(1).max(253)
+        .refine(value => normalizePortalHost(value) !== null, 'Use exact hostnames, not URLs, ports or wildcards.')
+        .transform(value => normalizePortalHost(value)!)).min(1).max(64)
+        .transform(values => [...new Set(values)]),
+    }).strict(),
     z.object({ command: z.literal('update_shell'), nodeId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/),
       changes: z.object({ title: z.string().trim().min(1).max(120).optional(),
         cwd: z.string().trim().min(1).max(4_000).optional(), startupCommand: z.string().trim().max(4_000).optional(),

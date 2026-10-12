@@ -80,7 +80,7 @@ test('an authenticated terminal corrects and restarts its existing Shell through
       import { readFile, writeFile } from 'node:fs/promises';
       import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'packages/orkestrai-cli/src/cli.js')).href)};
       while (!(await readFile(${JSON.stringify(join(root, 'input.json'))}, 'utf8').catch(() => ''))) await new Promise(resolve => setTimeout(resolve, 50));
-      const { taskId } = JSON.parse(await readFile(${JSON.stringify(join(root, 'input.json'))}, 'utf8'));
+      const { taskId, portalNodeId } = JSON.parse(await readFile(${JSON.stringify(join(root, 'input.json'))}, 'utf8'));
       const output = [];
       async function command(action, input) {
         output.length = 0;
@@ -94,7 +94,11 @@ test('an authenticated terminal corrects and restarts its existing Shell through
         const restarted = await command('shell-restart', { nodeId, revision: updated.shell.revision, expectedSessionId: null });
         let retryRejected = false;
         try { await command('shell-restart', { nodeId, revision: updated.shell.revision, expectedSessionId: null }); } catch { retryRejected = true; }
-        await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({ created, updated, restarted, retryRejected }));
+        output.length = 0;
+        await run(['canvas', 'list'], { cwd: ${JSON.stringify(root)}, out: value => output.push(value) });
+        const portal = JSON.parse(output.join('')).nodes.find(node => node.nodeId === portalNodeId).portal;
+        const configured = await command('portal-hosts', { nodeId: portalNodeId, revision: portal.revision, allowedHosts: ['localhost', '127.0.0.1', '[::1]'] });
+        await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({ created, updated, restarted, retryRejected, configured }));
       } catch (error) { await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({ error: error.message })); }
       // Keep the terminal identity alive until the assertion and cleanup.
       setInterval(() => {}, 1000);
@@ -116,13 +120,19 @@ test('an authenticated terminal corrects and restarts its existing Shell through
     const taskResponse = await request.post(`${base}/tasks`, { data: { title: 'Correct Shell command', status: 'doing', assigneeNodeId: agent.id } });
     expect(taskResponse.ok(), await taskResponse.text()).toBe(true);
     const task = (await taskResponse.json()).data;
-    await writeFile(join(root, 'input.json'), JSON.stringify({ taskId: task.id }));
+    const portal = (await (await request.post(`${base}/nodes`, { data: { type: 'portal', title: 'Host configuration',
+      payload: { url: 'http://127.0.0.1:3000', portalAllowedHosts: ['127.0.0.1'], portalAllowBackground: false } } })).json()).data;
+    await writeFile(join(root, 'input.json'), JSON.stringify({ taskId: task.id, portalNodeId: portal.id }));
     await expect.poll(async () => Boolean(await readFile(resultPath, 'utf8').catch(() => ''))).toBe(true);
     const result = JSON.parse(await readFile(resultPath, 'utf8'));
     expect(result.error).toBeUndefined();
     expect(result.updated).toMatchObject({ updated: true, restartRequired: false });
     expect(result.restarted).toMatchObject({ startupSubmitted: true });
     expect(result.retryRejected).toBe(true);
+    expect(result.configured).toMatchObject({ nodeId: portal.id, portal: { allowedHosts: ['localhost', '127.0.0.1', '[::1]'] } });
+    expect((await (await request.get(`${base}/nodes/${portal.id}`)).json()).data.payload).toMatchObject({
+      url: 'http://127.0.0.1:3000', portalAllowBackground: false, portalAllowedHosts: ['localhost', '127.0.0.1', '[::1]'],
+    });
     await expect.poll(async () => (await readFile(counter, 'utf8').catch(() => '')).trim()).toBe('corrected');
     expect((await (await request.get(`${base}/tasks`)).json()).data.find((item: any) => item.id === task.id).status).toBe('doing');
   } finally {

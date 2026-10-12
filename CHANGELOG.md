@@ -5,6 +5,21 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.42.0 - Unreleased
+
+### Added
+
+- Expose revision-checked Portal host configuration to assigned leaders and specialists in every workspace through `portal_configure_hosts` and `orkestrai canvas portal-hosts`. Validate exact hostnames, including all three loopback spellings, without changing browser state, agent grants, pauses, control or background settings. Recheck the latest profile inside the serialized ORM write and honor explicit workspace policies.
+- Add a verified local macOS installer: await copying, architecture, signature and entitlement verification before replacement, require the old app/Core to exit, validate the new Core executable/version and API, and retain only one verified compact rollback outside `/Applications`. Preserve recoverable data on uncertain startup; never touch project or app data.
+
+### Fixed
+
+- Route targeted macOS termination through normal app shutdown so local replacement closes managed Portals and the Core rather than orphaning the server. Register only the canonical installed app; do not leave launchable rollback bundles in `/Applications`.
+
+### Known limitations
+
+- CPU saturation was measured in an old 0.40.0 rollback bundle despite 0.41.1 being installed. Restarting the canonical current app restores low CPU in the observed session; this is not proof of a sustained renderer leak fix. Keep long-running and dense-canvas performance checks before release.
+
 ## 0.41.1 - 2026-10-12
 
 ### Fixed

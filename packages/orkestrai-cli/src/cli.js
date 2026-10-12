@@ -160,7 +160,7 @@ Uso:
   orkestrai say <texto>  — fala no desktop com a voz configurada
   orkestrai run <taskId>  — re-despacha a tarefa para o responsavel
   orkestrai notes | portals  — listagens rapidas
-  orkestrai canvas list [--archived] | canvas <layout|shell|shell-update|shell-restart|archive|restore> --task <id> --input '<json>'
+  orkestrai canvas list [--archived] | canvas <layout|portal-hosts|shell|shell-update|shell-restart|archive|restore> --task <id> --input '<json>'
   orkestrai clip  — le a area de transferencia local
   orkestrai mcp  — servidor MCP em stdio (tools do canvas para agentes MCP)
 
@@ -1154,8 +1154,8 @@ async function runCommand(argv, options, sink) {
         out(JSON.stringify(data, null, 2));
         return 0;
       }
-      const command = { layout: 'layout', shell: 'create_shell', 'shell-update': 'update_shell', 'shell-restart': 'restart_shell', archive: 'archive_note', restore: 'restore_note' }[action];
-      if (!command || !selfAgent || !flags.task || !flags.input) throw new Error('Use: orkestrai canvas <layout|shell|shell-update|shell-restart|archive|restore> --task <id> --input <json>');
+      const command = { layout: 'layout', 'portal-hosts': 'configure_portal_hosts', shell: 'create_shell', 'shell-update': 'update_shell', 'shell-restart': 'restart_shell', archive: 'archive_note', restore: 'restore_note' }[action];
+      if (!command || !selfAgent || !flags.task || !flags.input) throw new Error('Use: orkestrai canvas <layout|portal-hosts|shell|shell-update|shell-restart|archive|restore> --task <id> --input <json>');
       const input = JSON.parse(String(flags.input));
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/canvas', { from: selfAgent, taskId: String(flags.task), input: { ...input, command } });
       out(JSON.stringify(data, null, 2));

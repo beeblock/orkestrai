@@ -1386,6 +1386,9 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  // Local installers/support send a targeted signal, not an Apple Events prompt.
+  // Use the same orderly Portal/Core shutdown as Quit; do not orphan the server.
+  process.on('SIGTERM', () => app.quit());
   app.on('second-instance', (_event, argv) => {
     const invite = findCollaborationInvite(argv);
     if (invite) {
