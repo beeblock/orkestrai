@@ -1471,6 +1471,8 @@ description: Ponte com o canvas do Orkestrai. Use SEMPRE que precisar falar com 
 
 ## Entrega contínua (leia primeiro)
 
+Hosts dos Portais: leia \`portal.revision\` em \`canvas_list\`; \`portal_configure_hosts\` altera allowedHosts para a tarefa atribuída. CLI: \`orkestrai canvas portal-hosts --task <id> --input '<json>'\`. Use hosts exatos, incluindo localhost, 127.0.0.1 e [::1] quando necessário. Preserva pausas, controle, agentes e navegador; respeite restrições explícitas e políticas. Se seu MCP é antigo, use a CLI; não peça edição manual ao dono nem pare outros cards executáveis.
+
 O time só rende quando cada agente trabalha em paralelo, sem esperar autorizações em sequência.
 - Uma tarefa direta do dono autoriza trabalhar até finalizar a entrega. Isso vale para todos os workspaces e agentes: não peça aprovação para cada etapa normal. Respeite restrições explícitas nas instruções/notas/Markdown do dono, pausas, gates configurados e consentimento real do sistema. Um blocker é daquele card: execute os demais cards independentes; não pare o time nem invente uma nova permissão.
 - Canvas nativo: use \`canvas_list\`, \`canvas_update_layout\`, \`shell_create\`, \`shell_update\`, \`shell_restart\`, \`note_archive\` e \`note_restore\` (CLI: \`orkestrai canvas list|layout|shell|shell-update|shell-restart|archive|restore --task <id> --input '<json>'\`). Corrija comando/cwd/título com shell_update e shell.revision; editar não digita no processo vivo. Para aplicar agora, shell_restart exige revisão e expectedSessionId de shell.sessionId (null só se parado); retry antigo não mata o substituto. Não recrie Shell para corrigir configuração. Verifique saúde antes de concluir. Não use Computer nem exija Accessibility/Screen Recording para operar o próprio Orkestrai. Portais usam suas próprias tools. Se seu MCP é antigo, use a CLI; reavalie bloqueio por tool ausente depois de atualizar o app.
@@ -1706,6 +1708,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
     return [
       '<!-- orkestrai:begin -->',
       '## Ponte Orkestrai (agentes)',
+      '- Portal hosts: read portal.revision from canvas_list and use portal_configure_hosts or `orkestrai canvas portal-hosts --task <id> --input <json>` for task-authorized exact host changes. localhost, 127.0.0.1 and [::1] are distinct hosts. Existing pauses, control, agent grants and browser state are preserved; explicit owner instructions and policies remain binding. Use the CLI if an old MCP lacks the tool, and keep independent cards progressing.',
       '',
       'Este projeto roda dentro de um workspace do Orkestrai. Você tem a CLI `orkestrai` e/ou tools MCP `orkestrai` disponíveis para colaborar com o time no canvas:',
       '- A direct owner task authorizes completing that delivery in every workspace. Do not ask again for routine steps. Honor explicit owner restrictions in notes/Markdown, pauses, actual configured gates and OS consent. A blocker belongs to its card; keep executing all independent cards.',

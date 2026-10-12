@@ -12,6 +12,14 @@ import { workspacePathService } from './WorkspacePathService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { normalizeSavedTerminalCommands } from '../../domain/terminal-commands.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
+import { portalGrantsAgent, portalProfileFromPayload } from '../../contracts/schemas/managed-portal.schema.js';
+
+export function portalConfigurationSummary(node: CanvasNode) {
+  if (node.type !== 'portal') return undefined;
+  const profile = portalProfileFromPayload(node.payload as Record<string, unknown>);
+  return { revision: createHmac('sha256', revisionKey).update(JSON.stringify([node.id, profile])).digest('hex'),
+    allowedHosts: profile.allowedHosts };
+}
 
 // Shared with other server module copies, just like PTY ownership. Serialize
 // configuration changes and restarts per node, never across the entire team.
@@ -52,7 +60,7 @@ export class BridgeCanvasService {
     const nodes = (await workspaceRepository.listNodes(workspaceId, undefined, input.includeArchived))
       .sort((left, right) => left.id.localeCompare(right.id)).filter(node => !input.afterId || node.id > input.afterId);
     const page = nodes.slice(0, input.limit);
-    return { nodes: page.map(node => ({ ...canvasNodeSummary(node), shell: shellSummary(node), archived: activeIds ? !activeIds.has(node.id) : false })),
+    return { nodes: page.map(node => ({ ...canvasNodeSummary(node), shell: shellSummary(node), portal: portalConfigurationSummary(node), archived: activeIds ? !activeIds.has(node.id) : false })),
       nextCursor: nodes.length > page.length ? page.at(-1)!.id : null };
   }
 
@@ -60,7 +68,7 @@ export class BridgeCanvasService {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace || workspace.suspendedAt) throw new Error('Workspace is unavailable or explicitly suspended.');
     const input = dto.request.input;
-    const request = { workspaceId, capability: 'tool' as const, operation: `canvas.${input.command}`,
+    const request = { workspaceId, capability: input.command === 'configure_portal_hosts' ? 'browser' as const : 'tool' as const, operation: `canvas.${input.command}`,
       actorType: 'agent' as const, actorId, mutation: true,
       input: { command: input.command, taskId: dto.request.taskId }, auditOutput: () => ({ command: input.command }) };
     return autonomyPolicyService.execute(request, async () => {
@@ -84,6 +92,25 @@ export class BridgeCanvasService {
         // Soft archive preserves content, task references and edges. No deletion.
         await workspaceRepository.setNodeArchived(workspaceId, node.id, input.command === 'archive_note');
         result = { nodeId: node.id, archived: input.command === 'archive_note', preserved: true };
+      } else if (input.command === 'configure_portal_hosts') {
+        const node = await this.requireNode(workspaceId, input.nodeId);
+        if (node.type !== 'portal' || !(await workspaceRepository.getActiveNode(workspaceId, node.id))) {
+          throw new Error('Only active Portals can be configured.');
+        }
+        const validate = (current: CanvasNode) => {
+          if (current.type !== 'portal' || current.workspaceId !== workspaceId) throw new Error('Portal is not in this workspace.');
+          const profile = portalProfileFromPayload(current.payload as Record<string, unknown>);
+          if (profile.paused || profile.control !== 'interact' || !portalGrantsAgent(profile, actorId)) {
+            throw new Error('Portal configuration is restricted by the explicit owner settings.');
+          }
+          if (portalConfigurationSummary(current)!.revision !== input.revision) {
+            throw new Error('Portal configuration changed. Read canvas_list before retrying.');
+          }
+        };
+        const updated = await workspaceRepository.updateNode(node.id, { payload: { portalAllowedHosts: input.allowedHosts } as never },
+          { mergePortalPayload: true, validatePortal: validate });
+        if (!updated) throw new Error('Portal disappeared before configuration.');
+        result = { nodeId: updated.id, portal: portalConfigurationSummary(updated), updated: true };
       } else if (input.command === 'update_shell' || input.command === 'restart_shell') {
         result = await withShellLock(`${workspaceId}:${input.nodeId}`, async () => {
           // Resolve filesystem input before acquiring the SQLite write transaction.

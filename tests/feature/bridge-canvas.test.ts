@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { uuidv7 } from '@beeblock/svelar/support';
-import { bridgeCanvasService, BridgeCanvasService, canvasNodeSummary, shellSummary } from '$lib/modules/agent-room/application/services/BridgeCanvasService.js';
+import { bridgeCanvasService, BridgeCanvasService, canvasNodeSummary, shellSummary, portalConfigurationSummary } from '$lib/modules/agent-room/application/services/BridgeCanvasService.js';
 import { BridgeCanvasCommandDto } from '$lib/modules/agent-room/application/dto/BridgeCanvasCommandDto.js';
 import { bridgeCanvasCommandSchema } from '$lib/modules/agent-room/contracts/schemas/bridge-canvas.schema.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -39,6 +39,55 @@ describe('native Canvas agent delivery', () => {
     await execute(input);
     expect(await workspaceRepository.getNode(device.id)).toMatchObject({ x: 100, y: 840 });
     expect(JSON.stringify(await bridgeCanvasService.list(workspace.id, { includeArchived: false, limit: 100 }))).not.toContain('never-expose-this');
+  });
+
+  it('configures exact Portal hosts without changing grants or browser state in any workspace', async () => {
+    const { workspace, execute } = await setup();
+    const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal', payload: {
+      portalAllowedHosts: ['127.0.0.1'], portalAllowBackground: false, url: 'http://127.0.0.1:3000',
+      portalTabs: [{ id: 'existing', url: 'http://127.0.0.1:3000' }], privateToken: 'never-expose-this',
+    } as never });
+    const inventory = await bridgeCanvasService.list(workspace.id, { includeArchived: false, limit: 100 });
+    const summary = inventory.nodes.find(node => node.nodeId === portal.id)!.portal!;
+    const result = await execute({ command: 'configure_portal_hosts', nodeId: portal.id, revision: summary.revision,
+      allowedHosts: ['LOCALHOST', '127.0.0.1', '[::1]', 'localhost'] });
+    expect(result).toMatchObject({ portal: { allowedHosts: ['localhost', '127.0.0.1', '[::1]'] } });
+    expect((await workspaceRepository.getNode(portal.id))!.payload).toMatchObject({
+      portalAllowBackground: false, portalTabs: [{ id: 'existing', url: 'http://127.0.0.1:3000' }], privateToken: 'never-expose-this',
+    });
+    expect(JSON.stringify(result)).not.toContain('never-expose-this');
+    await expect(execute({ command: 'configure_portal_hosts', nodeId: portal.id, revision: summary.revision,
+      allowedHosts: ['example.com'] })).rejects.toThrow('configuration changed');
+  });
+
+  it.each([{ portalPaused: true }, { portalControl: 'read' }, { portalControl: 'disabled' },
+    { portalAgentAccess: 'selected', portalAgentIds: [] }])('preserves explicit Portal restrictions: %j', async restriction => {
+    const { workspace, execute } = await setup();
+    const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal',
+      payload: { portalAllowedHosts: ['127.0.0.1'], ...restriction } as never });
+    await expect(execute({ command: 'configure_portal_hosts', nodeId: portal.id,
+      revision: portalConfigurationSummary(portal)!.revision, allowedHosts: ['localhost'] })).rejects.toThrow('explicit owner settings');
+    expect((await workspaceRepository.getNode(portal.id))!.payload).toMatchObject({ portalAllowedHosts: ['127.0.0.1'], ...restriction });
+  });
+
+  it('checks an owner pause arriving between inventory and the serialized Portal write', async () => {
+    const { workspace, execute } = await setup();
+    const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal', payload: { portalAllowedHosts: ['127.0.0.1'] } as never });
+    const update = workspaceRepository.updateNode.bind(workspaceRepository);
+    vi.spyOn(workspaceRepository, 'updateNode').mockImplementationOnce(async (id, changes, options) => {
+      await update(id, { payload: { portalPaused: true } as never }, { mergePortalPayload: true });
+      return update(id, changes, options);
+    });
+    await expect(execute({ command: 'configure_portal_hosts', nodeId: portal.id,
+      revision: portalConfigurationSummary(portal)!.revision, allowedHosts: ['localhost'] })).rejects.toThrow('explicit owner settings');
+    expect((await workspaceRepository.getNode(portal.id))!.payload).toMatchObject({ portalPaused: true, portalAllowedHosts: ['127.0.0.1'] });
+  });
+
+  it.each(['https://localhost', 'localhost:3000', '*.example.com', 'user@host', '../host'])('rejects invalid Portal hosts: %s', async host => {
+    const { workspace, execute } = await setup();
+    const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal' });
+    await expect(execute({ command: 'configure_portal_hosts', nodeId: portal.id,
+      revision: portalConfigurationSummary(portal)!.revision, allowedHosts: [host] })).rejects.toThrow();
   });
 
   it('validates all layout targets before writing and refuses stale revisions or policy payloads', async () => {
@@ -227,5 +276,13 @@ describe('native Canvas agent delivery', () => {
       body: JSON.stringify({ from: agent.id, taskId, input: { command: 'update_shell', nodeId, revision, changes: { startupCommand: 'echo corrected' } } }) }) } as any) as Response;
     expect(edit.status).toBe(200);
     expect((await edit.json()).data).toMatchObject({ updated: true, restartRequired: false });
+    const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal',
+      payload: { portalAllowedHosts: ['127.0.0.1'] } as never });
+    const configured = await controller.canvasCommand({ url, params: {}, request: new Request(url, { method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'x-orkestrai-agent-token': 'test-live-token', 'content-type': 'application/json' },
+      body: JSON.stringify({ from: agent.id, taskId, input: { command: 'configure_portal_hosts', nodeId: portal.id,
+        revision: portalConfigurationSummary(portal)!.revision, allowedHosts: ['localhost', '127.0.0.1', '[::1]'] } }) }) } as any) as Response;
+    expect(configured.status).toBe(200);
+    expect((await configured.json()).data).toMatchObject({ portal: { allowedHosts: ['localhost', '127.0.0.1', '[::1]'] } });
   });
 });

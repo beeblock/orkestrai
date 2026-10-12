@@ -409,7 +409,7 @@ export class WorkspaceRepository {
   async updateNode(
     id: string,
     input: Partial<Pick<CanvasNode, 'title' | 'x' | 'y' | 'width' | 'height' | 'zIndex' | 'type'>> & { payload?: CanvasNodePayload },
-    options: { mergePortalPayload?: boolean } = {},
+    options: { mergePortalPayload?: boolean; validatePortal?: (current: CanvasNode) => void } = {},
   ): Promise<CanvasNode | null> {
     const model = await AgentCanvasNode.find(id);
     if (!model) return null;
@@ -436,6 +436,7 @@ export class WorkspaceRepository {
     };
     if (model.type === 'portal' && input.payload !== undefined) return serializePortalWrite(id, async () => {
       const latest = await AgentCanvasNode.find(id);
+      if (latest) options.validatePortal?.(mapNode(latest));
       return latest ? write(latest) : null;
     });
     return write(model);

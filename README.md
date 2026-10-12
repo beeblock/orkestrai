@@ -40,6 +40,11 @@ current revisions; note archival preserves content and references. Shell
 configuration edits preserve other settings without interrupting a live process;
 explicit restart checks both configuration and session identity. New Portals do
 not invent host restrictions; existing owner host lists remain exact, including IPv6.
+For task-authorized host configuration, read `portal.revision` from `canvas_list`
+and use `portal_configure_hosts` (CLI: `orkestrai canvas portal-hosts`). It changes
+only the exact host list, preserves other grants and rejects stale revisions,
+paused/read-only Portals and agents outside the existing grant. Recheck missing
+tools through the CLI after updating; do not make the owner edit hosts manually.
 Managed startup is submitted once per live PTY, including off-screen nodes, and is not
 proof that the server is healthy. Explicit pauses and external OS consent remain
 separate. Confirmed Codex terminal `/model` choices survive cold resume and reload.

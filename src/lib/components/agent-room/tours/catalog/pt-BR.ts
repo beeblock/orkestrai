@@ -6,6 +6,7 @@ import type { Tour } from '../types.js';
  * catalog/en.js e catalog/es.js com o MESMO id e a MESMA estrutura.
  */
 export const TOURS_PT: Tour[] = [
+  {"id":"portal-host-configuration","icon":"Globe","title":"Configurar hosts dos Portais","tagline":"Agentes ajustam os hosts da tarefa sem intervenção manual do dono.","steps":[{"id":"read","title":"Ler a revisão do Portal","body":"Atribua a tarefa ativa ao agente. Leia portal.revision em canvas_list, não a revisão do layout. Restrições explícitas do usuário continuam valendo."},{"id":"configure","title":"Configurar hosts exatos","body":"Chame portal_configure_hosts ou canvas portal-hosts com taskId, nodeId, revision e allowedHosts. Use hosts, não URLs ou portas. localhost, 127.0.0.1 e [::1] são nomes distintos."},{"id":"verify","title":"Verificar e continuar","body":"A operação preserva abas, pausas, controle e concessões de agentes. Releia a revisão em conflito e verifique navegação. Continue outros cards executáveis."}]},
   { id: 'native-shell-repair', icon: 'Terminal', title: 'Corrigir Shells', tagline: 'Agentes podem corrigir comandos iniciais.', steps: [
     { id: 'read', title: 'Ler configuração', body: 'Use canvas_list e shell.revision, não a revisão do layout. Atribua o card ativo ao executor. Sem permissão do Computer.' },
     { id: 'edit', title: 'Editar sem interromper', body: 'shell_update altera startupCommand, cwd ou título sem digitar no processo vivo. Outros comandos e ambiente continuam intactos.' },

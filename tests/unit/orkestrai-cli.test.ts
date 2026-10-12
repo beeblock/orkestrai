@@ -253,6 +253,7 @@ describe('orkestrai CLI', () => {
       ['layout', { updates: [{ nodeId, revision: 'a'.repeat(64), changes: { x: 1, y: 2 } }] }, 'layout'],
       ['shell', { nodeId, title: 'Dev server', startupCommand: 'npm run dev', start: false }, 'create_shell'],
       ['shell-update', { nodeId, revision: 'b'.repeat(64), changes: { startupCommand: 'npm run start' } }, 'update_shell'],
+      ['portal-hosts', { nodeId, revision: 'b'.repeat(64), allowedHosts: ['localhost', '127.0.0.1', '[::1]'] }, 'configure_portal_hosts'],
       ['shell-restart', { nodeId, revision: 'b'.repeat(64), expectedSessionId: null }, 'restart_shell'],
       ['archive', { nodeId }, 'archive_note'], ['restore', { nodeId }, 'restore_note'],
     ] as const) {
