@@ -17,7 +17,7 @@ describe('managed Portal contracts', () => {
   it('normalizes bounded browser profiles without credentials', () => {
     expect(portalProfileSchema.parse({})).toEqual({
       profileId: 'default', profileScope: 'workspace', allowedHosts: [], downloadDirectory: '.orkestrai/downloads',
-      control: 'interact', agentAccess: 'workspace', agentIds: [], paused: false, allowBackground: false,
+      control: 'interact', agentAccess: 'workspace', agentIds: [], paused: false, allowBackground: true,
     });
     expect(portalProfileFromPayload({ portalProfileId: 'team', portalAllowedHosts: ['APP.EXAMPLE.COM'] })).toMatchObject({
       profileId: 'team', allowedHosts: ['app.example.com'],
@@ -31,6 +31,17 @@ describe('managed Portal contracts', () => {
     const legacy = portalProfileFromPayload({ portalAllowedHosts: ['*.legacy.example'] });
     expect(legacy.allowedHosts).toEqual(['*.legacy.example']);
     expect(() => assertAllowedPortalUrl('https://another.example', legacy.allowedHosts)).toThrow(/not allowed/);
+  });
+
+  it('lets unconfigured existing Portals work in the background without widening explicit restrictions', () => {
+    expect(portalProfileSchema.parse({}).allowBackground).toBe(true);
+    expect(portalProfileFromPayload({}).allowBackground).toBe(true);
+    expect(portalProfileFromPayload({ portalAllowBackground: true }).allowBackground).toBe(true);
+    expect(portalProfileFromPayload({ portalAllowBackground: false, portalPaused: true,
+      portalControl: 'read', portalAgentAccess: 'selected', portalAgentIds: [],
+      portalAllowedHosts: ['example.com'] })).toMatchObject({ allowBackground: false,
+      paused: true, control: 'read', agentAccess: 'selected', agentIds: [], allowedHosts: ['example.com'] });
+    expect(() => portalProfileFromPayload({ portalAllowBackground: 'false' })).toThrow();
   });
 
   it('enforces host allowlists and rejects URL credentials', () => {

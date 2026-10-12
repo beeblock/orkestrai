@@ -5,6 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.41.1 - 2026-10-12
+
+### Fixed
+
+- Default unconfigured managed Portals to background control in every workspace. Leaders and specialists can operate the same persistent page when it is outside the Canvas viewport, detached, or the app window is minimized, without another permission request. Align the shared schema, Electron surface broker, settings UI and CLI/MCP access metadata. Preserve explicit visibility-only settings, pauses, agent/host restrictions, protected fields and enabled Security gates; do not focus or replace the owner's page.
+- Preserve live Portal grants and pauses when navigation or tab events save browser state. Send only changed Portal fields from the Canvas and merge serialized patches against the latest ORM record instead of replacing it with a stale renderer payload. Keep non-Portal replacement semantics unchanged.
+
 ## 0.41.0 - 2026-10-11
 
 ### Added

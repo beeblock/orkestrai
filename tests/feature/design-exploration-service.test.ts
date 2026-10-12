@@ -81,11 +81,15 @@ describe('DesignExplorationService', () => {
     // A cat process has no provider transcript; live-agent-delivery covers that.
     const session = ptySessionManager.create({
       command: '/bin/sh',
-      args: ['-c', "printf '? for shortcuts\\n'; stty raw -echo; cat"],
+      args: ['-c', "stty raw -echo; printf '? for shortcuts\\n'; cat"],
       cwd: '/tmp',
     });
     sessions.push(session.id);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await vi.waitFor(() => {
+      const ready = ptySessionManager.attach(session.id, () => {});
+      ready.detach();
+      expect(ready.scrollback).toContain('? for shortcuts');
+    });
     await workspaceRepository.updateNode(inactive.id, {
       payload: { provider: 'claude', maestro: true, sessionId: session.id },
     });
@@ -99,11 +103,12 @@ describe('DesignExplorationService', () => {
       status: 'doing',
       noteId: delegated.note.id,
     });
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const attached = ptySessionManager.attach(session.id, () => {});
-    attached.detach();
-    expect(attached.scrollback).toContain('Required output for every direction');
-    expect(attached.scrollback).toContain('Three checkout directions');
+    await vi.waitFor(() => {
+      const attached = ptySessionManager.attach(session.id, () => {});
+      attached.detach();
+      expect(attached.scrollback).toContain('Required output for every direction');
+      expect(attached.scrollback).toContain('Three checkout directions');
+    });
     ptySessionManager.kill(session.id);
   });
 

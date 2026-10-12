@@ -487,7 +487,7 @@ export class WorkspaceService {
       changes = { ...changes, payload: undefined };
     }
     const portalBefore = existing.type === 'portal' ? portalProfileFromPayload(existing.payload) : null;
-    const portalAfter = portalBefore && changes.payload ? portalProfileFromPayload(changes.payload) : null;
+    const portalAfter = portalBefore && changes.payload ? portalProfileFromPayload({ ...existing.payload, ...changes.payload }) : null;
     if (existing.type === 'terminal' && changes.payload) {
       const payload = { ...(changes.payload as Record<string, unknown>) };
       const currentRuntime = (existing.payload as { executionRuntime?: unknown } | null)?.executionRuntime;
@@ -500,7 +500,7 @@ export class WorkspaceService {
         payload: payload as CanvasNodePayload,
       };
     }
-    const node = await workspaceRepository.updateNode(dto.nodeId, changes);
+    const node = await workspaceRepository.updateNode(dto.nodeId, changes, { mergePortalPayload: existing.type === 'portal' });
     if (!node) throw new Error('No nao encontrado.');
     if (portalAfter && JSON.stringify(portalBefore) !== JSON.stringify(portalAfter)) {
       await autonomyPolicyService.recordSemanticEffect({ workspaceId:node.workspaceId, capability:'browser', operation:'portal:grant_changed',

@@ -1036,7 +1036,9 @@
         if (!target) continue;
         const links = connections.get(id) ?? [];
         links.push({ edgeId: edge.id, targetId, direction, targetTitle: target.title ?? target.type,
-          targetType: target.type, targetPayload: (localPayloadOverrides.get(targetId)?.payload ?? target.payload) as Record<string, unknown> });
+          targetType: target.type, targetPayload: (target.type === 'portal'
+            ? { ...target.payload, ...localPayloadOverrides.get(targetId)?.payload }
+            : localPayloadOverrides.get(targetId)?.payload ?? target.payload) as Record<string, unknown> });
         connections.set(id, links);
         if (changedConnectionTargets.has(targetId) || localPayloadOverrides.has(targetId)) changedNeighbors.add(id);
       }
@@ -1077,7 +1079,8 @@
           if (payloadOverride.confirmedAt !== null && payloadOverride.confirmedAt <= refreshStartedAt) {
             localPayloadOverrides.delete(node.id);
           } else {
-            refreshed.data = { ...refreshed.data, payload: payloadOverride.payload };
+            refreshed.data = { ...refreshed.data, payload: node.type === 'portal'
+              ? { ...node.payload, ...payloadOverride.payload } : payloadOverride.payload };
           }
         }
         const override = localPositionOverrides.get(node.id);
@@ -2407,7 +2410,8 @@
     const flowNode = nodes.find((node) => node.id === id);
     const current = (flowNode?.data?.payload ?? {}) as Record<string, unknown>;
     const optimisticPayload = { ...current, ...partial };
-    const payloadOverride = { payload: optimisticPayload, confirmedAt: null as number | null };
+    const payloadOverride = { payload: flowNode?.type === 'portal'
+      ? { ...localPayloadOverrides.get(id)?.payload, ...partial } : optimisticPayload, confirmedAt: null as number | null };
     localPayloadOverrides.set(id, payloadOverride);
     nodes = nodes.map((node) =>
       node.id === id ? { ...node, data: { ...node.data, payload: optimisticPayload } } : node
@@ -2419,7 +2423,9 @@
       .catch(() => undefined)
       .then(() => api(`/api/agent-room/workspaces/${workspaceId}/nodes/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ payload: optimisticPayload }),
+        // Browser state must not write a stale copy of the owner's grants.
+        // Portal payload patches are merged with the live record by the Core.
+        body: JSON.stringify({ payload: flowNode?.type === 'portal' ? partial : optimisticPayload }),
       }).then(() => undefined));
     nodePayloadUpdateQueues.set(queueKey, queued);
     try {

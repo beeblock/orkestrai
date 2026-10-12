@@ -141,7 +141,7 @@ async function main() {
   assert.equal((await executor.inspect(request)).visible, showWindow, 'stale mount must not hide current surface');
   assert.equal((await executor.inspect(request)).webContentsId, initial.webContentsId);
   executor.detach(request.workspaceId, request.nodeId, replacementLease);
-  assert.equal((await executor.execute({ ...request, profile: { ...request.profile, allowBackground: false } })).ok, false, 'background must be opt-in');
+  assert.equal((await executor.execute({ ...request, profile: { ...request.profile, allowBackground: false } })).ok, false, 'an explicit visibility-only restriction must still be enforced');
   const background = { ...request, profile: { ...request.profile, allowBackground:true } };
   assert.equal((await executor.execute(background)).ok, true);
   await executor.userCommand(request, 'pause', {});

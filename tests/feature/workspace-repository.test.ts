@@ -19,6 +19,31 @@ import { workspaceToolManifestSchema } from '$lib/modules/agent-room/contracts/s
 describe('WorkspaceRepository', () => {
   useSvelarTest({ refreshDatabase: true });
 
+  it('preserves live Portal grants across stale navigation, tab and concurrent state patches', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Portal state', workingDir: '/tmp' });
+    const portal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal',
+      payload: { url: 'https://example.com', portalAllowBackground: false } as never });
+    await workspaceRepository.updateNode(portal.id, { payload: { portalAllowBackground: true,
+      portalPaused: true, portalControl: 'read', portalAgentAccess: 'selected', portalAgentIds: [],
+      portalAllowedHosts: ['example.com'] } as never }, { mergePortalPayload: true });
+    await workspaceRepository.updateNode(portal.id, { payload: { url: 'https://example.com/checkout' } }, { mergePortalPayload: true });
+    await Promise.all([
+      workspaceRepository.updateNode(portal.id, { payload: { portalTabs: [{ id: 'checkout', url: 'https://example.com/checkout' }] } as never }, { mergePortalPayload: true }),
+      workspaceRepository.updateNode(portal.id, { payload: { portalActiveTabId: 'checkout' } as never }, { mergePortalPayload: true }),
+    ]);
+    expect((await workspaceRepository.getNode(portal.id))?.payload).toMatchObject({
+      url: 'https://example.com/checkout', portalAllowBackground: true, portalPaused: true,
+      portalControl: 'read', portalAgentAccess: 'selected', portalAgentIds: [], portalAllowedHosts: ['example.com'],
+      portalTabs: [{ id: 'checkout', url: 'https://example.com/checkout' }], portalActiveTabId: 'checkout',
+    });
+    await workspaceRepository.updateNode(portal.id, { payload: { portalAllowBackground: false } as never }, { mergePortalPayload: true });
+    await workspaceRepository.updateNode(portal.id, { payload: { url: 'https://example.com/next' } }, { mergePortalPayload: true });
+    expect((await workspaceRepository.getNode(portal.id))?.payload).toMatchObject({ portalAllowBackground: false, portalPaused: true });
+    const note = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'note', payload: { content: 'old', color: 'red' } });
+    await workspaceRepository.updateNode(note.id, { payload: { content: 'new' } });
+    expect((await workspaceRepository.getNode(note.id))?.payload).toEqual({ content: 'new' });
+  });
+
   it('cria, atualiza, lista e apaga workspaces com cascata de nos e arestas', async () => {
     const workspace = await workspaceRepository.createWorkspace({
       name: 'Orkestrai',

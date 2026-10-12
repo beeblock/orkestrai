@@ -124,7 +124,21 @@
   let agentAccess = $state(portalProfileFromPayload(data.payload).agentAccess);
   let agentIds = $state<string[]>(data.payload.portalAgentIds ?? []);
   let paused = $state(data.payload.portalPaused ?? false);
-  let allowBackground = $state(data.payload.portalAllowBackground ?? false);
+  let allowBackground = $state(portalProfileFromPayload(data.payload).allowBackground);
+  $effect(() => {
+    // Reflect live owner grants without overwriting an open settings draft.
+    if (settingsOpen) return;
+    const profile = portalProfileFromPayload(data.payload);
+    profileId = profile.profileId;
+    profileScope = profile.profileScope;
+    allowedHosts = profile.allowedHosts.join('\n');
+    downloadDirectory = profile.downloadDirectory;
+    control = profile.control;
+    agentAccess = profile.agentAccess;
+    agentIds = profile.agentIds;
+    paused = profile.paused;
+    allowBackground = profile.allowBackground;
+  });
   let browserTabs = $state<Array<{ id: string; title: string; url: string }>>([]);
   let activeBrowserTab = $state('');
   let browserStateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -805,7 +819,7 @@
           {#each agents as agent (agent.id)}<label class="flex items-center gap-2 text-ui-sm"><Checkbox checked={agentIds.includes(agent.id)} onCheckedChange={(checked: boolean) => (agentIds = checked ? [...new Set([...agentIds, agent.id])] : agentIds.filter((value) => value !== agent.id))} />{agent.title}</label>{/each}
         {/if}
       </fieldset>
-      <label class="flex items-center justify-between gap-4 text-ui-sm"><span>{m['portal.control_background']()}</span><Switch checked={allowBackground} onCheckedChange={(value: boolean) => (allowBackground = value)} /></label>
+      <label class="flex items-center justify-between gap-4 text-ui-sm"><span>{m['portal.control_background']()}</span><Switch aria-label={m['portal.control_background']()} checked={allowBackground} onCheckedChange={(value: boolean) => (allowBackground = value)} /></label>
       <label class="grid gap-1.5 text-ui-sm font-medium">
         <span>{m['portal.managed_profile']()}</span>
         <Input bind:value={profileId} maxlength={64} />
