@@ -18,6 +18,26 @@ type Rect = { cx: number; cy: number; halfW: number; halfH: number; x: number; y
 
 const nodeIndexCache = new WeakMap<object, ReadonlyMap<string, unknown>>();
 const edgeIndexCache = new WeakMap<object, ReadonlyMap<string, readonly unknown[]>>();
+type Anchor = { x: number; y: number } | null;
+const anchorSnapshots: { nodes: readonly NodeLike[]; edges: readonly Pick<Edge, 'source' | 'target'>[]; anchors: Map<string, Anchor> }[] = [];
+
+/**
+ * XYFlow publishes new node arrays for drag, dimensions and selection changes.
+ * Compute a hub's nearest-neighbor anchor once per immutable node/edge snapshot,
+ * not once per incident edge (quadratic work at a highly connected leader).
+ * Keep at most four snapshots, including multiple Canvas/Workbench views.
+ * Mutable callers must keep using floatingAnchorFor instead.
+ */
+export function floatingAnchorForSnapshot(nodeId: string, nodes: readonly NodeLike[], edges: readonly Pick<Edge, 'source' | 'target'>[]): Anchor {
+  let snapshot = anchorSnapshots.find(entry => entry.nodes === nodes && entry.edges === edges);
+  if (!snapshot) {
+    snapshot = { nodes, edges, anchors: new Map() };
+    anchorSnapshots.unshift(snapshot);
+    if (anchorSnapshots.length > 4) anchorSnapshots.pop();
+  }
+  if (!snapshot.anchors.has(nodeId)) snapshot.anchors.set(nodeId, floatingAnchorFor(nodeId, nodes, edges));
+  return snapshot.anchors.get(nodeId)!;
+}
 
 /** Shared indexes prevent every rendered edge from scanning the full canvas. */
 export function nodeIndexFor<T extends { id: string }>(nodes: readonly T[]): ReadonlyMap<string, T> {

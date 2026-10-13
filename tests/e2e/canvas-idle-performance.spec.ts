@@ -41,6 +41,36 @@ test('elastic edges settle without restarting from their own render updates', as
     await page.mouse.up();
     await expect.poll(countUpdates, { timeout: 10000 }).toBe(0);
     expect(await page.locator('.orkestrai-edge .edge-line').first().getAttribute('d')).toContain(' L ');
+
+    // A small canvas also simplifies native dash rasterization while panning;
+    // this is independent of the >=150-node body-paint policy.
+    const pane = (await page.locator('.svelte-flow__pane').boundingBox())!;
+    await page.mouse.move(pane.x + 20, pane.y + pane.height - 70);
+    await page.mouse.down();
+    await page.mouse.move(pane.x + 120, pane.y + pane.height - 40, { steps: 8 });
+    await expect(page.locator('.svelte-flow')).toHaveAttribute('data-canvas-navigating', 'true');
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');
+    await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
+    await page.mouse.up();
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
+    await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', '7px, 5px');
+    await page.locator('.svelte-flow__edge').first().press('Enter');
+    await expect(page.locator('.svelte-flow__edge.selected')).toHaveCount(1);
+    await page.mouse.move(pane.x + 20, pane.y + pane.height - 70);
+    await page.mouse.down();
+    await page.mouse.move(pane.x + 5_000, pane.y + pane.height - 40, { steps: 20 });
+    await page.mouse.up();
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
+    // Offscreen wrappers/data remain; only paint is culled, with an exception
+    // for selected controls so keyboard interaction is never discarded.
+    await expect(page.locator('.svelte-flow__edge')).toHaveCount(5);
+    await expect.poll(() => page.locator('.edge-line').evaluateAll(lines =>
+      lines.filter(line => getComputedStyle(line).visibility === 'visible').length)).toBe(1);
+    await expect(page.locator('.orkestrai-edge')).toHaveCount(5);
+    // EdgeLabel portals its controls outside the SVG wrapper.
+    await expect(page.locator('.edge-delete')).toHaveCount(1);
+    await page.locator('.svelte-flow__controls-fitview').click();
+    await expect(page.locator('.orkestrai-edge')).toHaveCount(5);
   } finally {
     await request.put('/api/agent-room/settings', { data: settings });
     await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
@@ -73,6 +103,22 @@ test('overview defers terminal paint without stopping its PTY or losing its rend
         if (frame.type === 'error') { clearTimeout(timer); reject(new Error(frame.message)); }
       });
     });
+    // A positive/stale intersection is not permission to redraw CSS-hidden
+    // bodies. Native engines can report zero-area intersecting descendants.
+    // Force that signal for both our observer and xterm's own observer so the
+    // regression exercises our output policy, not xterm's separate fallback.
+    await page.addInitScript(() => {
+      const Original = window.IntersectionObserver;
+      window.IntersectionObserver = class extends Original {
+        constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+          super((entries, observer) => callback(entries.map(entry => entry.target.closest('.canvas-terminal') ? {
+            time: entry.time, target: entry.target, rootBounds: entry.rootBounds,
+            boundingClientRect: entry.boundingClientRect, intersectionRect: entry.intersectionRect,
+            intersectionRatio: 1, isIntersecting: true,
+          } : entry), observer), options);
+        }
+      };
+    });
     await page.goto(`/canvas?workspace=${workspace.id}`);
     const terminal = page.locator('.canvas-terminal .xterm-helper-textarea');
     const body = page.locator('.canvas-terminal .node-body');
@@ -81,14 +127,26 @@ test('overview defers terminal paint without stopping its PTY or losing its rend
     for (let i = 0; i < 10; i++) await page.locator('.svelte-flow__controls-zoomout').click();
     await expect(page.locator('.svelte-flow')).toHaveAttribute('data-canvas-overview', 'true');
     await expect(body).toHaveCSS('content-visibility', 'hidden');
+    await page.evaluate(() => {
+      const state = { mutations: 0 };
+      (window as any).__overviewWrites = state;
+      new MutationObserver(records => { state.mutations += records.length; }).observe(
+        document.querySelector('.canvas-terminal .xterm-rows')!, { subtree: true, childList: true, characterData: true });
+    });
     // The same live PTY makes progress while its unreadable body is not painted.
     socket.send(JSON.stringify({ type: 'input', sessionId, data: `printf 'still working\\n' >> ${JSON.stringify(counter)}\r` }));
     await expect.poll(() => readFile(counter, 'utf8').catch(() => '')).toBe('still working\n');
+    // Native output keeps flowing, but CSS-hidden TUIs must not rebuild their
+    // DOM on every chunk merely because IntersectionObserver sees their box.
+    socket.send(JSON.stringify({ type: 'input', sessionId, data: `printf 'invisible redraw\\n'\r` }));
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__overviewWrites.mutations)).toBe(0);
     for (let i = 0; i < 10; i++) await page.locator('.svelte-flow__controls-zoomin').click();
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
     await expect(body).toHaveCSS('content-visibility', 'visible');
     expect(await page.evaluate(() => (window as any).__overviewTerminal === document.querySelector('.canvas-terminal .xterm-helper-textarea'))).toBe(true);
     await expect(terminal).toBeAttached();
+    await expect(page.locator('.canvas-terminal .xterm-rows')).toContainText('invisible redraw');
   } finally {
     socket?.close();
     await page.goto('about:blank');
@@ -107,7 +165,9 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     x: (i % 20) * 440, y: Math.floor(i / 20) * 500, width: 390, height: 420, zIndex: 0, floorId: null,
     payload: i < 208 ? { path: `fixture-${i}.png` } : i < 396 ? { content: 'A detailed, unsaved creative direction. '.repeat(150) } : { url: 'https://example.com/' },
   }));
-  const edges = Array.from({ length: 727 }, (_, i) => ({ id: randomUUID(), workspaceId: workspace.id, sourceNodeId: nodes[i % nodes.length].id, targetNodeId: nodes[(i % nodes.length + 1 + Math.floor(i / nodes.length)) % nodes.length].id }));
+  const edges = Array.from({ length: 727 }, (_, i) => ({ id: randomUUID(), workspaceId: workspace.id,
+    sourceNodeId: i < 236 ? nodes[0].id : nodes[i % nodes.length].id,
+    targetNodeId: i < 236 ? nodes[i + 1].id : nodes[(i % nodes.length + 1 + Math.floor(i / nodes.length)) % nodes.length].id }));
   const fixture = createCanvas(1024, 1024);
   const context = fixture.getContext('2d');
   await page.route(`**/workspaces/${workspace.id}/fs/raw?*`, route => {
@@ -158,6 +218,17 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     });
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
     await expect(page.locator('.svelte-flow__edge')).toHaveCount(727);
+    // A leader-like hub is not the same workload as a low-degree chain.
+    // Drag it in the fixture, never move nodes in the owner's workspace.
+    const hub = page.locator('.svelte-flow__node').first();
+    const hubHeader = (await hub.locator('.node-header').boundingBox())!;
+    const hubBefore = await hub.getAttribute('style');
+    await page.mouse.move(hubHeader.x + hubHeader.width / 2, hubHeader.y + hubHeader.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hubHeader.x + hubHeader.width / 2 + 30, hubHeader.y + hubHeader.height / 2 + 20, { steps: 16 });
+    await expect(hub).not.toHaveAttribute('style', hubBefore!);
+    await page.mouse.up();
+    await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
     await expect.poll(() => Boolean(activitySocket)).toBe(true);
     const readsBeforeActivity = nodeReads;
     activitySocket!.send(JSON.stringify({ type: 'talking', workspaceId: workspace.id, from: null, to: nodes[0].id, talking: true }));
@@ -210,14 +281,20 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     await page.mouse.down();
     await page.mouse.move(pane.x + 90, pane.y + 420, { steps: 20 });
     await expect(page.locator('.svelte-flow')).toHaveAttribute('data-canvas-moving', 'true');
+    await expect(page.locator('.svelte-flow')).toHaveAttribute('data-canvas-navigating', 'true');
+    await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
     await expect(page.locator('.canvas-image .node-body').first()).toHaveCSS('content-visibility', 'hidden');
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
     await page.mouse.up();
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
     await expect(page.locator('.canvas-image .node-body').first()).toHaveCSS('content-visibility', 'auto');
     expect(await page.evaluate(() => ({ image: (window as any).__retainedImage === document.querySelector('.canvas-image img.img-outline'),
       note: (window as any).__retainedNote === document.querySelector('.canvas-note textarea'),
       draft: (window as any).__retainedNote.value }))).toEqual({ image: true, note: true, draft: 'Unsaved review draft' });
+    if (await page.locator('.svelte-flow').getAttribute('data-canvas-overview')) {
+      await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
+    }
     await expect(viewport).not.toHaveAttribute('style', transform!);
     const gaps = await page.evaluate(() => (window as any).__denseFrameGaps as number[]);
     expect(gaps.length).toBeGreaterThan(5);

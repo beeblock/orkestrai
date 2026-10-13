@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
+  import { createTerminalOutputBuffer } from './terminal-output-buffer.js';
   import { SearchAddon } from '@xterm/addon-search';
   import { Mic, Square, Volume2, VolumeX, X } from '@lucide/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
@@ -449,52 +450,34 @@
     // several times a second, and every write mutates the DOM renderer. Output
     // is kept in order and written when the node scrolls back into view, with
     // a bounded background flush so the parser never falls far behind.
-    let onScreen = true;
-    let hiddenOutput: string[] = [];
-    let hiddenBytes = 0;
-    let hiddenFlushTimer: ReturnType<typeof setTimeout> | null = null;
-    const flushHiddenOutput = () => {
-      if (hiddenFlushTimer) {
-        clearTimeout(hiddenFlushTimer);
-        hiddenFlushTimer = null;
-      }
-      if (!hiddenOutput.length || disposed) return;
-      const data = hiddenOutput.join('');
-      hiddenOutput = [];
-      hiddenBytes = 0;
-      terminal.write(data);
-    };
-    const writeOutput = (data: string) => {
-      if (onScreen) {
-        terminal.write(data);
-        return;
-      }
-      hiddenOutput.push(data);
-      hiddenBytes += data.length;
-      if (hiddenBytes > 1_000_000) flushHiddenOutput();
-      else hiddenFlushTimer ??= setTimeout(flushHiddenOutput, 15_000);
+    const outputBuffer = createTerminalOutputBuffer(data => terminal.write(data));
+    const writeOutput = (data: string) => outputBuffer.write(data);
+    let intersects = true;
+    const paintBody = container.closest<HTMLElement>('.node-body');
+    const paintCanvas = container.closest<HTMLElement>('.svelte-flow');
+    const syncPaintEligibility = () => {
+      const focused = paintBody?.matches(':focus-within') ?? false;
+      const deferred = !!paintBody && (paintCanvas?.dataset.canvasMoving === 'true'
+        || paintCanvas?.dataset.canvasOverview === 'true');
+      outputBuffer.setVisible(intersects && document.visibilityState !== 'hidden' && (!deferred || focused), focused);
     };
     // A terminal swept past while panning or zooming stays buffered: only one
     // that remains in view is painted, so a pan never parses every backlog.
-    let revealTimer: ReturnType<typeof setTimeout> | null = null;
     const visibilityObserver = new IntersectionObserver((entries) => {
-      const visibleNow = entries.some((entry) => entry.isIntersecting);
-      if (revealTimer) {
-        clearTimeout(revealTimer);
-        revealTimer = null;
-      }
-      if (!visibleNow) {
-        onScreen = false;
-        return;
-      }
-      if (onScreen) return;
-      revealTimer = setTimeout(() => {
-        revealTimer = null;
-        onScreen = true;
-        flushHiddenOutput();
-      }, 200);
+      intersects = entries.some((entry) => entry.isIntersecting);
+      syncPaintEligibility();
     });
     visibilityObserver.observe(container);
+    // Intersection alone can still report a terminal visible at overview zoom,
+    // even when CSS defers its body. Do not churn xterm DOM for invisible TUIs.
+    // Observe only the two boundary attributes, never viewport transforms.
+    const paintObserver = new MutationObserver(syncPaintEligibility);
+    if (paintCanvas) paintObserver.observe(paintCanvas, { attributes: true, attributeFilter: ['data-canvas-moving', 'data-canvas-overview'] });
+    const syncFocusPaint = () => queueMicrotask(syncPaintEligibility);
+    paintBody?.addEventListener('focusin', syncFocusPaint);
+    paintBody?.addEventListener('focusout', syncFocusPaint);
+    document.addEventListener('visibilitychange', syncPaintEligibility);
+    syncPaintEligibility();
 
     // OSC 7 e o contrato padrao de shells integrados para publicar o cwd.
     // A deteccao no servidor cobre zsh/bash sem integracao no macOS/Linux.
@@ -611,8 +594,7 @@
       // Reattach sends the complete retained history, not an incremental delta.
       // Reset in the parser queue so old queued output cannot duplicate it.
       // The full history supersedes any output batched while off-screen.
-      hiddenOutput = [];
-      hiddenBytes = 0;
+      outputBuffer.clearPending();
       terminal.write(`\x1bc${replay}`, () => {
         if (disposed) return;
         terminal.clearTextureAtlas();
@@ -835,8 +817,11 @@
       pendingDictation = false;
       resizeObserver.disconnect();
       visibilityObserver.disconnect();
-      if (revealTimer) clearTimeout(revealTimer);
-      if (hiddenFlushTimer) clearTimeout(hiddenFlushTimer);
+      paintObserver.disconnect();
+      paintBody?.removeEventListener('focusin', syncFocusPaint);
+      paintBody?.removeEventListener('focusout', syncFocusPaint);
+      document.removeEventListener('visibilitychange', syncPaintEligibility);
+      outputBuffer.dispose();
       socket?.close();
       terminal.dispose();
       xtermInstance = null;

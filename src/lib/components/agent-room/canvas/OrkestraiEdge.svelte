@@ -3,7 +3,7 @@
   import { EdgeLabel, useEdges, useNodes, type EdgeProps } from '@xyflow/svelte';
   import { X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
-  import { floatingAnchorFor, nodeIndexFor } from './floating-anchor.js';
+  import { floatingAnchorForSnapshot, nodeIndexFor } from './floating-anchor.js';
   import { edgeIntersectsViewport, edgePerformanceProfile, normalizeEdgeRenderingPreference, staticEdgePath } from './edge-performance.js';
   import { canvasEdgeRuntime, retainCanvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
 
@@ -49,8 +49,8 @@
   }
 
   function anchors(): { ax: number; ay: number; bx: number; by: number } | null {
-    const a = floatingAnchorFor(source, nodesStore.current, edgesStore.current) ?? centerOf(source);
-    const b = floatingAnchorFor(target, nodesStore.current, edgesStore.current) ?? centerOf(target);
+    const a = floatingAnchorForSnapshot(source, nodesStore.current, edgesStore.current) ?? centerOf(source);
+    const b = floatingAnchorForSnapshot(target, nodesStore.current, edgesStore.current) ?? centerOf(target);
     if (!a || !b) return null;
     return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
   }
@@ -277,13 +277,14 @@
 </script>
 
 {#if path.path}
-  <g class="orkestrai-edge" class:talking>
+  <g class="orkestrai-edge" class:talking class:offscreen={!inViewport && !selected && !pinned}>
     <path
       d={path.path}
       fill="none"
       stroke="transparent"
       stroke-width="26"
-      style="pointer-events: stroke; cursor: pointer"
+      style:pointer-events={!inViewport && !selected && !pinned ? 'none' : 'stroke'}
+      style:cursor="pointer"
       role="button"
       aria-label={m['shell.connection']()}
       tabindex="-1"
@@ -327,8 +328,24 @@
     transition: stroke var(--duration-quick) ease-out;
   }
 
+  /* Keep EdgeLabel controls mounted (they portal outside this SVG), including
+     a focused hover control. Culling must skip paint, not discard focus. */
+  .offscreen > path {
+    visibility: hidden;
+  }
+
   .edge-line.animated {
     animation: dash-flow 0.9s linear infinite;
+  }
+
+  /* Preserve geometry, activity color and hit targets. Only decorative dashes
+     stop during navigation/overview, with one canvas-level signal rather than
+     a viewport subscription on every edge. Skia otherwise subdivides every
+     dashed curve again while the parent transform moves. */
+  :global(.svelte-flow[data-canvas-navigating='true']) .edge-line,
+  :global(.svelte-flow[data-canvas-overview='true']) .edge-line {
+    stroke-dasharray: none;
+    animation: none;
   }
 
   @keyframes dash-flow {

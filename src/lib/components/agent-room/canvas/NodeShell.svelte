@@ -4,7 +4,7 @@
   import * as Popover from '$lib/components/ui/popover';
   import { Link2, X } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
-  import { floatingAnchorFor, nodeIndexFor } from './floating-anchor.js';
+  import { floatingAnchorForSnapshot, nodeIndexFor } from './floating-anchor.js';
 
   export type NodeConnection = {
     edgeId: string;
@@ -87,7 +87,7 @@
   // proximo do vizinho conectado mais perto — a mesma matematica da ancora
   // da corda (OrkestraiEdge), entao a ponta da corda sempre toca a bolinha.
   const floatingAnchor = $derived.by(() => {
-    const absolute = floatingAnchorFor(id, nodesStore.current, edgesStore.current);
+    const absolute = floatingAnchorForSnapshot(id, nodesStore.current, edgesStore.current);
     if (!absolute) return null;
     const self = nodeIndexFor(nodesStore.current).get(id);
     if (!self) return null;

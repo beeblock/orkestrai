@@ -20,6 +20,9 @@
   function motion(moving: boolean) {
     if (moving) {
       movingCanvas = marker?.parentElement?.querySelector<HTMLElement>('.svelte-flow') ?? null;
+      // Dashed paths are expensive to rasterize even without SVG animation.
+      // Signal navigation once for every canvas, independently of body deferral.
+      movingCanvas?.setAttribute('data-canvas-navigating', 'true');
       // One transition, not hundreds of reactive node updates per frame.
       // Keep small canvases and all focused editors fully painted.
       if (movingCanvas && movingCanvas.querySelectorAll('.svelte-flow__node').length >= 150) {
@@ -27,6 +30,7 @@
       }
     } else {
       movingCanvas?.removeAttribute('data-canvas-moving');
+      movingCanvas?.removeAttribute('data-canvas-navigating');
       movingCanvas = null;
     }
   }
