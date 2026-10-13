@@ -54,6 +54,12 @@ unfocused node body and secondary header paint until viewport motion settles.
 Overview zoom defers unreadable terminal paint, not the live PTY or its output.
 Those invisible TUIs also batch DOM updates instead of rebuilding hidden rows
 for every output chunk; focus flushes immediately and visible terminals resume.
+At overview zoom, PNG/JPEG/BMP nodes reuse bounded 256-pixel browser bitmaps.
+Original images stay mounted and are shown at readable zoom, selection or review;
+workspace files and agent references are unchanged. The cache preserves aspect
+ratio/alpha, draws once per source load, and creates no disk files. Known
+animated/vector formats keep their original renderer.
+
 Connections remain solid while panning/zooming and in overview, avoiding native
 dash subdivision; readable idle zoom restores their decorative pattern.
 Settled offscreen connections skip paint without removing graph relationships.

@@ -120,3 +120,53 @@ processes, Portal grants or task supervision to obtain better CPU numbers.
   Loopback debugging is removed before handoff. Regenerable unpacked package
   and test intermediates are removed; app data, projects, assets and one compact
   rollback are retained.
+
+## Release-gate follow-up
+
+The first release-preparation CI (`53646f23`, run `38474597171`) passed the
+dependency audit, 2,203 Linux tests (17 skipped), build, secret scan and Windows transport, but
+failed two of 237 browser cases (233 passed, two skipped). No tag was created.
+
+- The terminal-load fixture changed viewport CSS without changing XYFlow's
+  real zoom. Its overview marker correctly kept the terminal body hidden, so
+  a programmatic focus did not establish actual input focus. The regression
+  now uses the native node deep link and verifies focus before measuring input;
+  the two-second latency budget is unchanged.
+- The dense fixture observed a transient moving marker after a mouse command
+  returned, racing the 150 ms quiet window. It now records the actual moving
+  state and unchanged CSS during the gesture, finds a genuinely empty pan hit
+  target, decodes all image pixels before measuring and samples the complete
+  gesture/restoration sequence with a 15-second failsafe. The maximum allowed
+  frame interval is still 500 ms; sampling may not expire before the pan.
+- Correcting fixture readiness was not sufficient: a Linux container with
+  the locked Playwright 1.63.0 browser, Node 24, four CPU slots and 5 GiB memory
+  still recorded a 667 ms interval. Metadata-only native tracing found image
+  decoding/raster work (approximately 1.6 s across raster/decode workers in one
+  short traced run), much more than the 46 ms of layout or 20 ms of minor GC.
+  Nested trace event totals are not additive CPU time. CSS visibility/opacity
+  experiments did not reliably pass the gate and were discarded.
+- PNG/JPEG/BMP nodes now cache a CPU-backed browser bitmap bounded to
+  256 pixels per side, drawn on source load rather than viewport frames. At
+  overview only that raster is painted; the original element, URL and file
+  remain unchanged. Readable zoom, selection and review use the original.
+  GIF/APNG/WebP/SVG and unknown extensions retain the original renderer.
+  Alpha and aspect ratio are preserved, no image files are rewritten and no
+  disk cache is created. A failed cache draw falls back to the original.
+- The first Linux run with the cache passed all four focused cases without
+  retries: 233 ms maximum frame interval and 47–60 ms typing latency. This is
+  bounded diagnostic evidence, not proof of uniform 60 FPS or a universal
+  resolution of the earlier multi-hour renderer saturation.
+
+The final build passed with corrected accessibility markup. The complete local
+suite passed **2,212 tests (13 skipped)** and **20 production browser cases**
+without retries, including original-element restoration and cache remount.
+The final Linux build passed **12/12 focused cases**, three serial repetitions,
+without retries: dense-canvas maximum frame intervals **283, 283 and 300 ms**;
+typing latencies **50–195 ms**. Both 500 ms / two-second budgets remain intact.
+The temporary Linux dependency tree and Docker image are removed after QA;
+project files, installed app data and owner containers/volumes are untouched.
+
+The release CI is revalidated before tagging. The installed local
+build at the start of this follow-up does not yet include the new image cache;
+replacing it requires a brief app restart, which was asked separately so the
+release work can continue without interrupting the owner's active agents.

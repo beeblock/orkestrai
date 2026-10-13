@@ -175,6 +175,18 @@ esses casos nem flexibilize limites para contornar uma falha de publicação.
   intervalo entre frames de 500 ms ou mais. Terminais continuam executando
   enquanto sua pintura é adiada. Esse limite detecta travamentos graves, não
   prova 60 FPS nem mede CPU do Electron no workspace real.
+- `tests/e2e/terminal-load.spec.ts`: a navegação nativa por deep link leva ao
+  terminal antes de medir entrada, mantendo o estado XYFlow alinhado ao zoom
+  exibido. A entrada exige foco real, mantém o limite de 2 segundos e cobre
+  atualização do grafo, recuperação de conexão e rascunho de prompt.
+
+O benchmark de navegação prepara pixels com `HTMLImageElement.decode()` e
+fontes carregadas, preservando as 208 imagens de 1024×1024 e o limite de
+500 ms. Ele não mede a preparação fria desses assets. Registre os marcadores
+transitórios durante o gesto: exigir `data-canvas-moving` depois de um comando
+de arraste retornar cria uma corrida com os 150 ms de estabilização. Nunca
+substitua a navegação real por alterações diretas no CSS do viewport: isso
+diverge do estado interno e pode manter terminais corretamente ocultos.
 
 Execute as suítes e o build em sequência. O Playwright usa banco e diretórios
 de usuário isolados e um build estável; remova seus traces depois. A tag só

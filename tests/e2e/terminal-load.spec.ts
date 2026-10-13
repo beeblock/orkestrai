@@ -60,7 +60,9 @@ test('keeps PTY input and quick prompts usable during dense Canvas refresh and r
       };
     });
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`/canvas?workspace=${workspace.id}`);
+    // Use the same deep-link navigation as search/Canvas. Overriding only the
+    // viewport CSS leaves XYFlow in overview and correctly defers TUI paint.
+    await page.goto(`/canvas?workspace=${workspace.id}&node=${terminals[0].id}`);
     await expect(page.locator('.svelte-flow__node')).toHaveCount(205);
     await expect(page.locator('.svelte-flow__edge')).toHaveCount(601);
     const terminal = page.locator(`.svelte-flow__node[data-id="${terminals[0].id}"]`);
@@ -69,13 +71,14 @@ test('keeps PTY input and quick prompts usable during dense Canvas refresh and r
       const nodes = (await (await request.get(`${base}/nodes`)).json()).data;
       return nodes.find((node: any) => node.id === terminals[0].id).payload.sessionId;
     }).toBeTruthy();
-    await page.locator('.svelte-flow__viewport').evaluate(element => {
-      (element as HTMLElement).style.setProperty('transform', 'translate(15px, 60px) scale(1)', 'important');
-    });
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');
+    await expect(terminal.locator('.node-body')).not.toHaveCSS('content-visibility', 'hidden');
     const latencies: number[] = [];
     for (let i = 0; i < 5; i++) {
       await request.patch(`${base}/nodes/${note.id}`, { data: { title: `Live briefing ${i}`, payload: { content: `Revision ${i}` } } });
       await terminal.locator('.xterm-helper-textarea').focus();
+      await expect(terminal.locator('.xterm-helper-textarea')).toBeFocused();
       const start = performance.now();
       await page.keyboard.type(`input-${i}-okay`);
       await expect(terminal.locator('.xterm-rows')).toContainText(`input-${i}-okay`, { timeout: 2_000 });
