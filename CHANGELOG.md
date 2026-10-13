@@ -5,7 +5,7 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## 0.42.0 - Unreleased
+## 0.42.0 - 2026-10-13
 
 ### Added
 
@@ -24,7 +24,7 @@ pt-BR, English, and Spanish translations.
 
 ### Known limitations
 
-- CPU saturation was reproduced in the canonical 0.42.0 renderer after the earlier old-rollback observation. Native samples show sustained painting and major-GC workers. Gesture and Portal lifecycle fixes do not by themselves prove the entire long-session GC failure resolved; keep native dense-canvas and sustained-session checks before release.
+- CPU saturation was reproduced in the canonical 0.42.0 renderer before these navigation fixes. Bounded native drag/zoom checks now show the renderer returning to low CPU after gestures, but they do not prove the entire long-session painting/GC failure resolved. Sustained-session validation remains open; this release does not claim to eliminate every CPU spike.
 
 ## 0.41.1 - 2026-10-12
 

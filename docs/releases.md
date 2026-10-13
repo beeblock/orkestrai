@@ -164,11 +164,17 @@ esses casos nem flexibilize limites para contornar uma falha de publicação.
 - `tests/unit/heavy-run-service.test.ts` e
   `tests/unit/orkestrai-cli-inbox.test.ts`: limite da fila, perda de reserva,
   encerramento da árvore do comando e parada por falta de espaço.
+- `tests/unit/edge-performance.test.ts` e
+  `tests/unit/terminal-output-buffer.test.ts`: cálculos compartilhados em
+  snapshots imutáveis limitados, geometria de hubs com muitas conexões,
+  ordenação/limites da saída oculta e retomada por foco ou visibilidade estável.
 - `tests/e2e/canvas-idle-performance.spec.ts`: arestas elásticas convergem e
-  ficam sem alterações no path em repouso; um canvas de 290 nós e 727 arestas
-  passa por pan/zoom sem desmontar nós, erros de página ou intervalo entre
-  frames de 500 ms ou mais. Esse limite detecta travamentos graves, não prova
-  60 FPS nem mede CPU do Electron no workspace real.
+  ficam sem alterações no path em repouso; um canvas de 399 nós e 727 arestas,
+  incluindo 208 imagens carregadas e 188 notas longas, passa por pan/zoom e
+  arraste de um hub com 236 conexões sem desmontar nós, erros de página ou
+  intervalo entre frames de 500 ms ou mais. Terminais continuam executando
+  enquanto sua pintura é adiada. Esse limite detecta travamentos graves, não
+  prova 60 FPS nem mede CPU do Electron no workspace real.
 
 Execute as suítes e o build em sequência. O Playwright usa banco e diretórios
 de usuário isolados e um build estável; remova seus traces depois. A tag só

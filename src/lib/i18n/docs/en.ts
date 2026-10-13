@@ -985,7 +985,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Unreleased · 0.42.0', title: 'Orkestrai 0.42.0: Portal hosts and verified local installation', summary: 'Agents can configure Portal hosts; local rollback bundles no longer compete with the installed app.', items: [
+    { date: 'October 13, 2026 · 0.42.0', title: 'Orkestrai 0.42.0: Faster canvas navigation and native Portal configuration', summary: 'Reduce connection and hidden-terminal paint work; agents configure Portal hosts and local installation is verified.', items: [
       'Connections keep solid geometry and activity colors during pan/zoom and overview, avoiding native dash subdivision even on small canvases. Readable idle zoom restores the pattern; settled offscreen connections skip paint without deleting relationships or selected/pinned controls.',
       'CSS-hidden terminal bodies now batch TUI DOM updates instead of redrawing every output chunk. Live PTYs and ordered output remain intact; existing periodic/backlog bounds apply, focus flushes immediately, and stable visibility restores live drawing.',
       'Highly connected nodes share floating-anchor calculations with their connections instead of rescanning the same neighbors per edge. Four immutable snapshots bound retention; node/edge updates invalidate the calculation and regression tests drag a high-degree hub.',
@@ -994,7 +994,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       'Private Portal movement previews reuse a one-second cache and are bounded to 640 pixels. Document changes invalidate it and stale captures cannot replace a newer preview. Full agent screenshots and the live native page are unchanged.',
       'portal_configure_hosts and canvas portal-hosts let assigned leaders and specialists configure exact hosts in every workspace. Current profile revisions and serialized writes preserve grants, pauses and browser state; explicit policies still apply.',
       'The local macOS installer verifies copy, architecture, signatures, entitlements and the new Core before retaining one compact rollback outside Applications. Targeted termination uses orderly Portal/Core shutdown.',
-      'CPU saturation was also reproduced in the canonical 0.42.0 renderer, with native samples showing painting and major GC. Restarting and gesture tests alone do not prove the long-session failure resolved.',
+      'Bounded native drag/zoom checks show the renderer returning to low CPU after gestures. Sustained-session validation remains open: this release does not claim to eliminate every long-session painting/GC spike.',
     ] },
     { date: 'October 12, 2026 · 0.41.1', title: 'Orkestrai 0.41.1: Portal work without visibility blockers', summary: 'Background control is the default, not another permission request.', items: [
       'Navigation and tab updates no longer replace live grants or pauses with stale renderer settings. The Canvas sends only changed browser fields; the ORM merges serialized Portal patches with the current record. Other node types retain their existing replacement behavior.',
