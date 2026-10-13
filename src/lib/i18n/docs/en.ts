@@ -986,6 +986,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: 'October 13, 2026 · 0.42.0', title: 'Orkestrai 0.42.0: Faster canvas navigation and native Portal configuration', summary: 'Reduce connection and hidden-terminal paint work; agents configure Portal hosts and local installation is verified.', items: [
+      'PNG/JPEG/BMP images use cached, display-only 256-pixel bitmaps at overview zoom instead of repeatedly rasterizing full-size files. Originals stay mounted and return at readable zoom, selection or review. Aspect ratio, alpha, masters, files and agent references are unchanged; no per-frame drawing or disk cache. Known animated/vector formats keep their original renderer.',
       'Connections keep solid geometry and activity colors during pan/zoom and overview, avoiding native dash subdivision even on small canvases. Readable idle zoom restores the pattern; settled offscreen connections skip paint without deleting relationships or selected/pinned controls.',
       'CSS-hidden terminal bodies now batch TUI DOM updates instead of redrawing every output chunk. Live PTYs and ordered output remain intact; existing periodic/backlog bounds apply, focus flushes immediately, and stable visibility restores live drawing.',
       'Highly connected nodes share floating-anchor calculations with their connections instead of rescanning the same neighbors per edge. Four immutable snapshots bound retention; node/edge updates invalidate the calculation and regression tests drag a high-degree hub.',

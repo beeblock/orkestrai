@@ -254,7 +254,20 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     })).toBe('visible');
     await test.step('decode all 208 full-size PNGs', async () => {
       await expect.poll(() => page.locator('.canvas-image img.img-outline').evaluateAll(images => images.filter(image => (image as HTMLImageElement).naturalWidth === 1024).length), { timeout: 30000 }).toBe(208);
+      // naturalWidth proves headers loaded, not that async pixel decoding has
+      // completed. Keep the full 832 MiB fixture, but finish preparation before
+      // measuring navigation, rather than attributing cold decode to a gesture.
+      await page.locator('.canvas-image img.img-outline').evaluateAll(async images => {
+        await Promise.all(images.map(image => (image as HTMLImageElement).decode()));
+      });
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
     });
+    // All original pixels are still loaded; the visible overview additionally
+    // uses actual bounded rasters, not empty-image or header-only fixtures.
+    await expect.poll(() => page.locator('.canvas-image .overview-preview.active').count()).toBeGreaterThan(200);
+    await expect(page.locator('.canvas-image .overview-preview canvas')).toHaveCount(208);
+    expect(await page.locator('.canvas-image .overview-preview canvas').evaluateAll(canvases =>
+      canvases.every(canvas => (canvas as HTMLCanvasElement).width <= 256 && (canvas as HTMLCanvasElement).height <= 256))).toBe(true);
     await page.evaluate(() => {
       (window as any).__retainedImage = document.querySelector('.canvas-image img.img-outline');
       (window as any).__retainedNote = document.querySelector('.canvas-note textarea');
@@ -262,32 +275,71 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
       note.value = 'Unsaved review draft';
       note.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await page.evaluate(() => {
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(start => {
       const gaps: number[] = [];
-      let last = performance.now();
-      const until = last + 5000;
-      const frame = (now: number) => { gaps.push(now - last); last = now; if (now < until) requestAnimationFrame(frame); };
-      requestAnimationFrame(frame);
+      let last = start;
+      const until = start + 15000;
+      let expired = false;
+      let frameId = 0;
+      const frame = (now: number) => {
+        gaps.push(now - last); last = now;
+        if (now < until) frameId = requestAnimationFrame(frame);
+        else expired = true;
+      };
+      frameId = requestAnimationFrame(frame);
       (window as any).__denseFrameGaps = gaps;
-    });
+      (window as any).__denseStopFrames = () => {
+        cancelAnimationFrame(frameId);
+        return { expired, elapsedMs: performance.now() - start };
+      };
+      resolve();
+    })));
     const zoomIn = page.locator('.svelte-flow__controls-zoomin');
     const zoomOut = page.locator('.svelte-flow__controls-zoomout');
     for (let i = 0; i < 4; i++) { await zoomIn.click(); await zoomOut.click(); }
     const viewport = page.locator('.svelte-flow__viewport').first();
+    // Observe the transient state during real movement, not after mouse.move
+    // has returned and a loaded runner may already have exceeded the 150 ms
+    // settle window. Keep the exact CSS and unchanged frame-time assertions.
+    await page.evaluate(() => {
+      const flow = document.querySelector<HTMLElement>('.svelte-flow')!;
+      const samples: Array<{ navigating: boolean; dash: string; body: string }> = [];
+      const capture = () => {
+        if (flow.dataset.canvasMoving !== 'true' || samples.length >= 10) return;
+        samples.push({ navigating: flow.dataset.canvasNavigating === 'true',
+          dash: getComputedStyle(document.querySelector('.orkestrai-edge .edge-line')!).strokeDasharray,
+          body: getComputedStyle(document.querySelector('.canvas-image .node-body')!).contentVisibility });
+      };
+      const observer = new MutationObserver(capture);
+      observer.observe(flow, { attributes: true, attributeFilter: ['data-canvas-moving', 'data-canvas-navigating'] });
+      capture();
+      (window as any).__denseMotionSamples = samples;
+      (window as any).__denseMotionObserver = observer;
+    });
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');
     const transform = await viewport.getAttribute('style');
-    const pane = (await page.locator('.svelte-flow__pane').boundingBox())!;
-    // Start on the empty canvas margin, not a nowheel/nodrag workflow form.
-    await page.mouse.move(pane.x + 20, pane.y + 300);
+    // Find an actually empty hit target. At fit-view scale a fixed "margin"
+    // coordinate can land on a loaded image or an interactive node control.
+    const panStart = await page.locator('.svelte-flow__pane').evaluate(pane => {
+      const box = pane.getBoundingClientRect();
+      for (let y = box.top + 60; y < box.bottom - 100; y += 20) {
+        for (let x = box.left + 10; x < box.right - 10; x += 20) {
+          const hit = document.elementFromPoint(x, y);
+          if (hit && pane.contains(hit) && !hit.closest('.svelte-flow__node, .svelte-flow__panel, .svelte-flow__edge, button, input, textarea')) return { x, y };
+        }
+      }
+      throw new Error('Dense fixture has no empty canvas pan target');
+    });
+    await page.mouse.move(panStart.x, panStart.y);
     await page.mouse.down();
-    await page.mouse.move(pane.x + 90, pane.y + 420, { steps: 20 });
-    await expect(page.locator('.svelte-flow')).toHaveAttribute('data-canvas-moving', 'true');
-    await expect(page.locator('.svelte-flow')).toHaveAttribute('data-canvas-navigating', 'true');
-    await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
-    await expect(page.locator('.canvas-image .node-body').first()).toHaveCSS('content-visibility', 'hidden');
+    await page.mouse.move(panStart.x + 70, panStart.y + 120, { steps: 20 });
+    await expect.poll(() => page.evaluate(() => (window as any).__denseMotionSamples)).toContainEqual({ navigating: true, dash: 'none', body: 'hidden' });
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
     await page.mouse.up();
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
+    await page.evaluate(() => { (window as any).__denseMotionObserver.disconnect(); delete (window as any).__denseMotionObserver; });
     await expect(page.locator('.canvas-image .node-body').first()).toHaveCSS('content-visibility', 'auto');
     expect(await page.evaluate(() => ({ image: (window as any).__retainedImage === document.querySelector('.canvas-image img.img-outline'),
       note: (window as any).__retainedNote === document.querySelector('.canvas-note textarea'),
@@ -296,14 +348,41 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
       await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
     }
     await expect(viewport).not.toHaveAttribute('style', transform!);
+    const sample = await page.evaluate(() => (window as any).__denseStopFrames());
+    // A slow runner must not silently finish sampling before the pan. Measure
+    // every zoom, the real pan and paint restoration, with a bounded failsafe.
+    expect(sample.expired).toBe(false);
     const gaps = await page.evaluate(() => (window as any).__denseFrameGaps as number[]);
+    console.log(JSON.stringify({ nodes: nodes.length, loadedImages: 208, decodedImageMiB: 832, longNotes: 188, portals: 3, edges: 727, sampledMs: Math.round(sample.elapsedMs), maxFrameGapMs: Math.round(Math.max(...gaps)), initialFrameGapsMs: gaps.slice(0, 10).map(Math.round) }));
     expect(gaps.length).toBeGreaterThan(5);
     expect(Math.max(...gaps)).toBeLessThan(500);
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
-    console.log(JSON.stringify({ nodes: nodes.length, loadedImages: 208, decodedImageMiB: 832, longNotes: 188, portals: 3, edges: 727, maxFrameGapMs: Math.round(Math.max(...gaps)) }));
     expect(errors).toEqual([]);
+    await test.step('rebuild the display cache after removing and restoring the same source', async () => {
+      const image = page.locator(`.svelte-flow__node[data-id="${nodes[1].id}"]`);
+      const beforeCanvas = await image.locator('canvas').evaluate(canvas => { (window as any).__previousOverviewCanvas = canvas; return (canvas as HTMLCanvasElement).width; });
+      expect(beforeCanvas).toBe(256);
+      nodes[1].payload = { path: '' };
+      activitySocket!.send(JSON.stringify({ type: 'workspaceChanged', workspaceId: workspace.id }));
+      await expect(image.locator('img.img-outline')).toHaveCount(0);
+      nodes[1].payload = { path: 'fixture-1.png' };
+      activitySocket!.send(JSON.stringify({ type: 'workspaceChanged', workspaceId: workspace.id }));
+      await expect(image.locator('img.img-outline')).toHaveCount(1);
+      await expect(image.locator('.overview-preview.active')).toHaveCount(1);
+      expect(await image.locator('canvas').evaluate(canvas => ({
+        fresh: canvas !== (window as any).__previousOverviewCanvas, width: (canvas as HTMLCanvasElement).width,
+      }))).toEqual({ fresh: true, width: 256 });
+    });
+    // Readable zoom restores the very same original elements and URLs, not a
+    // thumbnail pretending to be the reference/master.
+    for (let i = 0; i < 5; i++) await zoomIn.click();
+    await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
+    await expect(page.locator('.canvas-image .overview-preview.active')).toHaveCount(0);
+    await expect(page.locator('.canvas-image img.img-outline').first()).toHaveCSS('visibility', 'visible');
+    expect(await page.evaluate(() => (window as any).__retainedImage === document.querySelector('.canvas-image img.img-outline'))).toBe(true);
     await page.screenshot({ path: '/tmp/orkestrai-dense-canvas.png' });
   } finally {
+    await page.evaluate(() => { (window as any).__denseMotionObserver?.disconnect(); (window as any).__denseStopFrames?.(); }).catch(() => {});
     await request.put('/api/agent-room/settings', { data: settings });
     await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     await rm(dir, { recursive: true, force: true });

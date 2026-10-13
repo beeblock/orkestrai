@@ -14,6 +14,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Cache bounded 256-pixel, display-only PNG/JPEG/BMP overview bitmaps instead of repeatedly rasterizing full-size images at unreadable zoom. Keep originals mounted and use their full resolution when zoomed in, selected or reviewed; preserve aspect ratio and transparency without changing files, masters, references or agent access. Known animated/vector formats stay on their original renderer. Cache drawing happens on image load, never on viewport frames, and writes no disk cache.
 - Bound native connection rasterization during canvas navigation: retain solid connections and activity colors during pan/zoom and overview, then restore decorative dashes at readable idle zoom. Skip settled offscreen connection paint while retaining selected/pinned controls and the underlying graph. This also applies to small canvases, independently of dense-node body deferral.
 - Buffer TUI redraws when canvas motion, overview or document visibility actually defers terminal paint. Intersection alone no longer treats a CSS-hidden terminal as visible. Preserve ordered output, existing backlog/periodic bounds, immediate focused input and live PTYs; resume DOM writes only after stable visibility.
 - Share floating-anchor calculations per immutable graph snapshot across node handles and connections, avoiding quadratic nearest-neighbor scans at highly connected leaders. Bound retention to four snapshots and invalidate on node/edge updates; verify high-degree hub dragging as well as ordinary low-degree graphs.

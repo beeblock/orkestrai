@@ -7,6 +7,9 @@
   import * as m from '$lib/paraglide/messages.js';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import { canvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
+  import { isCanvasOverview } from './viewport-settle.js';
+  import { canCacheImageOverview, paintImageOverview } from './image-overview-preview.js';
 
   export type ImageNodeData = {
     title: string;
@@ -28,11 +31,32 @@
   let editing = $state(false);
   let dragActive = $state(false);
   let uploading = $state(false);
+  let originalImage = $state<HTMLImageElement>();
+  let overviewPreview = $state<HTMLCanvasElement>();
+  let previewTarget = $state<HTMLCanvasElement>();
+  let previewFor = $state<string | null>(null);
   const imageUrl = $derived(
     data.payload.path
       ? `/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(data.payload.path)}`
       : null
   );
+  const usePreview = $derived(previewFor === imageUrl && previewTarget === overviewPreview && imageUrl !== null && !selected && !editing && !reviewing
+    && isCanvasOverview(canvasEdgeRuntime.current.viewport?.zoom ?? 1));
+
+  function refreshPreview(force = false) {
+    if (!originalImage || !overviewPreview || !imageUrl || !canCacheImageOverview(data.payload.path)) return;
+    if (!force && previewFor === imageUrl && previewTarget === overviewPreview) return;
+    const expected = new URL(imageUrl, window.location.href).href;
+    if (originalImage.currentSrc !== expected || !originalImage.complete) return;
+    previewFor = null; previewTarget = undefined;
+    if (paintImageOverview(originalImage, overviewPreview)) { previewTarget = overviewPreview; previewFor = imageUrl; }
+  }
+  $effect(() => {
+    // Source changes invalidate display-only pixels. A late load must never
+    // show the previous asset, and pan/zoom must never redraw this bitmap.
+    if (!imageUrl || !originalImage || !overviewPreview) { previewFor = null; previewTarget = undefined; return; }
+    if (previewFor !== imageUrl || previewTarget !== overviewPreview) refreshPreview();
+  });
 
   async function saveBlob(blob: Blob) {
     if (data.payload.characterId && data.payload.characterDigest) return;
@@ -137,7 +161,10 @@
   <input bind:this={fileInput} type="file" accept="image/*" class="hidden-input" onchange={onFilePicked} />
   {#if imageUrl}
     <div class="image-body nodrag" onpaste={handlePaste} tabindex="-1" role="presentation">
-      <img class="img-outline" src={imageUrl} alt={data.title || m['img.alt_fallback']()} draggable="false" loading="lazy" decoding="async" />
+      <img bind:this={originalImage} class="img-outline" class:overview-original={usePreview} src={imageUrl} alt={data.title || m['img.alt_fallback']()} draggable="false" loading="lazy" decoding="async" onload={() => refreshPreview(true)} />
+      <div class="overview-preview" class:active={usePreview} role="img" aria-label={data.title || m['img.alt_fallback']()} aria-hidden={!usePreview}>
+        <canvas bind:this={overviewPreview} class="img-outline" aria-hidden="true"></canvas>
+      </div>
       {#if uploading}
         <span class="image-status" role="status"><LoaderCircle size={13} class="animate-spin" />{m['node.image_uploading']()}</span>
       {/if}
@@ -187,6 +214,30 @@
     max-height: 100%;
     object-fit: contain;
     display: block;
+  }
+
+  .overview-original {
+    visibility: hidden;
+  }
+
+  .overview-preview {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+    pointer-events: none;
+  }
+
+  .overview-preview.active {
+    display: block;
+  }
+
+  .overview-preview canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
   /* Status flutuante sobre a imagem enquanto a troca e enviada. */
