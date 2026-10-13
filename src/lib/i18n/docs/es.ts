@@ -985,7 +985,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Sin publicar · 0.42.0', title: 'Orkestrai 0.42.0: Hosts de Portales e instalación local verificada', summary: 'Los agentes configuran hosts; los respaldos no compiten con la aplicación instalada.', items: [
+    { date: '13 de octubre de 2026 · 0.42.0', title: 'Orkestrai 0.42.0: Navegación más rápida en el canvas y configuración nativa de Portales', summary: 'Menos pintura de conexiones y terminales ocultos; agentes configuran hosts y la instalación local se verifica.', items: [
       'Las conexiones conservan geometría sólida y colores de actividad durante arrastre/zoom y vista general, evitando subdividir trazos nativos incluso en canvas pequeños. El zoom legible en reposo restaura el patrón; conexiones fuera de la vista estable dejan de pintarse sin borrar relaciones ni controles seleccionados/fijados.',
       'Los cuerpos de terminal ocultos por CSS agrupan actualizaciones del DOM de la TUI en vez de redibujar cada salida. Se conservan PTYs activos y salida ordenada; siguen los límites periódicos/de acumulación, el foco vacía inmediatamente y la visibilidad estable restaura el dibujo en vivo.',
       'Nodos muy conectados comparten el cálculo del anclaje con sus aristas sin repetir la búsqueda de vecinos por conexión. Cuatro snapshots inmutables limitan la retención; cambios de nodos/aristas invalidan el cálculo y las pruebas arrastran un hub de alto grado.',
@@ -994,7 +994,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       'Las vistas previas privadas de movimiento de Portales reutilizan caché de un segundo y se limitan a 640 píxeles. Los cambios de documento invalidan la caché y capturas tardías no reemplazan una vista nueva. Las capturas completas de agentes y la página nativa en vivo no cambian.',
       'portal_configure_hosts y canvas portal-hosts permiten a líderes y especialistas asignados configurar hosts exactos en cualquier workspace. Revisión y escritura serializada conservan permisos, pausas y estado del navegador; siguen vigentes las políticas explícitas.',
       'El instalador local macOS verifica copia, arquitectura, firma, entitlements y el nuevo Core antes de conservar un único respaldo comprimido fuera de Applications. El cierre dirigido apaga Portales/Core normalmente.',
-      'La saturación de CPU también se reprodujo en el renderer canónico 0.42.0, con pintura y GC mayor en las muestras nativas. Reiniciar y probar gestos no demuestra por sí solo resuelta la falla de sesiones prolongadas.',
+      'Pruebas nativas acotadas de arrastre/zoom muestran el renderer volviendo a bajo uso de CPU tras los gestos. Sigue pendiente validar sesiones prolongadas: esta versión no afirma eliminar todos los picos de pintura/GC tras horas de uso.',
     ] },
     { date: '12 de octubre de 2026 · 0.41.1', title: 'Orkestrai 0.41.1: Portales sin bloqueo por visibilidad', summary: 'Segundo plano es el valor predeterminado, no otra solicitud de permiso.', items: [
       'La navegación y las actualizaciones de pestañas no reemplazan permisos o pausas actuales por ajustes antiguos del renderer. El Canvas envía solo campos cambiados; el ORM combina patches serializados de Portal con el registro actual. Los demás tipos de nodo mantienen su comportamiento de reemplazo.',
