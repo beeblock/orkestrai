@@ -986,9 +986,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: 'Sin publicar · 0.42.0', title: 'Orkestrai 0.42.0: Hosts de Portales e instalación local verificada', summary: 'Los agentes configuran hosts; los respaldos no compiten con la aplicación instalada.', items: [
+      'Los Portales ya no consultan la geometría en cada cuadro ni quedan ocultos si se pierde pointerup. Las transformaciones del canvas ocultan la vista nativa una vez y restauran el mismo documento al estabilizarse, conservando entrada, acceso de agentes y restricciones explícitas.',
+      'Los canvas densos difieren la pintura de cuerpos sin foco y controles secundarios de cabecera durante el movimiento. El zoom de vista general inferior a 0,2 también difiere la pintura ilegible de terminales, no el PTY activo ni su salida. Nodos y borradores siguen montados; la pintura vuelve tras 150 ms de geometría estable.',
+      'Las vistas previas privadas de movimiento de Portales reutilizan caché de un segundo y se limitan a 640 píxeles. Los cambios de documento invalidan la caché y capturas tardías no reemplazan una vista nueva. Las capturas completas de agentes y la página nativa en vivo no cambian.',
       'portal_configure_hosts y canvas portal-hosts permiten a líderes y especialistas asignados configurar hosts exactos en cualquier workspace. Revisión y escritura serializada conservan permisos, pausas y estado del navegador; siguen vigentes las políticas explícitas.',
       'El instalador local macOS verifica copia, arquitectura, firma, entitlements y el nuevo Core antes de conservar un único respaldo comprimido fuera de Applications. El cierre dirigido apaga Portales/Core normalmente.',
-      'La saturación de CPU observada venía de una aplicación antigua 0.40.0 de respaldo aunque 0.41.1 estaba instalada. La aplicación actual tiene CPU baja medida tras reiniciar; no afirmamos corregida una fuga del renderer tras horas de uso.',
+      'La saturación de CPU también se reprodujo en el renderer canónico 0.42.0, con pintura y GC mayor en las muestras nativas. Reiniciar y probar gestos no demuestra por sí solo resuelta la falla de sesiones prolongadas.',
     ] },
     { date: '12 de octubre de 2026 · 0.41.1', title: 'Orkestrai 0.41.1: Portales sin bloqueo por visibilidad', summary: 'Segundo plano es el valor predeterminado, no otra solicitud de permiso.', items: [
       'La navegación y las actualizaciones de pestañas no reemplazan permisos o pausas actuales por ajustes antiguos del renderer. El Canvas envía solo campos cambiados; el ORM combina patches serializados de Portal con el registro actual. Los demás tipos de nodo mantienen su comportamiento de reemplazo.',

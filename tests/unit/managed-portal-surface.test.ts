@@ -84,6 +84,32 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('bounds private motion previews without reducing full agent screenshots', async () => {
+    const { executor, request, contents, lease } = await setup();
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 800, height: 600 },
+      clip: { x: 100, y: 100, width: 800, height: 600 },
+      viewport: { width: 800, height: 600 }, zoom: 1, visible: true,
+    }, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    contents.executeJavaScriptInIsolatedWorld.mockResolvedValue({ x: 0, y: 0, density: 2, width: 800, height: 600 });
+    contents.debugger.sendCommand.mockImplementation(async (method, parameters) => {
+      if (method !== 'Page.captureScreenshot') return {};
+      const clip = parameters!.clip as { width: number; height: number; scale: number };
+      const png = Buffer.alloc(24);
+      png.writeUInt32BE(Math.round(clip.width * clip.scale * 2), 16);
+      png.writeUInt32BE(Math.round(clip.height * clip.scale * 2), 20);
+      return { data: png.toString('base64') };
+    });
+    const preview = await executor.userCommand(request, 'preview', {});
+    const previewBytes = Buffer.from(preview.split(',')[1], 'base64');
+    expect(previewBytes.readUInt32BE(16)).toBe(640);
+    expect(previewBytes.readUInt32BE(20)).toBe(480);
+    expect(await executor.execute({ ...request, action: 'screenshot' })).toMatchObject({ ok: true });
+    const screenshot = contents.debugger.sendCommand.mock.calls.filter(([method]) => method === 'Page.captureScreenshot').at(-1)!;
+    expect(screenshot[1]).toMatchObject({ clip: { width: 800, height: 600, scale: 1 } });
+  });
+
   it.each(['outside the viewport', 'minimized window', 'detached surface'])('operates an unconfigured Portal in %s without focusing or replacing its page', async reason => {
     const { executor, request, contents, parent, lease } = await setup();
     const profile = portalProfileFromPayload({ portalProfileScope: 'private', portalAllowedHosts: ['example.com'] });

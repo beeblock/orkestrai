@@ -58,11 +58,13 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   let disposed = false;
   let current: State | undefined;
   let lastGeometry = '';
-  let lastBounds = '';
+  let restingGeometry: Record<string, unknown> | undefined;
   let moving = false;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
   let previewPending: Promise<void> | undefined;
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
+  let previewRequestedAt = -Infinity;
+  let previewRevision = 0;
   const preview = document.createElement('img');
   preview.alt = '';
   preview.draggable = false;
@@ -75,22 +77,30 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
   function refreshPreview(): Promise<void> {
     if (previewPending) return previewPending;
     if (disposed || !current?.webContentsId || document.visibilityState !== 'visible') return Promise.resolve();
+    // Cached motion previews are not agent screenshots. Repeated gestures must
+    // not detach/reconfigure native pages several times per second.
+    if (performance.now() - previewRequestedAt < 1000) return Promise.resolve();
     const rect = host.getBoundingClientRect();
     if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return Promise.resolve();
     const tabId = current.activeTabId;
+    const revision = previewRevision;
+    previewRequestedAt = performance.now();
     previewPending = call('preview').then(async url => {
-      if (disposed || current?.activeTabId !== tabId || typeof url !== 'string' || !url.startsWith('data:image/')) return;
+      if (disposed || previewRevision !== revision || current?.activeTabId !== tabId || typeof url !== 'string' || !url.startsWith('data:image/')) return;
       preview.src = url;
       await preview.decode().catch(() => undefined);
-      if (!disposed && current?.activeTabId === tabId) preview.style.visibility = 'visible';
+      if (!disposed && previewRevision === revision && current?.activeTabId === tabId) preview.style.visibility = 'visible';
     }).catch(() => { /* A loading page can be captured after it finishes. */ })
-      .finally(() => { previewPending = undefined; });
+      .finally(() => {
+        previewPending = undefined;
+        if (!disposed && previewRevision !== revision) void refreshPreview();
+      });
     return previewPending;
   }
   function settle() {
     clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
-      if (disposed || interacting) return;
+      if (disposed) return;
       moving = false;
       position();
       void refreshPreview();
@@ -110,6 +120,8 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
       Object.assign(event, { url: state.url, isMainFrame: true }); host.dispatchEvent(event);
     }
     if (documentChanged) {
+      previewRevision++;
+      previewRequestedAt = -Infinity;
       preview.style.visibility = 'hidden';
       host.dispatchEvent(new Event('did-finish-load'));
       // Reads and title updates are not navigations and must not capture at idle.
@@ -118,7 +130,7 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     }
   };
   const ready = call('attach').then((state: State) => {
-    updateState(state); lastGeometry = ''; sentMoving = false; position();
+    updateState(state); lastGeometry = ''; position();
   });
   const frame = Object.assign(host, {
     src: '', getWebContentsId: () => current?.webContentsId ?? 0,
@@ -137,17 +149,24 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     if (event.workspaceId === input.workspaceId && event.nodeId === input.nodeId) updateState(event.state);
   });
 
-  let sentMoving = false;
+  function beginMotion() {
+    if (disposed) return;
+    if (!moving) {
+      moving = true;
+      // Hide using the last geometry. Do not measure the transformed DOM on
+      // every frame while a native surface cannot be presented anyway.
+      if (restingGeometry) {
+        const geometry = { ...restingGeometry, moving: true };
+        lastGeometry = JSON.stringify(geometry);
+        desktop.portalLayout({ ...identity, geometry });
+      }
+    }
+    settle();
+  }
   function position() {
     if (disposed || !host.isConnected) return;
+    if (moving) return;
     const rect = host.getBoundingClientRect();
-    const boundsKey = [rect.x, rect.y, rect.width, rect.height].map(value => Math.round(value * 100) / 100).join(':');
-    if (lastBounds && boundsKey !== lastBounds) { moving = true; settle(); }
-    lastBounds = boundsKey;
-    // While the Canvas moves, the native view stays hidden behind its DOM
-    // preview: one "moving" update is enough. Occlusion, clipping and IPC wait
-    // for the settle, so panning many Portals costs one rect read per frame.
-    if (moving && sentMoving) return;
     let left = Math.max(0, rect.left), top = Math.max(0, rect.top), right = Math.min(innerWidth, rect.right), bottom = Math.min(innerHeight, rect.bottom);
     for (let parent = host.parentElement; parent; parent = parent.parentElement) {
       const style = getComputedStyle(parent);
@@ -179,56 +198,40 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     };
     const serialized = JSON.stringify(geometry);
     if (serialized !== lastGeometry) { lastGeometry = serialized; desktop.portalLayout({ ...identity, geometry }); }
-    sentMoving = geometry.moving;
+    restingGeometry = geometry;
   }
   // Observe the actual transformed ancestors before paint. Polling trails the
   // Canvas by several frames and native views do not inherit DOM transforms.
-  const observer = new ResizeObserver(position); observer.observe(host);
-  const mutations = new MutationObserver(position);
+  const observer = new ResizeObserver(beginMotion); observer.observe(host);
+  const mutations = new MutationObserver(beginMotion);
   for (let element: HTMLElement | null = host; element; element = element.parentElement) {
     mutations.observe(element, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
   }
-  let interactionFrame = 0;
-  let interacting = false;
   const unobserveOverlays = observeOverlays(position);
-  const tick = () => {
-    position();
-    interactionFrame = interacting ? requestAnimationFrame(tick) : 0;
-  };
   const startInteraction = (event: PointerEvent) => {
-    interacting = true;
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest('.svelte-flow') && !target.closest('.nodrag, .svelte-flow__panel, input, button, textarea')) {
-      void refreshPreview();
-      moving = true;
-      position();
+      if (!moving) void refreshPreview();
+      beginMotion();
     }
-    if (!interactionFrame) interactionFrame = requestAnimationFrame(tick);
   };
-  const endInteraction = () => { interacting = false; if (moving) settle(); position(); };
   const wheelInteraction = (event: WheelEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest('.svelte-flow') || target.closest('.nowheel, .svelte-flow__panel')) return;
     if (!moving) void refreshPreview();
-    moving = true; settle(); position();
+    beginMotion();
   };
   document.addEventListener('pointerdown', startInteraction, true);
-  window.addEventListener('pointerup', endInteraction, true);
-  window.addEventListener('pointercancel', endInteraction, true);
-  window.addEventListener('blur', endInteraction);
   window.addEventListener('resize', position);
   document.addEventListener('visibilitychange', position);
   window.addEventListener('scroll', position, true);
   document.addEventListener('wheel', wheelInteraction, { capture: true, passive: true });
   return { destroy() {
-    disposed = true; interacting = false; cancelAnimationFrame(interactionFrame);
+    disposed = true;
     clearTimeout(settleTimer); clearTimeout(previewTimer); preview.remove();
     observer.disconnect(); mutations.disconnect(); unobserveOverlays(); unsubscribe(); window.removeEventListener('scroll', position, true);
     document.removeEventListener('pointerdown', startInteraction, true);
     document.removeEventListener('wheel', wheelInteraction, true);
-    window.removeEventListener('pointerup', endInteraction, true);
-    window.removeEventListener('pointercancel', endInteraction, true);
-    window.removeEventListener('blur', endInteraction);
     window.removeEventListener('resize', position);
     document.removeEventListener('visibilitychange', position);
     input.ready(null);

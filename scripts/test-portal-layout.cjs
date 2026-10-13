@@ -59,7 +59,7 @@ async function main() {
   await parent.loadURL(`http://127.0.0.1:${server.address().port}/host`);
   // Native compositor pixels require a presented window. Do not steal focus.
   parent.showInactive();
-  const bundle = await build({ entryPoints: ['src/lib/components/agent-room/managed-portal-surface.ts'], bundle: true, write: false, platform: 'browser', format: 'iife', globalName: 'PortalSurface' });
+  const bundle = await build({ entryPoints: [process.env.ORKESTRAI_PORTAL_SURFACE_ENTRY || 'src/lib/components/agent-room/managed-portal-surface.ts'], bundle: true, write: false, platform: 'browser', format: 'iife', globalName: 'PortalSurface' });
   await parent.webContents.executeJavaScript(bundle.outputFiles[0].text);
   const dom = code => parent.webContents.executeJavaScript(code);
   const raw = code => executor.userCommand(request, 'inspectScript', { code });
@@ -149,6 +149,8 @@ async function main() {
   const baseline = await raw('({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,wide:matchMedia("(min-width:590px)").matches})');
   const identity = await raw('window.identity');
   const captureCount = captures;
+  await dom(`window.portalRectReads=0;const hostRect=document.getElementById('host').getBoundingClientRect.bind(document.getElementById('host'));document.getElementById('host').getBoundingClientRect=()=>{window.portalRectReads++;return hostRect()};void 0`);
+  const layoutsBeforeMotion = layouts.length;
   await dom(`document.querySelector('header').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:1}));`);
   for (let step = 0; step < 12; step++) {
     await dom(`document.getElementById('node').style.transform='translate(${step * 7}px,${step * 3}px) scale(0.85)'`);
@@ -157,10 +159,13 @@ async function main() {
     assert.equal(clip.getVisible(), false, 'native page must not trail the DOM during movement');
   }
   assert.ok(captures <= captureCount + 1, 'never capture once per frame');
+  assert.ok((await dom('window.portalRectReads')) <= 3, 'moving Portals must not measure DOM geometry on every animation frame');
+  assert.ok(layouts.length - layoutsBeforeMotion <= 1, 'one hidden presentation update per continuous gesture');
   assert.equal((await executor.execute(request)).ok, true, 'agent must retain the same page during motion');
   const screenshot = path.join(os.tmpdir(), 'orkestrai-portal-motion.png');
   fs.writeFileSync(screenshot, (await parent.webContents.capturePage()).toPNG());
-  await dom(`window.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:1}))`);
+  // Native child views can consume pointer-up, and tabs/windows can lose it.
+  // Quiet geometry, not an event receipt, must restore the same live Portal.
   await pause(300);
   assert.equal(layouts.at(-1).moving, false);
   for (let i = 0; i < 60 && !clip.getVisible(); i++) await pause(50);
@@ -169,6 +174,15 @@ async function main() {
   assert.deepEqual(await raw('({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,wide:matchMedia("(min-width:590px)").matches})'), baseline);
   assert.equal(await raw('window.identity'), identity);
   assert.equal(await raw('document.getElementById("message").value'), 'Session preserved');
+  const readsAfterSettle = await dom('window.portalRectReads');
+  const capturesAfterSettle = captures;
+  await pause(300);
+  assert.equal(await dom('window.portalRectReads'), readsAfterSettle, 'a lost pointer-up must not leave an animation loop alive');
+  await dom(`const button=document.createElement('button');button.id='unrelated-click';document.body.append(button);button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:2}));`);
+  await pause(300);
+  assert.equal(await dom('window.portalRectReads'), readsAfterSettle, 'an unrelated input must not start Portal geometry polling');
+  assert.equal(captures, capturesAfterSettle, 'unrelated clicks must not capture the native page');
+  await dom(`window.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:1}));document.getElementById('unrelated-click').remove()`);
   // Same-origin pages used to share setZoomFactor, changing each other's viewport.
   const other = { ...request, nodeId: randomUUID(), profile: { ...request.profile } };
   const otherLease = randomUUID();
@@ -227,7 +241,7 @@ async function main() {
   await pause(120);
   const scrolled = nativeImage.createFromDataURL(await executor.userCommand(request, 'preview', {}));
   const size = scrolled.getSize();
-  assert.ok(Math.max(size.width, size.height) <= 1600, 'preview must remain bounded on high-density displays');
+  assert.ok(Math.max(size.width, size.height) <= 640, 'motion previews must remain small on high-density displays; full screenshots are separate');
   assert.ok(Math.abs(size.width / size.height - 390 / 844) < 0.002, 'preview contains the entire logical viewport, not its clipped native slice');
   const pixels = scrolled.toBitmap();
   const color = [...pixels.subarray((20 * size.width + 20) * 4, (20 * size.width + 20) * 4 + 3)];

@@ -635,7 +635,7 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     if (method === 'navigate') { await load(tab, args.url, 30000); return state(managed); }
     if (method === 'inspectScript') { requireOpen(tab); return nativeOperation(tab, tab.window.webContents.executeJavaScript(String(args.code), true)); }
     if (method === 'capture') return (await capturePage(tab, args.rect)).dataUrl;
-    if (method === 'preview') return (await capturePage(tab, undefined, 1600)).dataUrl;
+    if (method === 'preview') return (await capturePage(tab, undefined, 640)).dataUrl;
     if (method === 'state') return state(managed);
     if (method === 'pause' || method === 'resume') { managed.pauseLocked = method === 'pause'; return state(managed); }
     if (method === 'activate') {

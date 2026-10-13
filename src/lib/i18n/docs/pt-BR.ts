@@ -990,9 +990,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: 'Não lançado · 0.42.0', title: 'Orkestrai 0.42.0: Hosts dos Portais e instalação local verificada', summary: 'Agentes configuram hosts; apps de rollback não disputam a abertura com o instalado.', items: [
+      'Portais não consultam mais a geometria a cada quadro nem ficam ocultos quando se perde o pointerup. Transformações do canvas ocultam a view nativa uma vez e restauram o mesmo documento ao estabilizar, preservando entrada, acesso dos agentes e restrições explícitas.',
+      'Canvas densos adiam a pintura dos corpos dos nós sem foco e dos controles secundários do cabeçalho durante o movimento. Zoom de visão geral abaixo de 0,2 também adia a pintura ilegível dos terminais, não o PTY vivo nem sua saída. Nós e rascunhos continuam montados; a pintura do movimento volta após 150 ms de geometria estável.',
+      'Prévias privadas de movimento dos Portais reutilizam cache de um segundo e são limitadas a 640 pixels. Mudanças de documento invalidam o cache e capturas atrasadas não substituem uma prévia nova. Screenshots completos dos agentes e a página nativa ao vivo não mudam.',
       'portal_configure_hosts e canvas portal-hosts permitem a líderes e especialistas atribuídos configurar hosts exatos em qualquer workspace. Revisão do perfil e escrita serializada preservam concessões, pausas e estado do navegador; políticas explícitas continuam valendo.',
       'O instalador local macOS verifica cópia, arquitetura, assinatura, entitlements e o novo Core antes de manter um único rollback compactado fora de Applications. Encerramento direcionado fecha Portais/Core normalmente.',
-      'A saturação observada de CPU vinha de um app antigo 0.40.0 de rollback, com 0.41.1 instalado. O app atual tem CPU baixa medida após reiniciar; não afirmamos corrigido um vazamento do renderer após horas de uso.',
+      'A saturação de CPU também foi reproduzida no renderer canônico 0.42.0, com pintura e GC major nas amostras nativas. Reiniciar e testar gestos não prova, por si só, resolvida a falha de sessão prolongada.',
     ] },
     { date: '12 de outubro de 2026 · 0.41.1', title: 'Orkestrai 0.41.1: Portais sem bloqueio por visibilidade', summary: 'Segundo plano é o padrão, não outro pedido de permissão.', items: [
       'Navegação e atualizações de abas não substituem concessões ou pausas atuais por configurações antigas do renderer. O Canvas envia só os campos alterados; o ORM mescla patches de Portal serializados com o registro atual. Os outros tipos de nó mantêm o comportamento de substituição existente.',

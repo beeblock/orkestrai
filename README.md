@@ -49,6 +49,15 @@ Managed startup is submitted once per live PTY, including off-screen nodes, and 
 proof that the server is healthy. Explicit pauses and external OS consent remain
 separate. Confirmed Codex terminal `/model` choices survive cold resume and reload.
 
+Dense-canvas navigation retains nodes and drafts while temporarily deferring
+unfocused node body and secondary header paint until viewport motion settles.
+Overview zoom defers unreadable terminal paint, not the live PTY or its output.
+Managed Portals reuse cached geometry and small, rate-limited movement previews,
+and restore the same live page without
+depending on a pointer-up event. Native input/session regression tests and
+loaded-image fixtures cover these paths; a fresh restart is not evidence that
+long-session CPU saturation is resolved.
+
 ## Startup recovery
 
 If the app cannot start, use its native recovery dialog to download the latest
