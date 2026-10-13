@@ -986,9 +986,12 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: 'Unreleased · 0.42.0', title: 'Orkestrai 0.42.0: Portal hosts and verified local installation', summary: 'Agents can configure Portal hosts; local rollback bundles no longer compete with the installed app.', items: [
+      'Portals no longer poll geometry on every animation frame or stay hidden after a lost pointer-up. Canvas transforms hide the native page once and restore the same document after geometry settles, preserving input, agent access and explicit restrictions.',
+      'Dense canvases defer unfocused node bodies and secondary header controls during movement. Overview zoom below 0.2 also defers unreadable terminal paint, not the live PTY or its output. Nodes and drafts remain mounted; motion paint restores after 150 ms of quiet geometry.',
+      'Private Portal movement previews reuse a one-second cache and are bounded to 640 pixels. Document changes invalidate it and stale captures cannot replace a newer preview. Full agent screenshots and the live native page are unchanged.',
       'portal_configure_hosts and canvas portal-hosts let assigned leaders and specialists configure exact hosts in every workspace. Current profile revisions and serialized writes preserve grants, pauses and browser state; explicit policies still apply.',
       'The local macOS installer verifies copy, architecture, signatures, entitlements and the new Core before retaining one compact rollback outside Applications. Targeted termination uses orderly Portal/Core shutdown.',
-      'Observed CPU saturation came from an old 0.40.0 rollback app while 0.41.1 was installed. The current app has low measured CPU after restarting; a long-running renderer leak is not claimed fixed.',
+      'CPU saturation was also reproduced in the canonical 0.42.0 renderer, with native samples showing painting and major GC. Restarting and gesture tests alone do not prove the long-session failure resolved.',
     ] },
     { date: 'October 12, 2026 · 0.41.1', title: 'Orkestrai 0.41.1: Portal work without visibility blockers', summary: 'Background control is the default, not another permission request.', items: [
       'Navigation and tab updates no longer replace live grants or pauses with stale renderer settings. The Canvas sends only changed browser fields; the ORM merges serialized Portal patches with the current record. Other node types retain their existing replacement behavior.',

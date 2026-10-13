@@ -14,11 +14,14 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Restore the same live Portal after canvas movement without depending on a pointer-up event. Remove global per-Portal animation polling on unrelated clicks; hide once using cached geometry and measure clipping only after transforms settle. Preserve page state, native input, agent access and explicit restrictions.
+- Skip painting unfocused node bodies and secondary header controls while navigating a dense canvas, then restore them after 150 ms of quiet viewport geometry. At overview zoom below 0.2, defer unreadable unfocused terminal body paint while retaining the live PTY, input, output and header. Keep every node, draft, subscription and agent process alive. Exercise 208 loaded PNGs, 188 long notes and native Portal drag/zoom with lost-pointer-up regression coverage; empty-image fixtures do not establish real-world performance.
+- Reuse private Portal movement previews for one second and bound them to 640 pixels instead of repeatedly detaching and recapturing native pages. Document changes invalidate the cache and stale asynchronous captures cannot replace a newer preview. Keep full agent screenshots and live native-page fidelity unchanged.
 - Route targeted macOS termination through normal app shutdown so local replacement closes managed Portals and the Core rather than orphaning the server. Register only the canonical installed app; do not leave launchable rollback bundles in `/Applications`.
 
 ### Known limitations
 
-- CPU saturation was measured in an old 0.40.0 rollback bundle despite 0.41.1 being installed. Restarting the canonical current app restores low CPU in the observed session; this is not proof of a sustained renderer leak fix. Keep long-running and dense-canvas performance checks before release.
+- CPU saturation was reproduced in the canonical 0.42.0 renderer after the earlier old-rollback observation. Native samples show sustained painting and major-GC workers. Gesture and Portal lifecycle fixes do not by themselves prove the entire long-session GC failure resolved; keep native dense-canvas and sustained-session checks before release.
 
 ## 0.41.1 - 2026-10-12
 

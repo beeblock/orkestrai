@@ -172,7 +172,7 @@
     {/if}
   </header>
 
-  <div class="node-body {deferOffscreen ? '[content-visibility:auto] [contain-intrinsic-size:auto_300px]' : ''}">
+  <div class="node-body" class:deferred-body={deferOffscreen}>
     {@render children()}
   </div>
 </div>
@@ -364,6 +364,24 @@
     flex-direction: column;
     overflow: hidden;
     border-radius: 0 0 10px 10px;
+  }
+
+  .deferred-body {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 300px;
+  }
+
+  /* Keep DOM, drafts, subscriptions and dimensions; only skip expensive
+     subtree paint while navigating a dense canvas. Headers stay visible. */
+  :global(.svelte-flow[data-canvas-moving='true']) .node-body:not(:focus-within),
+  :global(.svelte-flow[data-canvas-overview='true']) .node-shell:global(.canvas-terminal) .node-body:not(:focus-within) {
+    content-visibility: hidden;
+    contain-intrinsic-size: auto 300px;
+  }
+
+  :global(.svelte-flow[data-canvas-moving='true']) .node-header:not(:focus-within) .node-actions,
+  :global(.svelte-flow[data-canvas-moving='true']) .node-header:not(:focus-within) .connections-badge {
+    visibility: hidden;
   }
 
   .node-shell :global(.node-action-btn) {

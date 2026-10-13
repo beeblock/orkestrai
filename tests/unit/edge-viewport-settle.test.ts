@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createViewportSettler, sameViewport, VIEWPORT_SETTLE_MS } from '$lib/components/agent-room/canvas/viewport-settle.js';
+import { createViewportSettler, isCanvasOverview, sameViewport, VIEWPORT_SETTLE_MS } from '$lib/components/agent-room/canvas/viewport-settle.js';
 import { edgeIntersectsViewport } from '$lib/components/agent-room/canvas/edge-performance.js';
 
 describe('settled canvas viewport', () => {
@@ -40,5 +40,36 @@ describe('settled canvas viewport', () => {
     expect(edgeIntersectsViewport(anchors, { x: -5_000, y: 0, zoom: 1 }, 1200, 800)).toBe(false);
     expect(sameViewport(null, null)).toBe(true);
     expect(sameViewport({ x: 0, y: 0, zoom: 1 }, null)).toBe(false);
+  });
+
+  it('signals motion only at its boundaries and restores paint without a pointer-up', () => {
+    const settled = vi.fn();
+    const motion = vi.fn();
+    const settler = createViewportSettler(settled, VIEWPORT_SETTLE_MS, motion);
+    settler.push({ x: 0, y: 0, zoom: 1 });
+    vi.advanceTimersByTime(VIEWPORT_SETTLE_MS);
+    expect(motion).not.toHaveBeenCalled();
+    for (let frame = 1; frame <= 120; frame++) {
+      settler.push({ x: frame, y: frame, zoom: 1 });
+      vi.advanceTimersByTime(16);
+    }
+    expect(motion.mock.calls).toEqual([[true]]);
+    vi.advanceTimersByTime(VIEWPORT_SETTLE_MS);
+    expect(motion.mock.calls).toEqual([[true], [false]]);
+    // A gesture ending at its original viewport still restores paint.
+    settler.push({ x: 400, y: 0, zoom: 1 });
+    settler.push({ x: 120, y: 120, zoom: 1 });
+    vi.advanceTimersByTime(VIEWPORT_SETTLE_MS);
+    expect(motion.mock.calls).toEqual([[true], [false], [true], [false]]);
+    expect(settled).toHaveBeenCalledTimes(2);
+    settler.push({ x: 500, y: 0, zoom: 1 });
+    settler.cancel();
+    expect(motion.mock.calls.at(-1)).toEqual([false]);
+  });
+
+  it('defers unreadable overview terminal paint, not readable or invalid viewports', () => {
+    expect(isCanvasOverview(0.05)).toBe(true);
+    expect(isCanvasOverview(0.199)).toBe(true);
+    for (const zoom of [0, -1, 0.2, 1, 4, NaN, Infinity]) expect(isCanvasOverview(zoom)).toBe(false);
   });
 });
