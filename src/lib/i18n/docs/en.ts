@@ -986,6 +986,9 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: 'Unreleased · 0.42.0', title: 'Orkestrai 0.42.0: Portal hosts and verified local installation', summary: 'Agents can configure Portal hosts; local rollback bundles no longer compete with the installed app.', items: [
+      'Connections keep solid geometry and activity colors during pan/zoom and overview, avoiding native dash subdivision even on small canvases. Readable idle zoom restores the pattern; settled offscreen connections skip paint without deleting relationships or selected/pinned controls.',
+      'CSS-hidden terminal bodies now batch TUI DOM updates instead of redrawing every output chunk. Live PTYs and ordered output remain intact; existing periodic/backlog bounds apply, focus flushes immediately, and stable visibility restores live drawing.',
+      'Highly connected nodes share floating-anchor calculations with their connections instead of rescanning the same neighbors per edge. Four immutable snapshots bound retention; node/edge updates invalidate the calculation and regression tests drag a high-degree hub.',
       'Portals no longer poll geometry on every animation frame or stay hidden after a lost pointer-up. Canvas transforms hide the native page once and restore the same document after geometry settles, preserving input, agent access and explicit restrictions.',
       'Dense canvases defer unfocused node bodies and secondary header controls during movement. Overview zoom below 0.2 also defers unreadable terminal paint, not the live PTY or its output. Nodes and drafts remain mounted; motion paint restores after 150 ms of quiet geometry.',
       'Private Portal movement previews reuse a one-second cache and are bounded to 640 pixels. Document changes invalidate it and stale captures cannot replace a newer preview. Full agent screenshots and the live native page are unchanged.',

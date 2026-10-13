@@ -1,8 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { edgeIntersectsViewport, edgePerformanceProfile, normalizeEdgeRenderingPreference, staticEdgePath } from '$lib/components/agent-room/canvas/edge-performance.js';
-import { connectedEdgesFor, nodeIndexFor } from '$lib/components/agent-room/canvas/floating-anchor.js';
+import { connectedEdgesFor, floatingAnchorFor, floatingAnchorForSnapshot, nodeIndexFor } from '$lib/components/agent-room/canvas/floating-anchor.js';
 
 describe('adaptive canvas edge performance', () => {
+  it('computes a 189-connection hub anchor once per immutable snapshot', () => {
+    let reads = 0;
+    const nodes = Array.from({ length: 190 }, (_, i) => ({
+      id: String(i), get position() { reads++; return { x: i * 400, y: i * 100 }; }, width: 320, height: 200,
+    }));
+    const edges = nodes.slice(1).map(node => ({ source: '0', target: node.id }));
+    const first = floatingAnchorForSnapshot('0', nodes, edges);
+    const firstReads = reads;
+    for (let i = 0; i < 189; i++) expect(floatingAnchorForSnapshot('0', nodes, edges)).toBe(first);
+    expect(reads).toBe(firstReads);
+    expect(firstReads).toBeLessThan(1_000);
+    const moved = nodes.map(node => node.id === '0' ? { ...node, position: { x: 900, y: 600 } } : node);
+    expect(floatingAnchorForSnapshot('0', moved, edges)).toEqual(floatingAnchorFor('0', moved, edges));
+    expect(floatingAnchorForSnapshot('0', moved, edges)).not.toEqual(first);
+    const replaced = [{ source: '0', target: '189' }];
+    expect(floatingAnchorForSnapshot('0', moved, replaced)).toEqual(floatingAnchorFor('0', moved, replaced));
+  });
+
+  it('bounds snapshot retention and keeps uncached mutable geometry correct', () => {
+    const a = [{ id: 'a', position: { x: 0, y: 0 } }, { id: 'b', position: { x: 300, y: 0 } }];
+    const edges = [{ source: 'a', target: 'b' }];
+    const first = floatingAnchorForSnapshot('a', a, edges);
+    for (let i = 0; i < 5; i++) floatingAnchorForSnapshot('a', a.map(node => ({ ...node })), edges);
+    expect(floatingAnchorForSnapshot('a', a, edges)).not.toBe(first);
+    const before = floatingAnchorFor('a', a, edges);
+    a[1].position.y = 500;
+    expect(floatingAnchorFor('a', a, edges)).not.toEqual(before);
+  });
   it('keeps full rope physics for ordinary workspaces', () => {
     expect(edgePerformanceProfile({ edgeCount: 40, documentVisible: true, inViewport: true, reducedMotion: false, emphasized: false })).toMatchObject({
       mode: 'physics', segments: 12, iterations: 4, fps: 60,

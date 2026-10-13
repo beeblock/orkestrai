@@ -52,6 +52,13 @@ separate. Confirmed Codex terminal `/model` choices survive cold resume and relo
 Dense-canvas navigation retains nodes and drafts while temporarily deferring
 unfocused node body and secondary header paint until viewport motion settles.
 Overview zoom defers unreadable terminal paint, not the live PTY or its output.
+Those invisible TUIs also batch DOM updates instead of rebuilding hidden rows
+for every output chunk; focus flushes immediately and visible terminals resume.
+Connections remain solid while panning/zooming and in overview, avoiding native
+dash subdivision; readable idle zoom restores their decorative pattern.
+Settled offscreen connections skip paint without removing graph relationships.
+Highly connected leaders share bounded anchor calculations across their handles
+and connections, rather than repeatedly scanning the same neighbors per edge.
 Managed Portals reuse cached geometry and small, rate-limited movement previews,
 and restore the same live page without
 depending on a pointer-up event. Native input/session regression tests and
