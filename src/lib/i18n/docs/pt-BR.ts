@@ -989,6 +989,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'Ainda não publicado', title: 'CPU estável com o Simulador iOS', summary: 'O nó Mobile não leva mais o Canvas a coletas de lixo constantes.', items: [
+      'A tela do Simulador iOS não deixa mais o Canvas mais lento quanto mais tempo fica aberta. O Chromium contava cada quadro transmitido para uma imagem como memória até ela fechar, o que depois de horas forçava várias coletas de lixo completas por segundo em todos os núcleos. Agora a tela é desenhada quadro a quadro a partir de um stream cancelável e para assim que o nó sai da vista.',
+    ] },
     { date: '13 de outubro de 2026 · 0.42.0', title: 'Orkestrai 0.42.0: Navegação mais rápida no canvas e configuração nativa dos Portais', summary: 'Menos pintura de conexões e terminais ocultos; agentes configuram hosts dos Portais e a instalação local é verificada.', items: [
       'Imagens PNG/JPEG/BMP usam bitmaps de exibição de até 256 pixels em cache no zoom de visão geral, evitando rasterizar arquivos grandes repetidamente. Originais continuam montados e voltam no zoom legível, seleção ou revisão. Proporção, alpha, masters, arquivos e referências dos agentes não mudam; sem desenho por quadro nem cache em disco. Formatos conhecidos animados/vetoriais mantêm o renderer original.',
       'Conexões mantêm geometria sólida e cores de atividade durante arraste/zoom e visão geral, evitando subdivisão nativa do tracejado mesmo em canvas pequenos. Zoom legível parado restaura o padrão; conexões fora da tela estabilizada deixam de pintar sem excluir relações ou controles selecionados/fixados.',

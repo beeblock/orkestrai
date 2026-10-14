@@ -39,6 +39,7 @@
   import * as Tabs from '$lib/components/ui/tabs';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import AndroidDeviceStream from './AndroidDeviceStream.svelte';
+  import MjpegDeviceStream from './MjpegDeviceStream.svelte';
   import { fitDeviceViewportScale, stepDeviceViewportScale } from './device-viewport.js';
   import type {
     DeviceCommandInput,
@@ -263,15 +264,9 @@
     streamVersion += 1;
   }
 
-  function streamLoaded(eventOrWidth: Event | number, height?: number): void {
-    if (typeof eventOrWidth === 'number') {
-      streamWidth = eventOrWidth;
-      streamHeight = height ?? 0;
-    } else {
-      const image = eventOrWidth.currentTarget as HTMLImageElement;
-      streamWidth = image.naturalWidth;
-      streamHeight = image.naturalHeight;
-    }
+  function streamLoaded(width: number, height: number): void {
+    streamWidth = width;
+    streamHeight = height;
     streamError = false;
   }
 
@@ -537,13 +532,11 @@
                 onpointercancel={() => (pointerStart = null)}
               />
             {:else if streamUrl}
-              <img
-                src={streamUrl}
+              <MjpegDeviceStream
+                {streamUrl}
                 alt={m['device.stream_alt']({ device: session.deviceName })}
-                class="block max-h-none max-w-none touch-none select-none rounded-[18px] object-contain"
                 style={streamImageStyle}
-                draggable="false"
-                onload={streamLoaded}
+                onloaded={streamLoaded}
                 onerror={() => (streamError = true)}
                 onpointerdown={pointerDown}
                 onpointerup={pointerUp}
