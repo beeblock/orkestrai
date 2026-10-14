@@ -47,6 +47,10 @@ describe('agent adapter registry', () => {
     expect(getAgentAdapter('antigravity').displayName).toBe('Antigravity');
     expect(getAgentAdapter('cline').displayName).toBe('Cline');
     expect(getAgentAdapter('devin').displayName).toBe('Devin');
+    expect(hasAgentAdapter('pi')).toBe(true);
+    expect(hasAgentAdapter('omp')).toBe(true);
+    expect(getAgentAdapter('pi').displayName).toBe('Pi');
+    expect(getAgentAdapter('omp').displayName).toBe('Oh My Pi');
     for (const id of expected) {
       const setup = getAgentAdapter(id).setup;
       expect(setup.docsUrl).toMatch(/^https:\/\//);
@@ -103,6 +107,14 @@ describe('agent adapter registry', () => {
     const kimi = materializeInteractiveAgentCommand({ provider: 'kimi', args: [] }, role).payload;
     expect(kimi.initialRoleArgs).toEqual(['--agent-file', role.instructionFile]);
 
+
+    const pi = materializeInteractiveAgentCommand({ provider: 'pi', args: [] }, role).payload;
+    expect(pi.initialRoleArgs).toEqual(['--append-system-prompt', role.prompt]);
+    expect(pi.roleConfiguredAtLaunch).toBe('Revisor');
+
+    const omp = materializeInteractiveAgentCommand({ provider: 'omp', args: [] }, role).payload;
+    expect(omp.initialRoleArgs).toEqual(['--append-system-prompt', role.prompt]);
+    expect(omp.roleConfiguredAtLaunch).toBe('Revisor');
     const fallback = materializeInteractiveAgentCommand({ provider: 'opencode', args: [] }, role).payload;
     expect(fallback.initialRoleArgs).toBeUndefined();
     expect(fallback.roleConfiguredAtLaunch).toBeUndefined();

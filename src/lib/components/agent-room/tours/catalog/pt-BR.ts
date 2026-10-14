@@ -7,6 +7,11 @@ import type { Tour } from '../types.js';
  */
 export const TOURS_PT: Tour[] = [
   {"id":"portal-host-configuration","icon":"Globe","title":"Configurar hosts dos Portais","tagline":"Agentes ajustam os hosts da tarefa sem intervenção manual do dono.","steps":[{"id":"read","title":"Ler a revisão do Portal","body":"Atribua a tarefa ativa ao agente. Leia portal.revision em canvas_list, não a revisão do layout. Restrições explícitas do usuário continuam valendo."},{"id":"configure","title":"Configurar hosts exatos","body":"Chame portal_configure_hosts ou canvas portal-hosts com taskId, nodeId, revision e allowedHosts. Use hosts, não URLs ou portas. localhost, 127.0.0.1 e [::1] são nomes distintos."},{"id":"verify","title":"Verificar e continuar","body":"A operação preserva abas, pausas, controle e concessões de agentes. Releia a revisão em conflito e verifique navegação. Continue outros cards executáveis."}]},
+  { id: 'pi-omp-collaboration', icon: 'Terminal', title: 'Colaboração com Pi e Oh My Pi', tagline: 'Orquestre especialistas usando Pi e Oh My Pi no mesmo time.', steps: [
+    { id: 'create-pi', title: 'Criar terminal Pi', body: 'Selecione o provider Pi no diálogo de Novo agente para iniciar um especialista veloz com suporte a ferramentas e sessões.' },
+    { id: 'create-omp', title: 'Criar terminal Oh My Pi', body: 'Inicie um terminal com o provider Oh My Pi para atuar como revisor ou executor integrado ao mesmo workspace.' },
+    { id: 'cross-ask', title: 'Comunicar via ponte nativa', body: 'Use orkestrai ask para enviar mensagens entre eles. A bridge identifica remetente e destinatário e confirma as respostas no quadro.' },
+  ] },
   { id: 'native-shell-repair', icon: 'Terminal', title: 'Corrigir Shells', tagline: 'Agentes podem corrigir comandos iniciais.', steps: [
     { id: 'read', title: 'Ler configuração', body: 'Use canvas_list e shell.revision, não a revisão do layout. Atribua o card ativo ao executor. Sem permissão do Computer.' },
     { id: 'edit', title: 'Editar sem interromper', body: 'shell_update altera startupCommand, cwd ou título sem digitar no processo vivo. Outros comandos e ambiente continuam intactos.' },
