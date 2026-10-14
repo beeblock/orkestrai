@@ -7,6 +7,19 @@ import { portalProfileFromPayload } from '../../src/lib/modules/agent-room/contr
 const require = createRequire(import.meta.url);
 const { createManagedPortalExecutor } = require('../../electron/managed-portal.cjs');
 
+type FakeImage = {
+  toDataURL: () => string; getSize: () => { width: number; height: number }; isEmpty: () => boolean;
+  resize: (size: { width: number; height: number }) => FakeImage; toJPEG: (quality: number) => Buffer;
+};
+
+function nativeImage(width: number, height: number): FakeImage {
+  return {
+    toDataURL: () => 'data:image/png;base64,', getSize: () => ({ width, height }), isEmpty: () => false,
+    resize: vi.fn((size: { width: number; height: number }) => nativeImage(size.width, size.height)),
+    toJPEG: () => Buffer.from(`jpeg:${width}x${height}`),
+  };
+}
+
 class Contents extends EventEmitter {
   id = Math.random();
   url = 'about:blank';
@@ -17,7 +30,7 @@ class Contents extends EventEmitter {
   isDestroyed() { return this.destroyed; }
   setZoomFactor = vi.fn();
   getZoomFactor = () => 1;
-  capturePage = vi.fn(async () => ({ toDataURL: () => 'data:image/png;base64,', getSize: () => ({ width: 800, height: 600 }) }));
+  capturePage = vi.fn(async (_rect?: unknown, _options?: unknown): Promise<any> => nativeImage(800, 600));
   debugger = { isAttached: () => true, sendCommand: vi.fn(async (_method: string, _parameters?: Record<string, unknown>): Promise<any> => ({})) };
   setWindowOpenHandler(handler: typeof this.handler) { this.handler = handler; }
   async loadURL(url: string) {
@@ -84,7 +97,7 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
-  it('bounds private motion previews without reducing full agent screenshots', async () => {
+  it('copies motion previews from the presented frame without detaching the page or reducing agent screenshots', async () => {
     const { executor, request, contents, lease } = await setup();
     executor.setGeometry(request.workspaceId, request.nodeId, {
       bounds: { x: 100, y: 100, width: 800, height: 600 },
@@ -101,10 +114,29 @@ describe('embedded Portal surface lifecycle', () => {
       png.writeUInt32BE(Math.round(clip.height * clip.scale * 2), 20);
       return { data: png.toString('base64') };
     });
-    const preview = await executor.userCommand(request, 'preview', {});
-    const previewBytes = Buffer.from(preview.split(',')[1], 'base64');
-    expect(previewBytes.readUInt32BE(16)).toBe(640);
-    expect(previewBytes.readUInt32BE(20)).toBe(480);
+    const view = ContentsView.instances[0];
+    const commands = contents.debugger.sendCommand.mock.calls.length;
+    const frame = nativeImage(1600, 1200);
+    contents.capturePage.mockResolvedValueOnce(frame);
+    const preview = await executor.userCommand(request, 'preview', { maxDimension: 1000 });
+    expect(contents.capturePage).toHaveBeenLastCalledWith(undefined, { stayHidden: true });
+    expect(frame.resize).toHaveBeenCalledWith(expect.objectContaining({ width: 1000, height: 750 }));
+    expect(Buffer.from(preview.split(',')[1], 'base64').toString()).toBe('jpeg:1000x750');
+    // No logical-page capture, device-metrics reset or re-presentation.
+    expect(contents.debugger.sendCommand).toHaveBeenCalledTimes(commands);
+    expect(view.visible).toBe(true);
+
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 100, y: 100, width: 800, height: 600 },
+      clip: { x: 100, y: 100, width: 500, height: 350 },
+      viewport: { width: 800, height: 600 }, zoom: 1, visible: true,
+    }, lease);
+    await new Promise(resolve => setImmediate(resolve));
+    const captures = contents.capturePage.mock.calls.length;
+    // A clipped frame would be stretched over the node; keep the last preview.
+    expect(await executor.userCommand(request, 'preview', { maxDimension: 1000 })).toBeNull();
+    expect(contents.capturePage).toHaveBeenCalledTimes(captures);
+
     expect(await executor.execute({ ...request, action: 'screenshot' })).toMatchObject({ ok: true });
     const screenshot = contents.debugger.sendCommand.mock.calls.filter(([method]) => method === 'Page.captureScreenshot').at(-1)!;
     expect(screenshot[1]).toMatchObject({ clip: { width: 800, height: 600, scale: 1 } });
@@ -396,7 +428,7 @@ describe('embedded Portal surface lifecycle', () => {
       if (++captures === 1) return new Promise(resolve => { finish = resolve; });
       return data;
     });
-    const first = executor.userCommand(request, 'preview', {});
+    const first = executor.userCommand(request, 'capture', {});
     const second = executor.userCommand(request, 'capture', {});
     await new Promise(resolve => setImmediate(resolve));
     expect(captures).toBe(1);
@@ -425,7 +457,7 @@ describe('embedded Portal surface lifecycle', () => {
     });
     let painted!: (image: Awaited<ReturnType<Contents['capturePage']>>) => void;
     contents.capturePage.mockImplementationOnce(() => new Promise(resolve => { painted = resolve; }));
-    const capture = executor.userCommand(request, 'preview', {});
+    const capture = executor.userCommand(request, 'capture', {});
     const result = expect(capture).rejects.toThrow('Screenshot failed');
     await new Promise(resolve => setImmediate(resolve));
     expect(clip.children.has(view)).toBe(true);
