@@ -5,6 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Added
+- Add first-class support for Pi and Oh My Pi (omp) agent providers: headless execution, interactive PTY sessions, dynamic provider discovery, thinking/effort controls, native system prompt injection via `--append-system-prompt`, and isolated session management.
+- Enable cross-provider communication between Pi, Oh My Pi, and other agents via `orkestrai ask` and the native bridge, preserving agent identity through `ORKESTRAI_NODE_ID` and environment inheritance.
+- Document Pi and Oh My Pi collaboration with a guided use case and tour in all three languages.
+
 ## 0.42.0 - 2026-10-13
 
 ### Added

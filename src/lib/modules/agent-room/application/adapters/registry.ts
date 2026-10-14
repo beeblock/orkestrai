@@ -8,6 +8,8 @@ import { antigravityAdapter } from './AntigravityAdapter.js';
 import { clineAdapter } from './ClineAdapter.js';
 import { devinAdapter } from './DevinAdapter.js';
 import { copilotAdapter } from './CopilotAdapter.js';
+import { piAdapter } from './PiAdapter.js';
+import { ohMyPiAdapter } from './OhMyPiAdapter.js';
 
 /**
  * Registry de adaptadores de agente. Novos providers (kimi, opencode, ...)
@@ -100,3 +102,5 @@ registerAgentAdapter(antigravityAdapter);
 registerAgentAdapter(clineAdapter);
 registerAgentAdapter(devinAdapter);
 registerAgentAdapter(copilotAdapter);
+registerAgentAdapter(piAdapter);
+registerAgentAdapter(ohMyPiAdapter);

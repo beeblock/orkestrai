@@ -3,6 +3,11 @@ import type { Tour } from '../types.js';
 /** Tour catalog in English — mirror of pt-BR.js (same ids and structure). */
 export const TOURS_EN: Tour[] = [
   {"id":"portal-host-configuration","icon":"Globe","title":"Configure Portal hosts","tagline":"Agents adjust task-required hosts without a manual owner workaround.","steps":[{"id":"read","title":"Read the Portal revision","body":"Assign the active task to the agent. Read portal.revision from canvas_list, not the layout revision. Explicit owner restrictions remain authoritative."},{"id":"configure","title":"Configure exact hosts","body":"Call portal_configure_hosts or canvas portal-hosts with taskId, nodeId, revision and allowedHosts. Use exact hosts, not URLs or ports. localhost, 127.0.0.1 and [::1] are distinct names."},{"id":"verify","title":"Verify and continue","body":"The operation preserves tabs, pauses, control and agent grants. Read the new revision on conflict and verify navigation. Continue other executable cards."}]},
+  { id: 'pi-omp-collaboration', icon: 'Terminal', title: 'Collaboration with Pi and Oh My Pi', tagline: 'Orchestrate specialists using Pi and Oh My Pi in the same team.', steps: [
+    { id: 'create-pi', title: 'Create Pi terminal', body: 'Select the Pi provider in the New agent dialog to launch a fast specialist with tool and session support.' },
+    { id: 'create-omp', title: 'Create Oh My Pi terminal', body: 'Launch a terminal with the Oh My Pi provider to act as a reviewer or executor integrated in the same workspace.' },
+    { id: 'cross-ask', title: 'Communicate via native bridge', body: 'Use orkestrai ask to send messages between them. The bridge identifies sender and recipient and confirms answers on the board.' },
+  ] },
   { id: 'native-shell-repair', icon: 'Terminal', title: 'Correct Shells', tagline: 'Agents can correct startup commands.', steps: [
     { id: 'read', title: 'Read configuration', body: 'Use canvas_list and shell.revision, not the layout revision. Assign the active task to the acting agent. No Computer grant is needed.' },
     { id: 'edit', title: 'Edit without interruption', body: 'shell_update changes startupCommand, cwd or title without typing into the live process. Other commands and environment remain intact.' },
