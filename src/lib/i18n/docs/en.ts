@@ -985,8 +985,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Unreleased', title: 'Steady CPU with the iOS Simulator', summary: 'The Mobile node no longer drives the Canvas into constant garbage collection.', items: [
+    { date: 'Unreleased', title: 'Steady CPU with the iOS Simulator and a stable Portal', summary: 'The Mobile node no longer drives the Canvas into constant garbage collection, and Portals stop blinking and blurring.', items: [
       'The iOS Simulator screen no longer makes the Canvas slower the longer it stays open. Chromium counted every streamed frame of an image as memory until the image closed, which after hours forced several full garbage collections per second on every core. The screen is now drawn frame by frame from a cancellable stream and stops as soon as the node leaves the view.',
+      'Portals keep the live page on screen during clicks, selection and other changes that do not move them; the movement preview appears only when a drag, pan or zoom actually starts. Previews copy the frame already on screen at full resolution instead of recapturing the page, which made it blink and look blurred. Agent screenshots are unchanged.',
     ] },
     { date: 'October 13, 2026 · 0.42.0', title: 'Orkestrai 0.42.0: Faster canvas navigation and native Portal configuration', summary: 'Reduce connection and hidden-terminal paint work; agents configure Portal hosts and local installation is verified.', items: [
       'PNG/JPEG/BMP images use cached, display-only 256-pixel bitmaps at overview zoom instead of repeatedly rasterizing full-size files. Originals stay mounted and return at readable zoom, selection or review. Aspect ratio, alpha, masters, files and agent references are unchanged; no per-frame drawing or disk cache. Known animated/vector formats keep their original renderer.',

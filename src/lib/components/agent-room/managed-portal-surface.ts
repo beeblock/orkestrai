@@ -46,6 +46,11 @@ function observeOverlays(listener: () => void) {
   };
 }
 
+/** Same inward rounding as the native clip, so equal rects compare equal. */
+function nativeBounds(rect: DOMRect) {
+  return { x: Math.ceil(rect.x), y: Math.ceil(rect.y), width: Math.max(1, Math.floor(rect.right) - Math.ceil(rect.x)), height: Math.max(1, Math.floor(rect.bottom) - Math.ceil(rect.y)) };
+}
+
 function isPresented(element: Element) {
   return element.getClientRects().length > 0 && !element.hasAttribute('hidden')
     && element.getAttribute('data-state') !== 'closed' && !element.hasAttribute('data-closed')
@@ -85,7 +90,9 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     const tabId = current.activeTabId;
     const revision = previewRevision;
     previewRequestedAt = performance.now();
-    previewPending = call('preview').then(async url => {
+    // Match the on-screen pixels: a smaller preview looks blurred while moving.
+    const maxDimension = Math.min(4096, Math.max(160, Math.ceil(Math.max(rect.width, rect.height) * (devicePixelRatio || 1))));
+    previewPending = call('preview', { maxDimension }).then(async url => {
       if (disposed || previewRevision !== revision || current?.activeTabId !== tabId || typeof url !== 'string' || !url.startsWith('data:image/')) return;
       preview.src = url;
       await preview.decode().catch(() => undefined);
@@ -189,7 +196,7 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     const geometry = {
       // Use the same inward rounding as clip so fractional Canvas positions do
       // not look like left/top clipping and unnecessarily disable interaction.
-      bounds: { x: Math.ceil(rect.x), y: Math.ceil(rect.y), width: Math.max(1, Math.floor(rect.right) - Math.ceil(rect.x)), height: Math.max(1, Math.floor(rect.bottom) - Math.ceil(rect.y)) },
+      bounds: nativeBounds(rect),
       clip: { x: Math.ceil(clip.x), y: Math.ceil(clip.y), width: Math.max(0, Math.floor(clip.x + clip.width) - Math.ceil(clip.x)), height: Math.max(0, Math.floor(clip.y + clip.height) - Math.ceil(clip.y)) },
       moving,
       viewport: { width: Math.max(1, host.offsetWidth), height: Math.max(1, host.offsetHeight) },
@@ -200,21 +207,42 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     if (serialized !== lastGeometry) { lastGeometry = serialized; desktop.portalLayout({ ...identity, geometry }); }
     restingGeometry = geometry;
   }
+  // Swap the live page for its preview only when the Portal actually moves.
+  // Selection, theme and body class/style changes also reach these observers;
+  // hiding for them made the Portal blink and blur without any motion.
+  function observedChange() {
+    if (disposed) return;
+    if (moving) { settle(); return; }
+    const resting = restingGeometry?.bounds as ReturnType<typeof nativeBounds> | undefined;
+    const bounds = nativeBounds(host.getBoundingClientRect());
+    if (!resting || bounds.x !== resting.x || bounds.y !== resting.y
+      || bounds.width !== resting.width || bounds.height !== resting.height) beginMotion();
+    else position();
+  }
   // Observe the actual transformed ancestors before paint. Polling trails the
   // Canvas by several frames and native views do not inherit DOM transforms.
-  const observer = new ResizeObserver(beginMotion); observer.observe(host);
-  const mutations = new MutationObserver(beginMotion);
+  const observer = new ResizeObserver(observedChange); observer.observe(host);
+  const mutations = new MutationObserver(observedChange);
   for (let element: HTMLElement | null = host; element; element = element.parentElement) {
     mutations.observe(element, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
   }
   const unobserveOverlays = observeOverlays(position);
+  // A press only prepares the preview. The swap happens once a drag starts,
+  // before XYFlow moves the Canvas, so a plain click never hides the page.
+  let press: { id: number; x: number; y: number } | null = null;
   const startInteraction = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest('.svelte-flow') && !target.closest('.nodrag, .svelte-flow__panel, input, button, textarea')) {
+      press = { id: event.pointerId, x: event.clientX, y: event.clientY };
       if (!moving) void refreshPreview();
-      beginMotion();
     }
   };
+  const dragInteraction = (event: PointerEvent) => {
+    if (!press || event.pointerId !== press.id || Math.hypot(event.clientX - press.x, event.clientY - press.y) < 3) return;
+    press = null;
+    beginMotion();
+  };
+  const endInteraction = (event: PointerEvent) => { if (press?.id === event.pointerId) press = null; };
   const wheelInteraction = (event: WheelEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest('.svelte-flow') || target.closest('.nowheel, .svelte-flow__panel')) return;
@@ -222,6 +250,9 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     beginMotion();
   };
   document.addEventListener('pointerdown', startInteraction, true);
+  document.addEventListener('pointermove', dragInteraction, { capture: true, passive: true });
+  document.addEventListener('pointerup', endInteraction, true);
+  document.addEventListener('pointercancel', endInteraction, true);
   window.addEventListener('resize', position);
   document.addEventListener('visibilitychange', position);
   window.addEventListener('scroll', position, true);
@@ -231,6 +262,9 @@ export function managedPortalSurface(host: HTMLElement, input: SurfaceInput) {
     clearTimeout(settleTimer); clearTimeout(previewTimer); preview.remove();
     observer.disconnect(); mutations.disconnect(); unobserveOverlays(); unsubscribe(); window.removeEventListener('scroll', position, true);
     document.removeEventListener('pointerdown', startInteraction, true);
+    document.removeEventListener('pointermove', dragInteraction, true);
+    document.removeEventListener('pointerup', endInteraction, true);
+    document.removeEventListener('pointercancel', endInteraction, true);
     document.removeEventListener('wheel', wheelInteraction, true);
     window.removeEventListener('resize', position);
     document.removeEventListener('visibilitychange', position);

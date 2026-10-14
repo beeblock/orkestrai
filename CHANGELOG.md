@@ -10,6 +10,7 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Stop the long-session renderer CPU saturation caused by the iOS Simulator screen. Chromium reports every byte an `<img>` receives to V8 as external memory until the image is destroyed, so the endless MJPEG stream of a Mobile node grew that counter for as long as the simulator was open (about 35 GB after 20 hours) and kept the Canvas in several full garbage collections per second across every core. The screen is now read with a cancellable stream and drawn frame by frame, decoding only the newest frame, so the counter stays flat and the stream stops as soon as the node leaves the view.
+- Keep the live Portal page on screen during clicks, selection and other Canvas changes that do not move it; the movement preview appears only once a drag, pan or zoom actually starts. Previews are copied from the frame already on screen at its real resolution instead of a 640-pixel capture that detached the page and laid it out again, which made the Portal blink and look blurred. Agent screenshots still capture the full page.
 
 ## 0.42.0 - 2026-10-13
 

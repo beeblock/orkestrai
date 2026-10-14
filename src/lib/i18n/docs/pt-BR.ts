@@ -989,8 +989,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Ainda não publicado', title: 'CPU estável com o Simulador iOS', summary: 'O nó Mobile não leva mais o Canvas a coletas de lixo constantes.', items: [
+    { date: 'Ainda não publicado', title: 'CPU estável com o Simulador iOS e Portal sem piscar', summary: 'O nó Mobile não leva mais o Canvas a coletas de lixo constantes, e os Portais deixam de piscar e embaçar.', items: [
       'A tela do Simulador iOS não deixa mais o Canvas mais lento quanto mais tempo fica aberta. O Chromium contava cada quadro transmitido para uma imagem como memória até ela fechar, o que depois de horas forçava várias coletas de lixo completas por segundo em todos os núcleos. Agora a tela é desenhada quadro a quadro a partir de um stream cancelável e para assim que o nó sai da vista.',
+      'Os Portais mantêm a página ao vivo na tela durante cliques, seleção e outras mudanças que não os movem; a prévia de movimento só aparece quando um arrasto, pan ou zoom começa de fato. As prévias copiam o quadro já exibido em resolução real em vez de recapturar a página, o que a fazia piscar e parecer embaçada. As capturas dos agentes não mudam.',
     ] },
     { date: '13 de outubro de 2026 · 0.42.0', title: 'Orkestrai 0.42.0: Navegação mais rápida no canvas e configuração nativa dos Portais', summary: 'Menos pintura de conexões e terminais ocultos; agentes configuram hosts dos Portais e a instalação local é verificada.', items: [
       'Imagens PNG/JPEG/BMP usam bitmaps de exibição de até 256 pixels em cache no zoom de visão geral, evitando rasterizar arquivos grandes repetidamente. Originais continuam montados e voltam no zoom legível, seleção ou revisão. Proporção, alpha, masters, arquivos e referências dos agentes não mudam; sem desenho por quadro nem cache em disco. Formatos conhecidos animados/vetoriais mantêm o renderer original.',

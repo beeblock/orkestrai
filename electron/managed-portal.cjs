@@ -169,6 +169,32 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     }
   }
 
+  // Motion previews copy the frame already on screen. The logical-page capture
+  // below detaches the view, resets device metrics and relays the page out,
+  // which made the live Portal blink whenever a preview was refreshed. Agent
+  // screenshots keep using it; a preview is skipped when nothing is presented.
+  async function capturePreview(tab, maxDimension) {
+    requireOpen(tab);
+    if (!tab.documentReady) throw new Error('Portal page is loading or unavailable.');
+    await Promise.resolve(tab.presentationFlight).catch(() => {});
+    const geometry = tab.managed.geometry;
+    if (!geometry || tab.closing || tab.capturing || tab.presentationPending || !tab.presented || !tab.presentationKey) return null;
+    const { frame } = portalPresentation(geometry);
+    // A clipped frame would be stretched over the whole node by the renderer.
+    if (frame.x !== geometry.bounds.x || frame.y !== geometry.bounds.y
+      || frame.width !== geometry.bounds.width || frame.height !== geometry.bounds.height) return null;
+    let image;
+    try { image = await boundedNative(nativeOperation(tab, tab.window.webContents.capturePage(undefined, { stayHidden: true })), 2000); }
+    catch { return null; }
+    if (!image || image.isEmpty()) return null;
+    const size = image.getSize();
+    const scale = Math.min(1, maxDimension / Math.max(size.width, size.height, 1));
+    const output = scale < 1
+      ? image.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), quality: 'good' })
+      : image;
+    return `data:image/jpeg;base64,${output.toJPEG(85).toString('base64')}`;
+  }
+
   function capturePage(tab, rect, maxDimension, protect = false) {
     const next = (tab.captureFlight || Promise.resolve()).catch(() => {}).then(() => captureDetachedPage(tab, rect, maxDimension, protect));
     tab.captureFlight = next;
@@ -635,7 +661,10 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     if (method === 'navigate') { await load(tab, args.url, 30000); return state(managed); }
     if (method === 'inspectScript') { requireOpen(tab); return nativeOperation(tab, tab.window.webContents.executeJavaScript(String(args.code), true)); }
     if (method === 'capture') return (await capturePage(tab, args.rect)).dataUrl;
-    if (method === 'preview') return (await capturePage(tab, undefined, 640)).dataUrl;
+    if (method === 'preview') {
+      const requested = Number(args.maxDimension);
+      return capturePreview(tab, Number.isInteger(requested) && requested >= 160 && requested <= 4096 ? requested : 1600);
+    }
     if (method === 'state') return state(managed);
     if (method === 'pause' || method === 'resume') { managed.pauseLocked = method === 'pause'; return state(managed); }
     if (method === 'activate') {
