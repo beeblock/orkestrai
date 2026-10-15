@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const listCanvasNodesQuerySchema = z.object({ view: z.literal('board').optional() });
+
 export const workspaceRepositoryRootSchema = z.object({
   alias: z.string().trim().min(1).max(48).regex(/^[a-z0-9][a-z0-9_-]*$/),
   path: z.string().trim().min(1).max(4_000),

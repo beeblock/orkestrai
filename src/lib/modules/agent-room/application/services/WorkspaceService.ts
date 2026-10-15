@@ -283,6 +283,11 @@ export class WorkspaceService {
 
   // -- Nos -----------------------------------------------------------------
 
+  async listBoardNodeSummaries(workspaceId: string) {
+    if (!await workspaceRepository.getWorkspace(workspaceId)) throw new Error('Workspace not found.');
+    return workspaceRepository.listBoardNodeSummaries(workspaceId);
+  }
+
   async listNodes(workspaceId: string) {
     const workspace = await this.get(workspaceId);
     const nodes = await workspaceRepository.listNodes(workspaceId);

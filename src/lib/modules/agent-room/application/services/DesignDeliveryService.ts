@@ -209,7 +209,7 @@ export class DesignDeliveryService {
     if (input.kind === 'portal') {
       const node = await workspaceRepository.getNode(input.nodeId);
       if (!node || node.workspaceId !== workspaceId || node.type !== 'portal') throw new Error('Portal not found in this workspace.');
-      const command = portalService.enqueue(input.nodeId, 'screenshot', {});
+      const command = portalService.enqueue(input.nodeId, 'screenshot', {}, workspaceId);
       const result = await portalService.waitResult(command.id, 15_000);
       const screenshot = result.ok && result.result && typeof result.result === 'object'
         ? (result.result as { dataUrl?: unknown }).dataUrl

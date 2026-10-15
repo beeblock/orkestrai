@@ -49,6 +49,24 @@ describe('Computer capture retention', () => {
     expect(service.usage(workspace.id)).toMatchObject({ files: 0, error: false });
   });
 
+  it('keeps a missing project unhealthy without flooding background maintenance and recovers when it returns', async () => {
+    const old = await fixture();
+    const active = await fixture();
+    await rm(old.folder, { recursive: true, force: true });
+    const dir = join(active.folder, '.orkestrai/computer/evidence');
+    await mkdir(dir, { recursive: true });
+    const expired = join(dir, `${uuidv7()}.png`);
+    await write(expired); await utimes(expired, new Date(0), new Date(0));
+    await expect(active.service.sweep({ background: true })).resolves.toBeUndefined();
+    expect(active.service.usage(old.workspace.id).error).toBe(true);
+    expect(await readdir(dir)).toEqual([]);
+    await expect(active.service.sweep()).rejects.toThrow(old.workspace.id);
+    await expect(active.service.capture(old.workspace.id, old.config, false, write)).rejects.toThrow(old.workspace.id);
+    await mkdir(old.folder);
+    await active.service.sweep({ background: true });
+    expect(active.service.usage(old.workspace.id).error).toBe(false);
+  });
+
   it('discards unchanged observations immediately and bounds retained temporary files', async () => {
     const { folder, workspace, config, service } = await fixture();
     COMPUTER_STORAGE_LIMITS.temporaryFiles = 2;
@@ -82,6 +100,7 @@ describe('Computer capture retention', () => {
     await mkdir(join(folder, '.orkestrai/computer'), { recursive: true });
     await symlink(target, join(folder, '.orkestrai/computer/evidence'), process.platform === 'win32' ? 'junction' : 'dir');
     await expect(service.sweep()).rejects.toThrow('cleanup failed');
+    await expect(service.sweep({ background: true })).rejects.toThrow('cleanup failed');
     await expect(service.capture(workspace.id, config, false, write)).rejects.toThrow('cleanup failed');
     expect(await readFile(userFile, 'utf8')).toBe('test capture');
     expect(service.usage(workspace.id).error).toBe(true);

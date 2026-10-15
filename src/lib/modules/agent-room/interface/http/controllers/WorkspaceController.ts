@@ -1,4 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
+import { listCanvasNodesQuerySchema } from '$lib/modules/agent-room/contracts/schemas/workspaceSchemas.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
@@ -113,6 +114,8 @@ export class WorkspaceController extends Controller {
 
   async listNodes(event: any) {
     try {
+      const { view } = listCanvasNodesQuerySchema.parse({ view: event.url?.searchParams.get('view') ?? undefined });
+      if (view === 'board') return this.json({ data: await workspaceService.listBoardNodeSummaries(event.params.id) });
       return this.json({ data: await workspaceService.listNodes(event.params.id) });
     } catch (error) {
       return this.errorResponse(error, 'Workspace nao encontrado.', 404);

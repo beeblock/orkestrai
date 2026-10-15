@@ -73,7 +73,9 @@ export class ComputerEvidenceService {
     });
   }
 
-  async sweep(): Promise<void> { await this.serial(() => this.sweepUnchecked()); }
+  async sweep({ background = false }: { background?: boolean } = {}): Promise<void> {
+    await this.serial(() => this.sweepUnchecked(undefined, undefined, background));
+  }
 
   private async entries(directory: string): Promise<Entry[]> {
     const entries: Entry[] = [];
@@ -104,7 +106,7 @@ export class ComputerEvidenceService {
     return kept;
   }
 
-  private async sweepUnchecked(protect?: string, captureWorkspaceId?: string): Promise<void> {
+  private async sweepUnchecked(protect?: string, captureWorkspaceId?: string, background = false): Promise<void> {
     const workspaces = await workspaceRepository.listWorkspaces();
     const groups: { workspaceId: string; evidence: Entry[]; temporary: Entry[] }[] = [];
     const seen = new Set<string>();
@@ -123,9 +125,16 @@ export class ComputerEvidenceService {
         const temporaryEntries = [...await this.entries(paths[1]), ...await this.entries(paths[2])].sort((a, b) => a.modified - b.modified || a.path.localeCompare(b.path));
         const temporary = await this.trim(temporaryEntries, Date.now() - COMPUTER_STORAGE_LIMITS.temporaryMs, COMPUTER_STORAGE_LIMITS.temporaryBytes, COMPUTER_STORAGE_LIMITS.temporaryFiles, protect);
         groups.push({ workspaceId: workspace.id, evidence, temporary });
-      } catch {
+      } catch (error) {
         this.stats.set(workspace.id, { ...this.usage(workspace.id), checkedAt: new Date().toISOString(), error: true });
-        failures.push(workspace.id);
+        // A deleted/unmounted project is expected during periodic maintenance.
+        // Keep its unhealthy status and retry next sweep, but never recreate it
+        // or hide permission, quota, symlink or other storage failures. Explicit
+        // cleanup and captures remain strict, including for missing projects.
+        const missingRoot = background && (error as NodeJS.ErrnoException)?.code === 'ENOENT'
+          && await lstat(workspace.workingDir).then(() => false,
+            (cause: NodeJS.ErrnoException) => cause.code === 'ENOENT');
+        if (!missingRoot) failures.push(workspace.id);
       }
     }
     const all = groups.flatMap((group) => [...group.evidence, ...group.temporary]).sort((a, b) => a.modified - b.modified || a.path.localeCompare(b.path));

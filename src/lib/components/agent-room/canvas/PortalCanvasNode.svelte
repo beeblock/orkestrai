@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { subscribeWorkspaceEvents } from '../workspace-events.js';
+  import { reconcileCommands } from '../command-reconciler.js';
   import type { NodeProps } from '@xyflow/svelte';
   import { ArrowRight, ChevronDown, Globe, KeyRound, MousePointer2, Navigation, Pause, Play, Pencil, RotateCcw, Send, ShieldCheck, Smartphone, X } from '@lucide/svelte';
   import type { PortalViewport } from './portal-device-presets.js';
@@ -96,7 +98,7 @@
   let viewport = $state<PortalViewport | null>(data.payload.viewport ?? null);
   let deviceToolbarOpen = $state(false);
   let frame: (PortalWebviewElement | HTMLIFrameElement) | null = $state(null);
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let commandReconciler: ReturnType<typeof reconcileCommands> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
   let urlPersistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -346,17 +348,20 @@
   }
 
   function startPolling() {
-    if (pollTimer || !isDesktop) return;
-    pollTimer = setInterval(async () => {
-      const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/portal/${id}/commands`);
+    if (commandReconciler || !isDesktop) return;
+    commandReconciler = reconcileCommands(async signal => {
+      const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/portal/${id}/commands`, { signal });
+      if (!response.ok) return;
       const payload = await response.json().catch(() => ({ data: [] }));
-      for (const command of payload.data ?? []) await executeCommand(command);
-    }, 2_000);
+      if (!signal.aborted && Array.isArray(payload.data)) {
+        for (const command of payload.data) await executeCommand(command);
+      }
+    });
   }
 
   function stopPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = null;
+    commandReconciler?.dispose();
+    commandReconciler = null;
   }
 
   function resetCapture() {
@@ -625,6 +630,9 @@
 
   onMount(() => {
     startPolling();
+    const unsubscribeCommands = isDesktop ? subscribeWorkspaceEvents(data.workspaceId, event => {
+      if (event.type === 'connected' || (event.type === 'portalCommand' && event.nodeId === id)) void commandReconciler?.wake();
+    }) : undefined;
     const unsubscribePortalOpen = desktop?.onPortalOpenRequest((payload) => {
       const webview = desktopFrame();
       if (!webview || !Number.isInteger(payload.sourceWebContentsId)) return;
@@ -633,6 +641,7 @@
       data.onOpenNewPortal?.(id, payload.url);
     });
     return () => {
+      unsubscribeCommands?.();
       unsubscribePortalOpen?.();
       if (browserStateTimer) { clearTimeout(browserStateTimer); persistBrowserTabs(); }
       stopPolling();
