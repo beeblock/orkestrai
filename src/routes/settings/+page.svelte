@@ -32,6 +32,7 @@
   import AudioDeviceSettings from '$lib/components/agent-room/AudioDeviceSettings.svelte';
   import { playAudioBlob } from '$lib/components/agent-room/audio-devices.js';
   import { applyAppTheme } from '$lib/components/agent-room/app-themes.js';
+  import { createSettingsSectionSelection } from '$lib/components/agent-room/settings-section-navigation.js';
 
   let settings = $state<Record<string, string>>({});
   let loaded = $state(false);
@@ -70,21 +71,70 @@
     { id: 'language', icon: Languages, label: m['settings.language'] },
   ];
   let activeSection = $state('autonomy');
+  let selectSection: (id: string) => void = () => {};
+
+  function selectNavSection(event: MouseEvent, id: string) {
+    // Leave modified clicks/new tabs to the native anchor.
+    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) selectSection(id);
+  }
 
   $effect(() => {
-    if (!loaded || typeof IntersectionObserver === 'undefined') return;
+    if (!loaded) return;
     const sections = SETTINGS_NAV.map((item) => document.getElementById(item.id)).filter((node): node is HTMLElement => Boolean(node));
-    const visible = new Set<string>();
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) visible.add(entry.target.id);
-        else visible.delete(entry.target.id);
-      }
-      const first = SETTINGS_NAV.find((item) => visible.has(item.id));
-      if (first) activeSection = first.id;
-    }, { rootMargin: '-96px 0px -55% 0px' });
-    for (const section of sections) observer.observe(section);
-    return () => observer.disconnect();
+    if (!sections.length) return;
+    // Windows desktop has its own scrolling container below the title bar.
+    const container = sections[0].closest<HTMLElement>('.desktop-content');
+    const root = container ?? document.scrollingElement!;
+    const scrollEvents = container ?? window;
+    const selection = createSettingsSectionSelection();
+    let frame = 0;
+    const viewportTop = () => container ? container.getBoundingClientRect().top + container.clientTop : 0;
+    const maximumScroll = () => Math.max(0, root.scrollHeight - root.clientHeight);
+
+    selectSection = (id) => {
+      const section = sections.find((item) => item.id === id);
+      if (!section) return;
+      const margin = parseFloat(getComputedStyle(section).scrollMarginTop) || 0;
+      const target = Math.min(maximumScroll(), Math.max(0, root.scrollTop + section.getBoundingClientRect().top - viewportTop() - margin));
+      activeSection = selection.select(id, target, root.scrollTop);
+    };
+
+    const update = () => {
+      frame = 0;
+      const top = viewportTop() + 96;
+      const atEnd = maximumScroll() > 0 && root.scrollTop >= maximumScroll() - 1;
+      const observed = atEnd ? sections.at(-1)! : sections.find((section) => section.getBoundingClientRect().bottom > top) ?? sections.at(-1)!;
+      activeSection = selection.update(root.scrollTop, observed.id);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const selectHash = () => {
+      const id = window.location.hash.slice(1);
+      if (sections.some((section) => section.id === id)) selectSection(id);
+      else selection.reset();
+      schedule();
+    };
+    const resize = () => {
+      selection.reset();
+      schedule();
+    };
+    scrollEvents.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', resize);
+    window.addEventListener('hashchange', selectHash);
+    window.addEventListener('popstate', selectHash);
+    selectHash();
+    // Settings load after SvelteKit's initial anchor lookup. Retry once the
+    // actual sections exist; do not animate or steal keyboard focus.
+    sections.find((section) => section.id === window.location.hash.slice(1))?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    return () => {
+      scrollEvents.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('hashchange', selectHash);
+      window.removeEventListener('popstate', selectHash);
+      if (frame) cancelAnimationFrame(frame);
+      selectSection = () => {};
+    };
   });
 
   const settingsNavLinkClasses = 'aria-[current=location]:border-l-[var(--app-accent)] aria-[current=location]:bg-[var(--app-hover)] aria-[current=location]:text-[var(--app-text)] aria-[current=location]:[&_svg]:text-[var(--app-accent)] rounded-r-md flex min-h-[34px] items-center gap-[9px] border-l-2 border-transparent py-[7px] pr-[11px] pl-[10px] text-xs leading-[1.35] text-[var(--app-text-muted)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-l-[var(--app-accent)] hover:bg-[var(--app-surface-subtle)] hover:text-[var(--app-text)] focus-visible:border-l-[var(--app-accent)] focus-visible:bg-[var(--app-surface-subtle)] focus-visible:text-[var(--app-text)] [&_svg]:shrink-0 [&_svg]:text-[var(--app-text-muted)] hover:[&_svg]:text-[var(--app-accent)] focus-visible:[&_svg]:text-[var(--app-accent)] max-[900px]:mb-[-1px] max-[900px]:min-h-10 max-[900px]:whitespace-nowrap max-[900px]:border-l-0 max-[900px]:border-b-2 max-[900px]:hover:border-b-[var(--app-accent)] max-[900px]:focus-visible:border-b-[var(--app-accent)]';
@@ -431,7 +481,7 @@
     <aside class="sticky top-[82px] max-h-[calc(100vh-102px)] overflow-y-auto max-[900px]:top-[70px] max-[900px]:z-[9] max-[900px]:max-h-none max-[900px]:overflow-x-auto max-[900px]:overflow-y-hidden max-[900px]:bg-[color-mix(in_srgb,var(--app-page)_94%,transparent)] max-[900px]:backdrop-blur-xl max-[900px]:[scrollbar-width:none]" aria-label={m['settings.title']()}>
       <nav class="grid gap-0.5 border-l border-[var(--app-border)] py-1 max-[900px]:flex max-[900px]:w-max max-[900px]:min-w-full max-[900px]:border-l-0 max-[900px]:border-b">
         {#each SETTINGS_NAV as item (item.id)}
-          <a class={settingsNavLinkClasses} href={`#${item.id}`} aria-current={activeSection === item.id ? 'location' : undefined}><item.icon size={14} />{item.label()}</a>
+          <a class={settingsNavLinkClasses} href={`#${item.id}`} onclick={(event) => selectNavSection(event, item.id)} aria-current={activeSection === item.id ? 'location' : undefined}><item.icon size={14} aria-hidden="true" />{item.label()}</a>
         {/each}
       </nav>
     </aside>

@@ -985,6 +985,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'Unreleased', title: 'Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
+      'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',
+    ] },
     { date: 'October 15, 2026 · 0.42.1', title: 'Orkestrai 0.42.1: Stable simulator streaming and lighter live updates', summary: 'Fix the long-session MJPEG GC storm, keep Portals clear and reduce repeated background work.', items: [
       'The iOS Simulator screen no longer makes the Canvas slower the longer it stays open. Chromium counted every streamed frame of an image as memory until the image closed, which after hours forced several full garbage collections per second on every core. The screen is now drawn frame by frame from a cancellable stream and stops as soon as the node leaves the view.',
       'Portals keep the live page on screen during clicks, selection and other changes that do not move them; the movement preview appears only when a drag, pan or zoom actually starts. Previews copy the frame already on screen at full resolution instead of recapturing the page, which made it blink and look blurred. Agent screenshots are unchanged.',

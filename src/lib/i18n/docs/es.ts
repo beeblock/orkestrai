@@ -985,6 +985,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'Sin publicar', title: 'Selección de secciones de Configuración', summary: 'Mantiene la selección del menú correcta al final de la página.', items: [
+      'Al hacer clic en una sección corta al final de Configuración, queda seleccionada aunque la página no pueda desplazarse más. Los enlaces directos desplazan hasta la sección después de cargar los datos. Se conservan anclas nativas, navegación por teclado e historial; al desplazarse a otro punto, el menú vuelve a seguir la sección visible, incluido el contenedor del escritorio Windows, sin polling en reposo.',
+    ] },
     { date: '15 de octubre de 2026 · 0.42.1', title: 'Orkestrai 0.42.1: Streaming estable del simulador y actualizaciones más ligeras', summary: 'Corrige la tormenta de GC del MJPEG en sesiones largas, mantiene Portales nítidos y reduce trabajo repetido en segundo plano.', items: [
       'La pantalla del Simulador iOS ya no vuelve el Canvas más lento cuanto más tiempo permanece abierta. Chromium contaba cada fotograma transmitido a una imagen como memoria hasta cerrarla, lo que tras horas forzaba varias recolecciones de basura completas por segundo en todos los núcleos. Ahora la pantalla se dibuja fotograma a fotograma desde un stream cancelable y se detiene en cuanto el nodo sale de la vista.',
       'Los Portales mantienen la página en vivo en pantalla durante clics, selección y otros cambios que no los mueven; la vista previa de movimiento solo aparece cuando empieza de verdad un arrastre, desplazamiento o zoom. Las vistas previas copian el fotograma ya mostrado a resolución real en lugar de recapturar la página, lo que la hacía parpadear y verse borrosa. Las capturas de los agentes no cambian.',

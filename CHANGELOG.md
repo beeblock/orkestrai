@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Select the clicked Settings section even when short sections near the bottom cannot scroll up to the sticky header. Restore direct section links after settings load, preserve native anchors, keyboard navigation and browser history, and resume scroll tracking when scrolling away, including the Windows desktop scroll container, without idle polling.
+
 ## 0.42.1 - 2026-10-15
 
 ### Fixed
