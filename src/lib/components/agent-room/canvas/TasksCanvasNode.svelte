@@ -18,6 +18,7 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import type { WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
   import CouncilDialog from '../CouncilDialog.svelte';
+  import { boardFeed } from '../shared-board-feed.js';
 
   type BoardTask = {
     id: string;
@@ -167,17 +168,7 @@
   }
 
   async function refresh() {
-    const [taskList, nodeList, columnList] = await Promise.all([
-      api<BoardTask[]>(`/api/agent-room/workspaces/${data.workspaceId}/tasks`),
-      api<Array<{ id: string; type: string; title: string | null }>>(`/api/agent-room/workspaces/${data.workspaceId}/nodes`),
-      api<BoardColumn[]>(`/api/agent-room/workspaces/${data.workspaceId}/task-columns`),
-    ]);
-    if (taskList) tasks = taskList;
-    if (columnList) taskColumns = columnList;
-    if (nodeList) {
-      agents = nodeList.filter((node) => node.type === 'terminal').map((node) => ({ id: node.id, title: node.title ?? m['tasks.terminal_fallback']() }));
-      notes = nodeList.filter((node) => node.type === 'note').map((node) => ({ id: node.id, title: node.title ?? m['tasks.note_fallback']() }));
-    }
+    await boardFeed(data.workspaceId).refresh();
   }
 
   async function columnRequest<T>(path: string, init: RequestInit): Promise<T | null> {
@@ -232,10 +223,12 @@
   }
 
   onMount(() => {
-    refresh();
-    // Agentes (lider) alteram o quadro pela bridge — sincroniza periodico.
-    const timer = setInterval(refresh, 5_000);
-    return () => clearInterval(timer);
+    return boardFeed(data.workspaceId).subscribe(snapshot => {
+      tasks = snapshot.tasks as BoardTask[];
+      taskColumns = snapshot.columns as BoardColumn[];
+      agents = snapshot.nodes.filter(node => node.type === 'terminal').map(node => ({ id: node.id, title: node.title ?? m['tasks.terminal_fallback']() }));
+      notes = snapshot.nodes.filter(node => node.type === 'note').map(node => ({ id: node.id, title: node.title ?? m['tasks.note_fallback']() }));
+    });
   });
 
   async function addTask() {

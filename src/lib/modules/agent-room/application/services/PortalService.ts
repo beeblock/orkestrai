@@ -25,7 +25,7 @@ export class PortalService {
   private results = new Map<string, PortalCommandResult>();
   private waiters = new Map<string, (result: PortalCommandResult) => void>();
 
-  enqueue(nodeId: string, action: PortalCommand['action'], args: Record<string, unknown>): PortalCommand {
+  enqueue(nodeId: string, action: PortalCommand['action'], args: Record<string, unknown>, workspaceId?: string): PortalCommand {
     const command: PortalCommand = {
       id: uuidv7(),
       nodeId,
@@ -36,6 +36,8 @@ export class PortalService {
     const queue = this.queues.get(nodeId) ?? [];
     queue.push(command);
     this.queues.set(nodeId, queue);
+    if (workspaceId) (globalThis as typeof globalThis & { __orkestraiBroadcast?: (event: Record<string, unknown>) => void })
+      .__orkestraiBroadcast?.({ type: 'portalCommand', workspaceId, nodeId });
     return command;
   }
 

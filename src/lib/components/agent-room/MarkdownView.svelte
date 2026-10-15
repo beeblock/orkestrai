@@ -1,6 +1,17 @@
-<script lang="ts">
+<script module lang="ts">
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
+  import { createContentCache } from './bounded-content-cache.js';
+
+  const render = (content: string) => {
+    const raw = marked.parse(content, { async: false, gfm: true, breaks: true }) as string;
+    return DOMPurify.sanitize(raw, { ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'type', 'class'] })
+      .replaceAll('<a href', '<a target="_blank" rel="noopener noreferrer" href');
+  };
+  const cachedRender = createContentCache(render);
+</script>
+
+<script lang="ts">
 
   type Props = {
     content: string;
@@ -10,17 +21,8 @@
 
   let { content, compact = false }: Props = $props();
 
-  marked.setOptions({ gfm: true, breaks: true });
-
   /** markdown -> html sanitizado; links abrem fora, checkboxes editaveis visualmente. */
-  const html = $derived.by(() => {
-    const raw = marked.parse(content ?? '', { async: false }) as string;
-    const clean = DOMPurify.sanitize(raw, {
-      ADD_ATTR: ['target', 'rel', 'checked', 'disabled', 'type', 'class'],
-    });
-    // Links externos: nova aba, sem referrer (seguranca + UX).
-    return clean.replaceAll('<a href', '<a target="_blank" rel="noopener noreferrer" href');
-  });
+  const html = $derived(typeof window === 'undefined' ? render(content ?? '') : cachedRender(content ?? ''));
 </script>
 
 <div class="md" class:compact>

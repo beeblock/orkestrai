@@ -272,7 +272,7 @@ describe('embedded Portal surface lifecycle', () => {
     }, lease);
     expect([...parent.contentView.children][0].visible).toBe(false);
     expect(contents.debugger.sendCommand).toHaveBeenCalledTimes(calls);
-    await expect(executor.userCommand(request, 'preview', {})).rejects.toThrow('loading or unavailable');
+    await expect(executor.userCommand(request, 'preview', {})).resolves.toBeNull();
     contents.emit('dom-ready');
     await new Promise(resolve => setImmediate(resolve));
     expect([...parent.contentView.children][0].visible).toBe(true);

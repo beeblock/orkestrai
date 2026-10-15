@@ -175,8 +175,9 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
   // screenshots keep using it; a preview is skipped when nothing is presented.
   async function capturePreview(tab, maxDimension) {
     requireOpen(tab);
-    if (!tab.documentReady) throw new Error('Portal page is loading or unavailable.');
+    if (!tab.documentReady) return null;
     await Promise.resolve(tab.presentationFlight).catch(() => {});
+    if (!tab.documentReady) return null;
     const geometry = tab.managed.geometry;
     if (!geometry || tab.closing || tab.capturing || tab.presentationPending || !tab.presented || !tab.presentationKey) return null;
     const { frame } = portalPresentation(geometry);

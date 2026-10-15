@@ -189,7 +189,10 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     server.onMessage(message => socket.send(message));
     socket.onMessage(message => {
       const request = JSON.parse(String(message));
-      if (request.type === 'subscribe' && request.events?.includes('workspaceChanged')) activitySocket = socket;
+      // Boards/Portals share their own metadata-only connection. Inject the
+      // ordered activity+graph frames into the canvas subscriber, not the last
+      // socket that happens to subscribe to workspaceChanged.
+      if (request.type === 'subscribe' && request.events?.includes('workspaceChanged') && request.events?.includes('talking')) activitySocket = socket;
       server.send(message);
     });
   });

@@ -120,3 +120,83 @@ about **5 GiB** was available after installed-app and intermediate verification.
 prepared locally as **0.42.0**, not publicly released. No new tag or push is
 authorized by this resource/permission-fix request. Synchronize the sibling site
 and run the release workflow before a future public tag.
+
+## 2026-10-15 follow-up — 0.42.1
+
+The owner subsequently authorized a release conditional on verification. Preserve
+Claude's three local commits (`100a8b8e`, `2bf2f794`, `aecc5721`): the diagnosed
+long-session saturation was Chromium's infinite MJPEG image external-memory
+accounting, not proof that every terminal or canvas gesture was intrinsically
+expensive. Those commits replace the image stream, preserve presented Portal
+frames and measure Mobile layout without the canvas transform.
+
+Additional fixes prepared for this patch:
+
+- One reference-counted metadata WebSocket and Kanban feed per workspace. Board
+  node summaries select only terminal/note identity columns through the ORM,
+  respect archived/inactive Floor filtering and do not run PTY repair. Events
+  update within a short batching window; unchanged data does not notify consumers.
+  Thirty-second reconciliation, reconnect and visibility recovery survive missed
+  events without overlapping requests or per-board five-second downloads.
+- Markdown caches sanitized output by exact content, in browser memory only,
+  bounded to 128 entries / 4 MiB. New content still passes the same sanitization.
+- Portal commands use targeted metadata wakeups and a single-flight ten-second
+  fallback. Startup/network failures are handled and requests have deadlines;
+  teardown aborts pending fetches. Loading pages return no movement preview,
+  including navigation during presentation settlement, without changing strict
+  full screenshots or any access restrictions.
+- iOS discovery shares concurrent reads and caches for at most five seconds.
+  Simulator operations invalidate it, and an older in-flight read cannot replace
+  the new generation. Collapsed/padding-only Mobile layout is unmeasured rather
+  than a one-pixel fit.
+- The repeated Computer storage error was traced read-only to an old test
+  workspace whose temporary project folder no longer exists. Periodic maintenance
+  skips only confirmed missing project roots, retaining unhealthy usage status
+  and retrying later. Manual cleanup/capture, symlink, permission and quota errors
+  stay strict. No workspace row, database or project folder was deleted/recreated.
+
+Live checks without restarting the owner app did not reproduce the reported
+250% isolated renderer spike; short `top` samples ranged roughly 6–49%. This is
+not a sustained load benchmark. Renderer WebGL was evaluated but not enabled:
+the pinned xterm add-on has GPU-context lifecycle concerns requiring an isolated
+hardware test, context-loss fallback and bounded context retention first (see
+[upstream GPU-context disposal report](https://github.com/xtermjs/xterm.js/issues/6068),
+also checked against the installed add-on source). Its
+temporary dependency installation was removed; dependency versions are unchanged.
+
+Disk checks found about 4.7–4.9 GiB available and **9 GiB allocated to macOS
+swap** (about 8.1–8.4 GiB used). No previous measurement establishes how much
+of the reported overnight 4.7 GiB change came from swap. Current release files
+were about 707 MiB with no unpacked intermediates, and the local rollback ZIP
+about 385 MiB. Other projects' temporary dependencies, OS swap, project artifacts,
+databases and provider histories were not removed. Tests use isolated runtime
+directories; production build/tests run sequentially and this run's E2E reports
+are removed after inspection. No app replacement or agent interruption is part
+of this release preparation.
+
+Verification before publication:
+
+- Full Vitest: **2,230 passed, 13 skipped, 0 failed**; focused follow-up tests
+  also cover reconnect after a failed initial fetch and archived/inactive Floor
+  exclusion without provisioning or PTY repair.
+- `npm audit --audit-level=moderate`: **0 vulnerabilities**.
+- Production build, native Computer host and desktop messages: **passed**.
+- Site: **33 tests passed**, production build passed, three release catalogs
+  match the app's translated entry.
+- Production Playwright: **27/27 passed, zero retries**. Two Kanbans received an
+  external task in **194 ms**, read a **133-byte** identity summary despite a
+  large note, and made **zero periodic task reads** in the 5.5-second idle window.
+  This is an isolated fixture, not a measurement of the owner's workspace.
+- Dense canvas: **399 nodes, 208 decoded 1024-pixel images (832 MiB), 188 long
+  notes, 3 Portals, 727 edges**; maximum observed frame gap **167 ms**. State,
+  loaded originals and graph/activity assertions remain enforced. An old test
+  initially injected frames into the last metadata socket rather than the canvas
+  activity subscriber; selecting its actual event signature fixed the fixture,
+  without relaxing assertions. The full selected battery then passed.
+- Reviewed metadata scoping/allowlisting, no command arguments or secrets in
+  events, browser-only bounded cache retention, cancellation, reconnect, simulator
+  invalidation races, storage failures and UI error-state parity. No provider,
+  WSL or native permission contract was broadened.
+- The build temporarily raised OS swap allocation from 9 to **10 GiB**; about
+  **3.4 GiB** remained free afterward. This identifies that execution's increment,
+  not the entire previous overnight change. No local package/install was run.

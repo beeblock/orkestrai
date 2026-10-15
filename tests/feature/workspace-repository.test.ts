@@ -3,6 +3,7 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { AgentCanvasNode } from '$lib/modules/agent-room/domain/models/AgentCanvasNode.js';
+import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { secretRefService, secretStorageKey } from '$lib/modules/agent-room/application/services/SecretRefService.js';
@@ -18,6 +19,27 @@ import { workspaceToolManifestSchema } from '$lib/modules/agent-room/contracts/s
 
 describe('WorkspaceRepository', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('returns only lightweight board identities scoped to the workspace', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Board fixture', workingDir: '/tmp' });
+    const other = await workspaceRepository.createWorkspace({ name: 'Other fixture', workingDir: '/tmp' });
+    const terminal = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Agent', payload: { command: 'private-command' } });
+    const note = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'note', title: 'Note', payload: { content: 'private-note'.repeat(1000) } });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'portal', title: 'Portal' });
+    await workspaceRepository.createNode({ workspaceId: other.id, type: 'note', title: 'Other' });
+    const archived = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'note', title: 'Archived' });
+    await workspaceRepository.archiveNode(archived.id);
+    const floorId = uuidv7();
+    await AgentFloor.create({ id: floorId, workspace_id: workspace.id, name: 'Retired', branch: 'test', path: '/tmp/retired', status: 'retired' });
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', floorId, title: 'Retired agent' });
+    const summaries = await workspaceRepository.listBoardNodeSummaries(workspace.id);
+    expect(summaries).toEqual([{ id: terminal.id, type: 'terminal', title: 'Agent' }, { id: note.id, type: 'note', title: 'Note' }]);
+    expect(JSON.stringify(summaries)).not.toContain('private');
+    expect(JSON.stringify(summaries).length).toBeLessThan(250);
+    const get = vi.spyOn(workspaceService, 'get');
+    try { expect(await workspaceService.listBoardNodeSummaries(workspace.id)).toEqual(summaries); expect(get).not.toHaveBeenCalled(); }
+    finally { get.mockRestore(); }
+  });
 
   it('preserves live Portal grants across stale navigation, tab and concurrent state patches', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Portal state', workingDir: '/tmp' });

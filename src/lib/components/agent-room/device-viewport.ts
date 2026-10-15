@@ -17,9 +17,13 @@ export function fitDeviceViewportScale({
   horizontalPadding = 36,
   verticalPadding = 80,
 }: FitDeviceViewportInput): number {
-  if (contentWidth <= 0 || contentHeight <= 0 || viewportWidth <= 0 || viewportHeight <= 0) return 1;
-  const availableWidth = Math.max(1, viewportWidth - horizontalPadding);
-  const availableHeight = Math.max(1, viewportHeight - verticalPadding);
+  if (![contentWidth, contentHeight, viewportWidth, viewportHeight, horizontalPadding, verticalPadding].every(Number.isFinite)
+    || contentWidth <= 0 || contentHeight <= 0 || viewportWidth <= 0 || viewportHeight <= 0) return 1;
+  // Collapsed/hidden panels are not measured viewports. Fitting one pixel of
+  // available height would lock a newly mounted screen into a near-zero zoom.
+  const availableWidth = viewportWidth - Math.max(0, horizontalPadding);
+  const availableHeight = viewportHeight - Math.max(0, verticalPadding);
+  if (availableWidth <= 0 || availableHeight <= 0) return 1;
   return Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
 }
 

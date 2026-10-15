@@ -65,6 +65,9 @@ async function freeLoopbackPort(): Promise<number> {
 
 export class IosSimulatorAdapter implements DeviceAdapter {
   readonly platform = 'ios' as const;
+  private deviceList: { value: DeviceDescriptor[]; until: number } | null = null;
+  private deviceListFlight: Promise<DeviceDescriptor[]> | null = null;
+  private deviceListRevision = 0;
 
   private cliPath(): string {
     const middleware = require.resolve('serve-sim/middleware');
@@ -82,6 +85,7 @@ export class IosSimulatorAdapter implements DeviceAdapter {
   }
 
   private async runSimctl(args: string[], timeout = 30_000): Promise<string> {
+    if (args[0] !== 'list') { this.deviceList = null; this.deviceListFlight = null; this.deviceListRevision++; }
     const { stdout } = await execFileAsync('xcrun', ['simctl', ...args], {
       timeout,
       maxBuffer: MAX_COMMAND_OUTPUT,
@@ -153,6 +157,20 @@ export class IosSimulatorAdapter implements DeviceAdapter {
 
   async list(): Promise<DeviceDescriptor[]> {
     if (process.platform !== 'darwin' || process.arch !== 'arm64') return [];
+    if (this.deviceList && this.deviceList.until > Date.now()) return this.deviceList.value.map(device => ({ ...device }));
+    if (!this.deviceListFlight) {
+      const revision = this.deviceListRevision;
+      const flight = this.readDevices().then(value => {
+        if (revision === this.deviceListRevision) this.deviceList = { value, until: Date.now() + 5000 };
+        return value;
+      });
+      this.deviceListFlight = flight;
+      void flight.finally(() => { if (this.deviceListFlight === flight) this.deviceListFlight = null; }).catch(() => {});
+    }
+    return (await this.deviceListFlight).map(device => ({ ...device }));
+  }
+
+  private async readDevices(): Promise<DeviceDescriptor[]> {
     const raw = JSON.parse(await this.runSimctl(['list', 'devices', 'available', '--json'])) as {
       devices?: Record<string, SimctlDevice[]>;
     };

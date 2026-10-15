@@ -65,11 +65,19 @@ dash subdivision; readable idle zoom restores their decorative pattern.
 Settled offscreen connections skip paint without removing graph relationships.
 Highly connected leaders share bounded anchor calculations across their handles
 and connections, rather than repeatedly scanning the same neighbors per edge.
-Managed Portals reuse cached geometry and small, rate-limited movement previews,
+Managed Portals reuse cached geometry and rate-limited presented-frame previews,
 and restore the same live page without
 depending on a pointer-up event. Native input/session regression tests and
 loaded-image fixtures cover these paths; a fresh restart is not evidence that
 long-session CPU saturation is resolved.
+
+The iOS Simulator uses a bounded, cancellable MJPEG parser and latest-frame
+bitmap drawing, never an endless multipart image. This avoids Chromium's
+ever-growing external-memory accounting and the diagnosed full-GC storm.
+Kanbans share workspace events and lightweight identity summaries; unchanged
+Markdown reuses a bounded sanitized-content cache. Portal commands wake on
+events with a non-overlapping fallback, and Simulator discovery coalesces reads.
+These fixes reduce measured sources of work, not every possible CPU spike.
 
 ## Startup recovery
 

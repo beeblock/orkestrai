@@ -5,13 +5,22 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.42.1 - 2026-10-15
 
 ### Fixed
 
 - Stop the long-session renderer CPU saturation caused by the iOS Simulator screen. Chromium reports every byte an `<img>` receives to V8 as external memory until the image is destroyed, so the endless MJPEG stream of a Mobile node grew that counter for as long as the simulator was open (about 35 GB after 20 hours) and kept the Canvas in several full garbage collections per second across every core. The screen is now read with a cancellable stream and drawn frame by frame, decoding only the newest frame, so the counter stays flat and the stream stops as soon as the node leaves the view.
 - Keep the live Portal page on screen during clicks, selection and other Canvas changes that do not move it; the movement preview appears only once a drag, pan or zoom actually starts. Previews are copied from the frame already on screen at its real resolution instead of a 640-pixel capture that detached the page and laid it out again, which made the Portal blink and look blurred. Agent screenshots still capture the full page.
 - Show the live iOS Simulator and Android emulator screen in Mobile nodes that mounted while the Canvas was zoomed out. The node measured its viewport through the Canvas zoom transform, and zooming does not resize it, so the fitted scale stayed near zero and the screen rendered as a 1-pixel black box. The fit now uses the node's untransformed layout size.
+- Share one event-driven Kanban feed per workspace instead of downloading full node payloads and task lists separately for every board every five seconds. Board pickers read only terminal/note identities, unchanged snapshots do not rebuild the UI, hidden windows suspend reconciliation, and a 30-second fallback recovers missed events.
+- Reuse sanitized Markdown output by exact content in a bounded, browser-only memory cache rather than parsing and sanitizing the same notes on every refresh.
+- Wake queued Portal commands immediately through scoped metadata events, with a non-overlapping 10-second fallback and bounded requests. Transient Core startup/network errors no longer generate unhandled renderer rejections. Skip movement previews while a page loads instead of logging an expected unavailable frame as an error; full agent screenshots remain strict.
+- Coalesce concurrent iOS Simulator discovery and reuse results for at most five seconds, invalidating them on simulator operations. Treat collapsed/padding-only Mobile viewports as unmeasured instead of fitting a live screen to nearly zero.
+- Keep periodic Computer storage maintenance running for healthy workspaces when an old project folder no longer exists. Preserve the missing workspace's unhealthy diagnostic state and strict explicit cleanup/capture errors; do not recreate or delete project data, or suppress permission, quota or symlink failures.
+
+### Known limitations
+
+- The diagnosed MJPEG external-memory GC storm is fixed; an isolated renderer spike is not proof that every workload is CPU-free. WebGL terminal rendering remains under evaluation rather than enabling an unverified GPU/context lifecycle change. OS swap and unrelated project data are not automatically deleted to free space.
 
 ## 0.42.0 - 2026-10-13
 
