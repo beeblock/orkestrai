@@ -76,6 +76,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
   import { VIEWPORT_SETTLE_MS } from './viewport-settle.js';
+  import { synchronizeGraphSurface } from './code-graph-viewport.js';
 
   export type CodeGraphNodeData = {
     title: string;
@@ -150,7 +151,7 @@
     kill: () => void;
     resize: (force?: boolean) => GraphRenderer;
     refresh: (options?: { schedule?: boolean; skipIndexation?: boolean }) => GraphRenderer;
-    scheduleRender: () => GraphRenderer;
+    render: () => GraphRenderer;
     getNodeDisplayData: (nodeId: string) => { x: number; y: number; size: number } | undefined;
     getCamera: () => {
       getState: () => CameraState;
@@ -1208,8 +1209,9 @@
         if (destroyed || !renderer) return;
         measureGraphViewport();
         // Sigma owns separate visible and picking buffers. Keep both aligned
-        // with the resizable and CSS-scaled node before the next interaction.
-        renderer.resize(true).scheduleRender();
+        // with the resizable and CSS-scaled node before the next interaction:
+        // resize clears the picker, so its draw must finish in this same frame.
+        synchronizeGraphSurface(renderer);
       });
     };
     const graphResizeObserver = new ResizeObserver(synchronizeGraphViewport);
