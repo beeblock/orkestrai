@@ -374,10 +374,12 @@
   $effect(() => {
     const element = viewportElement;
     if (!element) return;
+    // Layout size, not getBoundingClientRect(): the Canvas zoom transform would
+    // shrink the measurement, and zooming fires no ResizeObserver callback, so a
+    // node mounted while zoomed out kept fitting the device screen to ~1px.
     const updateSize = () => {
-      const rect = element.getBoundingClientRect();
-      viewportWidth = rect.width;
-      viewportHeight = rect.height;
+      viewportWidth = element.clientWidth;
+      viewportHeight = element.clientHeight;
     };
     updateSize();
     const observer = new ResizeObserver(updateSize);
