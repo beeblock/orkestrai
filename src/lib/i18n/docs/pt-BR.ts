@@ -989,6 +989,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'Não lançado', title: 'Seleção das seções de Configurações', summary: 'Mantém a seleção do menu correta no fim da página.', items: [
+      'Clicar em uma seção curta no fim de Configurações a seleciona mesmo quando a página não pode rolar mais. Links diretos rolam até a seção após carregar os dados. Âncoras nativas, navegação por teclado e histórico continuam disponíveis; ao rolar para outro ponto, o menu volta a acompanhar a seção visível, inclusive no contêiner do desktop Windows, sem polling em repouso.',
+    ] },
     { date: '15 de outubro de 2026 · 0.42.1', title: 'Orkestrai 0.42.1: Stream estável do simulador e atualizações mais leves', summary: 'Corrige a tempestade de GC do MJPEG em sessões longas, mantém os Portais nítidos e reduz trabalho repetido em segundo plano.', items: [
       'A tela do Simulador iOS não deixa mais o Canvas mais lento quanto mais tempo fica aberta. O Chromium contava cada quadro transmitido para uma imagem como memória até ela fechar, o que depois de horas forçava várias coletas de lixo completas por segundo em todos os núcleos. Agora a tela é desenhada quadro a quadro a partir de um stream cancelável e para assim que o nó sai da vista.',
       'Os Portais mantêm a página ao vivo na tela durante cliques, seleção e outras mudanças que não os movem; a prévia de movimento só aparece quando um arrasto, pan ou zoom começa de fato. As prévias copiam o quadro já exibido em resolução real em vez de recapturar a página, o que a fazia piscar e parecer embaçada. As capturas dos agentes não mudam.',
