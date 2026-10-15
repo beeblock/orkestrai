@@ -78,6 +78,8 @@ Kanbans share workspace events and lightweight identity summaries; unchanged
 Markdown reuses a bounded sanitized-content cache. Portal commands wake on
 events with a non-overlapping fallback, and Simulator discovery coalesces reads.
 These fixes reduce measured sources of work, not every possible CPU spike.
+Code-graph resizing redraws its visible and picking buffers in one settled frame,
+so a just-resized visible symbol does not temporarily lose click detection.
 
 ## Startup recovery
 

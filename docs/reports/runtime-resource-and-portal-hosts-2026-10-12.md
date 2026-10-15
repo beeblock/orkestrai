@@ -200,3 +200,37 @@ Verification before publication:
 - The build temporarily raised OS swap allocation from 9 to **10 GiB**; about
   **3.4 GiB** remained free afterward. This identifies that execution's increment,
   not the entire previous overnight change. No local package/install was run.
+
+### Additional release gate: graph picking after zoom
+
+The initial CI on `c073b7bc` passed in **30 min 15 s** (2,226 unit/feature tests
+passed on Linux, 17 platform/live tests skipped; 235 E2E passed, two skipped,
+one graph-UI case passed after retry). Rather than treating that retry as proof
+of stable interaction, the graph case was repeated locally without retries.
+It failed repeatedly, including **3 failures in eight diagnostic runs**.
+
+The graph's dimensions and pointer coordinates stayed the same: the symbol was
+hovered before a click, absent during it, then hoverable at the identical point
+two animation frames later. Sigma's `resize(true)` deletes its picking textures,
+but the component used `scheduleRender()` to redraw them in another frame.
+This exposed an input window with visible symbols and an empty picking buffer.
+Changing candidate pixels and waiting a frame did not reliably remove it.
+
+The first desktop packaging run (`38730258416`) was cancelled before publication;
+`v0.42.1` was not a public GitHub release. The fix redraws synchronously after
+resize in the already-coalesced, settled animation callback. It does not add
+per-viewport-frame work, change symbol selection behavior, or bypass picking.
+A focused unit regression requires `resize` followed by `render` before returning,
+never a deferred draw. The original graph E2E was restored unchanged: no added
+timeouts, retry clicks, relaxed assertions or diagnostic instrumentation remain.
+
+Full Vitest after the fix: **2,231 passed, 13 skipped, zero failed**. The release
+requires a new production build, interaction verification and successful CI on
+the corrected source before retagging the still-unpublished version.
+
+The corrected production build (including native host/messages) passed. The
+**unchanged original graph E2E passed eight consecutive runs with zero retries**
+in **46.6 seconds**. This verifies actual WebGL picking, symbol opening, scaled
+pointer coordinates, graph resizing, camera persistence and both themes, rather
+than just the mocked ordering regression. The still-unpublished tag must move
+only after the new source's CI succeeds; the public `0.42.0` remains immutable.

@@ -18,6 +18,8 @@ pt-BR, English, and Spanish translations.
 - Coalesce concurrent iOS Simulator discovery and reuse results for at most five seconds, invalidating them on simulator operations. Treat collapsed/padding-only Mobile viewports as unmeasured instead of fitting a live screen to nearly zero.
 - Keep periodic Computer storage maintenance running for healthy workspaces when an old project folder no longer exists. Preserve the missing workspace's unhealthy diagnostic state and strict explicit cleanup/capture errors; do not recreate or delete project data, or suppress permission, quota or symlink failures.
 
+- Keep code-graph symbols selectable immediately after canvas zoom or graph resizing. Resize cleared Sigma's picking textures and scheduled their redraw for a later frame, briefly making a visible symbol unclickable. Redraw visible and picking buffers atomically in the settled resize frame without restoring per-viewport-frame work.
+
 ### Known limitations
 
 - The diagnosed MJPEG external-memory GC storm is fixed; an isolated renderer spike is not proof that every workload is CPU-free. WebGL terminal rendering remains under evaluation rather than enabling an unverified GPU/context lifecycle change. OS swap and unrelated project data are not automatically deleted to free space.
