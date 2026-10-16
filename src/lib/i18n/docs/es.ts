@@ -985,7 +985,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Sin publicar', title: 'Selección de secciones de Configuración', summary: 'Mantiene la selección del menú correcta al final de la página.', items: [
+    { date: '16 de octubre de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Selección de secciones de Configuración', summary: 'Mantiene la selección del menú correcta al final de la página.', items: [
       'Al hacer clic en una sección corta al final de Configuración, queda seleccionada aunque la página no pueda desplazarse más. Los enlaces directos desplazan hasta la sección después de cargar los datos. Se conservan anclas nativas, navegación por teclado e historial; al desplazarse a otro punto, el menú vuelve a seguir la sección visible, incluido el contenedor del escritorio Windows, sin polling en reposo.',
     ] },
     { date: '15 de octubre de 2026 · 0.42.1', title: 'Orkestrai 0.42.1: Streaming estable del simulador y actualizaciones más ligeras', summary: 'Corrige la tormenta de GC del MJPEG en sesiones largas, mantiene Portales nítidos y reduce trabajo repetido en segundo plano.', items: [
