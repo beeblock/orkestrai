@@ -985,7 +985,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Unreleased', title: 'Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
+    { date: 'October 16, 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
       'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',
     ] },
     { date: 'October 15, 2026 · 0.42.1', title: 'Orkestrai 0.42.1: Stable simulator streaming and lighter live updates', summary: 'Fix the long-session MJPEG GC storm, keep Portals clear and reduce repeated background work.', items: [
