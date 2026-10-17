@@ -105,6 +105,9 @@
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { clearWorkspaceContext, publishWorkspaceContext } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
+  import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
+  import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
+  import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import WorkspacePermissionNotice from '$lib/components/agent-room/WorkspacePermissionNotice.svelte';
   import { isWorkspacePermissionError } from '$lib/components/agent-room/workspace-permission.js';
   import {
@@ -216,6 +219,18 @@
     const workspaceId = selectedWorkspaceId;
     return untrack(() => retainAgentStatus(workspaceId));
   });
+  $effect(() => {
+    const workspaceId = selectedWorkspaceId;
+    return untrack(() => retainAttentionFeed(workspaceId));
+  });
+
+  function openAttentionItem(item: AgentAttentionItem) {
+    if (item.action?.target === 'chat' && typeof item.action.channel === 'string') {
+      void goto(`/chat?${new URLSearchParams({ workspace: item.workspaceId, channel: item.action.channel }).toString()}`);
+      return;
+    }
+    if (item.nodeId) selectNode(item.workspaceId, item.nodeId);
+  }
   let layoutsByWorkspace = $state<Record<string, WorkbenchLayout>>({});
   let filePathsByWorkspace = $state<Record<string, string[]>>({});
   let tabPlacement = $state<WorkbenchTabPlacement>('vertical');
@@ -973,6 +988,7 @@
             void refreshControlCenter(String(message.workspaceId));
             if (message.workspaceId === selectedWorkspaceId) scheduleAgentStatusRefresh();
           }
+          if (message.type === 'attentionChanged' && message.workspaceId === selectedWorkspaceId) scheduleAttentionRefresh();
         } catch {
           // Frames PTY não relacionados não fazem parte deste explorer.
         }
@@ -1239,6 +1255,8 @@
         />
       </InputGroup.Root>
     </div>
+
+    <NeedsYouList onOpen={openAttentionItem} />
 
     {#if tabPlacement === 'vertical' && selectedLayout && selectedWorkspaceId}
       <div class="max-h-[38%] shrink-0 overflow-y-auto border-b border-[var(--app-border)] pb-1" data-testid="workbench-vertical-tabs">

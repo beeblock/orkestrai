@@ -110,7 +110,7 @@ test('an image upload stays in its original workspace when the user switches dur
     await pane.dispatchEvent('drop', { dataTransfer: files, clientX: 600, clientY: 300 });
     await expect.poll(() => uploadStarted).toBe(true);
     await page.getByRole('button', { name: 'Drop destination', exact: true }).click();
-    await expect(page.getByRole('link', { name: 'Workbench', exact: true })).toHaveAttribute('href', new RegExp(destination));
+    await expect(page.getByRole('link', { name: 'Foco', exact: true })).toHaveAttribute('href', new RegExp(destination));
     releaseUpload();
     const list = async (id: string) => (await (await request.get(`/api/agent-room/workspaces/${id}/nodes`)).json()).data;
     await expect.poll(async () => (await list(source)).length).toBe(1);

@@ -9,6 +9,8 @@
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import * as Select from '$lib/components/ui/select';
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
+  import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
+  import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
   import { answersByQuestion, buildTimeline, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
@@ -155,6 +157,16 @@
     sendError = '';
     syncUrl();
     void loadMessages();
+  }
+
+  function openAttentionItem(item: AgentAttentionItem) {
+    if (item.action?.target === 'chat' && typeof item.action.channel === 'string') {
+      selectChannel(item.action.channel);
+      return;
+    }
+    const params = new URLSearchParams({ workspace: item.workspaceId });
+    if (item.nodeId) params.set('node', item.nodeId);
+    void goto(`/canvas?${params.toString()}`);
   }
 
   function onInput() {
@@ -319,6 +331,7 @@
     {:else if workspace}
       <p class="workspace-name">{workspace.name}</p>
     {/if}
+    <NeedsYouList onOpen={openAttentionItem} limit={4} />
     <h2>{m['chat.channels']()}</h2>
     {#each channels.filter((entry) => entry.kind === 'team') as entry (entry.id)}
       <button type="button" class="channel" class:active={channel === entry.id} onclick={() => selectChannel(entry.id)} aria-current={channel === entry.id ? 'page' : undefined}>
@@ -354,7 +367,7 @@
           {@const live = agentStatus.agents[directNode]}
           {@const activity = live.sessionAlive ? live.state : 'disconnected'}
           {@const parts = elapsedParts(live.stateSince, statusClock.now)}
-          <span class="presence"><AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} />{agentStateLabel(activity)}{#if parts} · {elapsedLabel(parts)}{/if}</span>
+          <span class="presence"><AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} />{agentStateLabel(activity)}{#if parts}{` · ${elapsedLabel(parts)}`}{/if}</span>
         {/if}
       {:else}
         <span class="headline"><Hash size={18} />{channelTitle}</span>

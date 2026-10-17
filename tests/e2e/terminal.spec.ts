@@ -371,7 +371,7 @@ test.describe('terminais PTY', () => {
       await page.getByTestId('terminal-open-canvas').click();
       await expect(page).toHaveURL(new RegExp(`/canvas\\?workspace=${workspace.id}&node=${shell.id}`));
       await expect(page.locator('.canvas-terminal').filter({ hasText: shellTitle })).toBeVisible();
-      await page.getByRole('link', { name: 'Workbench' }).click();
+      await page.getByRole('link', { name: 'Foco', exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`/terminal\\?workspace=${workspace.id}.*node=`));
       await expect(page.getByTestId('workbench-pane-secondary')).toBeVisible();
 
