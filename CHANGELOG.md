@@ -35,6 +35,10 @@ pt-BR, English, and Spanish translations.
 - Let the owner describe a routine in natural language from the agent profile; the agent creates it with its automation tools and confirms in Chat.
 - Add phone access on the local network. The installed app can start an opt-in LAN gateway (port 7420 by default) that serves only the phone page, its assets and the Needs you, Chat and team-status APIs, authenticates API calls with a pairing token stored only as a SHA-256 hash, refuses clients outside private address ranges and is shown once as a QR code in Settings > Phone. The phone page installs to the home screen and uses the same decision and answer paths as the desktop.
 - Share open attention items with remote guests that hold `approvals.view`, and add `attention.decide` and `attention.answer` collaboration commands under `approvals.decide`; gate decisions record the remote device as the actor.
+- Let agent nodes show their direct conversation instead of the terminal, with the terminal still running underneath; the Canvas relays live channel messages to these faces.
+- Add scores: save a canvas selection as a selection-scoped preset (nodes, connections between them, roles of the selected agents and their routines; no tasks, MCP servers or skills) and place it into any workspace from the new Scores section of the Canvas sidebar.
+- Add a pen tool that turns each stroke into a freehand shape node (simplified and normalized like arrow points).
+- Add SSH machines: hosts from ~/.ssh/config (patterns skipped) can open a shell or an agent CLI on that machine in a terminal node that runs the local ssh client; host aliases are validated and the remote folder is shell-quoted.
 
 ## 0.42.2 - 2026-10-16
 

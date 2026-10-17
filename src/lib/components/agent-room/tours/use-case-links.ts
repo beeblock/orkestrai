@@ -1,5 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'canvas-scores': 'canvas-scores',
+  'ssh-machines': 'ssh-machines',
   'phone-companion': 'phone-companion',
   'always-on-teammate': 'always-on-teammate',
   'team-conversation': 'team-conversation',
