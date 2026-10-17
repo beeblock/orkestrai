@@ -30,3 +30,17 @@ export type ListChannelMessagesInput = z.infer<typeof listChannelMessagesSchema>
 export type PostChannelMessageInput = z.infer<typeof postChannelMessageSchema>;
 export type BridgeChannelPostInput = z.infer<typeof bridgeChannelPostSchema>;
 export type BridgeAskOwnerInput = z.infer<typeof bridgeAskOwnerSchema>;
+
+export const createChannelBindingSchema = z.object({
+  nodeId: z.string().uuid(),
+  integrationId: z.string().uuid(),
+  externalChatId: z.string().trim().min(1, 'Informe o chat ou canal.').max(120).regex(/^[A-Za-z0-9_@:.-]+$/, 'Use o id do chat ou canal.'),
+  allowedSenders: z.array(z.string().trim().min(1).max(120)).max(50).default([]),
+});
+
+export const updateChannelBindingSchema = z.object({
+  enabled: z.boolean(),
+});
+
+export type CreateChannelBindingInput = z.infer<typeof createChannelBindingSchema>;
+export type UpdateChannelBindingInput = z.infer<typeof updateChannelBindingSchema>;

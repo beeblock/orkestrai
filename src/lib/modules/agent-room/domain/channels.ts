@@ -4,7 +4,7 @@
  * posts, the owner's messages and questions with their answers; agent-to-agent
  * asks are read from the message envelopes and merged into the team timeline.
  */
-export type ChannelAuthorKind = 'owner' | 'agent' | 'system';
+export type ChannelAuthorKind = 'owner' | 'agent' | 'system' | 'external';
 export type ChannelMessageKind = 'text' | 'question' | 'answer' | 'event';
 
 export type ChannelMessage = {
@@ -72,4 +72,31 @@ export function mentionedTitles(body: string, titles: readonly string[]): string
     }
   }
   return found.sort((a, b) => a.at - b.at).map((entry) => entry.title);
+}
+
+export type ChannelBindingKind = 'telegram' | 'slack';
+
+/** An agent listening to and answering in one external chat. */
+export type ChannelBinding = {
+  id: string;
+  workspaceId: string;
+  nodeId: string;
+  integrationId: string;
+  kind: ChannelBindingKind;
+  externalChatId: string;
+  allowedSenders: string[];
+  enabled: boolean;
+  lastError: string | null;
+  lastInboundAt: string | null;
+  createdAt: string;
+};
+
+/** Whether an inbound sender may talk to the agent: an empty list allows the whole chat. */
+export function senderAllowed(binding: Pick<ChannelBinding, 'allowedSenders'>, senderId: string, senderName: string): boolean {
+  if (!binding.allowedSenders.length) return true;
+  const name = senderName.replace(/^@/, '').toLowerCase();
+  return binding.allowedSenders.some((allowed) => {
+    const value = allowed.trim().replace(/^@/, '').toLowerCase();
+    return Boolean(value) && (value === senderId.toLowerCase() || value === name);
+  });
 }
