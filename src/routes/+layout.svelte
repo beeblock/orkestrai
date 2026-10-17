@@ -38,20 +38,23 @@
   });
 
   let { children } = $props();
+  // The phone page runs behind the LAN gateway, which serves no settings or
+  // desktop chrome: it sets its own language from the mobile session.
+  const phoneShell = $derived(page.url.pathname === '/m' || page.url.pathname.startsWith('/m/'));
   let localeReady = $state(false);
 
   $effect(() => {
+    if (phoneShell) return;
     const theme = applyAppTheme(appSettingsStore.values);
     void desktopMenu?.setTitlebarTheme?.({ background: theme.tokens.sidebar, foreground: theme.tokens.textSoft });
   });
 
-  // The phone page runs behind the LAN gateway, which serves no settings or
-  // desktop chrome: it sets its own language from the mobile session.
-  const phoneShell = $derived(page.url.pathname === '/m' || page.url.pathname.startsWith('/m/'));
 
   onMount(() => {
     if (phoneShell) {
-      applyAppTheme(appSettingsStore.values);
+      // The phone follows its own light or dark preference.
+      const light = window.matchMedia?.('(prefers-color-scheme: light)').matches;
+      applyAppTheme({ ...appSettingsStore.values, appTheme: light ? 'orkestrai-light' : 'orkestrai-dark' });
       localeReady = true;
       return;
     }
