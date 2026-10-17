@@ -2842,7 +2842,19 @@
     }
     const width = node.measured?.width ?? (node.width as number) ?? 560;
     const height = node.measured?.height ?? (node.height as number) ?? 360;
-    zoomApi?.setCenter(node.position.x + width / 2, node.position.y + height / 2 + screenOffsetY / zoom, { zoom, duration: 300 });
+    // The sidebar, dock and message bar float over the pane: center the node in
+    // the area they leave visible (design mode covers the chrome, so it keeps the plain center).
+    const inset = designModeNodeId === nodeId
+      ? { top: 0, bottom: 0, left: 0, right: 0 }
+      : { top: 76, bottom: 92, left: sidebarCollapsed ? 76 : 300, right: 40 };
+    const scale = zoom;
+    const shiftX = (inset.left - inset.right) / 2;
+    const shiftY = (inset.top - inset.bottom) / 2;
+    zoomApi?.setCenter(
+      node.position.x + width / 2 - shiftX / scale,
+      node.position.y + height / 2 - shiftY / scale + screenOffsetY / scale,
+      { zoom: scale, duration: 300 },
+    );
     nodes = nodes.map((item) => ({ ...item, selected: item.id === nodeId }));
   }
 

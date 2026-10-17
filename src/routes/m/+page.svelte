@@ -96,6 +96,15 @@
     await loadMessages(true);
   }
 
+  // Long requests stay clamped until tapped.
+  let expanded = $state<Set<string>>(new Set());
+  function toggleExpanded(id: string) {
+    const next = new Set(expanded);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    expanded = next;
+  }
+
   function setBusy(id: string, on: boolean) {
     const next = new Set(busy);
     if (on) next.add(id);
@@ -237,10 +246,16 @@
         {#each attention as item (item.id)}
           {@const kind = attentionDecisionKind(item)}
           {@const options = ownerQuestionOptions(item)}
-          <article class="card" class:danger={item.severity === 'error'} data-testid="phone-needs-card">
-            <h2>{item.title}</h2>
-            {#if item.body && !options.length}<p>{item.body}</p>{/if}
-            {#if item.nodeTitle}<small>{item.nodeTitle}</small>{/if}
+          <article class="card" class:danger={item.severity === 'error'} class:open={expanded.has(item.id)} data-testid="phone-needs-card">
+            <header class="kind">
+              {#if item.nodeId}<AgentAvatar nodeId={item.nodeId} title={item.nodeTitle ?? ''} size={20} />{/if}
+              <b>{kind ? m['phone.kind_approval']() : item.sourceType === 'owner_question' ? m['phone.kind_question']() : item.severity === 'error' ? m['phone.kind_blocked']() : m['phone.kind_notice']()}</b>
+              {#if item.nodeTitle}<span>{item.nodeTitle}</span>{/if}
+            </header>
+            <button type="button" class="card-text" aria-expanded={expanded.has(item.id)} onclick={() => toggleExpanded(item.id)}>
+              <h2>{item.title}</h2>
+              {#if item.body && !options.length}<p>{item.body}</p>{/if}
+            </button>
             {#if kind}
               {@const labels = decisionLabels(kind)}
               <div class="actions">
@@ -281,7 +296,13 @@
                 {#if message.kind === 'question'}
                   <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={titles.get(message.authorNodeId ?? '') ?? ''} onAnswer={answerInChat} />
                 {:else}
-                  <div class="bubble"><MarkdownView content={message.body} compact /></div>
+                  <div class="bubble">
+                    {#if typeof message.meta.to === 'string'}<span class="to">→ {titles.get(message.meta.to) ?? m['chat.unknown_agent']()}</span>{/if}
+                    <MarkdownView content={message.body} compact />
+                    {#if typeof message.meta.reply === 'string' && message.meta.reply}
+                      <div class="reply"><b>{titles.get(String(message.meta.to)) ?? ''}</b><MarkdownView content={message.meta.reply} compact /></div>
+                    {/if}
+                  </div>
                 {/if}
               {/each}
             </div>
@@ -433,16 +454,72 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-danger) 28%, transparent);
   }
 
-  .card h2 {
+  .kind {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .kind b {
+    color: var(--app-warning);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .danger .kind b {
+    color: var(--app-danger);
+  }
+
+  .kind span {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--app-text-muted);
+    font-size: 12.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .card h2,
+  .card p {
     margin: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+  }
+
+  .card h2 {
     font-size: 16px;
     font-weight: 650;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
   }
 
   .card p {
-    margin: 0;
     color: var(--app-text-soft);
     font-size: 14px;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+
+  .card.open h2,
+  .card.open p {
+    display: block;
   }
 
   .card small,
@@ -476,8 +553,8 @@
   }
 
   .actions .primary {
-    background: var(--app-text);
-    color: var(--app-surface);
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
   }
 
   .actions .secondary {
@@ -516,6 +593,7 @@
   }
 
   .row-text small {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -558,11 +636,33 @@
 
   .bubble {
     max-width: 88%;
+    min-width: 0;
+    overflow-wrap: anywhere;
     padding: 8px 12px;
     border-radius: 14px;
     background: var(--app-surface);
     font-size: 14.5px;
     line-height: 1.5;
+  }
+
+  .bubble .to {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--app-accent);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .bubble .reply {
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-left: 2px solid var(--app-border-strong);
+    border-radius: 0 8px 8px 0;
+    background: var(--app-surface-raised);
+  }
+
+  .bubble .reply b {
+    font-size: 12px;
   }
 
   .mine .bubble {

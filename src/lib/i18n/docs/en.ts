@@ -1020,6 +1020,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Scores: select part of a canvas, choose Save as score and place it again in any workspace from the sidebar. It keeps the connections, the roles of the selected agents and their routines.",
       "Pen: draw freely on the canvas from the Plan menu; each stroke becomes a shape you can move, recolor or delete.",
       "SSH machines: open a terminal or an agent on another computer from the Devices menu, using the hosts in your SSH config.",
+      "Opening a node from the team, search or a link centers it in the part of the Canvas the floating panels leave visible. On the phone, long requests stay short until tapped and each card says whether it is an approval, a question or a blocked agent.",
     ] },
     { date: 'October 16, 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
       'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',

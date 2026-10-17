@@ -18,6 +18,7 @@ pt-BR, English, and Spanish translations.
 - Float the workspace sidebar over the Canvas with a Team section that lists agents by who needs the owner first, move the dock to the top with menus opening downward, and keep the minimap and horizontal zoom controls at the bottom right. Fitting the view leaves room for this chrome.
 - Set group titles and summary figures in a condensed display face (Archivo, SIL Open Font License).
 - Rename the Workbench to Focus in the interface, guides and agent instructions; the top bar switches between Canvas, Focus and Chat.
+- Center a node opened from the team list, search or a link in the area the floating Canvas chrome leaves visible (design mode keeps the plain center). Phone cards clamp long requests until tapped, label approvals, questions and blocked agents, and the phone chat shows who an agent asked and the reply.
 
 ### Added
 
