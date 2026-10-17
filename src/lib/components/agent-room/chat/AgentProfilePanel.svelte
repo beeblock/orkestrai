@@ -67,7 +67,7 @@
     <AgentAvatar {nodeId} {title} size={56} />
     <h2 class="headline">{title}</h2>
     {#if payload.role}<p class="role">{payload.role}</p>{/if}
-    <p class="status"><AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} /> {agentStateLabel(activity)}{#if since} · {since}{/if}</p>
+    <p class="status"><AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} /> {agentStateLabel(activity)}{#if since}{` · ${since}`}{/if}</p>
   </div>
   <div class="actions">
     <button type="button" onclick={() => onDirect(nodeId)}><MessageSquare size={13} />{m['chat.profile_direct']()}</button>
@@ -79,7 +79,7 @@
       <dt>{m['chat.profile_provider']()}</dt>
       <dd>
         {#if providerIcons[payload.provider]}<span class="app-logo-plate mark"><img src={providerIcons[payload.provider]} width="12" height="12" alt="" /></span>{/if}
-        {payload.provider}{#if model} · {model}{/if}
+        {payload.provider}{#if model}{` · ${model}`}{/if}
       </dd>
     {/if}
     {#if status?.currentTask}
