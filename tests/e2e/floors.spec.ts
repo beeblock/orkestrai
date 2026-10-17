@@ -39,7 +39,8 @@ test.describe('andares e rotinas', () => {
     await expect(page.locator('.canvas-note')).toHaveCount(1);
 
     // Abre o painel e cria um andar
-    await page.getByRole('button', { name: /Andares/ }).click();
+    await page.locator('.toolbar [data-tool-group-trigger]').filter({ hasText: 'Workspace' }).click();
+    await page.getByRole('menuitem', { name: /Andares/ }).click();
     const panel = page.locator('.side-panel');
     await expect(panel).toBeVisible();
     await panel.getByPlaceholder('Nome do andar').fill('feature-x');

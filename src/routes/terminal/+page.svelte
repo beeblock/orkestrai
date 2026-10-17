@@ -1,6 +1,6 @@
 <script lang="ts">
   import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { goto, replaceState } from '$app/navigation';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -103,8 +103,8 @@
   import { TEXT_DICTATION_FALLBACK, type TextDictationFallbackDetail } from '$lib/components/agent-room/text-dictation.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
-  import WorkspaceModeSwitch from '$lib/components/agent-room/WorkspaceModeSwitch.svelte';
-  import AttentionCenter from '$lib/components/agent-room/AttentionCenter.svelte';
+  import { clearWorkspaceContext, publishWorkspaceContext } from '$lib/components/agent-room/workspace-context.svelte.js';
+  import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
   import WorkspacePermissionNotice from '$lib/components/agent-room/WorkspacePermissionNotice.svelte';
   import { isWorkspacePermissionError } from '$lib/components/agent-room/workspace-permission.js';
   import {
@@ -206,6 +206,16 @@
   let expandedWorkspaceIds = $state<string[]>([]);
   let selectedWorkspaceId = $state<string | null>(null);
   let selectedNodeId = $state<string | null>(null);
+  // The app top bar shows the mode switch and attention bell for this workspace.
+  $effect(() => {
+    publishWorkspaceContext('terminals', selectedWorkspaceId, isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId);
+  });
+  onMount(() => () => clearWorkspaceContext('terminals'));
+  // Live teammate status for the terminal headers, shared with the Canvas.
+  $effect(() => {
+    const workspaceId = selectedWorkspaceId;
+    return untrack(() => retainAgentStatus(workspaceId));
+  });
   let layoutsByWorkspace = $state<Record<string, WorkbenchLayout>>({});
   let filePathsByWorkspace = $state<Record<string, string[]>>({});
   let tabPlacement = $state<WorkbenchTabPlacement>('vertical');
@@ -961,6 +971,7 @@
           }
           if (message.type === 'controlCenterChanged' || message.type === 'messageDelivery') {
             void refreshControlCenter(String(message.workspaceId));
+            if (message.workspaceId === selectedWorkspaceId) scheduleAgentStatusRefresh();
           }
         } catch {
           // Frames PTY não relacionados não fazem parte deste explorer.
@@ -1210,18 +1221,8 @@
   {#if selectedWorkspaceId}<CreativeRecipeDialog bind:open={showRecipes} workspaceId={selectedWorkspaceId} onOpenNode={async (id) => { const workspace = selectedWorkspaceId; if (workspace) { await loadWorkspace(workspace); if (selectedWorkspaceId === workspace) selectNode(workspace, id); } }} />{/if}
   {#if selectedWorkspaceId}<CreativeBrandDialog bind:open={showBrands} workspaceId={selectedWorkspaceId} onPlaced={async (id) => { const workspace = selectedWorkspaceId; if (workspace) { await loadWorkspace(workspace); if (selectedWorkspaceId === workspace) selectNode(workspace, id); } }} />{/if}
   <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-sidebar)]">
-    <div class="flex h-11 shrink-0 items-center gap-2 px-3">
-      <img src="/brand/icon.svg" width="20" height="20" alt="" />
-      <strong class="font-display text-[14.5px] font-semibold tracking-[-0.01em] text-[var(--app-text)]">Orkestrai</strong>
-      <div class="ml-auto"><WorkspaceSharingButton variant="icon" workspaceId={selectedWorkspaceId} onOpen={() => (sharingOpen = true)} /></div>
-    </div>
-    <div class="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[var(--app-border)] px-3">
-      <WorkspaceModeSwitch
-        active="terminals"
-        workspaceId={selectedWorkspaceId}
-        nodeId={isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId}
-      />
-      <AttentionCenter workspaceId={selectedWorkspaceId} />
+    <div class="flex h-11 shrink-0 items-center justify-end gap-2 border-b border-[var(--app-border)] px-3">
+      <WorkspaceSharingButton variant="icon" workspaceId={selectedWorkspaceId} onOpen={() => (sharingOpen = true)} />
       <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={() => addVideoWorkflow()}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_audio.add']()} onclick={() => addVideoWorkflow(true)}><AudioLines size={15} />{m['creative_audio.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['sequence.title']()} onclick={addSequence}><Film size={15} />{m['sequence.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_recipe.title']()} onclick={() => showRecipes = true}><Workflow size={15} />{m['creative_recipe.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
 

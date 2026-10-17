@@ -37,8 +37,28 @@ export async function selectCanvasTool(page: Page, buttonName: string) {
   if (await page.locator('[role="dialog"]:visible').count()) await page.keyboard.press('Escape');
 
   const button = page.locator('.toolbar button').filter({ hasText: buttonName });
-  await button.click();
-  await expect(button).toHaveClass(/bg-\[var\(--app-accent-soft\)\]/);
+  if (await button.count()) {
+    await button.click();
+    await expect(button).toHaveClass(/bg-\[var\(--app-accent-soft\)\]/);
+    return;
+  }
+
+  // Less frequent tools live in labelled dock groups: open each group until
+  // the tool appears, choose it and expect the group to show it as active.
+  const groups = page.locator('.toolbar [data-tool-group-trigger]');
+  const total = await groups.count();
+  for (let index = 0; index < total; index += 1) {
+    const group = groups.nth(index);
+    await group.click();
+    const item = page.getByRole('menuitem').filter({ hasText: buttonName });
+    if (await item.count()) {
+      await item.first().click();
+      await expect(group).toHaveClass(/bg-\[var\(--app-accent-soft\)\]/);
+      return;
+    }
+    await page.keyboard.press('Escape');
+  }
+  throw new Error(`Canvas tool not found in the dock: ${buttonName}`);
 }
 
 /**

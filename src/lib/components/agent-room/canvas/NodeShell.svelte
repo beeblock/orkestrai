@@ -175,6 +175,13 @@
   <div class="node-body" class:deferred-body={deferOffscreen}>
     {@render children()}
   </div>
+  {#if titleText}
+    <!-- Far out, the canvas reads as a map: the node becomes its name and status. -->
+    <div class="overview-label" aria-hidden="true">
+      <span class="overview-icon">{@render icon()}</span>
+      <span class="overview-title">{titleText}</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -377,6 +384,50 @@
   :global(.svelte-flow[data-canvas-overview='true']) .node-shell:global(.canvas-terminal) .node-body:not(:focus-within) {
     content-visibility: hidden;
     contain-intrinsic-size: auto 300px;
+  }
+
+  .overview-label {
+    display: none;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .node-shell:not(:global(.canvas-image)):not(:global(.canvas-design)):not(:focus-within) {
+    container-type: inline-size;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .node-shell:not(:global(.canvas-image)):not(:global(.canvas-design)):not(:focus-within) .overview-label {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25em;
+    padding: 8%;
+    border-radius: inherit;
+    background: var(--app-surface);
+    color: var(--app-text);
+    font-family: var(--font-display);
+    font-size: clamp(36px, 13cqw, 120px);
+    font-weight: 650;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .overview-icon {
+    display: inline-flex;
+    zoom: 2.6;
+  }
+
+  .overview-title {
+    display: -webkit-box;
+    max-width: 100%;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
   }
 
   :global(.svelte-flow[data-canvas-moving='true']) .node-header:not(:focus-within) .node-actions,

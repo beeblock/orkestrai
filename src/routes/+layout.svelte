@@ -25,7 +25,6 @@
   const desktopMenu = typeof window !== 'undefined'
     ? (window as unknown as { orkestraiDesktop?: DesktopMenuBridge }).orkestraiDesktop
     : undefined;
-  const windowsDesktop = desktopMenu?.platform === 'win32';
 
   $effect(() => {
     void desktopMenu?.setMenuLocale?.(localeState.current);
@@ -112,8 +111,8 @@
        m.*() reavalia — i18n reativo garantido por construcao. -->
   {#if localeReady}
     {#key localeState.current}
-      {#if windowsDesktop}<DesktopTitlebar />{/if}
-      <div class="app-content" class:desktop-content={windowsDesktop}>
+      <DesktopTitlebar />
+      <div class="app-content desktop-content">
         {@render children()}
       </div>
       <GlobalDictation />
@@ -143,14 +142,10 @@
     font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
+  /* The app-wide top bar (DesktopTitlebar) takes 44px on every platform. */
   .app-content {
-    height: 100dvh;
+    height: calc(100dvh - 44px);
     min-height: 0;
-  }
-
-  .app-content.desktop-content {
-    height: calc(100dvh - 36px);
-    border-top: 1px solid var(--app-border);
     overflow: auto;
   }
 </style>

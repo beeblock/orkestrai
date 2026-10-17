@@ -378,7 +378,13 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     });
     // Readable zoom restores the very same original elements and URLs, not a
     // thumbnail pretending to be the reference/master.
-    for (let i = 0; i < 5; i++) await zoomIn.click();
+    // The app top bar leaves a shorter canvas, so the fitted start is a little
+    // farther out; zoom until readable instead of counting a fixed number of steps.
+    for (let i = 0; i < 12; i++) {
+      await zoomIn.click();
+      if (i >= 4 && !(await page.locator('.svelte-flow').getAttribute('data-canvas-overview'))) break;
+      await page.waitForTimeout(200);
+    }
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
     await expect(page.locator('.canvas-image .overview-preview.active')).toHaveCount(0);
     await expect(page.locator('.canvas-image img.img-outline').first()).toHaveCSS('visibility', 'visible');
