@@ -1,3 +1,6 @@
+import { attentionDecisionService } from '$lib/modules/agent-room/application/services/AttentionDecisionService.js';
+import { channelService, OWNER_QUESTION_SOURCE } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { attentionRepository } from '$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { reviewCenterService } from '$lib/modules/agent-room/application/services/ReviewCenterService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
@@ -130,6 +133,16 @@ export class SharedWorkspaceCommandBus {
         assigneeNodeId: command.assigneeNodeId,
       });
       return { taskId: task.id, title: task.title, status: task.status };
+    }
+    if (command.type === 'attention.decide') {
+      const item = await attentionDecisionService.decide(workspaceId, command.itemId, command.decision, `remote:${deviceId}`);
+      return { itemId: command.itemId, resolved: item?.status === 'resolved' };
+    }
+    if (command.type === 'attention.answer') {
+      const item = await attentionRepository.find(workspaceId, command.itemId);
+      if (!item || item.sourceType !== OWNER_QUESTION_SOURCE || !item.sourceId || typeof item.action?.channel !== 'string') throw new Error('Esta pergunta não está mais aberta.');
+      const answer = await channelService.postOwner(workspaceId, item.action.channel, { body: command.text, replyToId: item.sourceId });
+      return { itemId: command.itemId, delivered: answer.delivered.every((entry) => entry.ok) };
     }
     if (command.type === 'review.decide') {
       const decision = await reviewCenterService.decide(

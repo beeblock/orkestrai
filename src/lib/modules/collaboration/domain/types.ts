@@ -181,6 +181,18 @@ export type SharedWorkspaceDto = {
     diagnostic?: 'provider_cli_only' | 'admin_api_required' | 'enterprise_api_required' | 'model_provider_managed' | null;
     fetchedAt: string;
   }>;
+  /** Requests waiting for the owner; absent in snapshots from older hosts. */
+  attention?: Array<{
+    id: string;
+    title: string;
+    body: string | null;
+    nodeTitle: string | null;
+    severity: 'info' | 'success' | 'warning' | 'error';
+    decision: 'gate' | 'flow' | 'tool' | 'learning' | 'review' | null;
+    options: string[];
+    question: boolean;
+    createdAt: string;
+  }>;
   activity: Array<{
     id: string;
     kind: 'agent' | 'task' | 'review';
@@ -207,7 +219,9 @@ export type CollaborationCommand =
   | { type: 'agent.invoke'; agentNodeId: string }
   | { type: 'huddle.create'; title: string; agenda?: string | null; agentNodeIds: string[]; facilitatorNodeId?: string | null }
   | { type: 'huddle.turn'; huddleId: string; text: string; targetNodeIds: string[] }
-  | { type: 'huddle.end'; huddleId: string };
+  | { type: 'huddle.end'; huddleId: string }
+  | { type: 'attention.decide'; itemId: string; decision: 'approve' | 'reject' }
+  | { type: 'attention.answer'; itemId: string; text: string };
 
 export type CollaborationCommandResult = {
   commandId: string;

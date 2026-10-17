@@ -9,6 +9,7 @@ import { usageService } from '$lib/modules/agent-room/application/services/Usage
 import { designDocumentService } from '$lib/modules/agent-room/application/services/DesignDocumentService.js';
 import { designCollaborationService } from '$lib/modules/agent-room/application/services/DesignCollaborationService.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import type { CollaborationScope, SharedCanvasNodeDto, SharedWorkspaceDto } from '../../domain/types.js';
 import { MAX_PLAINTEXT_BYTES } from '@orkestrai/collaboration-protocol';
 import { collaborationRepository } from '../../infrastructure/repositories/CollaborationRepository.js';
@@ -33,6 +34,7 @@ export function scopeSharedWorkspaceSnapshot(
     huddles: scopes.includes('huddles.view') ? snapshot.huddles : [],
     agents: canViewActivity ? snapshot.agents : snapshot.agents.map((agent) => ({ ...agent, workSummary: null })),
     activity: canViewActivity ? snapshot.activity : [],
+    attention: scopes.includes('approvals.view') ? snapshot.attention ?? [] : [],
   };
 }
 
@@ -87,6 +89,7 @@ export function fitSharedWorkspaceSnapshot(snapshot: SharedWorkspaceDto): Shared
       })),
       usage: snapshot.usage.slice(0, 8),
       activity: snapshot.activity.slice(0, 40),
+      attention: (snapshot.attention ?? []).slice(0, 30).map((item) => ({ ...item, body: item.body?.slice(0, descriptionLimit) ?? null })),
     };
   };
   for (const limits of [[150, 1_200, 300, 150], [100, 600, 220, 120], [60, 300, 150, 80], [30, 160, 100, 50]] as const) {
@@ -155,6 +158,7 @@ export class SharedWorkspaceQuery {
       reviewCenterService.snapshot(share.workspaceId).catch(() => ({ reviews: [] } as unknown as Awaited<ReturnType<typeof reviewCenterService.snapshot>>)),
       huddleService.snapshot(share.workspaceId).catch(() => ({ huddles: [], selected: null, activeHuddleId: null })),
     ]);
+    const attentionItems = await attentionService.list({ workspaceId: share.workspaceId, limit: 100 }).catch(() => []);
     const nodes = rawNodes.map(projectNode).filter((node): node is SharedCanvasNodeDto => Boolean(node));
     const designDocuments = await Promise.all(rawNodes.filter((node) => node.type === 'design').map(async (node) => {
       const document = await designDocumentService.get(share.workspaceId, node.id);
@@ -385,6 +389,27 @@ export class SharedWorkspaceQuery {
         diagnostic: usage.diagnostic ?? null,
         fetchedAt: usage.fetchedAt,
       })),
+      attention: attentionItems
+        .filter((item) => item.status === 'open' || item.status === 'read' || (item.status === 'snoozed' && new Date(item.snoozedUntil ?? 0).getTime() <= Date.now()))
+        .map((item) => {
+          const decision = typeof item.action?.decision === 'string' && ['gate', 'flow', 'tool', 'learning', 'review'].includes(item.action.decision)
+            ? item.action.decision as 'gate' | 'flow' | 'tool' | 'learning' | 'review'
+            : null;
+          const options = item.sourceType === 'owner_question' && Array.isArray(item.action?.options)
+            ? (item.action.options as unknown[]).filter((option): option is string => typeof option === 'string').slice(0, 6).map((option) => sanitizeSharedText(option))
+            : [];
+          return {
+            id: item.id,
+            title: sanitizeSharedText(item.title),
+            body: item.body ? sanitizeSharedText(item.body) : null,
+            nodeTitle: item.nodeTitle ? sanitizeSharedText(item.nodeTitle) : null,
+            severity: item.severity,
+            decision,
+            options,
+            question: item.sourceType === 'owner_question',
+            createdAt: item.createdAt,
+          };
+        }),
       activity: [
         ...control.agents.map((agent) => ({
           id: `agent_${agent.nodeId}_${agent.stateSince}`,

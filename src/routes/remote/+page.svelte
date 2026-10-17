@@ -207,6 +207,15 @@
     await command({ type: "review.decide", reviewId, status });
   }
 
+  async function decideAttention(itemId: string, decision: "approve" | "reject"): Promise<void> {
+    await command({ type: "attention.decide", itemId, decision });
+  }
+
+  async function answerAttention(itemId: string, text: string): Promise<boolean> {
+    const result = await command({ type: "attention.answer", itemId, text });
+    return Boolean(result?.accepted);
+  }
+
   async function createDesignComment(nodeId: string, pageId: string, elementId: string | null, body: string): Promise<void> {
     const result = await command({ type: "design.comment.create", nodeId, pageId, elementId, body });
     if (result?.accepted) toast.success(m["remote.design_comment_sent"]());
@@ -343,7 +352,16 @@
   });
 </script>
 
-<svelte:head><title>{m["remote.title"]()} - Orkestrai</title></svelte:head>
+<svelte:head>
+  <title>{m["remote.title"]()} - Orkestrai</title>
+  <!-- Installable on phones: open the invite once, then add it to the home screen. -->
+  <link rel="manifest" href="/pwa/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0b0c0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Orkestrai" />
+</svelte:head>
 
 {#snippet stepList(compact: boolean)}
   <ol class="rp-steps" class:compact>
@@ -566,6 +584,8 @@
     onCreateTask={() => (taskDialogOpen = true)}
     onUpdateTask={updateTask}
     onDecideReview={decideReview}
+    onDecideAttention={decideAttention}
+    onAnswerAttention={answerAttention}
     onCreateDesignComment={createDesignComment}
     onReplyDesignComment={replyDesignComment}
     onResolveDesignComment={resolveDesignComment}

@@ -25,7 +25,8 @@ function stringField(action: Record<string, unknown>, key: string): string {
  * requirements, owner-only publishing, revisions) apply as on its own screen.
  */
 export class AttentionDecisionService {
-  async decide(workspaceId: string, id: string, decision: AttentionDecision): Promise<AgentAttentionItem | null> {
+  /** `actorId` is recorded on gate decisions: the owner, or the remote device acting for them. */
+  async decide(workspaceId: string, id: string, decision: AttentionDecision, actorId: string = OWNER): Promise<AgentAttentionItem | null> {
     const item = await attentionRepository.find(workspaceId, id);
     if (!item) throw new Error('Item de atenção não encontrado.');
     if (item.status === 'resolved') throw new Error('Este item já foi resolvido.');
@@ -33,7 +34,7 @@ export class AttentionDecisionService {
     const approve = decision === 'approve';
     switch (action.decision) {
       case 'gate':
-        await autonomyPolicyService.resolveGate(workspaceId, stringField(action, 'gateId'), approve ? 'approved' : 'denied', OWNER, null);
+        await autonomyPolicyService.resolveGate(workspaceId, stringField(action, 'gateId'), approve ? 'approved' : 'denied', actorId, null);
         break;
       case 'flow': {
         const nodeId = item.nodeId ?? stringField(action, 'nodeId');

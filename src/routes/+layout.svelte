@@ -4,6 +4,7 @@
   import { getCsrfToken, registerToast } from '@beeblock/svelar/http';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import UpdateNotifier from '$lib/components/agent-room/UpdateNotifier.svelte';
   import GlobalDictation from '$lib/components/agent-room/GlobalDictation.svelte';
@@ -44,7 +45,16 @@
     void desktopMenu?.setTitlebarTheme?.({ background: theme.tokens.sidebar, foreground: theme.tokens.textSoft });
   });
 
+  // The phone page runs behind the LAN gateway, which serves no settings or
+  // desktop chrome: it sets its own language from the mobile session.
+  const phoneShell = $derived(page.url.pathname === '/m' || page.url.pathname.startsWith('/m/'));
+
   onMount(() => {
+    if (phoneShell) {
+      applyAppTheme(appSettingsStore.values);
+      localeReady = true;
+      return;
+    }
     // Nao libere interacao antes da preferencia inicial chegar: caso contrario
     // o remount de locale pode descartar um clique feito durante o startup.
     void initLocaleRuntime().finally(() => {
@@ -109,7 +119,11 @@
 <Tooltip.Provider>
   <!-- #key no locale: ao trocar de idioma, a arvore inteira remonta e todo
        m.*() reavalia — i18n reativo garantido por construcao. -->
-  {#if localeReady}
+  {#if localeReady && phoneShell}
+    {#key localeState.current}
+      {@render children()}
+    {/key}
+  {:else if localeReady}
     {#key localeState.current}
       <DesktopTitlebar />
       <div class="app-content desktop-content">
@@ -133,7 +147,7 @@
     default: { borderClass: '', progressClass: 'bg-[var(--app-text-muted)]' },
   }}
 />
-<UpdateNotifier />
+{#if !phoneShell}<UpdateNotifier />{/if}
 
 <style>
   :global(body) {
