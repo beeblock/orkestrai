@@ -985,6 +985,14 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'Unreleased', title: 'Revamp: one top bar, live teammates and a shorter dock', summary: 'The Canvas reads at a glance: who is working, what needs you and where everything is.', items: [
+      'One top bar on every platform holds the Canvas/Workbench switch, search, the attention bell and the microphone. On macOS the window buttons sit inside it.',
+      'Terminal headers show each agent\'s live state, a stable teammate color with initials, the time in the current state and the launch model.',
+      'The Canvas dock keeps everyday tools one click away and moves the rest into Plan, Code, Devices and Workspace menus. Creation tools can still be dragged onto the canvas.',
+      'The dock, minimap and zoom controls float on a translucent surface.',
+      'Connections stay quiet until one of their nodes is selected.',
+      'Zoomed far out, nodes show their name and status in large type instead of an empty frame.',
+    ] },
     { date: 'October 16, 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
       'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',
     ] },

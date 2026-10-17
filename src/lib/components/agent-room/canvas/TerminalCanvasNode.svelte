@@ -8,6 +8,11 @@
   import type { AgentRole } from '$lib/modules/agent-room/application/services/RoleService.js';
   import NodeShell from './NodeShell.svelte';
   import NodeEmptyState from './NodeEmptyState.svelte';
+  import AgentAvatar from '../AgentAvatar.svelte';
+  import AgentGlyph from '../AgentGlyph.svelte';
+  import { agentStatus, statusClock } from '../agent-status.svelte.js';
+  import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
+  import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
   import TerminalNode from '../TerminalNode.svelte';
   import VoiceConfirmDialog from '../VoiceConfirmDialog.svelte';
   import { appSettingsStore, getAppSettings, updateAppSettings } from '../app-settings.svelte.js';
@@ -232,6 +237,15 @@
   /** Role exibida no header: curta (o nome completo fica no dropdown/aria). */
   const roleLabel = $derived(currentRole && currentRole.length > 24 ? `${currentRole.slice(0, 23).trimEnd()}…` : currentRole);
   const currentProvider = $derived((data.payload as TerminalNodePayload).provider ?? null);
+  const liveStatus = $derived(agentStatus.agents[id] ?? null);
+  const statusTone = $derived(liveStatus ? agentTone(liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle');
+  const statusLabel = $derived(agentStateLabel(liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle'));
+  const launchModel = $derived(modelFromArgs((data.payload as TerminalNodePayload).args));
+  const statusSince = $derived.by(() => {
+    if (statusTone !== 'working' && statusTone !== 'attention' && statusTone !== 'blocked') return null;
+    const parts = elapsedParts(liveStatus?.stateSince, statusClock.now);
+    return parts ? elapsedLabel(parts) : null;
+  });
   const agentRuntimeMode = $derived((data.payload as TerminalNodePayload).agentRuntimeMode ?? 'interactive');
   const agentRuntimeSleeping = $derived(Boolean(currentProvider && agentRuntimeMode === 'on_demand' && !data.payload.sessionId && !forceRespawn));
   const currentProfileId = $derived((data.payload as TerminalNodePayload).profileId ?? null);
@@ -614,14 +628,26 @@
   onRemoveConnection={data.onRemoveConnection}
 >
   {#snippet icon()}
-    {#if currentProvider && providerIcons[currentProvider]}
-      <span class="terminal-provider-mark app-logo-plate"><img src={providerIcons[currentProvider]} width="13" height="13" alt="" /></span>
+    {#if currentProvider}
+      <span class="terminal-identity">
+        <AgentGlyph tone={statusTone} label={statusLabel} />
+        <AgentAvatar nodeId={id} title={data.title} />
+      </span>
     {:else}
       <SquareTerminal size={13} />
     {/if}
   {/snippet}
   {#snippet title()}{data.title}{/snippet}
   {#snippet actions()}
+    {#if currentProvider}
+      <span class="terminal-meta" title={[statusLabel, statusSince, launchModel].filter(Boolean).join(' · ')}>
+        {#if statusSince}<span class="terminal-since">{statusSince}</span>{/if}
+        {#if providerIcons[currentProvider]}
+          <span class="terminal-provider-mark app-logo-plate"><img src={providerIcons[currentProvider]} width="12" height="12" alt="" /></span>
+        {/if}
+        {#if launchModel}<span class="terminal-model">{launchModel}</span>{/if}
+      </span>
+    {/if}
     {#if runtimeOverride}
       <span class="terminal-status-chip" role="status" title={runtimeTitle} aria-label={runtimeTitle}>
         <MonitorCog size={12} />
@@ -1187,12 +1213,41 @@
     font-size: 11px;
   }
 
+  /* Status, teammate color and initials stay together at the start of the header. */
+  .terminal-identity {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .terminal-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .terminal-since {
+    color: var(--app-text-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .terminal-model {
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .terminal-provider-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 19px;
-    height: 19px;
+    width: 18px;
+    height: 18px;
     border-radius: 5px;
     /* Placa fixa escura de proposito: os SVGs em /images sao preenchidos com
        branco, entao um token de superficie apagaria a marca no tema claro.

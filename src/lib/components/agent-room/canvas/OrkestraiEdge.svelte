@@ -179,6 +179,11 @@
 
   const talking = $derived(Boolean((data as { talking?: boolean } | undefined)?.talking));
   const pinned = $derived(Boolean((data as { pinned?: boolean } | undefined)?.pinned));
+  // Connections stay quiet until one of their nodes is selected.
+  const endpointSelected = $derived.by(() => {
+    const index = nodeIndexFor(nodesStore.current);
+    return Boolean(index.get(source)?.selected || index.get(target)?.selected);
+  });
   const renderingPreference = $derived(normalizeEdgeRenderingPreference(
     (data as { renderingPreference?: unknown } | undefined)?.renderingPreference,
   ));
@@ -245,7 +250,7 @@
     return { path: pathD, midX: mid.x, midY: mid.y };
   });
 
-  const stroke = $derived(talking ? 'var(--app-success)' : pinned ? 'var(--app-accent)' : 'var(--app-edge)');
+  const stroke = $derived(talking ? 'var(--app-success)' : pinned || endpointSelected ? 'var(--app-accent)' : 'var(--app-edge)');
 
   // O X so aparece com hover na corda (ou no proprio botao) ou com a edge
   // selecionada/pinned — escondido ele nao intercepta cliques do canvas.
@@ -296,7 +301,7 @@
       d={path.path}
       fill="none"
       stroke={stroke}
-      stroke-width={talking ? 2.4 : 1.6}
+      stroke-width={talking ? 2.4 : endpointSelected ? 2 : 1.6}
       stroke-dasharray="7 5"
       stroke-linecap="round"
       class="edge-line"

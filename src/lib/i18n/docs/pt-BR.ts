@@ -989,6 +989,14 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: 'Ainda não publicado', title: 'Revamp: uma barra superior, agentes ao vivo e um dock mais curto', summary: 'O Canvas se lê de relance: quem está trabalhando, o que precisa de você e onde está cada coisa.', items: [
+      'Uma barra superior em todas as plataformas reúne a troca Canvas/Workbench, a busca, o sino de atenção e o microfone. No macOS os botões da janela ficam dentro dela.',
+      'O cabeçalho de cada terminal mostra o estado ao vivo do agente, uma cor fixa com as iniciais, o tempo no estado atual e o modelo escolhido ao iniciar.',
+      'O dock do Canvas deixa as ferramentas do dia a dia a um clique e leva o resto para os menus Planejar, Código, Dispositivos e Workspace. As ferramentas de criação ainda podem ser arrastadas para o canvas.',
+      'O dock, o minimapa e o zoom flutuam sobre uma superfície translúcida.',
+      'As conexões ficam discretas até um dos seus nós ser selecionado.',
+      'Com o zoom bem afastado, cada nó mostra o nome e o status em letras grandes em vez de uma moldura vazia.',
+    ] },
     { date: '16 de outubro de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Seleção das seções de Configurações', summary: 'Mantém a seleção do menu correta no fim da página.', items: [
       'Clicar em uma seção curta no fim de Configurações a seleciona mesmo quando a página não pode rolar mais. Links diretos rolam até a seção após carregar os dados. Âncoras nativas, navegação por teclado e histórico continuam disponíveis; ao rolar para outro ponto, o menu volta a acompanhar a seção visível, inclusive no contêiner do desktop Windows, sem polling em repouso.',
     ] },

@@ -826,10 +826,15 @@ async function createWindow() {
     title: 'Orkestrai',
     icon: path.join(appRoot, 'electron', 'resources', 'icon.png'),
     backgroundColor: '#0D0B2E',
+    // The renderer draws a 44px top bar on every platform (DesktopTitlebar):
+    // Windows overlays its native window buttons, macOS insets the traffic lights.
     ...(process.platform === 'win32' ? {
       titleBarStyle: 'hidden',
-      titleBarOverlay: { color: '#00000000', symbolColor: '#c7c8d0', height: 36 },
+      titleBarOverlay: { color: '#00000000', symbolColor: '#c7c8d0', height: 44 },
       autoHideMenuBar: true,
+    } : process.platform === 'darwin' ? {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 16, y: 15 },
     } : {}),
     webPreferences: {
       contextIsolation: true,
@@ -1257,7 +1262,7 @@ ipcMain.handle('orkestrai:titlebar-theme', (_event, theme) => {
   const color = String(theme.background ?? '');
   const symbolColor = String(theme.foreground ?? '');
   if (!/^#[0-9a-f]{6}$/i.test(color) || !/^#[0-9a-f]{6}$/i.test(symbolColor)) return false;
-  mainWindow.setTitleBarOverlay({ color, symbolColor, height: 36 });
+  mainWindow.setTitleBarOverlay({ color, symbolColor, height: 44 });
   return true;
 });
 

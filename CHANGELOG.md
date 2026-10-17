@@ -5,6 +5,17 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Changed
+
+- Gather the brand, the Canvas/Workbench switch, search, the attention bell and the docked microphone into one 44px top bar on every platform. macOS draws the window's traffic lights inside it; Windows keeps its menus and native window buttons. The Canvas and Workbench sidebars no longer repeat them.
+- Show each agent's live state in its terminal header: a status mark, a stable teammate color with initials, the time spent in the current state and the model chosen at launch. One shared, event-driven status feed serves every header.
+- Shorten the Canvas dock. Everyday tools stay one click away (Shell, agents, Huddles, Note, Tasks, Portal, Second Brain, Images, Design); the rest move into labelled Plan, Code, Devices and Workspace menus, and creation tools can still be dragged from the menus onto the canvas.
+- Float the dock, minimap and zoom controls on a translucent surface with a hairline edge.
+- Keep connections quiet until one of their nodes is selected, then draw them in the accent color.
+- At overview zoom, show each node's name and status in large type instead of an empty frame.
+
 ## 0.42.2 - 2026-10-16
 
 ### Fixed

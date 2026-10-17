@@ -96,6 +96,8 @@ test.describe('canvas de workspaces', () => {
   });
 
   test('organiza requests em pastas sem arrastar o node e salva runners independentes', async ({ page, request }) => {
+    // Room for the 560px node below the app top bar and above the dock.
+    await page.setViewportSize({ width: 1280, height: 800 });
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     const created = await request.post('/api/agent-room/workspaces', { data: { name: `E2E API tree ${Date.now()}`, workingDir: '/tmp' } });
@@ -216,6 +218,8 @@ test.describe('canvas de workspaces', () => {
       await runnerDialog.getByRole('button', { name: 'Salvar runners' }).click();
       await expect.poll(runnerOrder).toEqual([[initialOrder[1], initialOrder[0]]]);
 
+      // Focus returns to the Runners button and reopens its tooltip over the tree.
+      await page.keyboard.press('Escape');
       await client.getByTestId(`api-folder-${folderId}`).click({ button: 'right' });
       await expect(page.getByRole('menuitem', { name: 'Executar pasta' })).toBeVisible();
       await page.keyboard.press('Escape');
