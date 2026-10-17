@@ -26,6 +26,7 @@ export type PresetSummary = {
   category: 'product' | 'frontend' | 'backend' | 'creative' | 'growth' | 'orkestrai' | 'custom';
   version: string;
   updatedAt: string;
+  scope?: 'selection';
 };
 
 export type PresetData = {
@@ -66,6 +67,8 @@ export type PresetData = {
   taskColumns?: BoardColumnRecipe[];
   /** Arquivos SKILL.md portaveis, sempre relativos ao projeto de destino. */
   skills?: Array<{ relativePath: string; content: string }>;
+  /** 'selection' marks a score: part of a canvas saved to reuse in any workspace. */
+  scope?: 'selection';
   pack?: {
     packageId: string;
     version: string;
@@ -130,10 +133,12 @@ async function presetNodePayload(workspaceId: string, node: PresetData['nodes'][
 function mapSummary(model: AgentPreset): PresetSummary {
   let agents = 0;
   let version = '1.0.0';
+  let scope: 'selection' | undefined;
   try {
     const data = JSON.parse(model.getAttribute('data')) as PresetData;
     agents = (data.nodes ?? []).filter((node) => node.type === 'terminal' && (node.payload as { provider?: string })?.provider).length;
     version = dataVersion(data);
+    if (data.scope === 'selection') scope = 'selection';
   } catch {
     // data invalido — agentes 0
   }
@@ -148,6 +153,7 @@ function mapSummary(model: AgentPreset): PresetSummary {
     category: 'custom',
     version,
     updatedAt: iso(model.getAttribute('updated_at')),
+    ...(scope ? { scope } : {}),
   };
 }
 
@@ -223,7 +229,7 @@ export class PresetService {
   }
 
   /** Snapshot: cria o preset a partir do workspace atual. */
-  async createFromWorkspace(workspaceId: string, meta: { name: string; icon?: string | null; description?: string | null }): Promise<PresetSummary> {
+  async createFromWorkspace(workspaceId: string, meta: { name: string; icon?: string | null; description?: string | null; nodeIds?: string[] }): Promise<PresetSummary> {
     const name = meta.name.trim();
     if (!name) throw new Error('Informe o nome do preset.');
     const exported = (await workspaceService.exportWorkspace(workspaceId)) as {
@@ -231,6 +237,17 @@ export class PresetService {
       nodes: PresetData['nodes'];
       edges: PresetData['edges'];
     };
+    const selection = meta.nodeIds?.length ? await this.selectionFilter(workspaceId, meta.nodeIds) : null;
+    if (selection) {
+      // A score keeps only the chosen nodes and the connections between them.
+      const kept = exported.nodes.map((_, index) => index).filter((index) => selection.indexes.has(index));
+      const remap = new Map(kept.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+      exported.edges = exported.edges
+        .filter((edge) => remap.has(edge.sourceIndex) && remap.has(edge.targetIndex))
+        .map((edge) => ({ ...edge, sourceIndex: remap.get(edge.sourceIndex)!, targetIndex: remap.get(edge.targetIndex)! }));
+      exported.nodes = kept.map((index) => exported.nodes[index]);
+      if (!exported.nodes.length) throw new Error('Selecione ao menos um nó deste workspace.');
+    }
     const sourceWorkingDir = exported.workspace.workingDir ?? '';
     // Preset nao leva a pasta do projeto original (quem aplica escolhe a dele).
     delete exported.workspace.workingDir;
@@ -238,6 +255,7 @@ export class PresetService {
     // Rotinas viram receita por TITULO do agente (ids mudam a cada aplicacao).
     const routines: PresetData['routines'] = [];
     for (const routine of await routineService.list(workspaceId)) {
+      if (selection && (!routine.targetNodeId || !selection.ids.has(routine.targetNodeId))) continue;
       const node = routine.targetNodeId ? await workspaceRepository.getNode(routine.targetNodeId) : null;
       routines.push({
         targetTitle: node?.title ?? '',
@@ -248,7 +266,7 @@ export class PresetService {
     // Tarefas-template: titulo + responsavel/nota por TITULO (mesma regra).
     const sourceNodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
     const titleOf = (id: string | null) => (id ? (sourceNodes.find((node) => node.id === id)?.title ?? null) : null);
-    const tasks = (await taskBoardService.list(workspaceId)).map((task) => ({
+    const tasks = selection ? [] : (await taskBoardService.list(workspaceId)).map((task) => ({
       title: task.title,
       description: task.description,
       status: task.status,
@@ -257,7 +275,7 @@ export class PresetService {
       images: task.images,
     }));
     // MCPs extras (sem a entrada 'orkestrai' — provisionada sozinha).
-    const mcpServers = (await mcpService.list(workspaceId).catch(() => []))
+    const mcpServers = selection ? [] : (await mcpService.list(workspaceId).catch(() => []))
       .filter((server) => !server.builtin)
       .map(({ name, command, args }) => ({ name, command, args }));
     const id = uuidv7();
@@ -268,12 +286,14 @@ export class PresetService {
       workspace: exported.workspace,
       nodes,
       edges: exported.edges,
-      roles: await roleService.list(workspaceId),
+      roles: (await roleService.list(workspaceId)).filter((role) => !selection || selection.roles.has(role.name)),
       routines,
       tasks,
       mcpServers,
-      taskColumns: (await boardColumnService.list(workspaceId)).map(({ key, name, color, position }) => ({ key, name, color, position })),
-      skills: snapshotSkills(sourceWorkingDir),
+      ...(selection ? { scope: 'selection' as const } : {
+        taskColumns: (await boardColumnService.list(workspaceId)).map(({ key, name, color, position }) => ({ key, name, color, position })),
+        skills: snapshotSkills(sourceWorkingDir),
+      }),
       pack: { packageId: id, version: '1.0.0', minimumOrkestraiVersion: null, releaseNotes: null },
     };
     const now = new Date().toISOString();
@@ -289,6 +309,21 @@ export class PresetService {
     await AgentPresetRevision.create({ id: uuidv7(), preset_id: id, version: '1.0.0', revision_key: `${id}:1.0.0`, release_notes: null, data: JSON.stringify(data), checksum: checksum(data), created_at: now });
     const model = await AgentPreset.find(id);
     return mapSummary(model!);
+  }
+
+  /** Export indexes, ids and role names of the selected nodes of a workspace. */
+  private async selectionFilter(workspaceId: string, nodeIds: string[]): Promise<{ indexes: Set<number>; ids: Set<string>; roles: Set<string> }> {
+    const wanted = new Set(nodeIds);
+    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const indexes = new Set<number>();
+    const roles = new Set<string>();
+    nodes.forEach((node, index) => {
+      if (!wanted.has(node.id)) return;
+      indexes.add(index);
+      const role = (node.payload as { role?: string | null }).role;
+      if (role) roles.add(role);
+    });
+    return { indexes, ids: wanted, roles };
   }
 
   async remove(id: string): Promise<boolean> {

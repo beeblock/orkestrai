@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { NodeToolbar, Position, type NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Focus, MessageSquare, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Focus, MessageSquare, MessagesSquare, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import { Button } from '$lib/components/ui/button';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -11,6 +11,7 @@
   import AgentAvatar from '../AgentAvatar.svelte';
   import AgentGlyph from '../AgentGlyph.svelte';
   import NodeAttentionBanner from './NodeAttentionBanner.svelte';
+  import AgentChatFace from '../chat/AgentChatFace.svelte';
   import { agentStatus, statusClock } from '../agent-status.svelte.js';
   import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
@@ -238,6 +239,15 @@
   /** Role exibida no header: curta (o nome completo fica no dropdown/aria). */
   const roleLabel = $derived(currentRole && currentRole.length > 24 ? `${currentRole.slice(0, 23).trimEnd()}…` : currentRole);
   const currentProvider = $derived((data.payload as TerminalNodePayload).provider ?? null);
+  // Terminal or conversation face; a per-viewer preference kept in this browser.
+  const FACE_KEY = `orkestrai.node.face.${id}`;
+  let face = $state<'terminal' | 'chat'>((() => {
+    try { return localStorage.getItem(FACE_KEY) === 'chat' ? 'chat' : 'terminal'; } catch { return 'terminal'; }
+  })());
+  function setFace(next: 'terminal' | 'chat') {
+    face = next;
+    try { localStorage.setItem(FACE_KEY, next); } catch { /* storage unavailable */ }
+  }
   const liveStatus = $derived(agentStatus.agents[id] ?? null);
   const statusTone = $derived(liveStatus ? agentTone(liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle');
   const statusLabel = $derived(agentStateLabel(liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle'));
@@ -681,6 +691,19 @@
         <Star size={12} fill="currentColor" />
       </span>
     {/if}
+    {#if currentProvider}
+      <button
+        type="button"
+        class="node-action-btn face-toggle nodrag"
+        class:active={face === 'chat'}
+        aria-pressed={face === 'chat'}
+        title={face === 'chat' ? m['term.face_terminal']() : m['term.face_chat']()}
+        aria-label={face === 'chat' ? m['term.face_terminal']() : m['term.face_chat']()}
+        onclick={() => setFace(face === 'chat' ? 'terminal' : 'chat')}
+      >
+        {#if face === 'chat'}<SquareTerminal size={14} />{:else}<MessagesSquare size={14} />{/if}
+      </button>
+    {/if}
     <DropdownMenu.Root bind:open={actionsOpen}>
       <DropdownMenu.Trigger
         class="node-action-btn"
@@ -948,6 +971,11 @@
     {:else}
       <NodeEmptyState icon={SquareTerminal} compact title={m['term.no_command']()} />
     {/if}
+    {#if face === 'chat' && currentProvider}
+      <div class="chat-face-layer">
+        <AgentChatFace workspaceId={data.workspaceId} nodeId={id} title={data.title} />
+      </div>
+    {/if}
   </div>
   {#if voiceError}
     <p class="voice-error">{voiceError}</p>
@@ -989,6 +1017,7 @@
 
   <div
     class="composer nodrag"
+    class:hidden-face={face === 'chat' && Boolean(currentProvider)}
     class:attachment-drop-active={attachmentDropActive}
     role="group"
     aria-label={m['attachment.agent_drop_target']()}
@@ -1076,8 +1105,24 @@
   }
 
   .terminal-body {
+    position: relative;
     flex: 1;
     min-height: 0;
+  }
+
+  /* The conversation face covers the live terminal, which keeps running underneath. */
+  .chat-face-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+  }
+
+  .composer.hidden-face {
+    display: none;
+  }
+
+  :global(.face-toggle.active) {
+    color: var(--app-accent);
   }
 
   .terminal-body.attachment-drop-active,

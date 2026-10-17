@@ -129,7 +129,12 @@
   import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import CanvasSummaryCard from '$lib/components/agent-room/canvas/CanvasSummaryCard.svelte';
   import CanvasComposer from '$lib/components/agent-room/canvas/CanvasComposer.svelte';
+  import ScoresPanel from '$lib/components/agent-room/canvas/ScoresPanel.svelte';
+  import SaveScoreDialog from '$lib/components/agent-room/canvas/SaveScoreDialog.svelte';
+  import MachinesDialog from '$lib/components/agent-room/canvas/MachinesDialog.svelte';
+  import { sshTerminalArgs, type SshMachine } from '$lib/modules/agent-room/domain/ssh-machines.js';
   import { computeNoteStacks, hiddenStackedNotes } from '$lib/components/agent-room/canvas/note-stacks.js';
+  import { strokeToShape } from '$lib/components/agent-room/canvas/freehand.js';
   import { noteStackState, publishNoteStacks, setNoteStackExpanded } from '$lib/components/agent-room/canvas/note-stacks.svelte.js';
   import {
     parsePinnedAgentProviders,
@@ -137,7 +142,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, Music4, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -639,6 +644,8 @@
   let annotationsOpen = $state(false);
   let huddleOpen = $state(false);
   let transferOpen = $state(false);
+  let scoreDialogOpen = $state(false);
+  let machinesOpen = $state(false);
   /** workspaceId -> sessoes PTY vivas (indicador de ativo na sidebar). */
   let activity = $state<Record<string, number>>({});
   let editingWorkspace = $state<Workspace | null>(null);
@@ -722,8 +729,10 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design' | 'freehand';
   let drawTool = $state<DrawTool | null>(null);
+  // Points of the stroke being drawn with the pen, in flow coordinates.
+  let penStroke = $state.raw<Array<{ x: number; y: number }>>([]);
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
   // Provider armado junto com a ferramenta terminal (Claude/Codex/Kimi...) —
@@ -755,6 +764,7 @@
     toolWorkshop: async (rect) => { await addToolWorkshop(rect); },
     loop: async (rect) => { await addLoop(rect); },
     shape: async (rect) => { await addShape(rect); },
+    freehand: async () => {},
     tasks: async (rect) => { await addTasksNode(rect); },
     flow: async (rect) => { await addFlowNode(rect); },
     image: async (rect) => { await addImageNode(rect); },
@@ -795,15 +805,33 @@
     // So inicia o desenho no fundo vazio do canvas — cliques em nos, handles
     // e na toolbar nao contam (e o pointer capture nao rouba o clique).
     if (!(event.target as HTMLElement).classList.contains('svelte-flow__pane')) return;
+    if (drawTool === 'freehand') {
+      penStroke = [flowPoint(event)];
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      return;
+    }
     drawStart = flowPoint(event);
     drawCurrent = drawStart;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
   function handlePanePointerMove(event: PointerEvent) {
+    if (drawTool === 'freehand' && penStroke.length) {
+      const point = flowPoint(event);
+      const last = penStroke[penStroke.length - 1];
+      const zoom = zoomApi?.getViewport().zoom ?? 1;
+      if (Math.hypot(point.x - last.x, point.y - last.y) * zoom >= 2) penStroke = [...penStroke, point];
+      return;
+    }
     if (!drawStart) return;
     drawCurrent = flowPoint(event);
   }
+
+  const penGhost = $derived.by(() => {
+    if (penStroke.length < 2) return '';
+    const viewport = zoomApi?.getViewport() ?? { x: 0, y: 0, zoom: 1 };
+    return penStroke.map((point, index) => `${index ? 'L' : 'M'} ${point.x * viewport.zoom + viewport.x} ${point.y * viewport.zoom + viewport.y}`).join(' ');
+  });
 
   // O ghost e um overlay HTML fora do viewport do flow: precisa de coordenadas
   // de TELA (flow * zoom + pan), senao ele aparece deslocado do cursor.
@@ -823,6 +851,12 @@
   });
 
   async function handlePanePointerUp(event: PointerEvent) {
+    if (drawTool === 'freehand' && penStroke.length) {
+      const stroke = penStroke;
+      penStroke = [];
+      await addFreehand(stroke);
+      return;
+    }
     if (!drawTool || !drawStart || !drawCurrent) return;
     const rect = {
       x: Math.min(drawStart.x, drawCurrent.x),
@@ -1229,7 +1263,7 @@
     const connect = () => {
     if (disposed) return;
     socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking', 'attentionChanged'] }));
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking', 'attentionChanged', 'channelMessage'] }));
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(String(event.data));
@@ -1257,6 +1291,9 @@
         }
         if (message.type === 'attentionChanged' && (!message.workspaceId || message.workspaceId === activeWorkspace?.id)) {
           scheduleAttentionRefresh();
+        }
+        if (message.type === 'channelMessage' && message.workspaceId === activeWorkspace?.id) {
+          window.dispatchEvent(new CustomEvent('orkestrai:channel-message', { detail: { channel: message.channel, message: message.message } }));
         }
       } catch {
         // frame nao-JSON: ignora
@@ -1710,6 +1747,7 @@
     { id: 'flow', label: m['canvas.default_flow'](), hint: m['tool.flow'](), icon: Workflow, dragTool: 'flow', active: drawTool === 'flow', onSelect: () => toggleDrawTool('flow') },
     { id: 'loop', label: m['canvas.label_loop'](), hint: m['tool.loop'](), image: '/images/loop.svg', dragTool: 'loop', active: drawTool === 'loop', onSelect: () => toggleDrawTool('loop') },
     { id: 'shape', label: m['canvas.label_shape'](), hint: m['tool.shape'](), icon: Shapes, dragTool: 'shape', active: drawTool === 'shape', onSelect: () => toggleDrawTool('shape') },
+    { id: 'freehand', label: m['canvas.label_pen'](), hint: m['tool.pen'](), icon: PenLine, active: drawTool === 'freehand', onSelect: () => toggleDrawTool('freehand') },
     { id: 'council', label: m['council.title'](), hint: m['council.open'](), icon: Scale, active: councilOpen, onSelect: () => (councilOpen = true) },
   ]);
   const codeTools = $derived<ToolGroupItem[]>([
@@ -1723,6 +1761,7 @@
     { id: 'device', label: m['device.title'](), hint: m['tool.device'](), icon: Smartphone, dragTool: 'device', active: drawTool === 'device', onSelect: () => toggleDrawTool('device') },
     { id: 'computer', label: m['computer.title'](), hint: m['computer.tool'](), icon: MonitorCog, dragTool: 'computer', active: drawTool === 'computer', onSelect: () => toggleDrawTool('computer') },
     { id: 'toolWorkshop', label: m['tool_workshop.title'](), icon: Wrench, dragTool: 'toolWorkshop', active: drawTool === 'toolWorkshop', onSelect: () => toggleDrawTool('toolWorkshop') },
+    { id: 'machines', label: m['machines.title'](), hint: m['machines.description'](), icon: Server, active: machinesOpen, onSelect: () => (machinesOpen = true) },
   ]);
   const workspaceTools = $derived<ToolGroupItem[]>([
     { id: 'organize', label: m['canvas.label_organize'](), hint: m['tool.organize'](), icon: LayoutGrid, onSelect: () => void organizeCanvas() },
@@ -1964,6 +2003,48 @@
         width: nodeSize(rect, 120, 60, kind === 'arrow' ? 220 : 160, kind === 'arrow' ? 80 : 160).width,
         height: nodeSize(rect, 120, 60, kind === 'arrow' ? 220 : 160, kind === 'arrow' ? 80 : 160).height,
         payload: { shape: kind, color: '#7C4DFF', label: '' },
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
+  /** A terminal on another computer: a local `ssh` process running the program there. */
+  async function addSshTerminal(machine: SshMachine, directory: string, program: string | null) {
+    if (!activeWorkspace) return;
+    const position = nextFreePosition(Number(appSettings.newTerminalWidth ?? 560), Number(appSettings.newTerminalHeight ?? 340));
+    const label = program ? providers.find((provider) => provider.id === program)?.displayName ?? program : m['machines.shell']();
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'terminal',
+        title: uniqueNodeTitle(`${label} @ ${machine.alias}`),
+        ...position,
+        width: Number(appSettings.newTerminalWidth ?? 560),
+        height: Number(appSettings.newTerminalHeight ?? 340),
+        payload: { command: 'ssh', args: sshTerminalArgs(machine.alias, directory, program), theme: appSettings.terminalTheme },
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    jumpToNode(node.id);
+  }
+
+  /** A pen stroke becomes a freehand shape; the pen stays armed for the next one. */
+  async function addFreehand(stroke: Array<{ x: number; y: number }>) {
+    if (!activeWorkspace) return;
+    const shape = strokeToShape(stroke);
+    if (!shape) return;
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'shape',
+        title: '',
+        x: Math.round(shape.x),
+        y: Math.round(shape.y),
+        width: Math.round(shape.width),
+        height: Math.round(shape.height),
+        payload: { shape: 'freehand', points: shape.points, stroke: '#7C4DFF', strokeWidth: 3, fill: 'transparent', label: '' },
         floorId: visibleFloorId,
       }),
     });
@@ -3202,6 +3283,9 @@
           </ul>
         </section>
       {/if}
+      {#if activeWorkspace}
+        <ScoresPanel workspaceId={activeWorkspace.id} onInserted={() => { if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
+      {/if}
       <div class="sidebar-footer">
         {#if creatingFolder}
           <div class="new-folder-row">
@@ -3371,6 +3455,9 @@
       {/if}
       <div class="contents" inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
       <ZoomBridge onReady={(api) => (zoomApi = api)} padding={() => ({ ...fitPadding, right: document.querySelector('.canvas-summary') ? '336px' : fitPadding.right })} />
+      {#if penGhost}
+        <svg class="pen-ghost" aria-hidden="true"><path d={penGhost} /></svg>
+      {/if}
       {#if ghostRect}
         <div
           class="draw-ghost"
@@ -3420,6 +3507,9 @@
               <span class="mx-1 h-4 w-px bg-[var(--app-border)]" aria-hidden="true"></span>
               <Button size="sm" variant="ghost" class="h-7 gap-1.5 rounded-md px-2 text-xs text-[var(--app-text-soft)] hover:text-[var(--app-text)]" onclick={() => (transferOpen = true)}>
                 <Copy size={13} />{m['canvas.transfer_open']()}
+              </Button>
+              <Button size="sm" variant="ghost" class="h-7 gap-1.5 rounded-md px-2 text-xs text-[var(--app-text-soft)] hover:text-[var(--app-text)]" onclick={() => (scoreDialogOpen = true)}>
+                <Music4 size={13} />{m['scores.save_selection']()}
               </Button>
             </div>
           {/if}
@@ -3781,6 +3871,10 @@
     {/if}
     </SvelteFlowProvider>
   </section>
+<MachinesDialog bind:open={machinesOpen} programs={providers.map((provider) => ({ id: provider.id, label: provider.displayName }))} onOpenTerminal={addSshTerminal} />
+{#if activeWorkspace}
+  <SaveScoreDialog bind:open={scoreDialogOpen} workspaceId={activeWorkspace.id} nodeIds={selectedTransferNodeIds} />
+{/if}
 </main>
 
 <style>
@@ -4603,6 +4697,24 @@
     transform: translateX(-50%);
     pointer-events: none;
     animation: banner-in var(--duration-fast) var(--ease-smooth-out) both;
+  }
+
+  .pen-ghost {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 40;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .pen-ghost path {
+    fill: none;
+    stroke: #7c4dff;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .draw-ghost {
