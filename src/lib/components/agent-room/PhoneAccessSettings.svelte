@@ -71,13 +71,14 @@
 
   {#if status && !status.available}
     <p class="field-hint">{m['phone_settings.unavailable']()}</p>
-  {:else if status}
+  {:else}
+    <!-- The row renders before the status arrives so the section keeps its height. -->
     <div class="flex flex-wrap items-center gap-3">
-      <span class={`text-xs font-medium ${status.running ? 'text-[var(--app-success)]' : 'text-[var(--app-text-muted)]'}`}>
-        {status.running ? m['phone_settings.on']({ port: String(status.port) }) : m['phone_settings.off']()}
+      <span class={`text-xs font-medium ${status?.running ? 'text-[var(--app-success)]' : 'text-[var(--app-text-muted)]'}`}>
+        {status?.running ? m['phone_settings.on']({ port: String(status.port) }) : m['phone_settings.off']()}
       </span>
-      <Button size="sm" class="ml-auto" disabled={busy} onclick={pair}>{status.enabled ? m['phone_settings.pair_again']() : m['phone_settings.pair']()}</Button>
-      {#if status.enabled}<Button size="sm" variant="outline" disabled={busy} onclick={disable}>{m['phone_settings.turn_off']()}</Button>{/if}
+      <Button size="sm" class="ml-auto" disabled={busy || !status} onclick={pair}>{status?.enabled ? m['phone_settings.pair_again']() : m['phone_settings.pair']()}</Button>
+      {#if status?.enabled}<Button size="sm" variant="outline" disabled={busy} onclick={disable}>{m['phone_settings.turn_off']()}</Button>{/if}
     </div>
     {#if qr}
       <div class="mt-4 flex flex-wrap items-start gap-5">
@@ -90,7 +91,7 @@
           <p class="field-hint">{m['phone_settings.once']()}</p>
         </div>
       </div>
-    {:else if status.enabled && status.running && !status.addresses.length}
+    {:else if status?.enabled && status.running && !status.addresses.length}
       <p class="field-hint mt-3">{m['phone_settings.no_network']()}</p>
     {/if}
     <p class="field-hint mt-3">{m['phone_settings.safety']()}</p>

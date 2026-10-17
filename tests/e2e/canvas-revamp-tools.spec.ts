@@ -28,6 +28,7 @@ test.describe('canvas revamp tools', () => {
 
       // Pen: a stroke on the empty canvas becomes a freehand shape.
       await selectCanvasTool(page, 'Caneta');
+      await expect(page.getByRole('menu')).toHaveCount(0);
       const pane = page.locator('.svelte-flow__pane');
       const box = (await pane.boundingBox())!;
       await page.mouse.move(box.x + 420, box.y + 620);
