@@ -487,6 +487,17 @@ export class ControlCenterRepository {
     return rows.map(mapEnvelope);
   }
 
+  /** Agent-to-agent asks, newest first, for the team conversation. */
+  async listConversationEnvelopes(workspaceId: string, input: { before: string | null; limit: number }): Promise<AgentMessageEnvelopeData[]> {
+    const query = AgentMessageEnvelope.query()
+      .where('workspace_id', workspaceId)
+      .where('kind', 'ask')
+      .whereNotNull('from_node_id');
+    if (input.before) query.where('created_at', '<', input.before);
+    const rows = await query.orderBy('created_at', 'desc').limit(input.limit).get();
+    return rows.map(mapEnvelope);
+  }
+
   async latestLeaderSupervision(workspaceId: string, nodeId: string): Promise<AgentMessageEnvelopeData | null> {
     const row = await AgentMessageEnvelope.query()
       .where('workspace_id', workspaceId)

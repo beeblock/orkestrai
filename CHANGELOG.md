@@ -25,6 +25,9 @@ pt-BR, English, and Spanish translations.
 - Show an agent's open attention items inside its node with Reply, Resolve and one-hour Snooze, and say so when the terminal itself is waiting for permission, waiting for an answer or stopped.
 - Show Focus, Message and more actions above a selected agent.
 - Stack the notes an agent keeps only for itself (two or more notes whose only connection is that agent) behind the newest one, with a counter to spread them out and gather them again.
+- Add Chat, a third workspace mode next to Canvas and Workbench. The team channel merges agents' posts, their asks to each other with replies, and finished tasks; each agent also has a direct conversation and a profile with its current task, memory entries and routines. Owner messages reach agents through their inbox (a team message without a mention goes to the leader, @ addresses the named agents), and agents answer with the new `orkestrai post` command and `channel_post` MCP tool.
+- Let agents ask the owner without blocking through `orkestrai ask-owner` and the `ask_owner` MCP tool, with up to six answer choices. The question appears in Needs you, in the agent's node and in Chat, raises a desktop notification, and the answer is delivered once to the asking agent's inbox.
+- Decide requests where they appear through a single attention decision endpoint that delegates to each owning service: autonomy gates that require the user, flow approval steps, agent-proposed tools (publish or archive), lessons waiting for review and Review Center reviews. These sources, plus agent design proposals and an agent reaching its usage limit, now raise attention items and close them when decided elsewhere.
 
 ## 0.42.2 - 2026-10-16
 

@@ -23,6 +23,8 @@
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import NodeEmptyState from './canvas/NodeEmptyState.svelte';
+  import { answerOwnerQuestion, attentionDecisionKind, decideAttentionItem, ownerQuestionOptions } from './attention-feed.svelte.js';
+  import { decisionLabels } from './attention-decision-labels.js';
   import type {
     AgentAttentionItem,
     AgentAttentionStatus,
@@ -117,10 +119,40 @@
     }
   }
 
+  let deciding = $state<Set<string>>(new Set());
+
+  function setDeciding(id: string, on: boolean) {
+    const next = new Set(deciding);
+    if (on) next.add(id);
+    else next.delete(id);
+    deciding = next;
+  }
+
+  async function decide(item: AgentAttentionItem, decision: 'approve' | 'reject'): Promise<void> {
+    setDeciding(item.id, true);
+    const error = await decideAttentionItem(item, decision, getCsrfToken());
+    setDeciding(item.id, false);
+    if (error === null) items = items.filter((candidate) => candidate.id !== item.id);
+    else toast.error(error || m['attention.decide_failed']());
+  }
+
+  async function answer(item: AgentAttentionItem, option: string): Promise<void> {
+    setDeciding(item.id, true);
+    const delivered = await answerOwnerQuestion(item, option, getCsrfToken());
+    setDeciding(item.id, false);
+    items = items.filter((candidate) => candidate.id !== item.id);
+    if (delivered) toast.success(m['attention.answer_sent']());
+    else toast.error(m['node_attention.answer_failed']());
+  }
+
   async function openItem(item: AgentAttentionItem): Promise<void> {
     if (!item.actionAvailable) return;
     if (item.status === 'open') await act(item, 'read');
     open = false;
+    if (item.action?.target === 'chat' && typeof item.action.channel === 'string') {
+      await goto(`/chat?${new URLSearchParams({ workspace: item.workspaceId, channel: item.action.channel }).toString()}`);
+      return;
+    }
     const params = new URLSearchParams({ workspace: item.workspaceId });
     if (item.nodeId) params.set('node', item.nodeId);
     if (item.taskId) params.set('task', item.taskId);
@@ -276,7 +308,15 @@
                 {:else}
                   <span class="mr-auto px-2 text-ui-sm text-[var(--app-text-muted)]">{m['attention.source_unavailable']()}</span>
                 {/if}
-                {#if item.status === 'open'}
+                {#if attentionDecisionKind(item)}
+                  {@const labels = decisionLabels(attentionDecisionKind(item)!)}
+                  <Button variant="ghost" size="sm" class="text-ui-sm" disabled={deciding.has(item.id)} onclick={() => void decide(item, 'reject')}>{labels.reject}</Button>
+                  <Button size="sm" class="text-ui-sm" disabled={deciding.has(item.id)} onclick={() => void decide(item, 'approve')}>{labels.approve}</Button>
+                {:else if ownerQuestionOptions(item).length}
+                  {#each ownerQuestionOptions(item).slice(0, 3) as option (option)}
+                    <Button size="sm" class="max-w-36 text-ui-sm" disabled={deciding.has(item.id)} title={option} onclick={() => void answer(item, option)}><span class="truncate">{option}</span></Button>
+                  {/each}
+                {:else if item.status === 'open'}
                   <Button variant="ghost" size="sm" class="text-ui-sm text-[var(--app-text-muted)]" onclick={() => void act(item, 'read')}>{m['attention.mark_read']()}</Button>
                 {/if}
                 <Tooltip.Root>

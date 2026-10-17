@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Network, SquareTerminal } from '@lucide/svelte';
+  import { MessagesSquare, Network, SquareTerminal } from '@lucide/svelte';
+  import type { WorkspaceMode } from './workspace-context.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
 
   let {
@@ -7,12 +8,12 @@
     workspaceId = null,
     nodeId = null,
   }: {
-    active: 'canvas' | 'terminals';
+    active: WorkspaceMode;
     workspaceId?: string | null;
     nodeId?: string | null;
   } = $props();
 
-  function target(path: '/canvas' | '/terminal'): string {
+  function target(path: '/canvas' | '/terminal' | '/chat'): string {
     const params = new URLSearchParams();
     if (workspaceId) params.set('workspace', workspaceId);
     let targetNodeId = nodeId;
@@ -56,5 +57,14 @@
   >
     <SquareTerminal size={13} strokeWidth={1.8} class={active === 'terminals' ? 'text-[var(--app-accent)]' : ''} />
     <span>{m['workspace_view.workbench']()}</span>
+  </a>
+  <a
+    href={target('/chat')}
+    data-sveltekit-preload-data="hover"
+    class={itemClass(active === 'chat')}
+    aria-current={active === 'chat' ? 'page' : undefined}
+  >
+    <MessagesSquare size={13} strokeWidth={1.8} class={active === 'chat' ? 'text-[var(--app-accent)]' : ''} />
+    <span>{m['workspace_view.chat']()}</span>
   </a>
 </nav>

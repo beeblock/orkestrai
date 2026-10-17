@@ -1,5 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'team-conversation': 'team-conversation',
+  'owner-decisions': 'owner-decisions',
   'canvas-command-surface': 'canvas-command-surface',
   'native-shell-repair': 'native-shell-repair',
   'portal-host-configuration': 'portal-host-configuration',

@@ -40,7 +40,8 @@ export type InboxKind =
   | 'task_completion'
   | 'task_recovery'
   | 'leader_supervision'
-  | 'handoff';
+  | 'handoff'
+  | 'owner';
 
 export type InboxEnqueueInput = {
   workspaceId: string;
