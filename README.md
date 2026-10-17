@@ -123,6 +123,13 @@ routines. Agents can ask you something without stopping (`orkestrai ask-owner`),
 and requests that need your permission show Approve and Refuse right where they
 appear: in Needs you, in the agent's node and in Chat.
 
+### Answer your team from the phone
+
+Pair a phone on the same network in **Settings > Phone** with a QR code and add
+it to the home screen. It shows Needs you (answers and decisions), Chat and the
+team's status. The pairing code is shown once and stored only as a hash; use it
+on networks you trust.
+
 ### Chain agents with human approval
 
 Flows pass work from one agent to the next, stop for your approval, and record

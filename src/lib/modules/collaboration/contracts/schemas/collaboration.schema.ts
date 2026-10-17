@@ -140,7 +140,21 @@ const designElementUpdateCommandSchema = z.object({
   changes: remoteDesignChangesSchema,
 }).strict();
 
+const attentionDecisionCommandSchema = z.object({
+  type: z.literal('attention.decide'),
+  itemId: z.string().uuid(),
+  decision: z.enum(['approve', 'reject']),
+}).strict();
+
+const attentionAnswerCommandSchema = z.object({
+  type: z.literal('attention.answer'),
+  itemId: z.string().uuid(),
+  text: z.string().trim().min(1).max(4_000),
+}).strict();
+
 export const collaborationCommandSchema = z.discriminatedUnion('type', [
+  attentionDecisionCommandSchema,
+  attentionAnswerCommandSchema,
   taskCreateCommandSchema,
   taskUpdateCommandSchema,
   reviewDecisionCommandSchema,

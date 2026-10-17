@@ -236,6 +236,7 @@
       "scripts/orkestrai-server.mjs",
       "scripts/run-startup-migrations.mjs",
       "scripts/install-orkestrai-shim.mjs",
+      "scripts/mobile-gateway.mjs",
       "src/lib/database/migrations/**",
       "src/lib/database/resumable-workspace-schema.ts",
       "src/lib/modules/agent-room/infrastructure/pty/**",

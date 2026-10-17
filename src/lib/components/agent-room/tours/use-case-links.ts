@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'phone-companion': 'phone-companion',
   'always-on-teammate': 'always-on-teammate',
   'team-conversation': 'team-conversation',
   'owner-decisions': 'owner-decisions',

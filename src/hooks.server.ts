@@ -1,3 +1,4 @@
+import { mobileAccessService } from '$lib/modules/agent-room/application/services/MobileAccessService.js';
 /**
  * SvelteKit Server Hooks — Svelar middleware pipeline
  */
@@ -53,6 +54,7 @@ if (!building) {
       globalRef.__orkestraiAgentRuntimeSupervisor = true;
     }
     channelBridgeService.start();
+    void mobileAccessService.resume();
     void agentSessionRotationService.rotateOversized()
       .then((rotated) => { for (const item of rotated) console.log(`[agent-runtime] Fresh conversation for ${item.title}: previous transcript ${Math.round(item.sizeBytes / 1024 / 1024)} MB.`); })
       .catch(() => console.warn('[agent-runtime] Oversized conversation check failed.'))
