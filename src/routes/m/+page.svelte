@@ -248,7 +248,7 @@
           {@const options = ownerQuestionOptions(item)}
           <article class="card" class:danger={item.severity === 'error'} class:open={expanded.has(item.id)} data-testid="phone-needs-card">
             <header class="kind">
-              {#if item.nodeId}<AgentAvatar nodeId={item.nodeId} title={item.nodeTitle ?? ''} size={20} />{/if}
+              {#if item.nodeId && item.nodeTitle}<AgentAvatar nodeId={item.nodeId} title={item.nodeTitle} size={20} />{/if}
               <b>{kind ? m['phone.kind_approval']() : item.sourceType === 'owner_question' ? m['phone.kind_question']() : item.severity === 'error' ? m['phone.kind_blocked']() : m['phone.kind_notice']()}</b>
               {#if item.nodeTitle}<span>{item.nodeTitle}</span>{/if}
             </header>
