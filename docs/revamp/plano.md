@@ -154,3 +154,58 @@ Cada fase termina com testes unitários e e2e, build, instalação local ad-hoc 
 3. **Celular:** PWA primeiro e app nativo depois?
 4. **Bots:** rodam com as assinaturas atuais pelas CLIs (Claude, Codex…), sem API paga por token?
 5. **Fonte condensada:** adicionar uma fonte OFL como dependência?
+
+---
+
+## Status na branch (17/10/2026)
+
+| Id | Status | O que existe agora |
+|---|---|---|
+| F1 | Feito | Barra superior única com Canvas, Foco e Conversa, busca ⌘K, sino e microfone, em macOS e Windows. |
+| F2 | Parcial | Cor e iniciais estáveis por agente, iguais em todas as telas. Nome curto e avatar escolhidos pelo dono ainda não. |
+| F3 | Feito | Store compartilhado de status ao vivo (estado, desde quando, tarefa, floor, modelo). |
+| F4 | Feito | Archivo (OFL) condensada nos títulos e glifos de status padronizados. |
+| F5 | Parcial | Gates, fluxos, ferramentas, lições, revisões e propostas viram itens de atenção com broadcast. Rotinas e integrações ainda não emitem eventos próprios. |
+| A1 | Feito | Gates de autonomia, aprovações de fluxo, ferramentas em rascunho, lições pendentes, revisões, propostas de design e limite de uso. Sessão de dispositivo encerrada ainda não é detectada. |
+| A2 | Feito | `orkestrai ask-owner` / `ask_owner` com opções; a resposta volta para a caixa de entrada do agente. |
+| A3 | Feito | Decisão no lugar (sino, nó, Foco, Conversa, celular e convidado remoto) por um endpoint único. Reiniciar simulador não entrou. |
+| A4 | Não feito | Integração de floor continua direta; política de aprovação não foi criada. |
+| A5 | Feito | Cartão "desde a última visita" no Canvas (última visita por navegador). |
+| C1 | Feito | Dock no topo com grupos, barra lateral flutuante com equipe e partituras, minimapa e zoom, cartão de resumo. |
+| C2 | Parcial | Cabeçalho com status, avatar, provider e modelo. Rodapé com floor e assuntos não. |
+| C3 | Feito | Barra do nó selecionado (Foco, Mensagem, Mais) e troca terminal/conversa no cabeçalho. |
+| C4 | Feito | Faixa de atenção no nó com responder, resolver, adiar, aprovar e recusar. |
+| C5 | Feito | Face de conversa do agente (mensagens da Conversa, sem ler a TUI). |
+| C6 | Não feito | Vários assuntos retomáveis por agente. |
+| C7 | Feito | Pilhas de notas por agente. |
+| C8 | Feito | Conexões discretas, destacadas na seleção. |
+| C9 | Feito | Zoom semântico com nome e status grandes; títulos de grupo condensados. |
+| C10 | Não feito | Agrupamento automático por equipe ou floor além do "Organizar" existente. |
+| C11 | Feito | Caneta (traço livre vira forma). Texto manuscrito não. |
+| C12 | Feito | Partituras: salvar seleção e colocar em qualquer workspace. |
+| C13 | Feito | Compositor flutuante com @ e envio pela caixa de entrada do agente. Imagem colada e rascunho por destino não. |
+| D1 | Parcial | Foco renomeado, com Precisa de você na barra lateral. Reorganização completa da barra lateral não. |
+| D2–D6 | Não feito | Sem mudanças além do que o Workbench já tinha. |
+| E1 | Feito | Canal da equipe com posts, conversas entre agentes e tarefas concluídas. |
+| E2 | Feito | Conversa direta com cada agente. |
+| E3 | Feito | Cartões de pergunta com opções; aprovações no Precisa de você. |
+| E4 | Feito | Perfil com estado, tarefa, memória, rotinas, sempre ligado e canais. |
+| E5 | Não feito | "Esquecer de verdade" na memória. |
+| E6 | Não feito | Lição vira skill. |
+| E7 | Não feito | Ensinar mostrando. |
+| E8 | Feito | Rotina descrita em linguagem natural (o agente cria com as próprias tools). Postagem automática do resultado no canal não. |
+| B1–B2 | Parcial | O agente com modo "acorda quando chamado" ou "sempre rodando" no Core é o colega 24/7; perfil mostra e configura. Entidade "bot" separada do nó não. |
+| B3 | Parcial | Gatilhos por mensagem (Conversa, Telegram, Slack) e rotinas existentes. |
+| B4 | Parcial | Telegram e Slack com entrada e resposta. WhatsApp pelo Computer (já existente); e-mail e Discord não. |
+| B5 | Parcial | Mesma conversa e memória em todos os canais; lista de quem pode falar por canal. |
+| B6 | Feito | Aprovação remota no celular e por convidado remoto. |
+| B7 | Não feito | Passar login/captcha ao dono e retomar. |
+| B8 | Não feito | Bots em grupo dividindo tarefas no canal. |
+| B9 | Parcial | Limite de uso por agente agora vira item de atenção. Orçamento diário/semanal não. |
+| B10 | Parcial | Atividade recente no perfil. Auditoria completa por bot não. |
+| B11 | Parcial | Máquinas SSH do ~/.ssh/config abrem shell ou CLI de agente remota. Floors remotos, ponte e nuvem não. |
+| M1 | Feito | Página de celular instalável (Precisa de você, Conversa, Equipe) pela rede local. |
+| M2 | Parcial | Pareamento por QR. Vários computadores e push não. |
+| M3 | Não feito | Escolha de quais avisos chegam ao celular. |
+| G1–G3 | Não feito | GitHub nativo, Linear e novas CLIs. |
+| G4 | Já existia | Perfis de multi-conta na Central de Providers. |
