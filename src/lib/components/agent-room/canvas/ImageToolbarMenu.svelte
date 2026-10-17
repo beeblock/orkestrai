@@ -22,9 +22,9 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="top">{m['image_workflow.menu']()}</Tooltip.Content>
+    <Tooltip.Content side="bottom">{m['image_workflow.menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="top" align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
+  <DropdownMenu.Content side="bottom" align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
     <DropdownMenu.Label>{m['image_workflow.menu']()}</DropdownMenu.Label>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onImage}><ImageIcon size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_image']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_image_hint']()}</small></span></DropdownMenu.Item>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onWorkflow}><Sparkles size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_workflow']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_workflow_hint']()}</small></span></DropdownMenu.Item>

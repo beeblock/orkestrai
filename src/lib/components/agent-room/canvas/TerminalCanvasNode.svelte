@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { NodeToolbar, Position, type NodeProps } from '@xyflow/svelte';
+  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Focus, MessageSquare, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import { Button } from '$lib/components/ui/button';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -10,6 +10,7 @@
   import NodeEmptyState from './NodeEmptyState.svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
   import AgentGlyph from '../AgentGlyph.svelte';
+  import NodeAttentionBanner from './NodeAttentionBanner.svelte';
   import { agentStatus, statusClock } from '../agent-status.svelte.js';
   import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
@@ -610,6 +611,21 @@
   });
 </script>
 
+{#if currentProvider}
+  <NodeToolbar position={Position.Top} offset={10} class="node-quickbar nodrag">
+    <a class="quick" href={`/terminal?workspace=${encodeURIComponent(data.workspaceId)}&node=${encodeURIComponent(id)}`} title={m['node_quickbar.focus_hint']()}>
+      <Focus size={13} />{m['node_quickbar.focus']()}
+    </a>
+    <button type="button" class="quick" onclick={() => window.dispatchEvent(new CustomEvent('orkestrai:composer-target', { detail: { nodeId: id } }))}>
+      <MessageSquare size={13} />{m['node_quickbar.message']()}
+    </button>
+    <span class="quick-sep" aria-hidden="true"></span>
+    <button type="button" class="quick icon" aria-label={m['term.actions']()} title={m['term.actions']()} onclick={() => (actionsOpen = true)}>
+      <Ellipsis size={14} />
+    </button>
+  </NodeToolbar>
+{/if}
+
 <NodeShell
   onDragOver={handleAttachmentDragOver}
   onDragLeave={() => (attachmentDropActive = false)}
@@ -849,6 +865,15 @@
     </div>
   {/if}
 
+  {#if data.payload.provider}
+    <NodeAttentionBanner
+      nodeId={id}
+      activity={liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : null}
+      onRespond={() => promptInput?.focus()}
+      onShowTerminal={() => terminalNode?.focus()}
+    />
+  {/if}
+
   <div
     class="terminal-body nodrag"
     class:attachment-drop-active={attachmentDropActive}
@@ -998,6 +1023,58 @@
 </NodeShell>
 
 <style>
+  :global(.node-quickbar) {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--app-surface-raised) 92%, transparent);
+    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
+    backdrop-filter: blur(14px) saturate(140%);
+  }
+
+  :global(.node-quickbar .quick) {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  :global(.node-quickbar .quick:hover) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  :global(.node-quickbar .quick:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  :global(.node-quickbar .quick.icon) {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  :global(.node-quickbar .quick-sep) {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--app-border);
+  }
+
   .terminal-body {
     flex: 1;
     min-height: 0;

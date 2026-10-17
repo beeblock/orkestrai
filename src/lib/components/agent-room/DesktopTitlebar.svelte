@@ -108,7 +108,7 @@
   </div>
 
   <div class="end">
-    <button type="button" class="search" onclick={openSearch} aria-label={m['topbar.search']()}>
+    <button type="button" class="search" onclick={openSearch} aria-label={m['topbar.search_label']()}>
       <Search size={13} strokeWidth={2} />
       <span class="search-label">{m['topbar.search']()}</span>
       <kbd>{searchKey}</kbd>

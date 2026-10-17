@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Eye, Paperclip, Pencil, StickyNote, X } from '@lucide/svelte';
+  import { Eye, Layers, Paperclip, Pencil, StickyNote, X } from '@lucide/svelte';
   import MarkdownView from '../MarkdownView.svelte';
   import AttachmentList from '../AttachmentList.svelte';
   import {
@@ -26,6 +26,7 @@
   import NodeShell from './NodeShell.svelte';
   import * as Popover from '$lib/components/ui/popover';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import { noteStackState, setNoteStackExpanded } from './note-stacks.svelte.js';
   import type { NoteNodePayload, WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
 
   export type NoteNodeData = {
@@ -48,6 +49,7 @@
   let attachmentBusy = $state(false);
   let attachmentDropActive = $state(false);
   let attachmentError = $state('');
+  const stack = $derived(noteStackState.tops[id] ?? null);
   const noteColor = $derived(NOTE_COLORS[(data.payload as { color?: string }).color ?? 'yellow'] ?? NOTE_COLORS.yellow);
 
   function setColor(color: string) {
@@ -185,7 +187,7 @@
 <NodeShell
   {id}
   {selected}
-  class="canvas-note"
+  class={stack && !stack.expanded ? 'canvas-note note-stack-top' : 'canvas-note'}
   deferOffscreen
   accent={noteColor.color}
   minWidth={220}
@@ -200,6 +202,18 @@
   {#snippet icon()}<StickyNote size={13} />{/snippet}
   {#snippet title()}{data.title || m['note.default_title']()}{/snippet}
   {#snippet actions()}
+    {#if stack}
+      <button
+        type="button"
+        class="stack-toggle nodrag"
+        class:open={stack.expanded}
+        aria-pressed={stack.expanded}
+        title={stack.expanded ? m['note.stack_collapse']() : m['note.stack_expand']({ count: stack.count })}
+        onclick={() => setNoteStackExpanded(stack.agentId, !stack.expanded)}
+      >
+        <Layers size={12} /><span class="tabular-nums">{stack.expanded ? m['note.stack_group']() : `+${stack.count - 1}`}</span>
+      </button>
+    {/if}
     <input bind:this={attachmentInput} type="file" multiple class="hidden" onchange={pickAttachments} />
     <!-- Uma bolinha com a cor atual abre o seletor: cabecalho limpo mesmo
          em notas estreitas; as seis cores continuam a um clique. -->
@@ -268,6 +282,42 @@
 </NodeShell>
 
 <style>
+  /* Collapsed stack: two sheets peek out behind the newest note. */
+  :global(.svelte-flow__node:has(.note-stack-top)) {
+    filter: drop-shadow(5px 5px 0 color-mix(in srgb, var(--app-surface-raised) 92%, var(--app-border))) drop-shadow(5px 5px 0 color-mix(in srgb, var(--app-surface) 88%, var(--app-border)));
+  }
+
+  .stack-toggle {
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--app-hover);
+    color: var(--app-text-soft);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .stack-toggle:hover {
+    background: var(--app-active);
+    color: var(--app-text);
+  }
+
+  .stack-toggle.open {
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+  }
+
+  .stack-toggle:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
   .note-content {
     flex: 1;
     min-height: 0;

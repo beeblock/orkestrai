@@ -1,7 +1,7 @@
 <script lang="ts">
   import { applyEdgeActivity } from '$lib/components/agent-room/canvas/edge-activity.js';
   import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, setContext, tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from '@beeblock/svelar/ui';
   import { getCsrfToken } from '@beeblock/svelar/http';
@@ -121,8 +121,16 @@
   } from '$lib/components/agent-room/leader-dictation.js';
   import { TEXT_DICTATION_FALLBACK, type TextDictationFallbackDetail } from '$lib/components/agent-room/text-dictation.js';
   import { invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
-  import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
-  import { agentColor } from '$lib/components/agent-room/agent-identity.js';
+  import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
+  import { agentColor, agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
+  import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
+  import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
+  import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
+  import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
+  import CanvasSummaryCard from '$lib/components/agent-room/canvas/CanvasSummaryCard.svelte';
+  import CanvasComposer from '$lib/components/agent-room/canvas/CanvasComposer.svelte';
+  import { computeNoteStacks, hiddenStackedNotes } from '$lib/components/agent-room/canvas/note-stacks.js';
+  import { noteStackState, publishNoteStacks, setNoteStackExpanded } from '$lib/components/agent-room/canvas/note-stacks.svelte.js';
   import {
     parsePinnedAgentProviders,
     PINNED_AGENT_PROVIDERS_SETTING,
@@ -515,10 +523,24 @@
       : workspaces
   );
   let activeWorkspace = $state<Workspace | null>(null);
+  // Teammates of the open workspace, the ones that need the owner first.
+  const TONE_ORDER = { attention: 0, blocked: 1, working: 2, review: 3, idle: 4, done: 5, offline: 6 } as const;
+  const teamMembers = $derived.by(() => nodes
+    .filter((node) => node.type === 'terminal' && Boolean((node.data as { payload?: TerminalNodePayload }).payload?.provider))
+    .map((node) => {
+      const status = agentStatus.agents[node.id];
+      const state = status ? (status.sessionAlive ? status.state : 'disconnected') : 'idle';
+      const tone = agentTone(state);
+      const parts = tone === 'working' || tone === 'attention' || tone === 'blocked' ? elapsedParts(status?.stateSince, statusClock.now) : null;
+      return { id: node.id, title: String((node.data as { title?: string }).title ?? ''), tone, label: agentStateLabel(state), since: parts ? elapsedLabel(parts) : null };
+    })
+    .sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.title.localeCompare(b.title)));
   function workspaceTint(workspaceId: string): string {
     const color = agentColor(workspaceId);
     return `--ws-tint:${color.bg};--ws-ink:${color.ink}`;
   }
+  // The dock floats at the top of the canvas, so its tooltips open downward.
+  setContext('toolbar-tooltip-side', 'bottom');
   // The app top bar shows the mode switch and attention bell for this workspace.
   $effect(() => {
     publishWorkspaceContext('canvas', activeWorkspace?.id ?? null, nodes.find((node) => node.selected)?.id ?? canvasRouteNodeId());
@@ -529,6 +551,53 @@
     const workspaceId = activeWorkspace?.id ?? null;
     return untrack(() => retainAgentStatus(workspaceId));
   });
+  $effect(() => {
+    const workspaceId = activeWorkspace?.id ?? null;
+    return untrack(() => retainAttentionFeed(workspaceId));
+  });
+  // The arrival briefing shrinks to a chip once the owner starts working on the Canvas.
+  let summaryCompact = $state(false);
+  $effect(() => {
+    void activeWorkspace?.id;
+    summaryCompact = false;
+  });
+  // The composer talks to the selected agent, then the last one chosen, then the leader.
+  let composerTargetId = $state<string | null>(null);
+  const composerTargets = $derived(teamMembers.map((member) => ({ id: member.id, title: member.title })));
+  const composerTarget = $derived.by(() => {
+    const selected = nodes.find((node) => node.selected && composerTargets.some((target) => target.id === node.id));
+    if (selected) return selected.id;
+    if (composerTargetId && composerTargets.some((target) => target.id === composerTargetId)) return composerTargetId;
+    return nodes.find((node) => node.type === 'terminal' && (node.data?.payload as TerminalNodePayload | undefined)?.maestro)?.id ?? composerTargets[0]?.id ?? null;
+  });
+  onMount(() => {
+    const onComposerTarget = (event: Event) => {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (!nodeId) return;
+      composerTargetId = nodeId;
+      requestAnimationFrame(() => document.getElementById('canvas-composer-input')?.focus());
+    };
+    window.addEventListener('orkestrai:composer-target', onComposerTarget);
+    return () => window.removeEventListener('orkestrai:composer-target', onComposerTarget);
+  });
+  // Notes an agent keeps for itself collapse into one stack per agent.
+  const noteStackList = $derived.by(() => computeNoteStacks(nodes, edges));
+  $effect(() => {
+    const stacks = noteStackList;
+    const hidden = hiddenStackedNotes(stacks, new Set(noteStackState.expanded));
+    untrack(() => {
+      publishNoteStacks(stacks);
+      const differs = (node: Node) => node.type === 'note' && Boolean(node.hidden) !== hidden.has(node.id);
+      if (!nodes.some(differs)) return;
+      nodes = nodes.map((node) => differs(node)
+        ? { ...node, hidden: hidden.has(node.id), selected: hidden.has(node.id) ? false : node.selected }
+        : node);
+    });
+  });
+  const composerMentions = $derived.by(() => nodes
+    .filter((node) => node.type === 'terminal' || node.type === 'note' || node.type === 'portal')
+    .map((node) => ({ id: node.id, title: String(node.data?.title ?? ''), type: String(node.type) }))
+    .filter((mention) => mention.title));
   let providers = $state<AgentProviderInfo[]>([]);
   const canChooseAlternateRuntime = typeof navigator !== 'undefined' && navigator.platform.startsWith('Win');
   let nodes = $state.raw<Node[]>([]);
@@ -721,6 +790,7 @@
   }
 
   function handlePanePointerDown(event: PointerEvent) {
+    if (!(event.target as HTMLElement).closest?.('.svelte-flow__panel')) summaryCompact = true;
     if (!drawTool || !activeWorkspace) return;
     // So inicia o desenho no fundo vazio do canvas — cliques em nos, handles
     // e na toolbar nao contam (e o pointer capture nao rouba o clique).
@@ -785,6 +855,8 @@
   let leaderDictationState = $state<LeaderDictationStatus>('idle');
   let leaderDictationNodeId = $state<string | null>(null);
   let sidebarCollapsed = $state(false);
+  // Fitted content stays clear of the dock, sidebar and composer floating over the canvas.
+  const fitPadding = $derived({ top: '76px', bottom: '92px', left: sidebarCollapsed ? '76px' : '300px', right: '40px' } as const);
   let importInput: HTMLInputElement;
   let visibleFloorId = $state<string | null>(null);
   let floors = $state<Floor[]>([]);
@@ -1157,7 +1229,7 @@
     const connect = () => {
     if (disposed) return;
     socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking'] }));
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking', 'attentionChanged'] }));
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(String(event.data));
@@ -1182,6 +1254,9 @@
         if (message.type === 'controlCenterChanged' || message.type === 'messageDelivery') {
           scheduleActivity();
           if (message.workspaceId === activeWorkspace?.id) scheduleAgentStatusRefresh();
+        }
+        if (message.type === 'attentionChanged' && (!message.workspaceId || message.workspaceId === activeWorkspace?.id)) {
+          scheduleAttentionRefresh();
         }
       } catch {
         // frame nao-JSON: ignora
@@ -2680,6 +2755,10 @@
   function jumpToNode(nodeId: string, zoom = 1, screenOffsetY = 0) {
     const node = nodes.find((item) => item.id === nodeId);
     if (!node) return;
+    if (node.hidden) {
+      const stack = noteStackList.find((candidate) => candidate.noteIds.includes(nodeId));
+      if (stack) setNoteStackExpanded(stack.agentId, true);
+    }
     const width = node.measured?.width ?? (node.width as number) ?? 560;
     const height = node.measured?.height ?? (node.height as number) ?? 360;
     zoomApi?.setCenter(node.position.x + width / 2, node.position.y + height / 2 + screenOffsetY / zoom, { zoom, duration: 300 });
@@ -2983,7 +3062,7 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} oncopy={handleShapeCopy} onpaste={handleShapePaste} />
 
-<main class="canvas-page">
+<main class="canvas-page" style:--dock-side-clearance={sidebarCollapsed ? '64px' : '300px'}>
   <aside class="sidebar" data-portal-occluder inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
       <div class="sidebar-header">
         {#if !sidebarCollapsed}
@@ -3106,6 +3185,23 @@
         {/if}
       </ul>
 
+      {#if teamMembers.length}
+        <section class="team-section" aria-labelledby="team-title">
+          <h2 id="team-title" class="team-title">{m['canvas.team']()}<span class="section-count">{teamMembers.length}</span></h2>
+          <ul class="team-list">
+            {#each teamMembers as member (member.id)}
+              <li>
+                <button type="button" class="team-row" onclick={() => jumpToNode(member.id)} aria-label={`${member.title}: ${member.label}`}>
+                  <AgentGlyph tone={member.tone} label={member.label} />
+                  <AgentAvatar nodeId={member.id} title={member.title} size={18} />
+                  <span class="team-name">{member.title}</span>
+                  {#if member.since}<span class="team-since">{member.since}</span>{/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
       <div class="sidebar-footer">
         {#if creatingFolder}
           <div class="new-folder-row">
@@ -3274,7 +3370,7 @@
         </div>
       {/if}
       <div class="contents" inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
-      <ZoomBridge onReady={(api) => (zoomApi = api)} />
+      <ZoomBridge onReady={(api) => (zoomApi = api)} padding={() => ({ ...fitPadding, right: document.querySelector('.canvas-summary') ? '336px' : fitPadding.right })} />
       {#if ghostRect}
         <div
           class="draw-ghost"
@@ -3310,13 +3406,13 @@
           <Background gap={20} variant={backgroundVariant} patternColor="var(--app-grid)" />
         {/if}
         {#if appSettings.showControls !== 'false'}
-          <Controls />
+          <Controls position="bottom-right" orientation="horizontal" fitViewOptions={{ padding: fitPadding, duration: 300 }} />
         {/if}
         {#if appSettings.showMinimap !== 'false'}
           <MiniMap bgColor="var(--app-surface)" maskColor="color-mix(in srgb, var(--app-canvas) 72%, transparent)" nodeColor={minimapNodeColor} pannable zoomable />
         {/if}
-        {#if selectedTransferNodeIds.length > 0}
-          <Panel position="top-center">
+        <Panel position="bottom-center" class="composer-panel">
+          {#if selectedTransferNodeIds.length > 0}
             <div class="selection-bar flex h-9 items-center gap-1 rounded-[10px] bg-[var(--app-surface)] py-1 pr-1 pl-3 shadow-overlay">
               <span class="whitespace-nowrap text-ui-sm font-medium text-[var(--app-text-soft)] tabular-nums">
                 {selectedTransferNodeIds.length === 1 ? m['canvas.transfer_selected_one']() : m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}
@@ -3326,9 +3422,24 @@
                 <Copy size={13} />{m['canvas.transfer_open']()}
               </Button>
             </div>
+          {/if}
+          {#if activeWorkspace && composerTargets.length}
+            <CanvasComposer
+              workspaceId={activeWorkspace.id}
+              targets={composerTargets}
+              targetId={composerTarget}
+              mentions={composerMentions}
+              onTargetChange={(id) => (composerTargetId = id)}
+              onJump={(id) => jumpToNode(id)}
+            />
+          {/if}
+        </Panel>
+        {#if activeWorkspace && composerTargets.length}
+          <Panel position="top-right" class="summary-panel">
+            <CanvasSummaryCard workspaceId={activeWorkspace.id} compact={summaryCompact || selectedTransferNodeIds.length > 0} onOpenAttention={() => window.dispatchEvent(new CustomEvent('orkestrai:open-attention'))} />
           </Panel>
         {/if}
-        <Panel position="bottom-center">
+        <Panel position="top-center">
           <div class="toolbar-wrap">
             {#if canScrollLeft}
               <button class="toolbar-arrow" aria-label={m['canvas.scroll_left']()} onclick={() => scrollToolbar(-1)}>
@@ -3674,6 +3785,7 @@
 
 <style>
   .canvas-page {
+    position: relative;
     display: flex;
     height: 100%;
     background: var(--app-canvas);
@@ -3698,11 +3810,18 @@
     margin-left: 0;
   }
 
+  /* Floating glass panel over the canvas: the map runs edge to edge behind it. */
   .sidebar {
-    width: 288px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--app-border);
-    background: var(--app-sidebar);
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: var(--z-canvas-chrome);
+    width: 264px;
+    max-height: calc(100% - 24px);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--app-sidebar) 82%, transparent);
+    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
+    backdrop-filter: blur(16px) saturate(140%);
     padding: 10px 8px;
     display: flex;
     flex-direction: column;
@@ -3813,10 +3932,84 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    flex: 1;
-    min-height: 0;
+    flex: 0 1 auto;
+    min-height: 60px;
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  .team-section {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 6px;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .team-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px 8px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-text-muted);
+  }
+
+  .team-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    max-height: 32vh;
+  }
+
+  .team-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .team-row:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .team-row:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .team-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .team-since {
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
   }
 
   .workspace-list li {
@@ -4296,8 +4489,9 @@
    * Minimapa e zoom flutuam acima da linha do dock (nunca por baixo da barra
    * de ferramentas), com a mesma superficie elevada dos outros flutuantes.
    */
+  /* Minimap with the zoom row under it, bottom right; the composer owns the bottom center. */
   .canvas-area :global(.svelte-flow__minimap) {
-    bottom: 64px;
+    bottom: 50px;
     width: 176px;
     height: 116px;
     background: color-mix(in srgb, var(--app-surface) 80%, transparent);
@@ -4314,7 +4508,7 @@
   }
 
   .canvas-area :global(.svelte-flow__controls) {
-    bottom: 64px;
+    bottom: 4px;
     padding: 3px;
     gap: 2px;
     border: 0;
@@ -4420,11 +4614,36 @@
     pointer-events: none;
   }
 
+  .canvas-area :global(.composer-panel) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  /* While writing to the team, the selection actions step aside for mentions. */
+  .canvas-area :global(.composer-panel:has(.composer:focus-within) .selection-bar) {
+    display: none;
+  }
+
+  .canvas-area :global(.summary-panel) {
+    margin-top: 14px;
+    margin-right: 14px;
+  }
+
+  /* Below this width the centred dock reaches the corner, so the card sits under it. */
+  @media (max-width: 1400px) {
+    .canvas-area :global(.summary-panel) {
+      margin-top: 66px;
+    }
+  }
+
   .toolbar-wrap {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 12px;
+    margin-top: 2px;
   }
 
   .toolbar-arrow {
@@ -4467,9 +4686,9 @@
     box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
     backdrop-filter: blur(14px) saturate(140%);
     /* Muitos botoes (providers + paineis): rola em vez de cortar fora da tela.
-       O painel do xyflow nao tem largura propria — limita pelo viewport
-       (sidebar 288 + setas + margens). */
-    max-width: max(320px, calc(100vw - 360px));
+       O dock fica centrado; a largura livre e simetrica a sidebar flutuante
+       (276 + margens) para nunca passar por baixo dela. */
+    max-width: max(320px, calc(100vw - 2 * var(--dock-side-clearance, 300px) - 72px));
     overflow-x: auto;
     scrollbar-width: none;
   }

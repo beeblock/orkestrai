@@ -31,9 +31,9 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="top">{m['design.menu']()}</Tooltip.Content>
+    <Tooltip.Content side="bottom">{m['design.menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="top" align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
+  <DropdownMenu.Content side="bottom" align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
     <DropdownMenu.Label>{m['design.menu']()}</DropdownMenu.Label>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onBlank}>
       <Palette size={16} class="shrink-0" aria-hidden="true" />
