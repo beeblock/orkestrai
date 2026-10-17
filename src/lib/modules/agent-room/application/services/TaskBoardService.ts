@@ -1,5 +1,6 @@
 import { uuidv7 } from '@beeblock/svelar/support';
 import { agentLearningService } from './AgentLearningService.js';
+import { channelService } from './ChannelService.js';
 import { Event } from '@beeblock/svelar/events';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -547,6 +548,12 @@ export class TaskBoardService {
         correlationId: `task:${updated.id}`,
         sourceType: 'kanban',
         sourceId: updated.id,
+      });
+    }
+    if (!wasDone && updated.status === 'done') {
+      void channelService.recordEvent(workspaceId, {
+        body: updated.title,
+        meta: { event: 'task_done', taskId: updated.id, assigneeNodeId: updated.assigneeNodeId ?? null },
       });
     }
     if (!wasDone && updated.status === 'done') {

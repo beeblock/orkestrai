@@ -366,6 +366,8 @@ const TOOLS = [
   { name: 'computer_shortcut', description: 'Executa um atalho em uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { keys: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string' } }, targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['keys', 'targetId', 'taskId', 'idempotencyKey'] } },
   { name: 'computer_screenshot', description: 'Salva evidencia PNG confinada ao workspace de uma janela explicitamente permitida.', inputSchema: { type: 'object', properties: { targetId: { type: 'string' }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['targetId', 'taskId', 'idempotencyKey'] } },
   { name: 'computer_wait', description: 'Aguarda de forma limitada uma janela existir ou receber foco.', inputSchema: { type: 'object', properties: { condition: { type: 'string', enum: ['window_exists', 'window_focused'] }, value: { type: 'string' }, timeoutMs: { type: 'integer', minimum: 50, maximum: 30000 }, pollMs: { type: 'integer', minimum: 100, maximum: 2000 }, taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8 } }, required: ['condition', 'value', 'taskId', 'idempotencyKey'] } },
+  { name: 'channel_post', description: 'Posta na Conversa: channel owner (padrão) fala com o dono na conversa direta; team posta no canal #equipe. Use para progresso relevante e para responder mensagens do dono.', inputSchema: { type: 'object', properties: { message: { type: 'string' }, channel: { type: 'string', enum: ['owner', 'team'] } }, required: ['message'] } },
+  { name: 'ask_owner', description: 'Pergunta ao dono sem bloquear: aparece em Precisa de você e na Conversa, com opções de resposta opcionais. A resposta chega depois na sua caixa de entrada; continue o trabalho que não depende dela.', inputSchema: { type: 'object', properties: { question: { type: 'string' }, options: { type: 'array', items: { type: 'string' }, maxItems: 6 }, taskId: { type: 'string' } }, required: ['question'] } },
   { name: 'notify', description: 'Notificacao nativa de atencao ou conclusao do projeto. task_done ja notifica tarefas.', inputSchema: { type: 'object', properties: { message: { type: 'string' }, kind: { type: 'string', enum: ['info', 'attention', 'project', 'task'] }, title: { type: 'string' } }, required: ['message'] } },
   { name: 'status', description: 'Registra o estado semantico e a acao atual deste agente no Control Center.', inputSchema: { type: 'object', properties: { state: { type: 'string', enum: ['starting', 'working', 'waiting_input', 'waiting_permission', 'blocked', 'idle', 'done', 'error', 'disconnected'] }, action: { type: 'string' }, taskId: { type: 'string' } }, required: ['state'] } },
   { name: 'port', description: 'Devolve uma porta livre para subir servidores.', inputSchema: { type: 'object', properties: {} } },
@@ -1218,6 +1220,10 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return computerCommand({ command: 'screenshot', target: 'window', targetId: args.targetId, retention: args.retention ?? 'evidence' });
     case 'computer_wait':
       return computerCommand({ command: 'wait', condition: args.condition, value: args.value, timeoutMs: args.timeoutMs ?? 10000, pollMs: args.pollMs ?? 300 });
+    case 'channel_post':
+      return bridge('POST', '/api/agent-room/bridge/channel', { message: args.message, channel: args.channel === 'team' ? 'team' : 'owner', from: selfAgent });
+    case 'ask_owner':
+      return bridge('POST', '/api/agent-room/bridge/ask-owner', { question: args.question, options: args.options, taskId: args.taskId, from: selfAgent });
     case 'notify':
       return bridge('POST', '/api/agent-room/bridge/notify', { message: args.message, kind: args.kind, title: args.title, from: selfAgent });
     case 'status': {

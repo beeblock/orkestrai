@@ -25,6 +25,7 @@ import { AgentKnowledgeSource } from '../../domain/models/AgentKnowledgeSource.j
 import { AgentLearningEntry } from '../../domain/models/AgentLearningEntry.js';
 import { AgentMemorySource } from '../../domain/models/AgentMemorySource.js';
 import { AgentHuddle } from '../../domain/models/AgentHuddle.js';
+import { AgentChannelMessage } from '../../domain/models/AgentChannelMessage.js';
 import { AgentHuddleParticipant } from '../../domain/models/AgentHuddleParticipant.js';
 import { AgentHuddleTurn } from '../../domain/models/AgentHuddleTurn.js';
 import { AgentAutonomyPolicy } from '../../domain/models/AgentAutonomyPolicy.js';
@@ -297,6 +298,7 @@ export class WorkspaceRepository {
       await AgentMemoryEntry.query().where('workspace_id', id).delete();
       await AgentKnowledgeSource.query().where('workspace_id', id).delete();
       await AgentLearningEntry.query().where('workspace_id', id).delete();
+      await AgentChannelMessage.query().where('workspace_id', id).delete();
       await AgentHuddleTurn.query().where('workspace_id', id).delete();
       await AgentHuddleParticipant.query().where('workspace_id', id).delete();
       await AgentHuddle.query().where('workspace_id', id).delete();

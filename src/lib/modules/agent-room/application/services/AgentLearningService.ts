@@ -6,6 +6,9 @@ import { knowledgeNormalize, knowledgeTerms } from '../../domain/knowledge.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentLearningRepository } from '../../infrastructure/repositories/AgentLearningRepository.js';
 import type { AgentLearningCommandDto } from '../dto/AgentLearningCommandDto.js';
+import { attentionService } from './AttentionService.js';
+
+export const LEARNING_ATTENTION_SOURCE = 'learning_pending';
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 export class AgentLearningService {
@@ -62,6 +65,7 @@ export class AgentLearningService {
       if (input.command === 'decide' && input.status === 'active' && (!current.correction || !current.evidence)) throw new Error('learning_evidence_required');
       const at = new Date().toISOString();
       const status = input.command === 'skip' ? 'archived' : input.status;
+      await attentionService.resolveSource(workspaceId, LEARNING_ATTENTION_SOURCE, current.id).catch(() => 0);
       return agentLearningRepository.update({ ...current, status, evidenceLevel: actor.type === 'user' && status === 'active' ? 'owner_reviewed' : current.evidenceLevel, revision: current.revision + 1, updatedAt: at, history: [...current.history.slice(-49), { revision: current.revision + 1, status, at, actor: actor.type }] }, input.revision);
     }
     if (agentLearningMode(node.payload) === 'off') throw new Error('learning_disabled');
@@ -74,6 +78,14 @@ export class AgentLearningService {
     const pending = agentLearningMode(node.payload) === 'review' || status !== 'done' || lessonNeedsReview(content);
     const now = new Date().toISOString();
     const entry = await agentLearningRepository.create({ id: uuidv7(), workspaceId, nodeId: node.id, taskId: input.taskId, title: input.title, status: pending ? 'pending' : 'active', revision: 1, fingerprint: hash(knowledgeNormalize(`${input.trigger}\n${input.correction}`)), trigger: input.trigger, mistake: input.mistake, correction: input.correction, evidence: input.evidence, sourceHash: hash(JSON.stringify([task.getAttribute('title'), task.getAttribute('description'), status])), sourceTitle: String(task.getAttribute('title')), sourceStatus: status, evidenceLevel: actor.type === 'user' ? 'owner_reviewed' : 'agent_reported', history: [{ revision: 1, status: pending ? 'pending' : 'active', actor: actor.type, at: now }], createdAt: now, updatedAt: now });
+    if (pending) {
+      await attentionService.raise({
+        workspaceId, nodeId: node.id, taskId: input.taskId, category: 'agent', severity: 'info',
+        title: input.title.slice(0, 200), body: input.correction.slice(0, 500) || null,
+        sourceType: LEARNING_ATTENTION_SOURCE, sourceId: entry.id, correlationId: `${LEARNING_ATTENTION_SOURCE}:${entry.id}`,
+        action: { target: 'node', decision: 'learning', entryId: entry.id },
+      }).catch(() => undefined);
+    }
     for (const reflection of entries.filter(item => item.taskId === input.taskId && item.status === 'reflection')) {
       await agentLearningRepository.update({ ...reflection, status: 'archived', revision: reflection.revision + 1, updatedAt: now, history: [...reflection.history, { revision: reflection.revision + 1, status: 'archived', actor: actor.type, at: now }] }, reflection.revision);
     }

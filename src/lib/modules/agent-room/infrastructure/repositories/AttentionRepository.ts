@@ -155,6 +155,40 @@ export class AttentionRepository {
     return rows.length;
   }
 
+  async find(workspaceId: string, id: string): Promise<AgentAttentionItemData | null> {
+    const model = await AgentAttentionItem.find(id);
+    if (!model || model.getAttribute('workspace_id') !== workspaceId) return null;
+    return mapAttention(model);
+  }
+
+  async hasUnresolved(workspaceId: string, correlationId: string): Promise<boolean> {
+    const row = await AgentAttentionItem.query()
+      .where('workspace_id', workspaceId)
+      .where('correlation_id', correlationId)
+      .whereNull('resolved_at')
+      .first();
+    return Boolean(row);
+  }
+
+  async resolveBySource(workspaceId: string, sourceType: string, sourceId: string): Promise<number> {
+    const rows = await AgentAttentionItem.query()
+      .where('workspace_id', workspaceId)
+      .where('source_type', sourceType)
+      .where('source_id', sourceId)
+      .whereNull('resolved_at')
+      .get();
+    const now = new Date().toISOString();
+    for (const row of rows) {
+      await AgentAttentionItem.query().where('id', row.getAttribute('id')).update({
+        status: 'resolved',
+        read_at: row.getAttribute('read_at') ?? now,
+        resolved_at: now,
+        updated_at: now,
+      });
+    }
+    return rows.length;
+  }
+
   async deleteWorkspace(workspaceId: string): Promise<void> {
     await AgentAttentionItem.query().where('workspace_id', workspaceId).delete();
   }

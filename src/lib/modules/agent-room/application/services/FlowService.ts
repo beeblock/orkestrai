@@ -1,4 +1,5 @@
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { attentionService } from './AttentionService.js';
 import { bridgeService } from './BridgeService.js';
 import { agentSessionService } from './AgentSessionService.js';
 
@@ -53,6 +54,8 @@ function notifyWorkspaceChanged(workspaceId: string) {
  * O progresso e persistido no payload do no — sobrevive a reload e aparece
  * ao vivo no canvas.
  */
+export const FLOW_APPROVAL_SOURCE = 'flow_approval';
+
 export class FlowService {
   private running = new Map<string, RunHandle>();
   private approvalWaiters = new Map<string, () => void>();
@@ -154,11 +157,28 @@ export class FlowService {
           await persist({ active: true, iteration, iterations, startedAt, steps: [...runSteps] });
 
           if (step.kind === 'approval') {
-            await new Promise<void>((resolveApproval, rejectApproval) => {
-              this.approvalWaiters.set(nodeId, resolveApproval);
-              handle.onCancel = () => rejectApproval(new Error('Fluxo interrompido pelo usuario.'));
-            });
-            this.approvalWaiters.delete(nodeId);
+            const flowNode = await workspaceRepository.getNode(nodeId);
+            await attentionService.raise({
+              workspaceId,
+              nodeId,
+              category: 'workflow',
+              severity: 'warning',
+              title: flowNode?.title?.trim() || 'Fluxo',
+              body: currentInput.slice(0, 500) || null,
+              sourceType: FLOW_APPROVAL_SOURCE,
+              sourceId: nodeId,
+              correlationId: `${FLOW_APPROVAL_SOURCE}:${nodeId}`,
+              action: { target: 'node', decision: 'flow' },
+            }).catch(() => undefined);
+            try {
+              await new Promise<void>((resolveApproval, rejectApproval) => {
+                this.approvalWaiters.set(nodeId, resolveApproval);
+                handle.onCancel = () => rejectApproval(new Error('Fluxo interrompido pelo usuario.'));
+              });
+            } finally {
+              this.approvalWaiters.delete(nodeId);
+              await attentionService.resolveSource(workspaceId, FLOW_APPROVAL_SOURCE, nodeId).catch(() => 0);
+            }
             runSteps[i] = { ...runSteps[i], status: 'done', excerpt: 'aprovado' };
             await persist({ active: true, iteration, iterations, startedAt, steps: [...runSteps] });
             continue;

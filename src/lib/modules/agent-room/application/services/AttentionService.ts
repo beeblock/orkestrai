@@ -65,6 +65,8 @@ export class AttentionService {
     sourceType: string;
     sourceId: string;
     correlationId: string;
+    /** Overrides the default open-the-node action, e.g. to open a conversation. */
+    action?: Record<string, unknown>;
   }): Promise<void> {
     const item = await attentionRepository.save({
       workspaceId: input.workspaceId,
@@ -78,7 +80,7 @@ export class AttentionService {
       sourceType: input.sourceType,
       sourceId: input.sourceId,
       correlationId: input.correlationId,
-      action: input.nodeId ? {
+      action: input.action ? { workspaceId: input.workspaceId, nodeId: input.nodeId, taskId: input.taskId ?? null, ...input.action } : input.nodeId ? {
         target: input.taskId ? 'task' : 'node',
         workspaceId: input.workspaceId,
         nodeId: input.nodeId,
@@ -86,6 +88,19 @@ export class AttentionService {
       } : undefined,
     });
     broadcast(input.workspaceId, item);
+  }
+
+  /** Like `raise`, but leaves an item that is already open, read or snoozed untouched. */
+  async raiseOnce(input: Parameters<AttentionService['raise']>[0]): Promise<void> {
+    if (await attentionRepository.hasUnresolved(input.workspaceId, input.correlationId)) return;
+    await this.raise(input);
+  }
+
+  /** Closes the open items raised for one source once it is decided elsewhere. */
+  async resolveSource(workspaceId: string, sourceType: string, sourceId: string): Promise<number> {
+    const resolved = await attentionRepository.resolveBySource(workspaceId, sourceType, sourceId);
+    if (resolved) broadcast(workspaceId);
+    return resolved;
   }
 
   async list(input: { workspaceId?: string | null; includeResolved?: boolean; limit?: number } = {}): Promise<AgentAttentionItem[]> {

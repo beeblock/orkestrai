@@ -117,6 +117,8 @@ Uso:
   orkestrai portal create <url> [--title <titulo>] [--connect <agente|all>] [--force-new]
   orkestrai portal <nodeId|nome> <navigate|tabs|snapshot|click|type|select|upload|download|wait|extract|screenshot|dom|eval> [...]
   orkestrai notify <mensagem> [--kind info|attention|project|task] [--title <titulo>]
+  orkestrai post <mensagem> [--channel owner|team]
+  orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome>] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
@@ -1802,6 +1804,22 @@ async function runCommand(argv, options, sink) {
       if (!message) throw new Error('Uso: orkestrai notify <mensagem>');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/notify', { message, kind: flags.kind, title: flags.title, from: flags.from });
       out(data.notified ? 'Notificacao enviada.' : 'Evento informativo registrado sem notificacao do sistema.');
+      return 0;
+    }
+    case 'post': {
+      const message = rest.join(' ');
+      if (!message || !flags.from) throw new Error('Uso: orkestrai post <mensagem> [--channel owner|team]');
+      const channel = flags.channel === 'team' ? 'team' : 'owner';
+      await bridge(config, 'POST', '/api/agent-room/bridge/channel', { message, channel, from: flags.from });
+      out(channel === 'team' ? 'Postado no canal #equipe.' : 'Postado na conversa com o dono.');
+      return 0;
+    }
+    case 'ask-owner': {
+      const question = rest.join(' ');
+      if (!question || !flags.from) throw new Error('Uso: orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]');
+      const options = typeof flags.options === 'string' ? flags.options.split('|').map((option) => option.trim()).filter(Boolean) : undefined;
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/ask-owner', { question, options, taskId: flags.task, from: flags.from });
+      out(`Pergunta enviada ao dono (${data.questionId}). A resposta chega na sua caixa de entrada; continue o que não depende dela.`);
       return 0;
     }
     case 'status': {

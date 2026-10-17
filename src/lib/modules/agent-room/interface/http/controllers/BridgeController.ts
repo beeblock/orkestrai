@@ -1,3 +1,7 @@
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { TOOL_DRAFT_ATTENTION_SOURCE } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
+import { BridgeChannelPostRequest } from '../requests/BridgeChannelPostRequest.js';
+import { BridgeAskOwnerRequest } from '../requests/BridgeAskOwnerRequest.js';
 import { Controller } from '@beeblock/svelar/routing';
 import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
 import { AutonomyGatePendingError, autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
@@ -275,6 +279,15 @@ export class BridgeController extends Controller {
         if (!body.toolId) throw new Error('Tool id is required.');
         const input = executeWorkspaceToolSchema.omit({ actor: true, automationRunId: true }).parse(body.input);
         result = await toolExecutionService.execute(workspace.id, body.toolId, { ...input, actor: { type: 'agent', id: actor }, automationRunId: null });
+      }
+      const proposed = result as { id?: string; name?: string; description?: string; status?: string } | null;
+      if (body.operation !== 'execute' && proposed?.id && proposed.status === 'draft') {
+        await attentionService.raise({
+          workspaceId: workspace.id, nodeId: actor, taskId: body.taskId, category: 'workflow', severity: 'info',
+          title: proposed.name ?? 'Tool', body: proposed.description?.slice(0, 500) || null,
+          sourceType: TOOL_DRAFT_ATTENTION_SOURCE, sourceId: proposed.id, correlationId: `${TOOL_DRAFT_ATTENTION_SOURCE}:${proposed.id}`,
+          action: { target: 'node', decision: 'tool', toolId: proposed.id },
+        }).catch(() => undefined);
       }
       await controlCenterService.recordActivity({
         workspaceId: workspace.id, nodeId: actor, state: 'working', action: `tool:${body.operation}`,
@@ -1486,6 +1499,28 @@ export class BridgeController extends Controller {
       return this.json({ data: await bridgeService.notify(workspace, input) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao notificar.');
+    }
+  }
+
+  /** An agent posts to the team channel or to its conversation with the owner. */
+  async channelPost(event: any) {
+    try {
+      const input = await BridgeChannelPostRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await bridgeService.postToChannel(workspace.id, input) }, 201);
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao postar na conversa.');
+    }
+  }
+
+  /** An agent asks the owner; the answer arrives later in the agent's inbox. */
+  async askOwner(event: any) {
+    try {
+      const input = await BridgeAskOwnerRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await bridgeService.askOwner(workspace, input) }, 201);
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao perguntar ao dono.');
     }
   }
 
