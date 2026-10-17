@@ -15,6 +15,16 @@ pt-BR, English, and Spanish translations.
 - Float the dock, minimap and zoom controls on a translucent surface with a hairline edge.
 - Keep connections quiet until one of their nodes is selected, then draw them in the accent color.
 - At overview zoom, show each node's name and status in large type instead of an empty frame.
+- Float the workspace sidebar over the Canvas with a Team section that lists agents by who needs the owner first, move the dock to the top with menus opening downward, and keep the minimap and horizontal zoom controls at the bottom right. Fitting the view leaves room for this chrome.
+- Set group titles and summary figures in a condensed display face (Archivo, SIL Open Font License).
+
+### Added
+
+- Add a message bar at the bottom of the Canvas. It writes to the selected agent, the last one chosen or the workspace leader through the agent's inbox, which wakes an on-demand agent and waits for a busy one to finish its turn; @ mentions teammates, notes and portals.
+- Add a "since your last visit" card that counts open attention items, tasks finished since the previous visit and working agents. The last visit is remembered per workspace in this browser only.
+- Show an agent's open attention items inside its node with Reply, Resolve and one-hour Snooze, and say so when the terminal itself is waiting for permission, waiting for an answer or stopped.
+- Show Focus, Message and more actions above a selected agent.
+- Stack the notes an agent keeps only for itself (two or more notes whose only connection is that agent) behind the newest one, with a counter to spread them out and gather them again.
 
 ## 0.42.2 - 2026-10-16
 

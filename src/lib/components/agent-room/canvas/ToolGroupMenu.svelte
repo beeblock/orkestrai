@@ -42,7 +42,7 @@
     <span>{label}</span>
     <ChevronDown size={12} class="opacity-60 transition-transform duration-150 group-data-[state=open]:rotate-180" aria-hidden="true" />
   </DropdownMenu.Trigger>
-  <DropdownMenu.Content side="top" align="center" sideOffset={10} class="w-[min(300px,calc(100vw-24px))] p-1.5">
+  <DropdownMenu.Content side="bottom" align="center" sideOffset={10} class="w-[min(300px,calc(100vw-24px))] p-1.5">
     <DropdownMenu.Label>{heading ?? label}</DropdownMenu.Label>
     {#each items as item (item.id)}
       <DropdownMenu.Item

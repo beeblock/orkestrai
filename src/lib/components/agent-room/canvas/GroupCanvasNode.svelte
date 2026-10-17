@@ -154,6 +154,13 @@
   }
 
   .group-title {
+    font-family: var(--font-headline);
+    font-stretch: 62%;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    line-height: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

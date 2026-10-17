@@ -62,9 +62,9 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="top">{m['canvas.agents_menu']()}</Tooltip.Content>
+    <Tooltip.Content side="bottom">{m['canvas.agents_menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="top" align="start" sideOffset={10} class="agents-menu-content">
+  <DropdownMenu.Content side="bottom" align="start" sideOffset={10} class="agents-menu-content">
     <DropdownMenu.Label>{m['canvas.agents_available']()}</DropdownMenu.Label>
     {#each providers as provider (provider.id)}
       <DropdownMenu.Item

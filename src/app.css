@@ -3,6 +3,7 @@
 @import "@fontsource-variable/inter/wght.css";
 @import "@fontsource-variable/sora/wght.css";
 @import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "@fontsource-variable/archivo/wdth.css";
 @source "../node_modules/@beeblock/svelar/src/ui";
 
 @custom-variant dark (&:is(.dark *));
@@ -384,6 +385,8 @@ kbd:not([data-slot]) {
 
   --font-display: 'Sora Variable', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  /* Condensed headline face for big moments only (summary numbers, overview names, mode titles). */
+  --font-headline: 'Archivo Variable', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   --shadow-card: var(--app-shadow-card);
   --shadow-panel: var(--app-shadow-panel);
@@ -573,6 +576,15 @@ html:not(.dark) img.app-logo-plate {
 }
 
 /* Metadados de instrumento: caminhos, contagens, horarios, versoes. */
+/* Condensed headline: one weight, narrow width, tight tracking. */
+@utility headline {
+  font-family: var(--font-headline);
+  font-stretch: 62%;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
 @utility meta-mono {
   font-family: var(--font-mono);
   font-size: 11px;

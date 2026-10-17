@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { selectCanvasTool } from './helpers';
 
 test.describe('usage dos providers', () => {
   test('endpoint retorna todos os providers com janelas ou orientação oficial', async ({ request }) => {
@@ -47,7 +48,7 @@ test.describe('usage dos providers', () => {
     try {
       await page.goto('/canvas');
       await page.getByRole('button', { name: workspaceName, exact: true }).click();
-      await page.getByRole('button', { name: /Usage/ }).click();
+      await selectCanvasTool(page, 'Usage');
 
       await expect(page.locator('.usage-panel h3')).toHaveText('Uso dos providers');
       await expect(page.locator('.usage-card')).toHaveCount(9, { timeout: 15_000 });
@@ -137,7 +138,7 @@ test.describe('usage dos providers', () => {
         data: { ...originalSettings, uiLanguage: 'en' },
       });
       await page.goto(`/canvas?workspace=${workspace.id}`);
-      await page.getByRole('button', { name: /Usage/ }).click();
+      await selectCanvasTool(page, 'Usage');
       await expect(page.locator('.usage-error')).toHaveText(
         'No local credentials were found for Claude. Open its CLI and sign in.',
       );
