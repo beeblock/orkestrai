@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CircleHelp, CheckCircle2, LoaderCircle, SendHorizontal } from '@lucide/svelte';
+  import { Input } from '$lib/components/ui/input';
   import type { ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -50,7 +51,7 @@
       </div>
     {/if}
     <form class="reply" onsubmit={(event) => { event.preventDefault(); void send(draft); }}>
-      <input bind:value={draft} placeholder={m['chat.answer_placeholder']()} aria-label={m['chat.answer_placeholder']()} disabled={sending} />
+      <Input class="h-8 min-w-0 flex-1" bind:value={draft} placeholder={m['chat.answer_placeholder']()} aria-label={m['chat.answer_placeholder']()} disabled={sending} />
       <button type="submit" class="send" disabled={sending || !draft.trim()} aria-label={m['chat.answer_send']()}>
         {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<SendHorizontal size={14} />{/if}
       </button>
@@ -130,25 +131,6 @@
   .reply {
     display: flex;
     gap: 6px;
-  }
-
-  .reply input {
-    flex: 1;
-    min-width: 0;
-    height: 32px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 8px;
-    background: var(--app-surface-raised);
-    box-shadow: inset 0 0 0 1px var(--app-border);
-    color: var(--app-text);
-    font: inherit;
-    font-size: 13px;
-    outline: none;
-  }
-
-  .reply input:focus-visible {
-    box-shadow: inset 0 0 0 1px var(--app-accent);
   }
 
   .send {
