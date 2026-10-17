@@ -2,6 +2,7 @@
  * SvelteKit Server Hooks — Svelar middleware pipeline
  */
 
+import { channelBridgeService } from '$lib/modules/agent-room/application/services/ChannelBridgeService.js';
 import { createSvelarApp } from '@beeblock/svelar/hooks';
 import { DatabaseSessionStore } from '@beeblock/svelar/session';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
@@ -51,6 +52,7 @@ if (!building) {
       agentRuntimeService.startSupervisor();
       globalRef.__orkestraiAgentRuntimeSupervisor = true;
     }
+    channelBridgeService.start();
     void agentSessionRotationService.rotateOversized()
       .then((rotated) => { for (const item of rotated) console.log(`[agent-runtime] Fresh conversation for ${item.title}: previous transcript ${Math.round(item.sizeBytes / 1024 / 1024)} MB.`); })
       .catch(() => console.warn('[agent-runtime] Oversized conversation check failed.'))

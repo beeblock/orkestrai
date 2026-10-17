@@ -1,7 +1,12 @@
 <script lang="ts">
   import { Brain, CalendarClock, Focus, MessageSquare, Network, X } from '@lucide/svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
+  import { getCsrfToken } from '@beeblock/svelar/http';
+  import { toast } from '@beeblock/svelar/ui';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import AgentGlyph from '../AgentGlyph.svelte';
+  import AgentAlwaysOnPanel from './AgentAlwaysOnPanel.svelte';
   import { agentStatus, statusClock } from '../agent-status.svelte.js';
   import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
@@ -24,6 +29,29 @@
     onClose: () => void;
     onDirect: (nodeId: string) => void;
   } = $props();
+
+  let routineDraft = $state('');
+  let routineSending = $state(false);
+
+  // The agent turns the sentence into an automation with its own tools and confirms in Chat.
+  async function askRoutine() {
+    const sentence = routineDraft.trim();
+    if (!sentence || routineSending) return;
+    routineSending = true;
+    const csrf = getCsrfToken();
+    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(`dm:${nodeId}`)}/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+      body: JSON.stringify({ body: m['chat.routine_request']({ sentence }) }),
+    }).catch(() => null);
+    routineSending = false;
+    if (response?.ok) {
+      routineDraft = '';
+      toast.success(m['chat.routine_sent']({ name: title }));
+    } else {
+      toast.error(m['chat.send_failed']());
+    }
+  }
 
   let memory = $state<WorkspaceMemoryEntry[]>([]);
   let routines = $state<Routine[]>([]);
@@ -95,6 +123,7 @@
       <dd>{status.floorName}</dd>
     {/if}
   </dl>
+  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} />
   <section>
     <h3><Brain size={13} />{m['chat.profile_memory']()}</h3>
     {#if memory.length}
@@ -114,6 +143,10 @@
     {:else}
       <p class="empty">{m['chat.profile_routines_empty']()}</p>
     {/if}
+    <form class="routine-form" onsubmit={(event) => { event.preventDefault(); void askRoutine(); }}>
+      <Input bind:value={routineDraft} placeholder={m['chat.routine_placeholder']()} aria-label={m['chat.routine_label']()} />
+      <Button size="sm" type="submit" disabled={!routineDraft.trim() || routineSending}>{m['chat.routine_create']()}</Button>
+    </form>
   </section>
 </aside>
 
@@ -290,6 +323,12 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
+  }
+
+  .routine-form {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
   }
 
   .empty {

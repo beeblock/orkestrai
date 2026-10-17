@@ -348,6 +348,7 @@
       <button type="button" class="channel" class:active={channel === directChannel(agent.id)} onclick={() => selectChannel(directChannel(agent.id))} aria-current={channel === directChannel(agent.id) ? 'page' : undefined}>
         <AgentAvatar nodeId={agent.id} title={agent.title} size={22} />
         <span class="name">{agent.title}</span>
+        {#if agent.payload.agentRuntimeMode === 'persistent' || agent.payload.agentRuntimeMode === 'on_demand'}<span class="always-on" title={m['always_on.title']()}>24/7</span>{/if}
         <AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} />
         {#if summary?.openQuestions}<span class="badge">{summary.openQuestions}</span>{/if}
       </button>
@@ -409,6 +410,8 @@
           <article class="group" class:owner={row.authorKind === 'owner'}>
             {#if row.authorKind === 'owner'}
               <span class="owner-avatar" aria-hidden="true"><UserRound size={15} /></span>
+            {:else if row.authorKind === 'external'}
+              <span class="owner-avatar external" aria-hidden="true"><UserRound size={15} /></span>
             {:else}
               <button type="button" class="avatar-button" onclick={() => (profileNodeId = row.authorNodeId)} aria-label={m['chat.profile_open_for']({ name: titleOf(row.authorNodeId) })}>
                 <AgentAvatar nodeId={row.authorNodeId ?? 'unknown'} title={titleOf(row.authorNodeId)} size={34} />
@@ -416,7 +419,8 @@
             {/if}
             <div class="group-body">
               <header>
-                <b>{row.authorKind === 'owner' ? m['chat.you']() : titleOf(row.authorNodeId)}</b>
+                <b>{row.authorKind === 'owner' ? m['chat.you']() : row.authorKind === 'external' ? String(row.messages[0].meta.sender ?? '') : titleOf(row.authorNodeId)}</b>
+                {#if row.authorKind === 'external'}<span class="via">{m['chat.via']({ channel: row.messages[0].meta.via === 'slack' ? 'Slack' : 'Telegram' })}</span>{/if}
                 <time>{timeLabel(row.messages[0].createdAt)}</time>
               </header>
               {#each row.messages as message (message.id)}
@@ -795,6 +799,29 @@
     border-radius: 10px;
     background: var(--app-text);
     color: var(--app-surface);
+  }
+
+  .owner-avatar.external {
+    background: var(--app-info-soft);
+    color: var(--app-info);
+  }
+
+  .via {
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--app-info-soft);
+    color: var(--app-info);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .always-on {
+    padding: 0 5px;
+    border-radius: 5px;
+    background: var(--app-success-soft);
+    color: var(--app-success);
+    font-size: 11px;
+    font-weight: 700;
   }
 
   .group-body {

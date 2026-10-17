@@ -60,6 +60,15 @@ function quoteFilename(value: string): string {
   return value.replace(/["\r\n\\]/g, '_');
 }
 
+export type InboundChannelMessage = {
+  externalId: string;
+  chatId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  at: string;
+};
+
 export class IntegrationExecutionService {
   constructor(private readonly http = new TrustedIntegrationHttpClient()) {}
 
@@ -515,6 +524,86 @@ export class IntegrationExecutionService {
       attachmentId: body.attachmentId ? String(body.attachmentId).slice(0, 180) : null,
       parts: Array.isArray(part.parts) ? part.parts.slice(0, 100).map((entry) => this.safeGmailPart(record(entry), depth + 1)) : [],
     };
+  }
+
+  /**
+   * Reads new inbound messages for an agent's channel binding without
+   * recording a receipt per poll. It needs the same standing read grant as
+   * the agent-facing read action; replies still go through `execute`.
+   */
+  async pollInbound(
+    workspaceId: string,
+    integrationId: string,
+    input: { cursor: string | null; chatId?: string | null; waitSeconds?: number },
+  ): Promise<{ messages: InboundChannelMessage[]; cursor: string | null }> {
+    const integration = await this.requireIntegration(workspaceId, integrationId);
+    if (!integration.enabled || integration.status !== 'connected') throw new Error('Integration is not connected and enabled.');
+    if (integration.type === 'telegram') {
+      if (!integration.permissions.includes('telegram.read_updates')) throw new Error('Integration action is outside the standing account grant.');
+      const token = await this.secret(integration, 'telegram.read_updates', 'api.telegram.org');
+      const wait = Math.max(0, Math.min(20, input.waitSeconds ?? 20));
+      const response = await this.http.request(`https://api.telegram.org/bot${token}/getUpdates`, {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({ offset: input.cursor ? Number(input.cursor) : undefined, timeout: wait, limit: 50, allowed_updates: ['message'] }),
+        signal: AbortSignal.timeout((wait + 10) * 1000),
+      });
+      const data = record(response.json);
+      if (!response.ok || data.ok !== true) throw safeError(response.status, 'Telegram', response.json);
+      const updates = Array.isArray(data.result) ? data.result.slice(0, 50).map((update) => record(update)) : [];
+      let next = input.cursor ? Number(input.cursor) : 0;
+      const messages: InboundChannelMessage[] = [];
+      for (const update of updates) {
+        const updateId = Number(update.update_id);
+        if (Number.isFinite(updateId)) next = Math.max(next, updateId + 1);
+        const message = record(update.message);
+        const text = String(message.text ?? message.caption ?? '').trim();
+        const from = record(message.from);
+        if (!text || from.is_bot === true) continue;
+        messages.push({
+          externalId: String(updateId),
+          chatId: String(record(message.chat).id ?? ''),
+          senderId: String(from.id ?? ''),
+          senderName: String(from.username ?? from.first_name ?? '').slice(0, 120),
+          text: text.slice(0, 8_000),
+          at: typeof message.date === 'number' ? new Date(message.date * 1000).toISOString() : new Date().toISOString(),
+        });
+      }
+      return { messages, cursor: next ? String(next) : input.cursor };
+    }
+    if (integration.type === 'slack') {
+      if (!integration.permissions.includes('slack.read_messages')) throw new Error('Integration action is outside the standing account grant.');
+      if (!input.chatId) throw new Error('Slack channel is required.');
+      const token = await this.secret(integration, 'slack.read_messages', 'slack.com');
+      // First poll only sets the starting point, so old history is never replayed to the agent.
+      const oldest = input.cursor ?? String(Date.now() / 1000);
+      if (!input.cursor) return { messages: [], cursor: oldest };
+      const query = new URLSearchParams({ channel: input.chatId, oldest, limit: '50' });
+      const response = await this.http.request(`https://slack.com/api/conversations.history?${query}`, {
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
+      });
+      const data = record(response.json);
+      if (!response.ok || data.ok !== true) throw safeError(response.status, 'Slack', response.json);
+      let next = oldest;
+      const messages: InboundChannelMessage[] = [];
+      for (const raw of Array.isArray(data.messages) ? data.messages.slice(0, 50) : []) {
+        const message = record(raw);
+        const ts = String(message.ts ?? '');
+        if (ts && Number(ts) > Number(next)) next = ts;
+        const text = String(message.text ?? '').trim();
+        if (!text || message.bot_id || message.subtype) continue;
+        messages.push({
+          externalId: ts,
+          chatId: input.chatId,
+          senderId: String(message.user ?? ''),
+          senderName: String(message.user ?? '').slice(0, 120),
+          text: text.slice(0, 8_000),
+          at: new Date(Number(ts) * 1000 || Date.now()).toISOString(),
+        });
+      }
+      return { messages: messages.reverse(), cursor: next };
+    }
+    throw new Error('This integration cannot deliver messages to an agent.');
   }
 
   private safeTelegramUpdate(update: Record<string, unknown>): Record<string, unknown> {

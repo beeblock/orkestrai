@@ -30,6 +30,9 @@ pt-BR, English, and Spanish translations.
 - Let agents ask the owner without blocking through `orkestrai ask-owner` and the `ask_owner` MCP tool, with up to six answer choices. The question appears in Needs you, in the agent's node and in Chat, raises a desktop notification, and the answer is delivered once to the asking agent's inbox.
 - Decide requests where they appear through a single attention decision endpoint that delegates to each owning service: autonomy gates that require the user, flow approval steps, agent-proposed tools (publish or archive), lessons waiting for review and Review Center reviews. These sources, plus agent design proposals and an agent reaching its usage limit, now raise attention items and close them when decided elsewhere.
 - Show Needs you at the top of the Focus and Chat sidebars with the same in-place answers and decisions as the attention bell.
+- Add always-on controls to the agent profile in Chat (runtime mode through the existing agent runtime settings, recent activity) and mark 24/7 agents in the channel list.
+- Connect agents to Telegram chats and Slack channels through existing integrations that hold read and send grants. A background bridge long-polls Telegram per bot token and polls Slack per channel without recording a receipt per poll, delivers messages from allowed senders to the agent's inbox and conversation, and mirrors the agent's direct-conversation posts back through the integration's normal execution path, so external publication stays under the autonomy policy and idempotent per reply.
+- Let the owner describe a routine in natural language from the agent profile; the agent creates it with its automation tools and confirms in Chat.
 
 ## 0.42.2 - 2026-10-16
 

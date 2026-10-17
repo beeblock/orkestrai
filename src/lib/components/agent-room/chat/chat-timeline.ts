@@ -40,6 +40,7 @@ export function buildTimeline(messages: readonly ChannelMessage[]): TimelineRow[
       && last.kind !== 'question'
       && previous.authorKind === message.authorKind
       && previous.authorNodeId === message.authorNodeId
+      && (message.authorKind !== 'external' || last.meta.sender === message.meta.sender)
       && Date.parse(message.createdAt) - Date.parse(last.createdAt) <= GROUP_WINDOW_MS
     ) {
       previous.messages.push(message);
