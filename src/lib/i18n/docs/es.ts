@@ -1020,6 +1020,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Partituras: selecciona una parte del canvas, elige Guardar como partitura y colócala otra vez en cualquier workspace desde la barra lateral. Guarda las conexiones, los roles de los agentes seleccionados y sus rutinas.",
       "Lápiz: dibuja libremente en el canvas desde el menú Planificar; cada trazo se vuelve una forma que puedes mover, recolorear o borrar.",
       "Máquinas SSH: abre una terminal o un agente en otra computadora desde el menú Dispositivos, usando los hosts de tu configuración de SSH.",
+      "Abrir un nodo desde el equipo, la búsqueda o un enlace lo centra en la parte del Canvas que dejan visible los paneles flotantes. En el teléfono, las solicitudes largas quedan cortas hasta tocarlas, y cada tarjeta indica si es una aprobación, una pregunta o un agente bloqueado.",
     ] },
     { date: '16 de octubre de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Selección de secciones de Configuración', summary: 'Mantiene la selección del menú correcta al final de la página.', items: [
       'Al hacer clic en una sección corta al final de Configuración, queda seleccionada aunque la página no pueda desplazarse más. Los enlaces directos desplazan hasta la sección después de cargar los datos. Se conservan anclas nativas, navegación por teclado e historial; al desplazarse a otro punto, el menú vuelve a seguir la sección visible, incluido el contenedor del escritorio Windows, sin polling en reposo.',

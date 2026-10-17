@@ -5314,5 +5314,9 @@
   "machines.shell": "Shell",
   "machines.open": "Abrir",
   "machines.empty": "Nenhum host no ~/.ssh/config. Adicione uma entrada Host lá e abra esta lista de novo.",
-  "machines.note": "Usa suas chaves e configuração de ssh. A CLI do agente precisa estar instalada na máquina; agentes lá ainda não usam a ponte do Orkestrai."
+  "machines.note": "Usa suas chaves e configuração de ssh. A CLI do agente precisa estar instalada na máquina; agentes lá ainda não usam a ponte do Orkestrai.",
+  "phone.kind_approval": "Aprovação",
+  "phone.kind_question": "Pergunta",
+  "phone.kind_blocked": "Bloqueado",
+  "phone.kind_notice": "Aviso"
 }

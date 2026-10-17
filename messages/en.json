@@ -5314,5 +5314,9 @@
   "machines.shell": "Shell",
   "machines.open": "Open",
   "machines.empty": "No hosts in ~/.ssh/config. Add a Host entry there and open this list again.",
-  "machines.note": "Uses your ssh keys and config. The agent CLI must be installed on the machine; agents there do not use the Orkestrai bridge yet."
+  "machines.note": "Uses your ssh keys and config. The agent CLI must be installed on the machine; agents there do not use the Orkestrai bridge yet.",
+  "phone.kind_approval": "Approval",
+  "phone.kind_question": "Question",
+  "phone.kind_blocked": "Blocked",
+  "phone.kind_notice": "Notice"
 }
