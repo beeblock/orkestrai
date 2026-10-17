@@ -171,12 +171,20 @@
       token = fromLink;
     }
     if (fromLink) history.replaceState(null, '', '/m');
-    void api<Session>('/api/agent-room/mobile/session').then((data) => {
+    void api<Session>('/api/agent-room/mobile/session').then(async (data) => {
       session = data;
       if (data.locale === 'pt-BR' || data.locale === 'en' || data.locale === 'es') localeState.current = data.locale;
       let remembered: string | null = null;
       try { remembered = localStorage.getItem(WORKSPACE_KEY); } catch { remembered = null; }
-      const first = data.workspaces.find((candidate) => candidate.id === remembered)?.id ?? data.workspaces[0]?.id ?? null;
+      // Without a remembered choice, open the workspace with the most requests waiting.
+      let busiest: string | null = null;
+      if (!data.workspaces.some((candidate) => candidate.id === remembered)) {
+        const items = await api<AgentAttentionItem[]>('/api/agent-room/attention?limit=300').catch(() => []);
+        const counts = new Map<string, number>();
+        for (const item of items) if (item.status !== 'resolved') counts.set(item.workspaceId, (counts.get(item.workspaceId) ?? 0) + 1);
+        busiest = data.workspaces.map((candidate) => candidate.id).sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0))[0] ?? null;
+      }
+      const first = data.workspaces.find((candidate) => candidate.id === remembered)?.id ?? busiest ?? data.workspaces[0]?.id ?? null;
       if (first) chooseWorkspace(first);
     }).catch(() => { if (failure !== 'pair') failure = 'offline'; });
     const timer = setInterval(() => { now = Date.now(); void refresh(); }, 5_000);
