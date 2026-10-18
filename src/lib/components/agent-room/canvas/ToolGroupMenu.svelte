@@ -15,11 +15,14 @@
 </script>
 
 <script lang="ts">
+  import { getContext } from 'svelte';
   import { ChevronDown } from '@lucide/svelte';
+  import * as Tooltip from '$lib/components/ui/tooltip';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import { cn } from '$lib/utils.js';
 
-  let { label, heading, items, extra }: { label: string; heading?: string; items: ToolGroupItem[]; extra?: import('svelte').Snippet } = $props();
+  let { label, heading, items, extra, icon }: { label: string; heading?: string; items: ToolGroupItem[]; extra?: import('svelte').Snippet; icon?: Component<{ size?: number; class?: string; strokeWidth?: number }> } = $props();
+  const railSide = getContext<'top' | 'bottom' | 'right' | 'left' | undefined>('toolbar-tooltip-side') ?? 'bottom';
 
   const active = $derived(items.some((item) => item.active));
 
@@ -32,6 +35,29 @@
 
 <!-- A labelled group of canvas tools: one dock button instead of a row of icons. -->
 <DropdownMenu.Root>
+  {#if icon}
+    {@const Icon = icon}
+    <Tooltip.Root>
+      <Tooltip.Trigger>
+        {#snippet child({ props })}
+          <DropdownMenu.Trigger
+            {...props}
+            data-tool-group-trigger
+            aria-label={label}
+            class={cn(
+              'group relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-[var(--app-text-muted)] outline-none transition-[color,background-color,transform] duration-150 ease-smooth-out hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/45 data-[state=open]:bg-[var(--app-hover)] data-[state=open]:text-[var(--app-text)]',
+              active && 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]',
+            )}
+          >
+            <Icon size={15} strokeWidth={1.8} />
+            <span class="sr-only">{label}</span>
+            <ChevronDown size={9} class="absolute right-0.5 bottom-0.5 text-[var(--app-text-muted)] transition-transform duration-150 group-data-[state=open]:rotate-180" aria-hidden="true" />
+          </DropdownMenu.Trigger>
+        {/snippet}
+      </Tooltip.Trigger>
+      <Tooltip.Content side={railSide}>{label}</Tooltip.Content>
+    </Tooltip.Root>
+  {:else}
   <DropdownMenu.Trigger
     data-tool-group-trigger
     class={cn(
@@ -42,7 +68,8 @@
     <span>{label}</span>
     <ChevronDown size={12} class="opacity-60 transition-transform duration-150 group-data-[state=open]:rotate-180" aria-hidden="true" />
   </DropdownMenu.Trigger>
-  <DropdownMenu.Content side="bottom" align="center" sideOffset={10} class="w-[min(300px,calc(100vw-24px))] p-1.5">
+  {/if}
+  <DropdownMenu.Content side={railSide} align={railSide === "bottom" ? "center" : "start"} sideOffset={10} class="w-[min(300px,calc(100vw-24px))] p-1.5">
     <DropdownMenu.Label>{heading ?? label}</DropdownMenu.Label>
     {#each items as item (item.id)}
       <DropdownMenu.Item

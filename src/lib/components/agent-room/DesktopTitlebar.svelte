@@ -2,8 +2,11 @@
   import { AppWindow, Bug, CheckCircle2, FileText, FolderOpen, LayoutGrid, LifeBuoy, Maximize2, Minus, MonitorUp, PanelTop, RefreshCw, Search, Settings, SquareTerminal, X } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as m from '$lib/paraglide/messages.js';
+  import { goto } from '$app/navigation';
   import WorkspaceModeSwitch from './WorkspaceModeSwitch.svelte';
   import AttentionCenter from './AttentionCenter.svelte';
+  import TitlebarWorkspaceTabs from './TitlebarWorkspaceTabs.svelte';
+  import TitlebarPills from './TitlebarPills.svelte';
   import { workspaceContext } from './workspace-context.svelte.js';
 
   type DesktopBridge = { platform?: string; runMenuCommand?: (action: string) => Promise<unknown> };
@@ -28,7 +31,6 @@
 <header class="app-topbar" class:desktop={Boolean(desktop)} class:mac class:windows data-dictation-ignore>
   <div class="start">
     {#if mac}<span class="traffic-lights" aria-hidden="true"></span>{/if}
-    <div class="brand"><img src="/brand/icon.svg" alt="" width="18" height="18" /><strong>Orkestrai</strong></div>
 
     {#if windows}
       <nav class="menus" aria-label={m['desktop.menu_aria']()}>
@@ -99,6 +101,7 @@
         </DropdownMenu.Root>
       </nav>
     {/if}
+    <TitlebarWorkspaceTabs />
   </div>
 
   <div class="center">
@@ -108,12 +111,16 @@
   </div>
 
   <div class="end">
+    <TitlebarPills />
     <button type="button" class="search" onclick={openSearch} aria-label={m['topbar.search_label']()}>
       <Search size={13} strokeWidth={2} />
       <span class="search-label">{m['topbar.search']()}</span>
       <kbd>{searchKey}</kbd>
     </button>
     <AttentionCenter workspaceId={workspaceContext.workspaceId} />
+    <button type="button" class="ws-icon settings" aria-label={m['desktop.settings']()} title={m['desktop.settings']()} onclick={() => void goto('/settings')}>
+      <Settings size={15} strokeWidth={1.8} />
+    </button>
     <span class="dock" data-dictation-dock aria-hidden="true"></span>
     {#if windows}<span class="window-controls" aria-hidden="true"></span>{/if}
   </div>
@@ -127,7 +134,9 @@
     align-items: center;
     gap: 12px;
     padding: 0 0 0 10px;
-    background: var(--app-sidebar);
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
     border-bottom: 1px solid var(--app-border);
     color: var(--app-text-soft);
     user-select: none;
@@ -162,22 +171,8 @@
     flex: none;
   }
 
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 6px 0 2px;
-    color: var(--app-text);
-  }
-
-  .brand strong {
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
-
   .menus,
+  .start > :global(.ws-tabs),
   .center > :global(*),
   .end > :global(*) {
     -webkit-app-region: no-drag;
@@ -190,16 +185,16 @@
   }
 
   .search {
-    height: 28px;
+    height: 26px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 0 6px 0 10px;
-    border: 1px solid var(--app-border);
-    border-radius: 8px;
-    background: var(--app-canvas);
+    border: 1px solid var(--app-glass-line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--app-surface) 50%, transparent);
     color: var(--app-text-muted);
-    font-size: 12.5px;
+    font-size: 12px;
     cursor: pointer;
     transition: border-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
   }
@@ -239,8 +234,7 @@
 
   @media (max-width: 760px) {
     .search-label,
-    .search kbd,
-    .brand strong {
+    .search kbd {
       display: none;
     }
   }

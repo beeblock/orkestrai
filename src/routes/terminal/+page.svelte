@@ -103,7 +103,7 @@
   import { TEXT_DICTATION_FALLBACK, type TextDictationFallbackDetail } from '$lib/components/agent-room/text-dictation.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
-  import { clearWorkspaceContext, publishWorkspaceContext } from '$lib/components/agent-room/workspace-context.svelte.js';
+  import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
   import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
@@ -214,6 +214,17 @@
     publishWorkspaceContext('terminals', selectedWorkspaceId, isVirtualWorkbenchItemId(selectedNodeId) ? null : selectedNodeId);
   });
   onMount(() => () => clearWorkspaceContext('terminals'));
+  // The top bar's workspace tabs open another workspace in Focus.
+  onMount(() => registerWorkspaceSelector(async (id) => {
+    if (id === selectedWorkspaceId) return;
+    if (!loadedWorkspaceIds.includes(id)) await loadWorkspace(id);
+    localStorage.setItem('orkestrai.activeWorkspaceId', id);
+    const candidates = workbenchItems(id);
+    const target = candidates.find((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).maestro)) ?? candidates[0];
+    if (target) selectNode(id, target.id);
+    else selectedWorkspaceId = id;
+    if (!expandedWorkspaceIds.includes(id)) expandedWorkspaceIds = [...expandedWorkspaceIds, id];
+  }));
   // Live teammate status for the terminal headers, shared with the Canvas.
   $effect(() => {
     const workspaceId = selectedWorkspaceId;
@@ -988,6 +999,7 @@
             void refreshControlCenter(String(message.workspaceId));
             if (message.workspaceId === selectedWorkspaceId) scheduleAgentStatusRefresh();
           }
+          if (message.type === 'attentionChanged') window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
           if (message.type === 'attentionChanged' && message.workspaceId === selectedWorkspaceId) scheduleAttentionRefresh();
         } catch {
           // Frames PTY não relacionados não fazem parte deste explorer.

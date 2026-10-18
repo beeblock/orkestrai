@@ -15,14 +15,24 @@
   } from '../workspace-attachments.js';
   import * as m from '$lib/paraglide/messages.js';
 
-  const NOTE_COLORS: Record<string, { color: string; label: string }> = {
-    yellow: { color: '#d09a00', label: m['note.color_yellow']() },
-    blue: { color: '#3e78d8', label: m['note.color_blue']() },
-    green: { color: '#298457', label: m['note.color_green']() },
-    purple: { color: '#8357c5', label: m['note.color_purple']() },
-    red: { color: '#c84f57', label: m['note.color_red']() },
-    neutral: { color: '#777487', label: m['note.color_neutral']() },
+  /*
+   * Sticky paper: each note is a sheet in one of these colors with dark ink,
+   * readable on light and dark themes alike. "glass" keeps the dark card.
+   * Legacy ids (yellow, blue, green, purple, red, neutral) map to papers.
+   */
+  const NOTE_COLORS: Record<string, { color: string; ink: string; label: string }> = {
+    yellow: { color: '#efcd72', ink: '#2c230b', label: m['note.color_yellow']() },
+    peach: { color: '#f2b089', ink: '#2e1609', label: m['note.color_peach']() },
+    red: { color: '#f0a7b4', ink: '#2e0d14', label: m['note.color_red']() },
+    purple: { color: '#c7b6f6', ink: '#1d1436', label: m['note.color_purple']() },
+    blue: { color: '#a7d0f3', ink: '#0b2133', label: m['note.color_blue']() },
+    green: { color: '#a9dfc0', ink: '#0d2a1b', label: m['note.color_green']() },
+    lime: { color: '#d3e48f', ink: '#212a07', label: m['note.color_lime']() },
+    neutral: { color: '#e8e2d5', ink: '#26221b', label: m['note.color_neutral']() },
+    glass: { color: '#1b1a17', ink: '#efebe4', label: m['note.color_glass']() },
   };
+  const NOTE_FONTS = { hand: 'var(--font-hand)', sans: 'inherit', mono: 'var(--font-mono)' } as const;
+  const NOTE_SIZES = { hand: { s: 17, m: 21, l: 27 }, sans: { s: 12, m: 13.5, l: 16 }, mono: { s: 11.5, m: 12.5, l: 14.5 } } as const;
   import NodeShell from './NodeShell.svelte';
   import * as Popover from '$lib/components/ui/popover';
   import HeaderIconButton from './HeaderIconButton.svelte';
@@ -50,7 +60,16 @@
   let attachmentDropActive = $state(false);
   let attachmentError = $state('');
   const stack = $derived(noteStackState.tops[id] ?? null);
-  const noteColor = $derived(NOTE_COLORS[(data.payload as { color?: string }).color ?? 'yellow'] ?? NOTE_COLORS.yellow);
+  const noteColor = $derived(NOTE_COLORS[data.payload.color ?? 'yellow'] ?? NOTE_COLORS.yellow);
+  const noteFont = $derived<'hand' | 'sans' | 'mono'>(data.payload.font ?? 'sans');
+  const noteSize = $derived<'s' | 'm' | 'l'>(data.payload.size ?? 'm');
+  const paperVars = $derived(`--paper:${noteColor.color};--ink:${noteColor.ink};--note-font:${NOTE_FONTS[noteFont]};--note-size:${NOTE_SIZES[noteFont][noteSize]}px`);
+
+  function setStyle(partial: { font?: 'hand' | 'sans' | 'mono'; size?: 's' | 'm' | 'l' }) {
+    data.onContentChange(id, draft);
+    Object.assign(data.payload as Record<string, unknown>, partial);
+    void data.onPayloadChange?.(id, partial);
+  }
 
   function setColor(color: string) {
     data.onContentChange(id, draft);
@@ -187,9 +206,10 @@
 <NodeShell
   {id}
   {selected}
-  class={stack && !stack.expanded ? 'canvas-note note-stack-top' : 'canvas-note'}
+  class={`${stack && !stack.expanded ? 'canvas-note note-stack-top' : 'canvas-note'}${data.payload.color === 'glass' ? ' note-glass' : ' note-paper'}`}
+  vars={paperVars}
   deferOffscreen
-  accent={noteColor.color}
+  accent="var(--app-accent)"
   minWidth={220}
   minHeight={140}
   onResize={data.onResize}
@@ -221,10 +241,11 @@
       <Popover.Trigger class="node-action-btn color-trigger nodrag" aria-label={m['note.color_picker']({ color: noteColor.label })} title={m['note.color_picker']({ color: noteColor.label })}>
         <span class="color-dot" style:background={noteColor.color}></span>
       </Popover.Trigger>
-      <Popover.Content align="end" class="w-auto p-1.5">
+      <Popover.Content align="end" class="w-[262px] p-2.5">
+        <p class="style-label">{m['note.style_paper']()}</p>
         <div class="swatch-grid nodrag" role="radiogroup" aria-label={m['note.color_picker']({ color: noteColor.label })}>
           {#each Object.entries(NOTE_COLORS) as [name, preset] (name)}
-            {@const active = ((data.payload as { color?: string }).color ?? 'yellow') === name}
+            {@const active = (data.payload.color ?? 'yellow') === name}
             <button
               type="button"
               class="swatch"
@@ -236,6 +257,18 @@
               style:--swatch={preset.color}
               onclick={() => setColor(name)}
             ></button>
+          {/each}
+        </div>
+        <p class="style-label">{m['note.style_font']()}</p>
+        <div class="seg nodrag" role="radiogroup" aria-label={m['note.style_font']()}>
+          {#each [['hand', m['note.font_hand']()], ['sans', m['note.font_sans']()], ['mono', m['note.font_mono']()]] as [value, label] (value)}
+            <button type="button" role="radio" aria-checked={noteFont === value} class:on={noteFont === value} class={`font-${value}`} onclick={() => setStyle({ font: value as 'hand' | 'sans' | 'mono' })}>{label}</button>
+          {/each}
+        </div>
+        <p class="style-label">{m['note.style_size']()}</p>
+        <div class="seg nodrag" role="radiogroup" aria-label={m['note.style_size']()}>
+          {#each [['s', m['note.size_s']()], ['m', m['note.size_m']()], ['l', m['note.size_l']()]] as [value, label] (value)}
+            <button type="button" role="radio" aria-checked={noteSize === value} class:on={noteSize === value} onclick={() => setStyle({ size: value as 's' | 'm' | 'l' })}>{label}</button>
           {/each}
         </div>
       </Popover.Content>
@@ -324,21 +357,61 @@
     resize: none;
     border: none;
     outline: none;
-    padding: 12px 14px;
-    background: color-mix(in srgb, var(--note-color, var(--app-warning)) 12%, var(--app-surface));
-    color: var(--app-text);
-    font-family: inherit;
-    font-size: 13px;
-    line-height: 1.6;
+    padding: 10px 16px 14px;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--note-font);
+    font-size: var(--note-size);
+    line-height: 1.5;
     text-wrap: pretty;
   }
 
   .note-content::placeholder {
-    color: var(--app-text-muted);
+    color: color-mix(in srgb, var(--ink) 50%, transparent);
   }
 
   .note-content:focus-visible {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--note-color, var(--app-warning)) 55%, transparent);
+    box-shadow: none;
+  }
+
+  /* The whole node is the sheet: paper fill, ink header, a folded corner. */
+  :global(.node-shell.note-paper) {
+    background:
+      linear-gradient(225deg, color-mix(in srgb, #000000 14%, var(--paper)) 0 12px, transparent 12px),
+      linear-gradient(180deg, color-mix(in srgb, #ffffff 16%, var(--paper)), var(--paper) 40%);
+    color: var(--ink);
+  }
+
+  :global(.node-shell.note-paper:not(.selected)) {
+    box-shadow:
+      0 1px 0 color-mix(in srgb, #ffffff 30%, transparent) inset,
+      0 2px 4px color-mix(in srgb, #000000 18%, transparent),
+      0 18px 34px -10px color-mix(in srgb, #000000 50%, transparent);
+  }
+
+  :global(.node-shell.note-paper .node-header) {
+    background: transparent;
+    border-bottom: 1px dashed color-mix(in srgb, var(--ink) 18%, transparent);
+    color: var(--ink);
+  }
+
+  :global(.node-shell.note-paper .node-icon),
+  :global(.node-shell.note-paper .node-action-btn) {
+    color: color-mix(in srgb, var(--ink) 62%, transparent);
+  }
+
+  :global(.node-shell.note-paper .node-action-btn:hover) {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    color: var(--ink);
+  }
+
+  :global(.node-shell.note-paper .overview-label) {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  :global(.node-shell.note-glass) .note-content {
+    color: var(--app-text);
   }
 
   .note-content.attachment-drop-active {
@@ -368,16 +441,63 @@
 
   .swatch-grid {
     display: grid;
-    grid-template-columns: repeat(6, 26px);
-    gap: 4px;
+    grid-template-columns: repeat(9, 24px);
+    gap: 2px;
+  }
+
+  .style-label {
+    margin: 8px 2px 5px;
+    color: var(--app-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .style-label:first-child {
+    margin-top: 0;
+  }
+
+  .seg {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 9px;
+    background: var(--app-hover);
+  }
+
+  .seg button {
+    flex: 1;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .seg button.on {
+    background: var(--app-surface);
+    color: var(--app-text);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .seg .font-hand {
+    font-family: var(--font-hand);
+    font-size: 16px;
+  }
+
+  .seg .font-mono {
+    font-family: var(--font-mono);
   }
 
   /* Alvo de 26px para uma cor de 16px; anel marca a cor atual. */
   .swatch {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     border: 0;
     border-radius: 7px;
@@ -477,5 +597,11 @@
     margin: 0.5em 0;
     padding-left: 0.8em;
     color: var(--app-text-soft);
+  }
+
+  .note-preview {
+    color: var(--ink);
+    font-family: var(--note-font);
+    font-size: var(--note-size);
   }
 </style>

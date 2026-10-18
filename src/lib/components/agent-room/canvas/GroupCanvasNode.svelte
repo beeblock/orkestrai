@@ -2,8 +2,10 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
 
   import type { NodeProps } from '@xyflow/svelte';
-  import { Group, Ungroup } from '@lucide/svelte';
+  import { Ungroup } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
+  import { agentStatus } from '../agent-status.svelte.js';
+  import { agentColor } from '../agent-identity.js';
 
   export type GroupNodeData = {
     title: string;
@@ -13,6 +15,18 @@
   };
 
   let { id, data, selected } = $props<NodeProps & { data: GroupNodeData }>();
+
+  // Named team frame: the group keeps one color and counts its agents live.
+  const tint = $derived(agentColor(id).bg);
+  const stats = $derived.by(() => {
+    const members = data.payload.members ?? [];
+    const agents = members.filter((memberId: string) => agentStatus.agents[memberId]);
+    const working = agents.filter((memberId: string) => {
+      const state = agentStatus.agents[memberId]?.state;
+      return state === 'working' || state === 'starting';
+    }).length;
+    return { members: members.length, agents: agents.length, working };
+  });
 
   let editing = $state(false);
   let draft = $state('');
@@ -37,9 +51,9 @@
 
 <!-- Grupo: contorno tracejado no tom do no; selecionado vira anel cheio
      com halo de 4px (mesma linguagem do NodeShell). -->
-<div class="canvas-group nowheel" class:selected>
+<div class="canvas-group nowheel" class:selected style:--group-tint={tint}>
   <header class="group-label" class:editing ondblclick={startRename} role="presentation">
-    <Group size={12} class="group-icon shrink-0" aria-hidden="true" />
+    <span class="group-dot" class:live={stats.working > 0} aria-hidden="true"></span>
     {#if editing}
       <!-- svelte-ignore a11y_autofocus -->
       <input
@@ -64,6 +78,7 @@
           }
         }}
       >{data.title}</span>
+      <span class="group-stats">{stats.agents ? m['group.team_stats']({ count: stats.agents, working: stats.working }) : m['group.items']({ count: stats.members })}</span>
       {#if data.payload.workflowKind === 'design-exploration'}
         <span class="group-summary">{m['design.exploration_group_summary']({ directions: String(data.payload.designNodeIds?.length ?? 3), tasks: String(data.payload.taskIds?.length ?? 5) })}</span>
       {/if}
@@ -91,9 +106,12 @@
     position: relative;
     width: 100%;
     height: 100%;
-    border: 1.5px dashed color-mix(in srgb, var(--app-secondary) 50%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--app-secondary) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--group-tint) 34%, transparent);
+    border-radius: 20px;
+    background:
+      radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--group-tint) 7%, transparent), transparent 60%),
+      color-mix(in srgb, var(--group-tint) 2.5%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 4%, transparent);
     transition:
       border-color var(--duration-quick) ease-out,
       box-shadow var(--duration-quick) ease-out,
@@ -101,35 +119,36 @@
   }
 
   .canvas-group:hover {
-    border-color: color-mix(in srgb, var(--app-secondary) 75%, transparent);
+    border-color: color-mix(in srgb, var(--group-tint) 55%, transparent);
   }
 
   .canvas-group.selected {
-    border-style: solid;
-    border-color: var(--app-secondary);
-    background: color-mix(in srgb, var(--app-secondary) 7%, transparent);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-secondary) 16%, transparent);
+    border-color: var(--group-tint);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--group-tint) 12%, transparent), 0 0 60px -10px color-mix(in srgb, var(--group-tint) 30%, transparent);
   }
 
   .group-label {
     position: absolute;
-    top: -14px;
-    left: 14px;
+    top: -15px;
+    left: 18px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    max-width: calc(100% - 28px);
-    height: 26px;
-    padding: 0 3px 0 10px;
+    gap: 8px;
+    max-width: calc(100% - 36px);
+    height: 30px;
+    padding: 0 4px 0 12px;
     border-radius: 999px;
-    background: var(--app-surface-raised);
-    box-shadow: var(--app-shadow-panel);
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    border: 1px solid color-mix(in srgb, var(--group-tint) 30%, var(--app-glass-line));
+    box-shadow: var(--app-glass-shadow);
     color: var(--app-text-soft);
     font-size: 12px;
     font-weight: 500;
     cursor: grab;
     user-select: none;
-    transition: box-shadow var(--duration-quick) ease-out;
+    transition: box-shadow var(--duration-quick) ease-out, border-color var(--duration-quick) ease-out;
   }
 
   .group-label:active {
@@ -137,9 +156,7 @@
   }
 
   .canvas-group.selected .group-label {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--app-secondary) 60%, transparent),
-      var(--app-shadow-panel);
+    border-color: var(--group-tint);
     color: var(--app-text);
   }
 
@@ -149,17 +166,39 @@
       0 0 0 4px color-mix(in srgb, var(--app-accent) 16%, transparent);
   }
 
-  .group-label :global(.group-icon) {
-    color: var(--app-secondary);
+  .group-dot {
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--group-tint);
+  }
+
+  .group-dot.live {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--group-tint) 25%, transparent);
+    animation: group-live 2.2s ease-in-out infinite;
+  }
+
+  @keyframes group-live {
+    50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--group-tint) 6%, transparent); }
+  }
+
+  .group-stats {
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   .group-title {
-    font-family: var(--font-headline);
-    font-stretch: 62%;
-    font-size: 15px;
+    font-family: var(--font-mono);
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    color: var(--app-text);
     line-height: 1;
     min-width: 0;
     overflow: hidden;
@@ -224,5 +263,30 @@
   .group-label :global(.group-ungroup:focus-visible) {
     outline: 2px solid var(--app-accent);
     outline-offset: 1px;
+  }
+  /* Far out the team frames read as a map: their names grow to headlines. */
+  :global(.svelte-flow[data-canvas-overview='true']) .group-label {
+    top: -92px;
+    height: auto;
+    max-width: none;
+    padding: 10px 26px;
+    gap: 20px;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .group-title {
+    font-family: var(--font-headline);
+    font-stretch: 62%;
+    font-size: 60px;
+    letter-spacing: 0;
+    overflow: visible;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .group-stats {
+    font-size: 28px;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .group-dot {
+    width: 30px;
+    height: 30px;
   }
 </style>

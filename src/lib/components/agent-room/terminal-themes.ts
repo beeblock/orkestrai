@@ -3,6 +3,7 @@ import type { ITheme } from '@xterm/xterm';
 /** Temas xterm persistidos por terminal em payload.theme. */
 export type TerminalThemeName =
   | 'dark'
+  | 'midnight'
   | 'obsidian'
   | 'dracula'
   | 'nord'
@@ -24,7 +25,16 @@ export type TerminalThemeDefinition = {
 };
 
 export const TERMINAL_THEMES: Record<TerminalThemeName, TerminalThemeDefinition> = {
+  // Default: the canvas surface itself, warm ink and gold cursor, so a terminal reads as part of its node.
   dark: {
+    label: 'Orkestrai',
+    theme: {
+      background: '#121110', foreground: '#e9e4db', cursor: '#e8b84a', cursorAccent: '#121110', selectionBackground: '#3d3627',
+      black: '#1f1d1a', red: '#f07178', green: '#8fd18b', yellow: '#e8b84a', blue: '#7cb7e6', magenta: '#c9a3f2', cyan: '#7fd3c8', white: '#d9d3c7',
+      brightBlack: '#6f685d', brightRed: '#ff8f95', brightGreen: '#a9e3a5', brightYellow: '#f2c86a', brightBlue: '#9ccbf2', brightMagenta: '#dbbcf7', brightCyan: '#9fe2d9', brightWhite: '#fbf7f0',
+    },
+  },
+  midnight: {
     label: 'Midnight',
     theme: {
       background: '#090820', foreground: '#e6e6eb', cursor: '#e6e6eb', selectionBackground: '#35334f',

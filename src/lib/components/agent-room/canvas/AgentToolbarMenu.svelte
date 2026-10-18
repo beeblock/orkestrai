@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getContext } from 'svelte';
   import { Bot, ChevronDown, CodeXml, Pin, Settings2 } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -28,6 +29,8 @@
     onTogglePin,
     onOpenProviderCenter,
   }: Props = $props();
+  // Rails on the side of the canvas open their menus and tooltips sideways.
+  const railSide = getContext<'top' | 'bottom' | 'right' | 'left' | undefined>('toolbar-tooltip-side') ?? 'bottom';
 
   const pinnedProviderSet = $derived(new Set(pinnedProviderIds));
   const unpinnedProviderActive = $derived(
@@ -62,9 +65,9 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="bottom">{m['canvas.agents_menu']()}</Tooltip.Content>
+    <Tooltip.Content side={railSide}>{m['canvas.agents_menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="bottom" align="start" sideOffset={10} class="agents-menu-content">
+  <DropdownMenu.Content side={railSide} align="start" sideOffset={10} class="agents-menu-content">
     <DropdownMenu.Label>{m['canvas.agents_available']()}</DropdownMenu.Label>
     {#each providers as provider (provider.id)}
       <DropdownMenu.Item
