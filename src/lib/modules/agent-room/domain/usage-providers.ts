@@ -26,6 +26,11 @@ export const USAGE_PROVIDERS: readonly UsageProviderDefinition[] = [
   { id: 'opencode', name: 'OpenCode', icon: '/images/opencode.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://dev.opencode.ai/docs/go/' },
   { id: 'cline', name: 'Cline', icon: '/images/cline.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://docs.cline.bot/getting-started/cline-provider' },
   { id: 'copilot', name: 'GitHub Copilot', icon: '/images/githubcopilot.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://docs.github.com/en/copilot/concepts/billing/copilot-requests' },
+  { id: 'gemini', name: 'Gemini CLI', icon: '/images/gemini.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://geminicli.com/docs/' },
+  { id: 'qwen', name: 'Qwen Code', icon: '/images/qwen.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://qwenlm.github.io/qwen-code-docs/en/' },
+  { id: 'aider', name: 'Aider', icon: '/images/aider.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://aider.chat/docs/' },
+  { id: 'goose', name: 'goose', icon: '/images/goose.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://goose-docs.ai/docs/' },
+  { id: 'amp', name: 'Amp', icon: '/images/amp.svg', collector: null, diagnostic: 'model_provider_managed', helpUrl: 'https://ampcode.com/docs' },
 ];
 
 export const ROUTABLE_USAGE_PROVIDERS = USAGE_PROVIDERS.filter(

@@ -65,6 +65,7 @@ pt-BR, English, and Spanish translations.
 - Open a web inspector (DevTools) for a Portal from its header.
 - Add Studios to the Canvas panel rail: choose a diagram (architecture, user flow, data flow, components, request lifecycle, states; ink or colorful) or a document (overview, onboarding, architecture, README, API, data model, security) and an agent. The Canvas creates a native Design document or a note connected to that agent and assigns a task that tells it to read the repository and fill it.
 - Export a note as a paginated PDF through the system print dialog; the markdown is sanitized before printing.
+- Add Gemini CLI, Qwen Code, Aider, goose and Amp as agent providers with their official install commands in Provider Center. They run in terminal nodes and headless one-shot tasks; Gemini, Qwen and goose resume a conversation by id, while Aider and Amp always start fresh.
 
 ## 0.42.2 - 2026-10-16
 

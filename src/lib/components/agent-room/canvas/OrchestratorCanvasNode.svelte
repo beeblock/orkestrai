@@ -29,7 +29,7 @@
 
   let { id, data, selected } = $props<NodeProps & { data: OrchestratorNodeData }>();
 
-  const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', kimi: 'Kimi', opencode: 'OpenCode', cursor: 'Cursor', antigravity: 'Antigravity', cline: 'Cline', devin: 'Devin', copilot: 'Copilot' };
+  const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', kimi: 'Kimi', opencode: 'OpenCode', cursor: 'Cursor', antigravity: 'Antigravity', cline: 'Cline', devin: 'Devin', copilot: 'Copilot', gemini: 'Gemini', qwen: 'Qwen', aider: 'Aider', goose: 'goose', amp: 'Amp' };
 
   type Row = { id: string; title: string; role: string | null; provider: string | null; state: string; tone: ReturnType<typeof agentTone> };
   type Section = { id: string; title: string; tint: string | null; rows: Row[] };
