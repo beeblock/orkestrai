@@ -1535,7 +1535,7 @@
         onAgentSessionFound: (id: string, agentSessionId: string) => updateNodePayload(id, { agentSessionId, resumeRecovery: false }),
         connections: connectionsFor(node.id),
         onJumpToNode: jumpToNode,
-        onRecruit: () => (pendingAgentCreation = { provider: quickProviders[0] ?? null }),
+        onRecruit: () => (pendingAgentCreation = { provider: preferredAgentProvider() }),
         onConnectAll: (orchestratorId: string) => connectAllToOrchestrator(orchestratorId),
         onRemoveConnection: removeConnection,
         onDelete: deleteNode,
@@ -1926,7 +1926,7 @@
 
   const selectedForGroup = $derived(nodes.filter((node) => node.selected && node.type !== 'group').length);
   const quickChips = $derived<QuickChip[]>([
-    { id: 'new-agent', label: m['canvas.chip_new_agent'](), icon: Plus, onSelect: () => (pendingAgentCreation = { provider: quickProviders[0] ?? null }) },
+    { id: 'new-agent', label: m['canvas.chip_new_agent'](), icon: Plus, onSelect: () => (pendingAgentCreation = { provider: preferredAgentProvider() }) },
     { id: 'orchestrator', label: m['orchestrator.title'](), icon: Orbit, onSelect: () => void addOrchestratorNode() },
     { id: 'team', label: m['canvas.chip_team'](), icon: UsersRound, onSelect: () => (teamComposerOpen = !teamComposerOpen) },
     { id: 'group', label: m['canvas.chip_group'](), icon: GroupIcon, hint: selectedForGroup < 2 ? m['canvas.chip_group_hint']() : undefined, disabled: selectedForGroup < 2, onSelect: () => groupSelection() },
@@ -3085,6 +3085,16 @@
   // Team composer: up to twelve agents side by side inside one named group.
   const TEAM_NAMES = ['Ada', 'Bia', 'Caio', 'Duda', 'Eva', 'Gil', 'Hugo', 'Iris', 'Juca', 'Lia', 'Nina', 'Otto'];
   const teamProviders = $derived(providers.filter((provider) => provider.installed || canChooseAlternateRuntime));
+  // "New agent" starts from the CLI chosen last time; the dialog still lets the owner switch.
+  function preferredAgentProvider(): AgentProviderInfo | null {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem('orkestrai.lastAgentProvider');
+    } catch {
+      saved = null;
+    }
+    return teamProviders.find((provider) => provider.id === saved) ?? quickProviders[0] ?? teamProviders[0] ?? null;
+  }
 
   async function composeTeam(team: { name: string; role: string | null; providerIds: string[] }, progress: (done: number) => void): Promise<boolean> {
     if (!activeWorkspace) return false;
@@ -4165,9 +4175,18 @@
       onConfirm={async (creation) => {
         const pending = pendingAgentCreation;
         pendingAgentCreation = null;
+        if (pending?.provider) {
+          try {
+            localStorage.setItem('orkestrai.lastAgentProvider', pending.provider.id);
+          } catch {
+            // Remembering the CLI is a convenience only.
+          }
+        }
         await addTerminal(pending?.provider ?? undefined, pending?.rect, creation);
       }}
       onCancel={() => (pendingAgentCreation = null)}
+      providers={teamProviders}
+      onProviderChange={(next) => { if (pendingAgentCreation) pendingAgentCreation = { ...pendingAgentCreation, provider: next }; }}
     />
     {#if activeWorkspace}
       <DesignExplorationDialog
