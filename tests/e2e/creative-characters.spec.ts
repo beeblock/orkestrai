@@ -64,8 +64,8 @@ test('approves a character and drags its complete version into another workspace
     expect(await search.evaluate((element, bounds) => element.contains(document.elementFromPoint(bounds.x + bounds.width - 8, bounds.y + bounds.height / 2)), searchBounds!)).toBe(true);
     await page.screenshot({ path: '/tmp/orkestrai-character-library-light.png' });
     const pane = page.locator('.svelte-flow__pane');
-    // The workspace sidebar floats over the top left and the blank-canvas card sits in the middle.
-    await card.dragTo(pane, { targetPosition: { x: 330, y: 620 } });
+    // The tool rail sits at the left edge, the blank-canvas card in the middle and the message bar at the bottom.
+    await card.dragTo(pane, { targetPosition: { x: 200, y: 160 } });
     await expect.poll(async () => (await (await request.get(endpoint(destination))).json()).data.length).toBe(1);
     const copy = (await (await request.get(endpoint(destination))).json()).data[0];
     expect(copy).toMatchObject({ state: 'locked', familyId: character.familyId, version: 1 });

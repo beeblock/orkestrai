@@ -32,7 +32,7 @@ for (const mode of ['copy', 'move'] as const) {
       const nodes = page.locator('.svelte-flow__node-shape');
       await expect(nodes).toHaveCount(59);
       await expect(nodes.first()).toBeVisible();
-      await page.keyboard.press('ControlOrMeta+=');
+      // The initial fit already leaves the grid inside the area the floating chrome keeps clear.
       await expect.poll(async () => {
         const pane = await page.locator('.svelte-flow__pane').boundingBox();
         if (!pane) return false;

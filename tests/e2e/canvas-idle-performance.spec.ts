@@ -53,7 +53,8 @@ test('elastic edges settle without restarting from their own render updates', as
     await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
     await page.mouse.up();
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
-    await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', '7px, 5px');
+    // The dragged node stays selected, so its edge is a solid lit wire; quiet edges get their dashes back.
+    await expect(page.locator('.orkestrai-edge .edge-line:not(.lit)').first()).toHaveCSS('stroke-dasharray', '6px, 6px');
     await page.locator('.svelte-flow__edge').first().press('Enter');
     await expect(page.locator('.svelte-flow__edge.selected')).toHaveCount(1);
     await page.mouse.move(pane.x + 20, pane.y + pane.height - 70);

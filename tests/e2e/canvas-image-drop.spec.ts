@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { openWorkspace } from './helpers';
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=';
 
@@ -109,7 +110,7 @@ test('an image upload stays in its original workspace when the user switches dur
     const files = await transfer(page, ['stays-at-source.png']);
     await pane.dispatchEvent('drop', { dataTransfer: files, clientX: 600, clientY: 300 });
     await expect.poll(() => uploadStarted).toBe(true);
-    await page.getByRole('button', { name: 'Drop destination', exact: true }).click();
+    await openWorkspace(page, 'Drop destination');
     await expect(page.getByRole('link', { name: 'Foco', exact: true })).toHaveAttribute('href', new RegExp(destination));
     releaseUpload();
     const list = async (id: string) => (await (await request.get(`/api/agent-room/workspaces/${id}/nodes`)).json()).data;

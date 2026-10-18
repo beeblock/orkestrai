@@ -67,7 +67,8 @@ export async function selectCanvasTool(page: Page, buttonName: string) {
  * e agentes abrem o dialogo de criacao — confirma com o nome padrao.
  * O lookup e escopado na .toolbar para nao colidir com nomes de workspace.
  */
-export async function createNodeOnCanvas(page: Page, buttonName: string, position = { x: 600, y: 400 }) {
+// The default spot keeps new nodes above the message bar and quick actions floating at the bottom.
+export async function createNodeOnCanvas(page: Page, buttonName: string, position = { x: 600, y: 140 }) {
   const dialog = page.locator('[role="dialog"]');
   // Garante que o dialog da criacao ANTERIOR ja fechou (animacao de saida)
   // — senao o waitFor abaixo resolve no dialog velho e o novo fica aberto.

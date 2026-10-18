@@ -28,7 +28,8 @@ test.describe('arquivos e editor do workspace', () => {
       expect(workspaceId).toBeTruthy();
 
       // Abre a arvore de arquivos e navega ate src/hello.ts.
-      await createNodeOnCanvas(page, 'Arquivos');
+      // High enough that the tree rows stay clear of the message bar floating at the bottom.
+      await createNodeOnCanvas(page, 'Arquivos', { x: 560, y: 110 });
       const tree = page.locator('.canvas-filetree');
       await expect(tree).toBeVisible();
       await tree.getByText('src').click();
@@ -84,7 +85,8 @@ test.describe('arquivos e editor do workspace', () => {
       workspaceId = workspaces.find((workspace) => workspace.name === workspaceName)?.id;
       expect(workspaceId).toBeTruthy();
 
-      await createNodeOnCanvas(page, 'Arquivos');
+      // High enough that the tree rows stay clear of the message bar floating at the bottom.
+      await createNodeOnCanvas(page, 'Arquivos', { x: 560, y: 110 });
       const tree = page.locator('.canvas-filetree');
       await expect(tree.locator('.branch-badge')).toContainText('main');
       const readme = tree.locator('.tree-entry', { hasText: 'README.md' });
