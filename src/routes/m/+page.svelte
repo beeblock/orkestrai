@@ -638,7 +638,6 @@
     display: block;
   }
 
-  .card small,
   .row small,
   .bubble-group small {
     color: var(--app-text-muted);
