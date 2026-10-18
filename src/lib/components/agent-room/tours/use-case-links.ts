@@ -1,5 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'board-commands': 'board-commands',
+  'team-loops': 'team-loops',
   'team-orchestrator': 'team-orchestrator',
   'team-map': 'team-map',
   'team-composer': 'team-composer',

@@ -54,6 +54,15 @@ pt-BR, English, and Spanish translations.
 - Add the team map: the leader or orchestrator, the named groups and every agent as a tree, with filters (All, Working, Needs you, Idle, Done), search, fleet and structure counts, and a side panel to go to an agent, open it in Focus or start a chat.
 - Add the team composer: name a team, pick a role, line up to twelve agents with their CLIs and create them side by side inside a named group in one action.
 - Add pen options beside the tool rail: ten ink colors and five stroke widths, remembered on this device.
+- Add Pause all and Resume all to the Canvas: the agents' process trees stop in place (SIGSTOP) and continue exactly where they were (SIGCONT), with a paused status on each agent; not available on Windows. The endpoint only signals process groups that Orkestrai owns.
+- Open the conversation with the composer's target in a glass panel above the Canvas message bar.
+- Collapse a named group to its label; its members hide until it opens again.
+- Add Checklist and Calendar nodes to the Plan menu: objectives with a progress bar, and a month view with colored all-day or timed events, notes and today highlighted.
+- Pass an agent's open task to another agent from the agent menu or by typing it: the task moves with a handoff brief in its description, the new agent receives it through the normal dispatch and the previous agent is told to stop.
+- Run plain-language board commands from the Canvas message bar in Portuguese, English or Spanish: spawn a number of agents of a CLI, hand a task over, pause or resume everyone, open the team map, the orchestrator, the team composer, Focus, Chat, memory or scores, group the selection and write a note. Anything else is still a message to the team.
+- Add loops that keep a team moving: automations can now fire when an agent stays idle for some minutes or when its output contains a text, and loops that prompt an agent can stop themselves when the agent writes a goal text. Seven loop templates ship with the automations (progress check, keep them moving, failure rescue, test watchdog, commit checkpoint, review sweep, hourly standup).
+- Count tokens by day and by agent from Claude Code and Codex session logs on this computer, shown in the Usage panel as a 30-day chart with all tokens, input plus output or output only. Only counts are read and kept in memory; message content never leaves the files.
+- Open a web inspector (DevTools) for a Portal from its header.
 
 ## 0.42.2 - 2026-10-16
 

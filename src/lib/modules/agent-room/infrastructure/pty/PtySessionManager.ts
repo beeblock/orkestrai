@@ -29,6 +29,8 @@ export type PtySessionInfo = {
   exitCode: number | null;
   /** true quando a sessão parou de produzir saída (estado neutro de ociosidade). */
   waiting: boolean;
+  /** The owner paused the process tree (SIGSTOP); it resumes with SIGCONT. */
+  paused?: boolean;
   /** Já produziu algum output — usado na espera de prontidao antes de escrever. */
   hasOutput: boolean;
   /** Rotulos humanos (título do no / workspace) para notificações. */
@@ -583,6 +585,54 @@ export class PtySessionManager {
   }
 
   /** Retire owned duplicates or unclaimed orphans, never another node's PTY. */
+  /**
+   * Pauses or resumes every live process tree of a node (SIGSTOP/SIGCONT on the
+   * PTY's own process group). Only owned trees are signalled, so external CLIs
+   * are never touched; Windows has no equivalent and returns 0.
+   */
+  setNodePaused(workspaceId: string, nodeId: string, paused: boolean): number {
+    if (platform() === 'win32') return 0;
+    let count = 0;
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId !== workspaceId || session.nodeId !== nodeId || session.exited || !session.ownsProcessTree) continue;
+      if (Boolean(session.paused) === paused) continue;
+      const pid = Number(session.pty.pid);
+      if (!Number.isSafeInteger(pid) || pid <= 1) continue;
+      try {
+        const processGroup = Number(execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(pid)], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 2_000,
+        }).trim());
+        if (processGroup !== pid) continue;
+        process.kill(-processGroup, paused ? 'SIGSTOP' : 'SIGCONT');
+        session.paused = paused;
+        count += 1;
+      } catch {
+        // The process exited between the check and the signal.
+      }
+    }
+    return count;
+  }
+
+  /** Latest output of the node's live session (raw, bounded); null when none is live. */
+  outputTail(workspaceId: string, nodeId: string, chars = 8_000): string | null {
+    let latest: PtySession | null = null;
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId !== workspaceId || session.nodeId !== nodeId || session.exited) continue;
+      if (!latest || session.createdAt > latest.createdAt) latest = session;
+    }
+    return latest ? latest.scrollback.slice(-Math.max(200, chars)) : null;
+  }
+
+  pausedNodes(workspaceId: string): string[] {
+    const ids = new Set<string>();
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === workspaceId && session.paused && !session.exited && session.nodeId) ids.add(session.nodeId);
+    }
+    return [...ids];
+  }
+
   killAgentSession(provider: string, agentSessionId: string, owner: { workspaceId: string; nodeId: string }, keepSessionId?: string): number {
     const sessions = [...this.sessions.values()].filter(
       (session) => !session.exited

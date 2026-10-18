@@ -4,6 +4,7 @@ import {
   executeGitOperationSchema,
   fsWriteSchema,
   terminalWriteSchema,
+  terminalPauseSchema,
   gitOperationInputSchema,
   gitPathSchema,
 } from '$lib/modules/agent-room/contracts/schemas/fsSchemas.js';
@@ -13,6 +14,7 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { portalService } from '$lib/modules/agent-room/application/services/PortalService.js';
 import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
+import { agentPauseService } from '$lib/modules/agent-room/application/services/AgentPauseService.js';
 
 
 class FsWriteRequest extends FormRequest {
@@ -31,6 +33,12 @@ class TerminalWriteRequest extends FormRequest {
   rules() { return terminalWriteSchema; }
   authorize(): boolean { return true; }
   passedValidation(data: unknown) { return terminalWriteSchema.parse(data); }
+}
+
+class TerminalPauseRequest extends FormRequest {
+  rules() { return terminalPauseSchema; }
+  authorize(): boolean { return true; }
+  passedValidation(data: unknown) { return terminalPauseSchema.parse(data); }
 }
 
 class GitPathRequest extends FormRequest {
@@ -299,6 +307,26 @@ export class FilesystemController extends Controller {
       return this.json({ data: { written: true } });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao escrever no terminal.');
+    }
+  }
+
+  /** Pause all / Resume all for the workspace's agents (or the listed ones). */
+  async pauseTerminals(event: any) {
+    try {
+      const body = await TerminalPauseRequest.validate(event);
+      const workspace = await workspaceRepository.getWorkspace(event.params.id);
+      if (!workspace) throw new Error('Workspace não encontrado.');
+      return this.json({ data: await agentPauseService.setPaused(workspace.id, body.paused, body.nodeIds) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao pausar os agentes.');
+    }
+  }
+
+  async pausedTerminals(event: any) {
+    try {
+      return this.json({ data: { nodeIds: agentPauseService.pausedNodeIds(event.params.id) } });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao ler os agentes pausados.');
     }
   }
 

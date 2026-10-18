@@ -22,7 +22,8 @@
 </script>
 
 <script lang="ts">
-  import { ArrowUp, AtSign, ChevronDown, FileText, Globe, LoaderCircle, SquareTerminal } from '@lucide/svelte';
+  import { ArrowUp, AtSign, ChevronDown, ChevronUp, FileText, Globe, LoaderCircle, SquareTerminal, X } from '@lucide/svelte';
+  import AgentChatFace from '../chat/AgentChatFace.svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import AgentAvatar from '../AgentAvatar.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -34,6 +35,7 @@
     mentions,
     onTargetChange,
     onJump,
+    onCommand,
   }: {
     workspaceId: string;
     targets: ComposerTarget[];
@@ -41,7 +43,26 @@
     mentions: ComposerMention[];
     onTargetChange: (id: string) => void;
     onJump: (id: string) => void;
+    /** Board commands ("spawn 3 agents", "pause all"): true when the Canvas ran it. */
+    onCommand?: (text: string) => Promise<boolean> | boolean;
   } = $props();
+
+  let hintHidden = $state(readHintHidden());
+  function readHintHidden(): boolean {
+    try {
+      return localStorage.getItem('orkestrai.composer.commandHint') === 'hidden';
+    } catch {
+      return false;
+    }
+  }
+  function hideHint() {
+    hintHidden = true;
+    try {
+      localStorage.setItem('orkestrai.composer.commandHint', 'hidden');
+    } catch {
+      // The tip simply shows again next time.
+    }
+  }
 
   let draft = $state('');
   let sending = $state(false);
@@ -50,6 +71,8 @@
   let mentionFilter = $state('');
   let input = $state<HTMLTextAreaElement | null>(null);
   let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  // The conversation with the target opens above the bar, like a chat thread.
+  let threadOpen = $state(false);
 
   const target = $derived(targets.find((candidate) => candidate.id === targetId) ?? targets[0] ?? null);
   const filteredMentions = $derived(mentions
@@ -82,7 +105,14 @@
 
   async function send() {
     const text = draft.trim();
-    if (!text || sending || !target) return;
+    if (!text || sending) return;
+    if (onCommand && await onCommand(text)) {
+      if (draft.trim() === text) draft = '';
+      onInput();
+      showFeedback(true, m['composer.command_done']());
+      return;
+    }
+    if (!target) return;
     sending = true;
     const delivered = await sendToAgent(workspaceId, target.id, text);
     sending = false;
@@ -106,6 +136,15 @@
 </script>
 
 <div class="composer-wrap">
+  {#if threadOpen && target}
+    <section class="thread" aria-label={m['composer.thread_title']({ name: target.title })} data-testid="canvas-thread">
+      <header>
+        <span>{m['composer.thread_title']({ name: target.title })}</span>
+        <button type="button" class="thread-close" aria-label={m['composer.thread_close']()} onclick={() => (threadOpen = false)}><X size={13} /></button>
+      </header>
+      {#key target.id}<AgentChatFace {workspaceId} nodeId={target.id} title={target.title} />{/key}
+    </section>
+  {/if}
   {#if mentionOpen && filteredMentions.length}
     <div class="mentions" role="listbox" aria-label={m['composer.mention']()}>
       {#each filteredMentions as mention (mention.id)}
@@ -118,6 +157,8 @@
   {/if}
   {#if feedback}
     <p class="feedback" class:error={!feedback.ok} role="status">{feedback.text}</p>
+  {:else if onCommand && !hintHidden && !threadOpen}
+    <p class="command-hint">{m['composer.command_hint']()}<button type="button" aria-label={m['composer.command_hint_close']()} onclick={hideHint}><X size={11} /></button></p>
   {/if}
   <div class="composer" data-testid="canvas-composer">
     {#if target}
@@ -146,13 +187,14 @@
       bind:this={input}
       bind:value={draft}
       rows="1"
-      disabled={!target}
-      placeholder={target ? m['composer.placeholder']() : m['composer.no_agents']()}
+      disabled={!target && !onCommand}
+      placeholder={target ? m['composer.placeholder']() : onCommand ? m['composer.command_hint']() : m['composer.no_agents']()}
       oninput={onInput}
       onkeydown={onKeydown}
     ></textarea>
+    <button type="button" class="icon" disabled={!target} onclick={() => (threadOpen = !threadOpen)} aria-pressed={threadOpen} aria-label={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })} title={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })}><ChevronUp size={16} class={threadOpen ? 'rotate-180 transition-transform' : 'transition-transform'} /></button>
     <button type="button" class="icon" disabled={!target} onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()}><AtSign size={16} /></button>
-    <button type="button" class="send" disabled={!target || !draft.trim() || sending} onclick={() => void send()} aria-label={m['composer.send']()}>
+    <button type="button" class="send" disabled={(!target && !onCommand) || !draft.trim() || sending} onclick={() => void send()} aria-label={m['composer.send']()}>
       {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
     </button>
   </div>
@@ -164,6 +206,73 @@
     width: min(640px, calc(100vw - 720px));
     min-width: 360px;
     margin-bottom: 4px;
+  }
+
+  .thread {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 10px);
+    height: min(380px, 52vh);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 20px;
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+    animation: thread-in var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  @keyframes thread-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  }
+
+  .thread header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 8px 0 14px;
+    border-bottom: 1px solid var(--app-glass-line);
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .thread header span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .thread-close {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text-muted);
+  }
+
+  .thread-close:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .thread :global(.face) {
+    flex: 1;
+    min-height: 0;
+    background: transparent;
   }
 
   .composer {
@@ -331,6 +440,42 @@
     color: var(--app-text-soft);
     font-size: 12.5px;
     white-space: nowrap;
+  }
+
+  .command-hint {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 52px);
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 3px 4px 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--app-glass-line);
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+
+  .command-hint button {
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--app-text-muted);
+  }
+
+  .command-hint button:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
   }
 
   .feedback.error {

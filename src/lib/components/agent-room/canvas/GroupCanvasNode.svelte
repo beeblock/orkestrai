@@ -2,16 +2,17 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
 
   import type { NodeProps } from '@xyflow/svelte';
-  import { Ungroup } from '@lucide/svelte';
+  import { ChevronDown, Ungroup } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { agentStatus } from '../agent-status.svelte.js';
   import { agentColor } from '../agent-identity.js';
 
   export type GroupNodeData = {
     title: string;
-    payload: { members?: string[]; workflowKind?: string; designNodeIds?: string[]; taskIds?: string[] };
+    payload: { members?: string[]; workflowKind?: string; designNodeIds?: string[]; taskIds?: string[]; collapsed?: boolean };
     onRename: (id: string, title: string) => void;
     onUngroup: (id: string) => void;
+    onPayloadChange?: (id: string, partial: Record<string, unknown>) => void | Promise<void>;
   };
 
   let { id, data, selected } = $props<NodeProps & { data: GroupNodeData }>();
@@ -27,6 +28,14 @@
     }).length;
     return { members: members.length, agents: agents.length, working };
   });
+
+  const collapsed = $derived(Boolean(data.payload.collapsed));
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    data.payload.collapsed = next;
+    void data.onPayloadChange?.(id, { collapsed: next });
+  }
 
   let editing = $state(false);
   let draft = $state('');
@@ -51,7 +60,7 @@
 
 <!-- Grupo: contorno tracejado no tom do no; selecionado vira anel cheio
      com halo de 4px (mesma linguagem do NodeShell). -->
-<div class="canvas-group nowheel" class:selected style:--group-tint={tint}>
+<div class="canvas-group nowheel" class:selected class:collapsed style:--group-tint={tint}>
   <header class="group-label" class:editing ondblclick={startRename} role="presentation">
     <span class="group-dot" class:live={stats.working > 0} aria-hidden="true"></span>
     {#if editing}
@@ -83,6 +92,9 @@
         <span class="group-summary">{m['design.exploration_group_summary']({ directions: String(data.payload.designNodeIds?.length ?? 3), tasks: String(data.payload.taskIds?.length ?? 5) })}</span>
       {/if}
     {/if}
+    <HeaderIconButton label={collapsed ? m['group.expand']() : m['group.collapse']()} class="group-ungroup nodrag" side="top" onclick={toggleCollapsed}>
+      <ChevronDown size={13} class={collapsed ? 'rotate-[-90deg] transition-transform' : 'transition-transform'} />
+    </HeaderIconButton>
     <HeaderIconButton label={m['group.ungroup']()} class="group-ungroup nodrag" side="top" onclick={() => data.onUngroup(id)}>
       <Ungroup size={12} />
     </HeaderIconButton>
@@ -120,6 +132,18 @@
 
   .canvas-group:hover {
     border-color: color-mix(in srgb, var(--group-tint) 55%, transparent);
+  }
+
+  /* Collapsed: only the label stays; the frame lets clicks through to the canvas. */
+  .canvas-group.collapsed {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    pointer-events: none;
+  }
+
+  .canvas-group.collapsed .group-label {
+    pointer-events: auto;
   }
 
   .canvas-group.selected {

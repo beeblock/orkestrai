@@ -1143,7 +1143,7 @@ ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
   const request = await portalSurfaceRequest(event, input);
   if (input.method === 'attach') return managedPortalExecutor.surface(request, mainWindow, input.lease);
   if (input.method === 'detach') return managedPortalExecutor.detach(request.workspaceId, request.nodeId, input.lease);
-  if (!['navigate', 'inspectScript', 'capture', 'preview', 'state', 'close', 'activate', 'pause', 'resume'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
+  if (!['navigate', 'inspectScript', 'capture', 'preview', 'state', 'close', 'activate', 'pause', 'resume', 'devtools'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
   if (JSON.stringify(input.args || {}).length > 500000) throw new Error('Portal surface input is too large.');
   return managedPortalExecutor.userCommand(request, input.method, input.args || {});
 });
