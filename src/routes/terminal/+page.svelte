@@ -4,6 +4,7 @@
   import { goto, replaceState } from '$app/navigation';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
+  import { agentActionLabel } from '$lib/components/agent-room/agent-status-labels.js';
   import {
     ChevronDown,
     ChevronRight,
@@ -824,14 +825,8 @@
 
   function agentActivityLabel(workspaceId: string, nodeId: string): string | null {
     const agent = controlCenters[workspaceId]?.agents.find((candidate) => candidate.nodeId === nodeId);
-    if (!agent?.lastAction) return agent?.currentTask?.title ?? null;
-    const name = (key: string) => String(agent.lastActionData[key] ?? m['control_center.workspace_user']());
-    if (agent.lastAction === 'system:message_received') return m['control_center.action_message_received']({ name: name('fromTitle') });
-    if (agent.lastAction === 'system:message_replied') return m['control_center.action_message_replied']({ name: name('toTitle') });
-    if (agent.lastAction === 'system:task_completed') return m['control_center.action_task_completed']({ title: name('taskTitle') });
-    if (agent.lastAction === 'system:task_review') return m['control_center.action_task_review']({ title: name('taskTitle') });
-    if (agent.lastAction === 'system:task_working') return m['control_center.action_task_working']({ title: name('taskTitle') });
-    return agent.currentTask?.title ?? agent.lastAction;
+    if (!agent) return null;
+    return agentActionLabel(agent.lastAction, agent.lastActionData) ?? agent.currentTask?.title ?? null;
   }
 
   function paneLabel(paneId: WorkbenchPaneId): string {

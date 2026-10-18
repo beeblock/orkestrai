@@ -132,3 +132,45 @@ export function boundingBox(rects: LayoutRect[]): { x: number; y: number; width:
   const maxBottom = Math.max(...rects.map((rect) => rect.y + rect.height));
   return { x: minX, y: minY, width: maxRight - minX, height: maxBottom - minY };
 }
+
+/** Inner spacing of a group frame around its members; the label sits in the extra top band. */
+export const GROUP_FRAME = { pad: 40, header: 20, gap: 28 } as const;
+
+/** The frame that wraps every member with the group's padding and label band. */
+export function fitGroupFrame(rects: LayoutRect[]): { x: number; y: number; width: number; height: number } | null {
+  const box = boundingBox(rects);
+  if (!box) return null;
+  return {
+    x: box.x - GROUP_FRAME.pad,
+    y: box.y - GROUP_FRAME.pad - GROUP_FRAME.header,
+    width: box.width + GROUP_FRAME.pad * 2,
+    height: box.height + GROUP_FRAME.pad * 2 + GROUP_FRAME.header,
+  };
+}
+
+/**
+ * Lays a group's members out in reading order on an even grid that starts at
+ * the frame's inner corner. Columns aim for a landscape block; every column is
+ * as wide as the widest member and each row as tall as its tallest one.
+ */
+export function arrangeGroupMembers(
+  rects: LayoutRect[],
+  frame: { x: number; y: number },
+  gap: number = GROUP_FRAME.gap,
+): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  if (!rects.length) return result;
+  const cellWidth = Math.max(...rects.map((rect) => rect.width));
+  const averageHeight = rects.reduce((sum, rect) => sum + rect.height, 0) / rects.length;
+  const averageWidth = rects.reduce((sum, rect) => sum + rect.width, 0) / rects.length;
+  const columns = Math.max(1, Math.min(rects.length, Math.ceil(Math.sqrt(rects.length * (4 / 3) * (averageHeight / averageWidth)))));
+  const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);
+  const startX = frame.x + GROUP_FRAME.pad;
+  let y = frame.y + GROUP_FRAME.pad + GROUP_FRAME.header;
+  for (let start = 0; start < sorted.length; start += columns) {
+    const row = sorted.slice(start, start + columns);
+    row.forEach((rect, column) => result.set(rect.id, { x: startX + column * (cellWidth + gap), y }));
+    y += Math.max(...row.map((rect) => rect.height)) + gap;
+  }
+  return result;
+}

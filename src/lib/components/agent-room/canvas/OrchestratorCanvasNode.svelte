@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useNodes, type NodeProps } from '@xyflow/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
-  import { ArrowUp, Cable, LoaderCircle, Plus, X } from '@lucide/svelte';
+  import { ArrowUp, Cable, LoaderCircle, Plus, Star, X } from '@lucide/svelte';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
@@ -25,13 +25,14 @@
     onRename?: (id: string, title: string) => void;
     connections?: import('./NodeShell.svelte').NodeConnection[];
     onRemoveConnection?: (edgeId: string) => void;
+    onToggleMaestro?: (id: string) => void;
   };
 
   let { id, data, selected } = $props<NodeProps & { data: OrchestratorNodeData }>();
 
   const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', kimi: 'Kimi', opencode: 'OpenCode', cursor: 'Cursor', antigravity: 'Antigravity', cline: 'Cline', devin: 'Devin', copilot: 'Copilot', gemini: 'Gemini', qwen: 'Qwen', aider: 'Aider', goose: 'goose', amp: 'Amp' };
 
-  type Row = { id: string; title: string; role: string | null; provider: string | null; state: string; tone: ReturnType<typeof agentTone> };
+  type Row = { id: string; title: string; role: string | null; provider: string | null; leader: boolean; state: string; tone: ReturnType<typeof agentTone> };
   type Section = { id: string; title: string; tint: string | null; rows: Row[] };
 
   const nodesStore = useNodes();
@@ -43,10 +44,10 @@
     const groups = all.filter((node) => node.type === 'group');
     const placed = new Set<string>();
     const row = (node: (typeof agents)[number]): Row => {
-      const payload = (node.data as { payload?: { provider?: string; role?: string | null } }).payload ?? {};
+      const payload = (node.data as { payload?: { provider?: string; role?: string | null; maestro?: boolean } }).payload ?? {};
       const live = agentStatus.agents[node.id];
       const state = live ? (live.sessionAlive ? live.state : 'disconnected') : 'idle';
-      return { id: node.id, title: String((node.data as { title?: string }).title ?? ''), role: payload.role ?? null, provider: payload.provider ?? null, state, tone: agentTone(state as never) };
+      return { id: node.id, title: String((node.data as { title?: string }).title ?? ''), role: payload.role ?? null, provider: payload.provider ?? null, leader: Boolean(payload.maestro), state, tone: agentTone(state as never) };
     };
     const result: Section[] = [];
     for (const group of groups) {
@@ -60,11 +61,19 @@
     return result;
   });
 
+  // Panels made before the rename kept the old default title; show the current name instead.
+  const LEGACY_TITLES = new Set(['Orquestrador', 'Orchestrator', 'Orquestador']);
+  const panelTitle = $derived(!data.title || LEGACY_TITLES.has(data.title) ? m['orchestrator.title']() : data.title);
   const total = $derived(sections.reduce((sum, section) => sum + section.rows.length, 0));
   const working = $derived(sections.reduce((sum, section) => sum + section.rows.filter((item) => item.tone === 'working').length, 0));
   const groupCount = $derived(sections.filter((section) => section.id !== 'loose').length);
+  // This node is the leader's panel: the leader agent distributes what is said here.
+  const leader = $derived(sections.flatMap((section) => section.rows).find((item) => item.leader) ?? null);
+  const prompt = $derived(leader ? m['orchestrator.placeholder_leader']({ name: leader.title }) : m['orchestrator.placeholder_no_leader']());
 
   let draft = $state('');
+  // Without a leader, only @mentioned teammates would receive the message.
+  const canSend = $derived(Boolean(leader) || draft.includes('@'));
   let sending = $state(false);
   let feedback = $state<{ ok: boolean; text: string } | null>(null);
   let connecting = $state(false);
@@ -76,11 +85,11 @@
     feedbackTimer = setTimeout(() => (feedback = null), ok ? 2200 : 5000);
   }
 
-  // One message to the whole team: unmentioned goes to the leader, who
+  // One message to the team channel: unmentioned goes to the leader, who
   // distributes it; @mentions reach those teammates directly.
   async function send() {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || !canSend) return;
     sending = true;
     const csrf = getCsrfToken();
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(data.workspaceId)}/channels/${encodeURIComponent(TEAM_CHANNEL)}/messages`, {
@@ -91,7 +100,7 @@
     sending = false;
     if (response?.ok) {
       if (draft.trim() === text) draft = '';
-      flash(true, m['orchestrator.sent']());
+      flash(true, leader && !text.includes('@') ? m['orchestrator.sent_leader']({ name: leader.title }) : m['orchestrator.sent']());
     } else {
       flash(false, m['orchestrator.failed']());
     }
@@ -121,13 +130,13 @@
   minHeight={320}
   onResize={data.onResize}
   connections={data.connections ?? []}
-  titleText={data.title || m['orchestrator.title']()}
+  titleText={panelTitle}
   onRename={data.onRename}
   onJumpToNode={data.onJumpToNode}
   onRemoveConnection={data.onRemoveConnection}
 >
   {#snippet icon()}<span class="orb" aria-hidden="true"></span>{/snippet}
-  {#snippet title()}{data.title || m['orchestrator.title']()}{/snippet}
+  {#snippet title()}{panelTitle}{/snippet}
   {#snippet actions()}
     <span class="tally" title={m['orchestrator.working_count']({ working, total })}>
       <span class="ring" style:--pct={`${total ? Math.round((working / total) * 100) : 0}%`} aria-hidden="true"></span>
@@ -153,6 +162,19 @@
       {/if}
     </div>
 
+    {#if total > 0}
+      {#if leader}
+        <button type="button" class="leader" onclick={() => data.onJumpToNode?.(leader.id)} title={leader.title}>
+          <Star size={13} class="star" aria-hidden="true" />
+          <span class="leader-label">{m['orchestrator.led_by']()}</span>
+          <AgentAvatar nodeId={leader.id} title={leader.title} size={18} />
+          <b>{leader.title}</b>
+        </button>
+      {:else}
+        <p class="no-leader" role="note">{m['orchestrator.no_leader']()}</p>
+      {/if}
+    {/if}
+
     <div class="list">
       {#each sections as section (section.id)}
         {#if section.title}
@@ -175,8 +197,12 @@
               <b>{item.title}</b>
               <small>{[item.role, providerName(item.provider)].filter(Boolean).join(' · ')}</small>
             </span>
+            {#if item.leader}<Star size={13} class="star" aria-label={m['orchestrator.leader']()} />{/if}
             <StatusPill tone={item.tone} label={agentStateLabel(item.state as never)} />
           </button>
+          {#if !leader && data.onToggleMaestro}
+            <button type="button" class="make-leader" onclick={() => data.onToggleMaestro?.(item.id)}>{m['orchestrator.make_leader']({ name: item.title })}</button>
+          {/if}
         {/each}
       {:else}
         <div class="empty">
@@ -190,8 +216,8 @@
 
     {#if feedback}<p class="feedback" class:error={!feedback.ok} role="status">{feedback.text}</p>{/if}
     <form class="command" onsubmit={(event) => { event.preventDefault(); void send(); }}>
-      <input bind:value={draft} placeholder={m['orchestrator.placeholder']({ count: total })} aria-label={m['orchestrator.placeholder']({ count: total })} disabled={total === 0} />
-      <button type="submit" class="send" aria-label={m['orchestrator.send']()} disabled={!draft.trim() || sending}>
+      <input bind:value={draft} placeholder={prompt} aria-label={prompt} disabled={total === 0} />
+      <button type="submit" class="send" aria-label={leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={!draft.trim() || sending || !canSend}>
         {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} strokeWidth={2.4} />{/if}
       </button>
     </form>
@@ -206,6 +232,68 @@
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #fff3c4 0, #f2c45c 32%, #d98a2b 70%, #8a4a12 100%);
     box-shadow: 0 0 10px color-mix(in srgb, #f2b445 55%, transparent);
+  }
+
+  .leader {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 12px 6px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+    color: var(--app-text);
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .leader:hover {
+    background: color-mix(in srgb, var(--app-accent) 16%, transparent);
+  }
+
+  .leader b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .leader-label {
+    color: var(--app-text-muted);
+  }
+
+  .orch :global(.star) {
+    flex: none;
+    color: var(--app-accent);
+    fill: var(--app-accent);
+  }
+
+  .no-leader {
+    margin: 0 12px 6px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--app-warning) 12%, transparent);
+    color: var(--app-text-soft);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .make-leader {
+    align-self: flex-start;
+    margin: -2px 0 4px 44px;
+    padding: 2px 8px;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 11px;
+  }
+
+  .make-leader:hover {
+    border-color: var(--app-accent);
+    color: var(--app-text);
   }
 
   .orb.big {

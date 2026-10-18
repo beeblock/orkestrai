@@ -8,7 +8,7 @@
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
   import { answersByQuestion, buildTimeline } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentColor, agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
-  import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
+  import { agentActionLabel, agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
   import { decisionLabels } from '$lib/components/agent-room/attention-decision-labels.js';
   import { attentionDecisionKind, ownerQuestionOptions } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
@@ -285,7 +285,7 @@
             {@const parts = elapsedParts(agent.stateSince, now)}
             <div class="run">
               <span class="run-head"><AgentAvatar nodeId={agent.nodeId} title={agent.title} size={22} /><b>{agent.title}</b>{#if parts}<span class="num">{elapsedLabel(parts)}</span>{/if}</span>
-              {#if agent.lastAction || agent.currentTask}<small>{agent.lastAction ?? agent.currentTask?.title}</small>{/if}
+              {#if agentActionLabel(agent.lastAction, agent.lastActionData) || agent.currentTask}<small>{agentActionLabel(agent.lastAction, agent.lastActionData) ?? agent.currentTask?.title}</small>{/if}
             </div>
           {/each}
         {/if}

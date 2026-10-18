@@ -6,7 +6,7 @@
   import { decisionLabels } from './attention-decision-labels.js';
   import { agentStatus, statusClock } from './agent-status.svelte.js';
   import { agentTone, elapsedParts } from './agent-identity.js';
-  import { elapsedLabel } from './agent-status-labels.js';
+  import { agentActionLabel, elapsedLabel } from './agent-status-labels.js';
   import AgentGlyph from './AgentGlyph.svelte';
   import AgentAvatar from './AgentAvatar.svelte';
   import MarkdownView from './MarkdownView.svelte';
@@ -128,7 +128,7 @@
             <span class="glyph"><AgentGlyph tone={agentTone(agent.state)} label={agent.state} /></span>
             <span class="t">{agent.title}{#if agent.currentTask}<span class="muted"> · {agent.currentTask.title}</span>{/if}</span>
             <span class="when">{when(agent.stateSince)}</span>
-            {#if agent.lastAction}<span class="m mono">{agent.lastAction}</span>{/if}
+            {#if agentActionLabel(agent.lastAction, agent.lastActionData)}<span class="m">{agentActionLabel(agent.lastAction, agent.lastActionData)}</span>{/if}
           </button>
         {/each}
       {/if}

@@ -6,6 +6,7 @@
   import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
   import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
   import MarkdownView from '$lib/components/agent-room/MarkdownView.svelte';
+  import { routineCadence, routineNextRun } from '$lib/components/agent-room/chat/routine-labels.js';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
   import RequestCard from '$lib/components/agent-room/chat/RequestCard.svelte';
@@ -16,7 +17,7 @@
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
-  import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
+  import { agentDoingLabel, agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
   import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { directChannel, directChannelNode, TEAM_CHANNEL, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import type { CanvasNode, Routine, TerminalNodePayload, Workspace } from '$lib/modules/agent-room/domain/types.js';
@@ -120,14 +121,13 @@
 
   function routineLabel(routine: Routine): string {
     const target = routine.targetNodeId ? agentById.get(routine.targetNodeId)?.title : null;
-    const cadence = !routine.enabled ? m['chat.routine_paused']() : routine.intervalMinutes ? m['chat.routine_every']({ count: routine.intervalMinutes }) : m['chat.routine_once']();
-    return [cadence, target].filter(Boolean).join(' · ');
+    return [routineCadence(routine), routineNextRun(routine), target].filter(Boolean).join(' · ');
   }
 
   function doingOf(agentId: string): string {
     const live = agentStatus.agents[agentId];
     if (!live) return '';
-    return live.lastAction ?? live.currentTask?.title ?? agentStateLabel(live.sessionAlive ? live.state : 'disconnected');
+    return agentDoingLabel(live);
   }
 
   async function refreshChannels() {

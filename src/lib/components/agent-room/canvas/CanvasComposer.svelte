@@ -22,8 +22,15 @@
 </script>
 
 <script lang="ts">
-  import { ArrowUp, AtSign, ChevronDown, ChevronUp, FileText, Globe, LoaderCircle, SquareTerminal, X } from '@lucide/svelte';
+  import { onMount } from 'svelte';
+  import { ArrowUp, AtSign, ChevronDown, ChevronUp, FileText, Globe, LoaderCircle, Mic, SquareTerminal, Volume2, VolumeX, X } from '@lucide/svelte';
+  import { toast } from '@beeblock/svelar/ui';
   import AgentChatFace from '../chat/AgentChatFace.svelte';
+  import ComposerVoice from './ComposerVoice.svelte';
+  import { TEXT_DICTATION_COMMAND } from '../text-dictation.js';
+  import { speakText } from '../voice-speech.js';
+  import { normalizeSpeechText } from '../voice-cleanup.js';
+  import { appSettingsStore } from '../app-settings.svelte.js';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import AgentAvatar from '../AgentAvatar.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -63,6 +70,67 @@
       // The tip simply shows again next time.
     }
   }
+
+  // Voice: talk instead of typing; replies can be read back aloud.
+  let voiceOpen = $state(false);
+  let speakReplies = $state(readSpeakReplies());
+  // A message sent by voice gets its reply spoken even with read-back off.
+  let speakNextReplyFrom: string | null = null;
+  function readSpeakReplies(): boolean {
+    try {
+      return localStorage.getItem('orkestrai.composer.speakReplies') === 'on';
+    } catch {
+      return false;
+    }
+  }
+  function toggleSpeakReplies() {
+    speakReplies = !speakReplies;
+    try {
+      localStorage.setItem('orkestrai.composer.speakReplies', speakReplies ? 'on' : 'off');
+    } catch {
+      // The choice lasts for this visit only.
+    }
+  }
+
+  async function onVoiceTranscript(text: string, mode: 'send' | 'edit') {
+    draft = draft.trim() ? `${draft.trimEnd()} ${text}` : text;
+    if (mode === 'edit') {
+      requestAnimationFrame(() => {
+        onInput();
+        input?.focus();
+      });
+      return;
+    }
+    if (target) speakNextReplyFrom = target.id;
+    await send();
+  }
+
+  // Voice models not installed yet: the app's dictation flow offers the download.
+  function onVoiceSetup() {
+    voiceOpen = false;
+    requestAnimationFrame(() => {
+      input?.focus();
+      window.dispatchEvent(new Event(TEXT_DICTATION_COMMAND));
+    });
+  }
+
+  onMount(() => {
+    const onMessage = (event: Event) => {
+      const { channel, message } = (event as CustomEvent<{ channel: string; message: { authorKind: string; authorNodeId: string | null; body: string } }>).detail ?? {};
+      if (!message || message.authorKind !== 'agent' || !message.authorNodeId) return;
+      if (channel !== `dm:${message.authorNodeId}`) return;
+      const wanted = speakNextReplyFrom === message.authorNodeId || (speakReplies && target?.id === message.authorNodeId);
+      if (!wanted) return;
+      if (speakNextReplyFrom === message.authorNodeId) speakNextReplyFrom = null;
+      const spoken = normalizeSpeechText(message.body);
+      if (!spoken) return;
+      speakText(spoken, appSettingsStore.values.audioOutputDeviceId).catch((error) => {
+        toast.error(error instanceof Error ? error.message : m['composer.voice_speak_failed']());
+      });
+    };
+    window.addEventListener('orkestrai:channel-message', onMessage);
+    return () => window.removeEventListener('orkestrai:channel-message', onMessage);
+  });
 
   let draft = $state('');
   let sending = $state(false);
@@ -181,6 +249,9 @@
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     {/if}
+    {#if voiceOpen}
+      <ComposerVoice onTranscript={onVoiceTranscript} onClose={() => (voiceOpen = false)} onSetupNeeded={onVoiceSetup} />
+    {:else}
     <label class="sr-only" for="canvas-composer-input">{target ? m['composer.target']({ name: target.title }) : m['composer.no_agents']()}</label>
     <textarea
       id="canvas-composer-input"
@@ -188,15 +259,25 @@
       bind:value={draft}
       rows="1"
       disabled={!target && !onCommand}
-      placeholder={target ? m['composer.placeholder']() : onCommand ? m['composer.command_hint']() : m['composer.no_agents']()}
+      placeholder={target ? m['composer.placeholder']() : onCommand ? m['composer.placeholder_board']() : m['composer.no_agents']()}
       oninput={onInput}
       onkeydown={onKeydown}
     ></textarea>
     <button type="button" class="icon" disabled={!target} onclick={() => (threadOpen = !threadOpen)} aria-pressed={threadOpen} aria-label={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })} title={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })}><ChevronUp size={16} class={threadOpen ? 'rotate-180 transition-transform' : 'transition-transform'} /></button>
     <button type="button" class="icon" disabled={!target} onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()}><AtSign size={16} /></button>
-    <button type="button" class="send" disabled={(!target && !onCommand) || !draft.trim() || sending} onclick={() => void send()} aria-label={m['composer.send']()}>
-      {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
+    <button type="button" class="icon" class:on={speakReplies} disabled={!target} onclick={toggleSpeakReplies} aria-pressed={speakReplies} aria-label={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()} title={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()}>
+      {#if speakReplies}<Volume2 size={16} />{:else}<VolumeX size={16} />{/if}
     </button>
+    {#if draft.trim() || sending}
+      <button type="button" class="send" disabled={(!target && !onCommand) || !draft.trim() || sending} onclick={() => void send()} aria-label={m['composer.send']()}>
+        {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
+      </button>
+    {:else}
+      <button type="button" class="send mic" disabled={!target && !onCommand} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="composer-mic">
+        <Mic size={16} strokeWidth={2.2} />
+      </button>
+    {/if}
+    {/if}
   </div>
 </div>
 
@@ -366,6 +447,14 @@
   .icon:hover:not(:disabled) {
     background: var(--app-hover);
     color: var(--app-text);
+  }
+
+  .icon.on {
+    color: var(--app-accent);
+  }
+
+  .send.mic:hover:not(:disabled) {
+    transform: scale(1.06);
   }
 
   .send {

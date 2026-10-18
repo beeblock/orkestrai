@@ -32,6 +32,8 @@ describe('board commands', () => {
     expect(parseBoardCommand('Resume all', options)).toEqual({ kind: 'pause', paused: false });
     expect(parseBoardCommand('abra o mapa da equipe', options)).toEqual({ kind: 'open', target: 'team-map' });
     expect(parseBoardCommand('orquestrador', options)).toEqual({ kind: 'open', target: 'orchestrator' });
+    expect(parseBoardCommand('abra o painel do líder', options)).toEqual({ kind: 'open', target: 'orchestrator' });
+    expect(parseBoardCommand('open the leader panel', options)).toEqual({ kind: 'open', target: 'orchestrator' });
     expect(parseBoardCommand('monte uma equipe', options)).toEqual({ kind: 'open', target: 'team-composer' });
     expect(parseBoardCommand('nota: revisar o contrato do QR', options)).toEqual({ kind: 'note', text: 'revisar o contrato do QR' });
   });
