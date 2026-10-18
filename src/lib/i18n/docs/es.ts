@@ -1054,6 +1054,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "El campo de mensaje tiene micrófono: habla con un agente viendo la onda de tu voz y escucha la respuesta en voz alta.",
       "Los grupos tienen el botón Ordenar, que alinea los elementos dentro del marco, y el marco ahora sigue a sus elementos.",
       "Los agentes vuelven a inactivo en cuanto su terminal se calla, y cada pantalla muestra en palabras lo que hicieron.",
+      "Las imágenes que los agentes publican en la Conversación muestran el mismo archivo del workspace que ves en el Canvas.",
     ] },
     { date: '16 de octubre de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Selección de secciones de Configuración', summary: 'Mantiene la selección del menú correcta al final de la página.', items: [
       'Al hacer clic en una sección corta al final de Configuración, queda seleccionada aunque la página no pueda desplazarse más. Los enlaces directos desplazan hasta la sección después de cargar los datos. Se conservan anclas nativas, navegación por teclado e historial; al desplazarse a otro punto, el menú vuelve a seguir la sección visible, incluido el contenedor del escritorio Windows, sin polling en reposo.',

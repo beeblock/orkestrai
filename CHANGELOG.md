@@ -77,6 +77,7 @@ pt-BR, English, and Spanish translations.
 - Keep every node of a multi-selection where it was dropped; only the one under the pointer was saved before.
 - Keep a group's members inside its frame: dragging the group together with selected members no longer moves those members twice, grouping hands the selection to the new group so dragging one member moves only that member, the frame follows a member dragged past its edge and boards opened with members outside a frame refit it.
 - Chat routines sit right below what the agent is doing, read their schedule in words with the next run, and routines created from Chat post each result in the conversation.
+- Show images that agents post in Chat when they point at a file in the workspace, the same file the Canvas shows as an image node; agents are told to post images that way.
 
 ## 0.42.2 - 2026-10-16
 

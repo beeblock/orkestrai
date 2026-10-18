@@ -488,11 +488,11 @@
                     {:else if message.kind === 'answer'}
                       <span class="to"><CornerDownRight size={12} />{m['chat.answered_question']()}</span>
                     {/if}
-                    <MarkdownView content={message.body} compact />
+                    <MarkdownView content={message.body} compact {workspaceId} />
                     {#if typeof message.meta.reply === 'string' && message.meta.reply}
                       <div class="reply">
                         <AgentAvatar nodeId={String(message.meta.to)} title={titleOf(String(message.meta.to))} size={18} />
-                        <div><b>{titleOf(String(message.meta.to))}</b><MarkdownView content={message.meta.reply} compact /></div>
+                        <div><b>{titleOf(String(message.meta.to))}</b><MarkdownView content={message.meta.reply} compact {workspaceId} /></div>
                       </div>
                     {/if}
                   </div>

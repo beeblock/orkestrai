@@ -85,7 +85,7 @@
             {#if message.kind === 'question'}
               <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id)} />
             {:else}
-              <div class="bubble"><MarkdownView content={message.body} compact /></div>
+              <div class="bubble"><MarkdownView content={message.body} compact {workspaceId} /></div>
             {/if}
           {/each}
         </div>
