@@ -110,7 +110,7 @@
   import PresetLibraryPanel from '$lib/components/agent-room/canvas/PresetLibraryPanel.svelte';
   import AgentToolbarMenu from '$lib/components/agent-room/canvas/AgentToolbarMenu.svelte';
   import CommandPalette, { type PaletteAction } from '$lib/components/agent-room/canvas/CommandPalette.svelte';
-  import { alignRects, boundingBox, distributeRects, tidyRects, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
+  import { alignRects, arrangeGroupMembers, boundingBox, distributeRects, fitGroupFrame, tidyRects, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
   import { findFreeCanvasPosition } from '$lib/modules/agent-room/domain/canvas-placement.js';
   import type { TerminalThemeName } from '$lib/components/agent-room/terminal-themes.js';
   import {
@@ -1561,6 +1561,7 @@
           }).catch(() => {});
         },
         onUngroup: (id: string) => ungroup(id),
+        onArrange: (id: string) => void arrangeGroup(id),
         onPayloadDraftChange: (id: string, partial: Record<string, unknown>) => stageNodePayload(id, partial),
         onPayloadChange: (id: string, partial: Record<string, unknown>) => updateNodePayload(id, partial),
       },
@@ -1731,6 +1732,7 @@
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
       writeWorkspaceViewCache({ workspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
+      repairGroupFrames();
       void providerStatusRequest.then((providerStatus) => {
         if (requestId !== selectionRequestId || activeWorkspace?.id !== id) return;
         providers = providerStatus.providers ?? [];
@@ -2985,24 +2987,89 @@
     if (!activeWorkspace) return;
     const selected = nodes.filter((node) => node.selected && node.type !== 'group');
     if (selected.length < 2) return;
-    const box = boundingBox(selectedRects())!;
-    const padding = 40;
-    const headerSpace = 20;
+    const frame = fitGroupFrame(selected.map(rectOf))!;
     const groupNode = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
         type: 'group',
         title: m['canvas.default_group'](),
-        x: box.x - padding,
-        y: box.y - padding - headerSpace,
-        width: box.width + padding * 2,
-        height: box.height + padding * 2 + headerSpace,
+        x: frame.x,
+        y: frame.y,
+        width: Math.round(frame.width),
+        height: Math.round(frame.height),
         zIndex: -1,
         payload: { members: selected.map((node) => node.id) },
         floorId: visibleFloorId,
       }),
     });
-    nodes = [...nodes, toFlowNode(groupNode)];
+    // The new group takes the selection, so dragging one member next moves only that member.
+    nodes = [...nodes.map((node) => (node.selected ? { ...node, selected: false } : node)), { ...toFlowNode(groupNode), selected: true }];
+  }
+
+  function rectOf(node: Node) {
+    return {
+      id: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: node.measured?.width ?? (node.width as number) ?? 560,
+      height: node.measured?.height ?? (node.height as number) ?? 360,
+    };
+  }
+
+  function groupMemberIds(group: Node): string[] {
+    return ((group.data?.payload as { members?: string[] } | undefined)?.members ?? []);
+  }
+
+  function groupMemberNodes(group: Node): Node[] {
+    const ids = new Set(groupMemberIds(group));
+    return nodes.filter((node) => ids.has(node.id));
+  }
+
+  // A group's frame always wraps its members; a collapsed group keeps its label size.
+  async function fitGroupsToMembers(groupIds: Iterable<string>) {
+    const updates = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const id of new Set(groupIds)) {
+      const group = nodes.find((node) => node.id === id && node.type === 'group');
+      if (!group || (group.data?.payload as { collapsed?: boolean } | undefined)?.collapsed) continue;
+      const frame = fitGroupFrame(groupMemberNodes(group).map(rectOf));
+      if (!frame) continue;
+      const width = (group.width as number | undefined) ?? group.measured?.width ?? 0;
+      const height = (group.height as number | undefined) ?? group.measured?.height ?? 0;
+      const same = Math.abs(group.position.x - frame.x) < 1 && Math.abs(group.position.y - frame.y) < 1
+        && Math.abs(width - frame.width) < 1 && Math.abs(height - frame.height) < 1;
+      if (!same) updates.set(id, { ...frame, width: Math.round(frame.width), height: Math.round(frame.height) });
+    }
+    if (!updates.size) return;
+    nodes = nodes.map((node) => {
+      const frame = updates.get(node.id);
+      return frame ? { ...node, position: { x: frame.x, y: frame.y }, width: frame.width, height: frame.height } : node;
+    });
+    await Promise.all([...updates].map(([id, frame]) => persistNodePosition(id, { x: frame.x, y: frame.y }, { width: frame.width, height: frame.height })));
+  }
+
+  // Organize: members line up on an even grid from the frame's corner, then the frame fits them.
+  async function arrangeGroup(groupId: string) {
+    const group = nodes.find((node) => node.id === groupId && node.type === 'group');
+    if (!group) return;
+    const members = groupMemberNodes(group).filter((node) => !node.hidden);
+    if (!members.length) return;
+    snapshot();
+    await applyPositions(arrangeGroupMembers(members.map(rectOf), group.position));
+    await fitGroupsToMembers([groupId]);
+    requestAnimationFrame(() => zoomApi?.fitView({ nodes: [{ id: groupId }], padding: fitPadding, duration: 300 } as never));
+  }
+
+  // Older boards may hold groups whose members drifted outside the frame.
+  function repairGroupFrames() {
+    const drifted = nodes.filter((group) => {
+      if (group.type !== 'group' || (group.data?.payload as { collapsed?: boolean } | undefined)?.collapsed) return false;
+      const frame = rectOf(group);
+      return groupMemberNodes(group).some((member) => {
+        const rect = rectOf(member);
+        return rect.x < frame.x || rect.y < frame.y || rect.x + rect.width > frame.x + frame.width || rect.y + rect.height > frame.y + frame.height;
+      });
+    });
+    if (drifted.length) void fitGroupsToMembers(drifted.map((group) => group.id));
   }
 
   // Team composer: up to twelve agents side by side inside one named group.
@@ -3066,11 +3133,12 @@
     nodes = nodes.filter((node) => node.id !== groupId);
   }
 
-  function moveGroupWithMembers(groupNode: Node, previous: { x: number; y: number }) {
+  function moveGroupWithMembers(groupNode: Node, previous: { x: number; y: number }, alreadyMoved: Set<string> = new Set()) {
     const dx = groupNode.position.x - previous.x;
     const dy = groupNode.position.y - previous.y;
     if (!dx && !dy) return;
-    const members = ((groupNode.data?.payload as { members?: string[] })?.members ?? []) as string[];
+    // Members dragged along with the group (selected together) already moved once.
+    const members = groupMemberIds(groupNode).filter((id) => !alreadyMoved.has(id));
     nodes = nodes.map((node) =>
       members.includes(node.id)
         ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } }
@@ -3441,21 +3509,29 @@
     }));
   }
 
-  async function handleDragStop({ targetNode }: { targetNode: Node | null; nodes: Node[]; event: MouseEvent | TouchEvent }) {
+  async function handleDragStop({ targetNode, nodes: draggedNodes }: { targetNode: Node | null; nodes: Node[]; event: MouseEvent | TouchEvent }) {
     if (!activeWorkspace || !targetNode) return;
-    const previous = preDragPositions.get(targetNode.id);
-    preDragPositions.delete(targetNode.id);
-    if (targetNode.type === 'group' && previous) {
-      moveGroupWithMembers(targetNode, previous);
+    const moved = draggedNodes?.length ? draggedNodes : [targetNode];
+    const movedIds = new Set(moved.map((node) => node.id));
+    for (const node of moved) {
+      const previous = preDragPositions.get(node.id);
+      preDragPositions.delete(node.id);
+      if (node.type === 'group' && previous) moveGroupWithMembers(node, previous, movedIds);
     }
-    draggingNodeIds.delete(targetNode.id);
-    await persistNodePosition(targetNode.id, targetNode.position);
+    // A member dragged on its own carries its group's frame along.
+    const touchedGroups = nodes
+      .filter((node) => node.type === 'group' && !movedIds.has(node.id) && groupMemberIds(node).some((id) => movedIds.has(id)))
+      .map((node) => node.id);
+    for (const node of moved) draggingNodeIds.delete(node.id);
+    // Every node of a multi-selection keeps its new place, not only the one under the pointer.
+    await Promise.all(moved.map((node) => persistNodePosition(node.id, node.position)));
+    await fitGroupsToMembers(touchedGroups);
   }
 
-  function handleDragStart({ targetNode }: { targetNode: Node | null }) {
-    if (targetNode) {
-      draggingNodeIds.add(targetNode.id);
-      preDragPositions.set(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y });
+  function handleDragStart({ targetNode, nodes: draggedNodes }: { targetNode: Node | null; nodes: Node[] }) {
+    for (const node of draggedNodes?.length ? draggedNodes : targetNode ? [targetNode] : []) {
+      draggingNodeIds.add(node.id);
+      preDragPositions.set(node.id, { x: node.position.x, y: node.position.y });
     }
   }
 </script>

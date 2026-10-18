@@ -155,6 +155,10 @@ type PtySession = PtySessionInfo & {
   outputRevision: number;
   lastSubmitOutputRevision: number;
   conptySubmitGuard: boolean;
+  /** Output after idle reported the agent as working; the next quiet spell reports idle again. */
+  outputBurst: boolean;
+  /** A resize makes TUIs repaint; that repaint is not work. */
+  redrawUntil: number;
 };
 
 type ComposerDelivery = {
@@ -337,6 +341,8 @@ export class PtySessionManager {
       outputRevision: 0,
       lastSubmitOutputRevision: 0,
       conptySubmitGuard: platform() === 'win32' || input.runtime?.kind === 'wsl',
+      outputBurst: false,
+      redrawUntil: 0,
     };
 
     ptyProcess.onData((data) => {
@@ -352,7 +358,13 @@ export class PtySessionManager {
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
       this.scheduleAttentionCheck(session);
-      if (firstOutput || resumedFromIdle) this.recordLifecycle(session, 'working');
+      // `waiting` stays set on purpose (deliveries rely on it), so the burst
+      // flag remembers to report idle once the output goes quiet again.
+      const repaint = resumedFromIdle && Date.now() < session.redrawUntil;
+      if (firstOutput || (resumedFromIdle && !repaint && !session.outputBurst)) {
+        if (resumedFromIdle) session.outputBurst = true;
+        this.recordLifecycle(session, 'working');
+      }
     });
 
     ptyProcess.onExit(({ exitCode }) => {
@@ -535,6 +547,7 @@ export class PtySessionManager {
     if (session.cols === cols && session.rows === rows) return;
     session.cols = cols;
     session.rows = rows;
+    session.redrawUntil = Date.now() + 1_500;
     session.pty.resize(cols, rows);
   }
 
@@ -865,6 +878,10 @@ export class PtySessionManager {
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => {
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) return;
+      if (session.outputBurst && session.waiting) {
+        session.outputBurst = false;
+        this.recordLifecycle(session, 'idle');
+      }
       this.setWaiting(session, true);
       this.releaseDeliveryBarrierWhenReady(session);
       this.drainDeliveryQueue(session);
@@ -873,6 +890,7 @@ export class PtySessionManager {
 
   private setWaiting(session: PtySession, waiting: boolean): void {
     if (waiting) session.initialIdleObserved = true;
+    if (!waiting) session.outputBurst = false;
     if (session.waiting === waiting) return;
     session.waiting = waiting;
     for (const listener of session.attentionListeners) listener(waiting);

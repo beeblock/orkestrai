@@ -7,7 +7,7 @@
   import { agentStatus, statusClock } from '../agent-status.svelte.js';
   import { attentionFeed } from '../attention-feed.svelte.js';
   import { agentColor, agentTone, elapsedParts, type AgentTone } from '../agent-identity.js';
-  import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
+  import { agentActionLabel, agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -66,7 +66,7 @@
           groupId: membership.get(node.id) ?? null,
           leader: Boolean(payload.maestro),
           task: live?.currentTask?.title ?? null,
-          action: live?.lastAction ?? null,
+          action: agentActionLabel(live?.lastAction, live?.lastActionData),
           floor: live?.floorName ?? null,
         };
       });

@@ -77,7 +77,7 @@ export function parseBoardCommand(input: string, options: { providers: Array<{ i
   if (/^(?:resume all|resume everyone|resume the agents|retome todos|retomar todos|continue todos|retome os agentes|retomar os agentes|reanuda todos|reanudar todos|reanuda a todos)$/.test(text)) return { kind: 'pause', paused: false };
 
   if (/^(?:abra o |abrir o |abre o |open the |open |abre el |mostre o |show the )?(?:mapa da equipe|team map|mission map|mapa del equipo)$/.test(text)) return { kind: 'open', target: 'team-map' };
-  if (/^(?:abra o |abre el |open the |add an? |adicione o |crie o )?(?:orquestrador|orchestrator|orquestador)$/.test(text)) return { kind: 'open', target: 'orchestrator' };
+  if (/^(?:abra o |abre el |open the |add an? |adicione o |crie o )?(?:orquestrador|orchestrator|orquestador|painel do lider|leader panel|panel del lider)$/.test(text)) return { kind: 'open', target: 'orchestrator' };
   if (/^(?:monte uma equipe|montar equipe|montar uma equipe|build a team|arma un equipo|armar equipo|armar un equipo)$/.test(text)) return { kind: 'open', target: 'team-composer' };
   if (/^(?:abra o |abrir o |open |abre )?(?:foco|focus)$/.test(text)) return { kind: 'open', target: 'focus' };
   if (/^(?:abra a |abrir a |open |abre la )?(?:conversa|chat|conversacion)$/.test(text)) return { kind: 'open', target: 'chat' };

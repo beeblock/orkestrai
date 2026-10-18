@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'talk-to-team': 'talk-to-team',
   'more-agent-clis': 'more-agent-clis',
   'studios': 'studios',
   'board-commands': 'board-commands',

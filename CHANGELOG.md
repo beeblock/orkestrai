@@ -19,7 +19,7 @@ pt-BR, English, and Spanish translations.
 - Set group titles and summary figures in a condensed display face (Archivo, SIL Open Font License).
 - Rename the Workbench to Focus in the interface, guides and agent instructions; the top bar switches between Canvas, Focus and Chat.
 - Center a node opened from the team list, search or a link in the area the floating Canvas chrome leaves visible (design mode keeps the plain center). Phone cards clamp long requests until tapped, label approvals, questions and blocked agents, and the phone chat shows who an agent asked and the reply.
-- Redesign the Canvas chrome in liquid glass: a warm near-black palette with the gold accent, a vertical tool rail on the left (Select, agents, Shell, Orchestrator, Note, Pen, Shape, Tasks, Portal, Files, media, Design and the Plan, Code, Devices and Workspace menus), a panel rail on the right (team map, Huddles, Second Brain, scores, presets, floors, routines, roles, usage, ports, sharing and workspaces), quick-action pills above a pill-shaped message bar, a branch pill with the number of changed files at the bottom left and a zoom pill with the current zoom at the bottom right.
+- Redesign the Canvas chrome in liquid glass: a warm near-black palette with the gold accent, a vertical tool rail on the left (Select, agents, Shell, Leader panel, Note, Pen, Shape, Tasks, Portal, Files, media, Design and the Plan, Code, Devices and Workspace menus), a panel rail on the right (team map, Huddles, Second Brain, scores, presets, floors, routines, roles, usage, ports, sharing and workspaces), quick-action pills above a pill-shaped message bar, a branch pill with the number of changed files at the bottom left and a zoom pill with the current zoom at the bottom right.
 - Show open workspaces as tabs in the top bar, each with its own Needs you count, plus a switcher that lists and searches every workspace; the top bar also shows how many teammates are live and the tightest usage window with its reset time. Workspaces, folders, import, export and editing move to a drawer opened from the switcher or the right rail.
 - Give every node a thin outline in its live state color (gold while working, orange when it needs the owner, red when blocked), a deeper shadow, a gold glow when selected and a short fade-in; agent headers show a status pill.
 - Draw named groups as tinted team frames with a glass label that reads "NAME n · k working", growing into headlines at overview zoom.
@@ -51,7 +51,7 @@ pt-BR, English, and Spanish translations.
 - Add scores: save a canvas selection as a selection-scoped preset (nodes, connections between them, roles of the selected agents and their routines; no tasks, MCP servers or skills) and place it into any workspace from the new Scores section of the Canvas sidebar.
 - Add a pen tool that turns each stroke into a freehand shape node (simplified and normalized like arrow points).
 - Add SSH machines: hosts from ~/.ssh/config (patterns skipped) can open a shell or an agent CLI on that machine in a terminal node that runs the local ssh client; host aliases are validated and the remote folder is shell-quoted.
-- Add the Orchestrator node: the whole team in one card, grouped by named group with each agent's state, a working count, Recruit, Connect (wires every agent to it) and one field that commands the team (unmentioned messages go to the leader, @ reaches named agents).
+- Add the Leader panel, the leader's console on the Canvas: it shows which agent leads (the one marked with the star), every agent grouped by named group with its state and a working count, Recruit, Connect (wires every agent to it) and one field that briefs the leader, who distributes the work; @ reaches a teammate directly. Without a leader it says so and offers to pick one, since unmentioned messages only reach a leader.
 - Add the team map: the leader or orchestrator, the named groups and every agent as a tree, with filters (All, Working, Needs you, Idle, Done), search, fleet and structure counts, and a side panel to go to an agent, open it in Focus or start a chat.
 - Add the team composer: name a team, pick a role, line up to twelve agents with their CLIs and create them side by side inside a named group in one action.
 - Add pen options beside the tool rail: ten ink colors and five stroke widths, remembered on this device.
@@ -67,6 +67,16 @@ pt-BR, English, and Spanish translations.
 - Add Studios to the Canvas panel rail: choose a diagram (architecture, user flow, data flow, components, request lifecycle, states; ink or colorful) or a document (overview, onboarding, architecture, README, API, data model, security) and an agent. The Canvas creates a native Design document or a note connected to that agent and assigns a task that tells it to read the repository and fill it.
 - Export a note as a paginated PDF through the system print dialog; the markdown is sanitized before printing.
 - Add Gemini CLI, Qwen Code, Aider, goose and Amp as agent providers with their official install commands in Provider Center. They run in terminal nodes and headless one-shot tasks; Gemini, Qwen and goose resume a conversation by id, while Aider and Amp always start fresh.
+- Talk to the team from the Canvas message bar: the microphone records with a live waveform and a timer, then transcribes on this computer and either sends the words or leaves them in the field to edit. The reply to a voice message is read aloud, and a speaker button reads every reply from the chosen agent.
+- Arrange a group's members on an even grid inside its frame from the group label.
+
+### Fixed
+
+- Show an agent as idle again once its terminal goes quiet. Any output after a quiet spell, including the repaint after a terminal is opened or resized, used to leave it marked as working until the next keystroke; a repaint no longer counts as work, and plain shells printing server logs no longer count as working teammates.
+- Show what an agent did in words everywhere (Focus, Chat, team map, phone) instead of internal codes such as `system:task_completed`.
+- Keep every node of a multi-selection where it was dropped; only the one under the pointer was saved before.
+- Keep a group's members inside its frame: dragging the group together with selected members no longer moves those members twice, grouping hands the selection to the new group so dragging one member moves only that member, the frame follows a member dragged past its edge and boards opened with members outside a frame refit it.
+- Chat routines sit right below what the agent is doing, read their schedule in words with the next run, and routines created from Chat post each result in the conversation.
 
 ## 0.42.2 - 2026-10-16
 

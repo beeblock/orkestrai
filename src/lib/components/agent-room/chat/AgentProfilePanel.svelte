@@ -9,7 +9,8 @@
   import AgentAlwaysOnPanel from './AgentAlwaysOnPanel.svelte';
   import { agentStatus, statusClock } from '../agent-status.svelte.js';
   import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
-  import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
+  import { agentActionLabel, agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
+  import { routineCadence, routineNextRun } from './routine-labels.js';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import type { Routine, TerminalNodePayload, WorkspaceMemoryEntry } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -114,15 +115,34 @@
       <dt>{m['chat.profile_task']()}</dt>
       <dd>{status.currentTask.title}</dd>
     {/if}
-    {#if status?.lastAction}
+    {#if agentActionLabel(status?.lastAction, status?.lastActionData)}
       <dt>{m['chat.profile_doing']()}</dt>
-      <dd>{status.lastAction}</dd>
+      <dd>{agentActionLabel(status?.lastAction, status?.lastActionData)}</dd>
     {/if}
     {#if status?.floorName}
       <dt>{m['chat.profile_floor']()}</dt>
       <dd>{status.floorName}</dd>
     {/if}
   </dl>
+  <section>
+    <h3><CalendarClock size={13} />{m['chat.profile_routines']()}</h3>
+    {#if routines.length}
+      <ul>
+        {#each routines as routine (routine.id)}
+          <li class="routine" class:off={!routine.enabled}>
+            <b>{routine.name}</b>
+            <span>{[routineCadence(routine), routineNextRun(routine), routine.runCount ? m['chat.routine_runs']({ count: routine.runCount }) : null].filter(Boolean).join(' · ')}</span>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="empty">{m['chat.profile_routines_empty']()}</p>
+    {/if}
+    <form class="routine-form" onsubmit={(event) => { event.preventDefault(); void askRoutine(); }}>
+      <Input bind:value={routineDraft} placeholder={m['chat.routine_placeholder']()} aria-label={m['chat.routine_label']()} />
+      <Button size="sm" type="submit" disabled={!routineDraft.trim() || routineSending}>{m['chat.routine_create']()}</Button>
+    </form>
+  </section>
   <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} />
   <section>
     <h3><Brain size={13} />{m['chat.profile_memory']()}</h3>
@@ -133,20 +153,6 @@
     {:else}
       <p class="empty">{m['chat.profile_memory_empty']()}</p>
     {/if}
-  </section>
-  <section>
-    <h3><CalendarClock size={13} />{m['chat.profile_routines']()}</h3>
-    {#if routines.length}
-      <ul>
-        {#each routines as routine (routine.id)}<li><b>{routine.name}</b><span>{routine.enabled ? m['chat.profile_routine_on']() : m['chat.profile_routine_off']()}</span></li>{/each}
-      </ul>
-    {:else}
-      <p class="empty">{m['chat.profile_routines_empty']()}</p>
-    {/if}
-    <form class="routine-form" onsubmit={(event) => { event.preventDefault(); void askRoutine(); }}>
-      <Input bind:value={routineDraft} placeholder={m['chat.routine_placeholder']()} aria-label={m['chat.routine_label']()} />
-      <Button size="sm" type="submit" disabled={!routineDraft.trim() || routineSending}>{m['chat.routine_create']()}</Button>
-    </form>
   </section>
 </aside>
 
@@ -323,6 +329,10 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
+  }
+
+  .routine.off b {
+    color: var(--app-text-muted);
   }
 
   .routine-form {

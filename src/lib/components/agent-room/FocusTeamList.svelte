@@ -3,7 +3,7 @@
   import AgentGlyph from './AgentGlyph.svelte';
   import { agentStatus, statusClock } from './agent-status.svelte.js';
   import { agentTone, elapsedParts } from './agent-identity.js';
-  import { agentStateLabel, elapsedLabel } from './agent-status-labels.js';
+  import { agentDoingLabel, agentStateLabel, elapsedLabel } from './agent-status-labels.js';
   import * as m from '$lib/paraglide/messages.js';
 
   /** Teammates by floor (worktree), each with state, time in it and what it is doing. */
@@ -35,7 +35,7 @@
         <AgentGlyph tone={agentTone(state)} label={agentStateLabel(state)} />
         <span class="name">{agent.title}</span>
         <span class="time">{since(agent.stateSince)}</span>
-        <span class="doing">{agent.lastAction ?? agent.currentTask?.title ?? agentStateLabel(state)}</span>
+        <span class="doing">{agentDoingLabel({ ...agent, state })}</span>
       </button>
     {/each}
   {:else}

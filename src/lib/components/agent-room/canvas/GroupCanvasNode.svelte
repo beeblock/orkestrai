@@ -2,7 +2,7 @@
   import HeaderIconButton from './HeaderIconButton.svelte';
 
   import type { NodeProps } from '@xyflow/svelte';
-  import { ChevronDown, Ungroup } from '@lucide/svelte';
+  import { ChevronDown, LayoutGrid, Ungroup } from '@lucide/svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { agentStatus } from '../agent-status.svelte.js';
   import { agentColor } from '../agent-identity.js';
@@ -12,6 +12,7 @@
     payload: { members?: string[]; workflowKind?: string; designNodeIds?: string[]; taskIds?: string[]; collapsed?: boolean };
     onRename: (id: string, title: string) => void;
     onUngroup: (id: string) => void;
+    onArrange?: (id: string) => void;
     onPayloadChange?: (id: string, partial: Record<string, unknown>) => void | Promise<void>;
   };
 
@@ -95,6 +96,11 @@
     <HeaderIconButton label={collapsed ? m['group.expand']() : m['group.collapse']()} class="group-ungroup nodrag" side="top" onclick={toggleCollapsed}>
       <ChevronDown size={13} class={collapsed ? 'rotate-[-90deg] transition-transform' : 'transition-transform'} />
     </HeaderIconButton>
+    {#if !collapsed && (data.payload.members?.length ?? 0) > 1}
+      <HeaderIconButton label={m['group.arrange']()} class="group-ungroup nodrag" side="top" onclick={() => data.onArrange?.(id)}>
+        <LayoutGrid size={12} />
+      </HeaderIconButton>
+    {/if}
     <HeaderIconButton label={m['group.ungroup']()} class="group-ungroup nodrag" side="top" onclick={() => data.onUngroup(id)}>
       <Ungroup size={12} />
     </HeaderIconButton>

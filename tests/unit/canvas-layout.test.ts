@@ -94,3 +94,34 @@ describe('boundingBox', () => {
     expect(boundingBox([])).toBeNull();
   });
 });
+
+describe('group frames', () => {
+  const icons = Array.from({ length: 20 }, (_, index) => ({ id: `i${index}`, x: (index * 137) % 900, y: Math.floor(index / 3) * 260 - (index % 2) * 300, width: 280, height: 240 }));
+
+  it('wraps every member with padding and the label band', async () => {
+    const { fitGroupFrame, GROUP_FRAME } = await import('$lib/components/agent-room/canvas/layout.js');
+    const frame = fitGroupFrame([a, b, c])!;
+    expect(frame).toEqual({ x: -GROUP_FRAME.pad, y: -GROUP_FRAME.pad - GROUP_FRAME.header, width: 500 + GROUP_FRAME.pad * 2, height: 460 + GROUP_FRAME.pad * 2 + GROUP_FRAME.header });
+    expect(fitGroupFrame([])).toBeNull();
+  });
+
+  it('arranges scattered members on an even grid inside the frame', async () => {
+    const { arrangeGroupMembers, fitGroupFrame, GROUP_FRAME } = await import('$lib/components/agent-room/canvas/layout.js');
+    const positions = arrangeGroupMembers(icons, { x: 1000, y: 500 });
+    expect(positions.size).toBe(20);
+    const xs = new Set([...positions.values()].map((point) => point.x));
+    const ys = new Set([...positions.values()].map((point) => point.y));
+    expect(xs.size).toBe(5);
+    expect(ys.size).toBe(4);
+    expect(Math.min(...xs)).toBe(1000 + GROUP_FRAME.pad);
+    expect(Math.min(...ys)).toBe(500 + GROUP_FRAME.pad + GROUP_FRAME.header);
+    // No two members overlap once arranged.
+    const placed = icons.map((icon) => ({ ...icon, ...positions.get(icon.id)! }));
+    for (const one of placed) for (const other of placed) {
+      if (one.id === other.id) continue;
+      expect(one.x + one.width <= other.x || other.x + other.width <= one.x || one.y + one.height <= other.y || other.y + other.height <= one.y).toBe(true);
+    }
+    // The refitted frame starts where the grid was anchored.
+    expect(fitGroupFrame(placed)).toMatchObject({ x: 1000, y: 500 });
+  });
+});
