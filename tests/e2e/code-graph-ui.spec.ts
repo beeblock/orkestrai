@@ -235,6 +235,8 @@ test.describe('code graph UI', () => {
         await expect(graph.getByRole('button', { name: 'Search symbols' })).toBeVisible();
       }
 
+      // Workspace actions live in the workspaces drawer (right rail).
+      await page.locator('[data-rail-item="workspaces"]').click();
       await page.locator('.workspace-list li.active').getByRole('button', { name: 'Edit workspace' }).click();
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByRole('button', { name: 'Code Intelligence' })).toHaveText('Manual');

@@ -55,7 +55,7 @@
   import WorkspaceSharingDialog from '$lib/components/collaboration/WorkspaceSharingDialog.svelte';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
-  import { clearWorkspaceContext, publishWorkspaceContext } from '$lib/components/agent-room/workspace-context.svelte.js';
+  import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import WorkspaceMemoryDialog from '$lib/components/agent-room/WorkspaceMemoryDialog.svelte';
   import AnnotationCenterDialog from '$lib/components/agent-room/AnnotationCenterDialog.svelte';
   import HuddleDialog from '$lib/components/agent-room/HuddleDialog.svelte';
@@ -129,6 +129,13 @@
   import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import CanvasSummaryCard from '$lib/components/agent-room/canvas/CanvasSummaryCard.svelte';
   import CanvasComposer from '$lib/components/agent-room/canvas/CanvasComposer.svelte';
+  import CanvasSideRail, { type RailItem } from '$lib/components/agent-room/canvas/CanvasSideRail.svelte';
+  import CanvasQuickChips, { type QuickChip } from '$lib/components/agent-room/canvas/CanvasQuickChips.svelte';
+  import CanvasGitPill from '$lib/components/agent-room/canvas/CanvasGitPill.svelte';
+  import OrchestratorCanvasNode from '$lib/components/agent-room/canvas/OrchestratorCanvasNode.svelte';
+  import TeamMapDialog from '$lib/components/agent-room/canvas/TeamMapDialog.svelte';
+  import TeamComposer from '$lib/components/agent-room/canvas/TeamComposer.svelte';
+  import InkPanel from '$lib/components/agent-room/canvas/InkPanel.svelte';
   import ScoresPanel from '$lib/components/agent-room/canvas/ScoresPanel.svelte';
   import SaveScoreDialog from '$lib/components/agent-room/canvas/SaveScoreDialog.svelte';
   import MachinesDialog from '$lib/components/agent-room/canvas/MachinesDialog.svelte';
@@ -142,7 +149,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, Music4, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -187,40 +194,14 @@
     computer: ComputerCanvasNode,
     toolWorkshop: ToolWorkshopCanvasNode,
     design: DesignCanvasNode,
+    orchestrator: OrchestratorCanvasNode,
   };
 
-  // Mesmo destaque que cada no passa para o NodeShell — o minimapa vira uma
-  // legenda de cores em vez de 19 retangulos cinzas iguais.
-  const nodeAccents: Record<string, string> = {
-    terminal: 'var(--app-accent)',
-    note: 'var(--app-warning)',
-    fileTree: 'var(--app-success)',
-    git: 'var(--app-success)',
-    editor: 'var(--app-secondary)',
-    diff: 'var(--app-secondary)',
-    portal: 'var(--app-secondary)',
-    apiClient: 'var(--app-secondary)',
-    loop: 'var(--app-success)',
-    group: 'var(--app-secondary)',
-    shape: 'var(--app-accent)',
-    tasks: 'var(--app-success)',
-    flow: 'var(--app-accent)',
-    image: 'var(--app-secondary)',
-    imageWorkflow: 'var(--app-secondary)',
-    videoWorkflow: 'var(--app-secondary)',
-    sequence: 'var(--app-secondary)',
-    storyboard: 'var(--app-secondary)',
-    video: 'var(--app-secondary)',
-    usage: 'var(--app-warning)',
-    codeGraph: 'var(--app-secondary)',
-    device: 'var(--app-secondary)',
-    computer: 'var(--app-secondary)',
-    toolWorkshop: 'var(--app-secondary)',
-    design: 'var(--app-secondary)',
-  };
-
+  // The minimap is a quiet silhouette: selected nodes in gold, groups barely there.
   function minimapNodeColor(node: Node): string {
-    return nodeAccents[node.type ?? ''] ?? 'var(--app-border-strong)';
+    if (node.selected) return 'var(--app-accent)';
+    if (node.type === 'group') return 'color-mix(in srgb, var(--app-text) 6%, transparent)';
+    return 'color-mix(in srgb, var(--app-text) 26%, transparent)';
   }
 
   let workspaces = $state<Workspace[]>([]);
@@ -544,13 +525,38 @@
     const color = agentColor(workspaceId);
     return `--ws-tint:${color.bg};--ws-ink:${color.ink}`;
   }
-  // The dock floats at the top of the canvas, so its tooltips open downward.
-  setContext('toolbar-tooltip-side', 'bottom');
+  // The tool rail floats on the left of the canvas, so its tooltips and menus open to the right.
+  setContext('toolbar-tooltip-side', 'right');
   // The app top bar shows the mode switch and attention bell for this workspace.
   $effect(() => {
     publishWorkspaceContext('canvas', activeWorkspace?.id ?? null, nodes.find((node) => node.selected)?.id ?? canvasRouteNodeId());
   });
   onMount(() => () => clearWorkspaceContext('canvas'));
+  // Escape closes the workspaces drawer and the scores popover before anything else.
+  onMount(() => {
+    const closeOverlays = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || (!workspaceDrawerOpen && !scoresOpen && !teamComposerOpen)) return;
+      workspaceDrawerOpen = false;
+      scoresOpen = false;
+      teamComposerOpen = false;
+      event.stopPropagation();
+    };
+    window.addEventListener('keydown', closeOverlays, true);
+    return () => window.removeEventListener('keydown', closeOverlays, true);
+  });
+  // The top bar's workspace tabs switch the board in place.
+  onMount(() => registerWorkspaceSelector(async (id) => {
+    await selectWorkspace(id);
+    if (activeWorkspace?.id === id) history.replaceState(history.state, '', `/canvas?workspace=${encodeURIComponent(id)}`);
+  }));
+  // Created, renamed or removed workspaces refresh the tabs and the switcher.
+  let announcedWorkspaces = '';
+  $effect(() => {
+    const signature = workspaces.map((workspace) => `${workspace.id}:${workspace.name}:${workspace.icon ?? ''}`).join('|');
+    if (!workspacesLoaded || signature === announcedWorkspaces) return;
+    announcedWorkspaces = signature;
+    window.dispatchEvent(new CustomEvent('orkestrai:workspaces-changed'));
+  });
   // Live teammate status (headers, attention counts) follows the open workspace.
   $effect(() => {
     const workspaceId = activeWorkspace?.id ?? null;
@@ -733,6 +739,24 @@
   let drawTool = $state<DrawTool | null>(null);
   // Points of the stroke being drawn with the pen, in flow coordinates.
   let penStroke = $state.raw<Array<{ x: number; y: number }>>([]);
+  // Pen ink is remembered per device; strokes keep the ink they were drawn with.
+  let penColor = $state(readPenSetting('color', '#e8b84a'));
+  let penWidth = $state(Number(readPenSetting('width', '3')) || 3);
+  function readPenSetting(key: string, fallback: string): string {
+    try {
+      return localStorage.getItem(`orkestrai.pen.${key}`) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  $effect(() => {
+    try {
+      localStorage.setItem('orkestrai.pen.color', penColor);
+      localStorage.setItem('orkestrai.pen.width', String(penWidth));
+    } catch {
+      // Ink falls back to the defaults next time.
+    }
+  });
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
   // Provider armado junto com a ferramenta terminal (Claude/Codex/Kimi...) —
@@ -889,8 +913,15 @@
   let leaderDictationState = $state<LeaderDictationStatus>('idle');
   let leaderDictationNodeId = $state<string | null>(null);
   let sidebarCollapsed = $state(false);
-  // Fitted content stays clear of the dock, sidebar and composer floating over the canvas.
-  const fitPadding = $derived({ top: '76px', bottom: '92px', left: sidebarCollapsed ? '76px' : '300px', right: '40px' } as const);
+  // Workspaces, folders and their actions open as a drawer from the top bar or the right rail.
+  let workspaceDrawerOpen = $state(false);
+  let viewportZoom = $state(1);
+  let scoresOpen = $state(false);
+  let missionMapOpen = $state(false);
+  let teamComposerOpen = $state(false);
+  // Fitted content stays clear of the two rails and the composer floating over the canvas.
+  const CANVAS_INSET = { top: 28, bottom: 132, left: 84, right: 84 } as const;
+  const fitPadding = { top: `${CANVAS_INSET.top}px`, bottom: `${CANVAS_INSET.bottom}px`, left: `${CANVAS_INSET.left}px`, right: `${CANVAS_INSET.right}px` } as const;
   let importInput: HTMLInputElement;
   let visibleFloorId = $state<string | null>(null);
   let floors = $state<Floor[]>([]);
@@ -936,6 +967,9 @@
     else if (action === 'huddles' && activeWorkspace) huddleOpen = true;
     else if (action === 'organize' && activeWorkspace) void organizeCanvas();
     else if (action === 'command-palette') showPalette = true;
+    else if (action === 'workspaces') workspaceDrawerOpen = true;
+    else if (action === 'mission-map' && activeWorkspace) missionMapOpen = true;
+    else if (action === 'scores' && activeWorkspace) scoresOpen = true;
   }
 
   async function refreshAfterPresetApply() {
@@ -1289,6 +1323,7 @@
           scheduleActivity();
           if (message.workspaceId === activeWorkspace?.id) scheduleAgentStatusRefresh();
         }
+        if (message.type === 'attentionChanged') window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
         if (message.type === 'attentionChanged' && (!message.workspaceId || message.workspaceId === activeWorkspace?.id)) {
           scheduleAttentionRefresh();
         }
@@ -1410,22 +1445,8 @@
       }
     })();
     return () => {
-      toolbarResizeObserver?.disconnect();
       eventsSocket();
     };
-  });
-
-  // Overflow da toolbar: re-checa quando o tamanho/conteudo muda (resize,
-  // providers carregados, janela menor). Setas aparecem so quando ha para onde rolar.
-  let toolbarResizeObserver: ResizeObserver | null = null;
-
-  $effect(() => {
-    if (!toolbarEl) return;
-    void providers.length;
-    updateToolbarScroll();
-    toolbarResizeObserver ??= new ResizeObserver(updateToolbarScroll);
-    toolbarResizeObserver.observe(toolbarEl);
-    return () => toolbarResizeObserver?.disconnect();
   });
 
   function toFlowNode(node: CanvasNode): Node {
@@ -1462,6 +1483,8 @@
         onAgentSessionFound: (id: string, agentSessionId: string) => updateNodePayload(id, { agentSessionId, resumeRecovery: false }),
         connections: connectionsFor(node.id),
         onJumpToNode: jumpToNode,
+        onRecruit: () => (pendingAgentCreation = { provider: quickProviders[0] ?? null }),
+        onConnectAll: (orchestratorId: string) => connectAllToOrchestrator(orchestratorId),
         onRemoveConnection: removeConnection,
         onDelete: deleteNode,
         onDuplicate: duplicateShape,
@@ -1732,15 +1755,7 @@
   }
 
   // -- Setas de scroll da toolbar (so aparecem quando ha overflow) -----------
-  let toolbarEl = $state<HTMLDivElement | null>(null);
-  let canScrollLeft = $state(false);
-  let canScrollRight = $state(false);
 
-  function updateToolbarScroll() {
-    if (!toolbarEl) return;
-    canScrollLeft = toolbarEl.scrollLeft > 2;
-    canScrollRight = toolbarEl.scrollLeft < toolbarEl.scrollWidth - toolbarEl.clientWidth - 2;
-  }
 
   // Less frequent tools live in labelled groups; the dock keeps the everyday ones.
   const planTools = $derived<ToolGroupItem[]>([
@@ -1773,9 +1788,30 @@
     { id: 'ports', label: m['canvas.label_ports'](), hint: m['tool.ports'](), icon: RadioTower, active: showPortsPanel, onSelect: () => toggleSidePanel('ports') },
   ]);
 
-  function scrollToolbar(direction: 1 | -1) {
-    toolbarEl?.scrollBy({ left: direction * 220, behavior: 'smooth' });
-  }
+  const rightRailItems = $derived<RailItem[]>([
+    { id: 'team-map', label: m['canvas.team_map'](), icon: Network, active: missionMapOpen, onSelect: () => (missionMapOpen = !missionMapOpen) },
+    { id: 'huddles', label: m['huddle.title'](), icon: MessageCircleMore, active: huddleOpen, onSelect: () => (huddleOpen = true) },
+    { id: 'memory', label: m['knowledge.title'](), icon: BookMarked, active: memoryOpen, onSelect: () => (memoryOpen = true) },
+    { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, active: scoresOpen, onSelect: () => (scoresOpen = !scoresOpen) },
+    { id: 'presets', label: m['canvas.label_presets'](), icon: LayoutTemplate, active: showPresetPanel, onSelect: () => toggleSidePanel('presets') },
+    { id: 'floors', label: m['canvas.label_floors'](), icon: Layers, active: showFloorPanel, badge: floors.length || undefined, onSelect: () => toggleSidePanel('floors') },
+    { id: 'routines', label: m['canvas.label_routines'](), icon: CalendarClock, active: showRoutinePanel, onSelect: () => toggleSidePanel('routines') },
+    { id: 'roles', label: m['canvas.label_roles'](), icon: BadgeCheck, active: showRolesPanel, onSelect: () => toggleSidePanel('roles') },
+    { id: 'usage', label: m['canvas.label_usage'](), icon: Gauge, active: showUsagePanel, onSelect: () => toggleSidePanel('usage') },
+    { id: 'ports', label: m['canvas.label_ports'](), icon: RadioTower, active: showPortsPanel, onSelect: () => toggleSidePanel('ports') },
+    { id: 'workspaces', label: m['canvas.workspaces_drawer'](), icon: FolderCog, active: workspaceDrawerOpen, onSelect: () => (workspaceDrawerOpen = !workspaceDrawerOpen) },
+  ]);
+
+  const selectedForGroup = $derived(nodes.filter((node) => node.selected && node.type !== 'group').length);
+  const quickChips = $derived<QuickChip[]>([
+    { id: 'new-agent', label: m['canvas.chip_new_agent'](), icon: Plus, onSelect: () => (pendingAgentCreation = { provider: quickProviders[0] ?? null }) },
+    { id: 'orchestrator', label: m['orchestrator.title'](), icon: Orbit, onSelect: () => void addOrchestratorNode() },
+    { id: 'team', label: m['canvas.chip_team'](), icon: UsersRound, onSelect: () => (teamComposerOpen = !teamComposerOpen) },
+    { id: 'group', label: m['canvas.chip_group'](), icon: GroupIcon, hint: selectedForGroup < 2 ? m['canvas.chip_group_hint']() : undefined, disabled: selectedForGroup < 2, onSelect: () => groupSelection() },
+    { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, onSelect: () => (scoresOpen = !scoresOpen) },
+    { id: 'team-map', label: m['canvas.team_map'](), icon: Network, onSelect: () => (missionMapOpen = true) },
+  ]);
+
 
   // -- Descarregar workspace (encerra terminais vivos, mantem o layout) ---------
   let confirmUnload = $state(false);
@@ -2044,7 +2080,7 @@
         y: Math.round(shape.y),
         width: Math.round(shape.width),
         height: Math.round(shape.height),
-        payload: { shape: 'freehand', points: shape.points, stroke: '#7C4DFF', strokeWidth: 3, fill: 'transparent', label: '' },
+        payload: { shape: 'freehand', points: shape.points, stroke: penColor, strokeWidth: penWidth, fill: 'transparent', label: '' },
         floorId: visibleFloorId,
       }),
     });
@@ -2230,6 +2266,41 @@
       body: JSON.stringify({ type: 'tasks', title: m['canvas.default_tasks'](), ...position, ...nodeSize(rect, 400, 260, 560, 360), payload: {}, floorId: visibleFloorId }),
     });
     nodes = [...nodes, toFlowNode(node)];
+  }
+
+  // One orchestrator per board: the whole team in one node, beside the leader.
+  async function addOrchestratorNode(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const existing = nodes.find((node) => node.type === 'orchestrator');
+    if (existing) {
+      jumpToNode(existing.id);
+      toast.info(m['orchestrator.already']());
+      return;
+    }
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(380, 560);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'orchestrator', title: m['orchestrator.title'](), ...position, ...nodeSize(rect, 320, 360, 380, 560), payload: {}, floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    requestAnimationFrame(() => jumpToNode(node.id, Math.max(0.7, zoomApi?.getViewport().zoom ?? 1)));
+  }
+
+  /** Wires every agent on the board to the orchestrator; returns how many were added. */
+  async function connectAllToOrchestrator(orchestratorId: string): Promise<number> {
+    if (!activeWorkspace) return 0;
+    const linked = new Set(edges.flatMap((edge) => edge.source === orchestratorId ? [edge.target] : edge.target === orchestratorId ? [edge.source] : []));
+    const agents = nodes.filter((node) => node.type === 'terminal' && (node.data as { payload?: { provider?: string } }).payload?.provider && !linked.has(node.id));
+    let added = 0;
+    for (const agent of agents) {
+      try {
+        await handleConnect({ source: orchestratorId, target: agent.id, sourceHandle: null, targetHandle: null });
+        added += 1;
+      } catch {
+        // One failed wire must not stop the rest.
+      }
+    }
+    return added;
   }
 
   async function addUsageNode(rect?: { x: number; y: number; width: number; height: number }) {
@@ -2749,6 +2820,61 @@
     nodes = [...nodes, toFlowNode(groupNode)];
   }
 
+  // Team composer: up to twelve agents side by side inside one named group.
+  const TEAM_NAMES = ['Ada', 'Bia', 'Caio', 'Duda', 'Eva', 'Gil', 'Hugo', 'Iris', 'Juca', 'Lia', 'Nina', 'Otto'];
+  const teamProviders = $derived(providers.filter((provider) => provider.installed || canChooseAlternateRuntime));
+
+  async function composeTeam(team: { name: string; role: string | null; providerIds: string[] }, progress: (done: number) => void): Promise<boolean> {
+    if (!activeWorkspace) return false;
+    const chosen = team.providerIds
+      .map((id) => providers.find((provider) => provider.id === id))
+      .filter((provider): provider is AgentProviderInfo => Boolean(provider));
+    if (!chosen.length) return false;
+    const count = chosen.length;
+    const cols = Math.min(4, count);
+    const rows = Math.ceil(count / cols);
+    const width = 460, height = 300, gap = 28, pad = 36, top = 56;
+    const totalWidth = cols * width + (cols - 1) * gap + pad * 2;
+    const totalHeight = rows * height + (rows - 1) * gap + pad + top;
+    const origin = nextFreePosition(totalWidth, totalHeight);
+    const created: CanvasNode[] = [];
+    try {
+      for (const [index, provider] of chosen.entries()) {
+        const payload: TerminalNodePayload = provider.tui
+          ? { command: provider.tui.command, args: provider.tui.args, env: provider.tui.env, provider: provider.id }
+          : { command: provider.id, args: [], provider: provider.id };
+        if (team.role) payload.role = team.role;
+        const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'terminal',
+            title: uniqueNodeTitle(TEAM_NAMES[index % TEAM_NAMES.length]),
+            x: origin.x + pad + (index % cols) * (width + gap),
+            y: origin.y + top + Math.floor(index / cols) * (height + gap),
+            width,
+            height,
+            payload: { ...payload, theme: appSettings.terminalTheme },
+            floorId: visibleFloorId,
+          }),
+        });
+        created.push(node);
+        nodes = [...nodes, toFlowNode(node)];
+        progress(index + 1);
+      }
+      const groupNode = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'group', title: team.name, x: origin.x, y: origin.y, width: totalWidth, height: totalHeight, zIndex: -1, payload: { members: created.map((node) => node.id) }, floorId: visibleFloorId }),
+      });
+      nodes = [...nodes, toFlowNode(groupNode)];
+      toast.success(m['team_composer.created']({ name: team.name, count }));
+      requestAnimationFrame(() => zoomApi?.fitView({ nodes: [{ id: groupNode.id }], padding: fitPadding, duration: 400 } as never));
+      return true;
+    } catch {
+      toast.error(m['team_composer.failed']());
+      return false;
+    }
+  }
+
   async function ungroup(groupId: string) {
     if (!activeWorkspace) return;
     await api(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes/${groupId}`, { method: 'DELETE' });
@@ -2846,7 +2972,7 @@
     // the area they leave visible (design mode covers the chrome, so it keeps the plain center).
     const inset = designModeNodeId === nodeId
       ? { top: 0, bottom: 0, left: 0, right: 0 }
-      : { top: 76, bottom: 92, left: sidebarCollapsed ? 76 : 300, right: 40 };
+      : CANVAS_INSET;
     const scale = zoom;
     const shiftX = (inset.left - inset.right) / 2;
     const shiftY = (inset.top - inset.bottom) / 2;
@@ -3156,7 +3282,7 @@
 <svelte:window onkeydown={handleGlobalKeydown} oncopy={handleShapeCopy} onpaste={handleShapePaste} />
 
 <main class="canvas-page" style:--dock-side-clearance={sidebarCollapsed ? '64px' : '300px'}>
-  <aside class="sidebar" data-portal-occluder inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
+  <aside class="sidebar" class:open={workspaceDrawerOpen} id="workspace-drawer" data-portal-occluder inert={designModeNodeId !== null || !workspaceDrawerOpen} aria-hidden={designModeNodeId || !workspaceDrawerOpen ? 'true' : undefined} aria-label={m['canvas.workspaces_drawer']()}>
       <div class="sidebar-header">
         {#if !sidebarCollapsed}
           <h2>
@@ -3191,12 +3317,8 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {/if}
-        <HeaderIconButton
-          label={sidebarCollapsed ? m['canvas.sidebar_expand']() : m['canvas.sidebar_collapse']()}
-          side={sidebarCollapsed ? 'right' : 'bottom'}
-          onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
-        >
-          {#if sidebarCollapsed}<PanelLeftOpen size={14} />{:else}<PanelLeftClose size={14} />{/if}
+        <HeaderIconButton label={m['canvas.close_drawer']()} side="bottom" onclick={() => (workspaceDrawerOpen = false)}>
+          <X size={14} />
         </HeaderIconButton>
       </div>
     </div>
@@ -3278,26 +3400,6 @@
         {/if}
       </ul>
 
-      {#if teamMembers.length}
-        <section class="team-section" aria-labelledby="team-title">
-          <h2 id="team-title" class="team-title">{m['canvas.team']()}<span class="section-count">{teamMembers.length}</span></h2>
-          <ul class="team-list">
-            {#each teamMembers as member (member.id)}
-              <li>
-                <button type="button" class="team-row" onclick={() => jumpToNode(member.id)} aria-label={`${member.title}: ${member.label}`}>
-                  <AgentGlyph tone={member.tone} label={member.label} />
-                  <AgentAvatar nodeId={member.id} title={member.title} size={18} />
-                  <span class="team-name">{member.title}</span>
-                  {#if member.since}<span class="team-since">{member.since}</span>{/if}
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </section>
-      {/if}
-      {#if activeWorkspace}
-        <ScoresPanel workspaceId={activeWorkspace.id} onInserted={() => { if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
-      {/if}
       <div class="sidebar-footer">
         {#if creatingFolder}
           <div class="new-folder-row">
@@ -3332,7 +3434,7 @@
       ondragstart={(event) => handleDragStartWorkspace(event, workspace)}
       ondragend={handleDragEnd}
     >
-      <button class="workspace-item" aria-current={activeWorkspace?.id === workspace.id ? 'true' : undefined} onclick={() => selectWorkspace(workspace.id)}>
+      <button class="workspace-item" aria-current={activeWorkspace?.id === workspace.id ? 'true' : undefined} onclick={() => { workspaceDrawerOpen = false; void selectWorkspace(workspace.id); }}>
         <span class="workspace-icon tinted" style={workspaceTint(workspace.id)}>
           <WorkspaceIcon name={workspace.icon} size={13} />
         </span>
@@ -3468,7 +3570,7 @@
       <div class="contents" inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
       <ZoomBridge onReady={(api) => (zoomApi = api)} padding={() => ({ ...fitPadding, right: document.querySelector('.canvas-summary') ? '336px' : fitPadding.right })} />
       {#if penGhost}
-        <svg class="pen-ghost" aria-hidden="true"><path d={penGhost} /></svg>
+        <svg class="pen-ghost" aria-hidden="true"><path d={penGhost} style:stroke={penColor} style:stroke-width={`${penWidth * (zoomApi?.getViewport().zoom ?? 1)}px`} /></svg>
       {/if}
       {#if ghostRect}
         <div
@@ -3500,12 +3602,15 @@
         onpointerdown={handlePanePointerDown}
         onpointermove={handlePanePointerMove}
         onpointerup={handlePanePointerUp}
+        onmove={(_event, viewport) => { if (Math.abs(viewport.zoom - viewportZoom) > 0.004) viewportZoom = viewport.zoom; }}
       >
         {#if backgroundVariant !== 'none'}
           <Background gap={20} variant={backgroundVariant} patternColor="var(--app-grid)" />
         {/if}
         {#if appSettings.showControls !== 'false'}
-          <Controls position="bottom-right" orientation="horizontal" fitViewOptions={{ padding: fitPadding, duration: 300 }} />
+          <Controls position="bottom-right" orientation="horizontal" fitViewOptions={{ padding: fitPadding, duration: 300 }}>
+            {#snippet before()}<span class="zoom-level" aria-label={m['canvas.zoom_level']({ percent: Math.round(viewportZoom * 100) })}>{Math.round(viewportZoom * 100)}%</span>{/snippet}
+          </Controls>
         {/if}
         {#if appSettings.showMinimap !== 'false'}
           <MiniMap bgColor="var(--app-surface)" maskColor="color-mix(in srgb, var(--app-canvas) 72%, transparent)" nodeColor={minimapNodeColor} pannable zoomable />
@@ -3525,6 +3630,12 @@
               </Button>
             </div>
           {/if}
+          {#if activeWorkspace && teamComposerOpen}
+            <TeamComposer providers={teamProviders} onCreate={composeTeam} onClose={() => (teamComposerOpen = false)} />
+          {/if}
+          {#if activeWorkspace}
+            <CanvasQuickChips label={m['canvas.quick_actions']()} chips={quickChips} />
+          {/if}
           {#if activeWorkspace && composerTargets.length}
             <CanvasComposer
               workspaceId={activeWorkspace.id}
@@ -3541,18 +3652,23 @@
             <CanvasSummaryCard workspaceId={activeWorkspace.id} compact={summaryCompact || selectedTransferNodeIds.length > 0} onOpenAttention={() => window.dispatchEvent(new CustomEvent('orkestrai:open-attention'))} />
           </Panel>
         {/if}
-        <Panel position="top-center">
-          <div class="toolbar-wrap">
-            {#if canScrollLeft}
-              <button class="toolbar-arrow" aria-label={m['canvas.scroll_left']()} onclick={() => scrollToolbar(-1)}>
-                <ChevronLeft size={14} />
-              </button>
-            {/if}
-            <div class="toolbar" role="toolbar" aria-label={m['canvas.toolbar_label']()} bind:this={toolbarEl} onscroll={updateToolbarScroll}>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
-              <ToolbarButton label={m['tool.shell']()} hint={m['canvas.tool_drag_hint']()} dragTool="terminal" active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
-                <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
-              </ToolbarButton>
+        <Panel position="center-left" class="rail-panel">
+          {#if drawTool === 'freehand'}
+            <div class="ink-slot"><InkPanel bind:color={penColor} bind:width={penWidth} /></div>
+          {/if}
+          <div class="toolbar tool-rail" role="toolbar" aria-orientation="vertical" aria-label={m['canvas.toolbar_label']()}>
+            <Tooltip.Root>
+              <Tooltip.Trigger>
+                {#snippet child({ props })}
+                  <button {...props} type="button" class="rail-select" class:active={drawTool === null} aria-pressed={drawTool === null} aria-label={m['canvas.tool_select']()} data-testid="canvas-tool-select" onclick={() => { if (drawTool !== null) toggleDrawTool(drawTool, drawProvider ?? undefined); }}>
+                    <MousePointer2 size={15} strokeWidth={2} />
+                  </button>
+                {/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content side="right" class="flex-col items-start gap-0.5"><span>{m['canvas.tool_select']()}</span><span class="font-normal opacity-70">{m['canvas.tool_select_hint']()}</span></Tooltip.Content>
+            </Tooltip.Root>
+            <span class="rail-sep" aria-hidden="true"></span>
+            <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
               <AgentToolbarMenu
                 {providers}
                 {pinnedProviderIds}
@@ -3562,23 +3678,32 @@
                 onTogglePin={togglePinnedProvider}
                 onOpenProviderCenter={() => void goto('/providers')}
               />
-              <ToolbarButton label={m['huddle.title']()} active={huddleOpen} onclick={() => (huddleOpen = true)}>
-                <MessageCircleMore size={15} class="tool-icon-svg" /> {m['huddle.title']()}
+              <ToolbarButton label={m['tool.shell']()} hint={m['canvas.tool_drag_hint']()} dragTool="terminal" active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
+                <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
               </ToolbarButton>
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_create']()}>
+              <ToolbarButton label={m['orchestrator.tool']()} hint={m['orchestrator.tool_hint']()} onclick={() => void addOrchestratorNode()}>
+                <Orbit size={15} class="tool-icon-svg" /> {m['orchestrator.tool']()}
+              </ToolbarButton>
+            </div>
+            <span class="rail-sep" aria-hidden="true"></span>
+            <div class="tool-group" role="group" aria-label={m['canvas.group_create']()}>
               <ToolbarButton label={m['tool.note']()} hint={m['canvas.tool_drag_hint']()} dragTool="note" active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
                 <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['canvas.label_pen']()} hint={m['tool.pen']()} active={drawTool === 'freehand'} onclick={() => toggleDrawTool('freehand')}>
+                <PenLine size={15} class="tool-icon-svg" /> {m['canvas.label_pen']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['canvas.label_shape']()} hint={m['tool.shape']()} dragTool="shape" active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
+                <Shapes size={15} class="tool-icon-svg" /> {m['canvas.label_shape']()}
               </ToolbarButton>
               <ToolbarButton label={m['tool.tasks']()} hint={m['canvas.tool_drag_hint']()} dragTool="tasks" active={drawTool === 'tasks'} onclick={() => toggleDrawTool('tasks')}>
                 <SquareKanban size={15} class="tool-icon-svg" /> {m['canvas.default_tasks']()}
               </ToolbarButton>
               <ToolbarButton label={m['tool.portal']()} hint={m['canvas.tool_drag_hint']()} dragTool="portal" active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
-                <img src="/images/portal.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_portal']()}
+                <Globe size={15} class="tool-icon-svg" /> {m['canvas.default_portal']()}
               </ToolbarButton>
-              <ToolbarButton label={m['knowledge.title']()} active={memoryOpen} onclick={() => memoryOpen = true}>
-                <BookMarked size={15} class="tool-icon-svg" /> {m['knowledge.title']()}
+              <ToolbarButton label={m['tool.files']()} hint={m['canvas.tool_drag_hint']()} dragTool="fileTree" active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
+                <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
               </ToolbarButton>
               <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'audioWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onAudio={() => toggleDrawTool('audioWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
               <DesignToolbarMenu
@@ -3586,23 +3711,31 @@
                 onBlank={() => toggleDrawTool('design')}
                 onExploration={() => (designExplorationOpen = true)}
               />
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_more']()}>
-              <ToolGroupMenu label={m['canvas.dock_plan']()} heading={m['canvas.group_plan']()} items={planTools} />
-              <ToolGroupMenu label={m['canvas.dock_code']()} heading={m['canvas.group_code']()} items={codeTools} />
-              <ToolGroupMenu label={m['canvas.dock_devices']()} heading={m['canvas.group_devices']()} items={deviceTools} />
-              <ToolGroupMenu label={m['canvas.dock_workspace']()} heading={m['canvas.group_workspace']()} items={workspaceTools} />
-              <WorkspaceSharingButton variant="icon" workspaceId={activeWorkspace?.id ?? null} onOpen={() => (sharingOpen = true)} />
-              </div>
             </div>
-            {#if canScrollRight}
-              <button class="toolbar-arrow" aria-label={m['canvas.scroll_right']()} onclick={() => scrollToolbar(1)}>
-                <ChevronRight size={14} />
-              </button>
-            {/if}
+            <span class="rail-sep" aria-hidden="true"></span>
+            <div class="tool-group" role="group" aria-label={m['canvas.group_more']()}>
+              <ToolGroupMenu icon={Workflow} label={m['canvas.dock_plan']()} heading={m['canvas.group_plan']()} items={planTools} />
+              <ToolGroupMenu icon={CodeXml} label={m['canvas.dock_code']()} heading={m['canvas.group_code']()} items={codeTools} />
+              <ToolGroupMenu icon={MonitorSmartphone} label={m['canvas.dock_devices']()} heading={m['canvas.group_devices']()} items={deviceTools} />
+              <ToolGroupMenu icon={LayoutGrid} label={m['canvas.dock_workspace']()} heading={m['canvas.group_workspace']()} items={workspaceTools} />
+            </div>
           </div>
         </Panel>
+        {#if activeWorkspace}
+          <Panel position="center-right" class="side-rail-panel">
+            {#if scoresOpen}
+              <div class="scores-pop" role="dialog" aria-label={m['canvas.chip_scores']()}>
+                <ScoresPanel workspaceId={activeWorkspace.id} onInserted={() => { scoresOpen = false; if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
+              </div>
+            {/if}
+            <CanvasSideRail label={m['canvas.panels_label']()} items={rightRailItems}>
+              <WorkspaceSharingButton variant="icon" workspaceId={activeWorkspace.id} onOpen={() => (sharingOpen = true)} />
+            </CanvasSideRail>
+          </Panel>
+          <Panel position="bottom-left" class="git-pill-panel">
+            <CanvasGitPill workspaceId={activeWorkspace.id} onOpen={() => toggleSidePanel('floors')} />
+          </Panel>
+        {/if}
       </SvelteFlow>
       {#if showBlankCanvas}
         <div class="blank-canvas" role="region" aria-label={m['canvas.blank_title']()}>
@@ -3883,7 +4016,16 @@
     {/if}
     </SvelteFlowProvider>
   </section>
-<MachinesDialog bind:open={machinesOpen} programs={providers.map((provider) => ({ id: provider.id, label: provider.displayName }))} onOpenTerminal={addSshTerminal} />
+{#if activeWorkspace}
+    <TeamMapDialog
+      bind:open={missionMapOpen}
+      {nodes}
+      onJump={(nodeId) => jumpToNode(nodeId, Math.max(0.8, zoomApi?.getViewport().zoom ?? 1))}
+      onOpenFocus={(nodeId) => void goto(`/terminal?workspace=${encodeURIComponent(activeWorkspace?.id ?? '')}&node=${encodeURIComponent(nodeId)}`)}
+      onChat={(nodeId) => void goto(`/chat?workspace=${encodeURIComponent(activeWorkspace?.id ?? '')}&channel=${encodeURIComponent(`dm:${nodeId}`)}`)}
+    />
+  {/if}
+  <MachinesDialog bind:open={machinesOpen} programs={providers.map((provider) => ({ id: provider.id, label: provider.displayName }))} onOpenTerminal={addSshTerminal} />
 {#if activeWorkspace}
   <SaveScoreDialog bind:open={scoreDialogOpen} workspaceId={activeWorkspace.id} nodeIds={selectedTransferNodeIds} />
 {/if}
@@ -3916,18 +4058,20 @@
     margin-left: 0;
   }
 
-  /* Floating glass panel over the canvas: the map runs edge to edge behind it. */
+  /* Workspaces drawer: liquid glass beside the tool rail, closed until asked for. */
   .sidebar {
     position: absolute;
     top: 12px;
-    left: 12px;
-    z-index: var(--z-canvas-chrome);
-    width: 264px;
+    left: 70px;
+    z-index: var(--z-canvas-overlay);
+    width: 288px;
     max-height: calc(100% - 24px);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--app-sidebar) 82%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
-    backdrop-filter: blur(16px) saturate(140%);
+    border-radius: 18px;
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
     padding: 10px 8px;
     display: flex;
     flex-direction: column;
@@ -3935,6 +4079,16 @@
     /* A lista de workspaces rola; o cabecalho nunca encolhe (flex-shrink do
        flex container esmagava o cabecalho em 2 linhas sobre a lista). */
     overflow: hidden;
+    transform-origin: top left;
+    animation: drawer-in var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  .sidebar:not(.open) {
+    display: none;
+  }
+
+  @keyframes drawer-in {
+    from { opacity: 0; transform: translateX(-8px) scale(0.98); }
   }
 
   .sidebar-header {
@@ -4597,14 +4751,16 @@
    */
   /* Minimap with the zoom row under it, bottom right; the composer owns the bottom center. */
   .canvas-area :global(.svelte-flow__minimap) {
-    bottom: 50px;
+    bottom: 58px;
+    right: 4px;
     width: 176px;
-    height: 116px;
-    background: color-mix(in srgb, var(--app-surface) 80%, transparent);
-    border: 0;
-    border-radius: 12px;
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-panel);
-    backdrop-filter: blur(14px) saturate(140%);
+    height: 112px;
+    background: var(--app-glass);
+    border: 1px solid var(--app-glass-line);
+    border-radius: 14px;
+    box-shadow: var(--app-glass-shadow);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
     overflow: hidden;
   }
 
@@ -4613,24 +4769,44 @@
     height: 100%;
   }
 
+  /* Zoom pill: − 75% + then fit and lock, like a native window control. */
   .canvas-area :global(.svelte-flow__controls) {
     bottom: 4px;
+    margin-bottom: 14px;
+    margin-right: 14px;
     padding: 3px;
-    gap: 2px;
-    border: 0;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--app-surface) 80%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-panel);
-    backdrop-filter: blur(14px) saturate(140%);
+    gap: 1px;
+    align-items: center;
+    border: 1px solid var(--app-glass-line);
+    border-radius: 999px;
+    background: var(--app-glass);
+    box-shadow: var(--app-glass-shadow);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
     overflow: hidden;
   }
 
+  .canvas-area :global(.svelte-flow__controls-zoomout) { order: 1; }
+  .canvas-area :global(.zoom-level) { order: 2; }
+  .canvas-area :global(.svelte-flow__controls-zoomin) { order: 3; }
+  .canvas-area :global(.svelte-flow__controls-fitview) { order: 4; }
+  .canvas-area :global(.svelte-flow__controls-interactive) { order: 5; }
+
+  .canvas-area :global(.zoom-level) {
+    min-width: 44px;
+    text-align: center;
+    color: var(--app-text-soft);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .canvas-area :global(.svelte-flow__controls-button) {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     padding: 6px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 999px;
     background: transparent;
     color: var(--app-text-soft);
     transition: background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
@@ -4763,57 +4939,35 @@
     }
   }
 
-  .toolbar-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 2px;
-  }
-
-  .toolbar-arrow {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    flex-shrink: 0;
-    border: 0;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--app-surface-raised) 94%, transparent);
-    color: var(--app-text-soft);
-    cursor: pointer;
-    backdrop-filter: blur(12px);
-    box-shadow: var(--app-shadow-panel);
-    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
-  }
-
-  .toolbar-arrow:hover {
-    background: var(--app-surface-raised);
-    color: var(--app-text);
-  }
-
-  .toolbar-arrow:active {
-    transform: scale(var(--scale-press));
-  }
-
   /*
-   * Dock de ferramentas: grupos por categoria separados por divisores finos.
-   * Raio concentrico: dock 12px com 4px de respiro -> botoes 8px.
+   * Tool rail: one vertical liquid-glass column on the left of the board.
+   * The active tool glows gold; Select is a solid gold disc like a cursor.
    */
+  .canvas-area :global(.rail-panel) {
+    margin-left: 14px;
+  }
+
+  .ink-slot {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
   .toolbar {
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 4px;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--app-surface) 80%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
-    backdrop-filter: blur(14px) saturate(140%);
-    /* Muitos botoes (providers + paineis): rola em vez de cortar fora da tela.
-       O dock fica centrado; a largura livre e simetrica a sidebar flutuante
-       (276 + margens) para nunca passar por baixo dela. */
-    max-width: max(320px, calc(100vw - 2 * var(--dock-side-clearance, 300px) - 72px));
-    overflow-x: auto;
+    padding: 6px 5px;
+    border-radius: 18px;
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+    max-height: calc(100vh - 230px);
+    overflow-y: auto;
     scrollbar-width: none;
   }
 
@@ -4823,17 +4977,80 @@
 
   .tool-group {
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 2px;
     flex-shrink: 0;
   }
 
-  .toolbar-sep {
-    width: 1px;
-    height: 18px;
+  .toolbar :global(button) {
+    border-radius: 11px;
+  }
+
+  .rail-select {
+    width: 32px;
+    height: 32px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50% !important;
+    background: transparent;
+    color: var(--app-text-muted);
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out), box-shadow var(--duration-quick) ease-out;
+  }
+
+  .rail-select:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .rail-select.active {
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 18%, transparent), 0 6px 16px color-mix(in srgb, var(--app-accent) 30%, transparent);
+  }
+
+  .rail-select:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .rail-select:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .rail-sep {
+    width: 18px;
+    height: 1px;
     flex-shrink: 0;
-    margin: 0 4px;
-    background: var(--app-border);
+    margin: 4px 0;
+    background: var(--app-glass-line);
+  }
+
+  .canvas-area :global(.side-rail-panel) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 14px;
+  }
+
+  .scores-pop {
+    width: 280px;
+    max-height: min(460px, calc(100vh - 260px));
+    overflow-y: auto;
+    padding: 8px;
+    border-radius: 16px;
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+    animation: drawer-in var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  .canvas-area :global(.git-pill-panel) {
+    margin: 0 0 18px 14px;
   }
 
   /* Sem workspace aberto: ponto de partida com a acao principal a vista. */

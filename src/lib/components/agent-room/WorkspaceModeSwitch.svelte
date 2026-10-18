@@ -29,15 +29,15 @@
   // Controle segmentado: trilho neutro, segmento ativo elevado. Raio
   // concentrico: trilho 8px com 2px de respiro -> segmento 6px.
   const itemClass = (selected: boolean) =>
-    `inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-ui-sm font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${
+    `inline-flex h-[26px] flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium transition-[background-color,color,box-shadow] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] ${
       selected
-        ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-border'
+        ? 'bg-[color-mix(in_srgb,var(--app-text)_10%,transparent)] text-[var(--app-text)] shadow-[inset_0_1px_0_color-mix(in_srgb,#fff_8%,transparent)]'
         : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'
     }`;
 </script>
 
 <nav
-  class="flex h-8 items-center gap-0.5 rounded-lg bg-[var(--app-hover)] p-0.5"
+  class="flex h-[30px] items-center gap-0.5 rounded-[10px] border border-[var(--app-glass-line)] bg-[color-mix(in_srgb,var(--app-surface)_50%,transparent)] p-[1px]"
   aria-label={m['workspace_view.switcher_label']()}
 >
   <a

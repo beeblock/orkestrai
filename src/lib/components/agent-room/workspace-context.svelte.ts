@@ -25,3 +25,21 @@ export function clearWorkspaceContext(mode: WorkspaceMode): void {
   workspaceContext.workspaceId = null;
   workspaceContext.nodeId = null;
 }
+
+type WorkspaceSelector = (workspaceId: string) => void | Promise<void>;
+let workspaceSelector: WorkspaceSelector | null = null;
+
+/** The page on screen switches workspaces in place (keeps its mode and state). */
+export function registerWorkspaceSelector(selector: WorkspaceSelector): () => void {
+  workspaceSelector = selector;
+  return () => {
+    if (workspaceSelector === selector) workspaceSelector = null;
+  };
+}
+
+/** Asks the page on screen to open another workspace; false when no page can. */
+export function requestWorkspace(workspaceId: string): boolean {
+  if (!workspaceSelector) return false;
+  void workspaceSelector(workspaceId);
+  return true;
+}

@@ -17,7 +17,7 @@
   import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
-  import { clearWorkspaceContext, publishWorkspaceContext } from '$lib/components/agent-room/workspace-context.svelte.js';
+  import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { directChannel, directChannelNode, TEAM_CHANNEL, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import type { CanvasNode, TerminalNodePayload, Workspace } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -241,10 +241,23 @@
     void api<Workspace[]>('/api/agent-room/workspaces').then((list) => {
       workspaces = list;
       const requested = params.get('workspace');
-      workspaceId = list.find((candidate) => candidate.id === requested)?.id ?? list[0]?.id ?? null;
+      const remembered = localStorage.getItem('orkestrai.activeWorkspaceId');
+      workspaceId = list.find((candidate) => candidate.id === requested)?.id ?? list.find((candidate) => candidate.id === remembered)?.id ?? list[0]?.id ?? null;
       if (!workspaceId) loading = false;
     }).catch(() => (loading = false));
-    return () => clearWorkspaceContext('chat');
+    // The top bar's workspace tabs switch the conversation in place.
+    const unregister = registerWorkspaceSelector((id) => {
+      if (id === workspaceId) return;
+      localStorage.setItem('orkestrai.activeWorkspaceId', id);
+      workspaceId = id;
+      channel = TEAM_CHANNEL;
+      messages = [];
+      profileNodeId = null;
+    });
+    return () => {
+      unregister();
+      clearWorkspaceContext('chat');
+    };
   });
 
   $effect(() => {
@@ -302,7 +315,10 @@
           reloadTimer = setTimeout(() => { reloadTimer = null; void loadMessages(); }, 600);
         }
         if (frame.type === 'controlCenterChanged') scheduleAgentStatusRefresh();
-        if (frame.type === 'attentionChanged') scheduleAttentionRefresh();
+        if (frame.type === 'attentionChanged') {
+          scheduleAttentionRefresh();
+          window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
+        }
       };
       socket.onclose = () => {
         if (!disposed) reconnect = setTimeout(connect, 3_000);

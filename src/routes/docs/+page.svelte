@@ -330,7 +330,7 @@
             <div class="mt-6 border-t border-[var(--line)]">
               {#each section.examples as example (example.id)}
                 <section class="border-t border-[var(--line)] py-6 first:border-t-0">
-                  <h3 class="m-0 font-['Sora_Variable'] text-[14px] font-semibold text-[var(--copy)]">{example.title}</h3>
+                  <h3 class="m-0 text-[14px] font-semibold text-[var(--copy)]">{example.title}</h3>
                   <p class="mt-1.5 text-[12.5px] leading-5 text-[var(--copy-muted)]">{example.description}</p>
                   <div class="mt-4 grid gap-4">
                     {#each example.snippets as snippet (snippet.id)}
@@ -370,7 +370,7 @@
           {#each changelog as entry (entry.date)}
             <details class="group border-t border-[var(--line)] first:border-t-0">
               <summary class="flex min-h-12 cursor-pointer list-none items-center gap-3 py-3 outline-none transition-colors hover:text-[var(--app-accent)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]/45 [&::-webkit-details-marker]:hidden">
-                <span class="min-w-0 flex-1 font-['Sora_Variable'] text-xs font-semibold text-[var(--cyan)] tabular-nums">{entry.date}</span>
+                <span class="min-w-0 flex-1 text-xs font-semibold text-[var(--cyan)] tabular-nums">{entry.date}</span>
                 <span class="text-[11px] text-[var(--copy-muted)] tabular-nums">
                   {m['docs.changelog_change_count']({ count: String(entry.items.length) })}
                 </span>

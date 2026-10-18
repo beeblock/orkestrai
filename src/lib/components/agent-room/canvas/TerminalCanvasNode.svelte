@@ -9,6 +9,7 @@
   import NodeShell from './NodeShell.svelte';
   import NodeEmptyState from './NodeEmptyState.svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
+  import StatusPill from '../StatusPill.svelte';
   import AgentGlyph from '../AgentGlyph.svelte';
   import NodeAttentionBanner from './NodeAttentionBanner.svelte';
   import AgentChatFace from '../chat/AgentChatFace.svelte';
@@ -644,6 +645,7 @@
   {selected}
   class="canvas-terminal"
   accent="var(--app-accent)"
+  edge={statusTone === 'working' ? 'color-mix(in srgb, var(--app-accent) 52%, transparent)' : statusTone === 'attention' ? 'color-mix(in srgb, var(--app-warning) 60%, transparent)' : statusTone === 'blocked' ? 'color-mix(in srgb, var(--app-danger) 60%, transparent)' : null}
   minWidth={360}
   minHeight={220}
   onResize={data.onResize}
@@ -673,6 +675,7 @@
         {/if}
         {#if launchModel}<span class="terminal-model">{launchModel}</span>{/if}
       </span>
+      <StatusPill tone={statusTone} label={statusLabel} />
     {/if}
     {#if runtimeOverride}
       <span class="terminal-status-chip" role="status" title={runtimeTitle} aria-label={runtimeTitle}>
@@ -1057,10 +1060,12 @@
     align-items: center;
     gap: 2px;
     padding: 3px;
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--app-surface-raised) 92%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
-    backdrop-filter: blur(14px) saturate(140%);
+    border-radius: 12px;
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
   }
 
   :global(.node-quickbar .quick) {
@@ -1193,10 +1198,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    min-height: 40px;
+    min-height: 34px;
     padding: 0 6px;
-    border-top: 1px solid var(--app-border);
-    background: var(--app-surface);
+    border-top: 1px solid color-mix(in srgb, var(--app-text) 6%, transparent);
+    background: color-mix(in srgb, var(--app-surface-raised) 40%, var(--app-surface));
     transition: background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
   }
 
@@ -1328,11 +1333,11 @@
     min-width: 0;
     max-width: 120px;
     height: 22px;
-    padding: 0 7px;
+    padding: 0 3px;
     border-radius: 6px;
-    background: var(--app-hover);
-    color: var(--app-text-soft);
-    font-size: 11px;
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
   }
 
   /* Status, teammate color and initials stay together at the start of the header. */
@@ -1390,7 +1395,7 @@
     justify-content: center;
     width: 22px;
     height: 22px;
-    color: var(--app-warning);
+    color: var(--app-accent);
   }
 
   .theme-swatch {

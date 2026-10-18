@@ -250,7 +250,9 @@
     return { path: pathD, midX: mid.x, midY: mid.y };
   });
 
-  const stroke = $derived(talking ? 'var(--app-success)' : pinned || endpointSelected ? 'var(--app-accent)' : 'var(--app-edge)');
+  // Gold wire while two teammates talk or one end is selected; quiet dashes otherwise.
+  const stroke = $derived(talking || pinned || endpointSelected ? 'var(--app-accent)' : 'var(--app-edge)');
+  const lit = $derived(talking || pinned || endpointSelected);
 
   // O X so aparece com hover na corda (ou no proprio botao) ou com a edge
   // selecionada/pinned — escondido ele nao intercepta cliques do canvas.
@@ -296,18 +298,27 @@
       onpointerenter={showControls}
       onpointerleave={scheduleHideControls}
     />
+    {#if lit}
+      <path d={path.path} fill="none" stroke={stroke} stroke-width="8" stroke-linecap="round" class="edge-glow" style="pointer-events: none" />
+    {/if}
     <path
       {id}
       d={path.path}
       fill="none"
       stroke={stroke}
-      stroke-width={talking ? 2.4 : endpointSelected ? 2 : 1.6}
-      stroke-dasharray="7 5"
+      stroke-width={talking ? 2.2 : endpointSelected ? 1.9 : 1.4}
+      stroke-dasharray={lit ? undefined : '6 6'}
       stroke-linecap="round"
       class="edge-line"
+      class:lit
       class:animated={talking && profile.animateActivity}
       style="pointer-events: none"
     />
+    {#if talking && profile.animateActivity && inViewport}
+      <circle r="3.6" class="edge-spark" style="pointer-events: none">
+        <animateMotion dur="1.6s" repeatCount="indefinite" path={path.path} />
+      </circle>
+    {/if}
     {#if hovered || pinned || selected}
       <EdgeLabel x={Math.round(path.midX)} y={Math.round(path.midY)} selectEdgeOnClick>
         <button
@@ -330,7 +341,28 @@
 
 <style>
   .edge-line {
-    transition: stroke var(--duration-quick) ease-out;
+    opacity: 0.7;
+    transition: stroke var(--duration-quick) ease-out, opacity var(--duration-quick) ease-out;
+  }
+
+  .edge-line.lit {
+    opacity: 1;
+  }
+
+  .edge-glow {
+    opacity: 0.16;
+    filter: blur(2.5px);
+  }
+
+  .edge-spark {
+    fill: #fff;
+    filter: drop-shadow(0 0 4px var(--app-accent)) drop-shadow(0 0 8px var(--app-accent));
+  }
+
+  :global(.svelte-flow[data-canvas-navigating='true']) .edge-glow,
+  :global(.svelte-flow[data-canvas-overview='true']) .edge-glow,
+  :global(.svelte-flow[data-canvas-navigating='true']) .edge-spark {
+    display: none;
   }
 
   /* Keep EdgeLabel controls mounted (they portal outside this SVG), including

@@ -8,7 +8,7 @@ import {
 
 describe('terminal themes', () => {
   it('keeps every built-in theme selectable and complete', () => {
-    expect(TERMINAL_THEME_ORDER).toHaveLength(15);
+    expect(TERMINAL_THEME_ORDER).toHaveLength(16);
     expect(new Set(TERMINAL_THEME_ORDER).size).toBe(TERMINAL_THEME_ORDER.length);
 
     for (const name of TERMINAL_THEME_ORDER) {
@@ -27,7 +27,7 @@ describe('terminal themes', () => {
   it('normalizes legacy values and still supports deterministic cycling', () => {
     expect(normalizeTerminalTheme('tokyo-night')).toBe('tokyo-night');
     expect(normalizeTerminalTheme('unknown')).toBe('dark');
-    expect(nextTerminalTheme('dark')).toBe('obsidian');
+    expect(nextTerminalTheme('dark')).toBe('midnight');
     expect(nextTerminalTheme(TERMINAL_THEME_ORDER.at(-1))).toBe('dark');
   });
 });

@@ -32,8 +32,8 @@
     width: 78%;
     height: 78%;
     background: transparent;
-    border: 1.6px solid color-mix(in srgb, var(--app-info) 25%, transparent);
-    border-top-color: var(--app-info);
+    border: 1.6px solid color-mix(in srgb, var(--app-accent) 25%, transparent);
+    border-top-color: var(--app-accent);
     animation: agent-glyph-spin 0.9s linear infinite;
   }
   [data-tone='attention'] .mark {
@@ -60,6 +60,6 @@
     to { transform: rotate(360deg); }
   }
   @media (prefers-reduced-motion: reduce) {
-    [data-tone='working'] .mark { animation: none; border-color: var(--app-info); }
+    [data-tone='working'] .mark { animation: none; border-color: var(--app-accent); }
   }
 </style>

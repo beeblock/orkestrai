@@ -82,3 +82,10 @@ export async function createNodeOnCanvas(page: Page, buttonName: string, positio
     // nos sem dialogo (nota, arquivos...) nascem direto
   }
 }
+
+/** Opens a workspace through the top bar switcher (the Canvas list now lives in a drawer). */
+export async function openWorkspace(page: Page, name: string) {
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menuitem').filter({ hasText: name }).first().click();
+  await expect(page.locator('.ws-tab.active')).toContainText(name, { timeout: 15_000 });
+}

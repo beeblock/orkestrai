@@ -170,15 +170,19 @@
     display: flex;
     align-items: flex-end;
     gap: 6px;
-    padding: 6px;
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--app-surface) 84%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
-    backdrop-filter: blur(16px) saturate(140%);
+    padding: 7px;
+    border-radius: 22px;
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+    transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
   }
 
   .composer:focus-within {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 55%, transparent), var(--app-shadow-overlay);
+    border-color: color-mix(in srgb, var(--app-accent) 50%, transparent);
+    box-shadow: var(--app-glass-shadow), 0 0 0 4px color-mix(in srgb, var(--app-accent) 10%, transparent);
   }
 
   .composer :global(.target) {
@@ -189,7 +193,7 @@
     gap: 7px;
     padding: 0 8px 0 6px;
     border: 0;
-    border-radius: 10px;
+    border-radius: 999px;
     background: var(--app-hover);
     color: var(--app-text);
     font: inherit;
@@ -241,7 +245,7 @@
     display: grid;
     place-items: center;
     border: 0;
-    border-radius: 10px;
+    border-radius: 999px;
     cursor: pointer;
   }
 
@@ -258,6 +262,12 @@
   .send {
     background: var(--app-accent);
     color: var(--app-accent-contrast);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--app-accent) 32%, transparent);
+    transition: transform var(--duration-quick) var(--ease-smooth-out), opacity var(--duration-quick) ease-out;
+  }
+
+  .send:active:not(:disabled) {
+    transform: scale(var(--scale-press));
   }
 
   .send:disabled {
@@ -277,9 +287,12 @@
     bottom: calc(100% + 8px);
     min-width: 260px;
     padding: 4px;
-    border-radius: 12px;
-    background: var(--app-surface-raised);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
+    border-radius: 14px;
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
   }
 
   .mention {

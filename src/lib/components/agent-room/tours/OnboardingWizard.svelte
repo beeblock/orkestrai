@@ -271,7 +271,7 @@
   }
 
   .wizard-title {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
+    font-family: var(--font-display);
     font-size: 19px;
     font-weight: 600;
     margin: 0;

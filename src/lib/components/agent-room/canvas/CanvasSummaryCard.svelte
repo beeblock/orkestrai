@@ -110,11 +110,18 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--app-surface) 82%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
-    backdrop-filter: blur(16px) saturate(140%);
+    border-radius: 18px;
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
     color: var(--app-text);
+    animation: summary-in var(--duration-slow) var(--ease-smooth-out);
+  }
+
+  @keyframes summary-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   }
 
   header {
@@ -184,13 +191,14 @@
     height: 28px;
     padding: 0 12px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 999px;
     background: var(--app-accent);
     color: var(--app-accent-contrast);
     font: inherit;
     font-size: 12.5px;
     font-weight: 600;
     cursor: pointer;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--app-accent) 28%, transparent);
   }
 
   .open:hover {
@@ -209,11 +217,12 @@
     align-items: center;
     gap: 7px;
     padding: 0 12px;
-    border: 0;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--app-surface) 84%, transparent);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-overlay);
-    backdrop-filter: blur(16px) saturate(140%);
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
     color: var(--app-text-soft);
     font: inherit;
     font-size: 12.5px;

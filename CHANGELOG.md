@@ -19,6 +19,13 @@ pt-BR, English, and Spanish translations.
 - Set group titles and summary figures in a condensed display face (Archivo, SIL Open Font License).
 - Rename the Workbench to Focus in the interface, guides and agent instructions; the top bar switches between Canvas, Focus and Chat.
 - Center a node opened from the team list, search or a link in the area the floating Canvas chrome leaves visible (design mode keeps the plain center). Phone cards clamp long requests until tapped, label approvals, questions and blocked agents, and the phone chat shows who an agent asked and the reply.
+- Redesign the Canvas chrome in liquid glass: a warm near-black palette with the gold accent, a vertical tool rail on the left (Select, agents, Shell, Orchestrator, Note, Pen, Shape, Tasks, Portal, Files, media, Design and the Plan, Code, Devices and Workspace menus), a panel rail on the right (team map, Huddles, Second Brain, scores, presets, floors, routines, roles, usage, ports, sharing and workspaces), quick-action pills above a pill-shaped message bar, a branch pill with the number of changed files at the bottom left and a zoom pill with the current zoom at the bottom right.
+- Show open workspaces as tabs in the top bar, each with its own Needs you count, plus a switcher that lists and searches every workspace; the top bar also shows how many teammates are live and the tightest usage window with its reset time. Workspaces, folders, import, export and editing move to a drawer opened from the switcher or the right rail.
+- Give every node a thin outline in its live state color (gold while working, orange when it needs the owner, red when blocked), a deeper shadow, a gold glow when selected and a short fade-in; agent headers show a status pill.
+- Draw named groups as tinted team frames with a glass label that reads "NAME n · k working", growing into headlines at overview zoom.
+- Light connections in gold while two teammates talk or one end is selected, with a glow and a traveling spark; idle connections stay as quiet dashes.
+- Turn notes into sticky paper in nine colors with dark ink (or dark glass), and let each note choose handwriting, text or mono type in three sizes.
+- Use the canvas surface as the default terminal theme (warm ink, gold cursor); the previous default stays available as Midnight.
 
 ### Added
 
@@ -40,6 +47,10 @@ pt-BR, English, and Spanish translations.
 - Add scores: save a canvas selection as a selection-scoped preset (nodes, connections between them, roles of the selected agents and their routines; no tasks, MCP servers or skills) and place it into any workspace from the new Scores section of the Canvas sidebar.
 - Add a pen tool that turns each stroke into a freehand shape node (simplified and normalized like arrow points).
 - Add SSH machines: hosts from ~/.ssh/config (patterns skipped) can open a shell or an agent CLI on that machine in a terminal node that runs the local ssh client; host aliases are validated and the remote folder is shell-quoted.
+- Add the Orchestrator node: the whole team in one card, grouped by named group with each agent's state, a working count, Recruit, Connect (wires every agent to it) and one field that commands the team (unmentioned messages go to the leader, @ reaches named agents).
+- Add the team map: the leader or orchestrator, the named groups and every agent as a tree, with filters (All, Working, Needs you, Idle, Done), search, fleet and structure counts, and a side panel to go to an agent, open it in Focus or start a chat.
+- Add the team composer: name a team, pick a role, line up to twelve agents with their CLIs and create them side by side inside a named group in one action.
+- Add pen options beside the tool rail: ten ink colors and five stroke widths, remembered on this device.
 
 ## 0.42.2 - 2026-10-16
 
