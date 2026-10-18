@@ -256,7 +256,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'agent-b',
         title: 'O agente da feature',
-        body: 'Crio o agente da frente B. No painel Andares, troque a camada visível e arraste-o para lá — ele passa a trabalhar no checkout do andar.',
+        body: 'Crio o agente da frente B. No painel Andares, troque a camada visível e arraste-o para lá — ele passa a trabalhar no checkout do andar. No Térreo ele continua visível com o selo do andar.',
         action: { kind: 'createAgent', title: 'Dev Feature', provider: 'codex' },
         check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Dev Feature' },
       },

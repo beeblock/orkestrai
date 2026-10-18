@@ -112,6 +112,7 @@
   import CommandPalette, { type PaletteAction } from '$lib/components/agent-room/canvas/CommandPalette.svelte';
   import { alignRects, arrangeGroupMembers, boundingBox, distributeRects, fitGroupFrame, organizeByConnections, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
   import { findFreeCanvasPosition } from '$lib/modules/agent-room/domain/canvas-placement.js';
+  import { settleFloorAgents, shownOnFloor } from '$lib/modules/agent-room/domain/canvas-floors.js';
   import type { TerminalThemeName } from '$lib/components/agent-room/terminal-themes.js';
   import {
     LEADER_DICTATION_COMMAND,
@@ -1057,7 +1058,7 @@
     }
 
     leaderDictationNodeId = leader.id;
-    if ((leader.floorId ?? null) !== visibleFloorId) await selectFloor(leader.floorId ?? null);
+    if (!shownOnFloor(leader, visibleFloorId)) await selectFloor(leader.floorId ?? null);
     await tick();
     dispatchLeaderDictation(leader.id);
   }
@@ -1266,7 +1267,7 @@
       changedConnections.add(edge.target);
     }
     nodes = canvasNodes
-      .filter((node) => (node.floorId ?? null) === visibleFloorId)
+      .filter((node) => shownOnFloor(node, visibleFloorId))
       .map((node) => {
         const previous = previousById.get(node.id);
         // Keep live terminal/component inputs stable when a different node or
@@ -1524,6 +1525,9 @@
         providers,
         workingDir: floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.',
         workspaceRoot: activeWorkspace?.workingDir ?? '.',
+        // The ground floor shows every agent; its chip names the worktree it codes in.
+        floorName: visibleFloorId === null && node.floorId ? floors.find((floor) => floor.id === node.floorId)?.name ?? null : null,
+        onOpenFloor: node.floorId ? () => void selectFloor(node.floorId ?? null) : undefined,
         executionRuntime,
         workspaceRuntime,
         payload: node.payload,
@@ -1696,7 +1700,7 @@
       activeWorkspace = cached.workspace;
       floors = cached.floors;
       nodes = cached.nodes
-        .filter((node) => (node.floorId ?? null) === visibleFloorId)
+        .filter((node) => shownOnFloor(node, visibleFloorId))
         .map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = cached.edges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
@@ -1736,12 +1740,13 @@
         });
       }
       nodes = canvasNodes
-        .filter((node) => (node.floorId ?? null) === visibleFloorId)
+        .filter((node) => shownOnFloor(node, visibleFloorId))
         .map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
       writeWorkspaceViewCache({ workspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
       repairGroupFrames();
+      settleFloorAgentsOnGround(canvasNodes);
       void providerStatusRequest.then((providerStatus) => {
         if (requestId !== selectionRequestId || activeWorkspace?.id !== id) return;
         providers = providerStatus.providers ?? [];
@@ -1774,10 +1779,18 @@
         api<CanvasEdge[]>(`/api/agent-room/workspaces/${workspaceId}/edges`),
       ]);
       if (requestId !== selectionRequestId || activeWorkspace?.id !== workspaceId) return;
-      nodes = canvasNodes.filter((node) => (node.floorId ?? null) === visibleFloorId).map(toFlowNode);
+      nodes = canvasNodes.filter((node) => shownOnFloor(node, visibleFloorId)).map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+      settleFloorAgentsOnGround(canvasNodes);
     }
+  }
+
+  // Agents laid out while each floor had its own view can cover a ground-floor node: move them below the board.
+  function settleFloorAgentsOnGround(canvasNodes: CanvasNode[]) {
+    if (visibleFloorId !== null) return;
+    const moves = settleFloorAgents(canvasNodes);
+    if (moves.length) void applyPositions(new Map(moves.map((move) => [move.id, { x: move.x, y: move.y }])));
   }
 
   async function exportActiveWorkspace() {

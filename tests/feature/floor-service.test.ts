@@ -11,6 +11,9 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import * as diskGuard from '$lib/modules/agent-room/infrastructure/disk-guard.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
+import { CreateCanvasNodeDto } from '$lib/modules/agent-room/application/dto/WorkspaceDtos.js';
+import { canvasRectsOverlap } from '$lib/modules/agent-room/domain/canvas-placement.js';
 
 const repos: string[] = [];
 
@@ -59,6 +62,26 @@ describe('FloorService', () => {
     await floorService.remove(floor.id, true);
     expect(await floorService.list(workspace.id)).toHaveLength(0);
     expect(git(dir, ['branch', '--list', 'orkestrai/*'])).not.toContain('fix-login');
+  });
+
+  it('keeps a node created in a floor view on that floor and places floor agents clear of the ground floor', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    // Skip bridge provisioning: it would write provider configuration under the real home.
+    vi.spyOn(workspaceService, 'get').mockResolvedValue(workspace as never);
+    const floor = await floorService.create(workspace.id, { name: 'frente' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Leader', x: 80, y: 80, width: 560, height: 360, payload: { provider: 'claude', maestro: true } });
+    const create = (input: Record<string, unknown>) => workspaceService.createNode(CreateCanvasNodeDto.from(workspace.id, input as never));
+
+    const note = await create({ type: 'note', title: 'Floor note', payload: { content: '' }, floorId: floor.id });
+    expect(note.floorId).toBe(floor.id);
+    const agent = await create({ type: 'terminal', title: 'Dev', payload: { provider: 'claude', command: '/bin/cat', args: [] }, floorId: floor.id });
+    expect(agent.floorId).toBe(floor.id);
+    expect(canvasRectsOverlap(agent, leader)).toBe(false);
+    expect(canvasRectsOverlap(agent, note)).toBe(false);
+
+    await expect(create({ type: 'note', title: 'Lost', floorId: '018f0000-0000-7000-8000-000000000001' })).rejects.toThrow('Andar não encontrado');
+    expect((await workspaceRepository.listNodes(workspace.id)).map((node) => node.title)).not.toContain('Lost');
   });
 
   it('clona layout do terreo quando pedido', async () => {

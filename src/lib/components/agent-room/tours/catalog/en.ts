@@ -252,7 +252,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'agent-b',
         title: 'The feature agent',
-        body: 'I\'ll create the B-front agent. In the Floors panel, switch the visible layer and drag it there — it starts working in the floor checkout.',
+        body: 'I\'ll create the B-front agent. In the Floors panel, switch the visible layer and drag it there — it starts working in the floor checkout. It stays visible on the Ground floor with a chip for its floor.',
         action: { kind: 'createAgent', title: 'Dev Feature', provider: 'codex' },
         check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Dev Feature' },
       },

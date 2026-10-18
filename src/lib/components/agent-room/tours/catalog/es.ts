@@ -252,7 +252,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'agent-b',
         title: 'El agente de la feature',
-        body: 'Creo el agente del frente B. En el panel Pisos, cambia la capa visible y arrástralo ahí — empieza a trabajar en el checkout del piso.',
+        body: 'Creo el agente del frente B. En el panel Pisos, cambia la capa visible y arrástralo ahí — empieza a trabajar en el checkout del piso. En la Planta baja sigue visible con la etiqueta del piso.',
         action: { kind: 'createAgent', title: 'Dev Feature', provider: 'codex' },
         check: { kind: 'nodeExists', nodeType: 'terminal', titleIncludes: 'Dev Feature' },
       },

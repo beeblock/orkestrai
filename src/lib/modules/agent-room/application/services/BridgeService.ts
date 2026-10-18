@@ -7,7 +7,8 @@ import { dirname, resolve } from 'node:path';
 import type { AgentActivityState, CanvasNode, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { workspaceProjectContext } from '../../domain/runtime.js';
 import { LEADER_EXECUTION_CONTRACT } from '../../domain/leader-execution.js';
-import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/canvas-placement.js';
+import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
+import { occupiedOnFloor, shownOnFloor } from '../../domain/canvas-floors.js';
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -114,12 +115,6 @@ type BridgeAskResult = {
  * really must block passes timeoutMs (CLI --timeout) explicitly.
  */
 const DEFAULT_AGENT_ASK_WAIT_MS = 8_000;
-
-function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPlacementRect[] {
-  return nodes
-    .filter((node) => (node.floorId ?? null) === floorId)
-    .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
-}
 
 const MAX_ASK_QUEUE_WAIT_MS = 300_000;
 
@@ -1299,9 +1294,8 @@ export class BridgeService {
     const maestro = await workspaceRepository.getNode(maestroNodeId);
     const nodes = await workspaceRepository.listNodes(workspaceId);
     const targetFloor = floorId !== undefined ? floorId : ((maestro as { floorId?: string | null } | null)?.floorId ?? null);
-    const recruits = nodes.filter(
-      (node) => node.type === 'terminal' && node.id !== maestroNodeId && ((node as { floorId?: string | null }).floorId ?? null) === targetFloor
-    );
+    // Every agent shows on the ground floor, so a recruit avoids that view and its own floor.
+    const recruits = nodes.filter((node) => node.type === 'terminal' && node.id !== maestroNodeId && shownOnFloor(node, null));
     const index = recruits.length;
     const perRow = 3;
     const row = Math.floor(index / perRow);
@@ -1314,7 +1308,9 @@ export class BridgeService {
       width: 640,
       height: 400,
     };
-    return findFreeCanvasPosition(occupiedOnFloor(nodes, targetFloor), preferred, { rowsPerColumn: 3 });
+    const occupied = nodes.filter((node) => shownOnFloor(node, null) || (targetFloor !== null && (node.floorId ?? null) === targetFloor))
+      .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
+    return findFreeCanvasPosition(occupied, preferred, { rowsPerColumn: 3 });
   }
 
   /** Cria um portal (browser embutido) no canvas e conecta a um agente (default: o maestro). */

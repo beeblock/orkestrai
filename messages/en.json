@@ -1958,6 +1958,7 @@
   "palette.action_hint": "action",
   "term.voice_error": "Voice failed.",
   "term.role_label": "Role: {role}",
+  "term.floor_chip": "Works on the {floor} floor. Open the floor",
   "term.role_assign": "Assign role",
   "term.role_none": "No role",
   "term.role_empty": "No roles in this workspace",
