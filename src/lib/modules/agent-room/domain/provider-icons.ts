@@ -9,4 +9,9 @@ export const providerIcons: Record<string, string> = {
   cline: '/images/cline.svg',
   devin: '/images/devin.svg',
   copilot: '/images/githubcopilot.svg',
+  gemini: '/images/gemini.svg',
+  qwen: '/images/qwen.svg',
+  aider: '/images/aider.svg',
+  goose: '/images/goose.svg',
+  amp: '/images/amp.svg',
 };

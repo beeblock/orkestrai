@@ -8,6 +8,11 @@ import { antigravityAdapter } from './AntigravityAdapter.js';
 import { clineAdapter } from './ClineAdapter.js';
 import { devinAdapter } from './DevinAdapter.js';
 import { copilotAdapter } from './CopilotAdapter.js';
+import { geminiAdapter } from './GeminiAdapter.js';
+import { qwenAdapter } from './QwenAdapter.js';
+import { aiderAdapter } from './AiderAdapter.js';
+import { gooseAdapter } from './GooseAdapter.js';
+import { ampAdapter } from './AmpAdapter.js';
 
 /**
  * Registry de adaptadores de agente. Novos providers (kimi, opencode, ...)
@@ -100,3 +105,8 @@ registerAgentAdapter(antigravityAdapter);
 registerAgentAdapter(clineAdapter);
 registerAgentAdapter(devinAdapter);
 registerAgentAdapter(copilotAdapter);
+registerAgentAdapter(geminiAdapter);
+registerAgentAdapter(qwenAdapter);
+registerAgentAdapter(aiderAdapter);
+registerAgentAdapter(gooseAdapter);
+registerAgentAdapter(ampAdapter);
