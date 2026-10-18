@@ -683,7 +683,28 @@
     fitView: (options?: { duration?: number }) => void;
     screenToFlowPosition: (position: { x: number; y: number }) => { x: number; y: number };
     getViewport: () => { x: number; y: number; zoom: number };
+    setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   } | null>(null);
+  // Each workspace reopens where the owner left it (this browser only); a first visit fits the board.
+  const VIEWPORT_KEY = 'orkestrai.canvasViewport.';
+  function readSavedViewport(workspaceId: string): { x: number; y: number; zoom: number } | null {
+    try {
+      const value = JSON.parse(localStorage.getItem(VIEWPORT_KEY + workspaceId) ?? 'null') as { x?: unknown; y?: unknown; zoom?: unknown } | null;
+      if (!value || ![value.x, value.y, value.zoom].every((part) => typeof part === 'number' && Number.isFinite(part))) return null;
+      const zoom = Math.min(4, Math.max(0.02, value.zoom as number));
+      return { x: value.x as number, y: value.y as number, zoom };
+    } catch {
+      return null;
+    }
+  }
+  function saveViewport(viewport: { x: number; y: number; zoom: number }) {
+    if (!activeWorkspace || designModeNodeId) return;
+    try {
+      localStorage.setItem(VIEWPORT_KEY + activeWorkspace.id, JSON.stringify({ x: Math.round(viewport.x), y: Math.round(viewport.y), zoom: Number(viewport.zoom.toFixed(3)) }));
+    } catch {
+      // Storage may be unavailable; the board still fits on open.
+    }
+  }
   let flowWrapper: HTMLElement;
   const selectedTransferNodeIds = $derived(nodes.filter((node) => node.selected).map((node) => node.id));
   const selectedTransferNodeIdSet = $derived(new Set(selectedTransferNodeIds));
@@ -1698,7 +1719,10 @@
       floors = floorList;
       if (!options.force) {
         queueMicrotask(() => {
-          if (canvasNodes.length) zoomApi?.fitView({ duration: 0, maxZoom: 1 } as never);
+          if (!canvasNodes.length) return;
+          const saved = readSavedViewport(workspace.id);
+          if (saved) zoomApi?.setViewport(saved);
+          else zoomApi?.fitView({ duration: 0, maxZoom: 1 } as never);
         });
       }
       nodes = canvasNodes
@@ -3764,6 +3788,7 @@
         onpointermove={handlePanePointerMove}
         onpointerup={handlePanePointerUp}
         onmove={(_event, viewport) => { if (Math.abs(viewport.zoom - viewportZoom) > 0.004) viewportZoom = viewport.zoom; }}
+        onmoveend={(_event, viewport) => saveViewport(viewport)}
       >
         {#if backgroundVariant !== 'none'}
           <Background gap={20} variant={backgroundVariant} patternColor="var(--app-grid)" />

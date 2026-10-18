@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { Bot, ChevronDown, CodeXml, Pin, Settings2 } from '@lucide/svelte';
+  import { Bot, ChevronDown, CodeXml, LoaderCircle, Pin, Settings2 } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import ToolbarButton from './ToolbarButton.svelte';
@@ -69,6 +69,12 @@
   </Tooltip.Root>
   <DropdownMenu.Content side={railSide} align="start" sideOffset={10} class="agents-menu-content">
     <DropdownMenu.Label>{m['canvas.agents_available']()}</DropdownMenu.Label>
+    {#if providers.length === 0}
+      <DropdownMenu.Item disabled class="agent-menu-item" data-testid="agents-menu-loading">
+        <LoaderCircle size={14} class="animate-spin" aria-hidden="true" />
+        <span class="provider-menu-copy"><small>{m['canvas.agents_loading']()}</small></span>
+      </DropdownMenu.Item>
+    {/if}
     {#each providers as provider (provider.id)}
       <DropdownMenu.Item
         class="agent-menu-item"

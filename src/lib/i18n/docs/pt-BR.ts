@@ -1053,6 +1053,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Novos Estúdios: peça a um agente um diagrama ou um documento do seu projeto, entregue no Canvas.",
       "Notas exportam para PDF.",
       "Novos agentes: Gemini CLI, Qwen Code, Aider, goose e Amp, com os comandos oficiais de instalação na Central de Providers.",
+      "Cada Canvas reabre no zoom e no ponto em que você o deixou.",
     ] },
     { date: '16 de outubro de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Seleção das seções de Configurações', summary: 'Mantém a seleção do menu correta no fim da página.', items: [
       'Clicar em uma seção curta no fim de Configurações a seleciona mesmo quando a página não pode rolar mais. Links diretos rolam até a seção após carregar os dados. Âncoras nativas, navegação por teclado e histórico continuam disponíveis; ao rolar para outro ponto, o menu volta a acompanhar a seção visível, inclusive no contêiner do desktop Windows, sem polling em repouso.',

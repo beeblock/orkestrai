@@ -29,6 +29,7 @@ pt-BR, English, and Spanish translations.
 - Open Focus on Needs you: a list of what waits for the owner, newest first, with its kind (Approval, Question, Review, Tool, Lesson, Blocked, Notice) and age, an inspector that decides, answers, resolves or snoozes it, and the agents working right now. The Focus sidebar starts with Needs you, Tasks, Reviews, Control center, Automations and Skills, lists the team by floor with state, time in state and current action, keeps the full explorer below and shows this computer's agent count at the bottom.
 - Restyle Chat: a large channel title with the team's faces, a Team list that shows what each agent is doing, routines and the connected Telegram or Slack channels in the sidebar, a profile column that stays open beside the conversation, requests waiting for a decision as cards in the conversation and a hint under the message field.
 - Restyle the phone page: the workspace and connection at the top, a headline that counts what needs the owner, cards with full-width answers and the agents working right now; the first tab is now called Inbox.
+- Reopen each workspace's Canvas at the zoom and position it was left at (remembered in this browser); a workspace opened for the first time still fits the whole board. The Agents menu says it is detecting installed CLIs instead of looking empty while they load.
 
 ### Added
 

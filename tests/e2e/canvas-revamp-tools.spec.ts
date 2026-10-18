@@ -57,4 +57,27 @@ test.describe('canvas revamp tools', () => {
       await request.delete(`/api/agent-room/workspaces/${target.id}`);
     }
   });
+
+  test('reopens a workspace at the zoom it was left at', async ({ page, request }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-viewport-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `E2E viewport ${Date.now()}`, workingDir: dir } })).json()).data;
+    try {
+      await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, { data: { type: 'note', title: 'Anchor', x: 0, y: 0, width: 300, height: 200, payload: { content: 'anchor' } } });
+      await page.goto(`/canvas?workspace=${workspace.id}`);
+      const zoom = page.locator('.zoom-level');
+      await expect(zoom).toHaveText('100%');
+      await page.locator('.svelte-flow__controls-zoomout').click();
+      await page.locator('.svelte-flow__controls-zoomout').click();
+      await expect(zoom).not.toHaveText('100%');
+      // Let the zoom animation settle before reading where the board was left.
+      await page.waitForTimeout(800);
+      const left = await zoom.textContent();
+      await page.reload();
+      await expect(page.locator('.svelte-flow__node')).toHaveCount(1);
+      await expect(zoom).toHaveText(left!);
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    }
+  });
 });
