@@ -1,6 +1,7 @@
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { settingsService } from './SettingsService.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
+import { shownOnFloor } from '../../domain/canvas-floors.js';
 import { arrangeGroupMembers, fitGroupFrame } from '$lib/components/agent-room/canvas/layout.js';
 import type { CanvasNode, ImageNodePayload, ImageWorkflowNodePayload } from '../../domain/types.js';
 
@@ -83,7 +84,7 @@ export class CanvasTidyService {
         && (node.floorId ?? null) === floorId) ?? null;
       if (!group) {
         const anchor = agent ?? outputs[0];
-        const occupied = nodes.filter((node) => (node.floorId ?? null) === floorId && !targets.has(node.id) && !outputs.some((output) => output.id === node.id) && node.type !== 'group')
+        const occupied = nodes.filter((node) => shownOnFloor(node, floorId) && !targets.has(node.id) && !outputs.some((output) => output.id === node.id) && node.type !== 'group')
           .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
         const size = { width: 700, height: 600 };
         const spot = findFreeCanvasPosition(occupied, { x: anchor.x + anchor.width + 96, y: anchor.y, ...size }, { gap: 64 });

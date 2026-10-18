@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { NodeToolbar, Position, type NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Focus, MessageSquare, MessagesSquare, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Focus, MessageSquare, MessagesSquare, Globe2, History, Layers, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import { Button } from '$lib/components/ui/button';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -62,6 +62,9 @@
     workspaceRuntime: WorkspaceExecutionRuntime;
     workspaceId: string;
     payload: TerminalNodePayload;
+    /** On the ground floor: the floor (worktree) this agent codes in. */
+    floorName?: string | null;
+    onOpenFloor?: () => void;
     /** Avalia os args de resume exato por session-id NA HORA do respawn. */
     exactResumeArgsFor?: (agentSessionId: string) => string[] | null;
     /** Template que reserva um id novo na CLI e elimina races entre agentes. */
@@ -714,6 +717,12 @@
         <BadgeCheck size={12} />
         <span>{roleLabel}</span>
       </span>
+    {/if}
+    {#if data.floorName}
+      <button type="button" class="terminal-status-chip terminal-floor-chip nodrag" onclick={() => data.onOpenFloor?.()} title={m['term.floor_chip']({ floor: data.floorName })} aria-label={m['term.floor_chip']({ floor: data.floorName })}>
+        <Layers size={12} />
+        <span>{data.floorName}</span>
+      </button>
     {/if}
     {#if data.payload.maestro}
       <span class="terminal-leader-state" role="img" title={m['term.maestro_active']()} aria-label={m['term.maestro_active']()}>
@@ -1424,6 +1433,23 @@
        branco, entao um token de superficie apagaria a marca no tema claro.
        Mesmo valor da Central de Providers (.provider-icon) e do no Usage. */
     background: var(--app-logo-plate);
+  }
+
+  .terminal-floor-chip {
+    border: 0;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .terminal-floor-chip:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .terminal-floor-chip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .terminal-status-chip span {

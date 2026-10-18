@@ -76,6 +76,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Show the whole team on the Canvas Ground floor and in the Leader panel. Agents recruited onto their own floor (git worktree) used to be visible only inside that floor, so the Ground floor and the Leader panel showed the leader alone while Chat listed everyone. Each agent still codes in its floor's worktree and now carries a chip naming the floor, which opens it; a floor view still shows only that floor's nodes, and agents copied by cloning the Ground layout stay on their floor. A node created while a floor is open now stays on that floor instead of landing on the Ground floor. New nodes are placed clear of every agent, and agents that had been laid out on top of a Ground-floor node move to a row below the board.
 - Show an agent as idle again once its terminal goes quiet. Any output after a quiet spell, including the repaint after a terminal is opened or resized, used to leave it marked as working until the next keystroke; a repaint no longer counts as work, and plain shells printing server logs no longer count as working teammates.
 - Show what an agent did in words everywhere (Focus, Chat, team map, phone) instead of internal codes such as `system:task_completed`.
 - Keep every node of a multi-selection where it was dropped; only the one under the pointer was saved before.

@@ -13,7 +13,8 @@ import type {
   TerminalNodePayload,
   Workspace,
 } from '../../domain/types.js';
-import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/canvas-placement.js';
+import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
+import { occupiedOnFloor } from '../../domain/canvas-floors.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from './FilesystemService.js';
 import { bridgeService } from './BridgeService.js';
@@ -230,12 +231,6 @@ export class ImageWorkflowError extends Error {
 function broadcast(workspaceId: string, nodeId: string): void {
   const send = (globalThis as { __orkestraiBroadcast?: (payload: Record<string, unknown>) => void }).__orkestraiBroadcast;
   send?.({ type: 'workspaceChanged', workspaceId, nodeId });
-}
-
-function occupiedOnFloor(nodes: CanvasNode[], floorId: string | null): CanvasPlacementRect[] {
-  return nodes
-    .filter((node) => (node.floorId ?? null) === floorId)
-    .map((node) => ({ x: node.x, y: node.y, width: node.width, height: node.height }));
 }
 
 function imageMime(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/webp' | null {
