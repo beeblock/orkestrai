@@ -1165,7 +1165,12 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'choose-item',
         title: 'Escolha onde trabalhar',
-        body: 'Expanda um workspace ou use a pesquisa. Os itens abertos ficam em abas verticais por padrão; você pode escolher abas horizontais em Configurações → Aparência.',
+        body: 'Use a pesquisa ou a árvore do workspace aberto; o ícone de camadas mostra todos os workspaces. Os itens abertos ficam em abas no topo do painel; em Configurações → Aparência você pode preferir a lista vertical.',
+      },
+      {
+        id: 'agent-panel',
+        title: 'Trabalhe ao lado do agente',
+        body: 'Abra um agente da Equipe. O cabeçalho mostra o estado, o que ele está fazendo e a tarefa atual; o painel ao lado traz os pedidos dele para você decidir ou responder, a atividade recente e a conversa direta, por texto ou voz.',
       },
       {
         id: 'split-work',

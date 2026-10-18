@@ -229,12 +229,13 @@
     const payload = node.payload as TerminalNodePayload;
     const provider = providerFor(node);
     const workspaceRuntime = workspaceExecutionRuntime(workspace);
-    const width = Math.max(360, hostWidth - 32);
-    const height = Math.max(220, hostHeight - 32);
+    // Fills the pane edge to edge: in Focus the node is the work area, not a card on a board.
+    const width = Math.max(360, hostWidth);
+    const height = Math.max(220, hostHeight);
     return [{
       id: node.id,
       type: node.type,
-      position: { x: 16, y: 16 },
+      position: { x: 0, y: 0 },
       width,
       height,
       style: `width:${width}px;height:${height}px`,
@@ -334,17 +335,17 @@
     cursor: default;
   }
 
-  /*
-   * No em tela cheia: mesmo raio e elevacao do NodeShell no Canvas (o token ja
-   * inclui o contorno de 1px), sem sombra ad hoc.
-   */
-  .focused-node-host :global(.node-shell) {
-    border-radius: 10px;
-    box-shadow: var(--app-shadow-card);
+  /* Edge to edge in the pane: no card radius or elevation, the header reads as a toolbar. */
+  .focused-node-host :global(.svelte-flow__node .node-shell),
+  .focused-node-host :global(.svelte-flow__node .node-shell:hover),
+  .focused-node-host :global(.svelte-flow__node .node-shell.selected) {
+    border-radius: 0;
+    box-shadow: none;
   }
 
-  .focused-node-host :global(.node-header) {
-    border-radius: 10px 10px 0 0;
+  .focused-node-host :global(.svelte-flow__node .node-header) {
+    border-radius: 0;
+    border-bottom: 1px solid var(--app-border);
     cursor: default;
   }
 </style>

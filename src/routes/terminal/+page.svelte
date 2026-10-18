@@ -4,7 +4,8 @@
   import { goto, replaceState } from '$app/navigation';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
-  import { agentActionLabel } from '$lib/components/agent-room/agent-status-labels.js';
+  import { agentActionLabel, agentDoingLabel, agentStateLabel } from '$lib/components/agent-room/agent-status-labels.js';
+  import { agentTone } from '$lib/components/agent-room/agent-identity.js';
   import {
     ChevronDown,
     ChevronRight,
@@ -32,6 +33,9 @@
     SquareKanban,
     Blocks,
     Laptop,
+    ListChecks,
+    PanelRight,
+    Layers,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -114,6 +118,9 @@
   import { agentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import FocusInbox from '$lib/components/agent-room/FocusInbox.svelte';
   import FocusTeamList from '$lib/components/agent-room/FocusTeamList.svelte';
+  import FocusAgentInspector from '$lib/components/agent-room/FocusAgentInspector.svelte';
+  import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
+  import StatusPill from '$lib/components/agent-room/StatusPill.svelte';
   import WorkspacePermissionNotice from '$lib/components/agent-room/WorkspacePermissionNotice.svelte';
   import { isWorkspacePermissionError } from '$lib/components/agent-room/workspace-permission.js';
   import {
@@ -250,6 +257,30 @@
     if (!new URLSearchParams(location.search).get('node') && attentionFeed.items.length) focusView = 'inbox';
   });
 
+  // The agent's side panel and the explorer scope are per-viewer conveniences.
+  function readFlag(key: string, fallback: boolean): boolean {
+    try {
+      const value = localStorage.getItem(key);
+      return value === null ? fallback : value === 'true';
+    } catch {
+      return fallback;
+    }
+  }
+  function writeFlag(key: string, value: boolean): void {
+    try { localStorage.setItem(key, String(value)); } catch { /* private window */ }
+  }
+  // Opens by default only where it leaves the terminal a comfortable width.
+  let inspectorOpen = $state(readFlag('orkestrai.focus.inspector', typeof window !== 'undefined' && window.innerWidth >= 1360));
+  let showAllWorkspaces = $state(readFlag('orkestrai.focus.allWorkspaces', false));
+  function toggleInspector() {
+    inspectorOpen = !inspectorOpen;
+    writeFlag('orkestrai.focus.inspector', inspectorOpen);
+  }
+  function toggleAllWorkspaces() {
+    showAllWorkspaces = !showAllWorkspaces;
+    writeFlag('orkestrai.focus.allWorkspaces', showAllWorkspaces);
+  }
+
   function openTasksBoard() {
     if (!selectedWorkspaceId) return;
     const board = (nodesByWorkspace[selectedWorkspaceId] ?? []).find((node) => node.type === 'tasks');
@@ -259,7 +290,7 @@
 
   let layoutsByWorkspace = $state<Record<string, WorkbenchLayout>>({});
   let filePathsByWorkspace = $state<Record<string, string[]>>({});
-  let tabPlacement = $state<WorkbenchTabPlacement>('vertical');
+  let tabPlacement = $state<WorkbenchTabPlacement>('horizontal');
   let deletingNode = $state<CanvasNode | null>(null);
   let pendingEditorClose = $state<{ paneId: WorkbenchPaneId; node: CanvasNode } | null>(null);
   let dirtyEditorRevision = $state(0);
@@ -291,6 +322,9 @@
       : null
   );
   const selectedLayout = $derived(selectedWorkspaceId ? layoutsByWorkspace[selectedWorkspaceId] ?? null : null);
+  const selectedAgent = $derived(selectedNode?.type === 'terminal' ? selectedNode : null);
+  const selectedAgentLive = $derived(selectedAgent ? agentStatus.agents[selectedAgent.id] ?? null : null);
+  const selectedAgentState = $derived(selectedAgentLive ? (selectedAgentLive.sessionAlive ? selectedAgentLive.state : 'disconnected') : 'idle');
   const visiblePanes = $derived(selectedLayout ? workbenchPanes(selectedLayout) : []);
   const dirtyEditorNodeIds = $derived.by(() => {
     if (!selectedWorkspaceId) return [];
@@ -378,7 +412,8 @@
 
   const visibleWorkspaces = $derived.by(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return workspaces;
+    // The titlebar switches workspaces; the explorer stays on the open one unless asked.
+    if (!normalized) return showAllWorkspaces || !selectedWorkspaceId ? workspaces : workspaces.filter((workspace) => workspace.id === selectedWorkspaceId);
     return workspaces.filter((workspace) =>
       workspace.name.toLocaleLowerCase().includes(normalized) || browsableNodes(workspace.id).length > 0
     );
@@ -1011,6 +1046,9 @@
           }
           if (message.type === 'attentionChanged') window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
           if (message.type === 'attentionChanged' && message.workspaceId === selectedWorkspaceId) scheduleAttentionRefresh();
+          if (message.type === 'channelMessage' && message.workspaceId === selectedWorkspaceId) {
+            window.dispatchEvent(new CustomEvent('orkestrai:channel-message', { detail: { channel: message.channel, message: message.message } }));
+          }
         } catch {
           // Frames PTY não relacionados não fazem parte deste explorer.
         }
@@ -1288,6 +1326,16 @@
 
     <div class="side-label explore">
       <span class="grow">{m['focus.explore']()}</span>
+      {#if workspaces.length > 1}
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            {#snippet child({ props })}
+              <button {...props} type="button" class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]" class:text-[var(--app-accent)]={showAllWorkspaces} aria-pressed={showAllWorkspaces} aria-label={m['focus.show_all_workspaces']()} onclick={toggleAllWorkspaces} data-testid="focus-all-workspaces"><Layers size={15} /></button>
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content>{showAllWorkspaces ? m['focus.show_current_workspace']() : m['focus.show_all_workspaces']()}</Tooltip.Content>
+        </Tooltip.Root>
+      {/if}
       <WorkspaceSharingButton variant="icon" workspaceId={selectedWorkspaceId} onOpen={() => (sharingOpen = true)} />
       <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={() => addVideoWorkflow()}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_audio.add']()} onclick={() => addVideoWorkflow(true)}><AudioLines size={15} />{m['creative_audio.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['sequence.title']()} onclick={addSequence}><Film size={15} />{m['sequence.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_recipe.title']()} onclick={() => showRecipes = true}><Workflow size={15} />{m['creative_recipe.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
@@ -1551,17 +1599,33 @@
         />
       </div>
     {:else}
-    <header class="flex min-w-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3" data-testid="terminal-workspace-header">
+    <header class="focus-bar flex min-w-0 items-center gap-2.5 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3" data-testid="terminal-workspace-header">
       {#if selectedWorkspace && selectedLayout}
-        <span class="shrink-0 text-[var(--app-text-muted)]"><WorkspaceIcon name={selectedWorkspace.icon} size={15} /></span>
-        <span class="truncate text-[12.5px] font-medium text-[var(--app-text-soft)]">{selectedWorkspace.name}</span>
-        {#if selectedNode}
-          <ChevronRight size={13} class="shrink-0 text-[var(--app-text-muted)]" aria-hidden="true" />
-          <span class="min-w-0 truncate text-[12.5px] font-medium text-[var(--app-text)]">{selectedNode.title || nodeTypeLabel(selectedNode)}</span>
+        {#if selectedAgent}
+          <AgentAvatar nodeId={selectedAgent.id} title={selectedAgent.title ?? ''} size={26} />
+          <div class="flex min-w-0 flex-col leading-tight">
+            <span class="truncate text-[13px] font-semibold text-[var(--app-text)]">{selectedAgent.title || nodeTypeLabel(selectedAgent)}</span>
+            <span class="truncate text-[11px] text-[var(--app-text-muted)]">{[(selectedAgent.payload as TerminalNodePayload).role, (selectedAgent.payload as TerminalNodePayload).provider].filter(Boolean).join(' · ') || nodeTypeLabel(selectedAgent)}</span>
+          </div>
+          <StatusPill tone={agentTone(selectedAgentState)} label={agentStateLabel(selectedAgentState)} />
+          {#if selectedAgentLive}
+            <span class="hidden min-w-0 truncate text-[12px] text-[var(--app-text-soft)] min-[980px]:inline" data-testid="focus-agent-doing">{agentDoingLabel(selectedAgentLive)}</span>
+          {/if}
+          {#if selectedAgentLive?.currentTask}
+            <button type="button" class="focus-task-chip hidden min-[1180px]:inline-flex" onclick={openTasksBoard} title={m['focus_agent.open_tasks']()}>
+              <ListChecks size={12} aria-hidden="true" /><span class="truncate">{selectedAgentLive.currentTask.title}</span>
+            </button>
+          {/if}
+        {:else if selectedNode}
+          <span class="shrink-0 text-[var(--app-text-muted)]"><WorkbenchNodeIcon type={selectedNode.type} size={15} /></span>
+          <span class="min-w-0 truncate text-[13px] font-semibold text-[var(--app-text)]">{selectedNode.title || nodeTypeLabel(selectedNode)}</span>
           {@const typeLabel = isWorkbenchFileItemId(selectedNode.id) ? m['workbench_files.file']() : nodeTypeLabel(selectedNode)}
           {#if typeLabel !== (selectedNode.title || nodeTypeLabel(selectedNode))}
             <span class="shrink-0 rounded-md bg-[var(--app-hover)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--app-text-soft)]">{typeLabel}</span>
           {/if}
+        {:else}
+          <span class="shrink-0 text-[var(--app-text-muted)]"><WorkspaceIcon name={selectedWorkspace.icon} size={15} /></span>
+          <span class="truncate text-[13px] font-medium text-[var(--app-text-soft)]">{selectedWorkspace.name}</span>
         {/if}
         <span class="ml-auto"></span>
         <div class="flex shrink-0 items-center gap-0.5">
@@ -1644,6 +1708,27 @@
             <Tooltip.Content>{m['terminal_browser.open_canvas']()}</Tooltip.Content>
           </Tooltip.Root>
         {/if}
+        {#if selectedAgent}
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={inspectorOpen ? m['focus_agent.toggle_hide']() : m['focus_agent.toggle_show']()}
+                  aria-pressed={inspectorOpen}
+                  class={inspectorOpen ? 'text-[var(--app-accent)]' : ''}
+                  onclick={toggleInspector}
+                  data-testid="focus-agent-inspector-toggle"
+                >
+                  <PanelRight size={15} strokeWidth={1.8} />
+                </Button>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content>{inspectorOpen ? m['focus_agent.toggle_hide']() : m['focus_agent.toggle_show']()}</Tooltip.Content>
+          </Tooltip.Root>
+        {/if}
         </div>
         <span class="h-full w-[60px] shrink-0" data-dictation-dock aria-hidden="true"></span>
       {:else}
@@ -1651,9 +1736,19 @@
       {/if}
     </header>
 
-    <div class="min-h-0 min-w-0">
+    <div class="focus-stage min-h-0 min-w-0" class:with-inspector={Boolean(selectedAgent && selectedWorkspace && inspectorOpen)}>
       {#if selectedWorkspace && selectedLayout}
-        {@render renderWorkbenchLayout(selectedLayout.root)}
+        <div class="min-h-0 min-w-0">{@render renderWorkbenchLayout(selectedLayout.root)}</div>
+        {#if selectedAgent && inspectorOpen}
+          <FocusAgentInspector
+            workspaceId={selectedWorkspace.id}
+            node={selectedAgent}
+            activity={controlCenters[selectedWorkspace.id]?.activity ?? []}
+            onClose={toggleInspector}
+            onOpenTasks={openTasksBoard}
+            onShowCanvas={() => void goto(`/canvas?workspace=${encodeURIComponent(selectedWorkspace.id)}&node=${encodeURIComponent(selectedAgent.id)}`)}
+          />
+        {/if}
       {:else if !loading}
         <NodeEmptyState icon={SquareTerminal} title={m['workbench.empty_title']()} description={m['workbench.empty_body']()}>
           {#snippet actions()}
@@ -1701,6 +1796,56 @@
 </AlertDialog.Root>
 
 <style>
+  /* Focus stage: the panes and, beside an agent, its side panel. */
+  .focus-stage {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .focus-stage.with-inspector {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  @media (max-width: 1100px) {
+    .focus-stage.with-inspector {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .focus-stage.with-inspector > :global([data-testid='focus-agent-inspector']) {
+      position: absolute;
+      inset: 0 0 0 auto;
+      z-index: 20;
+      width: min(340px, 92%);
+      box-shadow: var(--app-shadow-overlay);
+    }
+  }
+
+  .focus-task-chip {
+    max-width: 260px;
+    min-width: 0;
+    height: 24px;
+    align-items: center;
+    gap: 5px;
+    padding: 0 9px;
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+  }
+
+  .focus-task-chip:hover {
+    border-color: var(--app-border-strong);
+    color: var(--app-text);
+  }
+
+  .focus-task-chip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
   /*
    * Arvore do Workbench: mesmo idioma da barra lateral do Canvas — linhas de
    * 30px, selecao neutra com indicador de acento, acoes da linha que aparecem

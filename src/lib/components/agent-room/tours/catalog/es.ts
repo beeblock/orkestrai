@@ -1161,7 +1161,12 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'choose-item',
         title: 'Elige dónde trabajar',
-        body: 'Expande un workspace o usa la búsqueda. Los elementos abiertos usan pestañas verticales por defecto; puedes elegir pestañas horizontales en Configuración → Apariencia.',
+        body: 'Usa la búsqueda o el árbol del workspace abierto; el icono de capas muestra todos los workspaces. Los elementos abiertos quedan en pestañas arriba del panel; en Configuración → Apariencia puedes preferir la lista vertical.',
+      },
+      {
+        id: 'agent-panel',
+        title: 'Trabaja junto al agente',
+        body: 'Abre un agente desde Equipo. El encabezado muestra su estado, lo que está haciendo y la tarea actual; el panel lateral trae sus pedidos para que decidas o respondas, la actividad reciente y la conversación directa, por texto o voz.',
       },
       {
         id: 'split-work',

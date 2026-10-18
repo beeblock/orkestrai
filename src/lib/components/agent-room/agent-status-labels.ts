@@ -45,3 +45,24 @@ export function agentDoingLabel(agent: { lastAction: string | null; lastActionDa
     ?? agent.currentTask?.title
     ?? agentStateLabel(agent.sessionAlive === false ? 'disconnected' : agent.state);
 }
+
+const VERB_LABELS: Record<string, () => string> = {
+  updated: m['control_center.verb_updated'], started: m['control_center.verb_started'],
+  stopped: m['control_center.verb_stopped'], ended: m['control_center.verb_ended'],
+  executed: m['control_center.verb_executed'], analyzed: m['control_center.verb_analyzed'],
+  completed: m['control_center.verb_completed'], failed: m['control_center.verb_failed'],
+  synthesized: m['control_center.verb_synthesized'], decided: m['control_center.verb_decided'],
+  received: m['control_center.verb_received'], replied: m['control_center.verb_replied'],
+  requested: m['control_center.verb_requested'], resumed: m['control_center.verb_resumed'],
+  controlled: m['control_center.verb_controlled'],
+};
+
+/** An activity verb from the backend in words; unknown verbs are kept as they came. */
+export function activityVerbLabel(verb: string): string {
+  return VERB_LABELS[verb]?.() ?? verb;
+}
+
+/** One line for an activity event in an agent's own timeline. */
+export function activityEventLabel(event: { objectTitle: string | null; action: string | null; metadata: Record<string, unknown>; verb: string }): string {
+  return event.objectTitle ?? agentActionLabel(event.action, event.metadata) ?? activityVerbLabel(event.verb);
+}

@@ -720,7 +720,7 @@
       <SegmentedControl
         class="w-fit max-w-full"
         label={m['settings.workbench_tabs']()}
-        value={settings.workbenchTabPlacement ?? 'vertical'}
+        value={settings.workbenchTabPlacement ?? 'horizontal'}
         onValueChange={(value: string) => (settings = { ...settings, workbenchTabPlacement: value })}
         options={[
           { value: 'vertical', label: m['settings.workbench_tabs_vertical']() },
