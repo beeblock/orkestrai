@@ -34,6 +34,8 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
+- Add a microphone to the Chat message field: record, then send the words or edit them first, with the same local transcription as the Canvas message bar.
+- Put an image an agent shows in Chat (`![description](path/in/workspace.png)`) on the Canvas as well, beside that agent and connected to it. A file the Canvas already shows is reused, and paths outside the workspace, web addresses and non-image files are ignored.
 - Add a message bar at the bottom of the Canvas. It writes to the selected agent, the last one chosen or the workspace leader through the agent's inbox, which wakes an on-demand agent and waits for a busy one to finish its turn; @ mentions teammates, notes and portals.
 - Add a "since your last visit" card that counts open attention items, tasks finished since the previous visit and working agents. The last visit is remembered per workspace in this browser only.
 - Show an agent's open attention items inside its node with Reply, Resolve and one-hour Snooze, and say so when the terminal itself is waiting for permission, waiting for an answer or stopped.
@@ -76,6 +78,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Keep requests waiting for the owner readable in Chat. Once the conversation scrolled, the cards shrank into thin stripes; they now keep their height, show their whole title, and a pending lesson shows its full text instead of a preview cut mid-word (new previews end with an ellipsis). The main decision button keeps its contrast on hover, and a Needs you item opened from Chat brings the whole request into view instead of leaving the page.
+- Show an agent's latest work under Recent activity in its Chat profile. The list showed the oldest eight events of the loaded window, so a task started later (such as a new naming round) never appeared; it now lists the newest first and leaves out plain working/idle flips when there is anything with substance.
 - Show the whole team on the Canvas Ground floor and in the Leader panel. Agents recruited onto their own floor (git worktree) used to be visible only inside that floor, so the Ground floor and the Leader panel showed the leader alone while Chat listed everyone. Each agent still codes in its floor's worktree and now carries a chip naming the floor, which opens it; a floor view still shows only that floor's nodes, and agents copied by cloning the Ground layout stay on their floor. A node created while a floor is open now stays on that floor instead of landing on the Ground floor. New nodes are placed clear of every agent, and agents that had been laid out on top of a Ground-floor node move to a row below the board.
 - Show an agent as idle again once its terminal goes quiet. Any output after a quiet spell, including the repaint after a terminal is opened or resized, used to leave it marked as working until the next keystroke; a repaint no longer counts as work, and plain shells printing server logs no longer count as working teammates.
 - Show what an agent did in words everywhere (Focus, Chat, team map, phone) instead of internal codes such as `system:task_completed`.

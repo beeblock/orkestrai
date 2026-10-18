@@ -149,6 +149,10 @@
     overflow-y: auto;
   }
 
+  .list > :global(*) {
+    flex-shrink: 0;
+  }
+
   .group {
     display: flex;
     flex-direction: column;

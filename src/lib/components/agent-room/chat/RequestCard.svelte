@@ -10,7 +10,7 @@
   import * as m from '$lib/paraglide/messages.js';
 
   /** A request that waits for the owner, decided right in the conversation. */
-  let { item }: { item: AgentAttentionItem } = $props();
+  let { item, highlighted = false }: { item: AgentAttentionItem; highlighted?: boolean } = $props();
 
   const kind = $derived(attentionDecisionKind(item));
   let busy = $state(false);
@@ -32,7 +32,7 @@
   }
 </script>
 
-<article class="request" class:done={decided} data-testid="chat-request-card">
+<article class="request" class:done={decided} class:highlighted data-testid="chat-request-card" data-attention-id={item.id}>
   {#if decided}
     <p class="done-line"><CheckCircle2 size={14} />{m['chat.request_done']({ decision: decided })} · {item.title}</p>
   {:else}
@@ -69,9 +69,15 @@
     from { opacity: 0; transform: translateY(4px); }
   }
 
+  .request.highlighted {
+    border-color: var(--app-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 22%, transparent);
+    transition: border-color var(--duration-fast) ease-out, box-shadow var(--duration-fast) ease-out;
+  }
+
   header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     padding: 10px 12px;
     border-bottom: 1px solid var(--app-border);
@@ -81,10 +87,14 @@
 
   header b {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
     font-weight: 600;
+  }
+
+  header :global(svg),
+  header :global(.agent-avatar) {
+    flex: none;
   }
 
   .grow {
@@ -92,6 +102,8 @@
   }
 
   .waits {
+    flex: none;
+    padding-top: 2px;
     color: var(--app-warning);
     font-size: 11px;
     font-weight: 700;
@@ -137,6 +149,15 @@
     background: var(--app-accent);
     color: var(--app-accent-contrast);
     font-weight: 600;
+  }
+
+  .actions .primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--app-accent) 84%, var(--app-bg));
+  }
+
+  .actions button:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
   }
 
   .actions .quiet {

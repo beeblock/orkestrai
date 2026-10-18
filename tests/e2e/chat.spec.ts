@@ -40,4 +40,78 @@ test.describe('Chat', () => {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }
   });
+
+  test('shows every waiting request whole, keeps its button readable and offers the microphone', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-chat-requests-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `E2E pedidos ${Date.now()}`, workingDir: dir } })).json()).data;
+    const base = `/api/agent-room/workspaces/${workspace.id}`;
+    try {
+      const leader = (await (await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Lead', x: 80, y: 80, width: 480, height: 320, payload: { provider: 'claude', args: [], maestro: true } } })).json()).data;
+      const now = new Date().toISOString();
+      const longTitle = 'Ler a caixa de entrada entre etapas e antes do task done; mudanças de critério chegam por mensagem durante o card';
+      const items = Array.from({ length: 12 }, (_, index) => ({
+        id: `018f0000-0000-7000-8000-0000000a${String(index).padStart(4, '0')}`,
+        workspaceId: workspace.id,
+        nodeId: leader.id,
+        nodeTitle: 'Lead',
+        category: 'agent',
+        severity: 'info',
+        status: 'open',
+        title: index === 0 ? longTitle : `Lição ${index}`,
+        body: `Corpo da lição ${index}. ${'Detalhe importante. '.repeat(8)}`,
+        sourceType: 'learning_pending',
+        sourceId: `lesson-${index}`,
+        action: { target: 'node', decision: 'learning', entryId: `lesson-${index}` },
+        createdAt: now,
+        updatedAt: new Date(Date.now() - index * 1000).toISOString(),
+      }));
+      await page.route('**/api/agent-room/attention?*', (route) => route.fulfill({ json: { data: items } }));
+
+      await page.goto(`/chat?workspace=${workspace.id}`);
+      const cards = page.getByTestId('chat-request-card');
+      await expect(cards).toHaveCount(12);
+      // The timeline scrolls instead of squeezing the cards into stripes.
+      for (const card of await cards.all()) expect((await card.boundingBox())?.height ?? 0).toBeGreaterThan(90);
+      const title = cards.first().locator('header b');
+      await expect(title).toHaveText(longTitle);
+      expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+
+      const keep = cards.first().getByRole('button', { name: 'Guardar lição' });
+      await keep.scrollIntoViewIfNeeded();
+      await keep.hover();
+      const contrast = await keep.evaluate((element) => {
+        const pixel = (value: string) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext('2d')!;
+          context.fillStyle = value;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)].map((channel) => {
+            const linear = channel / 255;
+            return linear <= 0.03928 ? linear / 12.92 : ((linear + 0.055) / 1.055) ** 2.4;
+          });
+        };
+        const luminance = ([r, g, b]: number[]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const style = getComputedStyle(element);
+        const [a, b] = [luminance(pixel(style.color)), luminance(pixel(style.backgroundColor))].sort((x, y) => y - x);
+        return (a + 0.05) / (b + 0.05);
+      });
+      expect(contrast).toBeGreaterThan(4.5);
+
+      // Opening a request from Needs you keeps the conversation and brings the whole card into view.
+      await page.getByTestId('needs-you-list').getByRole('button', { name: /Lição 2/ }).click();
+      await expect(page).toHaveURL(/\/chat/);
+      const opened = cards.filter({ hasText: 'Lição 2' });
+      await expect(opened).toHaveClass(/highlighted/);
+      await expect(opened).toBeInViewport();
+
+      const composer = page.locator('#chat-composer-input');
+      await expect(page.getByRole('button', { name: 'Mensagem de voz' })).toBeEnabled();
+      await composer.fill('oi');
+      await expect(page.getByRole('button', { name: 'Mensagem de voz' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Enviar', exact: true })).toBeEnabled();
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    }
+  });
 });

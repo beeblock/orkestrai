@@ -1,4 +1,6 @@
 export type AgentLearningMode = 'automatic' | 'review' | 'off';
+/** Source of the Needs you item that asks the owner to keep or drop a pending lesson. */
+export const LEARNING_ATTENTION_SOURCE = 'learning_pending';
 export type AgentLessonStatus = 'reflection' | 'pending' | 'active' | 'rejected' | 'archived';
 export type AgentLesson = {
   id: string; workspaceId: string; nodeId: string; taskId: string; title: string;

@@ -2,12 +2,14 @@
   import { onMount, tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { getCsrfToken } from '@beeblock/svelar/http';
-  import { ArrowUp, AtSign, CheckCheck, Clock3, CornerDownRight, Hash, LoaderCircle, PanelRightOpen, Plus, Smartphone, UserRound } from '@lucide/svelte';
+  import { ArrowUp, AtSign, CheckCheck, Clock3, CornerDownRight, Hash, LoaderCircle, Mic, PanelRightOpen, Plus, Smartphone, UserRound } from '@lucide/svelte';
   import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
   import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
   import MarkdownView from '$lib/components/agent-room/MarkdownView.svelte';
   import { routineCadence, routineNextRun } from '$lib/components/agent-room/chat/routine-labels.js';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
+  import ComposerVoice from '$lib/components/agent-room/canvas/ComposerVoice.svelte';
+  import { TEXT_DICTATION_COMMAND } from '$lib/components/agent-room/text-dictation.js';
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
   import RequestCard from '$lib/components/agent-room/chat/RequestCard.svelte';
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
@@ -51,6 +53,10 @@
   let mentionFilter = $state('');
   let scroller = $state<HTMLElement | null>(null);
   let input = $state<HTMLTextAreaElement | null>(null);
+  let listening = $state(false);
+  // A request opened from Needs you, waiting to be scrolled into view once its channel has loaded.
+  let revealId = $state<string | null>(null);
+  let highlightedId = $state<string | null>(null);
 
   const workspace = $derived(workspaces.find((candidate) => candidate.id === workspaceId) ?? null);
   const agentById = $derived(new Map(agents.map((agent) => [agent.id, agent])));
@@ -191,6 +197,12 @@
       selectChannel(item.action.channel);
       return;
     }
+    // Decisions wait as cards in this conversation: show the whole card instead of leaving the page.
+    if (attentionDecisionKind(item)) {
+      if (channel !== TEAM_CHANNEL && item.nodeId !== directNode) selectChannel(TEAM_CHANNEL);
+      revealId = item.id;
+      return;
+    }
     const params = new URLSearchParams({ workspace: item.workspaceId });
     if (item.nodeId) params.set('node', item.nodeId);
     void goto(`/canvas?${params.toString()}`);
@@ -242,6 +254,21 @@
     } finally {
       sending = false;
     }
+  }
+
+  async function onVoice(text: string, mode: 'send' | 'edit') {
+    draft = draft.trim() ? `${draft.trimEnd()} ${text}` : text;
+    if (mode === 'send') await send();
+    else requestAnimationFrame(() => { input?.focus(); onInput(); });
+  }
+
+  // Without the voice models, the app's dictation flow takes over and installs them.
+  function onVoiceSetup() {
+    listening = false;
+    requestAnimationFrame(() => {
+      input?.focus();
+      window.dispatchEvent(new Event(TEXT_DICTATION_COMMAND));
+    });
   }
 
   async function answer(questionId: string, text: string): Promise<boolean> {
@@ -301,6 +328,21 @@
 
   $effect(() => {
     publishWorkspaceContext('chat', workspaceId, profileNodeId ?? directNode);
+  });
+
+  $effect(() => {
+    const id = revealId;
+    if (!id || loading) return;
+    untrack(() => {
+      revealId = null;
+      void tick().then(() => {
+        const card = scroller?.querySelector<HTMLElement>(`[data-attention-id="${CSS.escape(id)}"]`);
+        if (!card) return;
+        card.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        highlightedId = id;
+        setTimeout(() => { if (highlightedId === id) highlightedId = null; }, 2_000);
+      });
+    });
   });
 
   $effect(() => {
@@ -505,7 +547,7 @@
       {/each}
       {#if pendingRequests.length && !loading}
         <div class="day"><span>{m['chat.pending_requests']()}</span></div>
-        {#each pendingRequests as item (item.id)}<RequestCard {item} />{/each}
+        {#each pendingRequests as item (item.id)}<RequestCard {item} highlighted={highlightedId === item.id} />{/each}
       {/if}
     </div>
 
@@ -521,22 +563,30 @@
       {/if}
       {#if sendError}<p class="send-error" role="alert">{sendError}</p>{/if}
       <div class="composer">
-        <label class="sr-only" for="chat-composer-input">{channelTitle}</label>
-        <textarea
-          id="chat-composer-input"
-          bind:this={input}
-          bind:value={draft}
-          rows="1"
-          disabled={!workspace || (!agents.length)}
-          placeholder={directNode ? m['chat.placeholder_direct']({ name: channelTitle }) : leader ? m['chat.placeholder_team']({ name: leader.title }) : m['chat.placeholder_team_no_leader']()}
-          oninput={onInput}
-          oncompositionend={onInput}
-          onkeydown={onKeydown}
-        ></textarea>
-        <button type="button" class="icon" onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()} disabled={!agents.length}><AtSign size={16} /></button>
-        <button type="button" class="send" onclick={() => void send()} disabled={!draft.trim() || sending} aria-label={m['composer.send']()}>
-          {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
-        </button>
+        {#if listening}
+          <ComposerVoice onTranscript={onVoice} onClose={() => (listening = false)} onSetupNeeded={onVoiceSetup} />
+        {:else}
+          <label class="sr-only" for="chat-composer-input">{channelTitle}</label>
+          <textarea
+            id="chat-composer-input"
+            bind:this={input}
+            bind:value={draft}
+            rows="1"
+            disabled={!workspace || (!agents.length)}
+            placeholder={directNode ? m['chat.placeholder_direct']({ name: channelTitle }) : leader ? m['chat.placeholder_team']({ name: leader.title }) : m['chat.placeholder_team_no_leader']()}
+            oninput={onInput}
+            oncompositionend={onInput}
+            onkeydown={onKeydown}
+          ></textarea>
+          <button type="button" class="icon" onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()} disabled={!agents.length}><AtSign size={16} /></button>
+          {#if !draft.trim() && !sending}
+            <button type="button" class="send" onclick={() => (listening = true)} disabled={!workspace || !agents.length} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={15} /></button>
+          {:else}
+            <button type="button" class="send" onclick={() => void send()} disabled={!draft.trim() || sending} aria-label={m['composer.send']()}>
+              {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
+            </button>
+          {/if}
+        {/if}
       </div>
       <p class="composer-hint">{directNode ? m['chat.composer_hint_direct']() : leader ? m['chat.composer_hint_team']({ name: leader.title }) : m['chat.composer_hint_team_plain']()}</p>
     </footer>
@@ -850,6 +900,11 @@
     gap: 2px;
     padding: 16px 24px 12px;
     overflow-y: auto;
+  }
+
+  /* Cards that clip their own overflow must not shrink into thin stripes once the timeline scrolls. */
+  .timeline > :global(*) {
+    flex-shrink: 0;
   }
 
   .older {

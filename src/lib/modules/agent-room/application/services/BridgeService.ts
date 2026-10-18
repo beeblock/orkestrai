@@ -3,8 +3,8 @@ import { Event } from '@beeblock/svelar/events';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
-import type { AgentActivityState, CanvasNode, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
+import { basename, dirname, relative, resolve, sep } from 'node:path';
+import type { AgentActivityState, CanvasNode, ImageNodePayload, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { workspaceProjectContext } from '../../domain/runtime.js';
 import { LEADER_EXECUTION_CONTRACT } from '../../domain/leader-execution.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
@@ -19,6 +19,8 @@ import { floorService } from './FloorService.js';
 import { getAgentAdapter, hasAgentAdapter, listAgentAdapters, materializeInteractiveAgentCommand } from '../adapters/registry.js';
 import { nativeNotificationService, type NativeNotificationKind } from './NativeNotificationService.js';
 import { channelService } from './ChannelService.js';
+import { filesystemService } from './FilesystemService.js';
+import { postedImagePaths } from '../../domain/channels.js';
 import { defaultShell } from '../../infrastructure/workspace.js';
 import { FIGMA_MCP_URL, repairLegacyCodexMcpConfig } from '../../infrastructure/codex-mcp-config.js';
 import { repairConfigFileAtomically } from '../../infrastructure/atomic-config-repair.js';
@@ -1065,7 +1067,53 @@ export class BridgeService {
   ): Promise<{ posted: true; messageId: string; channel: string }> {
     const agent = this.findAgent(await this.listAgents(workspaceId), input.from);
     const message = await channelService.postAgent(workspaceId, agent.nodeId, { body: input.message, channel: input.channel });
+    await this.placePostedImages(workspaceId, agent.nodeId, input.message).catch(() => undefined);
     return { posted: true, messageId: message.id, channel: message.channel };
+  }
+
+  /**
+   * Images an agent shows in the Conversa also land on the Canvas, beside the
+   * agent and connected to it, so both views show the same files. A file the
+   * Canvas already shows is reused, never duplicated.
+   */
+  private async placePostedImages(workspaceId: string, authorNodeId: string, body: string): Promise<void> {
+    const images = postedImagePaths(body);
+    if (!images.length) return;
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace) return;
+    const root = resolve(workspace.workingDir);
+    let nodes = await workspaceRepository.listNodes(workspaceId);
+    const author = nodes.find((node) => node.id === authorNodeId);
+    let placed = false;
+    for (const image of images) {
+      const inspection = await filesystemService.inspect(workspaceId, image.path).catch(() => null);
+      if (inspection?.kind !== 'image') continue;
+      const path = relative(root, inspection.path).replaceAll(sep, '/');
+      if (!path || path === '..' || path.startsWith('../')) continue;
+      let node = nodes.find((candidate) => candidate.type === 'image' && (candidate.payload as ImageNodePayload).path === path);
+      if (!node) {
+        const position = findFreeCanvasPosition(occupiedOnFloor(nodes, null), {
+          x: (author?.x ?? 0) + (author?.width ?? 640) + 60,
+          y: author?.y ?? 120,
+          width: 320,
+          height: 240,
+        });
+        node = await workspaceRepository.createNode({
+          workspaceId,
+          type: 'image',
+          title: shortTitle(image.alt || basename(path)),
+          x: position.x,
+          y: position.y,
+          width: 320,
+          height: 240,
+          payload: { path } satisfies ImageNodePayload,
+        });
+        nodes = [...nodes, node];
+      }
+      await this.ensureEdge(workspaceId, authorNodeId, node.id);
+      placed = true;
+    }
+    if (placed) this.notifyWorkspaceChanged(workspaceId);
   }
 
   /** Records a question for the owner, raises it in Needs you and notifies the desktop. */
@@ -1582,7 +1630,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 - \`orkestrai device tap|swipe|pinch|type|button|rotate\` — interage com o device ativo usando coordenadas normalizadas de 0 a 1.
 - \`orkestrai device install|launch|permissions|logs|tree|screenshot\` — instala/abre o app, altera permissões explicitamente e coleta evidência limitada. Trabalhe SEMPRE no ciclo observar (tree/screenshot) → agir → observar novamente; nunca afirme que um gesto funcionou sem verificar o estado seguinte.
 - \`orkestrai ask-owner "<pergunta>" [--options "Sim|Não"] [--task <id>]\` (tool MCP \`ask_owner\`) — pergunta ao DONO sem bloquear. Aparece em Precisa de você e na Conversa com as opções; a resposta chega depois na sua caixa de entrada como "Resposta do dono à sua pergunta". Use para decisões que só o dono pode tomar; continue o trabalho que não depende dela.
-- \`orkestrai post "<mensagem>" [--channel team]\` (tool MCP \`channel_post\`) — fala na Conversa: sem \`--channel\` vai para a conversa direta com o dono; \`--channel team\` posta no canal #equipe. Responda por aqui as mensagens que o dono enviar pela Conversa, e poste marcos relevantes (não cada passo). Para mostrar uma imagem gerada, inclua \`![descrição](caminho/relativo/ao/workspace.png)\`: a Conversa exibe o mesmo arquivo que aparece no Canvas.
+- \`orkestrai post "<mensagem>" [--channel team]\` (tool MCP \`channel_post\`) — fala na Conversa: sem \`--channel\` vai para a conversa direta com o dono; \`--channel team\` posta no canal #equipe. Responda por aqui as mensagens que o dono enviar pela Conversa, e poste marcos relevantes (não cada passo). Para mostrar uma imagem, inclua \`![descrição](caminho/relativo/ao/workspace.png)\`: a Conversa exibe o arquivo e o app coloca a mesma imagem no Canvas, ao seu lado e conectada a você. Não suba servidor nem Portal só para mostrar imagens.
 - \`orkestrai notify "<mensagem>" --kind attention\` — notificação NATIVA quando precisar de atenção do usuário.
 - \`orkestrai notify "<resumo>" --kind project --title "<projeto>"\` — conclusão do PROJETO inteiro; use somente depois de confirmar que não há tarefas pendentes. \`task done\` já notifica a conclusão da tarefa automaticamente — nunca envie outro aviso para a mesma tarefa.
 - \`orkestrai port\` — devolve uma porta LIVRE para subir servidores; \`orkestrai port --check <porta>\` testa se uma porta está livre.

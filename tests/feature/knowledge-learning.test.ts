@@ -17,6 +17,8 @@ import { bridgeService } from '$lib/modules/agent-room/application/services/Brid
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 import { stopKnowledgeWatch } from '$lib/modules/agent-room/infrastructure/knowledge/KnowledgeFileWatch.js';
 import { knowledgeRepository } from '$lib/modules/agent-room/infrastructure/repositories/KnowledgeRepository.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { attentionRepository } from '$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js';
 import { scannedPdf } from '../helpers/scanned-pdf.js';
 import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -199,6 +201,17 @@ describe('Second Brain and durable agent learning', () => {
     const list = await agentLearningService.list(ws.id, node.id);
     expect(list.entries.filter(entry => entry.status === 'active')).toHaveLength(1);
     expect(list.entries.find(entry => entry.id === first?.id)?.status).toBe('archived');
+  });
+  it('asks the owner about a pending lesson with its whole text', async () => {
+    const { ws, node, input, actor } = await agentTask();
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'configure', nodeId: node.id, mode: 'review' }, { type: 'user' }));
+    const correction = `${'Check the target DNS record before starting deployment, then confirm the TTL. '.repeat(12)}Last step.`;
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, correction }, actor));
+    const [stored] = await attentionRepository.list({ workspaceId: ws.id });
+    expect(stored.body?.length).toBeLessThanOrEqual(500);
+    expect(stored.body?.endsWith('…')).toBe(true);
+    const [item] = await attentionService.list({ workspaceId: ws.id });
+    expect(item.body).toBe(correction);
   });
   it('respects owner review/off modes and revision guards', async () => {
     const { ws, node, taskId, input, actor } = await agentTask();
