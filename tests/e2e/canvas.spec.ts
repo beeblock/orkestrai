@@ -321,7 +321,8 @@ test.describe('canvas de workspaces', () => {
     await note.locator('textarea').fill('# tarefa e2e');
 
     // Adiciona um terminal shell
-    await createNodeOnCanvas(page, 'Shell', { x: 700, y: 600 });
+    // Clear of the message bar and quick actions floating at the bottom.
+    await createNodeOnCanvas(page, 'Shell', { x: 200, y: 120 });
     await expect(page.locator('.canvas-terminal')).toBeVisible();
     await expect(page.locator('.canvas-terminal .xterm')).toBeVisible({ timeout: 10_000 });
 

@@ -146,7 +146,7 @@ test.describe('Portal Design Mode', () => {
       await page.goto(`/canvas?workspace=${workspace.id}&node=${portal.id}`);
       const portalNode = page.locator('.canvas-portal');
       await expect(portalNode).toBeVisible();
-      await expect(portalNode.locator('.portal-navigation')).toHaveCSS('background-color', 'rgb(242, 244, 245)');
+      await expect(portalNode.locator('.portal-navigation')).toHaveCSS('background-color', 'rgb(243, 240, 234)');
       await expect(portalNode.locator('.portal-address')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
       await expect(portalNode.locator('.portal-body')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
       await expect(portalNode.locator('.portal-name')).toHaveText('Design preview');

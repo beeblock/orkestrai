@@ -16,6 +16,8 @@ test.describe('usage dos providers', () => {
       helpUrl: string | null;
     }>;
     expect(usages.map((usage) => usage.provider).sort()).toEqual([
+      'aider',
+      'amp',
       'antigravity',
       'claude',
       'cline',
@@ -23,8 +25,11 @@ test.describe('usage dos providers', () => {
       'copilot',
       'cursor',
       'devin',
+      'gemini',
+      'goose',
       'kimi',
       'opencode',
+      'qwen',
     ]);
     for (const usage of usages) {
       // Providers sem telemetria oficial expõem diagnóstico e documentação,
@@ -46,12 +51,12 @@ test.describe('usage dos providers', () => {
     const workspace = (await created.json()).data as { id: string };
 
     try {
-      await page.goto('/canvas');
-      await page.getByRole('button', { name: workspaceName, exact: true }).click();
-      await selectCanvasTool(page, 'Usage');
+      await page.goto(`/canvas?workspace=${workspace.id}`);
+      // Usage lives in the Canvas panel rail.
+      await page.locator('[data-rail-item="usage"]').click();
 
       await expect(page.locator('.usage-panel h3')).toHaveText('Uso dos providers');
-      await expect(page.locator('.usage-card')).toHaveCount(9, { timeout: 15_000 });
+      await expect(page.locator('.usage-card')).toHaveCount(14, { timeout: 15_000 });
       // Cada card mostra janelas, erro ou orientação oficial do provider.
       const cards = page.locator('.usage-card');
       for (const card of await cards.all()) {
