@@ -24,7 +24,7 @@
 
 Orkestrai is a local-first desktop application for macOS, Windows, and Linux. It
 brings Claude Code, Codex CLI, Kimi Code, OpenCode, Cursor, Antigravity, Cline,
-Devin, shells, tasks, notes,
+Devin, GitHub Copilot, Gemini CLI, Qwen Code, Aider, goose, Amp, shells, tasks, notes,
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
@@ -833,6 +833,11 @@ authenticate only the providers you plan to use:
 - [Cline CLI](https://docs.cline.bot/cli/cli-reference)
 - [Devin CLI](https://docs.devin.ai/cli)
 - [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
+- [Gemini CLI](https://geminicli.com/docs/)
+- [Qwen Code](https://qwenlm.github.io/qwen-code-docs/en/)
+- [Aider](https://aider.chat/docs/)
+- [goose](https://goose-docs.ai/docs/)
+- [Amp](https://ampcode.com/docs)
 
 You do not need every provider or terminal expertise. Orkestrai enables the CLIs
 it detects, keeps their conversations separate, and lets you organize agents by
