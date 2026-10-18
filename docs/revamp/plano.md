@@ -157,7 +157,7 @@ Cada fase termina com testes unitários e e2e, build, instalação local ad-hoc 
 
 ---
 
-## Status na branch (17/10/2026)
+## Status na branch (18/10/2026)
 
 | Id | Status | O que existe agora |
 |---|---|---|
@@ -171,7 +171,7 @@ Cada fase termina com testes unitários e e2e, build, instalação local ad-hoc 
 | A3 | Feito | Decisão no lugar (sino, nó, Foco, Conversa, celular e convidado remoto) por um endpoint único. Reiniciar simulador não entrou. |
 | A4 | Não feito | Integração de floor continua direta; política de aprovação não foi criada. |
 | A5 | Feito | Cartão "desde a última visita" no Canvas (última visita por navegador). |
-| C1 | Feito | Dock no topo com grupos, barra lateral flutuante com equipe e partituras, minimapa e zoom, cartão de resumo. |
+| C1 | Feito | Chrome em vidro: abas de workspace na barra superior, barra de ferramentas vertical à esquerda, barra de painéis à direita, pílulas de ação acima do campo de mensagem, pílula de branch e de zoom, gaveta de workspaces e cartão de resumo. |
 | C2 | Parcial | Cabeçalho com status, avatar, provider e modelo. Rodapé com floor e assuntos não. |
 | C3 | Feito | Barra do nó selecionado (Foco, Mensagem, Mais) e troca terminal/conversa no cabeçalho. |
 | C4 | Feito | Faixa de atenção no nó com responder, resolver, adiar, aprovar e recusar. |
@@ -181,10 +181,10 @@ Cada fase termina com testes unitários e e2e, build, instalação local ad-hoc 
 | C8 | Feito | Conexões discretas, destacadas na seleção. |
 | C9 | Feito | Zoom semântico com nome e status grandes; títulos de grupo condensados. |
 | C10 | Não feito | Agrupamento automático por equipe ou floor além do "Organizar" existente. |
-| C11 | Feito | Caneta (traço livre vira forma). Texto manuscrito não. |
+| C11 | Feito | Caneta com cores e espessuras (traço livre vira forma) e notas com letra à mão. |
 | C12 | Feito | Partituras: salvar seleção e colocar em qualquer workspace. |
 | C13 | Feito | Compositor flutuante com @ e envio pela caixa de entrada do agente. Imagem colada e rascunho por destino não. |
-| D1 | Parcial | Foco renomeado, com Precisa de você na barra lateral. Reorganização completa da barra lateral não. |
+| D1 | Feito | O Foco abre em Precisa de você (lista e inspetor) e a barra lateral traz Tarefas, Revisões, Central de controle, Automações, Skills, a equipe por floor e as máquinas. |
 | D2–D6 | Não feito | Sem mudanças além do que o Workbench já tinha. |
 | E1 | Feito | Canal da equipe com posts, conversas entre agentes e tarefas concluídas. |
 | E2 | Feito | Conversa direta com cada agente. |
@@ -207,5 +207,25 @@ Cada fase termina com testes unitários e e2e, build, instalação local ad-hoc 
 | M1 | Feito | Página de celular instalável (Precisa de você, Conversa, Equipe) pela rede local. |
 | M2 | Parcial | Pareamento por QR. Vários computadores e push não. |
 | M3 | Não feito | Escolha de quais avisos chegam ao celular. |
-| G1–G3 | Não feito | GitHub nativo, Linear e novas CLIs. |
+| G1–G2 | Não feito | GitHub nativo e Linear. |
+| G3 | Feito | Gemini CLI, Qwen Code, Aider, goose e Amp como providers, com instaladores oficiais na Central de Providers. Aider e Amp não retomam conversa. |
 | G4 | Já existia | Perfis de multi-conta na Central de Providers. |
+
+### Revamp v4 (18/10/2026)
+
+| Item | Status | O que existe agora |
+|---|---|---|
+| Visual do protótipo | Feito | Paleta quente quase preta com dourado, vidro translúcido, nós com borda no estado vivo, brilho na seleção e animação de entrada; tema claro equivalente. |
+| Nó Orquestrador | Feito | Mostra a equipe conectada, quem trabalha e o que espera o dono; recruta e conecta todos. |
+| Grupos nomeados | Feito | Molduras tingidas com rótulo "NOME n · k trabalhando", recolhíveis até o rótulo. |
+| Notas e caneta | Feito | Nove cores de papel, letra à mão, texto ou mono em três tamanhos; caneta com cores e espessuras. |
+| Mapa da equipe e compositor | Feito | Mapa com quem fala com quem; compositor que monta e lança até 12 consoles de uma vez. |
+| Pausar e retomar todos | Feito | SIGSTOP/SIGCONT nos grupos de processo dos terminais (macOS e Linux; Windows não). |
+| Passagem de tarefa | Feito | Pelo menu do agente ou por comando no campo de mensagem, com resumo na descrição. |
+| Comandos do quadro | Feito | Frases em pt-BR, inglês e espanhol: criar agentes, passar tarefa, pausar, abrir painéis, nota e agrupar. |
+| Loops | Feito | Gatilhos de agente ocioso e de texto na saída, com meta que encerra o loop; sete modelos. |
+| Tokens por dia e por agente | Feito | Lidos dos registros locais do Claude Code e do Codex; só contagens. |
+| Checklist e Calendário | Feito | Nós no menu Planejar. |
+| Estúdios | Feito | Diagramas e documentos pedidos a um agente, entregues como nó de Design ou nota; notas exportam PDF. |
+| Inspetor web do Portal | Feito | DevTools em janela separada (não acoplado ao nó). |
+| Marcação a tinta sobre imagens | Não feito | A caneta desenha no Canvas, mas não grava anotações dentro do nó de imagem. |
