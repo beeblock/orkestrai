@@ -1059,6 +1059,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Los flujos de imagen terminados salen del canvas al nuevo panel Archivados, y sus imágenes se reúnen junto al agente.",
       "Las notas se leen en cada papel, las checklists se marcan con un clic y el editor tiene barra de formato.",
       "La barra superior tiene el menú Más, Ordenar mantiene juntos los nodos conectados y el Canvas muestra que se está abriendo.",
+      "Volver al Canvas por el historial lo abre al instante, sin quedarse en la página anterior.",
     ] },
     { date: '16 de octubre de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Selección de secciones de Configuración', summary: 'Mantiene la selección del menú correcta al final de la página.', items: [
       'Al hacer clic en una sección corta al final de Configuración, queda seleccionada aunque la página no pueda desplazarse más. Los enlaces directos desplazan hasta la sección después de cargar los datos. Se conservan anclas nativas, navegación por teclado e historial; al desplazarse a otro punto, el menú vuelve a seguir la sección visible, incluido el contenedor del escritorio Windows, sin polling en reposo.',

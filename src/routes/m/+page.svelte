@@ -179,7 +179,7 @@
     } catch {
       token = fromLink;
     }
-    if (fromLink) history.replaceState(null, '', '/m');
+    if (fromLink) history.replaceState(history.state, '', '/m');
     void api<Session>('/api/agent-room/mobile/session').then(async (data) => {
       session = data;
       if (data.locale === 'pt-BR' || data.locale === 'en' || data.locale === 'es') localeState.current = data.locale;

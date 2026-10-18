@@ -1059,6 +1059,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "Finished image workflows leave the canvas into a new Archived panel, and their images gather beside the agent.",
       "Notes are readable on every paper, checklists tick with a click and the editor has a formatting bar.",
       "The top bar has a More menu, Organize keeps connected nodes together and the Canvas shows that it is opening.",
+      "Going back to the Canvas through history opens it right away instead of hanging on the previous page.",
     ] },
     { date: 'October 16, 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
       'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',

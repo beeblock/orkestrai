@@ -83,6 +83,7 @@ pt-BR, English, and Spanish translations.
 - Show images that agents post in Chat when they point at a file in the workspace, the same file the Canvas shows as an image node; agents are told to post images that way.
 - Write notes in the note's ink everywhere: the formatted view, links, code, quotes and checklists are readable on every paper color, checklist items tick with a click, the editor gains a formatting bar and the color button is easy to spot.
 - Show that the Canvas is opening when you come back from Focus, Chat or Settings instead of flashing the start screen.
+- Reopen the Canvas right away when going back through history (back button, swipe or Cmd+[) from Settings, Focus or Chat; it used to stay on the previous page until another click because the Canvas cleared the router's history state.
 - Explain Scores when there are none yet and offer to save the current selection from the panel.
 - Organize the board by connections: connected agents, notes and portals stay together with the most connected node on top, groups move as one block and the layout is compact; aligned nodes stack instead of overlapping.
 - Show automation recipes, including the loop recipes, in the interface language, and write their instructions in that language.
