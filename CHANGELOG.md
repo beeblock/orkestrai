@@ -63,6 +63,8 @@ pt-BR, English, and Spanish translations.
 - Add loops that keep a team moving: automations can now fire when an agent stays idle for some minutes or when its output contains a text, and loops that prompt an agent can stop themselves when the agent writes a goal text. Seven loop templates ship with the automations (progress check, keep them moving, failure rescue, test watchdog, commit checkpoint, review sweep, hourly standup).
 - Count tokens by day and by agent from Claude Code and Codex session logs on this computer, shown in the Usage panel as a 30-day chart with all tokens, input plus output or output only. Only counts are read and kept in memory; message content never leaves the files.
 - Open a web inspector (DevTools) for a Portal from its header.
+- Add Studios to the Canvas panel rail: choose a diagram (architecture, user flow, data flow, components, request lifecycle, states; ink or colorful) or a document (overview, onboarding, architecture, README, API, data model, security) and an agent. The Canvas creates a native Design document or a note connected to that agent and assigns a task that tells it to read the repository and fill it.
+- Export a note as a paginated PDF through the system print dialog; the markdown is sanitized before printing.
 
 ## 0.42.2 - 2026-10-16
 
