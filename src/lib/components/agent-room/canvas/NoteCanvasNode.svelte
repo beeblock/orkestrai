@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Eye, Layers, Paperclip, Pencil, StickyNote, X } from '@lucide/svelte';
+  import { Eye, FileDown, Layers, Paperclip, Pencil, StickyNote, X } from '@lucide/svelte';
+  import { printMarkdown } from '../print-markdown.js';
   import MarkdownView from '../MarkdownView.svelte';
   import AttachmentList from '../AttachmentList.svelte';
   import {
@@ -275,6 +276,8 @@
     </Popover.Root>
     <HeaderIconButton class="node-action-btn" label={m['attachment.add']()} disabled={attachmentBusy} onclick={() => attachmentInput.click()}>
       <Paperclip size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['note.export_pdf']()} onclick={() => printMarkdown(data.title || m['note.default_title'](), draft)}>
+      <FileDown size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={formatted ? m['note.edit_raw']() : m['note.view_formatted']()} onclick={toggleFormatted}>
       {#if formatted}<Pencil size={13} />{:else}<Eye size={13} />{/if}
     </HeaderIconButton>

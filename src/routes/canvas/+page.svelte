@@ -138,6 +138,7 @@
   import ChecklistCanvasNode from '$lib/components/agent-room/canvas/ChecklistCanvasNode.svelte';
   import CalendarCanvasNode from '$lib/components/agent-room/canvas/CalendarCanvasNode.svelte';
   import InkPanel from '$lib/components/agent-room/canvas/InkPanel.svelte';
+  import StudioDialog, { type StudioRequest } from '$lib/components/agent-room/canvas/StudioDialog.svelte';
   import { agentPause, refreshPausedAgents, setAgentsPaused } from '$lib/components/agent-room/agent-pause.svelte.js';
   import { parseBoardCommand } from '$lib/modules/agent-room/domain/board-commands.js';
   import ScoresPanel from '$lib/components/agent-room/canvas/ScoresPanel.svelte';
@@ -153,7 +154,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, CalendarDays, ListChecks, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, Pause, Play, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, CalendarDays, ListChecks, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, Pause, Play, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, Sparkles, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -937,6 +938,7 @@
   let scoresOpen = $state(false);
   let missionMapOpen = $state(false);
   let teamComposerOpen = $state(false);
+  let studioOpen = $state(false);
   // Fitted content stays clear of the two rails and the composer floating over the canvas.
   const CANVAS_INSET = { top: 28, bottom: 132, left: 84, right: 84 } as const;
   const fitPadding = { top: `${CANVAS_INSET.top}px`, bottom: `${CANVAS_INSET.bottom}px`, left: `${CANVAS_INSET.left}px`, right: `${CANVAS_INSET.right}px` } as const;
@@ -1813,6 +1815,7 @@
     { id: 'huddles', label: m['huddle.title'](), icon: MessageCircleMore, active: huddleOpen, onSelect: () => (huddleOpen = true) },
     { id: 'memory', label: m['knowledge.title'](), icon: BookMarked, active: memoryOpen, onSelect: () => (memoryOpen = true) },
     { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, active: scoresOpen, onSelect: () => (scoresOpen = !scoresOpen) },
+    { id: 'studio', label: m['studio.title'](), icon: Sparkles, active: studioOpen, onSelect: () => (studioOpen = true) },
     { id: 'presets', label: m['canvas.label_presets'](), icon: LayoutTemplate, active: showPresetPanel, onSelect: () => toggleSidePanel('presets') },
     { id: 'floors', label: m['canvas.label_floors'](), icon: Layers, active: showFloorPanel, badge: floors.length || undefined, onSelect: () => toggleSidePanel('floors') },
     { id: 'routines', label: m['canvas.label_routines'](), icon: CalendarClock, active: showRoutinePanel, onSelect: () => toggleSidePanel('routines') },
@@ -2351,6 +2354,58 @@
       body: JSON.stringify({ type: 'tasks', title: m['canvas.default_tasks'](), ...position, ...nodeSize(rect, 400, 260, 560, 360), payload: {}, floorId: visibleFloorId }),
     });
     nodes = [...nodes, toFlowNode(node)];
+  }
+
+  // Studios: an agent reads the repository and fills a native diagram or a note.
+  const STUDIO_DIAGRAM_BRIEFS: Record<string, string> = {
+    architecture: 'the system architecture: main modules, services, storage and external integrations, with arrows for dependencies',
+    user_flow: 'the main user flow: screens or steps in order, with decisions and the happy path highlighted',
+    data_flow: 'how data moves: sources, transformations, storage and consumers',
+    components: 'the UI or code component hierarchy: parents, children and shared building blocks',
+    request: 'the lifecycle of one request: entry point, middleware, handlers, services, storage and response',
+    states: 'the main state machine: states, events and transitions',
+  };
+  const STUDIO_DOCUMENT_BRIEFS: Record<string, string> = {
+    overview: 'a project overview: purpose, main features, stack, how it is organized and how to run it',
+    onboarding: 'an onboarding guide for a new developer: setup, first tasks, conventions and where things live',
+    architecture: 'an architecture document: layers, modules, data flow and key decisions',
+    readme: 'a README: what it is, install, usage, configuration and contributing',
+    api: 'an API reference: endpoints or public functions with inputs, outputs and examples',
+    data: 'the data model: entities, fields, relations and constraints',
+    security: 'a security overview: authentication, authorization, secrets handling, inputs and known risks',
+  };
+
+  async function createStudioRequest(request: StudioRequest): Promise<boolean> {
+    if (!activeWorkspace) return false;
+    const agent = nodes.find((node) => node.id === request.agentId);
+    if (!agent) return false;
+    try {
+      const diagram = request.mode === 'diagram';
+      const size = diagram ? [720, 520] : [420, 520];
+      const position = nextFreePosition(size[0], size[1]);
+      const target = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify(diagram
+          ? { type: 'design', title: `${m['studio.diagram']()}: ${request.kindLabel}`, ...position, width: size[0], height: size[1], payload: { schemaVersion: 1 }, floorId: visibleFloorId }
+          : { type: 'note', title: request.kindLabel, ...position, width: size[0], height: size[1], payload: { content: '', font: 'sans' }, floorId: visibleFloorId }),
+      });
+      nodes = [...nodes, toFlowNode(target)];
+      await handleConnect({ source: agent.id, target: target.id, sourceHandle: null, targetHandle: null }).catch(() => undefined);
+      const extra = request.notes ? `\n\nOwner notes: ${request.notes}` : '';
+      const description = diagram
+        ? `Read the repository and draw ${STUDIO_DIAGRAM_BRIEFS[request.kind] ?? request.kindLabel} in the native Design document ${target.id} ("${target.title}"). Use the design MCP tools (design_import_code with simple semantic boxes, or design_create_elements) with labeled boxes and arrows, a clear title, readable spacing and ${request.style === 'ink' ? 'a hand-drawn ink look: monochrome strokes, no fills' : 'a colorful look: one color per area, soft fills'}. Do not change application code.${extra}`
+        : `Read the repository and write ${STUDIO_DOCUMENT_BRIEFS[request.kind] ?? request.kindLabel} in markdown, then save it in the note ${target.id} ("${target.title}") with orkestrai note write. Be accurate to the code, use headings and short sections, and do not change application code.${extra}`;
+      await api(`/api/agent-room/workspaces/${activeWorkspace.id}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({ title: `${diagram ? m['studio.diagram']() : m['studio.document']()}: ${request.kindLabel}`, description, assigneeNodeId: agent.id }),
+      });
+      toast.success(m['studio.created']({ name: String(agent.data?.title ?? ''), title: request.kindLabel }));
+      requestAnimationFrame(() => jumpToNode(target.id, Math.max(0.6, zoomApi?.getViewport().zoom ?? 1)));
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m['studio.failed']());
+      return false;
+    }
   }
 
   // Checklists and calendars sit beside the work for planning.
@@ -4123,6 +4178,14 @@
     </SvelteFlowProvider>
   </section>
 {#if activeWorkspace}
+    <StudioDialog
+      bind:open={studioOpen}
+      agents={composerTargets}
+      defaultAgentId={composerTarget}
+      onCreate={createStudioRequest}
+    />
+  {/if}
+  {#if activeWorkspace}
     <TeamMapDialog
       bind:open={missionMapOpen}
       {nodes}
