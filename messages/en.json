@@ -4912,7 +4912,7 @@
   "canvas.search_everything": "Search everything",
   "canvas.all_commands": "Commands",
   "canvas.blank_title": "Blank canvas",
-  "canvas.blank_body": "Add the first node with one click, or pick a tool from the bar below.",
+  "canvas.blank_body": "Add the first node with one click, or pick a tool from the rail on the left.",
   "canvas.blank_agents": "Agents",
   "canvas.blank_content": "Content",
   "canvas.quick_note": "Note",
