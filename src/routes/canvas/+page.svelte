@@ -543,6 +543,8 @@
   onMount(() => {
     const closeOverlays = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || (!workspaceDrawerOpen && !scoresOpen && !teamComposerOpen)) return;
+      // A dialog above the board closes first.
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return;
       workspaceDrawerOpen = false;
       scoresOpen = false;
       teamComposerOpen = false;
@@ -5089,6 +5091,17 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 14px;
+    /* Only the bars themselves take clicks; the gaps between them stay canvas. */
+    pointer-events: none;
+  }
+
+  .canvas-area :global(.composer-panel > *) {
+    pointer-events: auto;
+  }
+
+  /* The command tip floats above the quick actions; selection actions and the team composer take that spot. */
+  .canvas-area :global(.composer-panel:has(.selection-bar, .team-composer) .command-hint) {
+    display: none;
   }
 
   /* While writing to the team, the selection actions step aside for mentions. */
