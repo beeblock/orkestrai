@@ -8,13 +8,13 @@ export const TOURS_ES: Tour[] = [
   {"id": "team-orchestrator", "icon": "Workflow", "title": "Dirige el equipo desde un nodo", "tagline": "Cada agente, su estado y un campo para todos.", "steps": [{"id": "add", "title": "Agrega el Orquestador", "body": "Usa el botón Orquestador de la barra de herramientas o la píldora Orquestador sobre el campo de mensaje. Cada canvas tiene un orquestador."}, {"id": "connect", "title": "Conecta el equipo", "body": "Elige Conectar para unir todos los agentes al orquestador; los cables brillan mientras conversan."}, {"id": "command", "title": "Escribe una vez", "body": "Escribe en el campo inferior. Sin mención, el líder reparte el trabajo; @ llega a los agentes citados."}]},
   {"id": "team-map", "icon": "LayoutGrid", "title": "Lee el mapa del equipo", "tagline": "Quién trabaja, quién espera, quién te necesita.", "steps": [{"id": "open", "title": "Abre el mapa", "body": "Usa el botón del mapa en la barra derecha, la píldora Mapa del equipo o el contador en vivo de la barra superior."}, {"id": "filter", "title": "Filtra y busca", "body": "Elige Trabajando, Te necesita, En pausa o Terminado, o busca por agente o grupo."}, {"id": "jump", "title": "Ve allí", "body": "Haz clic en un agente para ver los detalles y luego en Ir al agente; el doble clic lleva el Canvas hasta él."}]},
   {"id": "team-composer", "icon": "Users", "title": "Lanza un equipo de una vez", "tagline": "Hasta doce agentes dentro de un grupo con nombre.", "steps": [{"id": "open", "title": "Abre el compositor", "body": "Elige Armar equipo sobre el campo de mensaje."}, {"id": "shape", "title": "Arma el equipo", "body": "Ponle nombre, elige un rol y define cuántos agentes. Haz clic en un lugar para cambiar su CLI o llena todos con uno."}, {"id": "create", "title": "Crea", "body": "Crear coloca los agentes lado a lado dentro de un grupo con nombre; el mapa del equipo y el Orquestador ya los muestran."}]},
-  {"id": "canvas-scores", "icon": "Layers", "title": "Reutiliza una parte del canvas", "tagline": "Guarda una selección como partitura y colócala en cualquier workspace.", "steps": [{"id": "agent", "title": "Crea algo para guardar", "body": "Las partituras guardan agentes, notas, portales y las conexiones entre ellos.", "action": [{"kind": "createAgent", "title": "Revisor", "provider": "claude"}, {"kind": "createNote", "title": "Checklist", "content": "- Pruebas pasando\n- Docs actualizadas"}, {"kind": "connect", "fromTitle": "Revisor", "toTitle": "Checklist"}], "check": {"kind": "edgeExists", "fromTitle": "Revisor", "toTitle": "Checklist"}}, {"id": "save", "title": "Guarda la selección", "body": "Selecciona los dos nodos (Shift + clic) y elige Guardar como partitura en la barra de abajo."}, {"id": "place", "title": "Colócala donde quieras", "body": "Abre otro workspace y usa el botón de más junto a la partitura en la barra lateral. Entra a la derecha de ese canvas."}]},
-  {"id": "ssh-machines", "icon": "MonitorCog", "title": "Trabaja en otra computadora", "tagline": "Terminales y agentes por SSH, con tus propias claves.", "steps": [{"id": "config", "title": "Ten la máquina en tu SSH", "body": "Agrega una entrada Host a ~/.ssh/config para que ssh <nombre> funcione en tu terminal."}, {"id": "open", "title": "Ábrela desde el Canvas", "body": "En el dock, abre Dispositivos > Máquinas SSH, elige una carpeta y un shell o CLI de agente y ábrelo."}, {"id": "limits", "title": "Conoce los límites", "body": "La CLI del agente se ejecuta en esa máquina y debe estar instalada allí; aún no usa el puente de Orkestrai."}]},
+  {"id": "canvas-scores", "icon": "Layers", "title": "Reutiliza una parte del canvas", "tagline": "Guarda una selección como partitura y colócala en cualquier workspace.", "steps": [{"id": "agent", "title": "Crea algo para guardar", "body": "Las partituras guardan agentes, notas, portales y las conexiones entre ellos.", "action": [{"kind": "createAgent", "title": "Revisor", "provider": "claude"}, {"kind": "createNote", "title": "Checklist", "content": "- Pruebas pasando\n- Docs actualizadas"}, {"kind": "connect", "fromTitle": "Revisor", "toTitle": "Checklist"}], "check": {"kind": "edgeExists", "fromTitle": "Revisor", "toTitle": "Checklist"}}, {"id": "save", "title": "Guarda la selección", "body": "Selecciona los dos nodos (Shift + clic) y elige Guardar como partitura en la barra de abajo."}, {"id": "place", "title": "Colócala donde quieras", "body": "Abre otro workspace, abre Partituras en la barra de paneles del Canvas y usa el botón de más junto a la partitura. Entra a la derecha de ese canvas."}]},
+  {"id": "ssh-machines", "icon": "MonitorCog", "title": "Trabaja en otra computadora", "tagline": "Terminales y agentes por SSH, con tus propias claves.", "steps": [{"id": "config", "title": "Ten la máquina en tu SSH", "body": "Agrega una entrada Host a ~/.ssh/config para que ssh <nombre> funcione en tu terminal."}, {"id": "open", "title": "Ábrela desde el Canvas", "body": "En la barra de herramientas del Canvas, abre Dispositivos > Máquinas SSH, elige una carpeta y un shell o CLI de agente y ábrelo."}, {"id": "limits", "title": "Conoce los límites", "body": "La CLI del agente se ejecuta en esa máquina y debe estar instalada allí; aún no usa el puente de Orkestrai."}]},
   {"id": "phone-companion", "icon": "Smartphone", "title": "Responde al equipo desde el teléfono", "tagline": "Vincula un teléfono en la misma red y lleva Te necesita en el bolsillo.", "steps": [{"id": "open", "title": "Abre la configuración del Teléfono", "body": "El acceso desde el teléfono está en Configuración, justo después de segundo plano y autonomía.", "action": {"kind": "openPage", "path": "/settings#phone"}}, {"id": "pair", "title": "Vincula y escanea", "body": "Elige Vincular un teléfono y escanea el código QR con la cámara. El teléfono debe estar en la misma red que esta computadora."}, {"id": "home", "title": "Tenlo como app", "body": "En el teléfono, usa Agregar a pantalla de inicio. Te necesita, Conversación y Equipo se abren como una app; las respuestas y decisiones siguen las mismas reglas que en la computadora."}]},
   {"id": "always-on-teammate", "icon": "RadioTower", "title": "Un compañero 24/7", "tagline": "Ejecución en segundo plano, Telegram o Slack y rutinas con tus palabras.", "steps": [{"id": "agent", "title": "Crea el compañero", "body": "Este agente responderá en Conversación y en el chat externo que conectes.", "action": {"kind": "createAgent", "title": "Ops", "provider": "claude"}, "check": {"kind": "nodeExists", "nodeType": "terminal", "titleIncludes": "Ops"}}, {"id": "wake", "title": "Déjalo despertar solo", "body": "Despertar cuando lo llaman mantiene al agente disponible a través del Core en segundo plano, durmiendo cuando está inactivo y deteniéndose en su límite de uso.", "action": {"kind": "configureAgentRuntime", "targetTitle": "Ops", "mode": "on_demand", "idleMinutes": 30, "concurrency": 1, "usageLimit": 90}}, {"id": "channel", "title": "Conecta Telegram o Slack", "body": "Abre Conversación, haz clic en el agente y elige Conectar Telegram o Slack en su perfil. Usa una integración de Automatizaciones que pueda leer y enviar mensajes, indica el id del chat o canal y quién puede hablarle.", "action": {"kind": "openPage", "path": "/chat"}}, {"id": "routine", "title": "Pide una rutina", "body": "En el mismo perfil, describe una rutina con tus palabras. El agente crea la automatización y confirma en su conversación."}]},
   {"id": "team-conversation", "icon": "MessageCircleMore", "title": "Habla con el equipo en Conversación", "tagline": "Un canal del equipo, una conversación directa con cada agente y sus perfiles.", "steps": [{"id": "leader", "title": "Crea un líder", "body": "Los mensajes del equipo sin mención van al líder.", "action": {"kind": "createAgent", "title": "Líder", "provider": "claude", "leader": true}, "check": {"kind": "nodeExists", "nodeType": "terminal", "titleIncludes": "Líder"}}, {"id": "open", "title": "Abre Conversación", "body": "Conversación está junto a Canvas y Foco en la barra superior.", "action": {"kind": "openPage", "path": "/chat"}}, {"id": "team", "title": "Escribe al equipo", "body": "En el canal del equipo, escribe sin mención para hablar con el líder, o escribe @ para elegir agentes. Sus conversaciones entre ellos y las tareas terminadas aparecen aquí a medida que ocurren."}, {"id": "direct", "title": "Habla con un agente", "body": "Elige un agente en Mensajes directos. Haz clic en su avatar para ver qué está haciendo, su tarea, lo que recuerda y sus rutinas."}]},
   {"id": "owner-decisions", "icon": "Activity", "title": "Responde y aprueba en el lugar", "tagline": "Las preguntas y solicitudes de permiso esperan donde ya estás.", "steps": [{"id": "leader", "title": "Crea un líder", "body": "Los agentes te preguntan con orkestrai ask-owner y siguen con el trabajo que no depende de la respuesta.", "action": {"kind": "createAgent", "title": "Líder", "provider": "claude", "leader": true}, "check": {"kind": "nodeExists", "nodeType": "terminal", "titleIncludes": "Líder"}}, {"id": "question", "title": "Responde una pregunta", "body": "La pregunta aparece en la campana, en el nodo del agente y en Conversación. Haz clic en una de las respuestas ofrecidas o escribe la tuya; vuelve a ese agente."}, {"id": "approve", "title": "Aprueba o rechaza", "body": "Las acciones de alto riesgo, aprobaciones de flujo, herramientas propuestas, lecciones y revisiones muestran Aprobar y Rechazar en la campana y en el nodo del agente. Se aplican las mismas reglas que en sus propias pantallas."}]},
-  {"id": "canvas-command-surface", "icon": "MessageCircleMore", "title": "Dirige al equipo desde el Canvas", "tagline": "Habla con los agentes, responde lo que te necesita y mantén el Canvas ordenado.", "steps": [{"id": "leader", "title": "Crea un líder", "body": "La barra de mensajes escribe al líder cuando no hay ningún agente seleccionado.", "action": {"kind": "createAgent", "title": "Líder", "provider": "claude", "leader": true}, "check": {"kind": "nodeExists", "nodeType": "terminal", "titleIncludes": "Líder"}}, {"id": "compose", "title": "Escribe desde la barra inferior", "body": "Escribe en la barra al pie del Canvas y pulsa Enter. Elige otro agente desde el nombre a la izquierda o selecciona uno en el Canvas. Escribe @ para citar un agente, nota o portal."}, {"id": "attention", "title": "Responde lo que te necesita", "body": "La tarjeta de la esquina superior cuenta lo que te necesita desde tu última visita. Un agente en espera muestra la solicitud en su propio nodo: Responder enfoca su prompt, Resolver la cierra y el reloj la pospone una hora."}, {"id": "tidy", "title": "Mantén el Canvas ordenado", "body": "Selecciona un agente para ver Foco, Mensaje y más acciones encima. Las notas que un agente guarda solo para sí se apilan detrás de la más nueva; el contador las extiende y Apilar las junta otra vez."}]},
+  {"id": "canvas-command-surface", "icon": "MessageCircleMore", "title": "Dirige al equipo desde el Canvas", "tagline": "Habla con los agentes, responde lo que te necesita y mantén el Canvas ordenado.", "steps": [{"id": "leader", "title": "Crea un líder", "body": "La barra de mensajes escribe al líder cuando no hay ningún agente seleccionado.", "action": {"kind": "createAgent", "title": "Líder", "provider": "claude", "leader": true}, "check": {"kind": "nodeExists", "nodeType": "terminal", "titleIncludes": "Líder"}}, {"id": "compose", "title": "Escribe desde la barra de mensajes", "body": "Escribe en la barra al pie del Canvas y pulsa Enter. Elige otro agente desde el nombre a la izquierda o selecciona uno en el Canvas. Escribe @ para citar un agente, nota o portal."}, {"id": "attention", "title": "Responde lo que te necesita", "body": "La tarjeta de la esquina superior cuenta lo que te necesita desde tu última visita. Un agente en espera muestra la solicitud en su propio nodo: Responder enfoca su prompt, Resolver la cierra y el reloj la pospone una hora."}, {"id": "tidy", "title": "Mantén el Canvas ordenado", "body": "Selecciona un agente para ver Foco, Mensaje y más acciones encima. Las notas que un agente guarda solo para sí se apilan detrás de la más nueva; el contador las extiende y Apilar las junta otra vez."}]},
   {"id":"portal-host-configuration","icon":"Globe","title":"Configurar hosts de Portales","tagline":"Los agentes ajustan hosts sin intervención manual del dueño.","steps":[{"id":"read","title":"Leer la revisión del Portal","body":"Asigna la tarea activa al agente. Lee portal.revision en canvas_list, no la revisión del layout. Siguen vigentes las restricciones explícitas del usuario."},{"id":"configure","title":"Configurar hosts exactos","body":"Llama portal_configure_hosts o canvas portal-hosts con taskId, nodeId, revision y allowedHosts. Usa hosts, no URLs ni puertos. localhost, 127.0.0.1 y [::1] son nombres distintos."},{"id":"verify","title":"Verificar y continuar","body":"Conserva pestañas, pausas, control y permisos de agentes. Lee la revisión nueva tras un conflicto y verifica navegación. Sigue con otras tarjetas ejecutables."}]},
   { id: 'native-shell-repair', icon: 'Terminal', title: 'Corregir Shells', tagline: 'Los agentes pueden corregir comandos iniciales.', steps: [
     { id: 'read', title: 'Leer configuración', body: 'Usa canvas_list y shell.revision, no la revisión del layout. Asigna la tarea activa al ejecutor. Sin permisos de Computer.' },
@@ -243,7 +243,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'agents',
         title: 'Un agente por frente',
-        body: 'Creo dos agentes: uno trabaja en el piso principal, otro en la feature nueva. Mueve el segundo a la capa del piso (panel Pisos en la barra inferior).',
+        body: 'Creo dos agentes: uno trabaja en el piso principal, otro en la feature nueva. Mueve el segundo a la capa del piso (Pisos en la barra de paneles del Canvas).',
         action: { kind: 'createAgent', title: 'Dev Principal', provider: 'claude' },
       },
       {
@@ -449,12 +449,12 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'save',
         title: 'Guárdalo como preset',
-        body: 'Con el equipo armado: lápiz junto al nombre del workspace en la barra lateral → "Guardar como preset". El snapshot guarda agentes, layout, notas, roles y rutinas (sin sesiones).',
+        body: 'Con el equipo armado, abre el panel Workspaces y carpetas y usa el lápiz junto al workspace → "Guardar como preset". El snapshot guarda agentes, layout, notas, roles y rutinas (sin sesiones).',
       },
       {
         id: 'use',
         title: 'Úsalo en el próximo proyecto',
-        body: 'Al crear un workspace nuevo (+ en la barra lateral), elige el preset en "Empezar de un preset" — el equipo entero nace instanciado en el proyecto. Gestiona presets en Configuración.',
+        body: 'Al crear un workspace nuevo (+ junto a las pestañas de workspace), elige el preset en "Empezar de un preset" — el equipo entero nace instanciado en el proyecto. Gestiona presets en Configuración.',
       },
     ],
   },
@@ -467,7 +467,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'open-roles',
         title: 'Abre Roles',
-        body: 'Abre Roles en la barra del Canvas y entra en la pestaña Workspace para ver los roles ya instalados aquí.',
+        body: 'Abre Roles en la barra de paneles del Canvas y entra en la pestaña Workspace para ver los roles ya instalados aquí.',
       },
       {
         id: 'choose-folder',
@@ -786,7 +786,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'panel',
         title: 'Abre Puertos y libera el listener',
-        body: 'En la barra inferior, justo después de Uso, abre Puertos. El proceso aparece en uso; haz clic en el icono de detener y confirma. El Portal queda guardado para la próxima ejecución.',
+        body: 'En la barra de paneles del Canvas, justo después de Uso, abre Puertos. El proceso aparece en uso; haz clic en el icono de detener y confirma. El Portal queda guardado para la próxima ejecución.',
       },
     ],
   },
@@ -903,7 +903,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'preset-library',
         title: 'Abre la biblioteca de presets',
-        body: 'Usa el icono de plantilla en la barra lateral o Presets en la barra inferior. Filtra por Producto, Desarrollo, Diseño y creación, Marketing y contenido u Orkestrai.',
+        body: 'Usa Presets en la barra de paneles del Canvas o el menú Workspace en la barra de herramientas. Filtra por Producto, Desarrollo, Diseño y creación, Marketing y contenido u Orkestrai.',
       },
       {
         id: 'create-or-merge',
@@ -997,7 +997,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'open-center',
         title: 'Abre la Central de Providers',
-        body: 'Usa el icono de cable en la barra lateral izquierda, Cmd/Ctrl+2 o Workspace → Central de Providers. Verifica Claude, Codex, Kimi, OpenCode, Cursor, Antigravity, Cline, Devin y GitHub Copilot localmente.',
+        body: 'Usa Abrir Central de Providers en el menú Agentes, Cmd/Ctrl+2 o Workspace → Central de Providers. Verifica Claude, Codex, Kimi, OpenCode, Cursor, Antigravity, Cline, Devin y GitHub Copilot localmente.',
       },
       {
         id: 'follow-setup',
@@ -1007,7 +1007,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'verify',
         title: 'Verifica de nuevo y crea el agente',
-        body: 'Regresa a la Central y usa Verificar de nuevo. Cuando se detecte la CLI, vuelve al canvas y crea ese agente desde la barra inferior.',
+        body: 'Regresa a la Central y usa Verificar de nuevo. Cuando se detecte la CLI, vuelve al canvas y crea ese agente desde el menú Agentes de la barra de herramientas.',
       },
       {
         id: 'multi-account',
@@ -1025,7 +1025,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'available',
         title: 'Mira lo que ya está disponible',
-        body: 'La barra inferior detecta Claude, Codex, Kimi, OpenCode, Cursor, Antigravity, Cline, Devin y GitHub Copilot. Los disponibles quedan activos; los desactivados solo necesitan instalación e inicio de sesión.',
+        body: 'El menú Agentes de la barra de herramientas del Canvas detecta Claude, Codex, Kimi, OpenCode, Cursor, Antigravity, Cline, Devin y GitHub Copilot. Los disponibles quedan activos; los desactivados solo necesitan instalación e inicio de sesión.',
       },
       {
         id: 'outcome',
@@ -1048,7 +1048,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'open-agents',
         title: 'Abre el menú Agentes',
-        body: 'Usa Agentes en la barra inferior para ver todos los servicios compatibles. Seleccionar un agente listo activa la misma herramienta de dibujo de antes; un agente que requiere configuración abre la Central de Providers.',
+        body: 'Usa Agentes en la barra de herramientas del Canvas para ver todos los servicios compatibles. Seleccionar un agente listo activa la misma herramienta de dibujo de antes; un agente que requiere configuración abre la Central de Providers.',
       },
       {
         id: 'pin-favorites',
@@ -1076,7 +1076,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'create',
         title: 'Crea el miembro Devin',
-        body: 'Vuelve al canvas y selecciona Devin en la barra inferior. Busca o desplázate por la lista limitada de modelos, elige uno disponible en tu cuenta e inicia con acceso autónomo al workspace.',
+        body: 'Vuelve al canvas y selecciona Devin en el menú Agentes de la barra de herramientas. Busca o desplázate por la lista limitada de modelos, elige uno disponible en tu cuenta e inicia con acceso autónomo al workspace.',
       },
       {
         id: 'continue',
@@ -1153,7 +1153,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'switch-view',
         title: 'Cambia la vista',
-        body: 'Usa Canvas/Foco en la esquina superior izquierda o abre Foco desde el menú Workspace. Los agentes permanecen en las mismas sesiones mientras cambias de modo; las métricas de fuente se estabilizan antes de volver a adjuntar la PTY para mantener el cursor alineado después de visitar Configuración o documentación.',
+        body: 'Usa Canvas/Foco en el centro de la barra superior o abre Foco desde el menú Workspace. Los agentes permanecen en las mismas sesiones mientras cambias de modo; las métricas de fuente se estabilizan antes de volver a adjuntar la PTY para mantener el cursor alineado después de visitar Configuración o documentación.',
       },
       {
         id: 'choose-item',
@@ -1201,7 +1201,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'open-file',
         title: 'Abre un archivo del workspace',
-        body: 'Expande Archivos en la barra lateral del Foco y elige un archivo de texto. Se abre directamente en una pestaña local sin añadir un nodo al Canvas. Monaco conserva cursor, selección, undo y cambios sin guardar entre pestañas y paneles.',
+        body: 'Expande Archivos en Explorar, en la barra lateral del Foco, y elige un archivo de texto. Se abre directamente en una pestaña local sin añadir un nodo al Canvas. Monaco conserva cursor, selección, undo y cambios sin guardar entre pestañas y paneles.',
       },
       {
         id: 'use-editor-tools',
@@ -1397,7 +1397,7 @@ export const TOURS_ES: Tour[] = [
     title: 'Dirige un huddle persistente de agentes',
     tagline: 'Reúne a los agentes adecuados en una conversación asistida por voz y trazable.',
     steps: [
-      { id: 'open-huddles', title: 'Abre Huddles', body: 'Abre Huddles desde la barra de Canvas, el explorador de Foco, el menú nativo Workspace o Command/Ctrl+K.', action: { kind: 'openPage', path: '/canvas?workspace={workspace}' } },
+      { id: 'open-huddles', title: 'Abre Huddles', body: 'Abre Huddles desde la barra de paneles del Canvas, el explorador de Foco, el menú nativo Workspace o Command/Ctrl+K.', action: { kind: 'openPage', path: '/canvas?workspace={workspace}' } },
       { id: 'choose-huddle-room', title: 'Configura la sala', body: 'Introduce tema y agenda opcional, elige hasta once agentes y define el facilitador. Solo puede existir un huddle activo por workspace.' },
       { id: 'hold-huddle-turn', title: 'Dirígete a los participantes correctos', body: 'Selecciona hasta cinco agentes participantes y escribe o dicta el turno. Respuestas pendientes, completas, fallidas y contribuciones quedan ordenadas en la transcripción persistida; el TTS opcional lee solo respuestas nuevas de agentes.' },
       { id: 'close-huddle-loop', title: 'Convierte la decisión en trabajo', body: 'Termina el huddle explícitamente y crea una tarea Kanban vinculada cuando haya seguimiento. La agenda y la transcripción limitada se convierten en evidencia trazable del Flujo de trabajo relacionado.' },
@@ -1541,7 +1541,7 @@ export const TOURS_ES: Tour[] = [
       {
         id: 'open-automations',
         title: 'Abre Automatizaciones',
-        body: 'Abre Automatizaciones desde la barra del Canvas, el explorador del Foco o Command/Ctrl+K. Las mismas automatizaciones y el mismo historial aparecen en todos los accesos.',
+        body: 'Abre Automatizaciones desde la barra de paneles del Canvas, la barra lateral del Foco o Command/Ctrl+K. Las mismas automatizaciones y el mismo historial aparecen en todos los accesos.',
         action: { kind: 'openPage', path: '/terminal?workspace={workspace}&node=workbench-automations:{workspace}' },
       },
       {
@@ -1775,9 +1775,9 @@ export const TOURS_ES: Tour[] = [
     id: 'workspace-folders',
     icon: 'FolderTree',
     title: 'Organiza workspaces en carpetas',
-    tagline: 'Agrupa proyectos por cliente, equipo o entorno en la barra lateral.',
+    tagline: 'Agrupa proyectos por cliente, equipo o entorno en el panel de workspaces.',
     steps: [
-      { id: 'open-canvas-sidebar', title: 'Abre la barra lateral', body: 'Expande la barra lateral del Canvas (el botón de colapsar en su encabezado) para ver la lista completa de workspaces.', action: { kind: 'openPage', path: '/canvas?workspace={workspace}' } },
+      { id: 'open-canvas-sidebar', title: 'Abre el panel de workspaces', body: 'Abre la flecha junto a las pestañas de workspace y elige Gestionar workspaces y carpetas, o usa Workspaces y carpetas en la barra de paneles del Canvas, para ver la lista completa de workspaces.', action: { kind: 'openPage', path: '/canvas?workspace={workspace}' } },
       { id: 'create-workspace-folder', title: 'Crea una carpeta', body: 'Escribe un nombre en Nueva carpeta al final de la lista y confirma. Aparece en la raíz, lista para recibir workspaces.' },
       { id: 'file-workspace-into-folder', title: 'Archiva un workspace en ella', body: 'Arrastra cualquier workspace sobre el encabezado de la carpeta para moverlo ahí; arrástralo al espacio vacío de la lista para devolverlo a la raíz.' },
       { id: 'create-workspace-in-folder', title: 'Crea un workspace ya dentro de una carpeta', body: 'Pasa el mouse sobre el encabezado de una carpeta y usa el ícono de más para abrir Nuevo workspace con esa carpeta preseleccionada como destino, o elige cualquier carpeta en el campo Carpeta del propio diálogo, sin necesidad de arrastrar después.' },
