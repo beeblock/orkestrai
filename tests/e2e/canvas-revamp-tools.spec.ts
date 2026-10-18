@@ -42,6 +42,8 @@ test.describe('canvas revamp tools', () => {
       expect(saved.status()).toBe(201);
       scoreId = (await saved.json()).data.id;
       await page.reload();
+      // Scores live in the Canvas panel rail (right).
+      await page.locator('[data-rail-item="scores"]').click();
       await expect(page.getByRole('region', { name: 'Partituras' })).toContainText('Review squad');
       const applied = await request.post(`/api/agent-room/presets/${scoreId}/apply`, { data: { workspaceId: target.id } });
       expect(applied.ok()).toBe(true);
