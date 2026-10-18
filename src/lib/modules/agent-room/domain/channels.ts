@@ -74,6 +74,24 @@ export function mentionedTitles(body: string, titles: readonly string[]): string
   return found.sort((a, b) => a.at - b.at).map((entry) => entry.title);
 }
 
+export const MAX_POSTED_IMAGES = 6;
+
+/**
+ * Workspace files a post shows with `![alt](path)`, in order and without
+ * repeats. Web addresses, data URIs and app routes are not workspace files.
+ */
+export function postedImagePaths(body: string): Array<{ alt: string; path: string }> {
+  const images: Array<{ alt: string; path: string }> = [];
+  for (const match of body.matchAll(/!\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"\n]*")?\s*\)/g)) {
+    const path = match[2].replace(/^\.\//, '');
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|\/api\/|#)/i.test(path)) continue;
+    if (images.some((image) => image.path === path)) continue;
+    images.push({ alt: match[1].trim(), path });
+    if (images.length >= MAX_POSTED_IMAGES) break;
+  }
+  return images;
+}
+
 export type ChannelBindingKind = 'telegram' | 'slack';
 
 /** An agent listening to and answering in one external chat. */

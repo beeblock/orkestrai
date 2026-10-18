@@ -7,6 +7,6 @@ describe('bridge skill content', () => {
     expect(content.startsWith('---\nname: orkestrai-bridge')).toBe(true);
     expect(content).toContain('orkestrai post');
     expect(content).toContain('`![descrição](caminho/relativo/ao/workspace.png)`');
-    expect(content).toContain('a Conversa exibe o mesmo arquivo que aparece no Canvas');
+    expect(content).toContain('o app coloca a mesma imagem no Canvas, ao seu lado e conectada a você');
   });
 });

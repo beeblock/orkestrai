@@ -8,6 +8,7 @@
   import { Switch } from '$lib/components/ui/switch';
   import AgentRuntimeDialog from '../canvas/AgentRuntimeDialog.svelte';
   import { agentStateLabel } from '../agent-status-labels.js';
+  import { recentAgentActivity } from './agent-recent-activity.js';
   import type { ChannelBinding } from '$lib/modules/agent-room/domain/channels.js';
   import type { AgentActivity, AutomationIntegration, ControlCenterSnapshot, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -47,7 +48,7 @@
     ]);
     bindings = list;
     integrations = available;
-    activity = (snapshot?.activity ?? []).filter((event) => event.nodeId === nodeId).slice(-8).reverse();
+    activity = recentAgentActivity(snapshot?.activity ?? [], nodeId);
   }
 
   $effect(() => {

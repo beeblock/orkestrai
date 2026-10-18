@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
-import { agentLearningMode, lessonNeedsReview, type AgentLesson } from '../../domain/agent-learning.js';
+import { agentLearningMode, LEARNING_ATTENTION_SOURCE, lessonNeedsReview, type AgentLesson } from '../../domain/agent-learning.js';
 import { knowledgeNormalize, knowledgeTerms } from '../../domain/knowledge.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentLearningRepository } from '../../infrastructure/repositories/AgentLearningRepository.js';
 import type { AgentLearningCommandDto } from '../dto/AgentLearningCommandDto.js';
 import { attentionService } from './AttentionService.js';
 
-export const LEARNING_ATTENTION_SOURCE = 'learning_pending';
+export { LEARNING_ATTENTION_SOURCE };
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 export class AgentLearningService {
@@ -81,7 +81,7 @@ export class AgentLearningService {
     if (pending) {
       await attentionService.raise({
         workspaceId, nodeId: node.id, taskId: input.taskId, category: 'agent', severity: 'info',
-        title: input.title.slice(0, 200), body: input.correction.slice(0, 500) || null,
+        title: input.title.slice(0, 200), body: input.correction.length > 500 ? `${input.correction.slice(0, 499).trimEnd()}…` : input.correction || null,
         sourceType: LEARNING_ATTENTION_SOURCE, sourceId: entry.id, correlationId: `${LEARNING_ATTENTION_SOURCE}:${entry.id}`,
         action: { target: 'node', decision: 'learning', entryId: entry.id },
       }).catch(() => undefined);

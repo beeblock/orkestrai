@@ -4,6 +4,8 @@ import type {
   AgentAttentionStatus,
   AgentActivitySeverity,
 } from '../../domain/types.js';
+import { LEARNING_ATTENTION_SOURCE, type AgentLesson } from '../../domain/agent-learning.js';
+import { agentLearningRepository } from '../../infrastructure/repositories/AgentLearningRepository.js';
 import { attentionRepository } from '../../infrastructure/repositories/AttentionRepository.js';
 import { agentRoomRepository } from '../../infrastructure/repositories/AgentRoomRepository.js';
 import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
@@ -21,6 +23,11 @@ function severityFor(activity: AgentActivity): AgentActivitySeverity {
 function broadcast(workspaceId: string, item?: AgentAttentionItem): void {
   const send = (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast;
   send?.({ type: 'attentionChanged', workspaceId, item });
+}
+
+function lessonBody(item: AgentAttentionItem, lessons: Map<string, AgentLesson>): string | null {
+  const lesson = item.sourceType === LEARNING_ATTENTION_SOURCE && item.sourceId ? lessons.get(item.sourceId) : null;
+  return lesson?.workspaceId === item.workspaceId && lesson.correction ? lesson.correction : null;
 }
 
 export class AttentionService {
@@ -117,6 +124,9 @@ export class AttentionService {
     const sourceContent = new Map<string, string>();
     const envelopes = await controlCenterRepository.findEnvelopes(messageIds);
     const envelopesById = new Map(envelopes.map((envelope) => [envelope.id, envelope]));
+    // A pending lesson is decided from its whole text, not the preview kept on the item.
+    const lessonIds = [...new Set(items.flatMap((item) => (item.sourceType === LEARNING_ATTENTION_SOURCE && item.sourceId ? [item.sourceId] : [])))];
+    const lessons = new Map((await agentLearningRepository.findMany(lessonIds)).map((lesson) => [lesson.id, lesson]));
     await Promise.all([
       ...[...nodeIds].map(async (nodeId) => {
         const node = await workspaceRepository.getNode(nodeId);
@@ -133,6 +143,7 @@ export class AttentionService {
     ]);
     return items.map((item) => ({
       ...item,
+      body: lessonBody(item, lessons) ?? item.body,
       workspaceName: workspaceNames.get(item.workspaceId) ?? null,
       nodeTitle: item.nodeId ? nodes.get(item.nodeId) ?? null : null,
       sourceContent: sourceContent.get(item.id) ?? null,

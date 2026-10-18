@@ -10,6 +10,10 @@ export class AgentLearningRepository {
     if (status) query.where('status', status);
     return (await query.orderBy('updated_at', 'desc').limit(1000).get()).map(project);
   }
+  async findMany(ids: string[]): Promise<AgentLesson[]> {
+    if (!ids.length) return [];
+    return (await AgentLearningEntry.query().whereIn('id', ids).get()).map(project);
+  }
   async create(entry: AgentLesson): Promise<AgentLesson> {
     return Connection.transaction(async () => {
       const duplicate = await AgentLearningEntry.query().where('workspace_id', entry.workspaceId).where('node_id', entry.nodeId).where('fingerprint', entry.fingerprint).first();
