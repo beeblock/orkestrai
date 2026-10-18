@@ -2,6 +2,7 @@
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { createContentCache } from './bounded-content-cache.js';
+  import { withWorkspaceImages } from './markdown-images.js';
 
   const render = (content: string) => {
     const raw = marked.parse(content, { async: false, gfm: true, breaks: true }) as string;
@@ -9,6 +10,7 @@
       .replaceAll('<a href', '<a target="_blank" rel="noopener noreferrer" href');
   };
   const cachedRender = createContentCache(render);
+
 </script>
 
 <script lang="ts">
@@ -17,12 +19,14 @@
     content: string;
     /** compact = tipografia menor (cartoes do kanban). */
     compact?: boolean;
+    /** Resolves images that name a file in this workspace. */
+    workspaceId?: string | null;
   };
 
-  let { content, compact = false }: Props = $props();
+  let { content, compact = false, workspaceId = null }: Props = $props();
 
   /** markdown -> html sanitizado; links abrem fora, checkboxes editaveis visualmente. */
-  const html = $derived(typeof window === 'undefined' ? render(content ?? '') : cachedRender(content ?? ''));
+  const html = $derived(withWorkspaceImages(typeof window === 'undefined' ? render(content ?? '') : cachedRender(content ?? ''), workspaceId));
 </script>
 
 <div class="md" class:compact>

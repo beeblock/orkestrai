@@ -1054,6 +1054,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "The message bar has a microphone: talk to an agent with a live waveform, and hear the reply read aloud.",
       "Groups have an Arrange button that lines members up inside the frame, and the frame now follows its members.",
       "Agents return to idle as soon as their terminal goes quiet, and every screen shows what they did in words.",
+      "Images agents post in Chat show the same workspace file you see on the Canvas.",
     ] },
     { date: 'October 16, 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
       'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',

@@ -1058,6 +1058,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "O campo de mensagem tem microfone: fale com um agente vendo a onda da sua voz e ouça a resposta em voz alta.",
       "Grupos ganharam o botão Organizar, que alinha os itens dentro do quadro, e o quadro agora acompanha os itens.",
       "Os agentes voltam a ocioso assim que o terminal silencia, e toda tela mostra em palavras o que eles fizeram.",
+      "Imagens que os agentes publicam na Conversa mostram o mesmo arquivo do workspace que aparece no Canvas.",
     ] },
     { date: '16 de outubro de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Seleção das seções de Configurações', summary: 'Mantém a seleção do menu correta no fim da página.', items: [
       'Clicar em uma seção curta no fim de Configurações a seleciona mesmo quando a página não pode rolar mais. Links diretos rolam até a seção após carregar os dados. Âncoras nativas, navegação por teclado e histórico continuam disponíveis; ao rolar para outro ponto, o menu volta a acompanhar a seção visível, inclusive no contêiner do desktop Windows, sem polling em repouso.',
