@@ -2184,6 +2184,7 @@
   "canvas.agents_menu": "Agents",
   "canvas.agents_menu_aria": "Choose an AI agent",
   "canvas.agents_available": "Available agents",
+  "canvas.agents_loading": "Detecting installed CLIs…",
   "canvas.agents_pinned": "Pinned to toolbar · {count}/{max}",
   "canvas.open_provider_center": "Open Provider Center",
   "canvas.pinned_agent_tooltip": "Create {provider} agent",

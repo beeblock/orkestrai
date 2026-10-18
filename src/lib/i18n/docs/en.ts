@@ -1049,6 +1049,7 @@ Header: Authorization = Bearer {{accessToken}}`,
       "New Studios: ask an agent for a diagram or a document from your project, delivered on the Canvas.",
       "Notes export to PDF.",
       "New agents: Gemini CLI, Qwen Code, Aider, goose and Amp, with official install commands in Provider Center.",
+      "Each Canvas reopens at the zoom and spot where you left it.",
     ] },
     { date: 'October 16, 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Settings section selection', summary: 'Keep the sidebar selection correct at the end of the page.', items: [
       'Clicking a short section near the bottom of Settings selects it even when the page cannot scroll farther. Direct section links scroll after settings load. Native anchors, keyboard navigation and browser history remain available; scrolling away resumes automatic section tracking, including the Windows desktop scroll container, without idle polling.',

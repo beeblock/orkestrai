@@ -56,6 +56,10 @@ test.describe('Canvas and design visual baseline', () => {
 
     try {
       await page.emulateMedia({ reducedMotion: 'reduce' });
+      // Every capture starts from the fitted board, not the view the previous capture left behind.
+      await page.addInitScript(() => {
+        for (const key of Object.keys(localStorage)) if (key.startsWith('orkestrai.canvasViewport.')) localStorage.removeItem(key);
+      });
       for (const theme of THEMES) {
         await request.put('/api/agent-room/settings', {
           data: {
