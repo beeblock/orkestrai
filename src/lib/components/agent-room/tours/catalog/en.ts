@@ -1161,7 +1161,12 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'choose-item',
         title: 'Choose where to work',
-        body: 'Expand a workspace or use search. Open items use vertical tabs by default; you can choose horizontal tabs under Settings → Appearance.',
+        body: "Use search or the open workspace's tree; the layers icon shows every workspace. Open items sit in tabs on top of the pane; under Settings → Appearance you can prefer the vertical list.",
+      },
+      {
+        id: 'agent-panel',
+        title: 'Work beside the agent',
+        body: 'Open an agent from the Team list. The header shows its state, what it is doing and its current task; the side panel brings its requests for you to decide or answer, its recent activity and the direct conversation, typed or spoken.',
       },
       {
         id: 'split-work',

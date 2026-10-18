@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Changed
 
+- Center Focus on the agent you are working with. Tabs sit on top of each pane by default (the sidebar list stays available under Settings → Appearance); the header shows the open agent's name, role, live state, what it is doing and its current task; the node fills its pane edge to edge; and a side panel beside an agent shows its requests for the owner (decided or answered in place), its recent activity and the direct conversation, typed or spoken. The explorer lists only the open workspace unless the owner asks for all of them, and direct conversations in Focus update live.
 - Gather the brand, the Canvas/Workbench switch, search, the attention bell and the docked microphone into one 44px top bar on every platform. macOS draws the window's traffic lights inside it; Windows keeps its menus and native window buttons. The Canvas and Workbench sidebars no longer repeat them.
 - Show each agent's live state in its terminal header: a status mark, a stable teammate color with initials, the time spent in the current state and the model chosen at launch. One shared, event-driven status feed serves every header.
 - Shorten the Canvas dock. Everyday tools stay one click away (Shell, agents, Huddles, Note, Tasks, Portal, Second Brain, Images, Design); the rest move into labelled Plan, Code, Devices and Workspace menus, and creation tools can still be dragged from the menus onto the canvas.

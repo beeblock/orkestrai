@@ -5682,5 +5682,18 @@
   "studio.doc_api": "Referencia de la API",
   "studio.doc_data": "Modelo de datos",
   "studio.doc_security": "Visión de seguridad",
-  "note.export_pdf": "Exportar como PDF"
+  "note.export_pdf": "Exportar como PDF",
+  "focus_agent.label": "Panel de {name}",
+  "focus_agent.close": "Cerrar el panel del agente",
+  "focus_agent.no_role": "Sin rol definido",
+  "focus_agent.now": "Ahora",
+  "focus_agent.open_tasks": "Abrir el tablero de tareas",
+  "focus_agent.no_task": "Ninguna tarea en el tablero ahora.",
+  "focus_agent.activity": "Actividad reciente",
+  "focus_agent.conversation": "Conversación directa",
+  "focus_agent.action_failed": "No se pudo completar la acción.",
+  "focus_agent.toggle_show": "Mostrar el panel del agente",
+  "focus_agent.toggle_hide": "Ocultar el panel del agente",
+  "focus.show_all_workspaces": "Mostrar todos los workspaces",
+  "focus.show_current_workspace": "Mostrar solo este workspace"
 }

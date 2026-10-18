@@ -5682,5 +5682,18 @@
   "studio.doc_api": "API reference",
   "studio.doc_data": "Data model",
   "studio.doc_security": "Security overview",
-  "note.export_pdf": "Export as PDF"
+  "note.export_pdf": "Export as PDF",
+  "focus_agent.label": "{name} panel",
+  "focus_agent.close": "Close the agent panel",
+  "focus_agent.no_role": "No role set",
+  "focus_agent.now": "Now",
+  "focus_agent.open_tasks": "Open the task board",
+  "focus_agent.no_task": "No task on the board right now.",
+  "focus_agent.activity": "Recent activity",
+  "focus_agent.conversation": "Direct conversation",
+  "focus_agent.action_failed": "Couldn't complete that action.",
+  "focus_agent.toggle_show": "Show the agent panel",
+  "focus_agent.toggle_hide": "Hide the agent panel",
+  "focus.show_all_workspaces": "Show every workspace",
+  "focus.show_current_workspace": "Show only this workspace"
 }

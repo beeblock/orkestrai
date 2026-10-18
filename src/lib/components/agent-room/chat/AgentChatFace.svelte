@@ -1,24 +1,29 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
-  import { ArrowUp, LoaderCircle, UserRound } from '@lucide/svelte';
+  import { ArrowUp, LoaderCircle, Mic, UserRound } from '@lucide/svelte';
   import MarkdownView from '../MarkdownView.svelte';
   import QuestionCard from './QuestionCard.svelte';
+  import ComposerVoice from '../canvas/ComposerVoice.svelte';
+  import { TEXT_DICTATION_COMMAND } from '../text-dictation.js';
   import { answersByQuestion, buildTimeline, upsertMessage } from './chat-timeline.js';
   import { directChannel, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
 
   /**
    * The agent's direct conversation shown inside its Canvas node: the same
-   * messages as in Chat, without reading the terminal screen.
+   * messages as in Chat, without reading the terminal screen. With `voice`,
+   * an empty field offers the microphone instead of a disabled send button.
    */
-  let { workspaceId, nodeId, title }: { workspaceId: string; nodeId: string; title: string } = $props();
+  let { workspaceId, nodeId, title, voice = false }: { workspaceId: string; nodeId: string; title: string; voice?: boolean } = $props();
 
   let messages = $state<ChannelMessage[]>([]);
   let draft = $state('');
   let sending = $state(false);
   let failed = $state(false);
   let scroller = $state<HTMLElement | null>(null);
+  let field = $state<HTMLInputElement | null>(null);
+  let listening = $state(false);
   const channel = $derived(directChannel(nodeId));
   const url = $derived(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(channel)}/messages`);
   const timeline = $derived(buildTimeline(messages));
@@ -61,6 +66,20 @@
     if (!failed && draft.trim() === text) draft = '';
   }
 
+  async function onVoice(text: string, mode: 'send' | 'edit') {
+    draft = draft.trim() ? `${draft.trimEnd()} ${text}` : text;
+    if (mode === 'send') await send();
+    else requestAnimationFrame(() => field?.focus());
+  }
+
+  function onVoiceSetup() {
+    listening = false;
+    requestAnimationFrame(() => {
+      field?.focus();
+      window.dispatchEvent(new Event(TEXT_DICTATION_COMMAND));
+    });
+  }
+
   onMount(() => {
     void load();
     // The Canvas page relays live channel frames to the nodes that show them.
@@ -96,10 +115,18 @@
   </div>
   {#if failed}<p class="error" role="alert">{m['composer.failed']({ name: title })}</p>{/if}
   <form class="composer" onsubmit={(event) => { event.preventDefault(); void send(); }}>
-    <input bind:value={draft} placeholder={m['chat.placeholder_direct']({ name: title })} aria-label={m['chat.placeholder_direct']({ name: title })} />
-    <button type="submit" disabled={!draft.trim() || sending} aria-label={m['composer.send']()}>
-      {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} />{/if}
-    </button>
+    {#if listening}
+      <ComposerVoice onTranscript={onVoice} onClose={() => (listening = false)} onSetupNeeded={onVoiceSetup} />
+    {:else}
+      <input bind:this={field} bind:value={draft} placeholder={m['chat.placeholder_direct']({ name: title })} aria-label={m['chat.placeholder_direct']({ name: title })} />
+      {#if voice && !draft.trim() && !sending}
+        <button type="button" onclick={() => (listening = true)} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={14} /></button>
+      {:else}
+        <button type="submit" disabled={!draft.trim() || sending} aria-label={m['composer.send']()}>
+          {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} />{/if}
+        </button>
+      {/if}
+    {/if}
   </form>
 </div>
 
