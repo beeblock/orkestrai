@@ -135,7 +135,11 @@
   import OrchestratorCanvasNode from '$lib/components/agent-room/canvas/OrchestratorCanvasNode.svelte';
   import TeamMapDialog from '$lib/components/agent-room/canvas/TeamMapDialog.svelte';
   import TeamComposer from '$lib/components/agent-room/canvas/TeamComposer.svelte';
+  import ChecklistCanvasNode from '$lib/components/agent-room/canvas/ChecklistCanvasNode.svelte';
+  import CalendarCanvasNode from '$lib/components/agent-room/canvas/CalendarCanvasNode.svelte';
   import InkPanel from '$lib/components/agent-room/canvas/InkPanel.svelte';
+  import { agentPause, refreshPausedAgents, setAgentsPaused } from '$lib/components/agent-room/agent-pause.svelte.js';
+  import { parseBoardCommand } from '$lib/modules/agent-room/domain/board-commands.js';
   import ScoresPanel from '$lib/components/agent-room/canvas/ScoresPanel.svelte';
   import SaveScoreDialog from '$lib/components/agent-room/canvas/SaveScoreDialog.svelte';
   import MachinesDialog from '$lib/components/agent-room/canvas/MachinesDialog.svelte';
@@ -149,7 +153,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, CalendarDays, ListChecks, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, Pause, Play, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -195,6 +199,8 @@
     toolWorkshop: ToolWorkshopCanvasNode,
     design: DesignCanvasNode,
     orchestrator: OrchestratorCanvasNode,
+    checklist: ChecklistCanvasNode,
+    calendar: CalendarCanvasNode,
   };
 
   // The minimap is a quiet silhouette: selected nodes in gold, groups barely there.
@@ -593,12 +599,22 @@
   });
   // Notes an agent keeps for itself collapse into one stack per agent.
   const noteStackList = $derived.by(() => computeNoteStacks(nodes, edges));
+  // Members of a collapsed group hide behind its label until it opens again.
+  const collapsedGroupMembers = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const node of nodes) {
+      const payload = node.type === 'group' ? (node.data?.payload as { collapsed?: boolean; members?: string[] } | undefined) : undefined;
+      if (payload?.collapsed) for (const memberId of payload.members ?? []) ids.add(memberId);
+    }
+    return ids;
+  });
   $effect(() => {
     const stacks = noteStackList;
     const hidden = hiddenStackedNotes(stacks, new Set(noteStackState.expanded));
+    for (const memberId of collapsedGroupMembers) hidden.add(memberId);
     untrack(() => {
       publishNoteStacks(stacks);
-      const differs = (node: Node) => node.type === 'note' && Boolean(node.hidden) !== hidden.has(node.id);
+      const differs = (node: Node) => node.type !== 'group' && Boolean(node.hidden) !== hidden.has(node.id);
       if (!nodes.some(differs)) return;
       nodes = nodes.map((node) => differs(node)
         ? { ...node, hidden: hidden.has(node.id), selected: hidden.has(node.id) ? false : node.selected }
@@ -735,7 +751,7 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design' | 'freehand';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design' | 'freehand' | 'checklist' | 'calendar';
   let drawTool = $state<DrawTool | null>(null);
   // Points of the stroke being drawn with the pen, in flow coordinates.
   let penStroke = $state.raw<Array<{ x: number; y: number }>>([]);
@@ -800,6 +816,8 @@
     usage: async (rect) => { await addUsageNode(rect); },
     codeGraph: async (rect) => { await addCodeGraphNode(rect); },
     design: async (rect) => { await addDesignNode(rect); },
+    checklist: async (rect) => { await addPlanNode('checklist', rect); },
+    calendar: async (rect) => { await addPlanNode('calendar', rect); },
   };
 
   function toggleDrawTool(tool: DrawTool, provider?: AgentProviderInfo) {
@@ -1764,6 +1782,8 @@
     { id: 'shape', label: m['canvas.label_shape'](), hint: m['tool.shape'](), icon: Shapes, dragTool: 'shape', active: drawTool === 'shape', onSelect: () => toggleDrawTool('shape') },
     { id: 'freehand', label: m['canvas.label_pen'](), hint: m['tool.pen'](), icon: PenLine, active: drawTool === 'freehand', onSelect: () => toggleDrawTool('freehand') },
     { id: 'council', label: m['council.title'](), hint: m['council.open'](), icon: Scale, active: councilOpen, onSelect: () => (councilOpen = true) },
+    { id: 'checklist', label: m['checklist.title'](), hint: m['checklist.tool_hint'](), icon: ListChecks, dragTool: 'checklist', active: drawTool === 'checklist', onSelect: () => toggleDrawTool('checklist') },
+    { id: 'calendar', label: m['calendar.title'](), hint: m['calendar.tool_hint'](), icon: CalendarDays, dragTool: 'calendar', active: drawTool === 'calendar', onSelect: () => toggleDrawTool('calendar') },
   ]);
   const codeTools = $derived<ToolGroupItem[]>([
     { id: 'fileTree', label: m['canvas.default_files'](), hint: m['tool.files'](), icon: FolderTree, dragTool: 'fileTree', active: drawTool === 'fileTree', onSelect: () => toggleDrawTool('fileTree') },
@@ -1802,6 +1822,67 @@
     { id: 'workspaces', label: m['canvas.workspaces_drawer'](), icon: FolderCog, active: workspaceDrawerOpen, onSelect: () => (workspaceDrawerOpen = !workspaceDrawerOpen) },
   ]);
 
+  // Pause all / Resume all freeze the agents' processes where they are (not available on Windows).
+  const pauseSupported = typeof navigator !== 'undefined' && !/win/i.test(navigator.platform);
+  $effect(() => {
+    const id = activeWorkspace?.id ?? null;
+    void untrack(() => refreshPausedAgents(id));
+  });
+
+  // Typed or dictated board commands from the message bar; anything else goes to the team.
+  async function runBoardCommand(text: string): Promise<boolean> {
+    if (!activeWorkspace) return false;
+    const agentNodes = nodes.filter((node) => node.type === 'terminal' && (node.data?.payload as TerminalNodePayload | undefined)?.provider);
+    const command = parseBoardCommand(text, {
+      providers: providers.map((provider) => ({ id: provider.id, names: [provider.id, provider.displayName] })),
+      agents: agentNodes.map((node) => String(node.data?.title ?? '')).filter(Boolean),
+    });
+    if (!command) return false;
+    if (command.kind === 'spawn') {
+      const provider = providers.find((candidate) => candidate.id === command.provider) ?? quickProviders[0] ?? null;
+      if (command.count === 1 || !provider) pendingAgentCreation = { provider };
+      else await composeTeam({ name: m['canvas.voice_team_name'](), role: null, providerIds: Array.from({ length: command.count }, () => provider.id) }, () => {});
+    } else if (command.kind === 'handoff') {
+      const byTitle = (title: string) => agentNodes.find((node) => String(node.data?.title ?? '') === title);
+      const from = byTitle(command.from);
+      const to = byTitle(command.to);
+      if (!from || !to) return false;
+      const result = await api<{ title: string }>(`/api/agent-room/workspaces/${activeWorkspace.id}/tasks/handoff`, { method: 'POST', body: JSON.stringify({ fromNodeId: from.id, toNodeId: to.id }) }).catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : m['term.handoff_failed']());
+        return null;
+      });
+      if (result) toast.success(m['term.handoff_done']({ title: result.title, name: command.to }));
+    } else if (command.kind === 'pause') {
+      await pauseAll(command.paused);
+    } else if (command.kind === 'open') {
+      if (command.target === 'team-map') missionMapOpen = true;
+      else if (command.target === 'orchestrator') await addOrchestratorNode();
+      else if (command.target === 'team-composer') teamComposerOpen = true;
+      else if (command.target === 'memory') memoryOpen = true;
+      else if (command.target === 'scores') scoresOpen = true;
+      else if (command.target === 'focus') void goto(`/terminal?workspace=${encodeURIComponent(activeWorkspace.id)}`);
+      else void goto(`/chat?workspace=${encodeURIComponent(activeWorkspace.id)}`);
+    } else if (command.kind === 'note') {
+      const position = nextFreePosition(320, 220);
+      const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'note', title: m['canvas.default_note'](), ...position, width: 320, height: 220, payload: { content: command.text }, floorId: visibleFloorId }),
+      });
+      nodes = [...nodes, toFlowNode(node)];
+    } else if (command.kind === 'group') {
+      await groupSelection();
+    }
+    return true;
+  }
+
+  async function pauseAll(paused: boolean) {
+    if (!activeWorkspace) return;
+    const changed = await setAgentsPaused(activeWorkspace.id, paused);
+    if (changed === null) toast.error(m['canvas.pause_unsupported']());
+    else if (!changed.length) toast.info(paused ? m['canvas.pause_none']() : m['canvas.resumed_count']({ count: 0 }));
+    else toast.success(paused ? m['canvas.paused_count']({ count: changed.length }) : m['canvas.resumed_count']({ count: changed.length }));
+  }
+
   const selectedForGroup = $derived(nodes.filter((node) => node.selected && node.type !== 'group').length);
   const quickChips = $derived<QuickChip[]>([
     { id: 'new-agent', label: m['canvas.chip_new_agent'](), icon: Plus, onSelect: () => (pendingAgentCreation = { provider: quickProviders[0] ?? null }) },
@@ -1809,6 +1890,10 @@
     { id: 'team', label: m['canvas.chip_team'](), icon: UsersRound, onSelect: () => (teamComposerOpen = !teamComposerOpen) },
     { id: 'group', label: m['canvas.chip_group'](), icon: GroupIcon, hint: selectedForGroup < 2 ? m['canvas.chip_group_hint']() : undefined, disabled: selectedForGroup < 2, onSelect: () => groupSelection() },
     { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, onSelect: () => (scoresOpen = !scoresOpen) },
+    ...(pauseSupported ? [
+      { id: 'pause-all', label: m['canvas.chip_pause_all'](), icon: Pause, hint: m['canvas.chip_pause_hint'](), onSelect: () => void pauseAll(true) },
+      ...(agentPause.ids.length ? [{ id: 'resume-all', label: m['canvas.chip_resume_all'](), icon: Play, onSelect: () => void pauseAll(false) }] : []),
+    ] : []),
     { id: 'team-map', label: m['canvas.team_map'](), icon: Network, onSelect: () => (missionMapOpen = true) },
   ]);
 
@@ -2264,6 +2349,25 @@
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({ type: 'tasks', title: m['canvas.default_tasks'](), ...position, ...nodeSize(rect, 400, 260, 560, 360), payload: {}, floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
+  // Checklists and calendars sit beside the work for planning.
+  async function addPlanNode(type: 'checklist' | 'calendar', rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const size = type === 'checklist' ? { min: [240, 180], def: [320, 360] } : { min: [360, 300], def: [540, 440] };
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(size.def[0], size.def[1]);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type,
+        title: type === 'checklist' ? m['checklist.title']() : m['calendar.title'](),
+        ...position,
+        ...nodeSize(rect, size.min[0], size.min[1], size.def[0], size.def[1]),
+        payload: type === 'checklist' ? { items: [] } : { events: [] },
+        floorId: visibleFloorId,
+      }),
     });
     nodes = [...nodes, toFlowNode(node)];
   }
@@ -3636,7 +3740,7 @@
           {#if activeWorkspace}
             <CanvasQuickChips label={m['canvas.quick_actions']()} chips={quickChips} />
           {/if}
-          {#if activeWorkspace && composerTargets.length}
+          {#if activeWorkspace}
             <CanvasComposer
               workspaceId={activeWorkspace.id}
               targets={composerTargets}
@@ -3644,6 +3748,7 @@
               mentions={composerMentions}
               onTargetChange={(id) => (composerTargetId = id)}
               onJump={(id) => jumpToNode(id)}
+              onCommand={runBoardCommand}
             />
           {/if}
         </Panel>
@@ -3857,6 +3962,7 @@
     {/if}
     {#if showUsagePanel}
       <UsagePanel
+        workspaceId={activeWorkspace?.id ?? null}
         onClose={() => (showUsagePanel = false)}
         onAddToCanvas={() => {
           void addUsageNode();

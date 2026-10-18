@@ -3,7 +3,7 @@ import { calendarScheduleSchema } from './calendar-schedule.schema.js';
 
 export const automationTriggerTypeSchema = z.enum([
   'manual', 'schedule', 'task', 'message', 'git_commit', 'github_pull_request',
-  'webhook', 'file_change', 'usage_threshold',
+  'webhook', 'file_change', 'usage_threshold', 'agent_idle', 'agent_output',
 ]);
 
 export const automationActionTypeSchema = z.enum(['prompt_agent', 'create_task', 'notify', 'browser', 'integration', 'tool']);
@@ -23,6 +23,10 @@ export const automationFormSchema = z.object({
   usageProvider: z.enum(['claude', 'codex', 'kimi']).nullish(),
   usageWindow: z.enum(['5h', 'weekly', 'monthly']).nullish(),
   usagePercent: z.coerce.number().int().min(1).max(100).nullish(),
+  watchNodeId: z.string().trim().max(64).nullish(),
+  idleMinutes: z.coerce.number().int().min(1).max(1_440).nullish(),
+  outputContains: z.string().trim().max(500).nullish(),
+  goalText: z.string().trim().max(500).nullish(),
   actionType: automationActionTypeSchema,
   targetNodeId: z.string().trim().nullish(),
   prompt: z.string().trim().max(50_000).nullish(),
@@ -56,6 +60,15 @@ export const automationFormSchema = z.object({
   }
   if (value.triggerType === 'usage_threshold' && (!value.usageProvider || !value.usageWindow || !value.usagePercent)) {
     context.addIssue({ code: 'custom', path: ['usagePercent'], message: 'Usage threshold is incomplete.' });
+  }
+  if (value.triggerType === 'agent_idle' && (!(value.watchNodeId || value.targetNodeId) || !value.idleMinutes)) {
+    context.addIssue({ code: 'custom', path: ['idleMinutes'], message: 'Choose the agent and how long it stays idle.' });
+  }
+  if (value.triggerType === 'agent_output' && (!(value.watchNodeId || value.targetNodeId) || !value.outputContains)) {
+    context.addIssue({ code: 'custom', path: ['outputContains'], message: 'Choose the agent and the text to watch for.' });
+  }
+  if (value.goalText && value.actionType !== 'prompt_agent') {
+    context.addIssue({ code: 'custom', path: ['goalText'], message: 'A goal stops loops that prompt an agent.' });
   }
   if (value.triggerType === 'github_pull_request' && !value.githubEvent) {
     context.addIssue({ code: 'custom', path: ['githubEvent'], message: 'Pull request event is required.' });

@@ -32,6 +32,8 @@ import { agentRuntimeService } from './AgentRuntimeService.js';
 import { autonomyPolicyService, AutonomyGatePendingError } from './AutonomyPolicyService.js';
 import { integrationExecutionService } from './IntegrationExecutionService.js';
 import { agentWorkspaceToolService, toolExecutionService } from './AgentWorkspaceToolService.js';
+import { loopGoalReached, outputMatchKey } from '../../domain/loop-goals.js';
+import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 
 const TICK_MS = 15_000;
 const RUN_LEASE_MS = 2 * 60_000;
@@ -44,6 +46,8 @@ const POLL_INTERVALS: Partial<Record<AutomationTriggerType, number>> = {
   git_commit: 30_000,
   github_pull_request: 5 * 60_000,
   usage_threshold: 5 * 60_000,
+  agent_idle: 30_000,
+  agent_output: 20_000,
 };
 
 const routineRuntime = globalThis as typeof globalThis & {
@@ -143,6 +147,14 @@ function mapRun(model: AgentRoutineRun): AutomationRun {
 }
 
 function triggerConfig(input: AutomationFormInput, existing: Record<string, unknown> = {}): Record<string, unknown> {
+  const config = baseTriggerConfig(input, existing);
+  // A loop with a goal retires itself once the agent writes the goal text.
+  return input.goalText ? { ...config, goal: input.goalText } : config;
+}
+
+function baseTriggerConfig(input: AutomationFormInput, existing: Record<string, unknown> = {}): Record<string, unknown> {
+  if (input.triggerType === 'agent_idle') return { nodeId: input.watchNodeId || input.targetNodeId, minutes: input.idleMinutes };
+  if (input.triggerType === 'agent_output') return { nodeId: input.watchNodeId || input.targetNodeId, contains: input.outputContains };
   if (input.triggerType === 'schedule') return input.calendar
     ? { calendar: input.calendar, calendarChangedAt: JSON.stringify(existing.calendar) === JSON.stringify(input.calendar) ? existing.calendarChangedAt : new Date().toISOString(), once: input.calendar.frequency === 'once' }
     : { intervalMinutes: input.intervalMinutes, once: !input.intervalMinutes };
@@ -434,6 +446,7 @@ export class RoutineService {
     const polled = await AgentRoutine.query().where('enabled', true).get();
     for (const model of polled) {
       const routine = mapRoutine(model);
+      if (await this.retireIfGoalMet(routine).catch(() => false)) continue;
       if (!POLL_INTERVALS[routine.triggerType] || !this.pollDue(routine)) continue;
       if (await this.poll(routine).catch(() => false)) count += 1;
     }
@@ -840,6 +853,28 @@ export class RoutineService {
       await AgentRoutine.query().where('id', routine.id).update({ last_trigger_key: key });
       return this.enqueue(routine, 'usage_threshold', key, { usage, window, threshold: percent });
     }
+    if (routine.triggerType === 'agent_idle') {
+      const nodeId = String(routine.triggerConfig.nodeId ?? '');
+      const minutes = Math.max(1, Number(routine.triggerConfig.minutes ?? 10));
+      const { controlCenterService } = await import('./ControlCenterService.js');
+      const snapshot = await controlCenterService.snapshot(routine.workspaceId, false);
+      const agent = snapshot.agents.find((candidate) => candidate.nodeId === nodeId);
+      if (!agent?.sessionAlive || agent.state !== 'idle') return false;
+      if (Date.now() - Date.parse(agent.stateSince) < minutes * 60_000) return false;
+      // Once per idle stretch: the key changes only when the agent idles again.
+      const key = `idle:${nodeId}:${agent.stateSince}`;
+      const model = await AgentRoutine.find(routine.id);
+      if (String(model?.getAttribute('last_trigger_key') ?? '') === key) return false;
+      await AgentRoutine.query().where('id', routine.id).update({ last_trigger_key: key });
+      return this.enqueue(routine, 'agent_idle', key, { nodeId, idleSince: agent.stateSince });
+    }
+    if (routine.triggerType === 'agent_output') {
+      const nodeId = String(routine.triggerConfig.nodeId ?? '');
+      const match = outputMatchKey(ptySessionManager.outputTail(routine.workspaceId, nodeId) ?? '', String(routine.triggerConfig.contains ?? ''));
+      if (!match) return false;
+      const key = `output:${nodeId}:${createHash('sha256').update(match).digest('hex').slice(0, 24)}`;
+      return this.pollState(routine, key, { nodeId, contains: routine.triggerConfig.contains });
+    }
     if (routine.triggerType === 'github_pull_request') {
       const integration = await automationIntegrationService.github(routine.workspaceId);
       if (!integration?.secretKey || integration.status !== 'connected') return false;
@@ -852,6 +887,19 @@ export class RoutineService {
       return this.pollState(routine, `github:${latest.key}`, latest.data, 'github_pull_request');
     }
     return false;
+  }
+
+  /** Turns a loop off when its agent wrote the goal text after the loop last ran. */
+  private async retireIfGoalMet(routine: Routine): Promise<boolean> {
+    const goal = String(routine.triggerConfig.goal ?? '').trim();
+    const targetNodeId = String(routine.actionConfig.targetNodeId ?? '');
+    if (!goal || routine.actionType !== 'prompt_agent' || !targetNodeId || !routine.lastRunAt) return false;
+    const tail = ptySessionManager.outputTail(routine.workspaceId, targetNodeId);
+    if (!tail || !loopGoalReached(tail, goal, String(routine.actionConfig.prompt ?? ''))) return false;
+    await AgentRoutine.query().where('id', routine.id).update({ enabled: false, updated_at: new Date().toISOString() });
+    const workspace = await workspaceRepository.getWorkspace(routine.workspaceId);
+    if (workspace) await nativeNotificationService.send(workspace, { kind: 'task', title: routine.name, message: goal }).catch(() => undefined);
+    return true;
   }
 
   private async pollState(

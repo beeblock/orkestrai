@@ -10,6 +10,10 @@
   import NodeEmptyState from './NodeEmptyState.svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
   import StatusPill from '../StatusPill.svelte';
+  import { agentPause } from '../agent-pause.svelte.js';
+  import { useNodes } from '@xyflow/svelte';
+  import { getCsrfToken as csrfForHandoff } from '@beeblock/svelar/http';
+  import { toast as handoffToast } from '@beeblock/svelar/ui';
   import AgentGlyph from '../AgentGlyph.svelte';
   import NodeAttentionBanner from './NodeAttentionBanner.svelte';
   import AgentChatFace from '../chat/AgentChatFace.svelte';
@@ -620,6 +624,24 @@
       workspaceRoot: data.workspaceRoot,
     };
   });
+
+  // "Pass the task to …": the open task moves to another agent with a brief.
+  const flowNodes = useNodes();
+  const handoffTargets = $derived(flowNodes.current
+    .filter((node) => node.id !== id && node.type === 'terminal' && (node.data as { payload?: { provider?: string } }).payload?.provider)
+    .map((node) => ({ id: node.id, title: String((node.data as { title?: string }).title ?? '') })));
+
+  async function handoffTo(targetId: string, targetTitle: string) {
+    const csrf = csrfForHandoff();
+    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(data.workspaceId)}/tasks/handoff`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+      body: JSON.stringify({ fromNodeId: id, toNodeId: targetId }),
+    }).catch(() => null);
+    const body = await response?.json().catch(() => null) as { data?: { title?: string }; error?: string; message?: string } | null;
+    if (response?.ok && body?.data?.title) handoffToast.success(m['term.handoff_done']({ title: body.data.title, name: targetTitle }));
+    else handoffToast.error(body?.error ?? body?.message ?? m['term.handoff_failed']());
+  }
 </script>
 
 {#if currentProvider}
@@ -675,7 +697,11 @@
         {/if}
         {#if launchModel}<span class="terminal-model">{launchModel}</span>{/if}
       </span>
-      <StatusPill tone={statusTone} label={statusLabel} />
+      {#if agentPause.ids.includes(id)}
+        <StatusPill tone="offline" label={m['agent_status.paused']()} />
+      {:else}
+        <StatusPill tone={statusTone} label={statusLabel} />
+      {/if}
     {/if}
     {#if runtimeOverride}
       <span class="terminal-status-chip" role="status" title={runtimeTitle} aria-label={runtimeTitle}>
@@ -773,6 +799,24 @@
             <Bot size={14} />
             {m['agent_runtime.menu']()}
           </DropdownMenu.Item>
+        {/if}
+        {#if currentProvider}
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <ArrowLeftRight size={14} />
+              {m['term.handoff']()}
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent sideOffset={6} class="max-h-72 w-56 overflow-y-auto">
+              {#each handoffTargets as target (target.id)}
+                <DropdownMenu.Item onclick={() => void handoffTo(target.id, target.title)}>
+                  <AgentAvatar nodeId={target.id} title={target.title} size={16} />
+                  <span class="min-w-0 flex-1 truncate">{target.title}</span>
+                </DropdownMenu.Item>
+              {:else}
+                <DropdownMenu.Item disabled>{m['term.handoff_none']()}</DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
         {/if}
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger>

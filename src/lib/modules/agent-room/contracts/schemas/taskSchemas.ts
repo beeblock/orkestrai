@@ -42,6 +42,12 @@ export const bridgeBoardTaskUpdateSchema = z.object({
   from: z.string().trim().nullish(),
 });
 
+export const taskHandoffSchema = z.object({
+  fromNodeId: z.string().trim().min(1).max(64),
+  toNodeId: z.string().trim().min(1).max(64),
+  note: z.string().trim().max(1_000).nullish(),
+});
+
 export const createBoardColumnSchema = z.object({
   name: z.string().trim().min(1).max(48),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
