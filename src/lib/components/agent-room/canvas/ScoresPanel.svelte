@@ -9,15 +9,31 @@
   type Score = { id: string; name: string; agents: number; scope?: 'selection' };
 
   /** Scores: parts of a canvas saved to place again in any workspace. */
-  let { workspaceId, onInserted }: { workspaceId: string; onInserted: () => void } = $props();
+  let {
+    workspaceId,
+    onInserted,
+    selectionCount = 0,
+    onSaveSelection,
+    standalone = false,
+  }: {
+    workspaceId: string;
+    onInserted: () => void;
+    /** Items selected on the board, offered as a new score. */
+    selectionCount?: number;
+    onSaveSelection?: () => void;
+    /** Shown on its own (popover): explain what scores are when there are none. */
+    standalone?: boolean;
+  } = $props();
 
   let scores = $state<Score[]>([]);
+  let loaded = $state(false);
   let busy = $state<string | null>(null);
 
   async function load() {
     const response = await fetch(`/api/agent-room/presets?locale=${getLocale()}`, { cache: 'no-store' }).catch(() => null);
     const body = response?.ok ? await response.json().catch(() => null) : null;
     scores = ((body?.data ?? []) as Score[]).filter((preset) => preset.scope === 'selection');
+    loaded = true;
   }
 
   async function insert(score: Score) {
@@ -56,9 +72,20 @@
   });
 </script>
 
-{#if scores.length}
-  <section class="scores" aria-labelledby="scores-title">
-    <h2 id="scores-title">{m['scores.title']()}<span class="count">{scores.length}</span></h2>
+{#if scores.length || standalone}
+  <section class="scores" class:standalone aria-labelledby="scores-title">
+    <h2 id="scores-title">{m['scores.title']()}{#if scores.length}<span class="count">{scores.length}</span>{/if}</h2>
+    {#if standalone && onSaveSelection}
+      <button type="button" class="save-selection" disabled={selectionCount < 1} onclick={() => onSaveSelection?.()}>
+        <Music4 size={13} />{selectionCount > 0 ? m['scores.save_selection_count']({ count: selectionCount }) : m['scores.save_selection']()}
+      </button>
+    {/if}
+    {#if standalone && loaded && !scores.length}
+      <div class="empty" data-testid="scores-empty">
+        <p>{m['scores.empty_body']()}</p>
+        <p class="hint">{selectionCount > 0 ? m['scores.empty_hint_ready']() : m['scores.empty_hint']()}</p>
+      </div>
+    {/if}
     <ul>
       {#each scores as score (score.id)}
         <li>
@@ -79,6 +106,50 @@
     gap: 4px;
     padding: 8px 10px 6px;
     border-top: 1px solid var(--app-border);
+  }
+
+  .scores.standalone {
+    gap: 8px;
+    padding: 12px;
+    border-top: 0;
+  }
+
+  .save-selection {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .save-selection:disabled {
+    background: var(--app-hover);
+    color: var(--app-text-muted);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 2px 4px;
+  }
+
+  .empty p {
+    margin: 0;
+    color: var(--app-text-soft);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .empty .hint {
+    color: var(--app-text-muted);
+    font-size: 11.5px;
   }
 
   h2 {

@@ -1,7 +1,10 @@
 <script lang="ts">
   import { useNodes, type NodeProps } from '@xyflow/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
-  import { ArrowUp, Cable, LoaderCircle, Plus, Star, X } from '@lucide/svelte';
+  import { ArrowUp, Cable, LoaderCircle, LocateFixed, Mic, Plus, Star, X } from '@lucide/svelte';
+  import ComposerVoice from './ComposerVoice.svelte';
+  import { sendToAgent } from './CanvasComposer.svelte';
+  import { TEXT_DICTATION_COMMAND } from '../text-dictation.js';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
@@ -69,11 +72,65 @@
   const groupCount = $derived(sections.filter((section) => section.id !== 'loose').length);
   // This node is the leader's panel: the leader agent distributes what is said here.
   const leader = $derived(sections.flatMap((section) => section.rows).find((item) => item.leader) ?? null);
-  const prompt = $derived(leader ? m['orchestrator.placeholder_leader']({ name: leader.title }) : m['orchestrator.placeholder_no_leader']());
+  // A teammate chosen in the list receives the next message directly.
+  let recipient = $state<Row | null>(null);
+  const prompt = $derived(recipient
+    ? m['orchestrator.placeholder_direct']({ name: recipient.title })
+    : leader ? m['orchestrator.placeholder_leader']({ name: leader.title }) : m['orchestrator.placeholder_no_leader']());
 
   let draft = $state('');
   // Without a leader, only @mentioned teammates would receive the message.
-  const canSend = $derived(Boolean(leader) || draft.includes('@'));
+  const canSend = $derived(Boolean(recipient) || Boolean(leader) || draft.includes('@'));
+  let voiceOpen = $state(false);
+  let inputEl = $state<HTMLInputElement | null>(null);
+  let mentionOpen = $state(false);
+  let mentionFilter = $state('');
+  const mentionOptions = $derived(sections.flatMap((section) => section.rows)
+    .filter((item) => item.title.toLowerCase().includes(mentionFilter.toLowerCase()))
+    .slice(0, 6));
+
+  // Reads the field itself, so @ works whatever order the browser updates the binding in.
+  function onDraftInput() {
+    const match = (inputEl?.value ?? draft).match(/@([\p{L}\p{N} ._-]*)$/u);
+    mentionOpen = Boolean(match);
+    mentionFilter = match?.[1] ?? '';
+  }
+
+  function insertMention(item: Row) {
+    draft = draft.replace(/@([\p{L}\p{N} ._-]*)$/u, `@${item.title} `);
+    mentionOpen = false;
+    inputEl?.focus();
+  }
+
+  function onDraftKeydown(event: KeyboardEvent) {
+    if (mentionOpen && mentionOptions.length && (event.key === 'Enter' || event.key === 'Tab')) {
+      event.preventDefault();
+      insertMention(mentionOptions[0]);
+    } else if (event.key === 'Escape' && mentionOpen) {
+      event.stopPropagation();
+      mentionOpen = false;
+    }
+  }
+
+  function chooseRecipient(item: Row) {
+    recipient = recipient?.id === item.id ? null : item;
+    requestAnimationFrame(() => inputEl?.focus());
+  }
+
+  async function onVoiceTranscript(text: string, mode: 'send' | 'edit') {
+    draft = draft.trim() ? `${draft.trimEnd()} ${text}` : text;
+    if (mode === 'send') await send();
+    else requestAnimationFrame(() => inputEl?.focus());
+  }
+
+  // Voice models not installed yet: the app's dictation flow offers the download.
+  function onVoiceSetup() {
+    voiceOpen = false;
+    requestAnimationFrame(() => {
+      inputEl?.focus();
+      window.dispatchEvent(new Event(TEXT_DICTATION_COMMAND));
+    });
+  }
   let sending = $state(false);
   let feedback = $state<{ ok: boolean; text: string } | null>(null);
   let connecting = $state(false);
@@ -91,6 +148,18 @@
     const text = draft.trim();
     if (!text || sending || !canSend) return;
     sending = true;
+    if (recipient) {
+      const target = recipient;
+      const delivered = await sendToAgent(data.workspaceId, target.id, text);
+      sending = false;
+      if (delivered) {
+        if (draft.trim() === text) draft = '';
+        flash(true, m['orchestrator.sent_direct']({ name: target.title }));
+      } else {
+        flash(false, m['orchestrator.failed']());
+      }
+      return;
+    }
     const csrf = getCsrfToken();
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(data.workspaceId)}/channels/${encodeURIComponent(TEAM_CHANNEL)}/messages`, {
       method: 'POST',
@@ -186,7 +255,8 @@
           </div>
         {/if}
         {#each section.rows as item (item.id)}
-          <button type="button" class="row" onclick={() => data.onJumpToNode?.(item.id)} title={item.title}>
+          <div class="row-wrap" class:chosen={recipient?.id === item.id}>
+          <button type="button" class="row" onclick={() => chooseRecipient(item)} aria-pressed={recipient?.id === item.id} title={m['orchestrator.talk_to']({ name: item.title })}>
             <span class="avatar">
               <AgentAvatar nodeId={item.id} title={item.title} size={26} />
               {#if item.provider && providerIcons[item.provider]}
@@ -200,6 +270,8 @@
             {#if item.leader}<Star size={13} class="star" aria-label={m['orchestrator.leader']()} />{/if}
             <StatusPill tone={item.tone} label={agentStateLabel(item.state as never)} />
           </button>
+          <button type="button" class="locate" onclick={() => data.onJumpToNode?.(item.id)} aria-label={m['orchestrator.show_on_canvas']({ name: item.title })} title={m['orchestrator.show_on_canvas']({ name: item.title })}><LocateFixed size={13} /></button>
+          </div>
           {#if !leader && data.onToggleMaestro}
             <button type="button" class="make-leader" onclick={() => data.onToggleMaestro?.(item.id)}>{m['orchestrator.make_leader']({ name: item.title })}</button>
           {/if}
@@ -215,11 +287,37 @@
     </div>
 
     {#if feedback}<p class="feedback" class:error={!feedback.ok} role="status">{feedback.text}</p>{/if}
-    <form class="command" onsubmit={(event) => { event.preventDefault(); void send(); }}>
-      <input bind:value={draft} placeholder={prompt} aria-label={prompt} disabled={total === 0} />
-      <button type="submit" class="send" aria-label={leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={!draft.trim() || sending || !canSend}>
-        {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} strokeWidth={2.4} />{/if}
-      </button>
+    {#if recipient}
+      <div class="to-chip">
+        <span>{m['orchestrator.to']()}</span>
+        <AgentAvatar nodeId={recipient.id} title={recipient.title} size={16} />
+        <b>{recipient.title}</b>
+        <button type="button" onclick={() => (recipient = null)} aria-label={m['orchestrator.clear_recipient']()} title={m['orchestrator.clear_recipient']()}><X size={12} /></button>
+      </div>
+    {/if}
+    {#if mentionOpen && mentionOptions.length}
+      <div class="panel-mentions" role="listbox" aria-label={m['composer.mention']()}>
+        {#each mentionOptions as option (option.id)}
+          <button type="button" role="option" aria-selected="false" onclick={() => insertMention(option)}>
+            <AgentAvatar nodeId={option.id} title={option.title} size={18} />
+            <span>{option.title}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+    <form class="command" class:voice={voiceOpen} onsubmit={(event) => { event.preventDefault(); void send(); }}>
+      {#if voiceOpen}
+        <ComposerVoice onTranscript={onVoiceTranscript} onClose={() => (voiceOpen = false)} onSetupNeeded={onVoiceSetup} />
+      {:else}
+        <input bind:this={inputEl} bind:value={draft} placeholder={prompt} aria-label={prompt} disabled={total === 0} oninput={onDraftInput} onkeydown={onDraftKeydown} oncompositionend={onDraftInput} />
+        {#if draft.trim() || sending}
+          <button type="submit" class="send" aria-label={recipient ? m['orchestrator.send_leader']({ name: recipient.title }) : leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={!draft.trim() || sending || !canSend}>
+            {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} strokeWidth={2.4} />{/if}
+          </button>
+        {:else}
+          <button type="button" class="send" disabled={total === 0} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="orchestrator-mic"><Mic size={14} strokeWidth={2.2} /></button>
+        {/if}
+      {/if}
     </form>
   </div>
 </NodeShell>
@@ -443,6 +541,113 @@
     text-align: left;
     color: var(--app-text);
     transition: background-color var(--duration-quick) ease-out;
+  }
+
+  .row-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    border-radius: 10px;
+  }
+
+  .row-wrap.chosen {
+    background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 40%, transparent);
+  }
+
+  .row-wrap .row {
+    padding-right: 34px;
+  }
+
+  .locate {
+    position: absolute;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text-muted);
+    opacity: 0;
+    transition: opacity var(--duration-quick) ease-out;
+  }
+
+  .row-wrap:hover .locate,
+  .locate:focus-visible {
+    opacity: 1;
+  }
+
+  .locate:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .to-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 10px 6px;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .to-chip b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-text);
+    font-weight: 600;
+  }
+
+  .to-chip button {
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--app-text-muted);
+  }
+
+  .to-chip button:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .panel-mentions {
+    display: flex;
+    flex-direction: column;
+    margin: 0 8px 6px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-border);
+  }
+
+  .panel-mentions button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text);
+    font-size: 12.5px;
+    text-align: left;
+  }
+
+  .panel-mentions button:hover,
+  .panel-mentions button:focus-visible {
+    background: var(--app-hover);
+  }
+
+  .command.voice {
+    padding: 3px 4px;
   }
 
   .row:hover {

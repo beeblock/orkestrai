@@ -49,6 +49,23 @@ export function alignRects(rects: LayoutRect[], mode: AlignMode): Map<string, { 
     }
     result.set(rect.id, { x, y });
   }
+  // Lined-up nodes never land on top of each other: stack them along the free axis.
+  const gap = 24;
+  const vertical = mode === 'left' || mode === 'right' || mode === 'centerH';
+  const ordered = [...rects].sort((one, two) => vertical ? one.y - two.y || one.x - two.x : one.x - two.x || one.y - two.y);
+  let edge = -Infinity;
+  for (const rect of ordered) {
+    const point = result.get(rect.id)!;
+    if (vertical) {
+      const y = Math.max(point.y, edge);
+      result.set(rect.id, { x: point.x, y });
+      edge = y + rect.height + gap;
+    } else {
+      const x = Math.max(point.x, edge);
+      result.set(rect.id, { x, y: point.y });
+      edge = x + rect.width + gap;
+    }
+  }
   return result;
 }
 
@@ -174,3 +191,112 @@ export function arrangeGroupMembers(
   }
   return result;
 }
+
+/**
+ * Organizes a board by what is connected: every connected cluster becomes one
+ * compact block with its most connected node (usually the leader) on top and
+ * the nodes it talks to in rows below, layer by layer. Blocks are packed in
+ * rows, largest first, and lone nodes close the board. `units` are the movable
+ * blocks (a group counts as one); `links` join unit ids.
+ */
+export function organizeByConnections(
+  units: LayoutRect[],
+  links: Array<[string, string]>,
+  options: { gap?: number; blockGap?: number } = {},
+): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  if (!units.length) return result;
+  const gap = options.gap ?? 32;
+  const blockGap = options.blockGap ?? 120;
+  const byId = new Map(units.map((unit) => [unit.id, unit]));
+  const neighbours = new Map<string, Set<string>>(units.map((unit) => [unit.id, new Set<string>()]));
+  for (const [a, b] of links) {
+    if (a === b || !byId.has(a) || !byId.has(b)) continue;
+    neighbours.get(a)!.add(b);
+    neighbours.get(b)!.add(a);
+  }
+  // Reading order of the current board keeps related placement stable.
+  const reading = (one: LayoutRect, two: LayoutRect) => one.y - two.y || one.x - two.x;
+
+  type Block = { width: number; height: number; places: Map<string, { x: number; y: number }> };
+  const blocks: Block[] = [];
+  const loose: LayoutRect[] = [];
+  const seen = new Set<string>();
+  for (const start of [...units].sort(reading)) {
+    if (seen.has(start.id)) continue;
+    const component: LayoutRect[] = [];
+    const queue = [start.id];
+    seen.add(start.id);
+    while (queue.length) {
+      const id = queue.shift()!;
+      component.push(byId.get(id)!);
+      for (const next of neighbours.get(id)!) if (!seen.has(next)) { seen.add(next); queue.push(next); }
+    }
+    if (component.length === 1) { loose.push(component[0]); continue; }
+    // Layers by distance from the most connected node.
+    const hub = [...component].sort((one, two) => neighbours.get(two.id)!.size - neighbours.get(one.id)!.size || reading(one, two))[0];
+    const depth = new Map<string, number>([[hub.id, 0]]);
+    const order = [hub.id];
+    for (let index = 0; index < order.length; index += 1) {
+      const id = order[index];
+      const children = [...neighbours.get(id)!].filter((next) => !depth.has(next)).map((next) => byId.get(next)!).sort(reading);
+      for (const child of children) { depth.set(child.id, depth.get(id)! + 1); order.push(child.id); }
+    }
+    const layers: LayoutRect[][] = [];
+    for (const id of order) (layers[depth.get(id)!] ??= []).push(byId.get(id)!);
+    const area = component.reduce((sum, unit) => sum + (unit.width + gap) * (unit.height + gap), 0);
+    const widest = Math.max(...component.map((unit) => unit.width));
+    const target = Math.max(widest, Math.sqrt(area) * 1.5);
+    const places = new Map<string, { x: number; y: number }>();
+    let y = 0;
+    let width = 0;
+    for (const layer of layers) {
+      let x = 0;
+      let rowHeight = 0;
+      for (const unit of layer) {
+        if (x > 0 && x + unit.width > target) { y += rowHeight + gap; x = 0; rowHeight = 0; }
+        places.set(unit.id, { x, y });
+        x += unit.width + gap;
+        rowHeight = Math.max(rowHeight, unit.height);
+        width = Math.max(width, x - gap);
+      }
+      y += rowHeight + gap * 2;
+    }
+    blocks.push({ width, height: y - gap * 2, places });
+  }
+  if (loose.length) {
+    const area = loose.reduce((sum, unit) => sum + (unit.width + gap) * (unit.height + gap), 0);
+    const target = Math.max(Math.max(...loose.map((unit) => unit.width)), Math.sqrt(area) * 1.5);
+    const places = new Map<string, { x: number; y: number }>();
+    let x = 0;
+    let y = 0;
+    let rowHeight = 0;
+    let width = 0;
+    for (const unit of [...loose].sort(reading)) {
+      if (x > 0 && x + unit.width > target) { y += rowHeight + gap; x = 0; rowHeight = 0; }
+      places.set(unit.id, { x, y });
+      x += unit.width + gap;
+      rowHeight = Math.max(rowHeight, unit.height);
+      width = Math.max(width, x - gap);
+    }
+    blocks.push({ width, height: y + rowHeight, places });
+  }
+  // Pack blocks in rows, largest first, starting where the board started.
+  const origin = { x: Math.min(...units.map((unit) => unit.x)), y: Math.min(...units.map((unit) => unit.y)) };
+  const lone = loose.length ? blocks.pop()! : null;
+  blocks.sort((one, two) => two.width * two.height - one.width * one.height);
+  if (lone) blocks.push(lone);
+  const totalArea = blocks.reduce((sum, block) => sum + (block.width + blockGap) * (block.height + blockGap), 0);
+  const rowLimit = Math.max(Math.max(...blocks.map((block) => block.width)), Math.sqrt(totalArea) * 1.6);
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  for (const block of blocks) {
+    if (x > 0 && x + block.width > rowLimit) { y += rowHeight + blockGap; x = 0; rowHeight = 0; }
+    for (const [id, place] of block.places) result.set(id, { x: origin.x + x + place.x, y: origin.y + y + place.y });
+    x += block.width + blockGap;
+    rowHeight = Math.max(rowHeight, block.height);
+  }
+  return result;
+}
+

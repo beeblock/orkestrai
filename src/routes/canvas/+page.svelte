@@ -110,7 +110,7 @@
   import PresetLibraryPanel from '$lib/components/agent-room/canvas/PresetLibraryPanel.svelte';
   import AgentToolbarMenu from '$lib/components/agent-room/canvas/AgentToolbarMenu.svelte';
   import CommandPalette, { type PaletteAction } from '$lib/components/agent-room/canvas/CommandPalette.svelte';
-  import { alignRects, arrangeGroupMembers, boundingBox, distributeRects, fitGroupFrame, tidyRects, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
+  import { alignRects, arrangeGroupMembers, boundingBox, distributeRects, fitGroupFrame, organizeByConnections, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
   import { findFreeCanvasPosition } from '$lib/modules/agent-room/domain/canvas-placement.js';
   import type { TerminalThemeName } from '$lib/components/agent-room/terminal-themes.js';
   import {
@@ -141,6 +141,7 @@
   import StudioDialog, { type StudioRequest } from '$lib/components/agent-room/canvas/StudioDialog.svelte';
   import { agentPause, refreshPausedAgents, setAgentsPaused } from '$lib/components/agent-room/agent-pause.svelte.js';
   import { parseBoardCommand } from '$lib/modules/agent-room/domain/board-commands.js';
+  import ArchivedPanel from '$lib/components/agent-room/canvas/ArchivedPanel.svelte';
   import ScoresPanel from '$lib/components/agent-room/canvas/ScoresPanel.svelte';
   import SaveScoreDialog from '$lib/components/agent-room/canvas/SaveScoreDialog.svelte';
   import MachinesDialog from '$lib/components/agent-room/canvas/MachinesDialog.svelte';
@@ -154,7 +155,7 @@
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, CalendarDays, ListChecks, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, Pause, Play, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, Sparkles, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { Archive, BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, CalendarDays, ListChecks, LoaderCircle, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, Pause, Play, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, Sparkles, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -542,11 +543,12 @@
   // Escape closes the workspaces drawer and the scores popover before anything else.
   onMount(() => {
     const closeOverlays = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || (!workspaceDrawerOpen && !scoresOpen && !teamComposerOpen)) return;
+      if (event.key !== 'Escape' || (!workspaceDrawerOpen && !scoresOpen && !archivedOpen && !teamComposerOpen)) return;
       // A dialog above the board closes first.
       if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return;
       workspaceDrawerOpen = false;
       scoresOpen = false;
+      archivedOpen = false;
       teamComposerOpen = false;
       event.stopPropagation();
     };
@@ -957,8 +959,11 @@
   let sidebarCollapsed = $state(false);
   // Workspaces, folders and their actions open as a drawer from the top bar or the right rail.
   let workspaceDrawerOpen = $state(false);
+  // While the board opens, show that it is loading instead of the start screen.
+  let booting = $state(true);
   let viewportZoom = $state(1);
   let scoresOpen = $state(false);
+  let archivedOpen = $state(false);
   let missionMapOpen = $state(false);
   let teamComposerOpen = $state(false);
   let studioOpen = $state(false);
@@ -1012,6 +1017,9 @@
     else if (action === 'command-palette') showPalette = true;
     else if (action === 'workspaces') workspaceDrawerOpen = true;
     else if (action === 'mission-map' && activeWorkspace) missionMapOpen = true;
+    else if (action === 'import-workspace') importInput.click();
+    else if (action === 'export-workspace' && activeWorkspace) void exportActiveWorkspace();
+    else if (action === 'unload-workspace' && activeWorkspace) confirmUnload = true;
     else if (action === 'scores' && activeWorkspace) scoresOpen = true;
   }
 
@@ -1448,6 +1456,7 @@
         }
       }
       workspacesLoaded = true;
+      booting = false;
       await tick();
       // Indicador de workspaces ativos (sessoes PTY vivas em background).
       await refreshActivity();
@@ -1486,7 +1495,7 @@
       } catch {
         // storage indisponivel — nao bloqueia
       }
-    })();
+    })().finally(() => (booting = false));
     return () => {
       eventsSocket();
     };
@@ -1842,7 +1851,8 @@
     { id: 'team-map', label: m['canvas.team_map'](), icon: Network, active: missionMapOpen, onSelect: () => (missionMapOpen = !missionMapOpen) },
     { id: 'huddles', label: m['huddle.title'](), icon: MessageCircleMore, active: huddleOpen, onSelect: () => (huddleOpen = true) },
     { id: 'memory', label: m['knowledge.title'](), icon: BookMarked, active: memoryOpen, onSelect: () => (memoryOpen = true) },
-    { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, active: scoresOpen, onSelect: () => (scoresOpen = !scoresOpen) },
+    { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, active: scoresOpen, onSelect: () => { scoresOpen = !scoresOpen; archivedOpen = false; } },
+    { id: 'archived', label: m['archived.title'](), icon: Archive, active: archivedOpen, onSelect: () => { archivedOpen = !archivedOpen; scoresOpen = false; } },
     { id: 'studio', label: m['studio.title'](), icon: Sparkles, active: studioOpen, onSelect: () => (studioOpen = true) },
     { id: 'presets', label: m['canvas.label_presets'](), icon: LayoutTemplate, active: showPresetPanel, onSelect: () => toggleSidePanel('presets') },
     { id: 'floors', label: m['canvas.label_floors'](), icon: Layers, active: showFloorPanel, badge: floors.length || undefined, onSelect: () => toggleSidePanel('floors') },
@@ -3185,7 +3195,13 @@
     const rects = organizationRects();
     if (!rects.length) return;
     snapshot();
-    const positions = tidyRects(rects);
+    // Connected nodes stay together; a group moves as one block with its members.
+    const unitOf = new Map<string, string>();
+    for (const group of nodes.filter((node) => node.type === 'group')) {
+      for (const memberId of groupMemberIds(group)) unitOf.set(memberId, group.id);
+    }
+    const links = edges.map((edge) => [unitOf.get(edge.source) ?? edge.source, unitOf.get(edge.target) ?? edge.target] as [string, string]);
+    const positions = organizeByConnections(rects, links);
     for (const group of nodes.filter((node) => node.type === 'group')) {
       const next = positions.get(group.id);
       if (!next) continue;
@@ -3986,9 +4002,14 @@
         </Panel>
         {#if activeWorkspace}
           <Panel position="center-right" class="side-rail-panel">
+            {#if archivedOpen}
+              <div class="scores-pop archived-pop" role="dialog" aria-label={m['archived.title']()}>
+                <ArchivedPanel workspaceId={activeWorkspace.id} onChanged={() => { if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
+              </div>
+            {/if}
             {#if scoresOpen}
               <div class="scores-pop" role="dialog" aria-label={m['canvas.chip_scores']()}>
-                <ScoresPanel workspaceId={activeWorkspace.id} onInserted={() => { scoresOpen = false; if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
+                <ScoresPanel standalone workspaceId={activeWorkspace.id} selectionCount={selectedTransferNodeIds.length} onSaveSelection={() => { scoresOpen = false; scoreDialogOpen = true; }} onInserted={() => { scoresOpen = false; if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
               </div>
             {/if}
             <CanvasSideRail label={m['canvas.panels_label']()} items={rightRailItems}>
@@ -4045,7 +4066,12 @@
       </div>
     {:else}
       <div class="canvas-empty">
-        {#if workspacesLoaded}
+        {#if booting}
+          <div class="canvas-loading" role="status" data-testid="canvas-loading">
+            <LoaderCircle size={18} class="animate-spin" aria-hidden="true" />
+            <span>{m['canvas.loading_workspace']()}</span>
+          </div>
+        {:else if workspacesLoaded}
           <div class="empty-hero">
             <img src="/brand/icon.svg" width="40" height="40" alt="" class="empty-mark" />
             <h1>{workspaces.length ? m['canvas.empty_title_pick']() : m['canvas.empty_title_new']()}</h1>
@@ -5318,6 +5344,10 @@
     margin-right: 14px;
   }
 
+  .scores-pop.archived-pop {
+    width: 320px;
+  }
+
   .scores-pop {
     width: 280px;
     max-height: min(460px, calc(100vh - 260px));
@@ -5520,6 +5550,19 @@
     box-shadow: var(--app-shadow-panel);
     backdrop-filter: blur(10px);
     pointer-events: auto;
+    animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
+  }
+
+  .canvas-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--app-glass-line);
+    background: var(--app-glass);
+    color: var(--app-text-soft);
+    font-size: 13px;
     animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
   }
 

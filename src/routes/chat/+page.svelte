@@ -196,8 +196,9 @@
     void goto(`/canvas?${params.toString()}`);
   }
 
+  // Reads the field itself, so a typed @ opens mentions whatever order the binding updates in.
   function onInput() {
-    const match = draft.match(/@([\p{L}\p{N} ._-]*)$/u);
+    const match = (input?.value ?? draft).match(/@([\p{L}\p{N} ._-]*)$/u);
     mentionOpen = Boolean(match);
     mentionFilter = match?.[1] ?? '';
     if (input) {
@@ -529,6 +530,7 @@
           disabled={!workspace || (!agents.length)}
           placeholder={directNode ? m['chat.placeholder_direct']({ name: channelTitle }) : leader ? m['chat.placeholder_team']({ name: leader.title }) : m['chat.placeholder_team_no_leader']()}
           oninput={onInput}
+          oncompositionend={onInput}
           onkeydown={onKeydown}
         ></textarea>
         <button type="button" class="icon" onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()} disabled={!agents.length}><AtSign size={16} /></button>

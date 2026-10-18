@@ -125,3 +125,38 @@ describe('group frames', () => {
     expect(fitGroupFrame(placed)).toMatchObject({ x: 1000, y: 500 });
   });
 });
+
+describe('organize by connections', () => {
+  const overlap = (rects: Array<{ x: number; y: number; width: number; height: number }>) => rects.some((one, i) => rects.some((two, j) => i < j
+    && one.x < two.x + two.width && two.x < one.x + one.width && one.y < two.y + two.height && two.y < one.y + one.height));
+
+  it('keeps a leader and its connections together, apart from another team and lone nodes', async () => {
+    const { organizeByConnections } = await import('$lib/components/agent-room/canvas/layout.js');
+    const unit = (id: string, x: number, y: number, width = 400, height = 300) => ({ id, x, y, width, height });
+    // Team A spread far apart, team B, two loose notes.
+    const units = [unit('leadA', 0, 0, 600, 400), unit('a1', 5000, 3000), unit('a2', -4000, 200), unit('a3', 200, 6000),
+      unit('leadB', 9000, 0), unit('b1', 0, 9000), unit('noteX', 3000, 3000, 280, 220), unit('noteY', 7000, 7000, 280, 220)];
+    const links: Array<[string, string]> = [['leadA', 'a1'], ['leadA', 'a2'], ['leadA', 'a3'], ['leadB', 'b1']];
+    const places = organizeByConnections(units, links);
+    const placed = units.map((item) => ({ ...item, ...places.get(item.id)! }));
+    const at = (id: string) => placed.find((item) => item.id === id)!;
+    expect(overlap(placed)).toBe(false);
+    // Team A: the leader sits on top of its three teammates, all close by.
+    for (const id of ['a1', 'a2', 'a3']) {
+      expect(at(id).y).toBeGreaterThan(at('leadA').y);
+      expect(Math.hypot(at(id).x - at('leadA').x, at(id).y - at('leadA').y)).toBeLessThan(1600);
+    }
+    // The whole board is far more compact than before.
+    const box = (items: typeof placed) => ({ w: Math.max(...items.map((i) => i.x + i.width)) - Math.min(...items.map((i) => i.x)), h: Math.max(...items.map((i) => i.y + i.height)) - Math.min(...items.map((i) => i.y)) });
+    const after = box(placed);
+    expect(after.w * after.h).toBeLessThan(box(units).w * box(units).h / 8);
+  });
+
+  it('stacks aligned nodes instead of piling them up', async () => {
+    const { alignRects } = await import('$lib/components/agent-room/canvas/layout.js');
+    const rects = [{ id: 'p', x: 0, y: 0, width: 200, height: 100 }, { id: 'q', x: 300, y: 40, width: 200, height: 100 }];
+    const places = alignRects(rects, 'left');
+    expect(places.get('p')).toEqual({ x: 0, y: 0 });
+    expect(places.get('q')).toEqual({ x: 0, y: 124 });
+  });
+});
