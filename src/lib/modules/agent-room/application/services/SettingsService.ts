@@ -34,6 +34,7 @@ const DEFAULTS: Record<string, string> = {
   terminalGlobalCommands: '[]',
   coreRunInBackground: 'false',
   coreLaunchAtLogin: 'false',
+  tidyFinishedWork: 'true',
 };
 
 /** Configuracoes globais do app (chave/valor, com defaults). */

@@ -360,6 +360,17 @@ export class WorkspaceRepository {
     return rows.map(mapNode);
   }
 
+  /** Archived nodes of a workspace, newest first, for the restore list. */
+  async listArchivedNodes(workspaceId: string, limit = 200): Promise<Array<CanvasNode & { archivedAt: string }>> {
+    const rows = await AgentCanvasNode.query()
+      .where('workspace_id', workspaceId)
+      .whereNotNull('archived_at')
+      .orderBy('archived_at', 'desc')
+      .limit(limit)
+      .get();
+    return rows.map((row) => ({ ...mapNode(row), archivedAt: String(row.getAttribute('archived_at')) }));
+  }
+
   /** Arquiva um no (some do canvas, continua no banco para o historico). */
   async archiveNode(id: string): Promise<void> {
     await AgentCanvasNode.query().where('id', id).update({ archived_at: new Date().toISOString() });

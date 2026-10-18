@@ -195,9 +195,23 @@
     return names[id]?.() ?? id;
   }
 
+  // What the recipe asks for, in the interface language: shown on the card and written into the automation.
+  function recipeText(recipe: AutomationRecipe): string {
+    const localized = (m as unknown as Record<string, (() => string) | undefined>)[`automation.recipe_text_${recipe.id.replaceAll('-', '_')}`];
+    return localized?.() ?? recipe.defaults.prompt ?? recipe.defaults.taskDescription ?? recipe.defaults.notificationMessage ?? '';
+  }
+
+  function localizedDefaults(recipe: AutomationRecipe): Partial<AutomationFormInput> {
+    const text = recipeText(recipe);
+    if (recipe.defaults.prompt) return { ...recipe.defaults, prompt: text };
+    if (recipe.defaults.taskDescription) return { ...recipe.defaults, taskTitle: m['automation.recipe_task_title_marketing_handoff'](), taskDescription: text };
+    if (recipe.defaults.notificationMessage) return { ...recipe.defaults, notificationTitle: m['automation.recipe_notify_title_operations_usage_guard'](), notificationMessage: text };
+    return recipe.defaults;
+  }
+
   function applyRecipe(recipe: AutomationRecipe): void {
     openNew();
-    $formData = { ...$formData, ...recipe.defaults, name: recipeName(recipe.id), recipeId: recipe.id } as AutomationFormInput;
+    $formData = { ...$formData, ...localizedDefaults(recipe), name: recipeName(recipe.id), recipeId: recipe.id } as AutomationFormInput;
     activeTab = 'overview';
   }
 
@@ -455,7 +469,7 @@
               <span class="rounded-md bg-[var(--app-hover)] px-1.5 py-px text-ui-xs font-medium text-[var(--app-text-soft)]">{recipeCategoryLabel(recipe.category)}</span>
             </div>
             <h3 class="mt-3 text-balance text-ui-lg font-semibold">{recipeName(recipe.id)}</h3>
-            <p class="mt-1 line-clamp-3 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{recipe.defaults.prompt ?? recipe.defaults.taskDescription ?? recipe.defaults.notificationMessage}</p>
+            <p class="mt-1 line-clamp-3 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{recipeText(recipe)}</p>
             <div class="mt-auto pt-4"><Button variant="outline" size="sm" onclick={() => applyRecipe(recipe)}>{m['automation.recipe_apply']()}</Button></div>
           </article>
         {/each}

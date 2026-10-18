@@ -69,6 +69,9 @@ pt-BR, English, and Spanish translations.
 - Add Gemini CLI, Qwen Code, Aider, goose and Amp as agent providers with their official install commands in Provider Center. They run in terminal nodes and headless one-shot tasks; Gemini, Qwen and goose resume a conversation by id, while Aider and Amp always start fresh.
 - Talk to the team from the Canvas message bar: the microphone records with a live waveform and a timer, then transcribes on this computer and either sends the words or leaves them in the field to edit. The reply to a voice message is read aloud, and a speaker button reads every reply from the chosen agent.
 - Arrange a group's members on an even grid inside its frame from the group label.
+- Keep the Canvas tidy after image workflows: when a workflow finishes, the workflow node and the notes that only briefed it are archived (hidden and kept) and its images gather in one arranged group beside the agent that made them. A new Archived panel in the panel rail restores anything with one click, turns the automatic tidy off and archives every finished workflow at once on boards that already piled up.
+- Give the leader panel a recipient: click an agent to write to it directly (the locate button still shows it on the canvas), mention teammates by typing @ and talk to the panel by voice.
+- Add a More menu to the top bar with How to use, Provider Center, Skills and MCPs, the remote workspace, Settings and importing, exporting or unloading the workspace, which used to hide inside the workspaces drawer.
 
 ### Fixed
 
@@ -78,6 +81,12 @@ pt-BR, English, and Spanish translations.
 - Keep a group's members inside its frame: dragging the group together with selected members no longer moves those members twice, grouping hands the selection to the new group so dragging one member moves only that member, the frame follows a member dragged past its edge and boards opened with members outside a frame refit it.
 - Chat routines sit right below what the agent is doing, read their schedule in words with the next run, and routines created from Chat post each result in the conversation.
 - Show images that agents post in Chat when they point at a file in the workspace, the same file the Canvas shows as an image node; agents are told to post images that way.
+- Write notes in the note's ink everywhere: the formatted view, links, code, quotes and checklists are readable on every paper color, checklist items tick with a click, the editor gains a formatting bar and the color button is easy to spot.
+- Show that the Canvas is opening when you come back from Focus, Chat or Settings instead of flashing the start screen.
+- Explain Scores when there are none yet and offer to save the current selection from the panel.
+- Organize the board by connections: connected agents, notes and portals stay together with the most connected node on top, groups move as one block and the layout is compact; aligned nodes stack instead of overlapping.
+- Show automation recipes, including the loop recipes, in the interface language, and write their instructions in that language.
+- Open mentions reliably when @ is typed in the Canvas message bar and in Chat.
 
 ## 0.42.2 - 2026-10-16
 

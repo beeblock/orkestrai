@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { NodeProps } from '@xyflow/svelte';
-  import { Eye, FileDown, Layers, Paperclip, Pencil, StickyNote, X } from '@lucide/svelte';
+  import { Eye, FileDown, Layers, Paperclip, Pencil, StickyNote, X, Bold, Italic, Heading2, List, ListChecks, Link2, Code, Palette } from '@lucide/svelte';
   import { printMarkdown } from '../print-markdown.js';
   import MarkdownView from '../MarkdownView.svelte';
   import AttachmentList from '../AttachmentList.svelte';
@@ -86,6 +86,64 @@
 
   function toggleFormatted() {
     formatted = !formatted;
+  }
+
+  // Ticking a checklist item in the formatted view flips the matching `- [ ]` in the text.
+  const TASK = /^(\s*(?:[-*+]|\d+[.)])\s+)\[( |x|X)\]/;
+  function toggleTask(event: MouseEvent) {
+    const item = (event.target as HTMLElement | null)?.closest('li');
+    const box = item?.querySelector(':scope > input[type="checkbox"], :scope > p > input[type="checkbox"]');
+    if (!item || !box) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const boxes = [...(event.currentTarget as HTMLElement).querySelectorAll('li input[type="checkbox"]')];
+    const index = boxes.indexOf(box);
+    if (index < 0) return;
+    let seen = -1;
+    draft = draft.split('\n').map((line: string) => {
+      if (!TASK.test(line)) return line;
+      seen += 1;
+      return seen === index ? line.replace(TASK, (_match: string, lead: string, mark: string) => `${lead}[${mark.trim() ? ' ' : 'x'}]`) : line;
+    }).join('\n');
+    data.onContentChange(id, draft);
+  }
+
+  // Editing helpers: wrap the selection or start the current line with markdown.
+  let editor = $state<HTMLTextAreaElement | null>(null);
+  function applyFormat(kind: 'bold' | 'italic' | 'heading' | 'list' | 'task' | 'link' | 'code') {
+    const area = editor;
+    if (!area) return;
+    const start = area.selectionStart;
+    const end = area.selectionEnd;
+    const selected = draft.slice(start, end);
+    const lineStart = draft.lastIndexOf('\n', start - 1) + 1;
+    let next = draft;
+    let cursorStart = start;
+    let cursorEnd = end;
+    const wrap = (left: string, right: string, fallback: string) => {
+      const inner = selected || fallback;
+      next = `${draft.slice(0, start)}${left}${inner}${right}${draft.slice(end)}`;
+      cursorStart = start + left.length;
+      cursorEnd = cursorStart + inner.length;
+    };
+    const prefix = (mark: string) => {
+      next = `${draft.slice(0, lineStart)}${mark}${draft.slice(lineStart)}`;
+      cursorStart = start + mark.length;
+      cursorEnd = end + mark.length;
+    };
+    if (kind === 'bold') wrap('**', '**', m['note.format_text']());
+    else if (kind === 'italic') wrap('_', '_', m['note.format_text']());
+    else if (kind === 'code') wrap('`', '`', 'code');
+    else if (kind === 'link') wrap('[', '](https://)', selected || m['note.format_link_text']());
+    else if (kind === 'heading') prefix('## ');
+    else if (kind === 'list') prefix('- ');
+    else prefix('- [ ] ');
+    draft = next;
+    handleInput();
+    requestAnimationFrame(() => {
+      area.focus();
+      area.setSelectionRange(cursorStart, cursorEnd);
+    });
   }
 
   async function addAttachments(next: WorkspaceAttachment[], at = draft.length) {
@@ -240,6 +298,7 @@
          em notas estreitas; as seis cores continuam a um clique. -->
     <Popover.Root>
       <Popover.Trigger class="node-action-btn color-trigger nodrag" aria-label={m['note.color_picker']({ color: noteColor.label })} title={m['note.color_picker']({ color: noteColor.label })}>
+        <Palette size={13} />
         <span class="color-dot" style:background={noteColor.color}></span>
       </Popover.Trigger>
       <Popover.Content align="end" class="w-[262px] p-2.5">
@@ -291,6 +350,7 @@
       class:attachment-drop-active={attachmentDropActive}
       style="--note-color: {noteColor.color}"
       ondblclick={toggleFormatted}
+      onclick={toggleTask}
       ondragover={handleDragOver}
       ondragleave={() => (attachmentDropActive = false)}
       ondrop={handleDrop}
@@ -299,7 +359,19 @@
       <MarkdownView content={draft} />
     </div>
   {:else}
+    <div class="format-bar nodrag" role="toolbar" aria-label={m['note.format_toolbar']()}>
+      <button type="button" onclick={() => applyFormat('bold')} aria-label={m['note.format_bold']()} title={m['note.format_bold']()}><Bold size={13} /></button>
+      <button type="button" onclick={() => applyFormat('italic')} aria-label={m['note.format_italic']()} title={m['note.format_italic']()}><Italic size={13} /></button>
+      <button type="button" onclick={() => applyFormat('heading')} aria-label={m['note.format_heading']()} title={m['note.format_heading']()}><Heading2 size={13} /></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" onclick={() => applyFormat('list')} aria-label={m['note.format_list']()} title={m['note.format_list']()}><List size={13} /></button>
+      <button type="button" onclick={() => applyFormat('task')} aria-label={m['note.format_task']()} title={m['note.format_task']()}><ListChecks size={13} /></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" onclick={() => applyFormat('link')} aria-label={m['note.format_link']()} title={m['note.format_link']()}><Link2 size={13} /></button>
+      <button type="button" onclick={() => applyFormat('code')} aria-label={m['note.format_code']()} title={m['note.format_code']()}><Code size={13} /></button>
+    </div>
     <textarea
+      bind:this={editor}
       class="note-content nodrag nowheel"
       class:attachment-drop-active={attachmentDropActive}
       style="--note-color: {noteColor.color}"
@@ -439,7 +511,15 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 18%, transparent);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--ink, var(--app-text)) 45%, transparent);
+  }
+
+  :global(.color-trigger) {
+    width: auto !important;
+    gap: 4px;
+    padding: 0 6px !important;
+    display: inline-flex !important;
+    align-items: center;
   }
 
   .swatch-grid {
@@ -535,57 +615,64 @@
     outline-offset: 1px;
   }
 
-  .note-preview :global(h1),
-  .note-preview :global(h2),
-  .note-preview :global(h3) {
-    margin: 0.5em 0 0.3em;
-    line-height: 1.3;
+  /* The formatted view writes in the note's ink, on every paper. */
+  .note-preview {
+    color: var(--ink);
+    font-family: var(--note-font);
+    font-size: var(--note-size);
+    --md-size: var(--note-size);
+    --md-text: var(--ink);
+    --md-heading: var(--ink);
+    --md-link: var(--note-link);
+    --md-link-hover: var(--ink);
+    --md-code-bg: color-mix(in srgb, var(--ink) 9%, transparent);
+    --md-pre-bg: color-mix(in srgb, var(--ink) 7%, transparent);
+    --md-border: color-mix(in srgb, var(--ink) 22%, transparent);
+    --md-quote-accent: color-mix(in srgb, var(--ink) 45%, transparent);
+    --md-quote-bg: color-mix(in srgb, var(--ink) 6%, transparent);
+    --md-check-border: color-mix(in srgb, var(--ink) 55%, transparent);
+    --md-check-on: var(--ink);
+    --md-check-mark: var(--paper);
+    --md-h1: 1.45em;
+    --md-h2: 1.25em;
+    --md-h3: 1.1em;
+    --md-h4: 1em;
   }
 
-  .note-preview :global(p) {
-    margin: 0 0 0.5em;
+  :global(.node-shell.note-paper) {
+    --note-link: color-mix(in srgb, #8a4f00 80%, var(--ink));
   }
 
-  .note-preview :global(code) {
-    background: var(--app-border);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 11px;
-  }
-
-  .note-preview :global(pre) {
-    background: var(--app-canvas);
-    border-radius: 8px;
-    padding: 8px;
-    overflow-x: auto;
-  }
-
-  .note-preview :global(pre code) {
-    background: transparent;
-    padding: 0;
-  }
-
-  .note-preview :global(ul),
-  .note-preview :global(ol) {
-    margin: 0 0 0.5em;
-    padding-left: 1.2em;
-  }
-
-  .note-preview :global(table) {
-    border-collapse: collapse;
-    margin: 0.5em 0;
-    width: 100%;
-  }
-
-  .note-preview :global(th),
-  .note-preview :global(td) {
-    border: 1px solid var(--app-border);
-    padding: 3px 7px;
-    text-align: left;
+  :global(.node-shell.note-glass) {
+    --note-link: var(--app-accent);
+    --paper: var(--app-surface);
+    --ink: var(--app-text);
   }
 
   .note-preview :global(a) {
-    color: var(--app-secondary);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 2px;
+  }
+
+  .note-preview :global(li:has(input[type='checkbox'])) {
+    cursor: pointer;
+    border-radius: 6px;
+  }
+
+  .note-preview :global(li:has(input[type='checkbox']):hover) {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+
+  .note-preview :global(li input[type='checkbox']) {
+    pointer-events: none;
+  }
+
+  .note-preview :global(li:has(input[type='checkbox']:checked)) {
+    color: color-mix(in srgb, var(--ink) 55%, transparent);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--ink) 40%, transparent);
   }
 
   .note-preview :global(img) {
@@ -595,16 +682,43 @@
     margin: 0.4em 0;
   }
 
-  .note-preview :global(blockquote) {
-    border-left: 3px solid var(--note-color, var(--app-warning));
-    margin: 0.5em 0;
-    padding-left: 0.8em;
-    color: var(--app-text-soft);
+  .format-bar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin: 6px 12px 0;
+    padding: 3px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    color: color-mix(in srgb, var(--ink) 72%, transparent);
+    align-self: flex-start;
   }
 
-  .note-preview {
+  .format-bar button {
+    width: 26px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: inherit;
+  }
+
+  .format-bar button:hover {
+    background: color-mix(in srgb, var(--ink) 12%, transparent);
     color: var(--ink);
-    font-family: var(--note-font);
-    font-size: var(--note-size);
+  }
+
+  .format-bar button:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ink) 60%, transparent);
+    outline-offset: 1px;
+  }
+
+  .format-bar .sep {
+    width: 1px;
+    height: 14px;
+    margin: 0 3px;
+    background: color-mix(in srgb, var(--ink) 20%, transparent);
   }
 </style>

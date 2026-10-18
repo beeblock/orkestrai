@@ -17,6 +17,7 @@ import { findFreeCanvasPosition, type CanvasPlacementRect } from '../../domain/c
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { filesystemService } from './FilesystemService.js';
 import { bridgeService } from './BridgeService.js';
+import { canvasTidyService } from './CanvasTidyService.js';
 import {
   AddImageWorkflowReferenceDto,
   CompleteImageWorkflowDto,
@@ -796,6 +797,13 @@ export class ImageWorkflowService {
           history: [...(current.history ?? []), run].slice(-HISTORY_LIMIT),
         }),
       });
+      // The finished workflow and its briefing notes leave the board (archived, restorable);
+      // its images gather beside the agent. A tidy failure never fails the delivery.
+      if (await canvasTidyService.enabled().catch(() => false)) {
+        await canvasTidyService.tidyWorkflows(dto.workspaceId, [workflow.id]).catch((error) => {
+          console.warn('[image-workflow] Could not tidy the finished workflow:', error instanceof Error ? error.message : String(error));
+        });
+      }
       broadcast(dto.workspaceId, workflow.id);
       return { workflowNodeId: workflow.id, run, outputPaths: dto.outputPaths, outputNodeIds };
     } catch (error) {

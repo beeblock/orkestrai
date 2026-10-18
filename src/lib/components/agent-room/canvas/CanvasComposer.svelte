@@ -147,8 +147,9 @@
     .filter((mention) => mention.title.toLowerCase().includes(mentionFilter.toLowerCase()))
     .slice(0, 8));
 
+  // Reads the field itself, so a typed @ opens mentions whatever order the binding updates in.
   function onInput() {
-    const match = draft.match(/@([\p{L}\p{N} ._-]*)$/u);
+    const match = (input?.value ?? draft).match(/@([\p{L}\p{N} ._-]*)$/u);
     mentionOpen = Boolean(match);
     mentionFilter = match?.[1] ?? '';
     if (input) {
@@ -261,6 +262,7 @@
       disabled={!target && !onCommand}
       placeholder={target ? m['composer.placeholder']() : onCommand ? m['composer.placeholder_board']() : m['composer.no_agents']()}
       oninput={onInput}
+      oncompositionend={onInput}
       onkeydown={onKeydown}
     ></textarea>
     <button type="button" class="icon" disabled={!target} onclick={() => (threadOpen = !threadOpen)} aria-pressed={threadOpen} aria-label={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })} title={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })}><ChevronUp size={16} class={threadOpen ? 'rotate-180 transition-transform' : 'transition-transform'} /></button>
@@ -481,6 +483,7 @@
 
   .mentions {
     position: absolute;
+    z-index: 6;
     left: 6px;
     bottom: calc(100% + 8px);
     min-width: 260px;

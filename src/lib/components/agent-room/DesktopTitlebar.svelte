@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppWindow, Bug, CheckCircle2, FileText, FolderOpen, LayoutGrid, LifeBuoy, Maximize2, Minus, MonitorUp, PanelTop, RefreshCw, Search, Settings, SquareTerminal, X } from '@lucide/svelte';
+  import { AppWindow, Blocks, Bug, Cable, CheckCircle2, CircleHelp, Download, FileText, FolderOpen, LayoutGrid, LifeBuoy, Maximize2, Minus, MonitorUp, MoreHorizontal, PanelTop, Power, RefreshCw, Search, Settings, SquareTerminal, Upload, X } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as m from '$lib/paraglide/messages.js';
   import { goto } from '$app/navigation';
@@ -8,6 +8,7 @@
   import TitlebarWorkspaceTabs from './TitlebarWorkspaceTabs.svelte';
   import TitlebarPills from './TitlebarPills.svelte';
   import { workspaceContext } from './workspace-context.svelte.js';
+  import { runCanvasAction } from './canvas-actions.js';
 
   type DesktopBridge = { platform?: string; runMenuCommand?: (action: string) => Promise<unknown> };
   const desktop = (window as unknown as { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
@@ -118,6 +119,24 @@
       <kbd>{searchKey}</kbd>
     </button>
     <AttentionCenter workspaceId={workspaceContext.workspaceId} />
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger class="ws-icon more" aria-label={m['topbar.more']()} title={m['topbar.more']()} data-testid="topbar-more">
+        <MoreHorizontal size={16} strokeWidth={1.8} />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" sideOffset={8} class="min-w-[230px]">
+        <DropdownMenu.Item onclick={() => void goto('/docs')}><CircleHelp size={14} />{m['canvas.how_to_use']()}</DropdownMenu.Item>
+        <DropdownMenu.Item onclick={() => void goto('/providers')}><Cable size={14} />{m['providers.title']()}</DropdownMenu.Item>
+        <DropdownMenu.Item onclick={() => void goto(workspaceContext.workspaceId ? `/skills?workspace=${encodeURIComponent(workspaceContext.workspaceId)}` : '/skills')}><Blocks size={14} />{m['skills.title']()}</DropdownMenu.Item>
+        <DropdownMenu.Item onclick={() => void goto('/remote')}><MonitorUp size={14} />{m['remote.open']()}</DropdownMenu.Item>
+        <DropdownMenu.Item onclick={() => void goto('/settings')}><Settings size={14} />{m['desktop.settings']()}</DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item onclick={() => runCanvasAction('import-workspace', workspaceContext.workspaceId)}><Upload size={14} />{m['canvas.import_ws']()}</DropdownMenu.Item>
+        {#if workspaceContext.workspaceId}
+          <DropdownMenu.Item onclick={() => runCanvasAction('export-workspace', workspaceContext.workspaceId)}><Download size={14} />{m['canvas.export_ws']()}</DropdownMenu.Item>
+          <DropdownMenu.Item onclick={() => runCanvasAction('unload-workspace', workspaceContext.workspaceId)}><Power size={14} />{m['canvas.unload_tooltip']()}</DropdownMenu.Item>
+        {/if}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
     <button type="button" class="ws-icon settings" aria-label={m['desktop.settings']()} title={m['desktop.settings']()} onclick={() => void goto('/settings')}>
       <Settings size={15} strokeWidth={1.8} />
     </button>
