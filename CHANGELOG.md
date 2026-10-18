@@ -26,6 +26,9 @@ pt-BR, English, and Spanish translations.
 - Light connections in gold while two teammates talk or one end is selected, with a glow and a traveling spark; idle connections stay as quiet dashes.
 - Turn notes into sticky paper in nine colors with dark ink (or dark glass), and let each note choose handwriting, text or mono type in three sizes.
 - Use the canvas surface as the default terminal theme (warm ink, gold cursor); the previous default stays available as Midnight.
+- Open Focus on Needs you: a list of what waits for the owner, newest first, with its kind (Approval, Question, Review, Tool, Lesson, Blocked, Notice) and age, an inspector that decides, answers, resolves or snoozes it, and the agents working right now. The Focus sidebar starts with Needs you, Tasks, Reviews, Control center, Automations and Skills, lists the team by floor with state, time in state and current action, keeps the full explorer below and shows this computer's agent count at the bottom.
+- Restyle Chat: a large channel title with the team's faces, a Team list that shows what each agent is doing, routines and the connected Telegram or Slack channels in the sidebar, a profile column that stays open beside the conversation, requests waiting for a decision as cards in the conversation and a hint under the message field.
+- Restyle the phone page: the workspace and connection at the top, a headline that counts what needs the owner, cards with full-width answers and the agents working right now; the first tab is now called Inbox.
 
 ### Added
 

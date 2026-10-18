@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { ArrowLeft, ArrowUp, BellRing, Hash, LoaderCircle, MessagesSquare, UserRound, UsersRound } from '@lucide/svelte';
+  import { ArrowLeft, ArrowUp, BellRing, Hash, Inbox, LoaderCircle, MessagesSquare, UserRound, UsersRound } from '@lucide/svelte';
   import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
   import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
   import MarkdownView from '$lib/components/agent-room/MarkdownView.svelte';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
   import { answersByQuestion, buildTimeline } from '$lib/components/agent-room/chat/chat-timeline.js';
-  import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
+  import { agentColor, agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
   import { decisionLabels } from '$lib/components/agent-room/attention-decision-labels.js';
   import { attentionDecisionKind, ownerQuestionOptions } from '$lib/components/agent-room/attention-feed.svelte.js';
@@ -227,19 +227,24 @@
     <header class="top">
       {#if tab === 'chat' && channel}
         <button type="button" class="back" onclick={() => { channel = null; messages = []; }} aria-label={m['phone.back']()}><ArrowLeft size={18} /></button>
-        <h1 class="headline">{channelTitle}</h1>
+        <h1 class="title-line">{channelTitle}</h1>
       {:else}
-        <h1 class="headline">{tab === 'needs' ? m['needs_you.title']() : tab === 'chat' ? m['workspace_view.chat']() : m['canvas.team']()}</h1>
+        <span class="ws-mark" aria-hidden="true" style={workspace ? `--mark-bg:${agentColor(workspace.id).bg};--mark-ink:${agentColor(workspace.id).ink}` : ''}>{workspace ? workspace.name.slice(0, 1).toUpperCase() : ''}</span>
+        <span class="ws-block">
+          {#if session.workspaces.length > 1}
+            <NativeSelect.Root class="ws-select" value={workspaceId ?? undefined} onchange={(event: Event) => chooseWorkspace((event.currentTarget as HTMLSelectElement).value)} aria-label={m['chat.workspace_label']()}>
+              {#each session.workspaces as option (option.id)}<NativeSelect.Option value={option.id}>{option.name}</NativeSelect.Option>{/each}
+            </NativeSelect.Root>
+          {:else}
+            <b>{workspace?.name ?? ''}</b>
+          {/if}
+          <small class:off={failure === 'offline'}><span class="dot" aria-hidden="true"></span>{failure === 'offline' ? m['phone.offline_short']() : m['phone.connected']()}</small>
+        </span>
       {/if}
-      {#if session.workspaces.length > 1 && !(tab === 'chat' && channel)}
-        <NativeSelect.Root class="max-w-[45%]" value={workspaceId ?? undefined} onchange={(event: Event) => chooseWorkspace((event.currentTarget as HTMLSelectElement).value)} aria-label={m['chat.workspace_label']()}>
-          {#each session.workspaces as option (option.id)}<NativeSelect.Option value={option.id}>{option.name}</NativeSelect.Option>{/each}
-        </NativeSelect.Root>
-      {:else if workspace && !(tab === 'chat' && channel)}
-        <span class="ws">{workspace.name}</span>
-      {/if}
-      {#if failure === 'offline'}<span class="offline" role="status">{m['phone.offline_short']()}</span>{/if}
     </header>
+    {#if !(tab === 'chat' && channel)}
+      <h1 class="headline">{tab === 'needs' ? (attention.length === 0 ? m['phone.all_clear']() : attention.length === 1 ? m['phone.headline_one']() : m['phone.headline_many']({ count: attention.length })) : tab === 'chat' ? m['workspace_view.chat']() : m['canvas.team']()}</h1>
+    {/if}
 
     <div class="body" bind:this={scroller}>
       {#if tab === 'needs'}
@@ -264,8 +269,8 @@
               </div>
             {:else if item.sourceType === 'owner_question'}
               <div class="actions wrap">
-                {#each options as option (option)}
-                  <button type="button" class="primary" disabled={busy.has(item.id)} onclick={() => void answerItem(item, option)}>{option}</button>
+                {#each options as option, index (option)}
+                  <button type="button" class={index === 0 ? 'primary' : 'secondary'} disabled={busy.has(item.id)} onclick={() => void answerItem(item, option)}>{option}</button>
                 {/each}
                 <button type="button" class="secondary" onclick={() => { tab = 'chat'; if (typeof item.action?.channel === 'string') void openChannel(item.action.channel); }}>{m['node_attention.answer_in_chat']()}</button>
               </div>
@@ -274,6 +279,16 @@
         {:else}
           <p class="empty">{m['remote.needs_empty']()}</p>
         {/each}
+        {#if (control?.agents ?? []).some((agent) => agent.state === 'working' || agent.state === 'starting')}
+          <p class="section-label">{m['phone.working']()}</p>
+          {#each (control?.agents ?? []).filter((agent) => agent.state === 'working' || agent.state === 'starting') as agent (agent.nodeId)}
+            {@const parts = elapsedParts(agent.stateSince, now)}
+            <div class="run">
+              <span class="run-head"><AgentAvatar nodeId={agent.nodeId} title={agent.title} size={22} /><b>{agent.title}</b>{#if parts}<span class="num">{elapsedLabel(parts)}</span>{/if}</span>
+              {#if agent.lastAction || agent.currentTask}<small>{agent.lastAction ?? agent.currentTask?.title}</small>{/if}
+            </div>
+          {/each}
+        {/if}
       {:else if tab === 'chat' && !channel}
         {#each channels as entry (entry.id)}
           <button type="button" class="row" onclick={() => void openChannel(entry.id)}>
@@ -339,7 +354,7 @@
 
     <nav class="tabs" aria-label={m['phone.tabs']()}>
       <button type="button" class:active={tab === 'needs'} onclick={() => (tab = 'needs')}>
-        <BellRing size={19} /><span>{m['needs_you.title']()}</span>{#if attention.length}<i>{attention.length}</i>{/if}
+        <Inbox size={19} /><span>{m['phone.tab_central']()}</span>{#if attention.length}<i>{attention.length}</i>{/if}
       </button>
       <button type="button" class:active={tab === 'chat'} onclick={() => (tab = 'chat')}>
         <MessagesSquare size={19} /><span>{m['workspace_view.chat']()}</span>
@@ -383,39 +398,140 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--app-border);
+    padding: 18px 18px 6px;
   }
 
-  .top h1 {
+  .title-line {
     margin: 0;
     flex: 1;
     min-width: 0;
     overflow: hidden;
-    font-size: 24px;
+    font-size: 17px;
+    font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .ws {
-    max-width: 45%;
-    height: 32px;
-    padding: 0 8px;
+  .ws-mark {
+    width: 34px;
+    height: 34px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--mark-bg, var(--app-hover));
+    color: var(--mark-ink, var(--app-text));
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .ws-block {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .ws-block b {
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .ws-block :global(.ws-select) {
+    max-width: 100%;
+  }
+
+  .ws-block :global(.ws-select select) {
+    height: 26px;
+    padding-left: 0;
     border: 0;
-    border-radius: 8px;
-    background: var(--app-hover);
+    background: transparent;
+    box-shadow: none;
     color: var(--app-text);
-    font: inherit;
-    font-size: 13px;
-    line-height: 32px;
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .ws-block small {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--app-text-muted);
+    font-size: 12px;
+  }
+
+  .ws-block small .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--app-success);
+  }
+
+  .ws-block small.off {
+    color: var(--app-warning);
+  }
+
+  .ws-block small.off .dot {
+    background: var(--app-warning);
+  }
+
+  .headline {
+    margin: 6px 18px 4px;
+    font-family: var(--font-headline);
+    font-stretch: 62%;
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .section-label {
+    margin: 8px 2px 0;
+    color: var(--app-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .run {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--app-border);
+  }
+
+  .run-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .run-head b {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 550;
   }
 
-  .offline {
-    color: var(--app-warning);
+  .run .num {
+    color: var(--app-text-muted);
     font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .run small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-text-muted);
+    font-size: 12.5px;
   }
 
   .back {
@@ -444,14 +560,13 @@
     flex-direction: column;
     gap: 6px;
     padding: 14px;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--app-warning) 9%, var(--app-surface));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-warning) 28%, transparent);
+    border-radius: 16px;
+    background: var(--app-surface);
+    box-shadow: inset 0 0 0 1px var(--app-border-strong);
   }
 
   .card.danger {
-    background: color-mix(in srgb, var(--app-danger) 9%, var(--app-surface));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-danger) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-danger) 40%, transparent);
   }
 
   .kind {
@@ -504,8 +619,9 @@
   }
 
   .card h2 {
-    font-size: 16px;
-    font-weight: 650;
+    font-size: 15px;
+    font-weight: 550;
+    line-height: 1.4;
     -webkit-line-clamp: 3;
     line-clamp: 3;
   }
@@ -558,7 +674,8 @@
   }
 
   .actions .secondary {
-    background: var(--app-hover);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--app-border-strong);
     color: var(--app-text);
   }
 

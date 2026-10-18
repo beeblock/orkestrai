@@ -2,24 +2,25 @@
   import { onMount, tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { getCsrfToken } from '@beeblock/svelar/http';
-  import { ArrowUp, AtSign, CheckCheck, CornerDownRight, Hash, LoaderCircle, PanelRightOpen, UserRound } from '@lucide/svelte';
+  import { ArrowUp, AtSign, CheckCheck, Clock3, CornerDownRight, Hash, LoaderCircle, PanelRightOpen, Plus, Smartphone, UserRound } from '@lucide/svelte';
   import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
   import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
   import MarkdownView from '$lib/components/agent-room/MarkdownView.svelte';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
-  import * as Select from '$lib/components/ui/select';
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
+  import RequestCard from '$lib/components/agent-room/chat/RequestCard.svelte';
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
   import { answersByQuestion, buildTimeline, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
-  import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
+  import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
   import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { directChannel, directChannelNode, TEAM_CHANNEL, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
-  import type { CanvasNode, TerminalNodePayload, Workspace } from '$lib/modules/agent-room/domain/types.js';
+  import type { CanvasNode, Routine, TerminalNodePayload, Workspace } from '$lib/modules/agent-room/domain/types.js';
+  import type { ChannelBinding } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
@@ -38,6 +39,10 @@
   let loadingOlder = $state(false);
   let hasOlder = $state(false);
   let profileNodeId = $state<string | null>(null);
+  // The profile column stays open beside the conversation unless the owner closes it.
+  let profileHidden = $state(false);
+  let routines = $state<Routine[]>([]);
+  let bindings = $state<ChannelBinding[]>([]);
   let draft = $state('');
   let sending = $state(false);
   let sendError = $state('');
@@ -54,7 +59,10 @@
   const answers = $derived(answersByQuestion(messages));
   const leader = $derived(agents.find((agent) => agent.payload.maestro) ?? null);
   const filteredMentions = $derived(agents.filter((agent) => agent.title.toLowerCase().includes(mentionFilter.toLowerCase())).slice(0, 8));
-  const profileAgent = $derived(profileNodeId ? agentById.get(profileNodeId) ?? null : null);
+  const profileAgent = $derived(profileHidden ? null : agentById.get(profileNodeId ?? directNode ?? leader?.id ?? '') ?? null);
+  // Requests that wait for a decision show up as cards in the team channel (and in that agent's conversation).
+  const pendingRequests = $derived(attentionFeed.items.filter((item) => attentionDecisionKind(item) && (channel === TEAM_CHANNEL || item.nodeId === directNode)));
+  const bindingKinds = $derived([...new Set(bindings.filter((binding) => binding.enabled).map((binding) => (binding.kind === 'slack' ? 'Slack' : 'Telegram')))]);
 
   async function api<T>(url: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -101,6 +109,25 @@
       .filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
       .map((node) => ({ id: node.id, title: node.title ?? m['canvas.fallback_terminal'](), payload: node.payload as TerminalNodePayload }));
     channels = summaries.channels;
+    const [routineList, bindingList] = await Promise.all([
+      api<Routine[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/routines`).catch(() => []),
+      api<ChannelBinding[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channel-bindings`).catch(() => []),
+    ]);
+    if (id !== workspaceId) return;
+    routines = Array.isArray(routineList) ? routineList : [];
+    bindings = Array.isArray(bindingList) ? bindingList : [];
+  }
+
+  function routineLabel(routine: Routine): string {
+    const target = routine.targetNodeId ? agentById.get(routine.targetNodeId)?.title : null;
+    const cadence = !routine.enabled ? m['chat.routine_paused']() : routine.intervalMinutes ? m['chat.routine_every']({ count: routine.intervalMinutes }) : m['chat.routine_once']();
+    return [cadence, target].filter(Boolean).join(' · ');
+  }
+
+  function doingOf(agentId: string): string {
+    const live = agentStatus.agents[agentId];
+    if (!live) return '';
+    return live.lastAction ?? live.currentTask?.title ?? agentStateLabel(live.sessionAlive ? live.state : 'disconnected');
   }
 
   async function refreshChannels() {
@@ -253,6 +280,7 @@
       channel = TEAM_CHANNEL;
       messages = [];
       profileNodeId = null;
+      profileHidden = false;
     });
     return () => {
       unregister();
@@ -339,14 +367,6 @@
 
 <main class="chat-page">
   <nav class="channels" aria-label={m['chat.channels_label']()}>
-    {#if workspaces.length > 1}
-      <Select.Root type="single" value={workspaceId ?? undefined} onValueChange={(value: string) => { workspaceId = value; channel = TEAM_CHANNEL; messages = []; profileNodeId = null; }}>
-        <Select.Trigger class="mb-2 w-full" aria-label={m['chat.workspace_label']()}><span class="truncate">{workspace?.name ?? ''}</span></Select.Trigger>
-        <Select.Content>{#each workspaces as option (option.id)}<Select.Item value={option.id}>{option.name}</Select.Item>{/each}</Select.Content>
-      </Select.Root>
-    {:else if workspace}
-      <p class="workspace-name">{workspace.name}</p>
-    {/if}
     <NeedsYouList onOpen={openAttentionItem} limit={4} />
     <h2>{m['chat.channels']()}</h2>
     {#each channels.filter((entry) => entry.kind === 'team') as entry (entry.id)}
@@ -356,27 +376,41 @@
         {#if entry.openQuestions}<span class="badge">{entry.openQuestions}</span>{/if}
       </button>
     {/each}
-    <h2>{m['chat.direct']()}</h2>
+    <h2 class="with-action">
+      <span>{m['chat.team_heading']()}</span>
+      {#if workspaceId}<a class="mini-action" href={`/canvas?workspace=${encodeURIComponent(workspaceId)}`} aria-label={m['chat.recruit']()} title={m['chat.recruit']()}><Plus size={13} /></a>{/if}
+    </h2>
     {#each agents as agent (agent.id)}
       {@const summary = channels.find((entry) => entry.nodeId === agent.id)}
       {@const live = agentStatus.agents[agent.id]}
       {@const activity = live ? (live.sessionAlive ? live.state : 'disconnected') : 'idle'}
-      <button type="button" class="channel" class:active={channel === directChannel(agent.id)} onclick={() => selectChannel(directChannel(agent.id))} aria-current={channel === directChannel(agent.id) ? 'page' : undefined}>
-        <AgentAvatar nodeId={agent.id} title={agent.title} size={22} />
-        <span class="name">{agent.title}</span>
-        {#if agent.payload.agentRuntimeMode === 'persistent' || agent.payload.agentRuntimeMode === 'on_demand'}<span class="always-on" title={m['always_on.title']()}>24/7</span>{/if}
+      <button type="button" class="channel dm" class:active={channel === directChannel(agent.id)} onclick={() => { profileHidden = false; profileNodeId = agent.id; selectChannel(directChannel(agent.id)); }} aria-current={channel === directChannel(agent.id) ? 'page' : undefined}>
+        <AgentAvatar nodeId={agent.id} title={agent.title} size={24} />
+        <span class="dm-text">
+          <span class="name">{agent.title}{#if agent.payload.agentRuntimeMode === 'persistent' || agent.payload.agentRuntimeMode === 'on_demand'}<span class="always-on" title={m['always_on.title']()}>24/7</span>{/if}</span>
+          <span class="doing">{doingOf(agent.id)}</span>
+        </span>
         <AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} />
         {#if summary?.openQuestions}<span class="badge">{summary.openQuestions}</span>{/if}
       </button>
     {:else}
       <p class="hint">{m['chat.no_agents']()}</p>
     {/each}
+    {#if routines.length}
+      <h2>{m['chat.routines']()}</h2>
+      {#each routines.slice(0, 8) as routine (routine.id)}
+        <div class="routine"><Clock3 size={14} /><span class="dm-text"><span class="name">{routine.name}</span><span class="doing">{routineLabel(routine)}</span></span></div>
+      {/each}
+    {/if}
+    {#if bindingKinds.length}
+      <p class="also-on"><Smartphone size={13} />{m['chat.also_on']({ channels: bindingKinds.join(' · ') })}</p>
+    {/if}
   </nav>
 
   <section class="conversation" aria-label={channelTitle}>
     <header class="conversation-header">
       {#if directNode}
-        <button type="button" class="who" onclick={() => (profileNodeId = profileNodeId === directNode ? null : directNode)}>
+        <button type="button" class="who" onclick={() => { profileHidden = false; profileNodeId = directNode; }}>
           <AgentAvatar nodeId={directNode} title={channelTitle} size={28} />
           <span class="headline">{channelTitle}</span>
         </button>
@@ -387,12 +421,17 @@
           <span class="presence"><AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} />{agentStateLabel(activity)}{#if parts}{` · ${elapsedLabel(parts)}`}{/if}</span>
         {/if}
       {:else}
-        <span class="headline"><Hash size={18} />{channelTitle}</span>
-        <span class="presence">{m['chat.team_members']({ count: agents.length })}</span>
+        <span class="headline"><span class="hash-mark">#</span>{channelTitle}</span>
+        <span class="presence">{m['chat.channel_sub_team']()}</span>
+        <span class="spacer"></span>
+        {#if bindingKinds.length}<span class="channels-note"><Smartphone size={13} />{m['chat.also_on']({ channels: bindingKinds.join(' · ') })}</span>{/if}
+        <span class="faces" aria-label={m['chat.team_members']({ count: agents.length })}>
+          {#each agents.slice(0, 6) as agent (agent.id)}<AgentAvatar nodeId={agent.id} title={agent.title} size={22} />{/each}
+        </span>
       {/if}
-      <span class="spacer"></span>
-      {#if directNode && !profileNodeId}
-        <button type="button" class="icon" onclick={() => (profileNodeId = directNode)} aria-label={m['chat.profile_open']()} title={m['chat.profile_open']()}><PanelRightOpen size={15} /></button>
+      {#if directNode}<span class="spacer"></span>{/if}
+      {#if !profileAgent && (directNode || leader)}
+        <button type="button" class="icon" onclick={() => { profileHidden = false; profileNodeId = directNode ?? leader?.id ?? null; }} aria-label={m['chat.profile_open']()} title={m['chat.profile_open']()}><PanelRightOpen size={15} /></button>
       {/if}
     </header>
 
@@ -429,7 +468,7 @@
             {:else if row.authorKind === 'external'}
               <span class="owner-avatar external" aria-hidden="true"><UserRound size={15} /></span>
             {:else}
-              <button type="button" class="avatar-button" onclick={() => (profileNodeId = row.authorNodeId)} aria-label={m['chat.profile_open_for']({ name: titleOf(row.authorNodeId) })}>
+              <button type="button" class="avatar-button" onclick={() => { profileHidden = false; profileNodeId = row.authorNodeId; }} aria-label={m['chat.profile_open_for']({ name: titleOf(row.authorNodeId) })}>
                 <AgentAvatar nodeId={row.authorNodeId ?? 'unknown'} title={titleOf(row.authorNodeId)} size={34} />
               </button>
             {/if}
@@ -463,6 +502,10 @@
           </article>
         {/if}
       {/each}
+      {#if pendingRequests.length && !loading}
+        <div class="day"><span>{m['chat.pending_requests']()}</span></div>
+        {#each pendingRequests as item (item.id)}<RequestCard {item} />{/each}
+      {/if}
     </div>
 
     <footer class="composer-area">
@@ -493,6 +536,7 @@
           {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
         </button>
       </div>
+      <p class="composer-hint">{directNode ? m['chat.composer_hint_direct']() : leader ? m['chat.composer_hint_team']({ name: leader.title }) : m['chat.composer_hint_team_plain']()}</p>
     </footer>
   </section>
 
@@ -502,7 +546,7 @@
       nodeId={profileAgent.id}
       title={profileAgent.title}
       payload={profileAgent.payload}
-      onClose={() => (profileNodeId = null)}
+      onClose={() => { profileHidden = true; profileNodeId = null; }}
       onDirect={(id) => selectChannel(directChannel(id))}
     />
   {/if}
@@ -529,22 +573,10 @@
     background: var(--app-sidebar);
   }
 
-  .workspace-name {
-    height: 32px;
-    margin: 0 0 8px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: 8px;
-    background: var(--app-hover);
-    color: var(--app-text);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 32px;
-  }
-
   .channels h2 {
-    margin: 12px 8px 4px;
+    display: flex;
+    align-items: center;
+    margin: 14px 8px 4px;
     color: var(--app-text-muted);
     font-size: 11px;
     font-weight: 600;
@@ -577,6 +609,77 @@
     background: var(--app-active);
     color: var(--app-text);
     font-weight: 600;
+  }
+
+  .channel.dm {
+    height: auto;
+    min-height: 44px;
+    padding: 5px 8px;
+  }
+
+  .dm-text {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  .dm-text .name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--app-text);
+    font-weight: 500;
+  }
+
+  .doing {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .with-action span {
+    flex: 1;
+  }
+
+  .mini-action {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    color: var(--app-text-muted);
+  }
+
+  .mini-action:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .routine {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 40px;
+    padding: 4px 8px;
+    color: var(--app-text-muted);
+    font-size: 13px;
+  }
+
+  .also-on {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: auto 0 0;
+    padding: 12px 8px 0;
+    border-top: 1px solid var(--app-border);
+    color: var(--app-text-muted);
+    font-size: 12px;
   }
 
   .channel:focus-visible,
@@ -633,7 +736,7 @@
   }
 
   .conversation-header {
-    height: 52px;
+    height: 60px;
     flex: none;
     display: flex;
     align-items: center;
@@ -644,9 +747,36 @@
 
   .conversation-header .headline {
     display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-family: var(--font-headline);
+    font-stretch: 62%;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .hash-mark {
+    color: var(--app-text-muted);
+  }
+
+  .channels-note {
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 22px;
+    color: var(--app-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .faces {
+    display: inline-flex;
+  }
+
+  .faces :global(> *) {
+    margin-left: -5px;
+    box-shadow: 0 0 0 2px var(--app-page);
+    border-radius: 7px;
   }
 
   .who {
@@ -685,7 +815,7 @@
     display: grid;
     place-items: center;
     border: 0;
-    border-radius: 9px;
+    border-radius: 999px;
     cursor: pointer;
   }
 
@@ -908,14 +1038,23 @@
     display: flex;
     align-items: flex-end;
     gap: 6px;
-    padding: 6px;
-    border-radius: 14px;
+    padding: 7px;
+    border-radius: 18px;
+    border: 1px solid var(--app-border-strong);
     background: var(--app-surface);
-    box-shadow: 0 0 0 1px var(--app-ring-hairline), var(--app-shadow-card);
+    box-shadow: var(--app-shadow-card);
+    transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
   }
 
   .composer:focus-within {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-accent) 55%, transparent), var(--app-shadow-card);
+    border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
+    box-shadow: var(--app-shadow-card), 0 0 0 4px color-mix(in srgb, var(--app-accent) 9%, transparent);
+  }
+
+  .composer-hint {
+    margin: 6px 6px 0;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
   }
 
   textarea {

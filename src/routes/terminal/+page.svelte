@@ -27,6 +27,10 @@
     BookUser,
     Palette,
     Network,
+    Inbox,
+    SquareKanban,
+    Blocks,
+    Laptop,
   } from '@lucide/svelte';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -105,9 +109,10 @@
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
-  import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
-  import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
-  import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
+  import { attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
+  import { agentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
+  import FocusInbox from '$lib/components/agent-room/FocusInbox.svelte';
+  import FocusTeamList from '$lib/components/agent-room/FocusTeamList.svelte';
   import WorkspacePermissionNotice from '$lib/components/agent-room/WorkspacePermissionNotice.svelte';
   import { isWorkspacePermissionError } from '$lib/components/agent-room/workspace-permission.js';
   import {
@@ -235,13 +240,22 @@
     return untrack(() => retainAttentionFeed(workspaceId));
   });
 
-  function openAttentionItem(item: AgentAttentionItem) {
-    if (item.action?.target === 'chat' && typeof item.action.channel === 'string') {
-      void goto(`/chat?${new URLSearchParams({ workspace: item.workspaceId, channel: item.action.channel }).toString()}`);
-      return;
-    }
-    if (item.nodeId) selectNode(item.workspaceId, item.nodeId);
+  // Focus opens on what needs the owner; picking an agent or item shows the panes.
+  let focusView = $state<'inbox' | 'panes'>('panes');
+  let inboxDefaulted = false;
+  $effect(() => {
+    if (inboxDefaulted || !attentionFeed.loaded || !selectedWorkspaceId) return;
+    inboxDefaulted = true;
+    if (!new URLSearchParams(location.search).get('node') && attentionFeed.items.length) focusView = 'inbox';
+  });
+
+  function openTasksBoard() {
+    if (!selectedWorkspaceId) return;
+    const board = (nodesByWorkspace[selectedWorkspaceId] ?? []).find((node) => node.type === 'tasks');
+    if (board) selectNode(selectedWorkspaceId, board.id);
+    else void goto(`/canvas?workspace=${encodeURIComponent(selectedWorkspaceId)}`);
   }
+
   let layoutsByWorkspace = $state<Record<string, WorkbenchLayout>>({});
   let filePathsByWorkspace = $state<Record<string, string[]>>({});
   let tabPlacement = $state<WorkbenchTabPlacement>('vertical');
@@ -576,6 +590,7 @@
     nodeId: string,
     splitDirection: WorkbenchSplitDirection | null = null,
   ) {
+    focusView = 'panes';
     const sameWorkspace = selectedWorkspaceId === workspaceId;
     if (!sameWorkspace) {
       leaderDictationState = 'idle';
@@ -1244,12 +1259,40 @@
   {/if}
 {/snippet}
 
-<main class="relative grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)] max-[720px]:grid-cols-[236px_minmax(420px,1fr)]" data-testid="workbench-shell">
+<main class="relative grid h-full min-h-0 grid-cols-[272px_minmax(0,1fr)] overflow-hidden bg-[var(--app-canvas)] text-[var(--app-text)] max-[720px]:grid-cols-[236px_minmax(420px,1fr)]" data-testid="workbench-shell">
   {#if showCharacters && selectedWorkspaceId}<CreativeCharacterLibrary overlay workspaceId={selectedWorkspaceId} busy={placingCharacter} onPlace={placeCharacter} onClose={() => showCharacters = false} />{/if}
   {#if selectedWorkspaceId}<CreativeRecipeDialog bind:open={showRecipes} workspaceId={selectedWorkspaceId} onOpenNode={async (id) => { const workspace = selectedWorkspaceId; if (workspace) { await loadWorkspace(workspace); if (selectedWorkspaceId === workspace) selectNode(workspace, id); } }} />{/if}
   {#if selectedWorkspaceId}<CreativeBrandDialog bind:open={showBrands} workspaceId={selectedWorkspaceId} onPlaced={async (id) => { const workspace = selectedWorkspaceId; if (workspace) { await loadWorkspace(workspace); if (selectedWorkspaceId === workspace) selectNode(workspace, id); } }} />{/if}
-  <aside class="flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-sidebar)]">
-    <div class="flex h-11 shrink-0 items-center justify-end gap-2 border-b border-[var(--app-border)] px-3">
+  <aside class="focus-side flex min-h-0 flex-col border-r border-[var(--app-border)] bg-[var(--app-sidebar)]">
+    <nav class="focus-nav" aria-label={m['focus.nav_label']()}>
+      <button type="button" class="nav-row" aria-current={focusView === 'inbox' ? 'page' : undefined} onclick={() => (focusView = 'inbox')} data-testid="focus-nav-inbox">
+        <Inbox size={15} strokeWidth={1.8} /><span class="grow">{m['focus.inbox_title']()}</span>
+        {#if attentionFeed.items.length}<span class="nav-count warn">{attentionFeed.items.length}</span>{/if}
+      </button>
+      <button type="button" class="nav-row" disabled={!selectedWorkspaceId} onclick={openTasksBoard}>
+        <SquareKanban size={15} strokeWidth={1.8} /><span class="grow">{m['focus.nav_tasks']()}</span>
+      </button>
+      <button type="button" class="nav-row" disabled={!selectedWorkspaceId} aria-current={focusView === 'panes' && selectedWorkspaceId && selectedNodeId === workbenchReviewCenterItemId(selectedWorkspaceId) ? 'page' : undefined} onclick={() => selectedWorkspaceId && selectNode(selectedWorkspaceId, workbenchReviewCenterItemId(selectedWorkspaceId))}>
+        <GitPullRequestArrow size={15} strokeWidth={1.8} /><span class="grow">{m['focus.nav_reviews']()}</span>
+      </button>
+      <button type="button" class="nav-row" disabled={!selectedWorkspaceId} aria-current={focusView === 'panes' && selectedWorkspaceId && selectedNodeId === workbenchControlCenterItemId(selectedWorkspaceId) ? 'page' : undefined} onclick={() => selectedWorkspaceId && selectNode(selectedWorkspaceId, workbenchControlCenterItemId(selectedWorkspaceId))}>
+        <Activity size={15} strokeWidth={1.8} /><span class="grow">{m['focus.nav_control']()}</span>
+      </button>
+      <button type="button" class="nav-row" disabled={!selectedWorkspaceId} aria-current={focusView === 'panes' && selectedWorkspaceId && selectedNodeId === workbenchAutomationsItemId(selectedWorkspaceId) ? 'page' : undefined} onclick={() => selectedWorkspaceId && selectNode(selectedWorkspaceId, workbenchAutomationsItemId(selectedWorkspaceId))}>
+        <Workflow size={15} strokeWidth={1.8} /><span class="grow">{m['focus.nav_automations']()}</span>
+      </button>
+      <a class="nav-row" href={selectedWorkspaceId ? `/skills?workspace=${encodeURIComponent(selectedWorkspaceId)}` : '/skills'}>
+        <Blocks size={15} strokeWidth={1.8} /><span class="grow">{m['focus.nav_skills']()}</span>
+      </a>
+    </nav>
+
+    <div class="focus-team-block">
+      <div class="side-label">{m['focus.team']()}</div>
+      <FocusTeamList selectedId={focusView === 'panes' ? selectedNodeId : null} onSelect={(nodeId) => selectedWorkspaceId && selectNode(selectedWorkspaceId, nodeId)} />
+    </div>
+
+    <div class="side-label explore">
+      <span class="grow">{m['focus.explore']()}</span>
       <WorkspaceSharingButton variant="icon" workspaceId={selectedWorkspaceId} onOpen={() => (sharingOpen = true)} />
       <DropdownMenu.Root><Tooltip.Root><Tooltip.Trigger>{#snippet child({ props })}<DropdownMenu.Trigger {...props} disabled={!selectedWorkspaceId || addingVideo} aria-label={m['image_workflow.menu']()} class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-[var(--app-border)] focus-visible:ring-2 focus-visible:ring-[var(--app-accent)]"><Film size={15} /></DropdownMenu.Trigger>{/snippet}</Tooltip.Trigger><Tooltip.Content>{m['image_workflow.menu']()}</Tooltip.Content></Tooltip.Root><DropdownMenu.Content><DropdownMenu.Item aria-label={m['creative.add']()} onclick={() => addVideoWorkflow()}><Film size={15} />{m['creative.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_audio.add']()} onclick={() => addVideoWorkflow(true)}><AudioLines size={15} />{m['creative_audio.add']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['sequence.title']()} onclick={addSequence}><Film size={15} />{m['sequence.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['storyboard.title']()} onclick={addStoryboard}><Film size={15} />{m['storyboard.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative.characters']()} onclick={() => showCharacters = !showCharacters}><BookUser size={15} />{m['creative.characters']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_brand.title']()} onclick={() => showBrands = true}><Palette size={15} />{m['creative_brand.title']()}</DropdownMenu.Item><DropdownMenu.Item aria-label={m['creative_recipe.title']()} onclick={() => showRecipes = true}><Workflow size={15} />{m['creative_recipe.title']()}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Root>
     </div>
@@ -1268,7 +1311,6 @@
       </InputGroup.Root>
     </div>
 
-    <NeedsYouList onOpen={openAttentionItem} />
 
     {#if tabPlacement === 'vertical' && selectedLayout && selectedWorkspaceId}
       <div class="max-h-[38%] shrink-0 overflow-y-auto border-b border-[var(--app-border)] pb-1" data-testid="workbench-vertical-tabs">
@@ -1500,9 +1542,20 @@
         {/each}
       {/if}
     </div>
+    <footer class="focus-machines">
+      <span class="machine"><span class="dot" aria-hidden="true"></span><Laptop size={13} /><span class="grow">{m['focus.this_mac']()}</span><span class="num">{m['focus.agents_count']({ count: Object.keys(agentStatus.agents).length })}</span></span>
+    </footer>
   </aside>
 
   <section class="grid min-h-0 min-w-0 grid-rows-[48px_minmax(0,1fr)_28px]">
+    {#if focusView === 'inbox' && selectedWorkspaceId}
+      <div class="row-span-2 min-h-0 min-w-0">
+        <FocusInbox
+          onOpenAgent={(nodeId) => selectedWorkspaceId && selectNode(selectedWorkspaceId, nodeId)}
+          onShowCanvas={(nodeId) => void goto(`/canvas?workspace=${encodeURIComponent(selectedWorkspaceId ?? '')}&node=${encodeURIComponent(nodeId)}`)}
+        />
+      </div>
+    {:else}
     <header class="flex min-w-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3" data-testid="terminal-workspace-header">
       {#if selectedWorkspace && selectedLayout}
         <span class="shrink-0 text-[var(--app-text-muted)]"><WorkspaceIcon name={selectedWorkspace.icon} size={15} /></span>
@@ -1614,6 +1667,7 @@
         </NodeEmptyState>
       {/if}
     </div>
+    {/if}
     <WorkbenchUsageFooter workspaceId={selectedWorkspaceId} />
   </section>
 </main>
@@ -1688,6 +1742,138 @@
     margin: 1px 0 4px 13px;
     padding: 2px 0 2px 6px;
     box-shadow: inset 1px 0 0 var(--app-border);
+  }
+
+  /* Focus sidebar: sections, team by floor, the explorer and the machines footer. */
+  .focus-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 10px 8px 6px;
+  }
+
+  .nav-row {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font-size: 13px;
+    text-align: left;
+    text-decoration: none;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .nav-row :global(svg) {
+    flex: none;
+    color: var(--app-text-muted);
+  }
+
+  .nav-row:hover:not(:disabled) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .nav-row[aria-current='page'] {
+    background: color-mix(in srgb, var(--app-text) 8%, transparent);
+    color: var(--app-text);
+  }
+
+  .nav-row[aria-current='page'] :global(svg) {
+    color: var(--app-text);
+  }
+
+  .nav-row:disabled {
+    opacity: 0.5;
+  }
+
+  .nav-row:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .nav-row .grow,
+  .side-label .grow,
+  .machine .grow {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nav-count.warn {
+    background: var(--app-warning);
+    color: #1d1204;
+  }
+
+  .focus-team-block {
+    max-height: 40%;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding: 0 8px 6px;
+  }
+
+  .side-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    color: var(--app-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .side-label.explore {
+    margin: 4px 8px 0;
+    padding: 0 2px 0 10px;
+    border-top: 1px solid var(--app-border);
+    height: 40px;
+  }
+
+  .focus-machines {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .machine {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--app-text-soft);
+    font-size: 12px;
+  }
+
+  .machine .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--app-success);
+  }
+
+  .machine .num {
+    color: var(--app-text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
   .wb-section {
