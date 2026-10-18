@@ -1491,7 +1491,7 @@
         if (!forced && requestedTourId && workspaceList.length) params.delete('tour');
         if (params.has('council') && workspaceList.length) params.delete('council');
         const query = params.toString();
-        history.replaceState(null, '', `/canvas${query ? `?${query}` : ''}`);
+        history.replaceState(history.state, '', `/canvas${query ? `?${query}` : ''}`);
       } catch {
         // storage indisponivel — nao bloqueia
       }
@@ -1972,7 +1972,7 @@
       edges = [];
       floors = [];
       localStorage.removeItem('orkestrai.activeWorkspaceId');
-      history.replaceState(null, '', '/canvas');
+      history.replaceState(history.state, '', '/canvas');
       const count = result?.killedSessions ?? 0;
       unloadMessage = count > 0
         ? count === 1
@@ -2051,10 +2051,10 @@
       const nextWorkspace = workspaces[0] ?? null;
       if (nextWorkspace) {
         await selectWorkspace(nextWorkspace.id);
-        history.replaceState(null, '', `/canvas?workspace=${encodeURIComponent(nextWorkspace.id)}`);
+        history.replaceState(history.state, '', `/canvas?workspace=${encodeURIComponent(nextWorkspace.id)}`);
       } else {
         localStorage.removeItem('orkestrai.activeWorkspaceId');
-        history.replaceState(null, '', '/canvas');
+        history.replaceState(history.state, '', '/canvas');
       }
     }
   }
@@ -4190,7 +4190,7 @@
           const params = new URLSearchParams(location.search);
           params.delete('tour');
           const query = params.toString();
-          history.replaceState(null, '', `/canvas${query ? `?${query}` : ''}`);
+          history.replaceState(history.state, '', `/canvas${query ? `?${query}` : ''}`);
         } catch {}
       }}
       onCreateWorkspace={createWorkspaceFromWizard}

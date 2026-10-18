@@ -91,7 +91,7 @@
   onMount(() => {
     // Atalho global (Cmd/Ctrl+K de qualquer tela): abre a paleta ja focada.
     if (new URLSearchParams(location.search).has('search')) {
-      history.replaceState(null, '', '/docs');
+      history.replaceState(history.state, '', '/docs');
       openPalette();
     }
   });
