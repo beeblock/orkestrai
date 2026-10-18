@@ -1064,6 +1064,8 @@ Header: Authorization = Bearer {{accessToken}}`,
       "As notas ficam legíveis em todo papel, as checklists marcam com um clique e o editor tem barra de formatação.",
       "A barra superior ganhou o menu Mais, Organizar mantém juntos os nós conectados e o Canvas mostra que está abrindo.",
       "Voltar ao Canvas pelo histórico abre na hora, sem ficar parado na página anterior.",
+      "Ao criar um agente você escolhe a CLI, começando pela última usada.",
+      "Os hooks dos andares abrem no topo de Andares, com explicação e exemplos.",
     ] },
     { date: '16 de outubro de 2026 · 0.42.2', title: 'Orkestrai 0.42.2: Seleção das seções de Configurações', summary: 'Mantém a seleção do menu correta no fim da página.', items: [
       'Clicar em uma seção curta no fim de Configurações a seleciona mesmo quando a página não pode rolar mais. Links diretos rolam até a seção após carregar os dados. Âncoras nativas, navegação por teclado e histórico continuam disponíveis; ao rolar para outro ponto, o menu volta a acompanhar a seção visível, inclusive no contêiner do desktop Windows, sem polling em repouso.',

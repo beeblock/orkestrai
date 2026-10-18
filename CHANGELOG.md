@@ -88,6 +88,8 @@ pt-BR, English, and Spanish translations.
 - Organize the board by connections: connected agents, notes and portals stay together with the most connected node on top, groups move as one block and the layout is compact; aligned nodes stack instead of overlapping.
 - Show automation recipes, including the loop recipes, in the interface language, and write their instructions in that language.
 - Open mentions reliably when @ is typed in the Canvas message bar and in Chat.
+- Choose the CLI when creating an agent from New agent, Recruit or a board command: the dialog lists the detected CLIs and starts from the last one used, instead of always opening the first.
+- Open the floor hooks editor right under the Floors header with an explanation and examples; it used to open below the floor list, out of sight.
 
 ## 0.42.2 - 2026-10-16
 
