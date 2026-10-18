@@ -218,6 +218,14 @@ test('reorders flow steps by dragging the grip', async ({ page, request }) => {
     await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}`);
     const flow = page.locator('.canvas-flow').first();
     await expect(flow.locator('.flow-step')).toHaveCount(3);
+    // The deep link glides to the node; drag only once it has stopped moving.
+    let last = '';
+    await expect.poll(async () => {
+      const box = JSON.stringify(await flow.locator('[data-step-grip="0"]').boundingBox());
+      const settled = box === last;
+      last = box;
+      return settled;
+    }, { intervals: [250] }).toBe(true);
     // Soltar o primeiro passo sobre o segundo troca os dois e salva a nova ordem.
     await flow.locator('[data-step-grip="0"]').dragTo(flow.locator('.flow-step').nth(1));
     await expect.poll(prompts).toEqual(['second', 'first', 'third']);
