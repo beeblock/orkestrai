@@ -29,9 +29,13 @@ test.describe('dialogo de criacao de agente', () => {
     // Nome + modelo + esforco. Lider: o checkbox JA vem marcado por padrao
     // (primeiro agente do workspace = lider, fluxo zero-config) — so confere.
     await dialog.locator('input').first().fill('Arquiteto');
-    await dialog.locator('button[role="combobox"], [data-slot="select-trigger"]').first().click();
+    // When several CLIs are installed the CLI picker comes first; the model and effort follow it.
+    const cliPicker = dialog.getByTestId('agent-cli-select');
+    const offset = await cliPicker.count();
+    if (offset) await expect(cliPicker).toContainText('Claude');
+    await dialog.locator('button[role="combobox"], [data-slot="select-trigger"]').nth(offset).click();
     await page.locator('[role="option"]').nth(1).click();
-    const effortTrigger = dialog.locator('button[role="combobox"], [data-slot="select-trigger"]').nth(1);
+    const effortTrigger = dialog.locator('button[role="combobox"], [data-slot="select-trigger"]').nth(offset + 1);
     if (await effortTrigger.count()) {
       await effortTrigger.click();
       await page.locator('[role="option"]').nth(1).click();
