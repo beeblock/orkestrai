@@ -152,6 +152,7 @@ type PtySession = PtySessionInfo & {
   deliveryReadyAt: number;
   deferredHumanInput: string[];
   humanComposerLength: number;
+  humanDraft: HumanDraft;
   humanComposerInput: HumanComposerInput;
   lastOutputAt: number;
   outputRevision: number;
@@ -269,6 +270,54 @@ export function trimScrollback(text: string, limit: number): { kept: string; dro
   return { kept: text.slice(cut), dropped: text.slice(0, cut) };
 }
 
+/** Text the owner is typing into an agent's terminal, across input chunks. */
+export type HumanDraft = { text: string; paste: boolean };
+
+/**
+ * Follows what the owner types into an agent's terminal and returns each line
+ * they submit, so the conversation in Chat can show it. Bracketed pastes keep
+ * their line breaks; editing keys apply to the draft; other escape sequences
+ * (arrows, focus reports, mouse) are terminal controls, not text.
+ */
+export function trackHumanDraft(draft: HumanDraft, data: string): string[] {
+  const submitted: string[] = [];
+  let text = draft.text;
+  let index = 0;
+  while (index < data.length) {
+    if (data.startsWith('\x1b[200~', index)) { draft.paste = true; index += 6; continue; }
+    if (data.startsWith('\x1b[201~', index)) { draft.paste = false; index += 6; continue; }
+    const char = data[index];
+    const code = char.charCodeAt(0);
+    if (code === 0x1b) {
+      const next = data[index + 1];
+      if (next === '[') {
+        let end = index + 2;
+        while (end < data.length && !(data.charCodeAt(end) >= 0x40 && data.charCodeAt(end) <= 0x7e)) end++;
+        index = end + 1;
+      } else if (next === 'O') {
+        index += 3;
+      } else {
+        // Alt+Enter adds a line; Alt+Backspace deletes a word; a lone Escape keeps the draft.
+        if (next === '\r') text += '\n';
+        else if (next === '\x7f') text = text.replace(/\S+\s*$/, '');
+        index += next === undefined ? 1 : 2;
+      }
+      continue;
+    }
+    if (draft.paste) text += char === '\r' ? '\n' : char;
+    else if (char === '\r' || char === '\n') {
+      if (text.trim()) submitted.push(text);
+      text = '';
+    } else if (code === 0x7f || code === 0x08) text = text.slice(0, -1);
+    else if (code === 0x15 || code === 0x03) text = '';
+    else if (code === 0x17) text = text.replace(/\S+\s*$/, '');
+    else if (code >= 0x20) text += char;
+    index++;
+  }
+  draft.text = text.slice(-16_000);
+  return submitted;
+}
+
 export function sanitizeComposerText(text: string): string {
   return text
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -379,6 +428,7 @@ export class PtySessionManager {
       deliveryReadyAt: 0,
       deferredHumanInput: [],
       humanComposerLength: 0,
+      humanDraft: { text: '', paste: false },
       humanComposerInput: new HumanComposerInput(),
       lastOutputAt: 0,
       outputRevision: 0,
@@ -1133,9 +1183,15 @@ export class PtySessionManager {
 
   private writeHumanInputNow(session: PtySession, data: string): void {
     session.startupGuard?.humanInput(data);
+    const prompts = session.provider ? trackHumanDraft(session.humanDraft, data) : [];
     const submitted = this.updateHumanComposerState(session, data);
     this.write(session.id, data);
     if (session.provider && submitted) {
+      // The owner just started a turn: the agent is working from here on.
+      // Typing cleared `waiting` without a report, so say it explicitly.
+      session.outputBurst = true;
+      this.recordLifecycle(session, 'working');
+      for (const text of prompts) this.emitHumanPrompt(session, text);
       session.lastSubmittedDelivery = null;
       session.lastDeliveryAccepted = false;
       // The renderer may submit a human prompt while an automatic handoff is
@@ -1150,6 +1206,15 @@ export class PtySessionManager {
       return;
     }
     if (session.humanComposerLength === 0) queueMicrotask(() => this.drainDeliveryQueue(session));
+  }
+
+  /** Hands a line the owner submitted in the terminal to the Chat mirror. */
+  private emitHumanPrompt(session: PtySession, text: string): void {
+    if (!session.workspaceId || !session.nodeId) return;
+    const mirror = (globalThis as {
+      __orkestraiHumanPrompt?: (input: { workspaceId: string; nodeId: string; sessionId: string; text: string; at: number }) => void;
+    }).__orkestraiHumanPrompt;
+    mirror?.({ workspaceId: session.workspaceId, nodeId: session.nodeId, sessionId: session.id, text, at: Date.now() });
   }
 
   private updateHumanComposerState(session: PtySession, data: string): boolean {

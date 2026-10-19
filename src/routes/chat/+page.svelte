@@ -15,7 +15,7 @@
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
-  import { answersByQuestion, buildTimeline, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
+  import { answersByQuestion, buildTimeline, mergeLoaded, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
@@ -161,7 +161,7 @@
         await tick();
         if (scroller) scroller.scrollTop += scroller.scrollHeight - height;
       } else {
-        messages = page;
+        messages = mergeLoaded(page, messages.filter((message) => message.channel === current));
         await tick();
         scrollToEnd();
       }
@@ -369,7 +369,11 @@
     const connect = () => {
       if (disposed) return;
       socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent-room/pty`);
-      socket.onopen = () => socket?.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'messageDelivery', 'controlCenterChanged', 'attentionChanged'] }));
+      socket.onopen = () => {
+        socket?.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'messageDelivery', 'controlCenterChanged', 'attentionChanged'] }));
+        // Messages sent before this subscription (first load or a reconnect) come from a reload.
+        if (workspaceId) void loadMessages();
+      };
       socket.onmessage = async (event) => {
         let frame: { type?: string; workspaceId?: string; channel?: string; message?: ChannelMessage };
         try { frame = JSON.parse(String(event.data)); } catch { return; }

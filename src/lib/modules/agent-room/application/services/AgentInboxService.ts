@@ -952,6 +952,11 @@ export class AgentInboxService {
     return open === false && released === true;
   }
 
+  /** Where an agent's conversation is recorded, without waking or restoring it. */
+  async transcriptFor(workspaceId: string, nodeId: string): Promise<TranscriptContext> {
+    return this.transcriptContext(workspaceId, nodeId, await this.liveSession(workspaceId, nodeId, false));
+  }
+
   private async transcriptContext(workspaceId: string, nodeId: string, session: PtySessionInfo | null): Promise<TranscriptContext> {
     const node = await workspaceRepository.getNode(nodeId);
     const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };

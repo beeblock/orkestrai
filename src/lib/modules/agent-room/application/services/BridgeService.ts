@@ -1059,6 +1059,10 @@ export class BridgeService {
         sourceType: 'notification',
         attentionRequired: input.kind === 'attention',
       });
+      // The leader handles a teammate's call for attention; the owner's desktop stays quiet.
+      if (input.kind === 'attention' && !agent.maestro && (await this.listAgents(workspace.id)).some((candidate) => candidate.maestro)) {
+        return { notified: false };
+      }
     }
     return nativeNotificationService.send(workspace, input);
   }

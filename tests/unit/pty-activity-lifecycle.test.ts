@@ -3,14 +3,45 @@ import { tmpdir } from 'node:os';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
 type Recorded = { state: string; nodeId: string };
-const hook = globalThis as unknown as { __orkestraiRecordActivity?: (input: Recorded) => void };
+const hook = globalThis as unknown as {
+  __orkestraiRecordActivity?: (input: Recorded) => void;
+  __orkestraiHumanPrompt?: (input: { nodeId: string; text: string }) => void;
+};
 
 describe('PTY activity lifecycle', () => {
   const sessions: string[] = [];
   afterEach(() => {
     for (const id of sessions.splice(0)) ptySessionManager.kill(id);
     delete hook.__orkestraiRecordActivity;
+    delete hook.__orkestraiHumanPrompt;
   });
+
+  it.skipIf(process.platform === 'win32')('reports working when the owner sends a line in the terminal and hands the line to Chat', async () => {
+    const states: string[] = [];
+    const lines: string[] = [];
+    hook.__orkestraiRecordActivity = (input) => {
+      if (input.nodeId === 'owner-node') states.push(input.state);
+    };
+    hook.__orkestraiHumanPrompt = (input) => {
+      if (input.nodeId === 'owner-node') lines.push(input.text);
+    };
+    // An agent-like CLI: it waits for a line, then works quietly before answering.
+    const session = ptySessionManager.create({
+      command: '/bin/sh',
+      args: ['-c', 'echo ready; read line; sleep 4; echo "answer to $line"; sleep 30'],
+      cwd: tmpdir(),
+      workspaceId: 'owner-workspace',
+      nodeId: 'owner-node',
+      provider: 'codex',
+    });
+    sessions.push(session.id);
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    expect(states).toEqual(['starting', 'working', 'idle']);
+    ptySessionManager.writeHumanInput(session.id, 'Por que estão bloqueados?\r');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(lines).toEqual(['Por que estão bloqueados?']);
+    expect(states.at(-1)).toBe('working');
+  }, 12_000);
 
   it.skipIf(process.platform === 'win32')('reports idle again when output after a quiet spell stops', async () => {
     const states: string[] = [];
