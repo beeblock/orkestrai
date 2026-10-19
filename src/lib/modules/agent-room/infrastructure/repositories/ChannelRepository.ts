@@ -114,6 +114,17 @@ export class ChannelRepository {
     return toIso(updated?.getAttribute('answered_at') ?? 0) === now;
   }
 
+  /** Records once when an owner message reached its agent; null when it already had. */
+  async markDelivered(workspaceId: string, id: string, at: string): Promise<ChannelMessage | null> {
+    const model = await AgentChannelMessage.find(id);
+    if (!model || model.getAttribute('workspace_id') !== workspaceId) return null;
+    const message = mapChannelMessage(model);
+    if (message.authorKind !== 'owner' || message.meta.deliveredAt) return null;
+    await AgentChannelMessage.query().where('id', id).update({ meta_json: JSON.stringify({ ...message.meta, deliveredAt: at }), updated_at: new Date().toISOString() });
+    const updated = await AgentChannelMessage.find(id);
+    return updated ? mapChannelMessage(updated) : null;
+  }
+
   async deleteWorkspace(workspaceId: string): Promise<void> {
     await AgentChannelMessage.query().where('workspace_id', workspaceId).delete();
   }

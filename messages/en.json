@@ -5200,7 +5200,6 @@
   "composer.voice_replies_on": "Read replies aloud",
   "composer.voice_replies_off": "Stop reading replies aloud",
   "composer.voice_speak_failed": "Could not read the reply aloud.",
-  "composer.sent": "Sent to {name}",
   "composer.failed": "{name} did not receive it. Open the terminal to check.",
   "node_attention.respond": "Reply",
   "node_attention.permission": "Waiting for your permission",
@@ -5696,5 +5695,17 @@
   "focus_agent.toggle_show": "Show the agent panel",
   "focus_agent.toggle_hide": "Hide the agent panel",
   "focus.show_all_workspaces": "Show every workspace",
-  "focus.show_current_workspace": "Show only this workspace"
+  "focus.show_current_workspace": "Show only this workspace",
+  "node_attention.open_focus": "See all",
+  "node_attention.open_focus_hint": "Opens the agent in Focus, with its whole terminal and conversation",
+  "node_attention.expand": "Show the whole message",
+  "node_attention.collapse": "Show less",
+  "composer.sent_queued": "Queued: {name} reads it after finishing the current work",
+  "composer.sent_delivered": "Delivered to {name}",
+  "composer.sent_replied": "{name} replied",
+  "composer.sent_open_reply": "See reply",
+  "composer.sent_dismiss": "Dismiss notice",
+  "term.inbox_queued_one": "Your message is queued: it goes in when {name} finishes this turn",
+  "term.inbox_queued_many": "{count} of your messages are queued: they go in when {name} finishes this turn",
+  "term.inbox_delivered": "Message delivered to {name}"
 }

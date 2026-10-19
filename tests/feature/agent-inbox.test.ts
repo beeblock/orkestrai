@@ -6,6 +6,8 @@ import { agentInboxService } from '$lib/modules/agent-room/application/services/
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
+import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager, type PtySessionInfo } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
@@ -103,6 +105,34 @@ describe('Agent inbox', () => {
     expect(prompts[0].message).toContain('Mobile pronto para revisão');
     const delivered = await controlCenterRepository.inboxEnvelopes(nodes.Lider, ['delivered']);
     expect(delivered.map((envelope) => envelope.id).sort()).toEqual([web.messageId, mobile.messageId].sort());
+  });
+
+  it('shows the owner a message as queued until the busy agent receives it', async () => {
+    const { workspace, nodes } = await team();
+    const frames: Array<Record<string, unknown>> = [];
+    const scope = globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void };
+    const previous = scope.__orkestraiBroadcast;
+    scope.__orkestraiBroadcast = (frame) => { frames.push(frame); };
+    try {
+      session(nodes.Lider).ready = false;
+      const { message } = await channelService.postOwner(workspace.id, `dm:${nodes.Lider}`, { body: 'A mensagem chegou?' });
+      expect(message.meta).toEqual({ deliverTo: [nodes.Lider] });
+      await agentInboxService.drain(workspace.id, nodes.Lider);
+      expect(prompts).toHaveLength(0);
+      expect((await channelRepository.find(workspace.id, message.id))?.meta.deliveredAt).toBeUndefined();
+
+      session(nodes.Lider).ready = true;
+      await agentInboxService.drain(workspace.id, nodes.Lider);
+
+      expect(prompts).toHaveLength(1);
+      const delivered = await channelRepository.find(workspace.id, message.id);
+      expect(delivered?.meta).toMatchObject({ deliverTo: [nodes.Lider], deliveredAt: expect.any(String) });
+      expect(frames.filter((frame) => frame.type === 'channelMessage').map((frame) => (frame.message as { meta: Record<string, unknown> }).meta.deliveredAt ?? null))
+        .toEqual([null, delivered?.meta.deliveredAt]);
+      expect(await channelRepository.markDelivered(workspace.id, message.id, new Date().toISOString())).toBeNull();
+    } finally {
+      scope.__orkestraiBroadcast = previous;
+    }
   });
 
   it('routes a late answer to the asker inbox instead of losing it', async () => {

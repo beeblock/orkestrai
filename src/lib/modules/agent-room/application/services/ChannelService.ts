@@ -124,8 +124,6 @@ export class ChannelService {
     const body = boundedBody(input.body);
     const { agents, directNodeId } = await this.requireChannel(workspaceId, channel);
     if (input.replyToId) return this.answer(workspaceId, channel, input.replyToId, body);
-    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', body });
-    broadcast(message);
     let recipients: string[];
     if (directNodeId) recipients = [directNodeId];
     else {
@@ -134,6 +132,9 @@ export class ChannelService {
         ? agents.filter((agent) => named.includes(agent.title)).map((agent) => agent.id)
         : agents.filter((agent) => agent.maestro).slice(0, 1).map((agent) => agent.id);
     }
+    // `deliverTo` lets the screens show the message as queued until an agent receives it.
+    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', body, meta: recipients.length ? { deliverTo: recipients } : {} });
+    broadcast(message);
     const where = directNodeId ? 'Mensagem direta do dono' : 'Mensagem do dono no canal #equipe';
     const content = `${where}: ${body} -- Responda com orkestrai post "<resposta>"${directNodeId ? '' : ' --channel team'} (tool MCP channel_post) para a resposta aparecer na Conversa.`;
     const delivered = await Promise.all(recipients.map(async (nodeId) => ({
@@ -147,7 +148,7 @@ export class ChannelService {
     const question = await channelRepository.find(workspaceId, questionId);
     if (!question || question.kind !== 'question' || question.channel !== channel) throw new Error('Pergunta não encontrada neste canal.');
     if (!(await channelRepository.markAnswered(workspaceId, questionId))) throw new Error('Esta pergunta já foi respondida.');
-    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', kind: 'answer', body, replyToId: questionId });
+    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', kind: 'answer', body, replyToId: questionId, meta: question.authorNodeId ? { deliverTo: [question.authorNodeId] } : {} });
     broadcast(message);
     const answered = await channelRepository.find(workspaceId, questionId);
     if (answered) broadcast(answered);
@@ -277,3 +278,11 @@ export class ChannelService {
 }
 
 export const channelService = new ChannelService();
+
+// The owner sees when a message leaves the queue and reaches the agent's terminal.
+agentInboxService.onDelivered('owner', async (envelope) => {
+  const id = envelope.metadata.channelMessageId;
+  if (typeof id !== 'string') return;
+  const message = await channelRepository.markDelivered(envelope.workspaceId, id, envelope.deliveredAt ?? new Date().toISOString());
+  if (message) broadcast(message);
+});

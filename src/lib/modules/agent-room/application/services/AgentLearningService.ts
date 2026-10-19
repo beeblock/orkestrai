@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
-import { agentLearningMode, LEARNING_ATTENTION_SOURCE, lessonNeedsReview, type AgentLesson } from '../../domain/agent-learning.js';
+import { agentLearningMode, LEARNING_ATTENTION_SOURCE, lessonNeedsReview, type AgentLesson, type AgentLessonStatus } from '../../domain/agent-learning.js';
 import { knowledgeNormalize, knowledgeTerms } from '../../domain/knowledge.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentLearningRepository } from '../../infrastructure/repositories/AgentLearningRepository.js';
@@ -90,6 +90,40 @@ export class AgentLearningService {
       await agentLearningRepository.update({ ...reflection, status: 'archived', revision: reflection.revision + 1, updatedAt: now, history: [...reflection.history, { revision: reflection.revision + 1, status: 'archived', actor: actor.type, at: now }] }, reflection.revision);
     }
     return entry;
+  }
+  /**
+   * Settles lessons that wait on the owner for no remaining reason. A lesson
+   * written just before its task was closed becomes active like any lesson of
+   * a finished task, and one whose agent was removed is archived, since no
+   * agent recalls it again. Review mode and quarantined text still wait.
+   */
+  async settlePending(workspaceId: string, nodeId?: string): Promise<number> {
+    let settled = 0;
+    for (const lesson of await agentLearningRepository.list(workspaceId, nodeId, 'pending')) {
+      const node = await workspaceRepository.getNode(lesson.nodeId);
+      const agent = node?.workspaceId === workspaceId && node.type === 'terminal' ? node : null;
+      let status: AgentLessonStatus | null = agent ? null : 'archived';
+      if (agent && agentLearningMode(agent.payload) === 'automatic' && lesson.correction && lesson.evidence
+        && !lessonNeedsReview([lesson.title, lesson.trigger, lesson.mistake, lesson.correction, lesson.evidence].join('\n'))) {
+        const task = await AgentBoardTask.find(lesson.taskId);
+        if (task?.getAttribute('workspace_id') === workspaceId && task.getAttribute('status') === 'done') status = 'active';
+      }
+      if (!status) continue;
+      const at = new Date().toISOString();
+      const revision = lesson.revision + 1;
+      // The owner may decide the same lesson meanwhile; that decision wins.
+      const saved = await agentLearningRepository.update({ ...lesson, status, revision, updatedAt: at, history: [...lesson.history.slice(-49), { revision, status, at, actor: 'system' }] }, lesson.revision).catch(() => null);
+      if (!saved) continue;
+      await attentionService.resolveSource(workspaceId, LEARNING_ATTENTION_SOURCE, lesson.id).catch(() => 0);
+      settled += 1;
+    }
+    return settled;
+  }
+  /** Settles every workspace's waiting lessons once, for those left before this rule existed. */
+  async settleAllPending(): Promise<number> {
+    let settled = 0;
+    for (const workspaceId of await agentLearningRepository.workspacesWith('pending')) settled += await this.settlePending(workspaceId);
+    return settled;
   }
   async context(workspaceId: string, nodeId: string, query: string): Promise<string> {
     const node = await workspaceRepository.getNode(nodeId);

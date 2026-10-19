@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { NodeToolbar, Position, type NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Focus, MessageSquare, MessagesSquare, Globe2, History, Layers, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { ArrowLeftRight, BadgeCheck, Bot, Check, Clock3, Ellipsis, Focus, MessageSquare, MessagesSquare, Globe2, History, Layers, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import { Button } from '$lib/components/ui/button';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -256,6 +256,32 @@
     face = next;
     try { localStorage.setItem(FACE_KEY, next); } catch { /* storage unavailable */ }
   }
+  // Owner messages wait in the inbox while the agent finishes its turn and only
+  // show in the terminal once typed there, so the wait is shown on the node.
+  let queuedMessages = $state<string[]>([]);
+  let justDelivered = $state(false);
+  let deliveredTimer: ReturnType<typeof setTimeout> | null = null;
+  onMount(() => {
+    const onChannelMessage = (event: Event) => {
+      const message = (event as CustomEvent<{ message?: { id: string; authorKind: string; meta?: Record<string, unknown> } }>).detail?.message;
+      const deliverTo = message?.meta?.deliverTo;
+      if (!message || message.authorKind !== 'owner' || !Array.isArray(deliverTo) || !deliverTo.includes(id)) return;
+      if (!message.meta?.deliveredAt) {
+        if (!queuedMessages.includes(message.id)) queuedMessages = [...queuedMessages, message.id];
+        return;
+      }
+      if (!queuedMessages.includes(message.id)) return;
+      queuedMessages = queuedMessages.filter((queued) => queued !== message.id);
+      justDelivered = true;
+      if (deliveredTimer) clearTimeout(deliveredTimer);
+      deliveredTimer = setTimeout(() => (justDelivered = false), 4000);
+    };
+    window.addEventListener('orkestrai:channel-message', onChannelMessage);
+    return () => {
+      window.removeEventListener('orkestrai:channel-message', onChannelMessage);
+      if (deliveredTimer) clearTimeout(deliveredTimer);
+    };
+  });
   const liveStatus = $derived(agentStatus.agents[id] ?? null);
   const statusTone = $derived(liveStatus ? agentTone(liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle');
   const statusLabel = $derived(agentStateLabel(liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle'));
@@ -402,6 +428,7 @@
   let mentionFilter = $state('');
   let mentionTargets = $state<MentionTarget[]>([]);
   let promptInput: HTMLInputElement;
+  let chatFaceLayer = $state<HTMLDivElement | null>(null);
   let attachmentInput: HTMLInputElement;
   let attachmentBusy = $state(false);
   let attachmentDropActive = $state(false);
@@ -947,9 +974,13 @@
   {#if data.payload.provider}
     <NodeAttentionBanner
       nodeId={id}
+      workspaceId={data.workspaceId}
       activity={liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : null}
-      onRespond={() => promptInput?.focus()}
-      onShowTerminal={() => terminalNode?.focus()}
+      onRespond={() => (face === 'chat' ? chatFaceLayer?.querySelector<HTMLInputElement>('input')?.focus() : promptInput?.focus())}
+      onShowTerminal={() => {
+        if (face === 'chat') setFace('terminal');
+        requestAnimationFrame(() => terminalNode?.focus());
+      }}
     />
   {/if}
 
@@ -1028,8 +1059,16 @@
       <NodeEmptyState icon={SquareTerminal} compact title={m['term.no_command']()} />
     {/if}
     {#if face === 'chat' && currentProvider}
-      <div class="chat-face-layer">
+      <div class="chat-face-layer" bind:this={chatFaceLayer}>
         <AgentChatFace workspaceId={data.workspaceId} nodeId={id} title={data.title} />
+      </div>
+    {:else if currentProvider && (queuedMessages.length || justDelivered)}
+      <div class="inbox-chip" class:delivered={!queuedMessages.length} role="status" data-testid="terminal-inbox-chip">
+        {#if queuedMessages.length}
+          <Clock3 size={12} aria-hidden="true" />{queuedMessages.length === 1 ? m['term.inbox_queued_one']({ name: data.title }) : m['term.inbox_queued_many']({ count: String(queuedMessages.length), name: data.title })}
+        {:else}
+          <Check size={12} aria-hidden="true" />{m['term.inbox_delivered']({ name: data.title })}
+        {/if}
       </div>
     {/if}
   </div>
@@ -1177,6 +1216,40 @@
 
   .composer.hidden-face {
     display: none;
+  }
+
+  .inbox-chip {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 20px);
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--app-warning) 34%, transparent);
+    background: color-mix(in srgb, var(--app-warning) 14%, var(--app-surface-raised));
+    box-shadow: var(--app-shadow-overlay);
+    color: var(--app-text);
+    font-size: 11.5px;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  .inbox-chip :global(svg) {
+    flex: none;
+    color: var(--app-warning);
+  }
+
+  .inbox-chip.delivered {
+    border-color: color-mix(in srgb, var(--app-success) 34%, transparent);
+    background: color-mix(in srgb, var(--app-success) 14%, var(--app-surface-raised));
+  }
+
+  .inbox-chip.delivered :global(svg) {
+    color: var(--app-success);
   }
 
   :global(.face-toggle.active) {

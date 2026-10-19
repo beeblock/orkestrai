@@ -518,6 +518,10 @@ export class TaskBoardService {
       const completionFloor = await this.commitAssigneeFloor(workspaceId, updated);
       if (completionFloor) updated.completionFloor = completionFloor;
     }
+    if (!wasDone && updated.status === 'done' && updated.assigneeNodeId) {
+      // A lesson written moments before closing the card no longer needs the owner.
+      await agentLearningService.settlePending(workspaceId, updated.assigneeNodeId).catch(() => 0);
+    }
     if (!wasDone && updated.assigneeNodeId && (updated.status === 'done' || /^(blocked|error|failed)$/.test(updated.status))) {
       const reflection = await agentLearningService.capture(workspaceId, updated.assigneeNodeId, taskId);
       if (reflection) updated.learning = { reflectionId: reflection.id, nodeId: updated.assigneeNodeId, taskId, instruction: 'Reflect now with learning_reflect using this task and your own nodeId: record a reusable correction/procedure, its trigger and concrete evidence. No fabricated lessons. Use learning_skip with this reflectionId and revision 1 if nothing reusable was learned. Existing security gates still apply.' };
