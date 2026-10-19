@@ -189,6 +189,36 @@ export class AttentionRepository {
     return rows.length;
   }
 
+  async resolveNode(workspaceId: string, nodeId: string): Promise<number> {
+    const rows = await AgentAttentionItem.query()
+      .where('workspace_id', workspaceId)
+      .where('node_id', nodeId)
+      .whereNull('resolved_at')
+      .get();
+    const now = new Date().toISOString();
+    for (const row of rows) {
+      await AgentAttentionItem.query().where('id', row.getAttribute('id')).update({
+        status: 'resolved',
+        read_at: row.getAttribute('read_at') ?? now,
+        resolved_at: now,
+        updated_at: now,
+      });
+    }
+    return rows.length;
+  }
+
+  /** Distinct (workspace, node) pairs that still have open items. */
+  async openNodeRefs(): Promise<Array<{ workspaceId: string; nodeId: string }>> {
+    const rows = await AgentAttentionItem.query().whereNull('resolved_at').whereNotNull('node_id').select('workspace_id', 'node_id').get();
+    const refs = new Map<string, { workspaceId: string; nodeId: string }>();
+    for (const row of rows) {
+      const workspaceId = row.getAttribute('workspace_id') as string;
+      const nodeId = row.getAttribute('node_id') as string;
+      refs.set(`${workspaceId}:${nodeId}`, { workspaceId, nodeId });
+    }
+    return [...refs.values()];
+  }
+
   async deleteWorkspace(workspaceId: string): Promise<void> {
     await AgentAttentionItem.query().where('workspace_id', workspaceId).delete();
   }

@@ -20,6 +20,7 @@ import { computerObservationService } from '$lib/modules/agent-room/application/
 import { creativeQueueService } from '$lib/modules/creative-media/application/services/CreativeQueueService.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { agentLearningService } from '$lib/modules/agent-room/application/services/AgentLearningService.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { startDatabaseMaintenance } from '$lib/modules/agent-room/infrastructure/database-maintenance.js';
 import { agentSessionRotationService } from '$lib/modules/agent-room/application/services/AgentSessionRotationService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
@@ -62,6 +63,7 @@ if (!building) {
       .finally(() => agentInboxService.start());
     void startDatabaseMaintenance().catch(() => console.warn('[database] WAL maintenance could not start.'));
     void agentLearningService.settleAllPending().catch(() => console.warn('[learning] Waiting lessons could not be settled.'));
+    void attentionService.resolveOrphaned().catch(() => console.warn('[attention] Items of removed nodes could not be closed.'));
   }).catch(() => console.error('[agent-runtime] Background services failed to start.'));
 }
 

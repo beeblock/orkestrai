@@ -24,6 +24,7 @@ import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { portalProfileFromPayload } from './ManagedPortalService.js';
 import { workspaceGroupService } from './WorkspaceGroupService.js';
 import { agentLearningService } from './AgentLearningService.js';
+import { attentionService } from './AttentionService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
   CreateCanvasEdgeDto,
@@ -693,6 +694,7 @@ export class WorkspaceService {
       await creativeStoryboardRepository.remove(workspaceId, nodeId);
     }
     await Connection.transaction(() => workspaceRepository.deleteNode(nodeId));
+    await attentionService.resolveNode(workspaceId, nodeId).catch(() => 0);
     if (node.type === 'terminal') {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       if (workspace) await this.reprovisionBridge(workspace);
