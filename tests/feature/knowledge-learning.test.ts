@@ -222,7 +222,8 @@ describe('Second Brain and durable agent learning', () => {
     const early = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor)) as { id: string; status: string };
     const risky = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, title: 'Skip slow reviews', correction: 'Bypass the review gate for hotfixes.' }, actor)) as { id: string; status: string };
     expect([early.status, risky.status]).toEqual(['pending', 'pending']);
-    expect(await attentionService.list({ workspaceId: ws.id })).toHaveLength(2);
+    // Only the quarantined lesson asks the owner; the other waits for the card.
+    expect((await attentionService.list({ workspaceId: ws.id })).map((item) => item.sourceId)).toEqual([risky.id]);
 
     await taskBoardService.update(ws.id, taskId, { status: 'done', notifyCompletion: false });
 
@@ -254,12 +255,19 @@ describe('Second Brain and durable agent learning', () => {
     await AgentBoardTask.create({ id: goneTask, workspace_id: ws.id, title: 'Review DNS', description: '', status: 'doing', assignee_node_id: gone.id, position: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     const orphan = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, nodeId: gone.id, taskId: goneTask, correction: 'Read the zone file before approving.' }, { type: 'agent', nodeId: gone.id })) as { id: string };
     await workspaceRepository.deleteNode(gone.id);
-    expect(await attentionService.list({ workspaceId: ws.id })).toHaveLength(2);
+    const openTask = uuidv7();
+    await AgentBoardTask.create({ id: openTask, workspace_id: ws.id, title: 'Rotate DNS keys', description: '', status: 'doing', assignee_node_id: node.id, position: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const waiting = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, taskId: openTask, correction: 'Rotate the keys before the TTL ends.' }, actor)) as { id: string };
+    // Earlier versions asked the owner about all three.
+    for (const id of [kept.id, orphan.id, waiting.id]) {
+      await attentionService.raise({ workspaceId: ws.id, nodeId: null, category: 'agent', severity: 'info', title: 'Lição', sourceType: 'learning_pending', sourceId: id, correlationId: `learning_pending:${id}` });
+    }
+    expect(await attentionService.list({ workspaceId: ws.id })).toHaveLength(3);
 
-    expect(await agentLearningService.settleAllPending()).toBe(2);
+    expect(await agentLearningService.settleAllPending()).toBe(3);
 
-    const found = await agentLearningRepository.findMany([kept.id, orphan.id]);
-    expect(Object.fromEntries(found.map((entry) => [entry.id, entry.status]))).toEqual({ [kept.id]: 'active', [orphan.id]: 'archived' });
+    const found = await agentLearningRepository.findMany([kept.id, orphan.id, waiting.id]);
+    expect(Object.fromEntries(found.map((entry) => [entry.id, entry.status]))).toEqual({ [kept.id]: 'active', [orphan.id]: 'archived', [waiting.id]: 'pending' });
     expect(await attentionService.list({ workspaceId: ws.id })).toEqual([]);
     expect(await agentLearningService.settleAllPending()).toBe(0);
     expect((await agentLearningService.recall(ws.id, node.id, 'DNS')).entries).toHaveLength(1);

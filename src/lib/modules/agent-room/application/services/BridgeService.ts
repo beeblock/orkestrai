@@ -1162,6 +1162,11 @@ export class BridgeService {
     if (input.taskId && (!task || task.getAttribute('workspace_id') !== workspaceId)) {
       throw new Error('Não foi possível identificar a tarefa neste workspace.');
     }
+    // A state that asks for a person must say what it needs; a bare state
+    // opened empty requests in Needs you.
+    if (['waiting_input', 'waiting_permission', 'blocked'].includes(input.state) && !input.action?.trim()) {
+      throw new Error(`Informe o que você precisa: orkestrai status ${input.state} "<o que falta e de quem>". Para só consultar o quadro, use orkestrai task list.`);
+    }
     let agent: BridgeAgent | null = input.from ? this.findAgent(agents, input.from) : null;
     if (!agent && task) {
       const assigneeNodeId = task?.getAttribute('assignee_node_id') as string | null | undefined;

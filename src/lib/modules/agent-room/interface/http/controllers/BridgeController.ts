@@ -1922,6 +1922,10 @@ export class BridgeController extends Controller {
       const input = cleanupFloorsSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
       const actor = await this.requireFloorCleanupActor(event, workspace.id, input);
+      if (input.entries.some((entry) => entry.archive)) {
+        const node = await workspaceRepository.getNode(actor);
+        if (!(node?.payload as { maestro?: boolean } | undefined)?.maestro) throw new Error('Só o líder arquiva andares com commits fora da main.');
+      }
       const result = await floorService.cleanup(workspace.id, input.entries);
       await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: actor, taskId: input.taskId,
         state: 'working', action: 'floor:cleanup', category: 'git', verb: 'executed', objectType: 'repository',
