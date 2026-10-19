@@ -61,12 +61,15 @@ describe('ChannelService', () => {
     await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'Não', replyToId: question.id })).rejects.toThrow();
   });
 
-  it('raises a question for the owner with bounded options', async () => {
+  it('sends a teammate question to the leader with bounded options, and the leader question to the owner', async () => {
     mockWorkspace();
     const raise = vi.spyOn(attentionService, 'raise').mockResolvedValue();
     const message = await new ChannelService().askOwner('w', { nodeId: QA, title: 'QA Upload' }, { question: 'Qual ambiente?', options: ['Staging', 'staging', 'Produção'] });
-    expect(message.meta.options).toEqual(['Staging', 'Produção']);
-    expect(raise).toHaveBeenCalledWith(expect.objectContaining({ sourceType: 'owner_question', nodeId: QA, action: expect.objectContaining({ target: 'chat', channel: `dm:${QA}` }) }));
+    expect(message.meta).toMatchObject({ options: ['Staging', 'Produção'], awaiting: 'leader', leaderNodeId: LEAD });
+    expect(raise).not.toHaveBeenCalled();
+
+    await new ChannelService().askOwner('w', { nodeId: LEAD, title: 'Codex Lider' }, { question: 'Publico a versão?' });
+    expect(raise).toHaveBeenCalledWith(expect.objectContaining({ sourceType: 'owner_question', nodeId: LEAD, action: expect.objectContaining({ target: 'chat', channel: `dm:${LEAD}` }) }));
   });
 
   it('merges agent conversations into the team timeline, newest first', async () => {
