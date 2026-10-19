@@ -142,6 +142,7 @@ describe('Agent inbox', () => {
     expect(question.meta).toMatchObject({ awaiting: 'leader', leaderNodeId: nodes.Lider, leaderTitle: 'Lider' });
     // Nothing waits for the owner: the leader decides.
     expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+    expect((await channelService.listChannels(workspace.id)).channels.find((channel) => channel.id === `dm:${nodes.Web}`)?.openQuestions).toBe(0);
     await agentInboxService.drain(workspace.id, nodes.Lider);
     const copy = prompts.find((prompt) => prompt.nodeId === nodes.Lider)?.message ?? '';
     expect(copy).toContain(`orkestrai close-question ${question.id}`);
