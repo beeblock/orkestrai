@@ -26,10 +26,18 @@ export const bridgeAskOwnerSchema = z.object({
   taskId: z.string().uuid().nullish(),
 });
 
+export const bridgeCloseQuestionSchema = z.object({
+  token: z.string().trim().min(1).nullish(),
+  from: z.string().trim().min(1, 'Informe o agente que está fechando a pergunta.').max(120),
+  questionId: z.string().uuid('Informe o id da pergunta.'),
+  answer: z.string().trim().min(1, 'A resposta está vazia.').max(MAX_CHANNEL_BODY),
+});
+
 export type ListChannelMessagesInput = z.infer<typeof listChannelMessagesSchema>;
 export type PostChannelMessageInput = z.infer<typeof postChannelMessageSchema>;
 export type BridgeChannelPostInput = z.infer<typeof bridgeChannelPostSchema>;
 export type BridgeAskOwnerInput = z.infer<typeof bridgeAskOwnerSchema>;
+export type BridgeCloseQuestionInput = z.infer<typeof bridgeCloseQuestionSchema>;
 
 export const createChannelBindingSchema = z.object({
   nodeId: z.string().uuid(),

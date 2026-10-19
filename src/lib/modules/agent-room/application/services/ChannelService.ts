@@ -256,7 +256,69 @@ export class ChannelService {
       correlationId: `${OWNER_QUESTION_SOURCE}:${message.id}`,
       action: { target: 'chat', channel: message.channel, questionId: message.id, ...(options.length ? { options } : {}) },
     });
+    await this.copyToLeader(workspaceId, agent, message, options, input.taskId ?? null);
     return message;
+  }
+
+  /**
+   * The leader coordinates the team, so it sees every teammate's question to the
+   * owner and can answer what it coordinates; it never wakes an offline leader.
+   */
+  private async copyToLeader(workspaceId: string, agent: { nodeId: string; title: string }, question: ChannelMessage, options: string[], taskId: string | null): Promise<void> {
+    const leader = (await this.agents(workspaceId)).find((candidate) => candidate.maestro && candidate.id !== agent.nodeId);
+    if (!leader) return;
+    await agentInboxService.enqueue({
+      workspaceId,
+      toNodeId: leader.id,
+      fromNodeId: agent.nodeId,
+      kind: 'owner_question',
+      content: `${agent.title} perguntou ao dono (pergunta ${question.id}): "${question.body}"${options.length ? ` Opções: ${options.join(' | ')}.` : ''}`
+        + ` Se for algo que você coordena (disco, ambiente, ordem do trabalho, dependências entre agentes ou andares), responda por ${agent.title} com orkestrai close-question ${question.id} "<resposta>" (tool MCP close_owner_question); a pergunta sai de Precisa de você e o dono vê a sua resposta na Conversa.`
+        + ' Gasto, credenciais, publicação, exclusões e escopo do produto ficam com o dono: nesses casos não responda.',
+      dedupKey: `owner-question:${question.id}`,
+      metadata: { questionId: question.id, wake: false, ...(taskId ? { questionTaskId: taskId } : {}) },
+    }).catch(() => undefined);
+  }
+
+  /**
+   * Closes a teammate's question to the owner: the leader answers it for the
+   * owner, or the agent that asked withdraws it. The owner sees who closed it.
+   */
+  async closeQuestion(workspaceId: string, questionId: string, closer: { nodeId: string; title: string }, input: { body: string }): Promise<{ message: ChannelMessage; delivered: boolean }> {
+    const body = boundedBody(input.body);
+    const question = await channelRepository.find(workspaceId, questionId);
+    if (!question || question.kind !== 'question') throw new Error('Pergunta não encontrada neste workspace.');
+    const asker = question.authorNodeId;
+    const byAsker = closer.nodeId === asker;
+    if (!byAsker && !(await this.agents(workspaceId)).some((agent) => agent.id === closer.nodeId && agent.maestro)) {
+      throw new Error('Só o líder ou o agente que perguntou pode fechar esta pergunta.');
+    }
+    if (!(await channelRepository.markAnswered(workspaceId, questionId))) throw new Error('Esta pergunta já foi respondida.');
+    const message = await channelRepository.save({
+      workspaceId,
+      channel: question.channel,
+      authorKind: 'agent',
+      authorNodeId: closer.nodeId,
+      kind: 'answer',
+      body,
+      replyToId: questionId,
+      meta: { closedBy: byAsker ? 'asker' : 'leader', authorTitle: closer.title },
+    });
+    broadcast(message);
+    const answered = await channelRepository.find(workspaceId, questionId);
+    if (answered) broadcast(answered);
+    await attentionService.resolveSource(workspaceId, OWNER_QUESTION_SOURCE, questionId);
+    if (byAsker || !asker) return { message, delivered: false };
+    const taskId = typeof question.meta.taskId === 'string' ? question.meta.taskId : null;
+    const delivered = await this.deliver(
+      workspaceId,
+      asker,
+      `Resposta do líder ${closer.title} à sua pergunta ao dono "${question.body.slice(0, 240)}": ${body} -- O dono vê esta resposta na Conversa e ainda pode mudar a decisão.`,
+      `leader-answer:${questionId}`,
+      { channel: question.channel, channelMessageId: message.id, questionId },
+      taskId,
+    );
+    return { message, delivered };
   }
 
   /** A team-channel event, such as a finished task. Never blocks the caller. */
@@ -280,6 +342,14 @@ export class ChannelService {
 export const channelService = new ChannelService();
 
 // The owner sees when a message leaves the queue and reaches the agent's terminal.
+// A copy of a question the owner already answered no longer needs the leader.
+agentInboxService.registerRelevance('owner_question', async (envelope) => {
+  const id = envelope.metadata.questionId;
+  if (typeof id !== 'string') return true;
+  const question = await channelRepository.find(envelope.workspaceId, id);
+  return Boolean(question && !question.answeredAt);
+});
+
 agentInboxService.onDelivered('owner', async (envelope) => {
   const id = envelope.metadata.channelMessageId;
   if (typeof id !== 'string') return;
