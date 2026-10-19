@@ -15,7 +15,8 @@ export const landFloorSchema = z.object({ targetBranch: z.string().trim().option
 export const cleanupFloorsSchema = z.object({
   from: z.string().trim().min(1).max(120),
   taskId: z.string().uuid(),
-  entries: z.array(z.object({ floorId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/) })).min(1).max(100),
+  // `archive` retires a reviewed floor whose commits main lacks; only the leader may ask for it.
+  entries: z.array(z.object({ floorId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/), archive: z.boolean().optional() })).min(1).max(100),
 });
 
 export const hooksSchema = z.object({

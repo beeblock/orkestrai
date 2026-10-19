@@ -75,10 +75,13 @@ export class AgentLearningService {
     const content = [input.title, input.trigger, input.mistake, input.correction, input.evidence].join('\n');
     // Never retain raw credentials, even as a pending lesson.
     if (/(?:password|api[_ -]?key|access[_ -]?token|secret)\s*[:=]\s*\S+|-----BEGIN.{0,30}PRIVATE KEY|\b(?:sk-|ghp_)[A-Za-z0-9_-]{16,}/i.test(content)) throw new Error('learning_sensitive_content');
-    const pending = agentLearningMode(node.payload) === 'review' || status !== 'done' || lessonNeedsReview(content);
+    const ownerReview = agentLearningMode(node.payload) === 'review' || lessonNeedsReview(content);
+    const pending = ownerReview || status !== 'done';
     const now = new Date().toISOString();
     const entry = await agentLearningRepository.create({ id: uuidv7(), workspaceId, nodeId: node.id, taskId: input.taskId, title: input.title, status: pending ? 'pending' : 'active', revision: 1, fingerprint: hash(knowledgeNormalize(`${input.trigger}\n${input.correction}`)), trigger: input.trigger, mistake: input.mistake, correction: input.correction, evidence: input.evidence, sourceHash: hash(JSON.stringify([task.getAttribute('title'), task.getAttribute('description'), status])), sourceTitle: String(task.getAttribute('title')), sourceStatus: status, evidenceLevel: actor.type === 'user' ? 'owner_reviewed' : 'agent_reported', history: [{ revision: 1, status: pending ? 'pending' : 'active', actor: actor.type, at: now }], createdAt: now, updatedAt: now });
-    if (pending) {
+    // A lesson that only waits for its task to finish settles on its own and
+    // never asks the owner; review mode and quarantined text do.
+    if (ownerReview) {
       await attentionService.raise({
         workspaceId, nodeId: node.id, taskId: input.taskId, category: 'agent', severity: 'info',
         title: input.title.slice(0, 200), body: input.correction.length > 500 ? `${input.correction.slice(0, 499).trimEnd()}…` : input.correction || null,
@@ -107,6 +110,8 @@ export class AgentLearningService {
         && !lessonNeedsReview([lesson.title, lesson.trigger, lesson.mistake, lesson.correction, lesson.evidence].join('\n'))) {
         const task = await AgentBoardTask.find(lesson.taskId);
         if (task?.getAttribute('workspace_id') === workspaceId && task.getAttribute('status') === 'done') status = 'active';
+        // Still waiting for the task: nothing for the owner to decide meanwhile.
+        else if (await attentionService.resolveSource(workspaceId, LEARNING_ATTENTION_SOURCE, lesson.id).catch(() => 0)) settled += 1;
       }
       if (!status) continue;
       const at = new Date().toISOString();

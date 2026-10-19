@@ -12,6 +12,13 @@ import { controlCenterRepository } from '../../infrastructure/repositories/Contr
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 
 const ATTENTION_STATES = new Set(['waiting_input', 'waiting_permission', 'blocked', 'error']);
+// Readable titles for state items reported without a description.
+const STATE_TITLES: Record<string, string> = {
+  waiting_input: 'Aguardando uma resposta no terminal',
+  waiting_permission: 'Aguardando uma permissão no terminal',
+  blocked: 'Bloqueado',
+  error: 'Erro no terminal',
+};
 
 function severityFor(activity: AgentActivity): AgentActivitySeverity {
   if (activity.severity !== 'info') return activity.severity;
@@ -48,7 +55,7 @@ export class AttentionService {
       taskId: activity.taskId,
       category: activity.category,
       severity: severityFor(activity),
-      title: activity.objectTitle ?? activity.action ?? activity.verb,
+      title: activity.objectTitle ?? activity.action ?? STATE_TITLES[activity.state] ?? activity.verb,
       body: activity.outcome,
       sourceType: activity.sourceType ?? 'agent_state',
       sourceId: activity.sourceId ?? activity.nodeId,

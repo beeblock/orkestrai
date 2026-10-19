@@ -181,6 +181,49 @@ describe('FloorService', () => {
     expect(git(dir, ['branch', '--list', 'orkestrai/ported']).trim()).toContain('orkestrai/ported');
   });
 
+  it('still removes a ported floor after main changed those files again', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'ported-then-evolved' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    git(dir, ['commit', '-am', 'porte']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 3;\n');
+    git(dir, ['commit', '-am', 'evolucao posterior']);
+
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ integration: 'content_integrated', safeToRemove: true });
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision }]))[0]).toMatchObject({ removed: true });
+  });
+
+  it('archives a reviewed floor with commits main lacks only when it is clean, keeping the branch', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'adapted' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2; // adaptado\n');
+    git(dir, ['commit', '-am', 'porte adaptado']);
+
+    writeFileSync(join(floor.path, 'rascunho.ts'), 'nao commitado\n');
+    let [audit] = await floorService.audit(workspace.id);
+    expect(audit.blockers).toEqual(expect.arrayContaining(['unmerged_commits_review_required', 'local_changes_or_untracked_or_ignored_files']));
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision, archive: true }]))[0]).toMatchObject({ removed: false });
+    expect(existsSync(floor.path)).toBe(true);
+
+    rmSync(join(floor.path, 'rascunho.ts'));
+    [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ safeToRemove: false, blockers: ['unmerged_commits_review_required'] });
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision }]))[0]).toMatchObject({ removed: false });
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision, archive: true }]))[0]).toMatchObject({ removed: true });
+    expect(existsSync(floor.path)).toBe(false);
+    expect(git(dir, ['branch', '--list', 'orkestrai/adapted']).trim()).toContain('orkestrai/adapted');
+    expect((await AgentFloor.find(floor.id))?.getAttribute('status')).toBe('archived');
+  });
+
   it('keeps a floor whose files differ from main', async () => {
     const dir = makeRepo();
     const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });

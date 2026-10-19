@@ -165,6 +165,20 @@ async function processWorkingDirectories(): Promise<string[] | null> {
   }
 }
 
+/** `path\0blob` for each change in `git diff|log --raw -z` output; deletions carry the zero blob. */
+function rawChanges(output: string): Set<string> {
+  const changes = new Set<string>();
+  const tokens = output.split('\0');
+  for (let index = 0; index < tokens.length - 1; index++) {
+    const meta = tokens[index].replace(/^\n+/, '');
+    if (!meta.startsWith(':')) continue;
+    const blob = meta.split(' ')[3];
+    const path = tokens[++index];
+    if (blob && path) changes.add(`${path}\0${blob}`);
+  }
+  return changes;
+}
+
 function slugify(text: string): string {
   return (
     text
@@ -190,6 +204,7 @@ function notifyWorkspaceChanged(workspaceId: string) {
 export class FloorService {
   private mutations = new Set<string>();
   private audits = new Map<string, Promise<FloorAudit[]>>();
+  private histories = new Map<string, Promise<Set<string>>>();
 
   private async exclusive<T>(workspaceId: string, run: () => Promise<T>): Promise<T> {
     const workspace = await this.workspace(workspaceId);
@@ -700,28 +715,39 @@ export class FloorService {
   }
 
   /**
-   * True when every file the floor changed since it forked from the target is
-   * identical in the target: its work reached the target by copy or port.
+   * True when the target's history once held every file exactly as the floor
+   * left it: the work reached the target by copy or port, even if the target
+   * changed those files later. Each change is a path and its final blob.
    */
   private async contentIntegrated(workspace: Workspace, head: string, targetHead: string): Promise<boolean> {
     try {
       const fork = (await this.git(workspace, workspace.workingDir, ['merge-base', head, targetHead])).trim();
       if (!fork) return false;
-      const changed = (await this.git(workspace, workspace.workingDir, ['diff', '--no-renames', '--name-only', '-z', fork, head])).split('\0').filter(Boolean);
-      if (!changed.length) return false;
-      for (let start = 0; start < changed.length; start += 200) {
-        const batch = changed.slice(start, start + 200);
-        const differs = (await this.git(workspace, workspace.workingDir, ['diff', '--no-renames', '--name-only', '-z', head, targetHead, '--', ...batch.map((path) => `:(literal)${path}`)])).split('\0').filter(Boolean);
-        if (differs.length) return false;
-      }
+      const changes = rawChanges(await this.git(workspace, workspace.workingDir, ['diff', '--raw', '--no-renames', '--no-abbrev', '-z', fork, head]));
+      if (!changes.size) return false;
+      const history = await this.targetHistory(workspace, targetHead);
+      for (const change of changes) if (!history.has(change)) return false;
       return true;
     } catch {
       return false;
     }
   }
 
+  /** Every (path, blob) the target's recent history introduced, cached per target commit. */
+  private targetHistory(workspace: Workspace, targetHead: string): Promise<Set<string>> {
+    const key = `${workspace.id}:${targetHead}`;
+    let pending = this.histories.get(key);
+    if (!pending) {
+      pending = this.git(workspace, workspace.workingDir, ['log', '--format=', '--raw', '--no-renames', '--no-abbrev', '-z', '-n', '5000', targetHead]).then(rawChanges);
+      this.histories.set(key, pending);
+      pending.catch(() => this.histories.delete(key));
+      for (const stale of [...this.histories.keys()].slice(0, Math.max(0, this.histories.size - 4))) this.histories.delete(stale);
+    }
+    return pending;
+  }
+
   /** Explicit, revision-bound cleanup. Branches are retained; blocked floors are never forced. */
-  async cleanup(workspaceId: string, entries: Array<{ floorId: string; revision: string }>) {
+  async cleanup(workspaceId: string, entries: Array<{ floorId: string; revision: string; archive?: boolean }>) {
     if (!entries.length || entries.length > 100 || new Set(entries.map((entry) => entry.floorId)).size !== entries.length) throw new Error('Selecione de 1 a 100 andares distintos.');
     // Validate every scope before any mutation, including mixed-workspace requests.
     await Promise.all(entries.map((entry) => this.requireFloor(workspaceId, entry.floorId)));
@@ -729,7 +755,7 @@ export class FloorService {
       const results: Array<{ floorId: string; removed: boolean; error?: string }> = [];
       for (const entry of entries) {
         try {
-          await this.removeChecked(entry.floorId, false, entry.revision);
+          await this.removeChecked(entry.floorId, false, entry.revision, entry.archive ? 'archived' : 'deleted', entry.archive === true);
           results.push({ floorId: entry.floorId, removed: true });
         } catch (error) {
           results.push({ floorId: entry.floorId, removed: false, error: error instanceof Error ? error.message : 'Falha na limpeza.' });
@@ -1034,15 +1060,20 @@ export class FloorService {
     return this.exclusive(floor.workspaceId, () => this.removeChecked(id, deleteBranch, revision));
   }
 
-  private async removeChecked(id: string, deleteBranch: boolean, revision?: string, finalStatus = 'deleted') {
+  private async removeChecked(id: string, deleteBranch: boolean, revision?: string, finalStatus = 'deleted', archive = false) {
     const floor = await this.get(id);
     if (!floor) throw new Error('Andar nao encontrado.');
     const workspace = await this.workspace(floor.workspaceId);
 
     const inspect = async () => this.inspectFloor(floor, workspace, await this.auditContext(workspace));
+    // Archiving a reviewed floor accepts commits the target lacks, never anything
+    // else: the checkout must be clean and idle, and the branch keeps the commits.
+    const removable = (audit: FloorAudit) => audit.safeToRemove
+      || (archive && Boolean(audit.head) && audit.blockers.length === 1 && audit.blockers[0] === 'unmerged_commits_review_required');
     const before = await inspect();
     if (revision && before.revision !== revision) throw new Error('O andar mudou desde a auditoria. Consulte floor_audit novamente.');
-    if (!before.safeToRemove) throw new Error(`Andar preservado: ${before.blockers.join(', ')}.`);
+    if (!removable(before)) throw new Error(`Andar preservado: ${before.blockers.join(', ')}.`);
+    if (archive) deleteBranch = false;
 
     const hooks = workspace.hooks;
     if (hooks.teardown?.length) {
@@ -1052,7 +1083,7 @@ export class FloorService {
 
     // Hooks and other agents can change a checkout after the first check.
     const after = await inspect();
-    if (!after.safeToRemove || after.revision !== before.revision) throw new Error('O andar mudou durante a limpeza; worktree preservada.');
+    if (!removable(after) || after.revision !== before.revision) throw new Error('O andar mudou durante a limpeza; worktree preservada.');
     await this.git(workspace, workspace.workingDir, ['worktree', 'remove', floor.path]);
     await this.retireFloorNodes(floor);
     await AgentFloor.query().where('id', id).update({ status: finalStatus });
