@@ -27,6 +27,28 @@ function severityFor(activity: AgentActivity): AgentActivitySeverity {
   return 'info';
 }
 
+// A teammate's terminal dialog asking for a key press is the only state no
+// agent can answer for it; everything else a team with a leader handles itself.
+const OWNER_ONLY_STATES = new Set(['waiting_permission']);
+// Item sources about how a teammate is doing, as opposed to owner decisions.
+const TEAM_SOURCES = ['agent_state', 'notification', 'bridge'];
+const TEAMMATE_STATE_LABELS: Record<string, string> = {
+  waiting_input: 'esperando uma resposta',
+  blocked: 'bloqueado',
+  error: 'com erro',
+};
+
+/** The leader of a team, when `nodeId` is another agent of that team. */
+async function teamLeaderFor(workspaceId: string, nodeId: string | null | undefined): Promise<{ leader: { id: string; title: string }; agent: { id: string; title: string } } | null> {
+  if (!nodeId) return null;
+  const nodes = await workspaceRepository.listNodes(workspaceId);
+  const isAgent = (node: (typeof nodes)[number]) => node.type === 'terminal' && Boolean((node.payload as { provider?: unknown }).provider);
+  const leader = nodes.find((node) => isAgent(node) && (node.payload as { maestro?: boolean }).maestro);
+  const agent = nodes.find((node) => node.id === nodeId);
+  if (!leader || !agent || agent.id === leader.id || !isAgent(agent)) return null;
+  return { leader: { id: leader.id, title: leader.title ?? 'líder' }, agent: { id: agent.id, title: agent.title ?? 'agente' } };
+}
+
 function broadcast(workspaceId: string, item?: AgentAttentionItem): void {
   const send = (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast;
   send?.({ type: 'attentionChanged', workspaceId, item });
@@ -48,6 +70,7 @@ export class AttentionService {
       if (resolved) broadcast(activity.workspaceId);
       return;
     }
+    if (!OWNER_ONLY_STATES.has(activity.state) && await this.handToLeader(activity)) return;
     const item = await attentionRepository.save({
       workspaceId: activity.workspaceId,
       activityEventId: activity.id,
@@ -70,6 +93,44 @@ export class AttentionService {
     broadcast(activity.workspaceId, item);
   }
 
+  /**
+   * In a team with a leader, a teammate that is blocked, waiting or failing is
+   * the leader's to solve: the leader is told and woken, and the owner's Needs
+   * you stays for what only the owner can decide.
+   */
+  private async handToLeader(activity: AgentActivity): Promise<boolean> {
+    const team = await teamLeaderFor(activity.workspaceId, activity.nodeId);
+    if (!team) return false;
+    const resolved = await attentionRepository.resolveNode(activity.workspaceId, activity.nodeId);
+    if (resolved) broadcast(activity.workspaceId);
+    const what = [activity.objectTitle ?? activity.action, activity.outcome].filter((part): part is string => Boolean(part?.trim())).join(' — ');
+    const { agentInboxService } = await import('./AgentInboxService.js');
+    await agentInboxService.enqueue({
+      workspaceId: activity.workspaceId,
+      toNodeId: team.leader.id,
+      fromNodeId: team.agent.id,
+      kind: 'owner_copy',
+      content: `Para você resolver, líder: ${team.agent.title} está ${TEAMMATE_STATE_LABELS[activity.state] ?? activity.state}${what ? `: ${what.slice(0, 600)}` : ''}.`
+        + ` Destrave sem o dono: responda com orkestrai ask "${team.agent.title}" "<orientação>", redistribua o card, ajuste a ordem ou reinicie o agente.`
+        + ' Leve ao dono, com orkestrai ask-owner, somente gasto de dinheiro, credenciais, publicação externa ou exclusões irreversíveis.',
+      dedupKey: `teammate-state:${activity.nodeId}:${activity.state}:${(what || '').slice(0, 120)}`,
+      taskId: activity.taskId ?? null,
+    }).catch(() => undefined);
+    return true;
+  }
+
+  /** In a team with a leader, closes what earlier versions raised to the owner about teammates. */
+  async handTeammateItemsToLeader(): Promise<number> {
+    let resolved = 0;
+    for (const { workspaceId, nodeId } of await attentionRepository.openNodeRefs()) {
+      if (!(await teamLeaderFor(workspaceId, nodeId))) continue;
+      const closed = await attentionRepository.resolveNodeSources(workspaceId, nodeId, TEAM_SOURCES);
+      if (closed) broadcast(workspaceId);
+      resolved += closed;
+    }
+    return resolved;
+  }
+
   /** An attention item that does not change the related agent's activity state. */
   async raise(input: {
     workspaceId: string;
@@ -85,6 +146,8 @@ export class AttentionService {
     /** Overrides the default open-the-node action, e.g. to open a conversation. */
     action?: Record<string, unknown>;
   }): Promise<void> {
+    // A teammate's undelivered message or alert is the leader's to handle.
+    if (TEAM_SOURCES.includes(input.sourceType) && await teamLeaderFor(input.workspaceId, input.nodeId)) return;
     const item = await attentionRepository.save({
       workspaceId: input.workspaceId,
       activityEventId: null,

@@ -381,6 +381,35 @@ describe('ControlCenterService', () => {
     expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId)).toEqual([kept.id]);
   });
 
+  it('hands a blocked teammate to the leader instead of the owner', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'team attention', workingDir: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Claude', payload: { provider: 'claude', maestro: true } });
+    const dev = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev Chat Realtime UI', payload: { provider: 'claude' } });
+    const { agentInboxService } = await import('$lib/modules/agent-room/application/services/AgentInboxService.js');
+    const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'blocked', action: 'Docker daemon 500', attentionRequired: true });
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: leader.id, fromNodeId: dev.id, content: expect.stringContaining('Dev Chat Realtime UI está bloqueado: Docker daemon 500') }));
+
+    // A terminal dialog waiting for a key press, and the leader's own state, still reach the owner.
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'waiting_permission', action: 'Allow Bash?' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: leader.id, state: 'blocked', action: 'Precisa da chave da API', attentionRequired: true });
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId).sort()).toEqual([dev.id, leader.id].sort());
+  });
+
+  it('hands to the leader, at startup, the teammate requests earlier versions raised', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'team startup', workingDir: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Claude', payload: { provider: 'claude', maestro: true } });
+    const dev = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev', payload: { provider: 'codex' } });
+    const { attentionRepository } = await import('$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js');
+    for (const node of [dev, leader]) {
+      await attentionRepository.save({ workspaceId: workspace.id, nodeId: node.id, category: 'agent', severity: 'warning', title: 'Bloqueado', sourceType: 'agent_state', sourceId: node.id, correlationId: `agent:${node.id}:agent` });
+    }
+    expect(await attentionService.handTeammateItemsToLeader()).toBe(1);
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId)).toEqual([leader.id]);
+  });
+
   it('preserva a mensagem completa e desabilita navegação para um agente removido', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'attention source', workingDir: '/tmp' });
     const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'QA Web' });

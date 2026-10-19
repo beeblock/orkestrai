@@ -60,6 +60,18 @@ export function answersByQuestion(messages: readonly ChannelMessage[]): Map<stri
   return answers;
 }
 
+/**
+ * A freshly loaded page, plus messages that arrived live while it loaded: a
+ * message broadcast between the request and its response must not vanish.
+ */
+export function mergeLoaded(loaded: readonly ChannelMessage[], live: readonly ChannelMessage[]): ChannelMessage[] {
+  const oldest = loaded.reduce<string | null>((min, message) => (min === null || message.createdAt < min ? message.createdAt : min), null);
+  const ids = new Set(loaded.map((message) => message.id));
+  const arrived = live.filter((message) => !ids.has(message.id) && (oldest === null || message.createdAt >= oldest));
+  if (!arrived.length) return [...loaded];
+  return [...loaded, ...arrived].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 /** Inserts or replaces a message by id, keeping the list free of duplicates. */
 export function upsertMessage(messages: readonly ChannelMessage[], message: ChannelMessage): ChannelMessage[] {
   const index = messages.findIndex((candidate) => candidate.id === message.id);

@@ -35,6 +35,12 @@ function broadcast(message: ChannelMessage): void {
   send?.({ type: 'channelMessage', workspaceId: message.workspaceId, channel: message.channel, message });
 }
 
+/** Mirrored terminal text is never refused for its length; it is clipped instead. */
+function clippedBody(value: string): string {
+  const body = value.trim();
+  return body.length > MAX_CHANNEL_BODY ? `${body.slice(0, MAX_CHANNEL_BODY - 1).trimEnd()}…` : boundedBody(body);
+}
+
 function boundedBody(value: string): string {
   const body = value.trim();
   if (!body) throw new Error('A mensagem está vazia.');
@@ -201,6 +207,28 @@ export class ChannelService {
     } catch {
       return false;
     }
+  }
+
+  /** What the owner typed in an agent's terminal, recorded in their direct conversation. */
+  async recordTerminalPrompt(workspaceId: string, nodeId: string, text: string): Promise<ChannelMessage> {
+    const body = clippedBody(text);
+    const message = await channelRepository.save({ workspaceId, channel: directChannel(nodeId), authorKind: 'owner', body, meta: { via: 'terminal' } });
+    broadcast(message);
+    const title = (await this.agents(workspaceId)).find((agent) => agent.id === nodeId)?.title ?? 'o agente';
+    await this.informLeader(
+      workspaceId,
+      nodeId,
+      `Para sua coordenação: o dono escreveu no terminal de ${title}: "${body}". ${title} recebe e responde ao dono; ajuste o plano e as instruções da equipe se isso mudar prioridades, escopo ou arquitetura, sem repetir a mensagem a ${title}.`,
+      `owner-copy:${message.id}`,
+    );
+    return message;
+  }
+
+  /** The agent's answer in its terminal, recorded right after the owner's line. */
+  async recordTerminalReply(workspaceId: string, nodeId: string, text: string, promptId: string): Promise<ChannelMessage> {
+    const message = await channelRepository.save({ workspaceId, channel: directChannel(nodeId), authorKind: 'agent', authorNodeId: nodeId, body: clippedBody(text), meta: { via: 'terminal', promptId } });
+    broadcast(message);
+    return message;
   }
 
   /** An agent's post: to the team channel, or to its direct channel with the owner. */

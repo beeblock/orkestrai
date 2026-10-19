@@ -6,7 +6,7 @@
   import QuestionCard from './QuestionCard.svelte';
   import ComposerVoice from '../canvas/ComposerVoice.svelte';
   import { TEXT_DICTATION_COMMAND } from '../text-dictation.js';
-  import { answersByQuestion, buildTimeline, upsertMessage } from './chat-timeline.js';
+  import { answersByQuestion, buildTimeline, mergeLoaded, upsertMessage } from './chat-timeline.js';
   import { directChannel, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -38,7 +38,7 @@
     const response = await fetch(`${url}?limit=60`, { cache: 'no-store' }).catch(() => null);
     const body = response?.ok ? await response.json().catch(() => null) : null;
     if (Array.isArray(body?.data)) {
-      messages = body.data;
+      messages = mergeLoaded(body.data, messages);
       await scrollEnd();
     }
   }
