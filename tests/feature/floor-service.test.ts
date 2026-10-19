@@ -161,6 +161,42 @@ describe('FloorService', () => {
     expect(existsSync(floor.path)).toBe(true);
   });
 
+  it('removes a floor whose files reached main by copy and keeps its branch', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'ported' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    writeFileSync(join(floor.path, 'new.ts'), 'export const added = true;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    // The leader ports the same files to main in its own commit; histories differ.
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    writeFileSync(join(dir, 'new.ts'), 'export const added = true;\n');
+    writeFileSync(join(dir, 'other.ts'), 'export const later = 1;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'porte conferido']);
+
+    expect(await floorService.remove(floor.id, true)).toMatchObject({ removed: true, branchDeleted: false });
+    expect(existsSync(floor.path)).toBe(false);
+    expect(git(dir, ['branch', '--list', 'orkestrai/ported']).trim()).toContain('orkestrai/ported');
+  });
+
+  it('keeps a floor whose files differ from main', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'partial' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    writeFileSync(join(floor.path, 'new.ts'), 'export const added = true;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'porte parcial']);
+
+    await expect(floorService.remove(floor.id)).rejects.toThrow('unmerged_commits_review_required');
+    expect(existsSync(floor.path)).toBe(true);
+  });
+
   it('starts a floor from the owner working tree without touching the owner index', async () => {
     const dir = makeRepo();
     writeFileSync(join(dir, 'app.ts'), 'const v = 1;\nconst local = true;\n');

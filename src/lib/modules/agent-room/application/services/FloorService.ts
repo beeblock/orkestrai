@@ -21,7 +21,7 @@ export type FloorAudit = {
   floorId: string; name: string; branch: string; path: string;
   target: string; merged: boolean; safeToRemove: boolean;
   blockers: string[]; revision: string; head: string | null;
-  integration: 'ancestor' | 'unchanged' | 'patch_equivalent' | 'patch_applied' | 'diverged' | 'unknown';
+  integration: 'ancestor' | 'unchanged' | 'patch_equivalent' | 'patch_applied' | 'content_integrated' | 'diverged' | 'unknown';
   changes: { tracked: number; untracked: number; ignored: number; samples: string[]; truncated: boolean };
 };
 
@@ -662,10 +662,17 @@ export class FloorService {
         }
       } catch (error) {
         if ((error as { code?: unknown }).code !== 1) throw error;
-        const patches = (await this.git(workspace, workspace.workingDir, ['cherry', context.targetHead, head])).trim().split('\n').filter(Boolean);
-        // Patch equivalence is useful evidence, not permission to discard the branch.
-        integration = patches.length > 0 && patches.every((line) => line.startsWith('- ')) ? 'patch_equivalent' : 'diverged';
-        blockers.push('unmerged_commits_review_required');
+        if (await this.contentIntegrated(workspace, head, context.targetHead)) {
+          // Brought to the target by copy: the checkout holds nothing the target
+          // lacks. Removing it keeps the branch and its commits.
+          merged = true;
+          integration = 'content_integrated';
+        } else {
+          const patches = (await this.git(workspace, workspace.workingDir, ['cherry', context.targetHead, head])).trim().split('\n').filter(Boolean);
+          // Patch equivalence is useful evidence, not permission to discard the branch.
+          integration = patches.length > 0 && patches.every((line) => line.startsWith('- ')) ? 'patch_equivalent' : 'diverged';
+          blockers.push('unmerged_commits_review_required');
+        }
       }
       const floorNodes = context.nodes.filter((node) => node.floorId === floor.id);
       const ids = new Set(floorNodes.map((node) => node.id));
@@ -690,6 +697,27 @@ export class FloorService {
     const revision = createHash('sha256').update(JSON.stringify([floor.id, floor.path, floor.branch, context.target, context.targetHead, head, status, blockers])).digest('hex');
     return { floorId: floor.id, name: floor.name, branch: floor.branch, path: floor.path, target: context.target,
       merged, safeToRemove: merged && !blockers.length, blockers, revision, head, integration, changes };
+  }
+
+  /**
+   * True when every file the floor changed since it forked from the target is
+   * identical in the target: its work reached the target by copy or port.
+   */
+  private async contentIntegrated(workspace: Workspace, head: string, targetHead: string): Promise<boolean> {
+    try {
+      const fork = (await this.git(workspace, workspace.workingDir, ['merge-base', head, targetHead])).trim();
+      if (!fork) return false;
+      const changed = (await this.git(workspace, workspace.workingDir, ['diff', '--no-renames', '--name-only', '-z', fork, head])).split('\0').filter(Boolean);
+      if (!changed.length) return false;
+      for (let start = 0; start < changed.length; start += 200) {
+        const batch = changed.slice(start, start + 200);
+        const differs = (await this.git(workspace, workspace.workingDir, ['diff', '--no-renames', '--name-only', '-z', head, targetHead, '--', ...batch.map((path) => `:(literal)${path}`)])).split('\0').filter(Boolean);
+        if (differs.length) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Explicit, revision-bound cleanup. Branches are retained; blocked floors are never forced. */
