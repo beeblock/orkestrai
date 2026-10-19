@@ -133,6 +133,8 @@ type PtySession = PtySessionInfo & {
   bracketedPaste: boolean;
   terminalModeTail: string;
   scrollback: string;
+  /** Modes in effect where the retained scrollback starts. */
+  trimmedModes: Map<string, boolean>;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
   attentionListeners: Set<PtyAttentionListener>;
@@ -227,6 +229,46 @@ const COMPOSER_SETTLE_LIMIT_MS = 5_000;
  * controle (atalhos como Ctrl+X abrem o editor externo do Claude!) e achata
  * newlines — \n solto num composer e um Enter (submit parcial da mensagem).
  */
+// Private modes a reattached terminal needs to keep working: the alternate
+// screen first, then key, mouse, focus and paste reporting, then the cursor.
+const REPLAYED_MODES = ['1049', '1047', '47', '1', '1000', '1002', '1003', '1004', '1005', '1006', '1015', '2004', '25'];
+
+/** Records the private modes (`ESC [ ? n h|l`) that `text` sets, in order. */
+export function applyTerminalModes(modes: Map<string, boolean>, text: string): void {
+  for (const match of text.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
+    for (const mode of match[1].split(';')) modes.set(mode, match[2] === 'h');
+  }
+}
+
+/**
+ * Restores, ahead of a trimmed replay, the modes set by output that no longer
+ * fits the scrollback. Without it an agent TUI that entered the alternate
+ * screen and mouse reporting long ago reattaches as a plain terminal, and the
+ * wheel no longer reaches it.
+ */
+export function terminalModePrefix(modes: Map<string, boolean>): string {
+  let prefix = '';
+  for (const mode of REPLAYED_MODES) {
+    const on = modes.get(mode);
+    if (on === undefined) continue;
+    if (mode === '25') {
+      if (!on) prefix += '\x1b[?25l';
+    } else if (on) {
+      prefix += `\x1b[?${mode}h`;
+    }
+  }
+  return prefix;
+}
+
+/** Splits output at the scrollback limit without cutting an escape sequence in two. */
+export function trimScrollback(text: string, limit: number): { kept: string; dropped: string } {
+  if (text.length <= limit) return { kept: text, dropped: '' };
+  let cut = text.length - limit;
+  const escape = text.lastIndexOf('\x1b', cut);
+  if (escape >= 0 && cut - escape < 64) cut = escape;
+  return { kept: text.slice(cut), dropped: text.slice(0, cut) };
+}
+
 export function sanitizeComposerText(text: string): string {
   return text
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -319,6 +361,7 @@ export class PtySessionManager {
       bracketedPaste: false,
       terminalModeTail: '',
       scrollback: '',
+      trimmedModes: new Map(),
       listeners: new Set(),
       exitListeners: new Set(),
       attentionListeners: new Set(),
@@ -350,7 +393,9 @@ export class PtySessionManager {
       const resumedFromIdle = session.waiting;
       session.lastOutputAt = Date.now();
       session.outputRevision += 1;
-      session.scrollback = (session.scrollback + data).slice(-SCROLLBACK_LIMIT);
+      const retained = trimScrollback(session.scrollback + data, SCROLLBACK_LIMIT);
+      if (retained.dropped) applyTerminalModes(session.trimmedModes, retained.dropped);
+      session.scrollback = retained.kept;
       const modes = session.terminalModeTail + data;
       for (const match of modes.matchAll(/\x1b\[\?2004([hl])/g)) session.bracketedPaste = match[1] === 'h';
       session.terminalModeTail = modes.slice(-12);
@@ -472,7 +517,7 @@ export class PtySessionManager {
     if (onAttention) session.attentionListeners.add(onAttention);
     if (onWorkingDirectory) session.workingDirectoryListeners.add(onWorkingDirectory);
 
-    const scrollback = session.scrollback;
+    const scrollback = terminalModePrefix(session.trimmedModes) + session.scrollback;
     if (session.exited && onExit) {
       queueMicrotask(() => onExit(session.exitCode ?? 0));
     }
