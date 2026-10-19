@@ -33,8 +33,14 @@ const INBOX_SINK = Symbol('inboxSink');
 export function formatInbox(items, remaining = 0) {
   if (!items?.length) return '';
   const lines = [`--- Orkestrai: ${items.length} mensagem(ns) nova(s) na sua caixa de entrada ---`];
-  for (const item of items) {
-    const from = item.fromTitle ? `De ${item.fromTitle}` : 'Orkestrai';
+  // The owner reads Chat and waits for an answer there: their messages come
+  // first and ask for a reply before the agent goes back to its work.
+  const fromOwner = items.filter((item) => item.kind === 'owner');
+  if (fromOwner.length) {
+    lines.push('O DONO ESTA ESPERANDO NA CONVERSA: responda agora com orkestrai post "<resposta>" (tool MCP channel_post), antes de continuar o trabalho. Se ainda nao pode tratar, diga quando vai tratar.');
+  }
+  for (const item of [...fromOwner, ...items.filter((candidate) => candidate.kind !== 'owner')]) {
+    const from = item.kind === 'owner' ? 'Do dono' : item.fromTitle ? `De ${item.fromTitle}` : 'Orkestrai';
     const task = item.taskId ? ` (tarefa ${item.taskId})` : '';
     const kind = item.kind === 'ask' && item.fromTitle ? ' [pergunta]' : item.kind === 'reply' ? ' [resposta]' : '';
     lines.push(`[${item.messageId}] ${from}${task}${kind}: ${item.content}`);
@@ -567,6 +573,9 @@ async function runCommand(argv, options, sink) {
       let cancelled = false;
       let released = false;
       const owner = process.ppid;
+      // The agent reads nothing until the command ends, so waiting and heartbeats
+      // leave messages queued; releasing the slot hands them over with the result.
+      const quiet = { ...config, [INBOX_SINK]: null };
       const leave = async () => {
         const id = lease ?? ticket;
         if (!id || released) return;
@@ -581,7 +590,7 @@ async function runCommand(argv, options, sink) {
       try {
         while (!lease) {
           if (cancelled) throw new Error('Execucao pesada cancelada antes de iniciar.');
-          const slot = await bridge(config, 'POST', '/api/agent-room/bridge/heavy', { label, taskId: flags.task ?? null, ticket, waitMs: 20_000 });
+          const slot = await bridge(quiet, 'POST', '/api/agent-room/bridge/heavy', { label, taskId: flags.task ?? null, ticket, waitMs: 20_000 });
           if (slot.granted) lease = slot.leaseId;
           else {
             ticket = slot.ticket;
@@ -600,7 +609,7 @@ async function runCommand(argv, options, sink) {
           stoppedTree = stopHeavyTree(child);
         };
         const heartbeat = setInterval(() => {
-          void bridge(config, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`, { label, taskId: flags.task ?? null })
+          void bridge(quiet, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`, { label, taskId: flags.task ?? null })
             .then((data) => {
               // A lost reservation the server cannot restore, or a nearly full
               // disk, ends the run: the machine never runs more than its slots.
