@@ -5200,7 +5200,6 @@
   "composer.voice_replies_on": "Leer las respuestas en voz alta",
   "composer.voice_replies_off": "Dejar de leer las respuestas en voz alta",
   "composer.voice_speak_failed": "No se pudo leer la respuesta en voz alta.",
-  "composer.sent": "Enviado a {name}",
   "composer.failed": "{name} no lo recibió. Abre la terminal para revisar.",
   "node_attention.respond": "Responder",
   "node_attention.permission": "Esperando tu permiso",
@@ -5696,5 +5695,17 @@
   "focus_agent.toggle_show": "Mostrar el panel del agente",
   "focus_agent.toggle_hide": "Ocultar el panel del agente",
   "focus.show_all_workspaces": "Mostrar todos los workspaces",
-  "focus.show_current_workspace": "Mostrar solo este workspace"
+  "focus.show_current_workspace": "Mostrar solo este workspace",
+  "node_attention.open_focus": "Ver todo",
+  "node_attention.open_focus_hint": "Abre el agente en Foco, con su terminal y la conversación completos",
+  "node_attention.expand": "Mostrar el mensaje completo",
+  "node_attention.collapse": "Mostrar menos",
+  "composer.sent_queued": "En cola: {name} lo lee al terminar lo que está haciendo",
+  "composer.sent_delivered": "Entregado a {name}",
+  "composer.sent_replied": "{name} respondió",
+  "composer.sent_open_reply": "Ver respuesta",
+  "composer.sent_dismiss": "Descartar aviso",
+  "term.inbox_queued_one": "Tu mensaje está en cola: entra cuando {name} termine su turno",
+  "term.inbox_queued_many": "{count} mensajes tuyos en cola: entran cuando {name} termine su turno",
+  "term.inbox_delivered": "Mensaje entregado a {name}"
 }

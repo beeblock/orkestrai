@@ -10,6 +10,10 @@ export class AgentLearningRepository {
     if (status) query.where('status', status);
     return (await query.orderBy('updated_at', 'desc').limit(1000).get()).map(project);
   }
+  async workspacesWith(status: AgentLesson['status']): Promise<string[]> {
+    const rows = await AgentLearningEntry.query().where('status', status).select('workspace_id').get();
+    return [...new Set(rows.map((row) => String(row.getAttribute('workspace_id'))))];
+  }
   async findMany(ids: string[]): Promise<AgentLesson[]> {
     if (!ids.length) return [];
     return (await AgentLearningEntry.query().whereIn('id', ids).get()).map(project);

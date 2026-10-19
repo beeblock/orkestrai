@@ -23,6 +23,7 @@ import { computerService } from './ComputerService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { portalProfileFromPayload } from './ManagedPortalService.js';
 import { workspaceGroupService } from './WorkspaceGroupService.js';
+import { agentLearningService } from './AgentLearningService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
   CreateCanvasEdgeDto,
@@ -695,6 +696,7 @@ export class WorkspaceService {
     if (node.type === 'terminal') {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       if (workspace) await this.reprovisionBridge(workspace);
+      await agentLearningService.settlePending(workspaceId, nodeId).catch(() => 0);
     }
     this.notifyStructureChanged(workspaceId);
     return { deleted: true };

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, BellRing, Clock3, CornerDownLeft, ShieldAlert, SquareTerminal } from '@lucide/svelte';
+  import { AlertTriangle, BellRing, Clock3, CornerDownLeft, Maximize2, ShieldAlert, SquareTerminal } from '@lucide/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { attentionDecisionKind, attentionFeed, decideAttentionItem, updateAttentionItem } from '../attention-feed.svelte.js';
@@ -9,11 +9,13 @@
 
   let {
     nodeId,
+    workspaceId,
     activity,
     onRespond,
     onShowTerminal,
   }: {
     nodeId: string;
+    workspaceId: string;
     activity: AgentActivityState | null;
     onRespond: () => void;
     onShowTerminal: () => void;
@@ -27,6 +29,11 @@
   // Without a recorded item, the terminal itself is what is waiting.
   const live = $derived(!item && (activity === 'waiting_permission' || activity === 'waiting_input' || activity === 'blocked' || activity === 'error') ? activity : null);
   let busy = $state(false);
+  // The whole message opens in place; another item starts collapsed again.
+  let expandedId = $state<string | null>(null);
+  const expanded = $derived(Boolean(item) && expandedId === item?.id);
+  // Focus shows the agent's whole terminal next to its requests and conversation.
+  const focusHref = $derived(`/terminal?${new URLSearchParams({ workspace: workspaceId, node: nodeId }).toString()}`);
 
   // A question the agent asked the owner can be answered right here.
   const question = $derived(item?.sourceType === 'owner_question' && item.sourceId ? item : null);
@@ -71,10 +78,17 @@
 {#if item}
   <div class="banner nodrag" class:danger={item.severity === 'error'} role="status" data-testid="node-attention-banner">
     <span class="mark" aria-hidden="true">{#if item.category === 'review'}<ShieldAlert size={14} />{:else}<BellRing size={14} />{/if}</span>
-    <div class="copy">
-      <strong>{item.title}{#if items.length > 1}<span class="more">+{items.length - 1}</span>{/if}</strong>
-      {#if item.body}<span>{item.body}</span>{/if}
-    </div>
+    <button
+      type="button"
+      class="copy nowheel"
+      class:expanded
+      aria-expanded={expanded}
+      title={expanded ? m['node_attention.collapse']() : m['node_attention.expand']()}
+      onclick={() => (expandedId = expanded ? null : item.id)}
+    >
+      <strong><span class="title-text">{item.title}</span>{#if items.length > 1}<span class="more">+{items.length - 1}</span>{/if}</strong>
+      {#if item.body}<span class="body-text">{item.body}</span>{/if}
+    </button>
     <div class="actions">
       {#if question}
         {#each questionOptions as option (option)}
@@ -86,7 +100,8 @@
         <button type="button" disabled={busy} onclick={() => void decide('reject')}>{labels.reject}</button>
         <button type="button" class="primary" disabled={busy} onclick={() => void decide('approve')}>{labels.approve}</button>
       {:else}
-        <button type="button" class="primary" onclick={onRespond}><CornerDownLeft size={12} />{m['node_attention.respond']()}</button>
+        <a class="link" href={focusHref} title={m['node_attention.open_focus_hint']()}><Maximize2 size={12} />{m['node_attention.open_focus']()}</a>
+        <button type="button" class="primary" onclick={() => { expandedId = item.id; onRespond(); }}><CornerDownLeft size={12} />{m['node_attention.respond']()}</button>
         <button type="button" disabled={busy} onclick={() => void update('resolved')}>{m['attention.resolve']()}</button>
       {/if}
       <button type="button" class="icon" disabled={busy} onclick={() => void update('snoozed')} aria-label={m['attention.snooze']()} title={m['attention.snooze']()}><Clock3 size={13} /></button>
@@ -111,6 +126,7 @@
 <style>
   .banner {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 9px;
     margin: 0 8px 6px;
@@ -144,29 +160,67 @@
 
   .copy {
     min-width: 0;
-    flex: 1;
+    flex: 1 1 200px;
     display: flex;
     flex-direction: column;
     gap: 1px;
   }
 
-  .copy strong {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    overflow: hidden;
-    font-size: 12.5px;
-    font-weight: 600;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+  button.copy {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
   }
 
-  .copy span {
+  button.copy:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .copy strong {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .copy .title-text,
+  .copy .body-text {
+    display: -webkit-box;
     overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+
+  .copy .body-text,
+  .copy > span {
     color: var(--app-text-soft);
     font-size: 11.5px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    line-height: 1.4;
+  }
+
+  /* Opened, the whole message shows and scrolls inside the banner. */
+  .copy.expanded {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .copy.expanded .title-text,
+  .copy.expanded .body-text {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    line-clamp: none;
+    white-space: pre-wrap;
   }
 
   .copy .more {
@@ -184,6 +238,7 @@
     align-items: center;
     gap: 4px;
     flex: none;
+    margin-left: auto;
   }
 
   .actions button,

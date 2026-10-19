@@ -7,23 +7,25 @@
   /**
    * Sends `text` to the agent's direct conversation: it is recorded in Chat
    * and reaches the agent through its inbox, which wakes an on-demand agent
-   * and waits for a busy one to finish its turn.
+   * and waits for a busy one to finish its turn. Returns the stored message
+   * id once it is queued, or null when it was not accepted.
    */
-  export async function sendToAgent(workspaceId: string, nodeId: string, text: string): Promise<boolean> {
+  export async function sendToAgent(workspaceId: string, nodeId: string, text: string): Promise<string | null> {
     const csrf = getCsrfToken();
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(`dm:${nodeId}`)}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
       body: JSON.stringify({ body: text }),
     }).catch(() => null);
-    const result = response?.ok ? await response.json().catch(() => null) as { data?: { delivered?: Array<{ ok: boolean }> } } | null : null;
-    return Boolean(result?.data?.delivered?.length) && !result!.data!.delivered!.some((entry) => !entry.ok);
+    const result = response?.ok ? await response.json().catch(() => null) as { data?: { message?: { id?: string }; delivered?: Array<{ ok: boolean }> } } | null : null;
+    const accepted = Boolean(result?.data?.delivered?.length) && !result!.data!.delivered!.some((entry) => !entry.ok);
+    return accepted ? result?.data?.message?.id ?? null : null;
   }
 </script>
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ArrowUp, AtSign, ChevronDown, ChevronUp, FileText, Globe, LoaderCircle, Mic, SquareTerminal, Volume2, VolumeX, X } from '@lucide/svelte';
+  import { ArrowUp, AtSign, Check, ChevronDown, ChevronUp, Clock3, FileText, Globe, LoaderCircle, MessageSquareText, Mic, SquareTerminal, Volume2, VolumeX, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import AgentChatFace from '../chat/AgentChatFace.svelte';
   import ComposerVoice from './ComposerVoice.svelte';
@@ -114,6 +116,60 @@
     });
   }
 
+  // The last message sent stays visible until the agent has it: queued while
+  // the agent finishes its turn, then delivered, then answered.
+  type SentState = 'queued' | 'delivered' | 'replied';
+  let lastSent = $state<{ id: string; nodeId: string; name: string; text: string; at: string; state: SentState } | null>(null);
+  let sentTimer: ReturnType<typeof setTimeout> | null = null;
+  // Deliveries that arrive before the send request returns.
+  const deliveredEarly = new Set<string>();
+
+  function trackSent(id: string, nodeId: string, name: string, text: string, at: string) {
+    if (sentTimer) clearTimeout(sentTimer);
+    lastSent = { id, nodeId, name, text, at, state: deliveredEarly.has(id) ? 'delivered' : 'queued' };
+    deliveredEarly.clear();
+    if (lastSent.state === 'delivered') settleDelivered();
+  }
+
+  function settleDelivered() {
+    if (sentTimer) clearTimeout(sentTimer);
+    const id = lastSent?.id;
+    sentTimer = setTimeout(() => {
+      if (lastSent?.id === id && lastSent?.state === 'delivered') lastSent = null;
+    }, 8000);
+  }
+
+  function openReply() {
+    lastSent = null;
+    threadOpen = true;
+  }
+
+  onMount(() => {
+    const onDelivery = (event: Event) => {
+      const { channel, message } = (event as CustomEvent<{ channel?: string; message?: { id: string; authorKind: string; authorNodeId: string | null; createdAt: string; meta?: Record<string, unknown> } }>).detail ?? {};
+      if (!message) return;
+      const sent = lastSent;
+      if (message.authorKind === 'owner' && message.meta?.deliveredAt) {
+        if (sent?.id === message.id) {
+          if (sent.state === 'queued') {
+            lastSent = { ...sent, state: 'delivered' };
+            settleDelivered();
+          }
+        } else if (sending) deliveredEarly.add(message.id);
+        return;
+      }
+      if (sent && message.authorKind === 'agent' && message.authorNodeId === sent.nodeId && channel === `dm:${sent.nodeId}` && message.createdAt >= sent.at) {
+        if (sentTimer) clearTimeout(sentTimer);
+        lastSent = { ...sent, state: 'replied' };
+      }
+    };
+    window.addEventListener('orkestrai:channel-message', onDelivery);
+    return () => {
+      window.removeEventListener('orkestrai:channel-message', onDelivery);
+      if (sentTimer) clearTimeout(sentTimer);
+    };
+  });
+
   onMount(() => {
     const onMessage = (event: Event) => {
       const { channel, message } = (event as CustomEvent<{ channel: string; message: { authorKind: string; authorNodeId: string | null; body: string } }>).detail ?? {};
@@ -182,13 +238,15 @@
       return;
     }
     if (!target) return;
+    const recipient = target;
+    const at = new Date().toISOString();
     sending = true;
-    const delivered = await sendToAgent(workspaceId, target.id, text);
+    const messageId = await sendToAgent(workspaceId, recipient.id, text);
     sending = false;
-    if (delivered) {
+    if (messageId) {
       if (draft.trim() === text) draft = '';
       onInput();
-      showFeedback(true, m['composer.sent']({ name: target.title }));
+      trackSent(messageId, recipient.id, recipient.title, text, at);
     } else {
       showFeedback(false, m['composer.failed']({ name: target.title }));
     }
@@ -226,6 +284,20 @@
   {/if}
   {#if feedback}
     <p class="feedback" class:error={!feedback.ok} role="status">{feedback.text}</p>
+  {:else if lastSent && !threadOpen}
+    <div class="sent" class:delivered={lastSent.state !== 'queued'} role="status" data-testid="composer-sent" data-state={lastSent.state}>
+      <span class="sent-mark" aria-hidden="true">
+        {#if lastSent.state === 'queued'}<Clock3 size={13} />{:else if lastSent.state === 'delivered'}<Check size={13} />{:else}<MessageSquareText size={13} />{/if}
+      </span>
+      <span class="sent-copy">
+        <strong>{lastSent.state === 'queued' ? m['composer.sent_queued']({ name: lastSent.name }) : lastSent.state === 'delivered' ? m['composer.sent_delivered']({ name: lastSent.name }) : m['composer.sent_replied']({ name: lastSent.name })}</strong>
+        <span class="sent-text">“{lastSent.text}”</span>
+      </span>
+      {#if lastSent.state === 'replied'}
+        <button type="button" class="sent-open" onclick={openReply}>{m['composer.sent_open_reply']()}</button>
+      {/if}
+      <button type="button" class="sent-close" aria-label={m['composer.sent_dismiss']()} title={m['composer.sent_dismiss']()} onclick={() => (lastSent = null)}><X size={11} /></button>
+    </div>
   {:else if onCommand && !hintHidden && !threadOpen}
     <p class="command-hint">{m['composer.command_hint']()}<button type="button" aria-label={m['composer.command_hint_close']()} onclick={hideHint}><X size={11} /></button></p>
   {/if}
@@ -572,6 +644,101 @@
 
   .feedback.error {
     color: var(--app-danger);
+  }
+
+  /* Above the quick-action pills, where the command tip sits, so it never covers them. */
+  .sent {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 52px);
+    width: fit-content;
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 5px 5px 5px 8px;
+    border-radius: 12px;
+    border: 1px solid var(--app-glass-line);
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-overlay);
+    color: var(--app-text);
+  }
+
+  .sent-mark {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--app-warning) 18%, transparent);
+    color: var(--app-warning);
+  }
+
+  .sent.delivered .sent-mark {
+    background: color-mix(in srgb, var(--app-success) 18%, transparent);
+    color: var(--app-success);
+  }
+
+  .sent-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .sent-copy strong {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .sent-text {
+    overflow: hidden;
+    color: var(--app-text-soft);
+    font-size: 11.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .sent-open {
+    flex: none;
+    height: 24px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--app-text);
+    color: var(--app-surface);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .sent-close {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+  }
+
+  .sent-close:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .sent-open:focus-visible,
+  .sent-close:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   @media (max-width: 1100px) {
