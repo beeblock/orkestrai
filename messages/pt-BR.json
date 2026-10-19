@@ -5709,7 +5709,7 @@
   "composer.sent_replied": "{name} respondeu",
   "composer.sent_open_reply": "Ver resposta",
   "composer.sent_dismiss": "Dispensar aviso",
-  "term.inbox_queued_one": "Sua mensagem está na fila: entra quando {name} terminar o turno",
-  "term.inbox_queued_many": "{count} mensagens suas na fila: entram quando {name} terminar o turno",
+  "term.inbox_queued_one": "Sua mensagem está na fila: entra quando {name} terminar o turno (ou quando o texto digitado aqui for enviado ou apagado)",
+  "term.inbox_queued_many": "{count} mensagens suas na fila: entram quando {name} terminar o turno (ou quando o texto digitado aqui for enviado ou apagado)",
   "term.inbox_delivered": "Mensagem entregue a {name}"
 }

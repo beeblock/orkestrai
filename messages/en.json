@@ -5709,7 +5709,7 @@
   "composer.sent_replied": "{name} replied",
   "composer.sent_open_reply": "See reply",
   "composer.sent_dismiss": "Dismiss notice",
-  "term.inbox_queued_one": "Your message is queued: it goes in when {name} finishes this turn",
-  "term.inbox_queued_many": "{count} of your messages are queued: they go in when {name} finishes this turn",
+  "term.inbox_queued_one": "Your message is queued: it goes in when {name} finishes this turn (or when text typed here is sent or cleared)",
+  "term.inbox_queued_many": "{count} of your messages are queued: they go in when {name} finishes this turn (or when text typed here is sent or cleared)",
   "term.inbox_delivered": "Message delivered to {name}"
 }

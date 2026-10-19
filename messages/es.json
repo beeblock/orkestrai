@@ -5709,7 +5709,7 @@
   "composer.sent_replied": "{name} respondió",
   "composer.sent_open_reply": "Ver respuesta",
   "composer.sent_dismiss": "Descartar aviso",
-  "term.inbox_queued_one": "Tu mensaje está en cola: entra cuando {name} termine su turno",
-  "term.inbox_queued_many": "{count} mensajes tuyos en cola: entran cuando {name} termine su turno",
+  "term.inbox_queued_one": "Tu mensaje está en cola: entra cuando {name} termine su turno (o cuando el texto escrito aquí se envíe o se borre)",
+  "term.inbox_queued_many": "{count} mensajes tuyos en cola: entran cuando {name} termine su turno (o cuando el texto escrito aquí se envíe o se borre)",
   "term.inbox_delivered": "Mensaje entregado a {name}"
 }
