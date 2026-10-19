@@ -34,6 +34,7 @@ import { providerProfileService } from './ProviderProfileService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 import { agentInboxService } from './AgentInboxService.js';
 import { agentLearningService } from './AgentLearningService.js';
+import { attentionService } from './AttentionService.js';
 import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
 import { portalGrantsAgent, portalProfileFromPayload } from '../../contracts/schemas/managed-portal.schema.js';
 
@@ -1489,6 +1490,7 @@ export class BridgeService {
     if (target.sessionId && ptySessionManager.claimNode(target.sessionId, workspaceId, target.nodeId)) ptySessionManager.kill(target.sessionId);
     await workspaceRepository.deleteNode(target.nodeId);
     await agentLearningService.settlePending(workspaceId, target.nodeId).catch(() => 0);
+    await attentionService.resolveNode(workspaceId, target.nodeId).catch(() => 0);
     this.notifyWorkspaceChanged(workspaceId);
     return { dismissed: target.title };
   }

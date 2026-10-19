@@ -17,6 +17,7 @@
   import AgentGlyph from '../AgentGlyph.svelte';
   import NodeAttentionBanner from './NodeAttentionBanner.svelte';
   import AgentChatFace from '../chat/AgentChatFace.svelte';
+  import { sendToAgent } from './CanvasComposer.svelte';
   import { agentStatus, statusClock } from '../agent-status.svelte.js';
   import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
@@ -283,6 +284,9 @@
     };
   });
   const liveStatus = $derived(agentStatus.agents[id] ?? null);
+  // The field talks to an agent through Chat, except while its CLI asks something
+  // in the terminal (a permission or a choice): the inbox waits for that turn to end.
+  const fieldSendsToChat = $derived(Boolean(currentProvider) && liveStatus?.state !== 'waiting_permission' && liveStatus?.state !== 'waiting_input');
   const statusTone = $derived(liveStatus ? agentTone(liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle');
   const statusLabel = $derived(agentStateLabel(liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle'));
   const launchModel = $derived(modelFromArgs((data.payload as TerminalNodePayload).args));
@@ -478,6 +482,13 @@
     promptSending = true;
     promptError = '';
     try {
+      // An agent gets the text as a direct message, so it and the reply show in
+      // Chat too; the inbox wakes a sleeping agent and holds it while one is busy.
+      if (fieldSendsToChat) {
+        if (!(await sendToAgent(data.workspaceId, id, text))) throw new Error('Delivery not confirmed');
+        if (prompt.trim() === text) prompt = '';
+        return;
+      }
       const sessionId = (data.payload as TerminalNodePayload).sessionId ?? (agentRuntimeSleeping ? await wakeAgent() : null);
       if (!sessionId) throw new Error('Terminal unavailable');
       const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/terminals/${id}/write`, {
@@ -1136,7 +1147,7 @@
       data-testid="terminal-quick-prompt"
       oninput={handlePromptInput}
       onkeydown={handlePromptKeydown}
-      placeholder={m['ph.quick_prompt']()}
+      placeholder={fieldSendsToChat ? m['ph.agent_message']() : m['ph.quick_prompt']()}
       spellcheck="false"
     />
     <button class="composer-send" class:ready={Boolean(prompt.trim())} aria-label={m['term.send']()} aria-busy={promptSending} onclick={sendPrompt} disabled={!prompt.trim() || promptSending}>

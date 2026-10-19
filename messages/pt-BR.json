@@ -951,6 +951,7 @@
   "ph.ws_name": "Nome",
   "ph.ws_dir": "Diretório de trabalho",
   "ph.quick_prompt": "Prompt rápido... (@ menciona agentes e notas)",
+  "ph.agent_message": "Mensagem ao agente (aparece também na Conversa)... @ menciona",
   "ph.loop_objective": "Objetivo do loop (líder planeja, engenheiro implementa, tester revisa)...",
   "ph.loop_member_title": "Título (ex.: Revisor)",
   "ph.loop_member_prompt": "System prompt (opcional — papel gera um padrão)",

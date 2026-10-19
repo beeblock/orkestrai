@@ -33,6 +33,9 @@ function lessonBody(item: AgentAttentionItem, lessons: Map<string, AgentLesson>)
 export class AttentionService {
   async syncActivity(activity: AgentActivity): Promise<void> {
     const requiresAttention = activity.attentionRequired || ATTENTION_STATES.has(activity.state);
+    // A message sent or received by a blocked agent does not change why it
+    // waits, and must not replace its state item with one nothing resolves.
+    if (requiresAttention && !activity.attentionRequired && activity.action?.startsWith('system:message_')) return;
     if (!requiresAttention) {
       const resolved = await attentionRepository.resolveAgentState(activity.workspaceId, activity.nodeId);
       if (resolved) broadcast(activity.workspaceId);
@@ -107,6 +110,22 @@ export class AttentionService {
   async resolveSource(workspaceId: string, sourceType: string, sourceId: string): Promise<number> {
     const resolved = await attentionRepository.resolveBySource(workspaceId, sourceType, sourceId);
     if (resolved) broadcast(workspaceId);
+    return resolved;
+  }
+
+  /** Closes what a removed node left open: no one can act on it any more. */
+  async resolveNode(workspaceId: string, nodeId: string): Promise<number> {
+    const resolved = await attentionRepository.resolveNode(workspaceId, nodeId);
+    if (resolved) broadcast(workspaceId);
+    return resolved;
+  }
+
+  /** Closes, at startup, the items of nodes removed before removal closed them. */
+  async resolveOrphaned(): Promise<number> {
+    let resolved = 0;
+    for (const { workspaceId, nodeId } of await attentionRepository.openNodeRefs()) {
+      if (!(await workspaceRepository.getNode(nodeId))) resolved += await this.resolveNode(workspaceId, nodeId);
+    }
     return resolved;
   }
 

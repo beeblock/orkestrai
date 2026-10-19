@@ -951,6 +951,7 @@
   "ph.ws_name": "Name",
   "ph.ws_dir": "Working directory",
   "ph.quick_prompt": "Quick prompt... (@ mentions agents and notes)",
+  "ph.agent_message": "Message the agent (also shows in Chat)... @ mentions",
   "ph.loop_objective": "Loop objective (leader plans, engineer builds, tester reviews)...",
   "ph.loop_member_title": "Title (e.g.: Reviewer)",
   "ph.loop_member_prompt": "System prompt (optional — role generates a default)",

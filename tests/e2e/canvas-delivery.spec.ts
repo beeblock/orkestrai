@@ -12,7 +12,7 @@ async function relay(page: Page, channel: string, message: LiveMessage) {
   }, { channel, message });
 }
 
-test('shows the whole agent notice and follows a message from the queue to the reply', async ({ page, request }) => {
+test('shows the whole agent notice and follows a message from the queue to the reply, from the bar or the agent', async ({ page, request }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const dir = await mkdtemp(join(tmpdir(), 'orkestrai-delivery-'));
   const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `E2E entrega ${Date.now()}`, workingDir: dir } })).json()).data;
@@ -65,6 +65,20 @@ test('shows the whole agent notice and follows a message from the queue to the r
     await expect(sent).toHaveAttribute('data-state', 'delivered');
     await expect(sent).toContainText(/Entregue a Lead|Delivered to Lead/);
     await expect(chip).toContainText(/entregue|delivered/i);
+
+    // The agent's own field sends a direct message as well, so Chat shows it and the reply.
+    let wroteToTerminal = false;
+    await page.route(`**/terminals/${lead.id}/write`, (route) => {
+      wroteToTerminal = true;
+      return route.fulfill({ json: { data: { written: true } } });
+    });
+    const quick = node.getByTestId('terminal-quick-prompt');
+    const posted = page.waitForRequest((request) => request.method() === 'POST' && request.url().includes(`/channels/${encodeURIComponent(`dm:${lead.id}`)}/messages`));
+    await quick.fill('Pergunta pelo campo do agente');
+    await quick.press('Enter');
+    expect((await posted).postDataJSON()).toEqual({ body: 'Pergunta pelo campo do agente' });
+    await expect(quick).toHaveValue('');
+    expect(wroteToTerminal).toBe(false);
 
     await relay(page, `dm:${lead.id}`, { id: 'reply-e2e', authorKind: 'agent', authorNodeId: lead.id, createdAt: new Date(Date.now() + 1000).toISOString(), body: 'Chegou sim.', meta: {} });
     await expect(sent).toHaveAttribute('data-state', 'replied');
