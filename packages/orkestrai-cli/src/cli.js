@@ -119,6 +119,7 @@ Uso:
   orkestrai notify <mensagem> [--kind info|attention|project|task] [--title <titulo>]
   orkestrai post <mensagem> [--channel owner|team]
   orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]
+  orkestrai close-question <perguntaId> <resposta ou motivo>
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome>] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
@@ -1820,6 +1821,14 @@ async function runCommand(argv, options, sink) {
       const options = typeof flags.options === 'string' ? flags.options.split('|').map((option) => option.trim()).filter(Boolean) : undefined;
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/ask-owner', { question, options, taskId: flags.task, from: flags.from });
       out(`Pergunta enviada ao dono (${data.questionId}). A resposta chega na sua caixa de entrada; continue o que não depende dela.`);
+      return 0;
+    }
+    case 'close-question': {
+      const [questionId, ...answerParts] = rest;
+      const answer = answerParts.join(' ');
+      if (!questionId || !answer || !flags.from) throw new Error('Uso: orkestrai close-question <perguntaId> <resposta ou motivo>');
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/close-question', { questionId, answer, from: flags.from });
+      out(data.delivered ? 'Pergunta respondida; a resposta segue para quem perguntou e o dono a vê na Conversa.' : 'Pergunta fechada; o dono vê o motivo na Conversa.');
       return 0;
     }
     case 'status': {

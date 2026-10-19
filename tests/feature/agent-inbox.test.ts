@@ -7,6 +7,7 @@ import { agentTerminalDeliveryService } from '$lib/modules/agent-room/applicatio
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
 import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -133,6 +134,43 @@ describe('Agent inbox', () => {
     } finally {
       scope.__orkestraiBroadcast = previous;
     }
+  });
+
+  it('gives the leader a copy of a teammate question to the owner and lets it answer for the owner', async () => {
+    const { workspace, nodes } = await team();
+    const question = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'O disco caiu para 1 GB; libero espaço ou paro?', options: ['Liberar', 'Parar'] });
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    const copy = prompts.find((prompt) => prompt.nodeId === nodes.Lider)?.message ?? '';
+    expect(copy).toContain(`orkestrai close-question ${question.id}`);
+    expect(copy).toContain('O disco caiu para 1 GB');
+
+    await expect(channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { body: 'Pode seguir.' }))
+      .rejects.toThrow('Só o líder ou o agente que perguntou');
+    const { message, delivered } = await channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { body: 'Já liberei 16 GB; pode seguir.' });
+    expect(delivered).toBe(true);
+    expect(message).toMatchObject({ kind: 'answer', authorKind: 'agent', authorNodeId: nodes.Lider, replyToId: question.id, meta: { closedBy: 'leader', authorTitle: 'Lider' } });
+    expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toEqual(expect.any(String));
+    expect((await attentionService.list({ workspaceId: workspace.id })).filter((item) => item.sourceId === question.id)).toEqual([]);
+    await expect(channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { body: 'De novo.' })).rejects.toThrow('já foi respondida');
+
+    await agentInboxService.drain(workspace.id, nodes.Web);
+    expect(prompts.find((prompt) => prompt.nodeId === nodes.Web)?.message).toContain('Resposta do líder Lider à sua pergunta ao dono');
+  });
+
+  it('lets the asker withdraw its question and drops the leader copy once the owner answered', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const withdrawn = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'Preciso de outra porta?' });
+    const result = await channelService.closeQuestion(workspace.id, withdrawn.id, { nodeId: nodes.Web, title: 'Web' }, { body: 'Não preciso mais: a porta 5199 liberou.' });
+    expect(result).toMatchObject({ delivered: false, message: { meta: { closedBy: 'asker' } } });
+
+    const answered = await channelService.askOwner(workspace.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { question: 'Publico na loja?' });
+    await channelService.postOwner(workspace.id, `dm:${nodes.Mobile}`, { body: 'Ainda não.', replyToId: answered.id });
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+
+    session(nodes.Lider).ready = true;
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    expect(prompts.filter((prompt) => prompt.nodeId === nodes.Lider)).toEqual([]);
   });
 
   it('routes a late answer to the asker inbox instead of losing it', async () => {

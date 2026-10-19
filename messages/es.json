@@ -5249,6 +5249,8 @@
   "chat.question_from": "{name} te pregunta",
   "chat.question_answered": "Respondida",
   "chat.answer_placeholder": "Escribe tu respuesta…",
+  "chat.answered_by": "{name} respondió",
+  "chat.withdrawn_by": "{name} retiró la pregunta",
   "chat.answer_send": "Enviar respuesta",
   "chat.answer_failed": "La respuesta no llegó al agente. Inténtalo de nuevo.",
   "chat.profile_label": "Perfil de {name}",

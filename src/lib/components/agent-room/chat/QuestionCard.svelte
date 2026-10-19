@@ -18,6 +18,12 @@
 
   const options = $derived(Array.isArray(question.meta.options) ? (question.meta.options as unknown[]).filter((option): option is string => typeof option === 'string') : []);
   const answered = $derived(Boolean(question.answeredAt || answer));
+  // The leader may answer for the owner, or the agent that asked may withdraw it.
+  const answeredBy = $derived.by(() => {
+    if (!answer || answer.authorKind === 'owner') return m['chat.you']();
+    const name = typeof answer.meta.authorTitle === 'string' ? answer.meta.authorTitle : authorTitle;
+    return answer.meta.closedBy === 'asker' ? m['chat.withdrawn_by']({ name }) : m['chat.answered_by']({ name });
+  });
   let draft = $state('');
   let sending = $state(false);
   let failed = $state(false);
@@ -41,7 +47,7 @@
   </header>
   <p class="body">{question.body}</p>
   {#if answered}
-    {#if answer}<p class="answer"><b>{m['chat.you']()}</b> {answer.body}</p>{/if}
+    {#if answer}<p class="answer"><b>{answeredBy}</b> {answer.body}</p>{/if}
   {:else}
     {#if options.length}
       <div class="options">

@@ -41,7 +41,8 @@ export type InboxKind =
   | 'task_recovery'
   | 'leader_supervision'
   | 'handoff'
-  | 'owner';
+  | 'owner'
+  | 'owner_question';
 
 export type InboxEnqueueInput = {
   workspaceId: string;

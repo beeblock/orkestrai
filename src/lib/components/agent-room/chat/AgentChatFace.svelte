@@ -99,7 +99,7 @@
     {#each timeline as row (row.key)}
       {#if row.type === 'group'}
         <div class="group" class:mine={row.authorKind === 'owner'}>
-          <small>{#if row.authorKind === 'owner'}<UserRound size={11} />{m['chat.you']()}{:else if row.authorKind === 'external'}{String(row.messages[0].meta.sender ?? '')}{:else}{title}{/if}</small>
+          <small>{#if row.authorKind === 'owner'}<UserRound size={11} />{m['chat.you']()}{:else if row.authorKind === 'external'}{String(row.messages[0].meta.sender ?? '')}{:else if row.authorNodeId && row.authorNodeId !== nodeId && typeof row.messages[0].meta.authorTitle === 'string'}{row.messages[0].meta.authorTitle}{:else}{title}{/if}</small>
           {#each row.messages as message (message.id)}
             {#if message.kind === 'question'}
               <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id)} />
