@@ -126,6 +126,7 @@ Uso:
   orkestrai post <mensagem> [--channel owner|team]
   orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]
   orkestrai close-question <perguntaId> <resposta ou motivo>
+  orkestrai escalate-question <perguntaId> <por que so o dono decide>
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome>] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
@@ -1829,7 +1830,9 @@ async function runCommand(argv, options, sink) {
       if (!question || !flags.from) throw new Error('Uso: orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]');
       const options = typeof flags.options === 'string' ? flags.options.split('|').map((option) => option.trim()).filter(Boolean) : undefined;
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/ask-owner', { question, options, taskId: flags.task, from: flags.from });
-      out(`Pergunta enviada ao dono (${data.questionId}). A resposta chega na sua caixa de entrada; continue o que não depende dela.`);
+      out(data.routedTo === 'leader'
+        ? `Pergunta enviada ao lider ${data.leader ?? ''} (${data.questionId}); ele decide ou leva ao dono. A resposta chega na sua caixa de entrada; continue o que nao depende dela.`
+        : `Pergunta enviada ao dono (${data.questionId}). A resposta chega na sua caixa de entrada; continue o que não depende dela.`);
       return 0;
     }
     case 'close-question': {
@@ -1838,6 +1841,14 @@ async function runCommand(argv, options, sink) {
       if (!questionId || !answer || !flags.from) throw new Error('Uso: orkestrai close-question <perguntaId> <resposta ou motivo>');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/close-question', { questionId, answer, from: flags.from });
       out(data.delivered ? 'Pergunta respondida; a resposta segue para quem perguntou e o dono a vê na Conversa.' : 'Pergunta fechada; o dono vê o motivo na Conversa.');
+      return 0;
+    }
+    case 'escalate-question': {
+      const [questionId, ...noteParts] = rest;
+      const note = noteParts.join(' ');
+      if (!questionId || !note || !flags.from) throw new Error('Uso: orkestrai escalate-question <perguntaId> <por que so o dono decide>');
+      await bridge(config, 'POST', '/api/agent-room/bridge/escalate-question', { questionId, note, from: flags.from });
+      out('Pergunta levada ao dono (Precisa de voce). Siga com o que nao depende dela.');
       return 0;
     }
     case 'status': {

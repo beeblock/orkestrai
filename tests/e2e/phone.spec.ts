@@ -11,7 +11,9 @@ test('the phone page answers what needs the owner and talks to the team', async 
     await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Lead', x: 0, y: 0, width: 480, height: 320, payload: { provider: 'claude', args: [], maestro: true } } });
     await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'QA Upload', x: 600, y: 0, width: 480, height: 320, payload: { provider: 'claude', args: [] } } });
     const token = JSON.parse(await readFile(join(dir, '.orkestrai', 'workspace.json'), 'utf8')).token as string;
-    await request.post('/api/agent-room/bridge/ask-owner', { data: { token, from: 'QA Upload', question: 'Posso rodar o e2e agora?', options: ['Pode', 'Espere'] } });
+    const asked = (await (await request.post('/api/agent-room/bridge/ask-owner', { data: { token, from: 'QA Upload', question: 'Posso rodar o e2e agora?', options: ['Pode', 'Espere'] } })).json()).data;
+    // The leader brings it to the owner; only then it waits on the phone.
+    await request.post('/api/agent-room/bridge/escalate-question', { data: { token, from: 'Lead', questionId: asked.questionId, note: 'O dono decide quando rodar' } });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.addInitScript((id) => { try { localStorage.setItem('orkestrai.mobile.workspace', id); } catch { /* ignore */ } }, workspace.id);

@@ -136,12 +136,16 @@ describe('Agent inbox', () => {
     }
   });
 
-  it('gives the leader a copy of a teammate question to the owner and lets it answer for the owner', async () => {
+  it('sends a teammate question to the leader, who decides it without the owner', async () => {
     const { workspace, nodes } = await team();
     const question = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'O disco caiu para 1 GB; libero espaço ou paro?', options: ['Liberar', 'Parar'] });
+    expect(question.meta).toMatchObject({ awaiting: 'leader', leaderNodeId: nodes.Lider, leaderTitle: 'Lider' });
+    // Nothing waits for the owner: the leader decides.
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
     await agentInboxService.drain(workspace.id, nodes.Lider);
     const copy = prompts.find((prompt) => prompt.nodeId === nodes.Lider)?.message ?? '';
     expect(copy).toContain(`orkestrai close-question ${question.id}`);
+    expect(copy).toContain(`orkestrai escalate-question ${question.id}`);
     expect(copy).toContain('O disco caiu para 1 GB');
 
     await expect(channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { body: 'Pode seguir.' }))
@@ -157,6 +161,25 @@ describe('Agent inbox', () => {
     expect(prompts.find((prompt) => prompt.nodeId === nodes.Web)?.message).toContain('Resposta do líder Lider à sua pergunta ao dono');
   });
 
+  it('lets only the leader bring a question to the owner, and asks the owner directly without a leader', async () => {
+    const { workspace, nodes } = await team();
+    const question = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'Assino o plano pago do provedor?' });
+    await expect(channelService.escalateQuestion(workspace.id, question.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { note: 'Gasto' }))
+      .rejects.toThrow('Só o líder');
+    const escalated = await channelService.escalateQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { note: 'Gasto mensal novo' });
+    expect(escalated.meta).toMatchObject({ awaiting: 'owner', escalationNote: 'Gasto mensal novo', escalatedBy: 'Lider' });
+    const [item] = await attentionService.list({ workspaceId: workspace.id });
+    expect(item).toMatchObject({ sourceId: question.id, nodeId: nodes.Web, title: 'Assino o plano pago do provedor? — Gasto mensal novo' });
+    await expect(channelService.escalateQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { note: 'De novo' }))
+      .rejects.toThrow('já está com o dono');
+
+    const solo = await workspaceRepository.createWorkspace({ name: 'solo', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({ workspaceId: solo.id, type: 'terminal', title: 'Sozinho', payload: { provider: 'codex' } });
+    const direct = await channelService.askOwner(solo.id, { nodeId: agent.id, title: 'Sozinho' }, { question: 'Posso seguir?' });
+    expect(direct.meta.awaiting).toBeUndefined();
+    expect((await attentionService.list({ workspaceId: solo.id })).map((entry) => entry.sourceId)).toEqual([direct.id]);
+  });
+
   it('lets the asker withdraw its question and drops the leader copy once the owner answered', async () => {
     const { workspace, nodes } = await team();
     session(nodes.Lider).ready = false;
@@ -170,7 +193,21 @@ describe('Agent inbox', () => {
 
     session(nodes.Lider).ready = true;
     await agentInboxService.drain(workspace.id, nodes.Lider);
-    expect(prompts.filter((prompt) => prompt.nodeId === nodes.Lider)).toEqual([]);
+    // The copies of both questions are gone; the owner's decision reaches the leader.
+    const leader = prompts.filter((prompt) => prompt.nodeId === nodes.Lider).map((prompt) => prompt.message).join('\n');
+    expect(leader).not.toContain('close-question');
+    expect(leader).toContain('o dono respondeu à pergunta de Mobile ("Publico na loja?"): Ainda não.');
+  });
+
+  it('tells the leader what the owner says to a teammate directly, and nothing when it is the leader', async () => {
+    const { workspace, nodes } = await team();
+    await channelService.postOwner(workspace.id, `dm:${nodes.Web}`, { body: 'A infra precisa seguir a do WhatsApp.' });
+    await channelService.postOwner(workspace.id, `dm:${nodes.Lider}`, { body: 'Como está a fila?' });
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    const leader = prompts.filter((prompt) => prompt.nodeId === nodes.Lider).map((prompt) => prompt.message).join('\n');
+    expect(leader).toContain('o dono mandou uma mensagem direta a Web: "A infra precisa seguir a do WhatsApp."');
+    expect(leader).toContain('Como está a fila?');
+    expect(leader.match(/Para sua coordenação/g)).toHaveLength(1);
   });
 
   it('routes a late answer to the asker inbox instead of losing it', async () => {

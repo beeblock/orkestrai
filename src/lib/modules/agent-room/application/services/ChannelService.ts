@@ -141,6 +141,15 @@ export class ChannelService {
       nodeId,
       ok: await this.deliver(workspaceId, nodeId, content, `channel:${message.id}:${nodeId}`, { channel, channelMessageId: message.id }),
     })));
+    if (directNodeId) {
+      const title = agents.find((agent) => agent.id === directNodeId)?.title ?? 'o agente';
+      await this.informLeader(
+        workspaceId,
+        directNodeId,
+        `Para sua coordenação: o dono mandou uma mensagem direta a ${title}: "${body}". ${title} recebe e responde ao dono; ajuste o plano e as instruções da equipe se isso mudar prioridades, escopo ou arquitetura, sem repetir a mensagem a ${title}.`,
+        `owner-copy:${message.id}`,
+      );
+    }
     return { message, delivered };
   }
 
@@ -163,6 +172,13 @@ export class ChannelService {
       `owner-answer:${questionId}`,
       { channel, channelMessageId: message.id, questionId },
       taskId,
+    );
+    const title = (await this.agents(workspaceId)).find((agent) => agent.id === asker)?.title ?? 'o agente';
+    await this.informLeader(
+      workspaceId,
+      asker,
+      `Para sua coordenação: o dono respondeu à pergunta de ${title} ("${question.body.slice(0, 240)}"): ${body}. ${title} já recebeu a resposta; ajuste o plano e as instruções da equipe se precisar, sem repetir a decisão a ${title}.`,
+      `owner-copy:${message.id}`,
     );
     return { message, delivered: [{ nodeId: asker, ok }] };
   }
@@ -233,6 +249,9 @@ export class ChannelService {
   ): Promise<ChannelMessage> {
     const body = boundedBody(input.question);
     const options = normalizeQuestionOptions(input.options);
+    // A team with a leader decides without the owner: the question goes to the
+    // leader, who answers it or brings to the owner only what is the owner's.
+    const leader = (await this.agents(workspaceId)).find((candidate) => candidate.maestro && candidate.id !== agent.nodeId) ?? null;
     const message = await channelRepository.save({
       workspaceId,
       channel: directChannel(agent.nodeId),
@@ -240,44 +259,75 @@ export class ChannelService {
       authorNodeId: agent.nodeId,
       kind: 'question',
       body,
-      meta: { ...(options.length ? { options } : {}), ...(input.taskId ? { taskId: input.taskId } : {}) },
+      meta: {
+        ...(options.length ? { options } : {}),
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        ...(leader ? { awaiting: 'leader', leaderNodeId: leader.id, leaderTitle: leader.title } : {}),
+      },
     });
     broadcast(message);
-    await attentionService.raise({
-      workspaceId,
-      nodeId: agent.nodeId,
-      taskId: input.taskId ?? null,
-      category: 'message',
-      severity: 'warning',
-      title: body.length > 200 ? `${body.slice(0, 199)}…` : body,
-      body: options.length ? options.join(' · ') : null,
-      sourceType: OWNER_QUESTION_SOURCE,
-      sourceId: message.id,
-      correlationId: `${OWNER_QUESTION_SOURCE}:${message.id}`,
-      action: { target: 'chat', channel: message.channel, questionId: message.id, ...(options.length ? { options } : {}) },
-    });
-    await this.copyToLeader(workspaceId, agent, message, options, input.taskId ?? null);
+    if (leader) await this.routeToLeader(workspaceId, agent, leader, message, options);
+    else await this.raiseQuestion(workspaceId, agent.nodeId, message, options, null);
     return message;
   }
 
-  /**
-   * The leader coordinates the team, so it sees every teammate's question to the
-   * owner and can answer what it coordinates; it never wakes an offline leader.
-   */
-  private async copyToLeader(workspaceId: string, agent: { nodeId: string; title: string }, question: ChannelMessage, options: string[], taskId: string | null): Promise<void> {
-    const leader = (await this.agents(workspaceId)).find((candidate) => candidate.maestro && candidate.id !== agent.nodeId);
-    if (!leader) return;
+  private async raiseQuestion(workspaceId: string, nodeId: string, question: ChannelMessage, options: string[], note: string | null): Promise<void> {
+    const title = note ? `${question.body} — ${note}` : question.body;
+    await attentionService.raise({
+      workspaceId,
+      nodeId,
+      taskId: typeof question.meta.taskId === 'string' ? question.meta.taskId : null,
+      category: 'message',
+      severity: 'warning',
+      title: title.length > 200 ? `${title.slice(0, 199)}…` : title,
+      body: options.length ? options.join(' · ') : null,
+      sourceType: OWNER_QUESTION_SOURCE,
+      sourceId: question.id,
+      correlationId: `${OWNER_QUESTION_SOURCE}:${question.id}`,
+      action: { target: 'chat', channel: question.channel, questionId: question.id, ...(options.length ? { options } : {}) },
+    });
+  }
+
+  /** Wakes the leader: a teammate waits for its decision. */
+  private async routeToLeader(workspaceId: string, agent: { nodeId: string; title: string }, leader: ChannelAgent, question: ChannelMessage, options: string[]): Promise<void> {
     await agentInboxService.enqueue({
       workspaceId,
       toNodeId: leader.id,
       fromNodeId: agent.nodeId,
       kind: 'owner_question',
-      content: `${agent.title} perguntou ao dono (pergunta ${question.id}): "${question.body}"${options.length ? ` Opções: ${options.join(' | ')}.` : ''}`
-        + ` Se for algo que você coordena (disco, ambiente, ordem do trabalho, dependências entre agentes ou andares), responda por ${agent.title} com orkestrai close-question ${question.id} "<resposta>" (tool MCP close_owner_question); a pergunta sai de Precisa de você e o dono vê a sua resposta na Conversa.`
-        + ' Gasto, credenciais, publicação, exclusões e escopo do produto ficam com o dono: nesses casos não responda.',
+      content: `Decisão para você, líder: ${agent.title} perguntou (pergunta ${question.id}): "${question.body}"${options.length ? ` Opções: ${options.join(' | ')}.` : ''}`
+        + ` Você decide pelo dono tudo o que é técnico, de infraestrutura, de prioridade, de ordem do trabalho ou de escopo dentro do plano aprovado: responda agora com orkestrai close-question ${question.id} "<decisão e motivo>" (tool MCP close_owner_question). O dono vê a sua decisão na Conversa.`
+        + ` Leve ao dono, com orkestrai escalate-question ${question.id} "<por que só o dono decide>" (tool MCP escalate_owner_question), somente gasto de dinheiro, credenciais, publicação externa ou exclusões irreversíveis; enquanto isso, o time segue com o que não depende disso.`,
       dedupKey: `owner-question:${question.id}`,
-      metadata: { questionId: question.id, wake: false, ...(taskId ? { questionTaskId: taskId } : {}) },
+      metadata: { questionId: question.id },
     }).catch(() => undefined);
+  }
+
+  /** The leader brings a teammate's question to the owner: only then it waits in Needs you. */
+  async escalateQuestion(workspaceId: string, questionId: string, leader: { nodeId: string; title: string }, input: { note: string }): Promise<ChannelMessage> {
+    const note = boundedBody(input.note).slice(0, 400);
+    const question = await channelRepository.find(workspaceId, questionId);
+    if (!question || question.kind !== 'question') throw new Error('Pergunta não encontrada neste workspace.');
+    if (question.answeredAt) throw new Error('Esta pergunta já foi respondida.');
+    if (!(await this.agents(workspaceId)).some((agent) => agent.id === leader.nodeId && agent.maestro)) throw new Error('Só o líder leva uma pergunta ao dono.');
+    if (question.meta.awaiting !== 'leader') throw new Error('Esta pergunta já está com o dono.');
+    const updated = await channelRepository.mergeMeta(workspaceId, questionId, { awaiting: 'owner', escalationNote: note, escalatedBy: leader.title });
+    if (!updated) throw new Error('Pergunta não encontrada neste workspace.');
+    broadcast(updated);
+    const options = Array.isArray(updated.meta.options) ? updated.meta.options.filter((option): option is string => typeof option === 'string') : [];
+    await this.raiseQuestion(workspaceId, updated.authorNodeId ?? leader.nodeId, updated, options, note);
+    return updated;
+  }
+
+  /**
+   * The leader coordinates the team, so it learns what the owner tells a
+   * teammate directly, including decisions; it never wakes an offline leader.
+   */
+  private async informLeader(workspaceId: string, aboutNodeId: string, content: string, dedupKey: string): Promise<void> {
+    const leader = (await this.agents(workspaceId)).find((candidate) => candidate.maestro && candidate.id !== aboutNodeId);
+    if (!leader) return;
+    await agentInboxService.enqueue({ workspaceId, toNodeId: leader.id, fromNodeId: null, kind: 'owner_copy', content, dedupKey, metadata: { wake: false } })
+      .catch(() => undefined);
   }
 
   /**

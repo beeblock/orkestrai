@@ -5249,6 +5249,7 @@
   "chat.question_from": "{name} te pregunta",
   "chat.question_answered": "Respondida",
   "chat.answer_placeholder": "Escribe tu respuesta…",
+  "chat.question_to_leader": "{name} preguntó; {leader} (líder) decide",
   "chat.answered_by": "{name} respondió",
   "chat.withdrawn_by": "{name} retiró la pregunta",
   "chat.answer_send": "Enviar respuesta",

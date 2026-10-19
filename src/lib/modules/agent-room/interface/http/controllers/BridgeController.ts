@@ -3,6 +3,7 @@ import { TOOL_DRAFT_ATTENTION_SOURCE } from '$lib/modules/agent-room/application
 import { BridgeChannelPostRequest } from '../requests/BridgeChannelPostRequest.js';
 import { BridgeAskOwnerRequest } from '../requests/BridgeAskOwnerRequest.js';
 import { BridgeCloseQuestionRequest } from '../requests/BridgeCloseQuestionRequest.js';
+import { BridgeEscalateQuestionRequest } from '../requests/BridgeEscalateQuestionRequest.js';
 import { Controller } from '@beeblock/svelar/routing';
 import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
 import { AutonomyGatePendingError, autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
@@ -1532,6 +1533,16 @@ export class BridgeController extends Controller {
       return this.json({ data: await bridgeService.closeOwnerQuestion(workspace, input) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao fechar a pergunta.');
+    }
+  }
+
+  async escalateQuestion(event: any) {
+    try {
+      const input = await BridgeEscalateQuestionRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await bridgeService.escalateOwnerQuestion(workspace, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao levar a pergunta ao dono.');
     }
   }
 
