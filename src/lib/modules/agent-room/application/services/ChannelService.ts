@@ -91,7 +91,11 @@ export class ChannelService {
       channelRepository.openQuestions(workspaceId),
     ]);
     const openByChannel = new Map<string, number>();
-    for (const question of open) openByChannel.set(question.channel, (openByChannel.get(question.channel) ?? 0) + 1);
+    // The badge counts what waits for the owner, not what the leader decides.
+    for (const question of open) {
+      if (question.meta.awaiting === 'leader') continue;
+      openByChannel.set(question.channel, (openByChannel.get(question.channel) ?? 0) + 1);
+    }
     return {
       channels: [
         { id: TEAM_CHANNEL, kind: 'team', nodeId: null, title: TEAM_CHANNEL, last: latest.get(TEAM_CHANNEL) ?? null, openQuestions: openByChannel.get(TEAM_CHANNEL) ?? 0 },
