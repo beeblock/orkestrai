@@ -43,7 +43,7 @@
 <div class="question" class:answered data-testid="chat-question">
   <header>
     {#if answered}<CheckCircle2 size={14} />{:else}<CircleHelp size={14} />{/if}
-    <span>{answered ? m['chat.question_answered']() : m['chat.question_from']({ name: authorTitle })}</span>
+    <span>{answered ? m['chat.question_answered']() : question.meta.awaiting === 'leader' ? m['chat.question_to_leader']({ name: authorTitle, leader: String(question.meta.leaderTitle ?? '') }) : m['chat.question_from']({ name: authorTitle })}</span>
   </header>
   <p class="body">{question.body}</p>
   {#if answered}

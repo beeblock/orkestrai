@@ -114,6 +114,16 @@ export class ChannelRepository {
     return toIso(updated?.getAttribute('answered_at') ?? 0) === now;
   }
 
+  /** Merges fields into a message's meta; null when it is not in this workspace. */
+  async mergeMeta(workspaceId: string, id: string, patch: Record<string, unknown>): Promise<ChannelMessage | null> {
+    const model = await AgentChannelMessage.find(id);
+    if (!model || model.getAttribute('workspace_id') !== workspaceId) return null;
+    const message = mapChannelMessage(model);
+    await AgentChannelMessage.query().where('id', id).update({ meta_json: JSON.stringify({ ...message.meta, ...patch }), updated_at: new Date().toISOString() });
+    const updated = await AgentChannelMessage.find(id);
+    return updated ? mapChannelMessage(updated) : null;
+  }
+
   /** Records once when an owner message reached its agent; null when it already had. */
   async markDelivered(workspaceId: string, id: string, at: string): Promise<ChannelMessage | null> {
     const model = await AgentChannelMessage.find(id);

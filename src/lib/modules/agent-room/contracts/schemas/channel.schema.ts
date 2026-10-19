@@ -33,11 +33,19 @@ export const bridgeCloseQuestionSchema = z.object({
   answer: z.string().trim().min(1, 'A resposta está vazia.').max(MAX_CHANNEL_BODY),
 });
 
+export const bridgeEscalateQuestionSchema = z.object({
+  token: z.string().trim().min(1).nullish(),
+  from: z.string().trim().min(1, 'Informe o líder que leva a pergunta.').max(120),
+  questionId: z.string().uuid('Informe o id da pergunta.'),
+  note: z.string().trim().min(1, 'Explique por que só o dono decide.').max(400),
+});
+
 export type ListChannelMessagesInput = z.infer<typeof listChannelMessagesSchema>;
 export type PostChannelMessageInput = z.infer<typeof postChannelMessageSchema>;
 export type BridgeChannelPostInput = z.infer<typeof bridgeChannelPostSchema>;
 export type BridgeAskOwnerInput = z.infer<typeof bridgeAskOwnerSchema>;
 export type BridgeCloseQuestionInput = z.infer<typeof bridgeCloseQuestionSchema>;
+export type BridgeEscalateQuestionInput = z.infer<typeof bridgeEscalateQuestionSchema>;
 
 export const createChannelBindingSchema = z.object({
   nodeId: z.string().uuid(),

@@ -24,6 +24,12 @@ test.describe('Chat', () => {
       const token = JSON.parse(await readFile(join(dir, '.orkestrai', 'workspace.json'), 'utf8')).token as string;
       const asked = await request.post('/api/agent-room/bridge/ask-owner', { data: { token, from: 'QA Upload', question: 'Posso instalar o sharp?', options: ['Sim', 'Não'] } });
       expect(asked.status()).toBe(201);
+      // With a leader in the team, the question goes to the leader first.
+      const { questionId, routedTo } = (await asked.json()).data;
+      expect(routedTo).toBe('leader');
+      await expect(page.getByTestId('needs-you-list')).toHaveCount(0);
+      const escalated = await request.post('/api/agent-room/bridge/escalate-question', { data: { token, from: 'Lead', questionId, note: 'Instalar dependência nova é do dono' } });
+      expect(escalated.status()).toBe(200);
       await expect(page.getByTestId('needs-you-list')).toContainText('Posso instalar o sharp?');
 
       await page.getByRole('button', { name: /QA Upload/ }).first().click();
