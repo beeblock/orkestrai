@@ -1,4 +1,5 @@
 import { z } from '@beeblock/svelar/validation';
+import { MAX_CHANNEL_BODY } from '$lib/modules/agent-room/domain/channels.js';
 
 export const collaborationRoleSchema = z.enum(['viewer', 'collaborator', 'operator', 'administrator']);
 
@@ -140,6 +141,16 @@ const designElementUpdateCommandSchema = z.object({
   changes: remoteDesignChangesSchema,
 }).strict();
 
+const chatChannelSchema = z.string().regex(/^(?:team|dm:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+
+/** A message in the Conversa: to the team channel or an agent's direct channel, or an answer to a question there. */
+const chatPostCommandSchema = z.object({
+  type: z.literal('chat.post'),
+  channel: chatChannelSchema,
+  body: z.string().trim().min(1).max(MAX_CHANNEL_BODY),
+  replyToId: z.string().uuid().nullable().optional(),
+}).strict();
+
 const attentionDecisionCommandSchema = z.object({
   type: z.literal('attention.decide'),
   itemId: z.string().uuid(),
@@ -153,6 +164,7 @@ const attentionAnswerCommandSchema = z.object({
 }).strict();
 
 export const collaborationCommandSchema = z.discriminatedUnion('type', [
+  chatPostCommandSchema,
   attentionDecisionCommandSchema,
   attentionAnswerCommandSchema,
   taskCreateCommandSchema,
@@ -171,6 +183,13 @@ export const collaborationCommandSchema = z.discriminatedUnion('type', [
   designProposalDecisionCommandSchema,
   designElementUpdateCommandSchema,
 ]);
+
+/** A page of one Conversa channel, newest first from `before`; the session answers it, not the command bus. */
+export const chatReadCommandSchema = z.object({
+  type: z.literal('chat.read'),
+  channel: chatChannelSchema,
+  before: z.string().datetime().nullish(),
+}).strict();
 
 export const executeCollaborationCommandSchema = z.object({
   commandId: z.string().min(8).max(128).regex(/^[a-zA-Z0-9_-]+$/),

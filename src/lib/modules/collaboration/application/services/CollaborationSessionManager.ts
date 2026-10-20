@@ -12,10 +12,11 @@ import {
   type CollaborationEnvelope,
   type CollaborationMessage,
 } from '@orkestrai/collaboration-protocol';
-import type { CollaborationCommand, CollaborationCommandResult, SharedWorkspaceDto } from '../../domain/types.js';
+import type { CollaborationCommand, CollaborationCommandResult, CollaborationReadCommand, SharedChatPageDto, SharedWorkspaceDto } from '../../domain/types.js';
 import { collaborationRepository } from '../../infrastructure/repositories/CollaborationRepository.js';
 import { scopeSharedWorkspaceSnapshot, sharedWorkspaceQuery } from '../queries/SharedWorkspaceQuery.js';
 import { ExecuteCollaborationCommandDto } from '../dto/CollaborationDto.js';
+import { chatReadCommandSchema, collaborationCommandSchema } from '../../contracts/schemas/collaboration.schema.js';
 import { sharedWorkspaceCommandBus } from './SharedWorkspaceCommandBus.js';
 import { collaborationRuntime } from './CollaborationRuntime.js';
 import { withCollaborationShareLock } from './CollaborationShareLock.js';
@@ -27,6 +28,11 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 const MAX_REMOTE_VOICE_BYTES = 3 * 1024 * 1024;
 const MAX_REMOTE_VOICE_CHUNK_BYTES = 48 * 1024;
 const MAX_REMOTE_VOICE_REQUESTS_PER_MINUTE = 6;
+const MAX_CHAT_READS_PER_MINUTE = 40;
+// A remote terminal opens with as much recent output as one frame carries: the
+// protocol allows 98,304 characters, and JSON turns each escape byte into six.
+const TERMINAL_REPLAY_LIMITS = [96_000, 64_000, 40_000, 24_000, 12_000] as const;
+const TERMINAL_REPLAY_MAX_JSON_BYTES = 120_000;
 
 type HostVoiceRequest = {
   requestId: string;
@@ -58,6 +64,9 @@ type HostPeer = {
   voiceTranscribing: boolean;
   voiceWindowStartedAt: number;
   voiceRequestsInWindow: number;
+  eventSequence: number;
+  chatReadWindowStartedAt: number;
+  chatReadsInWindow: number;
 };
 
 type HostSession = {
@@ -102,6 +111,7 @@ type GuestSession = {
   stopped: boolean;
   state: RemoteCollaborationState;
   commands: Map<string, { resolve: (value: CollaborationCommandResult) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>;
+  chatReads: Map<string, { resolve: (page: SharedChatPageDto) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>;
 };
 
 type ManagerState = { hosts: Map<string, HostSession>; guest: GuestSession | null };
@@ -113,6 +123,15 @@ function websocketDataText(data: WebSocket.RawData): string {
   if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString('utf8');
   return data.toString('utf8');
+}
+
+/** Recent output of a live session that fits one frame, with the modes it relies on. */
+function terminalReplay(sessionId: string): string {
+  for (const limit of TERMINAL_REPLAY_LIMITS) {
+    const replay = ptySessionManager.replay(sessionId, limit);
+    if (Buffer.byteLength(JSON.stringify(replay)) <= TERMINAL_REPLAY_MAX_JSON_BYTES) return replay;
+  }
+  return ptySessionManager.replay(sessionId, 6_000);
 }
 
 export class CollaborationSessionManager {
@@ -215,7 +234,7 @@ export class CollaborationSessionManager {
       shareId: invite.shareId, pairingSecret: invite.pairingSecret, relayUrl: input.relayUrl,
       deviceId, displayName: input.displayName.trim().slice(0, 80), platform: input.platform,
       guestNonce, hostDeviceId: null, socket: null, pairingChannel: null, sessionChannel: null,
-      reconnectTimer: null, stopped: false, commands: new Map(),
+      reconnectTimer: null, stopped: false, commands: new Map(), chatReads: new Map(),
       state: {
         status: 'connecting', shareId: invite.shareId, hostDeviceId: null, deviceId,
         displayName: input.displayName.trim().slice(0, 80), role: null, scopes: [], revision: 0,
@@ -245,6 +264,11 @@ export class CollaborationSessionManager {
       pending.reject(new Error('Remote workspace disconnected.'));
     }
     guest.commands.clear();
+    for (const pending of guest.chatReads.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('Remote workspace disconnected.'));
+    }
+    guest.chatReads.clear();
     guest.pairingSecret = '';
     guest.pairingChannel = null;
     guest.sessionChannel = null;
@@ -266,6 +290,25 @@ export class CollaborationSessionManager {
     });
     this.send(guest.socket, guest.sessionChannel.encrypt(message, guest.hostDeviceId));
     return result;
+  }
+
+  /** A page of one channel of the host's Conversa (see `chat.read`). */
+  async readGuestChat(channel: string, before: string | null = null): Promise<SharedChatPageDto> {
+    const guest = managerState.guest;
+    if (!guest?.sessionChannel || !guest.socket || guest.socket.readyState !== WebSocket.OPEN) throw new Error('REMOTE_WORKSPACE_OFFLINE');
+    const commandId = `read_${uuidv7().replaceAll('-', '_')}`;
+    const read: CollaborationReadCommand = { type: 'chat.read', channel, before };
+    const message = { type: 'command', commandId, revision: guest.state.revision, command: read } as CollaborationMessage;
+    const page = new Promise<SharedChatPageDto>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        guest.chatReads.delete(commandId);
+        reject(new Error('REMOTE_COMMAND_TIMEOUT'));
+      }, 20_000);
+      timer.unref?.();
+      guest.chatReads.set(commandId, { resolve, reject, timer });
+    });
+    this.send(guest.socket, guest.sessionChannel.encrypt(message, guest.hostDeviceId));
+    return page;
   }
 
   shutdown(): void {
@@ -315,6 +358,9 @@ export class CollaborationSessionManager {
         voiceTranscribing: false,
         voiceWindowStartedAt: Date.now(),
         voiceRequestsInWindow: 0,
+        eventSequence: 0,
+        chatReadWindowStartedAt: Date.now(),
+        chatReadsInWindow: 0,
       };
       host.peers.set(peer.peerId, peer);
     }
@@ -388,8 +434,19 @@ export class CollaborationSessionManager {
       return;
     }
     if (message.type === 'command' && peer.sessionChannel && peer.deviceRecordId) {
+      const read = chatReadCommandSchema.safeParse(message.command);
+      if (read.success) {
+        await this.readChat(host, peer, message.commandId, read.data.channel, read.data.before ?? null);
+        return;
+      }
+      // Guests are approved devices, but their commands are still untrusted input.
+      const command = collaborationCommandSchema.safeParse(message.command);
+      if (!command.success) {
+        await this.rejectCommand(host, peer, message.commandId, 'INVALID_COMMAND');
+        return;
+      }
       const result = await sharedWorkspaceCommandBus.execute(host.shareId, peer.deviceRecordId, new ExecuteCollaborationCommandDto(
-        message.commandId, message.revision, message.command as CollaborationCommand,
+        message.commandId, message.revision, command.data as CollaborationCommand,
       ));
       this.send(host.socket, peer.sessionChannel.encrypt({
         type: 'command.result', commandId: result.commandId, accepted: result.accepted,
@@ -471,7 +528,24 @@ export class CollaborationSessionManager {
       guest.state = { ...guest.state, status: 'connected', revision: message.revision, snapshot: message.workspace as SharedWorkspaceDto, errorCode: null };
       return;
     }
+    if (message.type === 'event') {
+      const event = message.event as Partial<SharedChatPageDto>;
+      const read = event.kind === 'chat.page' && typeof event.requestId === 'string' ? guest.chatReads.get(event.requestId) : undefined;
+      if (!read || !event.requestId) return;
+      clearTimeout(read.timer);
+      guest.chatReads.delete(event.requestId);
+      read.resolve(event as SharedChatPageDto);
+      return;
+    }
     if (message.type === 'command.result') {
+      const read = guest.chatReads.get(message.commandId);
+      if (read) {
+        // A page arrives before its accepted result; only a refusal is left to report.
+        clearTimeout(read.timer);
+        guest.chatReads.delete(message.commandId);
+        read.reject(new Error(message.errorCode ?? 'CHAT_UNAVAILABLE'));
+        return;
+      }
       const pending = guest.commands.get(message.commandId);
       if (!pending) return;
       clearTimeout(pending.timer);
@@ -539,12 +613,17 @@ export class CollaborationSessionManager {
       },
     );
     peer.terminal = { nodeId, sessionId: session.id, detach: attached.detach };
+    // The guest may have dropped while the node and its session were looked up.
+    if (!peer.sessionChannel) {
+      this.detachTerminal(peer);
+      return;
+    }
     this.send(host.socket, peer.sessionChannel.encrypt({
       type: 'terminal.opened',
       nodeId,
       cols,
       rows,
-      scrollback: attached.scrollback.slice(-24_576),
+      scrollback: terminalReplay(session.id),
     }, peer.peerId));
     await collaborationRepository.appendAudit({
       workspaceId: host.workspaceId,
@@ -754,6 +833,51 @@ export class CollaborationSessionManager {
     peer.terminal = null;
     peer.inputWindowStartedAt = Date.now();
     peer.inputBytesInWindow = 0;
+  }
+
+  private async rejectCommand(host: HostSession, peer: HostPeer, commandId: string, errorCode: string): Promise<void> {
+    if (!peer.sessionChannel) return;
+    const share = await collaborationRepository.findShare(host.shareId);
+    this.send(host.socket, peer.sessionChannel.encrypt({
+      type: 'command.result', commandId, accepted: false, revision: share?.revision ?? 0, errorCode,
+    }, peer.peerId));
+  }
+
+  /**
+   * Answers `chat.read` with a page of whole messages for the guest's open
+   * conversation: an `event` carrying the page, then the command result.
+   */
+  private async readChat(host: HostSession, peer: HostPeer, commandId: string, channel: string, before: string | null): Promise<void> {
+    const device = await collaborationRepository.findDevice(peer.deviceRecordId);
+    if (!device?.approvedAt || device.revokedAt || !device.scopes.includes('agents.message')) {
+      await this.rejectCommand(host, peer, commandId, 'SCOPE_DENIED');
+      return;
+    }
+    const now = Date.now();
+    if (now - peer.chatReadWindowStartedAt >= 60_000) {
+      peer.chatReadWindowStartedAt = now;
+      peer.chatReadsInWindow = 0;
+    }
+    peer.chatReadsInWindow += 1;
+    if (peer.chatReadsInWindow > MAX_CHAT_READS_PER_MINUTE) {
+      await this.rejectCommand(host, peer, commandId, 'CHAT_READ_RATE_LIMITED');
+      return;
+    }
+    let page: Awaited<ReturnType<typeof sharedWorkspaceQuery.chatPage>>;
+    try {
+      page = await sharedWorkspaceQuery.chatPage(host.shareId, channel, before);
+    } catch {
+      await this.rejectCommand(host, peer, commandId, 'CHAT_UNAVAILABLE');
+      return;
+    }
+    if (!peer.sessionChannel) return;
+    const share = await collaborationRepository.findShare(host.shareId);
+    const revision = share?.revision ?? 0;
+    peer.eventSequence += 1;
+    this.send(host.socket, peer.sessionChannel.encrypt({
+      type: 'event', sequence: peer.eventSequence, revision, event: { ...page, requestId: commandId },
+    }, peer.peerId));
+    this.send(host.socket, peer.sessionChannel.encrypt({ type: 'command.result', commandId, accepted: true, revision }, peer.peerId));
   }
 
   private sendTerminalError(host: HostSession, peer: HostPeer, code: string, nodeId?: string): void {

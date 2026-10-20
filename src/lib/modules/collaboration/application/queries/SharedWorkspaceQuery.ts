@@ -1,4 +1,4 @@
-import type { CanvasNode } from '$lib/modules/agent-room/domain/types.js';
+import type { CanvasNode, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { boardColumnService } from '$lib/modules/agent-room/application/services/BoardColumnService.js';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
@@ -10,13 +10,23 @@ import { designDocumentService } from '$lib/modules/agent-room/application/servi
 import { designCollaborationService } from '$lib/modules/agent-room/application/services/DesignCollaborationService.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
-import type { CollaborationScope, SharedCanvasNodeDto, SharedWorkspaceDto } from '../../domain/types.js';
+import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
+import type { CollaborationScope, SharedCanvasNodeDto, SharedChatDto, SharedChatPageDto, SharedWorkspaceDto } from '../../domain/types.js';
 import { MAX_PLAINTEXT_BYTES } from '@orkestrai/collaboration-protocol';
 import { collaborationRepository } from '../../infrastructure/repositories/CollaborationRepository.js';
 import { assertSharedProjectionSafe, sanitizeSharedText } from '../projections/sanitize-shared-data.js';
+import { fitChatPage, fitSharedChat, legacyConversations, projectChatChannel, projectChatMessage } from '../projections/shared-chat.js';
 
 const SHARED_NODE_TYPES = new Set(['terminal', 'tasks', 'group', 'shape', 'controlCenter', 'reviewCenter', 'automation', 'toolWorkshop', 'design']);
 export const MAX_SHARED_SNAPSHOT_BYTES = MAX_PLAINTEXT_BYTES - 16 * 1024;
+// The conversation gets at least this much of the snapshot; the rest is fitted first.
+const CHAT_RESERVE_BYTES = 40 * 1024;
+// Messages read per channel for the snapshot: the richest level `fitSharedChat` uses.
+const CHAT_SNAPSHOT_MESSAGES = 12;
+// A `chat.read` page: whole messages within one frame, beside the event envelope.
+const CHAT_PAGE_MESSAGES = 60;
+const CHAT_PAGE_BYTES = 140 * 1024;
 
 export function scopeSharedWorkspaceSnapshot(
   snapshot: SharedWorkspaceDto,
@@ -24,6 +34,7 @@ export function scopeSharedWorkspaceSnapshot(
 ): SharedWorkspaceDto {
   const canViewDesign = scopes.includes('design.view');
   const canViewActivity = scopes.includes('activity.view');
+  const canMessage = scopes.includes('agents.message') || scopes.includes('leader.message');
   const nodes = canViewDesign ? snapshot.nodes : snapshot.nodes.filter((node) => node.type !== 'design');
   const nodeIds = new Set(nodes.map((node) => node.id));
   return {
@@ -35,6 +46,9 @@ export function scopeSharedWorkspaceSnapshot(
     agents: canViewActivity ? snapshot.agents : snapshot.agents.map((agent) => ({ ...agent, workSummary: null })),
     activity: canViewActivity ? snapshot.activity : [],
     attention: scopes.includes('approvals.view') ? snapshot.attention ?? [] : [],
+    // The owner's conversations go only to guests that may talk to the agents themselves.
+    conversations: canMessage ? snapshot.conversations : [],
+    chat: scopes.includes('agents.message') ? snapshot.chat : undefined,
   };
 }
 
@@ -42,7 +56,8 @@ function snapshotBytes(snapshot: SharedWorkspaceDto): number {
   return Buffer.byteLength(JSON.stringify(snapshot));
 }
 
-export function fitSharedWorkspaceSnapshot(snapshot: SharedWorkspaceDto): SharedWorkspaceDto {
+/** The snapshot without its conversation at the richest level within `budget` bytes, or null. */
+function fitWorkspaceWithin(snapshot: SharedWorkspaceDto, budget: number): SharedWorkspaceDto | null {
   const fit = (taskLimit: number, descriptionLimit: number, nodeLimit: number, agentLimit: number): SharedWorkspaceDto => {
     const nodes = snapshot.nodes.slice(0, nodeLimit);
     const nodeIds = new Set(nodes.map((node) => node.id));
@@ -94,9 +109,25 @@ export function fitSharedWorkspaceSnapshot(snapshot: SharedWorkspaceDto): Shared
   };
   for (const limits of [[150, 1_200, 300, 150], [100, 600, 220, 120], [60, 300, 150, 80], [30, 160, 100, 50]] as const) {
     const candidate = fit(limits[0], limits[1], limits[2], limits[3]);
-    if (snapshotBytes(candidate) <= MAX_SHARED_SNAPSHOT_BYTES) return candidate;
+    if (snapshotBytes(candidate) <= budget) return candidate;
   }
-  throw new Error('COLLABORATION_SNAPSHOT_TOO_LARGE');
+  return null;
+}
+
+/**
+ * Fits the snapshot into one encrypted frame. The workspace is fitted first,
+ * leaving the conversation at least `CHAT_RESERVE_BYTES` when it can; the
+ * conversation then takes the room that is left, down to its channel list.
+ */
+export function fitSharedWorkspaceSnapshot(snapshot: SharedWorkspaceDto): SharedWorkspaceDto {
+  const { chat, ...workspace } = snapshot;
+  const base = (chat ? fitWorkspaceWithin(workspace, MAX_SHARED_SNAPSHOT_BYTES - CHAT_RESERVE_BYTES) : null)
+    ?? fitWorkspaceWithin(workspace, MAX_SHARED_SNAPSHOT_BYTES);
+  if (!base) throw new Error('COLLABORATION_SNAPSHOT_TOO_LARGE');
+  if (!chat) return base;
+  // `{...base, chat}` adds `,"chat":` and the conversation itself.
+  const fitted = fitSharedChat(chat, MAX_SHARED_SNAPSHOT_BYTES - snapshotBytes(base) - 8);
+  return fitted ? { ...base, chat: fitted } : base;
 }
 
 function sharedNodeType(type: CanvasNode['type']): SharedCanvasNodeDto['type'] | null {
@@ -159,6 +190,7 @@ export class SharedWorkspaceQuery {
       huddleService.snapshot(share.workspaceId).catch(() => ({ huddles: [], selected: null, activeHuddleId: null })),
     ]);
     const attentionItems = await attentionService.list({ workspaceId: share.workspaceId, limit: 100 }).catch(() => []);
+    const chat = await this.chat(share.workspaceId, rawNodes);
     const nodes = rawNodes.map(projectNode).filter((node): node is SharedCanvasNodeDto => Boolean(node));
     const designDocuments = await Promise.all(rawNodes.filter((node) => node.type === 'design').map(async (node) => {
       const document = await designDocumentService.get(share.workspaceId, node.id);
@@ -260,7 +292,9 @@ export class SharedWorkspaceQuery {
           },
         };
       }),
-      conversations: control.communications
+      // Guests built before the shared Conversa read the owner's direct conversations here,
+      // together with the threads such guests started through the agents' bridge.
+      conversations: legacyConversations(chat, control.communications
         .filter((thread) => thread.events.some((event) => event.metadata.remoteShareId === share.id))
         .map((thread) => ({
           messageId: thread.messageId,
@@ -272,7 +306,8 @@ export class SharedWorkspaceQuery {
           error: thread.error ? sanitizeSharedText(thread.error) : null,
           createdAt: thread.createdAt,
           updatedAt: thread.updatedAt,
-        })),
+        }))),
+      chat,
       huddles: (await Promise.all(huddleSnapshot.huddles.map(async (summary) => {
         const item = await huddleService.snapshot(share.workspaceId, summary.id).then((value) => value.selected).catch(() => null);
         if (!item) return null;
@@ -441,6 +476,39 @@ export class SharedWorkspaceQuery {
     const fitted = fitSharedWorkspaceSnapshot(projection);
     assertSharedProjectionSafe(fitted);
     return fitted;
+  }
+
+  /**
+   * A page of whole messages of one channel for `chat.read`, newest first
+   * from `before` and returned oldest first, within one encrypted frame.
+   */
+  async chatPage(shareId: string, channel: string, before: string | null): Promise<Omit<SharedChatPageDto, 'requestId'>> {
+    const share = await collaborationRepository.findShare(shareId);
+    if (!share || share.status !== 'active' || new Date(share.expiresAt).getTime() <= Date.now()) {
+      throw new Error('COLLABORATION_SHARE_UNAVAILABLE');
+    }
+    const { channels } = await channelService.listChannels(share.workspaceId);
+    if (!channels.some((entry) => entry.id === channel)) throw new Error('CHAT_CHANNEL_NOT_FOUND');
+    const stored = await channelRepository.list(share.workspaceId, channel, { before, limit: CHAT_PAGE_MESSAGES + 1 });
+    const { messages, complete } = fitChatPage(stored.slice(0, CHAT_PAGE_MESSAGES).map(projectChatMessage), CHAT_PAGE_BYTES);
+    const page = { kind: 'chat.page' as const, channel, before, messages, hasOlder: stored.length > CHAT_PAGE_MESSAGES || !complete };
+    assertSharedProjectionSafe(page);
+    return page;
+  }
+
+  /**
+   * The Conversa as the app shows it, minus the agents' messages to each
+   * other: the team channel keeps the posts, questions and events, and each
+   * direct channel keeps the owner's conversation with that agent.
+   */
+  private async chat(workspaceId: string, nodes: CanvasNode[]): Promise<SharedChatDto> {
+    const leader = nodes.find((node) => node.type === 'terminal' && (node.payload as TerminalNodePayload).maestro && (node.payload as TerminalNodePayload).provider) ?? null;
+    const { channels } = await channelService.listChannels(workspaceId).catch(() => ({ channels: [] }));
+    const recent = await Promise.all(channels.map((channel) => channelRepository.list(workspaceId, channel.id, { limit: CHAT_SNAPSHOT_MESSAGES }).catch(() => [])));
+    return {
+      channels: channels.map((channel) => projectChatChannel(channel, leader?.id ?? null)),
+      messages: recent.flat().map(projectChatMessage).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+    };
   }
 }
 

@@ -270,6 +270,19 @@ export function trimScrollback(text: string, limit: number): { kept: string; dro
   return { kept: text.slice(cut), dropped: text.slice(0, cut) };
 }
 
+/**
+ * The last `limit` characters of a terminal's output for a reattached viewer,
+ * preceded by the modes that the omitted output set (`modes` already holds the
+ * ones from output the scrollback no longer keeps). A plain tail would drop the
+ * alternate screen and mouse reporting of an agent TUI that started long ago.
+ */
+export function replayTail(modes: ReadonlyMap<string, boolean>, scrollback: string, limit: number): string {
+  const { kept, dropped } = trimScrollback(scrollback, limit);
+  const replayed = new Map(modes);
+  if (dropped) applyTerminalModes(replayed, dropped);
+  return terminalModePrefix(replayed) + kept;
+}
+
 /** Text the owner is typing into an agent's terminal, across input chunks. */
 export type HumanDraft = { text: string; paste: boolean };
 
@@ -581,6 +594,12 @@ export class PtySessionManager {
         if (onWorkingDirectory) session.workingDirectoryListeners.delete(onWorkingDirectory);
       },
     };
+  }
+
+  /** At most `limit` characters of recent output, replayable on its own (see `replayTail`). */
+  replay(id: string, limit: number): string {
+    const session = this.requireSession(id);
+    return replayTail(session.trimmedModes, session.scrollback, limit);
   }
 
   writeStartupOnce(id: string, input: string): boolean {

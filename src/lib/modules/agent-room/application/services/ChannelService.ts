@@ -130,10 +130,12 @@ export class ChannelService {
    * direct channel; in the team channel the agents mentioned with @, else the
    * leader. An answer goes back to the agent that asked and closes its question.
    */
-  async postOwner(workspaceId: string, channel: string, input: { body: string; replyToId?: string | null }): Promise<OwnerPostResult> {
+  async postOwner(workspaceId: string, channel: string, input: { body: string; replyToId?: string | null; via?: 'remote' }): Promise<OwnerPostResult> {
     const body = boundedBody(input.body);
     const { agents, directNodeId } = await this.requireChannel(workspaceId, channel);
-    if (input.replyToId) return this.answer(workspaceId, channel, input.replyToId, body);
+    // Written from the remote companion rather than in this app.
+    const origin = input.via ? { via: input.via } : {};
+    if (input.replyToId) return this.answer(workspaceId, channel, input.replyToId, body, origin);
     let recipients: string[];
     if (directNodeId) recipients = [directNodeId];
     else {
@@ -143,7 +145,7 @@ export class ChannelService {
         : agents.filter((agent) => agent.maestro).slice(0, 1).map((agent) => agent.id);
     }
     // `deliverTo` lets the screens show the message as queued until an agent receives it.
-    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', body, meta: recipients.length ? { deliverTo: recipients } : {} });
+    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', body, meta: { ...(recipients.length ? { deliverTo: recipients } : {}), ...origin } });
     broadcast(message);
     const where = directNodeId ? 'Mensagem direta do dono' : 'Mensagem do dono no canal #equipe';
     const content = `${where}: ${body} -- Responda com orkestrai post "<resposta>"${directNodeId ? '' : ' --channel team'} (tool MCP channel_post) para a resposta aparecer na Conversa.`;
@@ -163,11 +165,11 @@ export class ChannelService {
     return { message, delivered };
   }
 
-  private async answer(workspaceId: string, channel: string, questionId: string, body: string): Promise<OwnerPostResult> {
+  private async answer(workspaceId: string, channel: string, questionId: string, body: string, origin: Record<string, unknown> = {}): Promise<OwnerPostResult> {
     const question = await channelRepository.find(workspaceId, questionId);
     if (!question || question.kind !== 'question' || question.channel !== channel) throw new Error('Pergunta não encontrada neste canal.');
     if (!(await channelRepository.markAnswered(workspaceId, questionId))) throw new Error('Esta pergunta já foi respondida.');
-    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', kind: 'answer', body, replyToId: questionId, meta: question.authorNodeId ? { deliverTo: [question.authorNodeId] } : {} });
+    const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', kind: 'answer', body, replyToId: questionId, meta: { ...(question.authorNodeId ? { deliverTo: [question.authorNodeId] } : {}), ...origin } });
     broadcast(message);
     const answered = await channelRepository.find(workspaceId, questionId);
     if (answered) broadcast(answered);

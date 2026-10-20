@@ -32,6 +32,7 @@ const COMMAND_SCOPE = {
   'huddle.end': 'huddles.manage',
   'attention.decide': 'approvals.decide',
   'attention.answer': 'approvals.decide',
+  'chat.post': 'agents.message',
 } as const satisfies Record<string, CollaborationScope>;
 
 export class CollaborationPolicy {
