@@ -1577,6 +1577,7 @@
         onArrange: (id: string) => void arrangeGroup(id),
         onPayloadDraftChange: (id: string, partial: Record<string, unknown>) => stageNodePayload(id, partial),
         onPayloadChange: (id: string, partial: Record<string, unknown>) => updateNodePayload(id, partial),
+        onPlanOperations: (id: string, kind: 'checklist' | 'calendar', operations: unknown[]) => applyPlanOperations(id, kind, operations),
       },
     };
   }
@@ -2885,6 +2886,30 @@
     nodes = nodes.map((node) =>
       node.id === id ? { ...node, data: { ...node.data, payload } } : node
     );
+  }
+
+  /**
+   * Checklist and calendar changes travel as operations the Core applies to the
+   * latest content, so another screen or an agent editing at once keeps its
+   * items. Returns the content the Core holds afterwards, or null on failure.
+   */
+  async function applyPlanOperations(id: string, kind: 'checklist' | 'calendar', operations: unknown[]): Promise<Record<string, unknown> | null> {
+    if (!activeWorkspace) return null;
+    const workspaceId = activeWorkspace.id;
+    try {
+      const view = await api<{ items?: unknown[]; events?: unknown[] }>(`/api/agent-room/workspaces/${workspaceId}/nodes/${id}/${kind}`, {
+        method: 'POST',
+        body: JSON.stringify({ operations }),
+      });
+      const partial = kind === 'checklist' ? { items: view.items ?? [] } : { events: view.events ?? [] };
+      if (activeWorkspace?.id === workspaceId) {
+        nodes = nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, payload: { ...(node.data.payload as Record<string, unknown>), ...partial } } } : node);
+      }
+      return partial;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m['canvas.error_api']());
+      return null;
+    }
   }
 
   async function updateNodePayload(id: string, partial: Record<string, unknown>) {

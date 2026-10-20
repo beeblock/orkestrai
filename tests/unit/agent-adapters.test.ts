@@ -279,10 +279,11 @@ describe('geminiAdapter', () => {
     expect(geminiAdapter.buildCommand(request({ agent: 'gemini', allowWrites: true })).args).toContain('--approval-mode=yolo');
   });
 
-  it('opens the TUI in yolo and resumes by id', () => {
+  it('opens the TUI in yolo and does not claim a resume it cannot track', () => {
     expect(geminiAdapter.interactiveCommand().args).toEqual(['--approval-mode=yolo']);
-    expect(geminiAdapter.resumeArgs('abc')).toEqual(['--resume', 'abc']);
-    expect(geminiAdapter.resumeArgs()).toBeNull();
+    expect(geminiAdapter.supportsResume).toBe(false);
+    expect(geminiAdapter.sessionStorage).toBeUndefined();
+    expect(geminiAdapter.resumeArgs('abc')).toBeNull();
   });
 });
 
@@ -293,7 +294,8 @@ describe('qwenAdapter', () => {
     expect(review.args).toEqual(expect.arrayContaining(['--approval-mode', 'plan', '-m', 'qwen3-coder-plus']));
     expect(qwenAdapter.buildCommand(request({ agent: 'qwen', allowWrites: true })).args).toEqual(expect.arrayContaining(['--approval-mode', 'yolo']));
     expect(qwenAdapter.interactiveCommand().args).toEqual(['--yolo']);
-    expect(qwenAdapter.resumeArgs('s-1')).toEqual(['--resume', 's-1']);
+    expect(qwenAdapter.supportsResume).toBe(false);
+    expect(qwenAdapter.resumeArgs('s-1')).toBeNull();
   });
 });
 
@@ -319,11 +321,12 @@ describe('gooseAdapter', () => {
     expect(gooseAdapter.buildCommand(request({ agent: 'goose', allowWrites: true })).env?.GOOSE_MODE).toBe('auto');
   });
 
-  it('opens a session and resumes it by id', () => {
+  it('opens a session and does not claim a resume it cannot track', () => {
     const tui = gooseAdapter.interactiveCommand({ model: 'gpt-5' });
     expect(tui.args).toEqual(['session']);
     expect(tui.env).toEqual({ GOOSE_MODE: 'auto', GOOSE_MODEL: 'gpt-5' });
-    expect(gooseAdapter.resumeArgs('20261018_1')).toEqual(['--resume', '--session-id', '20261018_1']);
+    expect(gooseAdapter.supportsResume).toBe(false);
+    expect(gooseAdapter.resumeArgs('20261018_1')).toBeNull();
   });
 });
 

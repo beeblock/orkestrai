@@ -32,4 +32,18 @@ describe('a page loaded while messages arrive live', async () => {
     const merged = mergeLoaded(loaded, [message('c', '2026-10-19T19:00:09.000Z'), message('old', '2026-10-19T18:00:00.000Z'), message('b', '2026-10-19T19:00:05.000Z')]);
     expect(merged.map((entry: { id: string }) => entry.id)).toEqual(['a', 'b', 'c']);
   });
+
+  it('keeps messages oldest first and loads earlier ones from the oldest held', async () => {
+    const { mergeOlder, oldestCreatedAt } = await import('$lib/components/agent-room/chat/chat-timeline.js');
+    // The API sends each page newest first.
+    const latest = Array.from({ length: 80 }, (_, index) => message(`m${80 + index}`, new Date(Date.UTC(2026, 9, 20, 12, 0, 80 + index)).toISOString())).reverse();
+    const held = mergeLoaded(latest, []);
+    expect(held[0].createdAt).toBe(oldestCreatedAt(latest));
+    expect(oldestCreatedAt(held)).toBe('2026-10-20T12:01:20.000Z');
+    const earlier = Array.from({ length: 80 }, (_, index) => message(`m${index}`, new Date(Date.UTC(2026, 9, 20, 12, 0, index)).toISOString())).reverse();
+    const all = mergeOlder([...earlier, held[0]], held);
+    expect(all).toHaveLength(160);
+    expect(all.map((entry: { id: string }) => entry.id)).toEqual(Array.from({ length: 160 }, (_, index) => `m${index}`));
+    expect(oldestCreatedAt([])).toBeNull();
+  });
 });

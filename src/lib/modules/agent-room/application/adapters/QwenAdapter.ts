@@ -4,12 +4,12 @@ import type { AgentAdapter, AgentCommandSpec, AgentDetection, ParsedAgentOutput 
 
 /**
  * Official Qwen Code CLI. Headless runs use `-p`; read-only runs use the
- * `plan` approval mode and writes use `yolo`. Sessions resume by id.
+ * `plan` approval mode and writes use `yolo`.
  */
 export const qwenAdapter: AgentAdapter = {
   id: 'qwen',
   displayName: 'Qwen Code',
-  supportsResume: true,
+  supportsResume: false,
   profileStrategy: { kind: 'unsupported' },
   setup: {
     docsUrl: 'https://qwenlm.github.io/qwen-code-docs/en/',
@@ -41,8 +41,11 @@ export const qwenAdapter: AgentAdapter = {
     };
   },
 
-  resumeArgs(agentSessionId?: string): string[] | null {
-    return agentSessionId ? ['--resume', agentSessionId] : null;
+  // Resuming needs the exact conversation, which Orkestrai learns only by reading the
+  // CLI's own session files (`sessionStorage`). Until that is read for this CLI, a
+  // restarted terminal starts a new conversation instead of claiming a resume.
+  resumeArgs(): string[] | null {
+    return null;
   },
 
   interactiveCommand(options?: { model?: string; effort?: ModelEffort | null }): AgentCommandSpec {

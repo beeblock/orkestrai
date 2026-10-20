@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
   import { Check, ListChecks, Plus, X } from '@lucide/svelte';
   import NodeShell from './NodeShell.svelte';
@@ -12,6 +13,7 @@
     onDelete: (id: string) => void;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
     onPayloadChange?: (id: string, partial: Record<string, unknown>) => void | Promise<void>;
+    onPlanOperations?: (id: string, kind: 'checklist', operations: unknown[]) => Promise<Record<string, unknown> | null>;
     onRename?: (id: string, title: string) => void;
     onJumpToNode?: (nodeId: string) => void;
     onRemoveConnection?: (edgeId: string) => void;
@@ -20,28 +22,57 @@
 
   let { id, data, selected } = $props<NodeProps & { data: ChecklistNodeData }>();
 
-  let items = $state<ChecklistItem[]>([...(data.payload.items ?? [])]);
+  // The first render shows the stored items; the effect below follows later changes.
+  let items = $state<ChecklistItem[]>(untrack(() => [...(data.payload.items ?? [])]));
   let draft = $state('');
+  // Changes still on their way to the Core; until they return, this screen keeps its own view.
+  let pending = 0;
   const done = $derived(items.filter((item) => item.done).length);
 
-  function save(next: ChecklistItem[]) {
+  // Items added or checked elsewhere (another screen, an agent) arrive with the node's payload.
+  $effect(() => {
+    const latest = data.payload.items ?? [];
+    untrack(() => {
+      if (pending === 0) items = [...latest];
+    });
+  });
+
+  /** Shows the change at once and sends it as an operation the Core applies to the latest items. */
+  async function apply(operations: unknown[], next: ChecklistItem[]) {
     items = next;
-    void data.onPayloadChange?.(id, { items: next });
+    if (!data.onPlanOperations) {
+      void data.onPayloadChange?.(id, { items: next });
+      return;
+    }
+    pending += 1;
+    const result = await data.onPlanOperations(id, 'checklist', operations);
+    pending -= 1;
+    if (pending === 0) items = [...((result?.items as ChecklistItem[] | undefined) ?? data.payload.items ?? [])];
   }
 
   function add() {
-    const text = draft.trim();
+    const text = draft.trim().slice(0, 400);
     if (!text) return;
-    save([...items, { id: crypto.randomUUID(), text: text.slice(0, 400), done: false }]);
+    const item = { id: crypto.randomUUID(), text, done: false };
+    void apply([{ op: 'add', id: item.id, text }], [...items, item]);
     draft = '';
   }
 
   function toggle(itemId: string) {
-    save(items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item)));
+    const item = items.find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    void apply([{ op: 'set', itemId, done: !item.done }], items.map((candidate) => (candidate.id === itemId ? { ...candidate, done: !candidate.done } : candidate)));
   }
 
   function remove(itemId: string) {
-    save(items.filter((item) => item.id !== itemId));
+    void apply([{ op: 'remove', itemId }], items.filter((item) => item.id !== itemId));
+  }
+
+  function clearDone() {
+    const operations = items.filter((item) => item.done).map((item) => ({ op: 'remove', itemId: item.id }));
+    const next = items.filter((item) => !item.done);
+    // The Core takes up to 50 changes per request.
+    for (let index = 0; index < operations.length; index += 50) void apply(operations.slice(index, index + 50), next);
   }
 </script>
 
@@ -88,7 +119,7 @@
       <input bind:value={draft} placeholder={m['checklist.add']()} aria-label={m['checklist.add']()} maxlength="400" />
     </form>
     {#if done > 0}
-      <button type="button" class="clear" onclick={() => save(items.filter((item) => !item.done))}>{m['checklist.clear_done']()}</button>
+      <button type="button" class="clear" onclick={clearDone}>{m['checklist.clear_done']()}</button>
     {/if}
   </div>
 </NodeShell>

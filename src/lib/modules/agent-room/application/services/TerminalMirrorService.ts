@@ -1,6 +1,6 @@
 import type { TerminalNodePayload } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { findPromptInTranscript, findReplyToPrompt, lastReplyText, latestTurnComplete } from '../../infrastructure/transcript/AgentTranscript.js';
+import { findPromptInTranscript, findReplyToPrompt, lastReplyText, latestTurnComplete, latestTurnStartedAt } from '../../infrastructure/transcript/AgentTranscript.js';
 import { agentInboxService } from './AgentInboxService.js';
 import { channelService } from './ChannelService.js';
 
@@ -57,6 +57,10 @@ export class TerminalMirrorService {
     }
     if (reply || !allowUnmatched || !context.agentSessionId || this.latest.get(nodeId) !== messageId) return false;
     if (await findPromptInTranscript(context.provider, context.cwd, context.agentSessionId, prompt, since, context.options)) return false;
+    // Only a turn the conversation started after this line was sent can answer it;
+    // an earlier answer is not repeated as if it were new.
+    const turnStarted = await latestTurnStartedAt(context.provider, context.cwd, context.agentSessionId, context.options);
+    if (turnStarted === null || turnStarted < since) return false;
     if (!(await latestTurnComplete(context.provider, context.cwd, context.agentSessionId, context.options))) return false;
     const text = await lastReplyText(context.provider, context.cwd, context.agentSessionId);
     if (!text?.trim()) return false;

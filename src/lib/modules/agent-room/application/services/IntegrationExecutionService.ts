@@ -64,10 +64,16 @@ export type InboundChannelMessage = {
   externalId: string;
   chatId: string;
   senderId: string;
+  /** A username the platform reserves for the sender (Telegram @handle); null when there is none. */
+  senderHandle: string | null;
+  /** How the sender appears; free text, never an identity. */
   senderName: string;
   text: string;
   at: string;
 };
+
+// Slack pages hold 50 messages; a poll reads at most this many pages before advancing.
+const SLACK_MAX_PAGES = 20;
 
 export class IntegrationExecutionService {
   constructor(private readonly http = new TrustedIntegrationHttpClient()) {}
@@ -560,11 +566,14 @@ export class IntegrationExecutionService {
         const text = String(message.text ?? message.caption ?? '').trim();
         const from = record(message.from);
         if (!text || from.is_bot === true) continue;
+        const handle = typeof from.username === 'string' && from.username.trim() ? from.username.trim().slice(0, 120) : null;
+        const displayName = [from.first_name, from.last_name].filter((part) => typeof part === 'string' && part.trim()).join(' ');
         messages.push({
           externalId: String(updateId),
           chatId: String(record(message.chat).id ?? ''),
           senderId: String(from.id ?? ''),
-          senderName: String(from.username ?? from.first_name ?? '').slice(0, 120),
+          senderHandle: handle,
+          senderName: (handle ? `@${handle}` : displayName || String(from.id ?? '')).slice(0, 120),
           text: text.slice(0, 8_000),
           at: typeof message.date === 'number' ? new Date(message.date * 1000).toISOString() : new Date().toISOString(),
         });
@@ -578,30 +587,40 @@ export class IntegrationExecutionService {
       // First poll only sets the starting point, so old history is never replayed to the agent.
       const oldest = input.cursor ?? String(Date.now() / 1000);
       if (!input.cursor) return { messages: [], cursor: oldest };
-      const query = new URLSearchParams({ channel: input.chatId, oldest, limit: '50' });
-      const response = await this.http.request(`https://slack.com/api/conversations.history?${query}`, {
-        headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-      });
-      const data = record(response.json);
-      if (!response.ok || data.ok !== true) throw safeError(response.status, 'Slack', response.json);
+      // Slack returns the newest messages first, a page at a time: every page after
+      // `oldest` is read before the cursor moves past them.
       let next = oldest;
+      let pageCursor: string | null = null;
       const messages: InboundChannelMessage[] = [];
-      for (const raw of Array.isArray(data.messages) ? data.messages.slice(0, 50) : []) {
-        const message = record(raw);
-        const ts = String(message.ts ?? '');
-        if (ts && Number(ts) > Number(next)) next = ts;
-        const text = String(message.text ?? '').trim();
-        if (!text || message.bot_id || message.subtype) continue;
-        messages.push({
-          externalId: ts,
-          chatId: input.chatId,
-          senderId: String(message.user ?? ''),
-          senderName: String(message.user ?? '').slice(0, 120),
-          text: text.slice(0, 8_000),
-          at: new Date(Number(ts) * 1000 || Date.now()).toISOString(),
+      for (let page = 0; page < SLACK_MAX_PAGES; page += 1) {
+        const query = new URLSearchParams({ channel: input.chatId, oldest, limit: '50' });
+        if (pageCursor) query.set('cursor', pageCursor);
+        const response = await this.http.request(`https://slack.com/api/conversations.history?${query}`, {
+          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
         });
+        const data = record(response.json);
+        if (!response.ok || data.ok !== true) throw safeError(response.status, 'Slack', response.json);
+        for (const raw of Array.isArray(data.messages) ? data.messages.slice(0, 50) : []) {
+          const message = record(raw);
+          const ts = String(message.ts ?? '');
+          if (ts && Number(ts) > Number(next)) next = ts;
+          const text = String(message.text ?? '').trim();
+          if (!text || message.bot_id || message.subtype) continue;
+          messages.push({
+            externalId: ts,
+            chatId: input.chatId,
+            senderId: String(message.user ?? ''),
+            senderHandle: null,
+            senderName: String(message.user ?? '').slice(0, 120),
+            text: text.slice(0, 8_000),
+            at: new Date(Number(ts) * 1000 || Date.now()).toISOString(),
+          });
+        }
+        const following = String(record(data.response_metadata).next_cursor ?? '').trim();
+        if (data.has_more !== true || !following) break;
+        pageCursor = following;
       }
-      return { messages: messages.reverse(), cursor: next };
+      return { messages: messages.sort((a, b) => Number(a.externalId) - Number(b.externalId)), cursor: next };
     }
     throw new Error('This integration cannot deliver messages to an agent.');
   }

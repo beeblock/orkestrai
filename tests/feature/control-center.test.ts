@@ -392,6 +392,12 @@ describe('ControlCenterService', () => {
     expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: leader.id, fromNodeId: dev.id, content: expect.stringContaining('Dev Chat Realtime UI está bloqueado: Docker daemon 500') }));
 
+    // The teammate's own approval request for the owner stays when it gets blocked again.
+    await attentionService.raise({ workspaceId: workspace.id, nodeId: dev.id, category: 'review', severity: 'warning', title: 'Publicar o pacote?', sourceType: 'autonomy_gate', sourceId: 'gate-1', correlationId: 'gate:gate-1' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'blocked', action: 'Esperando a aprovação do dono', attentionRequired: true });
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.sourceType)).toEqual(['autonomy_gate']);
+    await attentionService.resolveSource(workspace.id, 'autonomy_gate', 'gate-1');
+
     // A terminal dialog waiting for a key press, and the leader's own state, still reach the owner.
     await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'waiting_permission', action: 'Allow Bash?' });
     await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: leader.id, state: 'blocked', action: 'Precisa da chave da API', attentionRequired: true });

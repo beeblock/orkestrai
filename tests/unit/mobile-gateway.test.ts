@@ -1,3 +1,4 @@
+import { connect } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMobileGateway, hashMobileToken, mobileRequestAllowed } from '../../scripts/mobile-gateway.mjs';
 
@@ -39,5 +40,21 @@ describe('phone gateway', () => {
     expect(ok.status).toBe(200);
     expect(seen).toEqual([{ url: '/api/agent-room/attention', host: '127.0.0.1:4173', origin: 'http://127.0.0.1:4173', token: undefined }]);
     expect((await fetch(`${base}/m`)).status).toBe(200);
+  });
+
+  it('answers a malformed request target with 400 and keeps serving', async () => {
+    const gateway = createMobileGateway({ loopbackHost: '127.0.0.1:4173', handler: (_request: unknown, response: import('node:http').ServerResponse) => response.end('ok') });
+    const port = 48000 + Math.floor(Math.random() * 1000);
+    await gateway.start({ port, tokenHash: hashMobileToken('secret-token') });
+    stop = () => gateway.stop();
+    const raw = await new Promise<string>((resolve, reject) => {
+      const socket = connect(port, '127.0.0.1', () => socket.write('GET //[ HTTP/1.1\r\nHost: phone\r\nConnection: close\r\n\r\n'));
+      let data = '';
+      socket.on('data', (chunk) => { data += chunk.toString(); });
+      socket.on('end', () => resolve(data));
+      socket.on('error', reject);
+    });
+    expect(raw.startsWith('HTTP/1.1 400')).toBe(true);
+    expect((await fetch(`http://127.0.0.1:${port}/m`)).status).toBe(200);
   });
 });

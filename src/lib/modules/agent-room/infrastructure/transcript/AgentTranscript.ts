@@ -1108,25 +1108,56 @@ function turnActivityBefore(storage: string, records: unknown[], before: number)
   return latest > 0 && latest < before;
 }
 
+/** The tail of this PTY's conversation file, from its host-visible home (including WSL). */
+async function conversationTail(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions,
+): Promise<{ storage: string; text: string } | null> {
+  if (!sessionId || !hasAgentAdapter(provider)) return null;
+  const storage = getAgentAdapter(provider).sessionStorage;
+  if (!storage || !FILE_LOOKUP_STORAGES.has(storage)) return null;
+  const actualCwd = await transcriptCwd(cwd, options.posixCwd);
+  const home = options.homeDir ?? homedir();
+  const root = storage === 'claude-project-jsonl'
+    ? join(home, '.claude', 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
+    : storage === 'codex-rollout-jsonl' ? join(home, '.codex', 'sessions')
+      : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
+  const path = storage === 'claude-project-jsonl' ? join(root, `${sessionId}.jsonl`)
+    : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
+      : join(root, sessionId, 'agents', 'main', 'wire.jsonl');
+  const text = path ? await transcriptTail(path, TAIL_BYTES) : null;
+  return text ? { storage, text } : null;
+}
+
 /** Bound to this PTY's conversation and host-visible home (including WSL). */
 export async function latestTurnComplete(
   provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
 ): Promise<boolean | null> {
-  if (!sessionId || !hasAgentAdapter(provider)) return null;
-  const storage = getAgentAdapter(provider).sessionStorage;
-  if (!storage || !FILE_LOOKUP_STORAGES.has(storage)) return null;
   try {
-    const actualCwd = await transcriptCwd(cwd, options.posixCwd);
-    const home = options.homeDir ?? homedir();
-    const root = storage === 'claude-project-jsonl'
-      ? join(home, '.claude', 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
-      : storage === 'codex-rollout-jsonl' ? join(home, '.codex', 'sessions')
-        : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
-    const path = storage === 'claude-project-jsonl' ? join(root, `${sessionId}.jsonl`)
-      : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
-        : join(root, sessionId, 'agents', 'main', 'wire.jsonl');
-    const text = path ? await transcriptTail(path, TAIL_BYTES) : null;
-    return text ? parseLatestTurnComplete(storage, text, options.processStartedAt) : null;
+    const tail = await conversationTail(provider, cwd, sessionId, options);
+    return tail ? parseLatestTurnComplete(tail.storage, tail.text, options.processStartedAt) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** When the conversation's latest prompt was written, in ms; null when the transcript does not say. */
+export function parseLatestTurnStart(storage: string, transcript: string): number | null {
+  if (!FILE_LOOKUP_STORAGES.has(storage)) return null;
+  const records = transcript.trim().split('\n').map((line) => {
+    try { return JSON.parse(line); } catch { return null; }
+  });
+  const prompt = records.findLast((event) => event && typeof event === 'object' && promptFromJsonlEvent(storage, event));
+  const at = typeof prompt?.timestamp === 'string' ? Date.parse(prompt.timestamp) : Number.NaN;
+  return Number.isFinite(at) ? at : null;
+}
+
+/** When this PTY's conversation started its latest turn (see `parseLatestTurnStart`). */
+export async function latestTurnStartedAt(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
+): Promise<number | null> {
+  try {
+    const tail = await conversationTail(provider, cwd, sessionId, options);
+    return tail ? parseLatestTurnStart(tail.storage, tail.text) : null;
   } catch {
     return null;
   }

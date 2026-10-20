@@ -5,12 +5,12 @@ import type { AgentAdapter, AgentCommandSpec, AgentDetection, ParsedAgentOutput 
 /**
  * goose CLI. `goose run -t` runs one instruction; `GOOSE_MODE` picks the
  * permission level (`auto` writes, `chat` never calls tools). The terminal
- * opens `goose session`, which resumes by id with `--resume --session-id`.
+ * opens `goose session`.
  */
 export const gooseAdapter: AgentAdapter = {
   id: 'goose',
   displayName: 'goose',
-  supportsResume: true,
+  supportsResume: false,
   profileStrategy: { kind: 'unsupported' },
   setup: {
     docsUrl: 'https://goose-docs.ai/docs/',
@@ -44,8 +44,11 @@ export const gooseAdapter: AgentAdapter = {
     };
   },
 
-  resumeArgs(agentSessionId?: string): string[] | null {
-    return agentSessionId ? ['--resume', '--session-id', agentSessionId] : null;
+  // Resuming needs the exact conversation, which Orkestrai learns only by reading the
+  // CLI's own session files (`sessionStorage`). Until that is read for this CLI, a
+  // restarted terminal starts a new conversation instead of claiming a resume.
+  resumeArgs(): string[] | null {
+    return null;
   },
 
   interactiveCommand(options?: { model?: string; effort?: ModelEffort | null }): AgentCommandSpec {

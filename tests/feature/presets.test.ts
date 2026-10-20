@@ -129,6 +129,44 @@ describe('PresetService', () => {
     expect(applied.nodes).toBe(1);
   });
 
+  it('copies a group with its own copies of the members, in the same workspace too', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orkestrai-preset-group-'));
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Grupo', workingDir: dir });
+    const lead = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Lead', x: 40, y: 40, payload: { command: 'claude', provider: 'claude' } });
+    const dev = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev', x: 640, y: 40, payload: { command: 'codex', provider: 'codex' } });
+    const outside = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'note', title: 'Fora', x: 40, y: 900, payload: { content: 'x' } });
+    const group = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'group', title: 'Time', x: 0, y: 0, width: 1300, height: 500, payload: { members: [lead.id, dev.id, outside.id], taskIds: ['t1'] } });
+
+    // A score of the group and two of its members leaves out the third member.
+    const score = await presetService.createFromWorkspace(workspace.id, { name: 'Partitura', nodeIds: [group.id, lead.id, dev.id] });
+    const stored = (await presetService.data(score.id)).nodes.find((node) => node.type === 'group')!.payload as Record<string, unknown>;
+    expect(stored.members).toBeUndefined();
+    expect((stored.memberIndexes as number[]).length).toBe(2);
+    expect(stored.taskIds).toEqual([]);
+
+    await presetService.apply(score.id, { workspaceId: workspace.id });
+    const nodes = await workspaceRepository.listNodes(workspace.id);
+    const groups = nodes.filter((node) => node.type === 'group');
+    expect(groups).toHaveLength(2);
+    const copy = groups.find((node) => node.id !== group.id)!;
+    const copies = nodes.filter((node) => node.type === 'terminal' && node.id !== lead.id && node.id !== dev.id);
+    expect(((copy.payload as { members: string[] }).members).sort()).toEqual(copies.map((node) => node.id).sort());
+    expect((copy.payload as Record<string, unknown>).memberIndexes).toBeUndefined();
+    // The original group still holds the originals.
+    expect(((await workspaceRepository.getNode(group.id))!.payload as { members: string[] }).members).toEqual([lead.id, dev.id, outside.id]);
+
+    // A preset saved before positions were kept points to no original node.
+    const { AgentPreset } = await import('$lib/modules/agent-room/domain/models/AgentPreset.js');
+    const legacy = await AgentPreset.find(score.id);
+    const data = JSON.parse(legacy!.getAttribute('data'));
+    data.nodes.find((node: { type: string }) => node.type === 'group').payload = { members: [lead.id, dev.id] };
+    await AgentPreset.query().where('id', score.id).update({ data: JSON.stringify(data) });
+    await presetService.apply(score.id, { workspaceId: workspace.id });
+    const third = (await workspaceRepository.listNodes(workspace.id)).filter((node) => node.type === 'group' && node.id !== group.id && node.id !== copy.id);
+    expect(third).toHaveLength(1);
+    expect((third[0].payload as { members: string[] }).members).toEqual([]);
+  });
+
   it('remove preset', async () => {
     const source = await workspaceRepository.createWorkspace({ name: 'Tmp', workingDir: '/tmp' });
     const preset = await presetService.createFromWorkspace(source.id, { name: 'Descartavel' });

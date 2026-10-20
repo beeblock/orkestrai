@@ -84,7 +84,7 @@ export function createMobileGateway({ handler, loopbackHost, extraHeaders = {} }
   function deny(response, status) {
     response.statusCode = status;
     response.setHeader('content-type', 'application/json');
-    response.end(JSON.stringify({ error: status === 401 ? 'Pair this phone again from Orkestrai.' : 'Not available from the phone.' }));
+    response.end(JSON.stringify({ error: status === 401 ? 'Pair this phone again from Orkestrai.' : status === 400 ? 'Bad request.' : 'Not available from the phone.' }));
   }
 
   /** @param {http.IncomingMessage} request */
@@ -99,7 +99,13 @@ export function createMobileGateway({ handler, loopbackHost, extraHeaders = {} }
   /** @param {http.IncomingMessage} request @param {http.ServerResponse} response */
   function handle(request, response) {
     if (!isPrivateAddress(request.socket.remoteAddress)) return deny(response, 403);
-    const url = new URL(request.url ?? '/', 'http://phone.invalid');
+    let url;
+    try {
+      url = new URL(request.url ?? '/', 'http://phone.invalid');
+    } catch {
+      // A malformed request target must not reach the app, nor stop the gateway.
+      return deny(response, 400);
+    }
     const kind = mobileRequestAllowed(request.method ?? 'GET', url.pathname);
     if (!kind) return deny(response, 404);
     if (kind === 'api' && !authorized(request)) return deny(response, 401);

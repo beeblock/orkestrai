@@ -16,6 +16,8 @@ export const bridgeChannelPostSchema = z.object({
   from: z.string().trim().min(1, 'Informe o agente que está postando.').max(120),
   message: z.string().trim().min(1, 'A mensagem está vazia.').max(MAX_CHANNEL_BODY),
   channel: z.enum(['team', 'owner']).default('owner'),
+  /** The Telegram/Slack message this answers; only such a reply goes back to that chat. */
+  replyTo: z.string().uuid('Informe o id da mensagem respondida.').nullish(),
 });
 
 export const bridgeAskOwnerSchema = z.object({
