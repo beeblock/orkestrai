@@ -565,10 +565,11 @@ device access.
   non-extractable in the browser and the invitation secret is removed from the
   URL before connecting. Installed-app invites open Orkestrai automatically;
   guests can also paste one through **Workspace → Join remote workspace**.
-  Operators can hold a traceable structured conversation whose reply is bound
-  to the exact turn across every registered provider. The overview keeps the
-  leader thread visible and waits through intermediate tool use until the
-  provider finishes the turn. Dictation is available for leader, agent, and
+  Operators share the app's Conversa: the team channel and each agent's direct
+  conversation, with questions, answers and delivery state. What they write
+  there reaches the agent like a message written in the app, whole messages and
+  older history load on demand, and the agents' messages to each other stay on
+  the host. They also answer and decide what waits in Needs you. Dictation is available for leader, agent, and
   terminal input through the host's local STT without exposing plaintext audio
   to the relay; terminal dictation inserts text without submitting it.
   Administrators can start or restore an agent. Raw terminal control is a

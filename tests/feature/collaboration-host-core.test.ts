@@ -18,12 +18,18 @@ import { ApproveCollaborationDeviceRequest } from '$lib/modules/collaboration/in
 import { ExecuteCollaborationCommandDto } from '$lib/modules/collaboration/application/dto/CollaborationDto.js';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
-import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { designDocumentService } from '$lib/modules/agent-room/application/services/DesignDocumentService.js';
 import { ApplyDesignOperationsDto } from '$lib/modules/agent-room/application/dto/DesignDtos.js';
 import { designOperationSchema } from '$lib/modules/agent-room/contracts/schemas/designSchemas.js';
 import { collaborationCommandSchema } from '$lib/modules/collaboration/contracts/schemas/collaboration.schema.js';
 import { huddleService } from '$lib/modules/agent-room/application/services/HuddleService.js';
+import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
+import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
+
+function command(): string {
+  return `command_${uuidv7().replaceAll('-', '_')}`;
+}
 
 async function setup(role: 'viewer' | 'operator' | 'administrator' = 'operator') {
   const workingDir = mkdtempSync(join(tmpdir(), 'orkestrai-collaboration-'));
@@ -161,43 +167,108 @@ describe('collaboration host core', () => {
     expect(scoped.edges.every((edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId))).toBe(true);
   });
 
-  it('routes leader messages through the correlated remote conversation flow', async () => {
+  it('puts messages from guests built before the shared Conversa into the agent direct conversation', async () => {
     const { share, workspace, device, agent } = await setup('operator');
-    vi.spyOn(bridgeService, 'listAgents').mockResolvedValue([{
-      nodeId: agent.id,
-      title: 'Leader',
-      provider: 'claude',
-      command: 'claude',
-      sessionId: 'leader-session',
-      sessionAlive: true,
-      maestro: true,
-    }]);
-    const ask = vi.spyOn(bridgeService, 'ask').mockResolvedValue({
-      to: 'Leader',
-      reply: 'Done',
-      delivered: true,
-      replyConfirmed: true,
-      timedOut: false,
-      messageId: uuidv7(),
-      deliveryState: 'replied',
-    });
+    const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
 
     const result = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
-      `command_${uuidv7().replaceAll('-', '_')}`,
-      0,
-      { type: 'leader.message', message: 'Review the release.' },
+      command(), 0, { type: 'leader.message', message: 'Review the release.' },
     ));
-
     expect(result).toMatchObject({ accepted: true, errorCode: null });
-    expect(ask).toHaveBeenCalledWith(workspace.id, expect.objectContaining({
-      to: agent.id,
-      message: 'Review the release.',
-      metadata: expect.objectContaining({
-        remoteCollaboration: true,
-        remoteShareId: share.id,
-        remoteDeviceId: device.deviceId,
-      }),
-    }));
+    const [stored] = await channelRepository.list(workspace.id, `dm:${agent.id}`);
+    expect(stored).toMatchObject({ authorKind: 'owner', body: 'Review the release.', meta: { via: 'remote', deliverTo: [agent.id] } });
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: agent.id, kind: 'owner', content: expect.stringContaining('Review the release.') }));
+
+    // A message is never refused for a snapshot a moment old.
+    const stale = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
+      command(), 0, { type: 'agent.message', agentNodeId: agent.id, message: 'And the changelog.' },
+    ));
+    expect(stale).toMatchObject({ accepted: true, errorCode: null });
+    const missing = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
+      command(), 0, { type: 'agent.message', agentNodeId: uuidv7(), message: 'Anyone?' },
+    ));
+    expect(missing).toMatchObject({ accepted: false, errorCode: 'COMMAND_FAILED' });
+
+    // Those guests read the exchange as a message and its reply.
+    await channelService.postAgent(workspace.id, agent.id, { body: 'Release reviewed.' });
+    const snapshot = scopeSharedWorkspaceSnapshot(await sharedWorkspaceQuery.snapshot(share.id), device.scopes);
+    expect(snapshot.conversations[0]).toMatchObject({ agentNodeId: agent.id, message: 'And the changelog.', reply: 'Release reviewed.', state: 'replied' });
+    expect(snapshot.conversations[1]).toMatchObject({ message: 'Review the release.', reply: null, state: 'queued' });
+  });
+
+  it('shares the Conversa with operators, who post, answer and page it without the agents talking to each other', async () => {
+    const { share, workspace, device, agent } = await setup('operator');
+    vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+    const direct = `dm:${agent.id}`;
+    const question = await channelService.askOwner(workspace.id, { nodeId: agent.id, title: 'Leader' }, { question: 'Publish to the store?', options: ['Yes', 'Not yet'] });
+    await controlCenterService.recordDelivery({
+      messageId: uuidv7(), workspaceId: workspace.id, toNodeId: agent.id,
+      state: 'replied', content: 'Internal agent ask', reply: 'Internal agent reply',
+    });
+
+    const posted = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
+      command(), 0, { type: 'chat.post', channel: direct, body: 'Ship the beta from /Users/host/private/notes.md' },
+    ));
+    expect(posted).toMatchObject({ accepted: true, errorCode: null });
+    const answered = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
+      command(), 0, { type: 'chat.post', channel: direct, body: 'Not yet', replyToId: question.id },
+    ));
+    expect(answered).toMatchObject({ accepted: true, errorCode: null });
+    expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeTruthy();
+    const twice = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
+      command(), 0, { type: 'chat.post', channel: direct, body: 'Yes', replyToId: question.id },
+    ));
+    expect(twice).toMatchObject({ accepted: false, errorCode: 'COMMAND_FAILED' });
+
+    const snapshot = scopeSharedWorkspaceSnapshot(await sharedWorkspaceQuery.snapshot(share.id), device.scopes);
+    expect(snapshot.chat?.channels[0]).toMatchObject({ id: 'team', kind: 'team' });
+    expect(snapshot.chat?.channels.find((channel) => channel.nodeId === agent.id)).toMatchObject({ id: direct, kind: 'dm', leader: true, openQuestions: 0 });
+    const messages = snapshot.chat?.messages ?? [];
+    expect(messages.find((message) => message.kind === 'question')).toMatchObject({ body: 'Publish to the store?', options: ['Yes', 'Not yet'], answeredAt: expect.any(String) });
+    expect(messages.find((message) => message.kind === 'answer')).toMatchObject({ authorKind: 'owner', via: 'remote', replyToId: question.id, body: 'Not yet' });
+    expect(messages.some((message) => message.body.includes('[redacted-path]'))).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain('Internal agent');
+    expect(JSON.stringify(snapshot)).not.toContain('/Users/host/private');
+
+    // Older history comes in pages of whole messages.
+    for (let index = 0; index < 70; index += 1) {
+      await channelRepository.save({ workspaceId: workspace.id, channel: direct, authorKind: 'agent', authorNodeId: agent.id, body: `progress ${index} ${'detail '.repeat(150)}` });
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    const total = (await channelRepository.list(workspace.id, direct, { limit: 200 })).length;
+    const latest = await sharedWorkspaceQuery.chatPage(share.id, direct, null);
+    expect(latest).toMatchObject({ kind: 'chat.page', channel: direct, before: null, hasOlder: true });
+    expect(latest.messages).toHaveLength(60);
+    expect(latest.messages.at(-1)?.body.startsWith('progress 69 ')).toBe(true);
+    expect(latest.messages.every((message) => !message.clipped)).toBe(true);
+    const earlier = await sharedWorkspaceQuery.chatPage(share.id, direct, latest.messages[0].createdAt);
+    expect(earlier.hasOlder).toBe(false);
+    expect(earlier.messages).toHaveLength(total - 60);
+    expect(earlier.messages[0].body).toBe('Publish to the store?');
+    await expect(sharedWorkspaceQuery.chatPage(share.id, `dm:${uuidv7()}`, null)).rejects.toThrow('CHAT_CHANNEL_NOT_FOUND');
+  });
+
+  it('keeps the shared Conversa inside one frame beside a large workspace', async () => {
+    const { share, workspace, agent } = await setup('operator');
+    for (let index = 0; index < 30; index += 1) {
+      await channelRepository.save({ workspaceId: workspace.id, channel: 'team', authorKind: 'agent', authorNodeId: agent.id, body: `update ${index} ${'context '.repeat(900)}` });
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    const snapshot = await sharedWorkspaceQuery.snapshot(share.id);
+    const oversized = {
+      ...snapshot,
+      tasks: Array.from({ length: 200 }, (_, index) => ({
+        ...snapshot.tasks[0],
+        id: uuidv7(),
+        title: `Large task ${index}`,
+        description: 'safe context '.repeat(4_000),
+      })),
+    };
+    const fitted = fitSharedWorkspaceSnapshot(oversized);
+    expect(Buffer.byteLength(JSON.stringify(fitted))).toBeLessThanOrEqual(MAX_SHARED_SNAPSHOT_BYTES);
+    expect(fitted.chat?.channels).toHaveLength(2);
+    expect(fitted.chat?.messages.length).toBeGreaterThan(0);
+    expect(fitted.chat?.messages.at(-1)?.body.startsWith('update 29 ')).toBe(true);
   });
 
   it('keeps raw terminal access off by default and only grants an explicit administrator opt-in', () => {
