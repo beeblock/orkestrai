@@ -140,6 +140,8 @@ describe('the Conversa shared with remote guests', () => {
     expect(collaborationCommandSchema.safeParse({ type: 'chat.post', channel: DM, body: 'Hi', extra: true }).success).toBe(false);
     expect(chatReadCommandSchema.safeParse({ type: 'chat.read', channel: DM, before: '2026-10-20T12:00:00.000Z' }).success).toBe(true);
     expect(chatReadCommandSchema.safeParse({ type: 'chat.read', channel: DM, before: 'yesterday' }).success).toBe(false);
+    expect(chatReadCommandSchema.safeParse({ type: 'chat.read', channel: DM, before: '2026-10-20T12:00:00.000Z', beforeId: '01a15042-3362-7000-8000-000000000001' }).success).toBe(true);
+    expect(chatReadCommandSchema.safeParse({ type: 'chat.read', channel: DM, before: '2026-10-20T12:00:00.000Z', beforeId: "1' OR 1=1" }).success).toBe(false);
     expect(collaborationPolicy.commandScope('chat.post')).toBe('agents.message');
     expect(collaborationPolicy.scopesForRole('collaborator')).not.toContain('agents.message');
   });

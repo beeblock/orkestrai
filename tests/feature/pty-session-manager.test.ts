@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node-pty';
-import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
+import { PtySessionManager, type PtyOutputMark } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
 /**
  * Integracao real com node-pty usando /bin/cat (echo de terminal).
@@ -27,6 +27,30 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(1_000);
       await delivery.submitted;
       expect(writes.slice(-2)).toEqual(['handoff', '\r']);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
+  it('reports where the output stood at the Enter that submitted a delivery, not when it was queued', async () => {
+    vi.useFakeTimers();
+    let emitData!: (data: string) => void;
+    // The terminal echoes what is typed into it.
+    const fakePty = { write: (data: string) => { if (data !== '\r') emitData(data); }, resize() {}, kill() {}, pid: 1,
+      onData: (listener: typeof emitData) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: '/bin/cat', cwd: '/tmp', workspaceId: 'w', nodeId: 'n' });
+    try {
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3_000);
+      const marks: PtyOutputMark[] = [];
+      const delivery = manager.queueWithSubmit(session.id, 'Rode os testes', 200, false, undefined, (mark) => marks.push(mark));
+      emitData(' ainda trabalhando: ALL TESTS PASS');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(marks).toEqual([]);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await delivery.submitted;
+      expect(marks).toEqual([{ sessionId: session.id, length: 'ReadyRode os testes ainda trabalhando: ALL TESTS PASS'.length }]);
+      emitData('ALL TESTS PASS');
+      expect(manager.outputSince('w', 'n', marks[0])).toBe('ALL TESTS PASS');
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 

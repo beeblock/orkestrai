@@ -70,12 +70,39 @@ export class ChannelRepository {
     return mapChannelMessage(model);
   }
 
-  /** Newest first; `before` pages back through older messages. */
-  async list(workspaceId: string, channel: string, input: { before?: string | null; limit?: number } = {}): Promise<ChannelMessage[]> {
+  /**
+   * Newest first, by time and then id. `before` with `beforeId` pages back
+   * from exactly that message, even past others written in the same
+   * millisecond; `before` alone pages back from that instant, which
+   * `includeInstant` keeps for readers that drop the messages they hold.
+   */
+  async list(
+    workspaceId: string,
+    channel: string,
+    input: { before?: string | null; beforeId?: string | null; includeInstant?: boolean; limit?: number } = {},
+  ): Promise<ChannelMessage[]> {
     const query = AgentChannelMessage.query().where('workspace_id', workspaceId).where('channel', channel);
-    if (input.before) query.where('created_at', '<', input.before);
-    const rows = await query.orderBy('created_at', 'desc').limit(Math.min(200, Math.max(1, input.limit ?? 80))).get();
+    const { before, beforeId } = input;
+    if (before && beforeId) {
+      query.whereNested((older) => {
+        older.where('created_at', '<', before).orWhereNested((same) => same.where('created_at', before).where('id', '<', beforeId));
+      });
+    } else if (before) query.where('created_at', input.includeInstant ? '<=' : '<', before);
+    const rows = await query.orderBy('created_at', 'desc').orderBy('id', 'desc').limit(Math.min(200, Math.max(1, input.limit ?? 80))).get();
     return rows.map(mapChannelMessage);
+  }
+
+  /** A message a Telegram or Slack chat delivered, found by its identity in that chat at any age. */
+  async findExternal(workspaceId: string, channel: string, bindingId: string, externalId: string): Promise<ChannelMessage | null> {
+    const rows = await AgentChannelMessage.query()
+      .where('workspace_id', workspaceId)
+      .where('channel', channel)
+      .where('author_kind', 'external')
+      .where('meta_json', 'like', `%${JSON.stringify({ externalId }).slice(1, -1)}%`)
+      .orderBy('created_at', 'desc')
+      .limit(50)
+      .get();
+    return rows.map(mapChannelMessage).find((message) => message.meta.bindingId === bindingId && message.meta.externalId === externalId) ?? null;
   }
 
   /** The newest message of every channel in the workspace, for the channel list. */
@@ -116,15 +143,6 @@ export class ChannelRepository {
       .whereNull('answered_at')
       .update({ answered_at: now, updated_at: now });
     return Number(changed) > 0;
-  }
-
-  /** Opens a question again, when the answer it got could not reach the agent that asked. */
-  async clearAnswered(workspaceId: string, id: string): Promise<void> {
-    await AgentChannelMessage.query().where('id', id).where('workspace_id', workspaceId).update({ answered_at: null, updated_at: new Date().toISOString() });
-  }
-
-  async delete(workspaceId: string, id: string): Promise<void> {
-    await AgentChannelMessage.query().where('id', id).where('workspace_id', workspaceId).delete();
   }
 
   /** Merges fields into a message's meta; null when it is not in this workspace. */

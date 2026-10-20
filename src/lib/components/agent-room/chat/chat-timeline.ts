@@ -64,9 +64,21 @@ function chronological(a: ChannelMessage, b: ChannelMessage): number {
   return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }
 
-/** The creation time of the oldest message held, the cursor for loading earlier ones. */
+/** The creation time of the oldest message held. */
 export function oldestCreatedAt(messages: readonly ChannelMessage[]): string | null {
   return messages.reduce<string | null>((min, message) => (min === null || message.createdAt < min ? message.createdAt : min), null);
+}
+
+/**
+ * The oldest message held, by time and then id in the server's order: the
+ * cursor for loading earlier ones, exact even among messages of one instant.
+ */
+export function oldestCursor(messages: readonly ChannelMessage[]): { before: string; beforeId: string } | null {
+  let oldest: ChannelMessage | null = null;
+  for (const message of messages) {
+    if (!oldest || message.createdAt < oldest.createdAt || (message.createdAt === oldest.createdAt && message.id < oldest.id)) oldest = message;
+  }
+  return oldest ? { before: oldest.createdAt, beforeId: oldest.id } : null;
 }
 
 /**

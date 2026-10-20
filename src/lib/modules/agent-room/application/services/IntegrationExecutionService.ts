@@ -74,6 +74,15 @@ export type InboundChannelMessage = {
 
 // Slack pages hold 50 messages; a poll reads at most this many pages before advancing.
 const SLACK_MAX_PAGES = 20;
+const SLACK_TS = /^\d{1,12}(?:\.\d{1,6})?$/;
+
+/** The Slack timestamp one microsecond before `ts`: as a bound that excludes itself, it still includes `ts`. */
+export function slackTsBefore(ts: string): string {
+  const [seconds, fraction = ''] = ts.split('.');
+  const micros = Number(fraction.padEnd(6, '0'));
+  if (micros > 0) return `${seconds}.${String(micros - 1).padStart(6, '0')}`;
+  return `${Math.max(0, Number(seconds) - 1)}.999999`;
+}
 
 export class IntegrationExecutionService {
   constructor(private readonly http = new TrustedIntegrationHttpClient()) {}
@@ -585,15 +594,22 @@ export class IntegrationExecutionService {
       if (!input.chatId) throw new Error('Slack channel is required.');
       const token = await this.secret(integration, 'slack.read_messages', 'slack.com');
       // First poll only sets the starting point, so old history is never replayed to the agent.
-      const oldest = input.cursor ?? String(Date.now() / 1000);
-      if (!input.cursor) return { messages: [], cursor: oldest };
-      // Slack returns the newest messages first, a page at a time: every page after
-      // `oldest` is read before the cursor moves past them.
-      let next = oldest;
+      if (!input.cursor) return { messages: [], cursor: String(Date.now() / 1000) };
+      // Slack returns the newest messages first, a page at a time. The cursor is
+      // how far the chat was read ("oldest"); while a backlog larger than one
+      // poll is caught up, it also holds the end of the older part still to
+      // read ("oldest:latest"), so messages always reach the agent in order and
+      // the cursor never moves past one that was not read.
+      const [oldest, bound] = input.cursor.split(':');
+      const latest = bound && SLACK_TS.test(bound) ? bound : null;
+      let newest: string | null = null;
+      let earliest: string | null = null;
+      let complete = false;
       let pageCursor: string | null = null;
       const messages: InboundChannelMessage[] = [];
       for (let page = 0; page < SLACK_MAX_PAGES; page += 1) {
         const query = new URLSearchParams({ channel: input.chatId, oldest, limit: '50' });
+        if (latest) query.set('latest', latest);
         if (pageCursor) query.set('cursor', pageCursor);
         const response = await this.http.request(`https://slack.com/api/conversations.history?${query}`, {
           headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
@@ -603,7 +619,9 @@ export class IntegrationExecutionService {
         for (const raw of Array.isArray(data.messages) ? data.messages.slice(0, 50) : []) {
           const message = record(raw);
           const ts = String(message.ts ?? '');
-          if (ts && Number(ts) > Number(next)) next = ts;
+          if (!SLACK_TS.test(ts)) continue;
+          if (newest === null || Number(ts) > Number(newest)) newest = ts;
+          if (earliest === null || Number(ts) < Number(earliest)) earliest = ts;
           const text = String(message.text ?? '').trim();
           if (!text || message.bot_id || message.subtype) continue;
           messages.push({
@@ -617,9 +635,20 @@ export class IntegrationExecutionService {
           });
         }
         const following = String(record(data.response_metadata).next_cursor ?? '').trim();
-        if (data.has_more !== true || !following) break;
+        if (data.has_more !== true || !following) {
+          complete = true;
+          break;
+        }
         pageCursor = following;
       }
+      if (!complete) {
+        // More than one poll holds: nothing is handed over yet. The older part,
+        // up to the oldest message read here, is read first; these newer
+        // messages are read again after it.
+        return { messages: [], cursor: earliest ? `${oldest}:${earliest}` : input.cursor };
+      }
+      // A finished window was read whole, so the next read starts right below its end.
+      const next = latest ? slackTsBefore(latest) : newest && Number(newest) > Number(oldest) ? newest : oldest;
       return { messages: messages.sort((a, b) => Number(a.externalId) - Number(b.externalId)), cursor: next };
     }
     throw new Error('This integration cannot deliver messages to an agent.');

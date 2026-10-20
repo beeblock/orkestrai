@@ -3,6 +3,8 @@ import { MAX_CHANNEL_BODY, MAX_OPTION_LENGTH, MAX_QUESTION_OPTIONS } from '../..
 
 export const listChannelMessagesSchema = z.object({
   before: z.string().datetime().nullable().optional(),
+  /** The id of the oldest message held, so a page continues past others of the same instant. */
+  beforeId: z.string().trim().min(1).max(200).nullable().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(80),
 });
 

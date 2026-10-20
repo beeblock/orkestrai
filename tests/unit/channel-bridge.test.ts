@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChannelBridgeService } from '$lib/modules/agent-room/application/services/ChannelBridgeService.js';
 import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
-import { IntegrationExecutionService, integrationExecutionService } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
+import { IntegrationExecutionService, integrationExecutionService, slackTsBefore } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
 import { channelBindingRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelBindingRepository.js';
 import { senderAllowed, type ChannelBinding } from '$lib/modules/agent-room/domain/channels.js';
 
@@ -61,6 +61,44 @@ describe('channel bridge', () => {
     expect(messages.map((message) => message.text)).toEqual(['third', 'fourth', 'newest']);
     expect(messages.every((message) => message.senderHandle === null)).toBe(true);
     expect(cursor).toBe('1700000005.000000');
+  });
+
+  it('catches up a Slack backlog larger than one poll in order, without skipping a message', async () => {
+    // 1,150 messages after the cursor, one per second; Slack pages newest first within (oldest, latest).
+    const all = Array.from({ length: 1_150 }, (_, index) => ({ ts: `${1_700_001_001 + index}.000100`, user: 'U1', text: `Mensagem ${index}` }));
+    const request = vi.fn().mockImplementation(async (address: string) => {
+      const query = new URL(address).searchParams;
+      const oldest = Number(query.get('oldest'));
+      const latest = query.has('latest') ? Number(query.get('latest')) : Infinity;
+      const window = all.filter((message) => Number(message.ts) > oldest && Number(message.ts) < latest).reverse();
+      const start = Number(query.get('cursor') ?? 0);
+      const page = window.slice(start, start + 50);
+      const more = start + 50 < window.length;
+      return { ok: true, status: 200, json: { ok: true, has_more: more, response_metadata: { next_cursor: more ? String(start + 50) : '' }, messages: page } };
+    });
+    const service = new IntegrationExecutionService({ request } as never);
+    vi.spyOn(service as unknown as Internals, 'requireIntegration').mockResolvedValue({ type: 'slack', enabled: true, status: 'connected', permissions: ['slack.read_messages'] } as never);
+    vi.spyOn(service as unknown as Internals, 'secret').mockResolvedValue('xoxb' as never);
+
+    let cursor = '1700001000.000000';
+    const delivered: string[] = [];
+    for (let poll = 0; poll < 6 && delivered.length < all.length; poll += 1) {
+      const result = await service.pollInbound('w', 'sl', { cursor, chatId: 'C1' });
+      expect(request.mock.calls.length).toBeLessThanOrEqual(20 * (poll + 1));
+      delivered.push(...result.messages.map((message) => message.externalId));
+      cursor = result.cursor!;
+    }
+    expect(delivered).toEqual(all.map((message) => message.ts));
+    expect(cursor).toBe(all.at(-1)!.ts);
+    // Nothing new: the cursor stays.
+    expect(await service.pollInbound('w', 'sl', { cursor, chatId: 'C1' })).toEqual({ messages: [], cursor });
+  });
+
+  it('bounds a Slack window right below a timestamp', () => {
+    expect(slackTsBefore('1700000005.000123')).toBe('1700000005.000122');
+    expect(slackTsBefore('1700000005.000000')).toBe('1700000004.999999');
+    expect(slackTsBefore('1700000005.5')).toBe('1700000005.499999');
+    expect(slackTsBefore('1700000005')).toBe('1700000004.999999');
   });
 
   it('moves the chat cursor only after every message reached the agent', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answersByQuestion, buildTimeline, upsertMessage } from '../../src/lib/components/agent-room/chat/chat-timeline.js';
+import { answersByQuestion, buildTimeline, oldestCursor, upsertMessage } from '../../src/lib/components/agent-room/chat/chat-timeline.js';
 import type { ChannelMessage } from '../../src/lib/modules/agent-room/domain/channels.js';
 
 function message(id: string, minute: number, extra: Partial<ChannelMessage> = {}): ChannelMessage {
@@ -20,6 +20,12 @@ function message(id: string, minute: number, extra: Partial<ChannelMessage> = {}
 }
 
 describe('chat timeline', () => {
+  it('loads earlier messages from the exact oldest one held, even among messages of one instant', () => {
+    expect(oldestCursor([])).toBeNull();
+    const held = [message('b', 3), message('envelope:a', 1), message('c', 1), message('a', 1), message('d', 2)];
+    expect(oldestCursor(held)).toEqual({ before: held[1].createdAt, beforeId: 'a' });
+  });
+
   it('groups one author within five minutes and keeps questions and events apart', () => {
     const rows = buildTimeline([
       message('3', 4),

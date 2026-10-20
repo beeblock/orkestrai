@@ -85,7 +85,10 @@ async function setup(role: 'viewer' | 'operator' | 'administrator' = 'operator')
 describe('collaboration host core', () => {
   useSvelarTest({ refreshDatabase: true });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   it('projects only allowlisted workspace data and redacts paths, secrets, and private URLs', async () => {
     const { share } = await setup();
@@ -199,6 +202,8 @@ describe('collaboration host core', () => {
   it('shares the Conversa with operators, who post, answer and page it without the agents talking to each other', async () => {
     const { share, workspace, device, agent } = await setup('operator');
     vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+    // The answer really lands in the agent's inbox; no terminal is opened to deliver it.
+    vi.spyOn(agentInboxService, 'kick').mockImplementation(() => undefined);
     const direct = `dm:${agent.id}`;
     const question = await channelService.askOwner(workspace.id, { nodeId: agent.id, title: 'Leader' }, { question: 'Publish to the store?', options: ['Yes', 'Not yet'] });
     await controlCenterService.recordDelivery({
@@ -241,11 +246,63 @@ describe('collaboration host core', () => {
     expect(latest.messages).toHaveLength(60);
     expect(latest.messages.at(-1)?.body.startsWith('progress 69 ')).toBe(true);
     expect(latest.messages.every((message) => !message.clipped)).toBe(true);
-    const earlier = await sharedWorkspaceQuery.chatPage(share.id, direct, latest.messages[0].createdAt);
+    const earlier = await sharedWorkspaceQuery.chatPage(share.id, direct, latest.messages[0].createdAt, latest.messages[0].id);
     expect(earlier.hasOlder).toBe(false);
     expect(earlier.messages).toHaveLength(total - 60);
     expect(earlier.messages[0].body).toBe('Publish to the store?');
+    // A companion that sends only the time gets that instant again, never less.
+    const legacy = await sharedWorkspaceQuery.chatPage(share.id, direct, latest.messages[0].createdAt);
+    expect(legacy.messages.map((message) => message.id)).toEqual([...earlier.messages.map((message) => message.id), latest.messages[0].id]);
     await expect(sharedWorkspaceQuery.chatPage(share.id, `dm:${uuidv7()}`, null)).rejects.toThrow('CHAT_CHANNEL_NOT_FOUND');
+  });
+
+  it('pages through messages written in the same millisecond without skipping or repeating one', async () => {
+    const { share, workspace, agent } = await setup('operator');
+    const direct = `dm:${agent.id}`;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T16:00:00.000Z'));
+    for (let index = 0; index < 65; index += 1) {
+      await channelRepository.save({ workspaceId: workspace.id, channel: direct, authorKind: 'agent', authorNodeId: agent.id, body: `Mensagem ${index}` });
+    }
+    // The team channel mixes its posts with the agents' asks to each other.
+    for (let index = 0; index < 20; index += 1) {
+      await channelRepository.save({ workspaceId: workspace.id, channel: 'team', authorKind: 'agent', authorNodeId: agent.id, body: `Equipe ${index}` });
+      await controlCenterService.recordDelivery({ messageId: uuidv7(), workspaceId: workspace.id, fromNodeId: agent.id, toNodeId: agent.id, state: 'queued', content: `Pedido ${index}` });
+    }
+    vi.useRealTimers();
+    const stored = await channelRepository.list(workspace.id, direct, { limit: 200 });
+    expect(new Set(stored.map((message) => message.createdAt)).size).toBe(1);
+
+    const latest = await sharedWorkspaceQuery.chatPage(share.id, direct, null);
+    expect(latest.messages).toHaveLength(60);
+    expect(latest.hasOlder).toBe(true);
+    const oldest = latest.messages[0];
+    const older = await sharedWorkspaceQuery.chatPage(share.id, direct, oldest.createdAt, oldest.id);
+    expect(older.messages).toHaveLength(5);
+    expect(older.hasOlder).toBe(false);
+    const seen = [...older.messages, ...latest.messages].map((message) => message.id);
+    expect(new Set(seen).size).toBe(65);
+    expect(seen).toEqual(stored.map((message) => message.id).reverse());
+
+    // The app's own Conversa pages the same way.
+    const page = await channelService.listMessages(workspace.id, direct, { limit: 40 });
+    const last = page.at(-1)!;
+    const rest = await channelService.listMessages(workspace.id, direct, { before: last.createdAt, beforeId: last.id, limit: 40 });
+    expect(rest).toHaveLength(25);
+    expect(new Set([...page, ...rest].map((message) => message.id)).size).toBe(65);
+
+    const team: string[] = [];
+    let cursor: { before?: string; beforeId?: string } = {};
+    for (let read = 0; read < 10; read += 1) {
+      const chunk = await channelService.listMessages(workspace.id, 'team', { ...cursor, limit: 15 });
+      team.push(...chunk.map((message) => message.id));
+      if (chunk.length < 15) break;
+      cursor = { before: chunk.at(-1)!.createdAt, beforeId: chunk.at(-1)!.id };
+    }
+    // Page by page reads exactly what one long read does, in the same order.
+    expect(team).toEqual((await channelService.listMessages(workspace.id, 'team', { limit: 200 })).map((message) => message.id));
+    expect(team.filter((id) => id.startsWith('envelope:'))).toHaveLength(20);
+    expect(team.filter((id) => !id.startsWith('envelope:')).length).toBeGreaterThanOrEqual(20);
   });
 
   it('keeps the shared Conversa inside one frame beside a large workspace', async () => {

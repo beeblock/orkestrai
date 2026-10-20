@@ -185,6 +185,11 @@ export class AttentionService {
     return resolved;
   }
 
+  /** Tells the screens that a workspace's items changed in a transaction that has now committed. */
+  announce(workspaceId: string): void {
+    broadcast(workspaceId);
+  }
+
   /** Closes what a removed node left open: no one can act on it any more. */
   async resolveNode(workspaceId: string, nodeId: string): Promise<number> {
     const resolved = await attentionRepository.resolveNode(workspaceId, nodeId);

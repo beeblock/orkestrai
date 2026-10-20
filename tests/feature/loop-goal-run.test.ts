@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
+import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
+import { agentSessionService } from '$lib/modules/agent-room/application/services/AgentSessionService.js';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
+import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
@@ -20,6 +24,7 @@ describe('a loop goal belongs to the run that asked for it', () => {
   const sessions: string[] = [];
   afterEach(() => {
     for (const session of sessions.splice(0)) ptySessionManager.kill(session);
+    vi.restoreAllMocks();
   });
 
   it('stops a loop only on goal text written after its latest prompt, in the same terminal', { timeout: 30_000 }, async () => {
@@ -56,5 +61,52 @@ describe('a loop goal belongs to the run that asked for it', () => {
     sessions.push(second.id);
     await written(second.id, workspace.id, node.id, 'ALL TESTS PASS');
     expect(await retire(routine)).toBe(false);
+  });
+
+  it('counts nothing while a run prompt waits for the terminal, and counts from the Enter that submits it', { timeout: 30_000 }, async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'loop', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev', payload: { provider: 'codex' } });
+    const pty = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', workspaceId: workspace.id, nodeId: node.id });
+    sessions.push(pty.id);
+    const routine = {
+      id: '01a15042-3362-7000-8000-0000000000f2', workspaceId: workspace.id, name: 'Testes', enabled: true,
+      triggerType: 'schedule', triggerConfig: { goal: 'ALL TESTS PASS', intervalMinutes: 5 },
+      actionType: 'prompt_agent', actionConfig: { targetNodeId: node.id, prompt: 'Rode os testes e diga ALL TESTS PASS quando passarem.' },
+      lastRunAt: new Date().toISOString(),
+    };
+    const internals = routineService as unknown as {
+      retireIfGoalMet: (value: unknown) => Promise<boolean>;
+      executeActionUnchecked: (value: unknown, input: unknown, runId: string, signal: AbortSignal) => Promise<unknown>;
+    };
+    const retire = () => internals.retireIfGoalMet.call(routineService, routine);
+    const marks = (globalThis as { __orkestraiLoopRunMarks?: Map<string, { sessionId: string; length: number }> }).__orkestraiLoopRunMarks!;
+    vi.spyOn(agentRuntimeService, 'assertAutomaticWorkAllowed').mockResolvedValue();
+    vi.spyOn(autonomyPolicyService, 'get').mockResolvedValue({ policy: { computerReplyGrants: [] } } as never);
+    vi.spyOn(agentSessionService, 'ensure').mockResolvedValue({ nodeId: node.id, sessionId: pty.id, state: 'existing' } as never);
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    let submitted: ((mark: { sessionId: string; length: number }) => void) | undefined;
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockImplementation(async (input) => {
+      submitted = input.onSubmitted;
+      await waiting;
+    });
+
+    // An earlier run's mark, and its terminal later printing the goal phrase for other work.
+    marks.set(routine.id, ptySessionManager.outputMark(workspace.id, node.id)!);
+    await written(pty.id, workspace.id, node.id, 'outro trabalho: ALL TESTS PASS');
+    const running = internals.executeActionUnchecked.call(routineService, routine, {}, 'run-1', new AbortController().signal);
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
+    // The new prompt still waits: nothing counts, not even what the earlier mark would.
+    expect(await retire()).toBe(false);
+    await written(pty.id, workspace.id, node.id, 'ainda o trabalho anterior: ALL TESTS PASS');
+    expect(await retire()).toBe(false);
+
+    // Enter submits it: from there on, the agent's answer counts.
+    submitted!(ptySessionManager.outputMark(workspace.id, node.id)!);
+    release();
+    await running;
+    expect(await retire()).toBe(false);
+    await written(pty.id, workspace.id, node.id, 'ALL TESTS PASS');
+    expect(await retire()).toBe(true);
   });
 });
