@@ -104,14 +104,27 @@ export class ChannelRepository {
     return rows.map(mapChannelMessage);
   }
 
-  /** Marks a question answered once; returns false when it already was. */
+  /**
+   * Marks a question answered once; returns false when it already was. The
+   * conditional update decides: of two answers at the same moment, one wins.
+   */
   async markAnswered(workspaceId: string, id: string): Promise<boolean> {
-    const model = await AgentChannelMessage.find(id);
-    if (!model || model.getAttribute('workspace_id') !== workspaceId || model.getAttribute('answered_at')) return false;
     const now = new Date().toISOString();
-    await AgentChannelMessage.query().where('id', id).whereNull('answered_at').update({ answered_at: now, updated_at: now });
-    const updated = await AgentChannelMessage.find(id);
-    return toIso(updated?.getAttribute('answered_at') ?? 0) === now;
+    const changed = await AgentChannelMessage.query()
+      .where('id', id)
+      .where('workspace_id', workspaceId)
+      .whereNull('answered_at')
+      .update({ answered_at: now, updated_at: now });
+    return Number(changed) > 0;
+  }
+
+  /** Opens a question again, when the answer it got could not reach the agent that asked. */
+  async clearAnswered(workspaceId: string, id: string): Promise<void> {
+    await AgentChannelMessage.query().where('id', id).where('workspace_id', workspaceId).update({ answered_at: null, updated_at: new Date().toISOString() });
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await AgentChannelMessage.query().where('id', id).where('workspace_id', workspaceId).delete();
   }
 
   /** Merges fields into a message's meta; null when it is not in this workspace. */

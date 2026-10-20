@@ -15,7 +15,7 @@
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
-  import { answersByQuestion, buildTimeline, mergeLoaded, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
+  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCreatedAt, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
@@ -116,6 +116,12 @@
       .filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
       .map((node) => ({ id: node.id, title: node.title ?? m['canvas.fallback_terminal'](), payload: node.payload as TerminalNodePayload }));
     channels = summaries.channels;
+    // A conversation asked for in the link but with no such agent here opens the team channel.
+    const requested = directChannelNode(channel);
+    if (requested && !agents.some((agent) => agent.id === requested)) {
+      channel = TEAM_CHANNEL;
+      syncUrl();
+    }
     const [routineList, bindingList] = await Promise.all([
       api<Routine[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/routines`).catch(() => []),
       api<ChannelBinding[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channel-bindings`).catch(() => []),
@@ -147,7 +153,7 @@
     if (!workspaceId) return;
     const id = workspaceId;
     const current = channel;
-    const before = older ? messages[0]?.createdAt : null;
+    const before = older ? oldestCreatedAt(messages) : null;
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
     if (before) params.set('before', before);
     if (older) loadingOlder = true;
@@ -157,7 +163,7 @@
       hasOlder = page.length >= PAGE_SIZE;
       if (older) {
         const height = scroller?.scrollHeight ?? 0;
-        messages = [...page, ...messages].filter((message, index, list) => list.findIndex((candidate) => candidate.id === message.id) === index);
+        messages = mergeOlder(page, messages);
         await tick();
         if (scroller) scroller.scrollTop += scroller.scrollHeight - height;
       } else {

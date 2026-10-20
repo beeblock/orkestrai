@@ -224,6 +224,51 @@ describe('FloorService', () => {
     expect((await AgentFloor.find(floor.id))?.getAttribute('status')).toBe('archived');
   });
 
+  it('keeps a floor that brings back content main had before the floor started', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    git(dir, ['commit', '-am', 'v2 antes do andar']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'revert' });
+    // The floor reverts app.ts to the first version, which main held before the fork.
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 1;\n');
+    git(floor.path, ['commit', '-am', 'reverte v2']);
+    writeFileSync(join(dir, 'other.ts'), 'export const later = 1;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'trabalho na main']);
+
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ safeToRemove: false, blockers: ['unmerged_commits_review_required'] });
+    expect(audit.integration).not.toBe('content_integrated');
+    await expect(floorService.remove(floor.id)).rejects.toThrow('unmerged_commits_review_required');
+  });
+
+  it('keeps a floor whose only change is a file mode main lacks', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho ok\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'script']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'chmod' });
+    chmodSync(join(floor.path, 'run.sh'), 0o755);
+    git(floor.path, ['commit', '-am', 'torna executavel']);
+    // Main touches the same file's content but never makes it executable.
+    writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho ok\n# nota\n');
+    git(dir, ['commit', '-am', 'nota']);
+    writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho ok\n');
+    git(dir, ['commit', '-am', 'volta o conteudo']);
+
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit.integration).not.toBe('content_integrated');
+    expect(audit.safeToRemove).toBe(false);
+
+    // Once main also makes it executable, the floor's work is there.
+    chmodSync(join(dir, 'run.sh'), 0o755);
+    git(dir, ['commit', '-am', 'executavel na main']);
+    const [after] = await floorService.audit(workspace.id);
+    expect(after).toMatchObject({ integration: 'content_integrated', safeToRemove: true });
+  });
+
   it('keeps a floor whose files differ from main', async () => {
     const dir = makeRepo();
     const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });

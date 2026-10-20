@@ -109,12 +109,17 @@ export type ChannelBinding = {
   createdAt: string;
 };
 
-/** Whether an inbound sender may talk to the agent: an empty list allows the whole chat. */
-export function senderAllowed(binding: Pick<ChannelBinding, 'allowedSenders'>, senderId: string, senderName: string): boolean {
+/**
+ * Whether an inbound sender may talk to the agent: an empty list allows the
+ * whole chat. Only identities the platform verifies count: the sender id, or
+ * a username the platform reserves for that account (Telegram's @handle).
+ * Display names are chosen freely by anyone, so they never match.
+ */
+export function senderAllowed(binding: Pick<ChannelBinding, 'allowedSenders'>, senderId: string, senderHandle: string | null): boolean {
   if (!binding.allowedSenders.length) return true;
-  const name = senderName.replace(/^@/, '').toLowerCase();
+  const handle = senderHandle?.trim().replace(/^@/, '').toLowerCase() || null;
   return binding.allowedSenders.some((allowed) => {
     const value = allowed.trim().replace(/^@/, '').toLowerCase();
-    return Boolean(value) && (value === senderId.toLowerCase() || value === name);
+    return Boolean(value) && (value === senderId.toLowerCase() || value === handle);
   });
 }

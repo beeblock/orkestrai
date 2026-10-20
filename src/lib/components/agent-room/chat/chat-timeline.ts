@@ -60,16 +60,31 @@ export function answersByQuestion(messages: readonly ChannelMessage[]): Map<stri
   return answers;
 }
 
+function chronological(a: ChannelMessage, b: ChannelMessage): number {
+  return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+}
+
+/** The creation time of the oldest message held, the cursor for loading earlier ones. */
+export function oldestCreatedAt(messages: readonly ChannelMessage[]): string | null {
+  return messages.reduce<string | null>((min, message) => (min === null || message.createdAt < min ? message.createdAt : min), null);
+}
+
 /**
- * A freshly loaded page, plus messages that arrived live while it loaded: a
- * message broadcast between the request and its response must not vanish.
+ * A freshly loaded page (the API sends it newest first), plus messages that
+ * arrived live while it loaded: a message broadcast between the request and
+ * its response must not vanish. Oldest first.
  */
 export function mergeLoaded(loaded: readonly ChannelMessage[], live: readonly ChannelMessage[]): ChannelMessage[] {
-  const oldest = loaded.reduce<string | null>((min, message) => (min === null || message.createdAt < min ? message.createdAt : min), null);
+  const oldest = oldestCreatedAt(loaded);
   const ids = new Set(loaded.map((message) => message.id));
   const arrived = live.filter((message) => !ids.has(message.id) && (oldest === null || message.createdAt >= oldest));
-  if (!arrived.length) return [...loaded];
-  return [...loaded, ...arrived].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return [...loaded, ...arrived].sort(chronological);
+}
+
+/** Earlier messages added in front of the ones held, without repeats. Oldest first. */
+export function mergeOlder(older: readonly ChannelMessage[], messages: readonly ChannelMessage[]): ChannelMessage[] {
+  const ids = new Set(messages.map((message) => message.id));
+  return [...older.filter((message) => !ids.has(message.id)), ...messages].sort(chronological);
 }
 
 /** Inserts or replaces a message by id, keeping the list free of duplicates. */

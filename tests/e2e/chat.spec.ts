@@ -28,20 +28,26 @@ test.describe('Chat', () => {
       const { questionId, routedTo } = (await asked.json()).data;
       expect(routedTo).toBe('leader');
       await expect(page.getByTestId('needs-you-list')).toHaveCount(0);
-      const escalated = await request.post('/api/agent-room/bridge/escalate-question', { data: { token, from: 'Lead', questionId, note: 'Instalar dependência nova é do dono' } });
-      expect(escalated.status()).toBe(200);
+      expect(questionId).toBeTruthy();
+      // Only the leader's live terminal may bring it to the owner; the shared workspace token cannot.
+      const spoofed = await request.post('/api/agent-room/bridge/escalate-question', { data: { token, from: 'Lead', questionId, note: 'Instalar dependência nova é do dono' } });
+      expect(spoofed.status()).toBe(403);
+
+      // The leader's own question goes straight to the owner.
+      const own = await request.post('/api/agent-room/bridge/ask-owner', { data: { token, from: 'Lead', question: 'Posso instalar o sharp?', options: ['Sim', 'Não'] } });
+      expect((await own.json()).data.routedTo).toBe('owner');
       await expect(page.getByTestId('needs-you-list')).toContainText('Posso instalar o sharp?');
 
-      await page.getByRole('button', { name: /QA Upload/ }).first().click();
+      await page.getByRole('button', { name: /Lead/ }).first().click();
       const question = page.getByTestId('chat-question');
       await expect(question).toContainText('Posso instalar o sharp?');
       await question.getByRole('button', { name: 'Sim', exact: true }).click();
       await expect(question).toContainText('Respondida');
       await expect(page.getByTestId('needs-you-list')).toHaveCount(0);
 
-      const messages = (await (await request.get(`${base}/channels/${encodeURIComponent(`dm:${qa.id}`)}/messages`)).json()).data as Array<{ kind: string; body: string }>;
+      const messages = (await (await request.get(`${base}/channels/${encodeURIComponent(`dm:${leader.id}`)}/messages`)).json()).data as Array<{ kind: string; body: string }>;
       expect(messages.some((message) => message.kind === 'answer' && message.body === 'Sim')).toBe(true);
-      expect(leader.id).toBeTruthy();
+      expect(qa.id).toBeTruthy();
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }
@@ -116,6 +122,32 @@ test.describe('Chat', () => {
       await composer.fill('oi');
       await expect(page.getByRole('button', { name: 'Mensagem de voz' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Enviar', exact: true })).toBeEnabled();
+    } finally {
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    }
+  });
+
+  test('switching from the Canvas to Chat keeps the selected agent, and a non-agent opens the team', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-chat-switch-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `E2E chat switch ${Date.now()}`, workingDir: dir } })).json()).data;
+    const base = `/api/agent-room/workspaces/${workspace.id}`;
+    try {
+      const make = async (data: Record<string, unknown>) => (await (await request.post(`${base}/nodes`, { data })).json()).data;
+      const qa = await make({ type: 'terminal', title: 'QA Upload', x: 80, y: 80, width: 480, height: 320, payload: { provider: 'claude', args: [] } });
+      const note = await make({ type: 'note', title: 'Plano', x: 640, y: 80, width: 320, height: 240, payload: { content: 'x' } });
+
+      await page.goto(`/canvas?workspace=${workspace.id}&node=${qa.id}`);
+      const chatLink = page.getByRole('link', { name: 'Conversa', exact: true });
+      // Once the Canvas has loaded, the switch carries the agent shown.
+      await expect(chatLink).toHaveAttribute('href', new RegExp(`channel=dm%3A${qa.id}`));
+      await chatLink.click();
+      await expect(page).toHaveURL(new RegExp(`channel=dm%3A${qa.id}`));
+      const channels = page.getByRole('navigation', { name: 'Canais e mensagens diretas' });
+      await expect(channels.getByRole('button', { name: /QA Upload/ })).toHaveAttribute('aria-current', 'page');
+
+      await page.goto(`/chat?workspace=${workspace.id}&channel=${encodeURIComponent(`dm:${note.id}`)}`);
+      await expect(page).not.toHaveURL(/channel=/);
+      await expect(channels.getByRole('button', { name: /equipe/ })).toHaveAttribute('aria-current', 'page');
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }

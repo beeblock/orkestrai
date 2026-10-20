@@ -165,16 +165,20 @@ async function processWorkingDirectories(): Promise<string[] | null> {
   }
 }
 
-/** `path\0blob` for each change in `git diff|log --raw -z` output; deletions carry the zero blob. */
+/**
+ * `path\0mode\0blob` for each change in `git diff|log --raw -z` output: the
+ * file's final mode and content (deletions carry mode 000000 and the zero
+ * blob), so a change of permissions alone is a change too.
+ */
 function rawChanges(output: string): Set<string> {
   const changes = new Set<string>();
   const tokens = output.split('\0');
   for (let index = 0; index < tokens.length - 1; index++) {
     const meta = tokens[index].replace(/^\n+/, '');
     if (!meta.startsWith(':')) continue;
-    const blob = meta.split(' ')[3];
+    const [, mode, , blob] = meta.split(' ');
     const path = tokens[++index];
-    if (blob && path) changes.add(`${path}\0${blob}`);
+    if (mode && blob && path) changes.add(`${path}\0${mode}\0${blob}`);
   }
   return changes;
 }
@@ -715,9 +719,11 @@ export class FloorService {
   }
 
   /**
-   * True when the target's history once held every file exactly as the floor
-   * left it: the work reached the target by copy or port, even if the target
-   * changed those files later. Each change is a path and its final blob.
+   * True when the target, since the floor forked from it, once held every file
+   * exactly as the floor left it (content and mode): the work reached the
+   * target by copy or port, even if the target changed those files later.
+   * Content the target held before the fork proves nothing about the floor's
+   * work, as when a floor brings back an older version of a file.
    */
   private async contentIntegrated(workspace: Workspace, head: string, targetHead: string): Promise<boolean> {
     try {
@@ -725,7 +731,7 @@ export class FloorService {
       if (!fork) return false;
       const changes = rawChanges(await this.git(workspace, workspace.workingDir, ['diff', '--raw', '--no-renames', '--no-abbrev', '-z', fork, head]));
       if (!changes.size) return false;
-      const history = await this.targetHistory(workspace, targetHead);
+      const history = await this.targetHistory(workspace, fork, targetHead);
       for (const change of changes) if (!history.has(change)) return false;
       return true;
     } catch {
@@ -733,12 +739,12 @@ export class FloorService {
     }
   }
 
-  /** Every (path, blob) the target's recent history introduced, cached per target commit. */
-  private targetHistory(workspace: Workspace, targetHead: string): Promise<Set<string>> {
-    const key = `${workspace.id}:${targetHead}`;
+  /** Every (path, mode, blob) the target's history introduced after `fork`, cached per range. */
+  private targetHistory(workspace: Workspace, fork: string, targetHead: string): Promise<Set<string>> {
+    const key = `${workspace.id}:${fork}..${targetHead}`;
     let pending = this.histories.get(key);
     if (!pending) {
-      pending = this.git(workspace, workspace.workingDir, ['log', '--format=', '--raw', '--no-renames', '--no-abbrev', '-z', '-n', '5000', targetHead]).then(rawChanges);
+      pending = this.git(workspace, workspace.workingDir, ['log', '--format=', '--raw', '--no-renames', '--no-abbrev', '-z', '-n', '5000', `${fork}..${targetHead}`]).then(rawChanges);
       this.histories.set(key, pending);
       pending.catch(() => this.histories.delete(key));
       for (const stale of [...this.histories.keys()].slice(0, Math.max(0, this.histories.size - 4))) this.histories.delete(stale);

@@ -5,8 +5,6 @@ import { channelService } from './ChannelService.js';
 
 const SLACK_INTERVAL_MS = 15_000;
 const RETRY_DELAY_MS = 60_000;
-/** Replies are mirrored to a chat only while its conversation is recent. */
-const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 type Loop = { stop: () => void };
 
@@ -14,8 +12,8 @@ type Loop = { stop: () => void };
  * Connects agents to external chats. One loop per Telegram integration (its
  * updates are acknowledged per bot token) and one per Slack binding. Inbound
  * messages from allowed senders land in the agent's direct conversation and
- * inbox; the agent's posts to that conversation are mirrored back through the
- * integration, under the workspace autonomy policy.
+ * inbox; an agent's post that replies to one of them goes back to that chat
+ * only, through the integration, under the workspace autonomy policy.
  */
 export class ChannelBridgeService {
   private loops = new Map<string, Loop>();
@@ -67,12 +65,7 @@ export class ChannelBridgeService {
             chatId: first.kind === 'slack' ? first.externalChatId : null,
             waitSeconds: 20,
           });
-          if (result.cursor !== cursor) {
-            cursor = result.cursor;
-            if (first.kind === 'telegram') await channelBindingRepository.updateIntegrationCursor(first.integrationId, cursor);
-            else await channelBindingRepository.update(first.id, { cursor });
-          }
-          for (const message of result.messages) await this.dispatch(group, message);
+          cursor = await this.consume(first, group, cursor, result);
           for (const binding of group) if (binding.lastError) await channelBindingRepository.update(binding.id, { lastError: null });
           if (first.kind === 'slack') await delay(SLACK_INTERVAL_MS, () => stopped);
         } catch (error) {
@@ -86,10 +79,29 @@ export class ChannelBridgeService {
     return { stop: () => { stopped = true; } };
   }
 
+  /**
+   * Hands a polled batch to the agents, then records how far the chat was
+   * read. The cursor moves only once every message is stored: after a failure
+   * the same messages are read again, and the ones already stored are not
+   * stored twice. Returns the cursor to poll from next.
+   */
+  private async consume(
+    first: ChannelBinding,
+    group: ChannelBinding[],
+    cursor: string | null,
+    result: { messages: InboundChannelMessage[]; cursor: string | null },
+  ): Promise<string | null> {
+    for (const message of result.messages) await this.dispatch(group, message);
+    if (result.cursor === cursor) return cursor;
+    if (first.kind === 'telegram') await channelBindingRepository.updateIntegrationCursor(first.integrationId, result.cursor);
+    else await channelBindingRepository.update(first.id, { cursor: result.cursor });
+    return result.cursor;
+  }
+
   private async dispatch(group: ChannelBinding[], message: InboundChannelMessage): Promise<void> {
     for (const binding of group) {
       if (binding.externalChatId !== message.chatId) continue;
-      if (!senderAllowed(binding, message.senderId, message.senderName)) continue;
+      if (!senderAllowed(binding, message.senderId, message.senderHandle)) continue;
       await channelService.postExternal(binding.workspaceId, binding.nodeId, {
         body: message.text,
         via: binding.kind,
@@ -101,10 +113,13 @@ export class ChannelBridgeService {
     }
   }
 
-  /** Sends an agent's post to the chats that talked to it recently. Never blocks the post. */
-  async mirrorReply(workspaceId: string, nodeId: string, messageId: string, body: string): Promise<void> {
+  /**
+   * Sends an agent's reply to the one external chat whose message it answers.
+   * Never blocks the post; a binding that is gone or disabled gets nothing.
+   */
+  async mirrorReply(workspaceId: string, nodeId: string, messageId: string, body: string, bindingId: string): Promise<void> {
     const bindings = (await channelBindingRepository.list(workspaceId, nodeId).catch(() => []))
-      .filter((binding) => binding.enabled && binding.lastInboundAt && Date.now() - Date.parse(binding.lastInboundAt) <= REPLY_WINDOW_MS);
+      .filter((binding) => binding.id === bindingId && binding.enabled);
     for (const binding of bindings) {
       try {
         await integrationExecutionService.execute(workspaceId, {

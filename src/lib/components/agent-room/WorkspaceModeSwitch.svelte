@@ -21,7 +21,12 @@
       const current = new URLSearchParams(location.search);
       if (current.get('workspace') === workspaceId) targetNodeId = current.get('node');
     }
-    if (targetNodeId) params.set('node', targetNodeId);
+    // Chat opens a node as that agent's direct conversation; it falls back to the team
+    // channel when the node is not an agent.
+    if (targetNodeId) {
+      if (path === '/chat') params.set('channel', `dm:${targetNodeId}`);
+      else params.set('node', targetNodeId);
+    }
     const query = params.toString();
     return query ? `${path}?${query}` : path;
   }

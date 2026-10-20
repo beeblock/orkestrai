@@ -101,7 +101,9 @@ export class AttentionService {
   private async handToLeader(activity: AgentActivity): Promise<boolean> {
     const team = await teamLeaderFor(activity.workspaceId, activity.nodeId);
     if (!team) return false;
-    const resolved = await attentionRepository.resolveNode(activity.workspaceId, activity.nodeId);
+    // Only the teammate's state warnings move to the leader. Its approvals, questions
+    // and reviews still wait for the owner: the work stays blocked until they decide.
+    const resolved = await attentionRepository.resolveNodeSources(activity.workspaceId, activity.nodeId, TEAM_SOURCES);
     if (resolved) broadcast(activity.workspaceId);
     const what = [activity.objectTitle ?? activity.action, activity.outcome].filter((part): part is string => Boolean(part?.trim())).join(' — ');
     const { agentInboxService } = await import('./AgentInboxService.js');

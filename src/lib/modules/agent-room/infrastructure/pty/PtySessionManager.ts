@@ -135,6 +135,8 @@ type PtySession = PtySessionInfo & {
   scrollback: string;
   /** Modes in effect where the retained scrollback starts. */
   trimmedModes: Map<string, boolean>;
+  /** Characters this session has output since it started, kept or trimmed. */
+  outputLength: number;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
   attentionListeners: Set<PtyAttentionListener>;
@@ -424,6 +426,7 @@ export class PtySessionManager {
       terminalModeTail: '',
       scrollback: '',
       trimmedModes: new Map(),
+      outputLength: 0,
       listeners: new Set(),
       exitListeners: new Set(),
       attentionListeners: new Set(),
@@ -456,6 +459,7 @@ export class PtySessionManager {
       const resumedFromIdle = session.waiting;
       session.lastOutputAt = Date.now();
       session.outputRevision += 1;
+      session.outputLength += data.length;
       const retained = trimScrollback(session.scrollback + data, SCROLLBACK_LIMIT);
       if (retained.dropped) applyTerminalModes(session.trimmedModes, retained.dropped);
       session.scrollback = retained.kept;
@@ -744,12 +748,34 @@ export class PtySessionManager {
 
   /** Latest output of the node's live session (raw, bounded); null when none is live. */
   outputTail(workspaceId: string, nodeId: string, chars = 8_000): string | null {
+    const latest = this.liveNodeSession(workspaceId, nodeId);
+    return latest ? latest.scrollback.slice(-Math.max(200, chars)) : null;
+  }
+
+  /** Where a node's live terminal output stands now, to read later only what came after. */
+  outputMark(workspaceId: string, nodeId: string): { sessionId: string; length: number } | null {
+    const latest = this.liveNodeSession(workspaceId, nodeId);
+    return latest ? { sessionId: latest.id, length: latest.outputLength } : null;
+  }
+
+  /**
+   * The output a node's terminal wrote after `mark`, as far as the scrollback
+   * still holds it; null when that terminal is gone or was restarted since.
+   */
+  outputSince(workspaceId: string, nodeId: string, mark: { sessionId: string; length: number }): string | null {
+    const latest = this.liveNodeSession(workspaceId, nodeId);
+    if (!latest || latest.id !== mark.sessionId) return null;
+    const retainedFrom = latest.outputLength - latest.scrollback.length;
+    return latest.scrollback.slice(Math.max(0, mark.length - retainedFrom));
+  }
+
+  private liveNodeSession(workspaceId: string, nodeId: string): PtySession | null {
     let latest: PtySession | null = null;
     for (const session of this.sessions.values()) {
       if (session.workspaceId !== workspaceId || session.nodeId !== nodeId || session.exited) continue;
       if (!latest || session.createdAt > latest.createdAt) latest = session;
     }
-    return latest ? latest.scrollback.slice(-Math.max(200, chars)) : null;
+    return latest;
   }
 
   pausedNodes(workspaceId: string): string[] {

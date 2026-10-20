@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { NodeProps } from '@xyflow/svelte';
   import { CalendarDays, ChevronDown, ChevronUp, Plus, Trash2, X } from '@lucide/svelte';
   import NodeShell from './NodeShell.svelte';
@@ -16,6 +17,7 @@
     onDelete: (id: string) => void;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
     onPayloadChange?: (id: string, partial: Record<string, unknown>) => void | Promise<void>;
+    onPlanOperations?: (id: string, kind: 'calendar', operations: unknown[]) => Promise<Record<string, unknown> | null>;
     onRename?: (id: string, title: string) => void;
     onJumpToNode?: (nodeId: string) => void;
     onRemoveConnection?: (edgeId: string) => void;
@@ -26,7 +28,18 @@
 
   const COLORS = ['#e8b84a', '#f0883e', '#e5646c', '#f29bc0', '#b6a2ff', '#7cbff0', '#5fd2c2', '#8fd18b'];
 
-  let events = $state<CalendarEvent[]>([...(data.payload.events ?? [])]);
+  // The first render shows the stored events; the effect below follows later changes.
+  let events = $state<CalendarEvent[]>(untrack(() => [...(data.payload.events ?? [])]));
+  // Changes still on their way to the Core; until they return, this screen keeps its own view.
+  let pending = 0;
+
+  // Events added or changed elsewhere (another screen, an agent) arrive with the node's payload.
+  $effect(() => {
+    const latest = data.payload.events ?? [];
+    untrack(() => {
+      if (pending === 0) events = [...latest];
+    });
+  });
   const today = new Date();
   let cursor = $state(new Date(today.getFullYear(), today.getMonth(), 1));
   let editor = $state<{ event: CalendarEvent; isNew: boolean } | null>(null);
@@ -58,9 +71,17 @@
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() + months, 1);
   }
 
-  function save(next: CalendarEvent[]) {
+  /** Shows the change at once and sends it as an operation the Core applies to the latest events. */
+  async function apply(operation: Record<string, unknown>, next: CalendarEvent[]) {
     events = next;
-    void data.onPayloadChange?.(id, { events: next });
+    if (!data.onPlanOperations) {
+      void data.onPayloadChange?.(id, { events: next });
+      return;
+    }
+    pending += 1;
+    const result = await data.onPlanOperations(id, 'calendar', [operation]);
+    pending -= 1;
+    if (pending === 0) events = [...((result?.events as CalendarEvent[] | undefined) ?? data.payload.events ?? [])];
   }
 
   function openNew(date: string) {
@@ -69,17 +90,28 @@
 
   function commit() {
     if (!editor) return;
-    const event = { ...editor.event, title: editor.event.title.trim().slice(0, 160) };
+    const event = { ...editor.event, title: editor.event.title.trim().slice(0, 160), notes: editor.event.notes?.trim().slice(0, 4_000) || null };
     if (!event.title || !/^\d{4}-\d{2}-\d{2}$/.test(event.date)) return;
-    if (event.allDay) event.time = null;
-    save(editor.isNew ? [...events, event] : events.map((item) => (item.id === event.id ? event : item)));
+    // An event without a time lasts the whole day.
+    if (event.allDay || !event.time) {
+      event.allDay = true;
+      event.time = null;
+    }
+    // Some browsers send seconds with the time; stored colors predating the palette are left as they are.
+    if (event.time) event.time = event.time.slice(0, 5);
+    const color = event.color && /^#[0-9a-fA-F]{6}$/.test(event.color) ? event.color : null;
+    const fields = { title: event.title, date: event.date, allDay: event.allDay, time: event.time ?? null, ...(color ? { color } : {}), notes: event.notes };
+    void apply(
+      editor.isNew ? { op: 'add', id: event.id, ...fields } : { op: 'edit', eventId: event.id, ...fields },
+      editor.isNew ? [...events, event] : events.map((item) => (item.id === event.id ? event : item)),
+    );
     editor = null;
   }
 
   function removeEvent() {
     if (!editor) return;
     const targetId = editor.event.id;
-    save(events.filter((item) => item.id !== targetId));
+    void apply({ op: 'remove', eventId: targetId }, events.filter((item) => item.id !== targetId));
     editor = null;
   }
 </script>
@@ -139,7 +171,7 @@
             <button type="button" role="radio" aria-checked={editor.event.color === color} aria-label={color} class="color" class:on={editor.event.color === color} style:--event={color} onclick={() => editor && (editor.event.color = color)}></button>
           {/each}
         </div>
-        <Textarea class="min-h-14 text-xs" bind:value={editor.event.notes} placeholder={m['calendar.notes']()} aria-label={m['calendar.notes']()} />
+        <Textarea class="min-h-14 text-xs" bind:value={editor.event.notes} maxlength={4000} placeholder={m['calendar.notes']()} aria-label={m['calendar.notes']()} />
         <div class="row end">
           {#if !editor.isNew}<button type="button" class="ghost danger" onclick={removeEvent}><Trash2 size={12} />{m['calendar.delete_event']()}</button>{/if}
           <span class="grow"></span>

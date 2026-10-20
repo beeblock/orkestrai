@@ -99,6 +99,8 @@ import { createWorkspaceToolSchema, executeWorkspaceToolSchema, updateWorkspaceT
 import { BridgeCanvasCommandRequest } from '../requests/BridgeCanvasCommandRequest.js';
 import { bridgeCanvasListSchema } from '../../../contracts/schemas/bridge-canvas.schema.js';
 import { bridgeCanvasService } from '../../../application/services/BridgeCanvasService.js';
+import { planNodeService } from '../../../application/services/PlanNodeService.js';
+import { bridgeCalendarOperationsSchema, bridgeChecklistOperationsSchema } from '../../../contracts/schemas/planNodeSchemas.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -726,6 +728,48 @@ export class BridgeController extends Controller {
       return this.json({ data: await new CreateImageWorkflowAction().execute(new CreateImageWorkflowDto(workspace.id, input, actor)) }, 201);
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to create image workflow.');
+    }
+  }
+
+  /** A checklist on the Canvas, by node id or exact title. */
+  async checklistRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await planNodeService.checklist(workspace.id, String(event.params.nodeId)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao ler o checklist.');
+    }
+  }
+
+  /** Adds, checks, edits or removes checklist items on the latest content. */
+  async checklistUpdate(event: any) {
+    try {
+      const input = bridgeChecklistOperationsSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await planNodeService.applyChecklist(workspace.id, String(event.params.nodeId), input.operations) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao alterar o checklist.');
+    }
+  }
+
+  /** A calendar on the Canvas, by node id or exact title, its events by date. */
+  async calendarRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await planNodeService.calendar(workspace.id, String(event.params.nodeId)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao ler o calendário.');
+    }
+  }
+
+  /** Adds, edits or removes calendar events on the latest content. */
+  async calendarUpdate(event: any) {
+    try {
+      const input = bridgeCalendarOperationsSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await planNodeService.applyCalendar(workspace.id, String(event.params.nodeId), input.operations) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao alterar o calendário.');
     }
   }
 
@@ -1504,12 +1548,19 @@ export class BridgeController extends Controller {
     }
   }
 
+  /** The agent whose live terminal makes this call (ORKESTRAI_AGENT_TOKEN), or null without one. */
+  private terminalAgent(event: any, workspaceId: string): string | null {
+    return ptySessionManager.resolveBridgeAgent(workspaceId, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+  }
+
   /** An agent posts to the team channel or to its conversation with the owner. */
   async channelPost(event: any) {
     try {
       const input = await BridgeChannelPostRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      return this.json({ data: await bridgeService.postToChannel(workspace.id, input) }, 201);
+      // A live terminal posts only as itself; `from` is the fallback for shells without a PTY token.
+      const from = this.terminalAgent(event, workspace.id) ?? input.from;
+      return this.json({ data: await bridgeService.postToChannel(workspace.id, { ...input, from }) }, 201);
     } catch (error) {
       return this.errorResponse(error, 'Falha ao postar na conversa.');
     }
@@ -1520,7 +1571,8 @@ export class BridgeController extends Controller {
     try {
       const input = await BridgeAskOwnerRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      return this.json({ data: await bridgeService.askOwner(workspace, input) }, 201);
+      const from = this.terminalAgent(event, workspace.id) ?? input.from;
+      return this.json({ data: await bridgeService.askOwner(workspace, { ...input, from }) }, 201);
     } catch (error) {
       return this.errorResponse(error, 'Falha ao perguntar ao dono.');
     }
@@ -1530,7 +1582,11 @@ export class BridgeController extends Controller {
     try {
       const input = await BridgeCloseQuestionRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      return this.json({ data: await bridgeService.closeOwnerQuestion(workspace, input) });
+      // Answering for the owner is the leader's (or the asker's) power: it acts only as the
+      // terminal that calls, never as the agent a shared workspace token names.
+      const actor = this.terminalAgent(event, workspace.id);
+      if (!actor) return this.json({ error: 'Fechar uma pergunta exige a identidade do terminal do agente (ORKESTRAI_AGENT_TOKEN).' }, 403);
+      return this.json({ data: await bridgeService.closeOwnerQuestion(workspace, { ...input, from: actor }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao fechar a pergunta.');
     }
@@ -1540,7 +1596,9 @@ export class BridgeController extends Controller {
     try {
       const input = await BridgeEscalateQuestionRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      return this.json({ data: await bridgeService.escalateOwnerQuestion(workspace, input) });
+      const actor = this.terminalAgent(event, workspace.id);
+      if (!actor) return this.json({ error: 'Levar uma pergunta ao dono exige a identidade do terminal do líder (ORKESTRAI_AGENT_TOKEN).' }, 403);
+      return this.json({ data: await bridgeService.escalateOwnerQuestion(workspace, { ...input, from: actor }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao levar a pergunta ao dono.');
     }
