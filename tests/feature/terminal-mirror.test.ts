@@ -65,6 +65,9 @@ describe('terminal and Chat are one conversation', () => {
     expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, true)).toBe(false);
     started.mockResolvedValue(null);
     expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, true)).toBe(false);
+    // Even a turn begun two seconds before the line is earlier work.
+    started.mockResolvedValue(sentAt - 2_000);
+    expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, true)).toBe(false);
     expect((await channelRepository.list(workspace.id, `dm:${leader.id}`)).filter((message) => message.authorKind === 'agent')).toHaveLength(0);
 
     started.mockResolvedValue(sentAt + 2_000);

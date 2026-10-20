@@ -166,6 +166,8 @@ type PtySession = PtySessionInfo & {
   redrawUntil: number;
 };
 
+export type PtyOutputMark = { sessionId: string; length: number };
+
 type ComposerDelivery = {
   text: string;
   submitDelayMs: number;
@@ -174,6 +176,8 @@ type ComposerDelivery = {
   requiresAcceptance: boolean;
   confirmAcceptance?: () => Promise<boolean>;
   confirmationPending?: boolean;
+  /** Where the terminal's output stood when Enter submitted this delivery. */
+  onSubmitted?: (mark: PtyOutputMark) => void;
 };
 
 export type ComposerDeliveryHandle = {
@@ -829,6 +833,7 @@ export class PtySessionManager {
       isAccepted?: () => Promise<boolean>;
       isStillRelevant?: () => Promise<boolean>;
       signal?: AbortSignal;
+      onSubmitted?: (mark: PtyOutputMark) => void;
     } = {},
   ): Promise<void> {
     const session = this.requireSession(id);
@@ -839,7 +844,7 @@ export class PtySessionManager {
       acceptanceRead ??= Promise.resolve().then(options.isAccepted!).finally(() => { acceptanceRead = undefined; });
       return acceptanceRead;
     } : undefined;
-    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance);
+    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance, options.onSubmitted);
     if (options.signal?.aborted) {
       queued.cancel();
       throw new Error('Agent message delivery cancelled.');
@@ -948,7 +953,14 @@ export class PtySessionManager {
     return false;
   }
 
-  queueWithSubmit(id: string, text: string, submitDelayMs = 200, requiresAcceptance = false, confirmAcceptance?: () => Promise<boolean>): ComposerDeliveryHandle {
+  queueWithSubmit(
+    id: string,
+    text: string,
+    submitDelayMs = 200,
+    requiresAcceptance = false,
+    confirmAcceptance?: () => Promise<boolean>,
+    onSubmitted?: (mark: PtyOutputMark) => void,
+  ): ComposerDeliveryHandle {
     const session = this.requireSession(id);
     if (session.exited) {
       return {
@@ -968,7 +980,7 @@ export class PtySessionManager {
 
     let delivery!: ComposerDelivery;
     const submitted = new Promise<void>((resolve, reject) => {
-      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance };
+      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance, onSubmitted };
       session.deliveryQueue.push(delivery);
       this.drainDeliveryQueue(session);
     });
@@ -1110,6 +1122,7 @@ export class PtySessionManager {
           throw new Error('Complete the provider workspace trust confirmation in its terminal before sending agent messages.');
         }
         session.lastSubmitOutputRevision = session.outputRevision;
+        const submittedAt: PtyOutputMark = { sessionId: session.id, length: session.outputLength };
         this.write(session.id, '\r');
         session.lastSubmittedDelivery = delivery;
         session.lastDeliveryAccepted = false;
@@ -1117,6 +1130,11 @@ export class PtySessionManager {
         session.awaitingDeliveryIdle = true;
         session.deliveryReadyAt = Date.now() + this.deliverySettleMs(session);
         this.scheduleDeliveryBarrierFallback(session);
+        try {
+          delivery.onSubmitted?.(submittedAt);
+        } catch {
+          // An observer never undoes a submitted delivery.
+        }
       } catch (error) {
         delivery.reject(error instanceof Error ? error : new Error(String(error)));
       } finally {

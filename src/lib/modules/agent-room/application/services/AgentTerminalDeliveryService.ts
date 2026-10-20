@@ -1,6 +1,6 @@
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracker.js';
-import { ObsoletePtyDeliveryError, ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
+import { ObsoletePtyDeliveryError, ptySessionManager, type PtyOutputMark } from '../../infrastructure/pty/PtySessionManager.js';
 import { findPromptInTranscript } from '../../infrastructure/transcript/AgentTranscript.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 
@@ -13,6 +13,8 @@ type DeliverAgentMessageInput = {
   queueTimeoutMs?: number;
   signal?: AbortSignal;
   isStillRelevant?: () => Promise<boolean>;
+  /** Called when Enter submits the message, with where the terminal's output stood. */
+  onSubmitted?: (mark: PtyOutputMark) => void;
 };
 
 /**
@@ -36,6 +38,7 @@ export class AgentTerminalDeliveryService {
       signal: input.signal,
       isAccepted: confirmAccepted,
       isStillRelevant: input.isStillRelevant,
+      onSubmitted: input.onSubmitted,
     });
   }
 

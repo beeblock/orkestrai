@@ -297,7 +297,7 @@ export type CollaborationCommand =
  * (an `event` with the data, then the result) without a share revision, since
  * it changes nothing on the host.
  */
-export type CollaborationReadCommand = { type: 'chat.read'; channel: string; before?: string | null };
+export type CollaborationReadCommand = { type: 'chat.read'; channel: string; before?: string | null; beforeId?: string | null };
 
 export type CollaborationCommandResult = {
   commandId: string;

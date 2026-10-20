@@ -1,13 +1,16 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
 import { channelBridgeService } from '$lib/modules/agent-room/application/services/ChannelBridgeService.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
 import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
+import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 import { BridgeController } from '$lib/modules/agent-room/interface/http/controllers/BridgeController.js';
@@ -37,10 +40,19 @@ describe('who speaks in the Conversa', () => {
   useSvelarTest({ refreshDatabase: true });
   const sessions: string[] = [];
 
+  // Messages really land in the agents' inboxes; no terminal is opened to deliver them.
+  beforeEach(() => {
+    vi.spyOn(agentInboxService, 'kick').mockImplementation(() => undefined);
+  });
+
   afterEach(() => {
     for (const session of sessions.splice(0)) ptySessionManager.kill(session);
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
+
+  const openItems = async (workspaceId: string, questionId: string) =>
+    (await attentionService.list({ workspaceId, limit: 20 })).filter((item) => item.sourceId === questionId && item.status !== 'resolved');
 
   it('sends back to an external chat only a reply that cites its message', async () => {
     const { workspace, web } = await team();
@@ -116,14 +128,13 @@ describe('who speaks in the Conversa', () => {
 
   it('keeps a question open when its answer cannot reach the agent, so the same answer can be sent again', async () => {
     const { workspace, leader } = await team();
-    const { attentionService } = await import('$lib/modules/agent-room/application/services/AttentionService.js');
-    const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+    vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
     // The leader's own question goes to the owner and waits in Needs you.
     const question = await channelService.askOwner(workspace.id, { nodeId: leader.id, title: 'Lead' }, { question: 'Publico a versão?', options: ['Sim', 'Não'] });
-    const open = async () => (await attentionService.list({ workspaceId: workspace.id, limit: 20 })).filter((item) => item.sourceId === question.id && item.status !== 'resolved');
+    const open = () => openItems(workspace.id, question.id);
     expect(await open()).toHaveLength(1);
 
-    enqueue.mockRejectedValueOnce(new Error('database is locked'));
+    vi.spyOn(agentInboxService, 'enqueueDeferred').mockRejectedValueOnce(new Error('database is locked'));
     await expect(channelService.postOwner(workspace.id, `dm:${leader.id}`, { body: 'Sim', replyToId: question.id })).rejects.toThrow('continua aberta');
     expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeNull();
     expect((await channelRepository.list(workspace.id, `dm:${leader.id}`)).some((message) => message.kind === 'answer')).toBe(false);
@@ -133,6 +144,76 @@ describe('who speaks in the Conversa', () => {
     expect(retried.delivered).toEqual([{ nodeId: leader.id, ok: true }]);
     expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeTruthy();
     expect(await open()).toHaveLength(0);
+    // The answer waits in the asker's inbox, where a restart does not lose it.
+    expect((await controlCenterRepository.inboxByDedupKey(leader.id, `owner-answer:${question.id}`)).map((envelope) => envelope.state)).toEqual(['queued']);
+  });
+
+  for (const who of ['owner', 'leader'] as const) {
+    it(`records nothing when the ${who} answer cannot be written, so it can be sent again`, async () => {
+      const { workspace, leader, web } = await team();
+      vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+      // A teammate question the leader decides; the owner answers the leader's own.
+      const asker = who === 'owner' ? leader : web;
+      const question = await channelService.askOwner(workspace.id, { nodeId: asker.id, title: asker.title! }, { question: 'Qual ambiente?' });
+      const channel = `dm:${asker.id}`;
+      const dedupKey = `${who === 'owner' ? 'owner' : 'leader'}-answer:${question.id}`;
+      const answer = () => who === 'owner'
+        ? channelService.postOwner(workspace.id, channel, { body: 'Staging', replyToId: question.id })
+        : channelService.closeQuestion(workspace.id, question.id, { nodeId: leader.id, title: 'Lead' }, { body: 'Staging' });
+      const nothingRecorded = async () => {
+        expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeNull();
+        expect((await channelRepository.list(workspace.id, channel)).filter((message) => message.kind === 'answer')).toHaveLength(0);
+        expect(await controlCenterRepository.inboxByDedupKey(asker.id, dedupKey)).toEqual([]);
+        expect(await openItems(workspace.id, question.id)).toHaveLength(who === 'owner' ? 1 : 0);
+      };
+
+      // The answer itself cannot be written.
+      vi.spyOn(channelRepository, 'save').mockRejectedValueOnce(new Error('database is locked'));
+      await expect(answer()).rejects.toThrow('continua aberta');
+      await nothingRecorded();
+
+      // The inbox copy was written and then the transaction failed: it goes too.
+      vi.spyOn(controlCenterRepository, 'findEnvelope').mockRejectedValueOnce(new Error('disk I/O error'));
+      await expect(answer()).rejects.toThrow('continua aberta');
+      await nothingRecorded();
+
+      await answer();
+      expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeTruthy();
+      expect((await channelRepository.list(workspace.id, channel)).filter((message) => message.kind === 'answer')).toHaveLength(1);
+      expect((await controlCenterRepository.inboxByDedupKey(asker.id, dedupKey)).map((envelope) => envelope.state)).toEqual(['queued']);
+      expect(await openItems(workspace.id, question.id)).toHaveLength(0);
+      await expect(answer()).rejects.toThrow('já foi respondida');
+    });
+  }
+
+  it('hands an external message to the agent once, however often or late its chat is read again', async () => {
+    const { workspace, web } = await team();
+    const channel = `dm:${web.id}`;
+    const input = { body: 'Faça a ação pedida', via: 'telegram' as const, bindingId: 'binding-1', sender: '@ana', externalId: '10' };
+    const key = 'external:binding-1:10';
+    const message = await channelService.postExternal(workspace.id, web.id, input);
+    const [first] = await controlCenterRepository.inboxByDedupKey(web.id, key);
+    expect(first.state).toBe('queued');
+
+    // Already delivered: a batch read again after a later failure does not queue it twice.
+    await AgentMessageEnvelope.query().where('id', first.id).update({ state: 'delivered', delivered_at: new Date().toISOString() });
+    expect((await channelService.postExternal(workspace.id, web.id, input)).id).toBe(message.id);
+    expect((await controlCenterRepository.inboxByDedupKey(web.id, key)).map((envelope) => envelope.state)).toEqual(['delivered']);
+
+    // Far behind the newest messages, it is still the same message.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 5_000);
+    for (let index = 0; index < 101; index += 1) {
+      await channelRepository.save({ workspaceId: workspace.id, channel, authorKind: 'agent', authorNodeId: web.id, body: `Depois ${index}` });
+    }
+    expect((await channelService.postExternal(workspace.id, web.id, input)).id).toBe(message.id);
+    expect((await channelRepository.list(workspace.id, channel, { limit: 200 })).filter((entry) => entry.authorKind === 'external')).toHaveLength(1);
+    expect(await controlCenterRepository.inboxByDedupKey(web.id, key)).toHaveLength(1);
+
+    // A hand-over that failed is the only one tried again.
+    await AgentMessageEnvelope.query().where('id', first.id).update({ state: 'failed', failed_at: new Date().toISOString() });
+    expect((await channelService.postExternal(workspace.id, web.id, input)).id).toBe(message.id);
+    expect((await controlCenterRepository.inboxByDedupKey(web.id, key)).map((envelope) => envelope.state).sort()).toEqual(['failed', 'queued']);
   });
 
   it('lets only one of two answers at the same moment close a question', async () => {
@@ -152,7 +233,7 @@ describe('who speaks in the Conversa', () => {
     const { workspace, leader, web } = await team();
     const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
     const question = await channelService.askOwner(workspace.id, { nodeId: web.id, title: 'Web' }, { question: 'Posso usar Redis?' });
-    enqueue.mockRejectedValueOnce(new Error('disk I/O error'));
+    vi.spyOn(agentInboxService, 'enqueueDeferred').mockRejectedValueOnce(new Error('disk I/O error'));
     await expect(channelService.closeQuestion(workspace.id, question.id, { nodeId: leader.id, title: 'Lead' }, { body: 'Sim.' })).rejects.toThrow('continua aberta');
     expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeNull();
     const closed = await channelService.closeQuestion(workspace.id, question.id, { nodeId: leader.id, title: 'Lead' }, { body: 'Sim.' });

@@ -49,6 +49,7 @@ export class TerminalMirrorService {
   private async recordReply(workspaceId: string, nodeId: string, prompt: string, at: number, messageId: string, allowUnmatched: boolean): Promise<boolean> {
     const context = await agentInboxService.transcriptFor(workspaceId, nodeId);
     if (!context.provider) return false;
+    // Only the search for the line in the transcript tolerates a few seconds.
     const since = at - 5_000;
     const reply = await findReplyToPrompt(context.provider, context.cwd, context.agentSessionId, prompt, since, context.options);
     if (reply?.complete && reply.text.trim()) {
@@ -57,10 +58,11 @@ export class TerminalMirrorService {
     }
     if (reply || !allowUnmatched || !context.agentSessionId || this.latest.get(nodeId) !== messageId) return false;
     if (await findPromptInTranscript(context.provider, context.cwd, context.agentSessionId, prompt, since, context.options)) return false;
-    // Only a turn the conversation started after this line was sent can answer it;
-    // an earlier answer is not repeated as if it were new.
+    // Only a turn the conversation started once this line was sent can answer it,
+    // with no tolerance: a turn begun even a moment earlier is earlier work, and
+    // its answer is not repeated as if it were new.
     const turnStarted = await latestTurnStartedAt(context.provider, context.cwd, context.agentSessionId, context.options);
-    if (turnStarted === null || turnStarted < since) return false;
+    if (turnStarted === null || turnStarted < at) return false;
     if (!(await latestTurnComplete(context.provider, context.cwd, context.agentSessionId, context.options))) return false;
     const text = await lastReplyText(context.provider, context.cwd, context.agentSessionId);
     if (!text?.trim()) return false;

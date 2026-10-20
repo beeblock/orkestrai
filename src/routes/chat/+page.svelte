@@ -15,7 +15,7 @@
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
-  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCreatedAt, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
+  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCursor, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
@@ -153,9 +153,8 @@
     if (!workspaceId) return;
     const id = workspaceId;
     const current = channel;
-    const before = older ? oldestCreatedAt(messages) : null;
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
-    if (before) params.set('before', before);
+    const cursor = older ? oldestCursor(messages) : null;
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), ...(cursor ?? {}) });
     if (older) loadingOlder = true;
     try {
       const page = await api<ChannelMessage[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels/${encodeURIComponent(current)}/messages?${params.toString()}`);

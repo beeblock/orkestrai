@@ -18,6 +18,7 @@ export class ChannelController extends Controller {
     try {
       const query = listChannelMessagesSchema.parse({
         before: event.url.searchParams.get('before') || null,
+        beforeId: event.url.searchParams.get('beforeId') || null,
         limit: event.url.searchParams.get('limit') ?? undefined,
       });
       return this.json({ data: await channelService.listMessages(event.params.id, decodeURIComponent(event.params.channel), query) });

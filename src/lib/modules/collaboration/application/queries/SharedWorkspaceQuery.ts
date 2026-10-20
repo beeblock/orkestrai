@@ -481,15 +481,19 @@ export class SharedWorkspaceQuery {
   /**
    * A page of whole messages of one channel for `chat.read`, newest first
    * from `before` and returned oldest first, within one encrypted frame.
+   * With `beforeId` the page continues exactly past the guest's oldest
+   * message. Without it (an older companion), the page includes that whole
+   * instant again: the guest drops what it holds, and nothing written in the
+   * same millisecond is skipped.
    */
-  async chatPage(shareId: string, channel: string, before: string | null): Promise<Omit<SharedChatPageDto, 'requestId'>> {
+  async chatPage(shareId: string, channel: string, before: string | null, beforeId: string | null = null): Promise<Omit<SharedChatPageDto, 'requestId'>> {
     const share = await collaborationRepository.findShare(shareId);
     if (!share || share.status !== 'active' || new Date(share.expiresAt).getTime() <= Date.now()) {
       throw new Error('COLLABORATION_SHARE_UNAVAILABLE');
     }
     const { channels } = await channelService.listChannels(share.workspaceId);
     if (!channels.some((entry) => entry.id === channel)) throw new Error('CHAT_CHANNEL_NOT_FOUND');
-    const stored = await channelRepository.list(share.workspaceId, channel, { before, limit: CHAT_PAGE_MESSAGES + 1 });
+    const stored = await channelRepository.list(share.workspaceId, channel, { before, beforeId, includeInstant: true, limit: CHAT_PAGE_MESSAGES + 1 });
     const { messages, complete } = fitChatPage(stored.slice(0, CHAT_PAGE_MESSAGES).map(projectChatMessage), CHAT_PAGE_BYTES);
     const page = { kind: 'chat.page' as const, channel, before, messages, hasOlder: stored.length > CHAT_PAGE_MESSAGES || !complete };
     assertSharedProjectionSafe(page);

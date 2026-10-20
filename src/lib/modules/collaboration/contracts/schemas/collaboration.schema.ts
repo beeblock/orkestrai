@@ -184,11 +184,16 @@ export const collaborationCommandSchema = z.discriminatedUnion('type', [
   designElementUpdateCommandSchema,
 ]);
 
-/** A page of one Conversa channel, newest first from `before`; the session answers it, not the command bus. */
+/**
+ * A page of one Conversa channel, newest first from `before`; the session
+ * answers it, not the command bus. `beforeId`, the oldest message the guest
+ * holds, continues exactly past others written in the same instant.
+ */
 export const chatReadCommandSchema = z.object({
   type: z.literal('chat.read'),
   channel: chatChannelSchema,
   before: z.string().datetime().nullish(),
+  beforeId: z.string().uuid().nullish(),
 }).strict();
 
 export const executeCollaborationCommandSchema = z.object({

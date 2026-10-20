@@ -135,6 +135,9 @@ describe('collaboration encrypted session', () => {
     expect(page).toMatchObject({ kind: 'chat.page', channel: direct, hasOlder: false });
     expect(page.messages[0].body).toContain('The full report');
     expect(page.messages[0].clipped).toBe(false);
+    // Older pages continue past the exact oldest message held.
+    expect(await collaborationSessionManager.readGuestChat(direct, page.messages[0].createdAt, page.messages[0].id))
+      .toMatchObject({ kind: 'chat.page', channel: direct, messages: [], hasOlder: false });
     await expect(collaborationSessionManager.readGuestChat(`dm:${uuidv7()}`)).rejects.toThrow('CHAT_UNAVAILABLE');
 
     const invalid = await collaborationSessionManager.sendGuestCommand({ type: 'chat.post', channel: '../team', body: 'Hi' } as never);

@@ -222,15 +222,20 @@ export class ControlCenterService {
       ...input,
       messageId: input.messageId ?? uuidv7(),
     });
+    this.announceDelivery(event);
+    if (event.state === 'failed' && event.metadata.cancelled !== true) await this.recordMessageFailure(event);
+    return event;
+  }
+
+  /** Tells the screens about a delivery event, such as one written in a transaction that has now committed. */
+  announceDelivery(event: AgentMessageDeliveryEvent): void {
     broadcast({
       type: 'messageDelivery',
-      workspaceId: input.workspaceId,
+      workspaceId: event.workspaceId,
       messageId: event.messageId,
       state: event.state,
       event,
     });
-    if (event.state === 'failed' && event.metadata.cancelled !== true) await this.recordMessageFailure(event);
-    return event;
   }
 
   /**

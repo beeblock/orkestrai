@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Connection } from '@beeblock/svelar/database';
 import { ChannelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { attentionRepository } from '$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js';
 import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -48,17 +50,26 @@ describe('ChannelService', () => {
   });
 
   it('answers a question once, closes its attention item and replies to the agent that asked', async () => {
-    const enqueue = mockWorkspace();
+    mockWorkspace();
     const question = stored({ id: '01a14a44-5d87-7d1c-90e7-7b697f79bf50', channel: `dm:${QA}`, authorKind: 'agent', authorNodeId: QA, kind: 'question', body: 'Posso instalar o sharp?' });
     vi.spyOn(channelRepository, 'find').mockResolvedValue(question);
+    const transaction = vi.spyOn(Connection, 'transaction').mockImplementation(async (callback) => callback());
     const mark = vi.spyOn(channelRepository, 'markAnswered').mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-    const resolve = vi.spyOn(attentionService, 'resolveSource').mockResolvedValue(1);
+    const resolve = vi.spyOn(attentionRepository, 'resolveBySource').mockResolvedValue(1);
+    const announce = vi.spyOn(attentionService, 'announce').mockImplementation(() => undefined);
+    const release = vi.fn();
+    const queued = vi.spyOn(agentInboxService, 'enqueueDeferred').mockResolvedValue({ envelope: {} as never, release });
     const result = await new ChannelService().postOwner('w', `dm:${QA}`, { body: 'Sim', replyToId: question.id });
     expect(result.message.kind).toBe('answer');
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(mark).toHaveBeenCalledWith('w', question.id);
     expect(resolve).toHaveBeenCalledWith('w', 'owner_question', question.id);
-    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: QA, dedupKey: `owner-answer:${question.id}` }));
-    await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'Não', replyToId: question.id })).rejects.toThrow();
+    expect(queued).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: QA, kind: 'owner', dedupKey: `owner-answer:${question.id}` }));
+    // The agent and the screens hear of it only once it is committed.
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('w');
+    await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'Não', replyToId: question.id })).rejects.toThrow('já foi respondida');
+    expect(release).toHaveBeenCalledTimes(1);
   });
 
   it('sends a teammate question to the leader with bounded options, and the leader question to the owner', async () => {

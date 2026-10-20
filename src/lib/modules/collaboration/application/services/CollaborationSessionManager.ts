@@ -293,11 +293,11 @@ export class CollaborationSessionManager {
   }
 
   /** A page of one channel of the host's Conversa (see `chat.read`). */
-  async readGuestChat(channel: string, before: string | null = null): Promise<SharedChatPageDto> {
+  async readGuestChat(channel: string, before: string | null = null, beforeId: string | null = null): Promise<SharedChatPageDto> {
     const guest = managerState.guest;
     if (!guest?.sessionChannel || !guest.socket || guest.socket.readyState !== WebSocket.OPEN) throw new Error('REMOTE_WORKSPACE_OFFLINE');
     const commandId = `read_${uuidv7().replaceAll('-', '_')}`;
-    const read: CollaborationReadCommand = { type: 'chat.read', channel, before };
+    const read: CollaborationReadCommand = { type: 'chat.read', channel, before, ...(before && beforeId ? { beforeId } : {}) };
     const message = { type: 'command', commandId, revision: guest.state.revision, command: read } as CollaborationMessage;
     const page = new Promise<SharedChatPageDto>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -436,7 +436,7 @@ export class CollaborationSessionManager {
     if (message.type === 'command' && peer.sessionChannel && peer.deviceRecordId) {
       const read = chatReadCommandSchema.safeParse(message.command);
       if (read.success) {
-        await this.readChat(host, peer, message.commandId, read.data.channel, read.data.before ?? null);
+        await this.readChat(host, peer, message.commandId, read.data.channel, read.data.before ?? null, read.data.beforeId ?? null);
         return;
       }
       // Guests are approved devices, but their commands are still untrusted input.
@@ -847,7 +847,7 @@ export class CollaborationSessionManager {
    * Answers `chat.read` with a page of whole messages for the guest's open
    * conversation: an `event` carrying the page, then the command result.
    */
-  private async readChat(host: HostSession, peer: HostPeer, commandId: string, channel: string, before: string | null): Promise<void> {
+  private async readChat(host: HostSession, peer: HostPeer, commandId: string, channel: string, before: string | null, beforeId: string | null): Promise<void> {
     const device = await collaborationRepository.findDevice(peer.deviceRecordId);
     if (!device?.approvedAt || device.revokedAt || !device.scopes.includes('agents.message')) {
       await this.rejectCommand(host, peer, commandId, 'SCOPE_DENIED');
@@ -865,7 +865,7 @@ export class CollaborationSessionManager {
     }
     let page: Awaited<ReturnType<typeof sharedWorkspaceQuery.chatPage>>;
     try {
-      page = await sharedWorkspaceQuery.chatPage(host.shareId, channel, before);
+      page = await sharedWorkspaceQuery.chatPage(host.shareId, channel, before, beforeId);
     } catch {
       await this.rejectCommand(host, peer, commandId, 'CHAT_UNAVAILABLE');
       return;
