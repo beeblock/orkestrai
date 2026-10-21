@@ -1,3 +1,9 @@
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { TOOL_DRAFT_ATTENTION_SOURCE } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
+import { BridgeChannelPostRequest } from '../requests/BridgeChannelPostRequest.js';
+import { BridgeAskOwnerRequest } from '../requests/BridgeAskOwnerRequest.js';
+import { BridgeCloseQuestionRequest } from '../requests/BridgeCloseQuestionRequest.js';
+import { BridgeEscalateQuestionRequest } from '../requests/BridgeEscalateQuestionRequest.js';
 import { Controller } from '@beeblock/svelar/routing';
 import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
 import { AutonomyGatePendingError, autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
@@ -93,6 +99,8 @@ import { createWorkspaceToolSchema, executeWorkspaceToolSchema, updateWorkspaceT
 import { BridgeCanvasCommandRequest } from '../requests/BridgeCanvasCommandRequest.js';
 import { bridgeCanvasListSchema } from '../../../contracts/schemas/bridge-canvas.schema.js';
 import { bridgeCanvasService } from '../../../application/services/BridgeCanvasService.js';
+import { planNodeService } from '../../../application/services/PlanNodeService.js';
+import { bridgeCalendarOperationsSchema, bridgeChecklistOperationsSchema } from '../../../contracts/schemas/planNodeSchemas.js';
 
 /**
  * Endpoints consumidos pela CLI `orkestrai` (autenticacao por token de
@@ -275,6 +283,15 @@ export class BridgeController extends Controller {
         if (!body.toolId) throw new Error('Tool id is required.');
         const input = executeWorkspaceToolSchema.omit({ actor: true, automationRunId: true }).parse(body.input);
         result = await toolExecutionService.execute(workspace.id, body.toolId, { ...input, actor: { type: 'agent', id: actor }, automationRunId: null });
+      }
+      const proposed = result as { id?: string; name?: string; description?: string; status?: string } | null;
+      if (body.operation !== 'execute' && proposed?.id && proposed.status === 'draft') {
+        await attentionService.raise({
+          workspaceId: workspace.id, nodeId: actor, taskId: body.taskId, category: 'workflow', severity: 'info',
+          title: proposed.name ?? 'Tool', body: proposed.description?.slice(0, 500) || null,
+          sourceType: TOOL_DRAFT_ATTENTION_SOURCE, sourceId: proposed.id, correlationId: `${TOOL_DRAFT_ATTENTION_SOURCE}:${proposed.id}`,
+          action: { target: 'node', decision: 'tool', toolId: proposed.id },
+        }).catch(() => undefined);
       }
       await controlCenterService.recordActivity({
         workspaceId: workspace.id, nodeId: actor, state: 'working', action: `tool:${body.operation}`,
@@ -711,6 +728,48 @@ export class BridgeController extends Controller {
       return this.json({ data: await new CreateImageWorkflowAction().execute(new CreateImageWorkflowDto(workspace.id, input, actor)) }, 201);
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to create image workflow.');
+    }
+  }
+
+  /** A checklist on the Canvas, by node id or exact title. */
+  async checklistRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await planNodeService.checklist(workspace.id, String(event.params.nodeId)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao ler o checklist.');
+    }
+  }
+
+  /** Adds, checks, edits or removes checklist items on the latest content. */
+  async checklistUpdate(event: any) {
+    try {
+      const input = bridgeChecklistOperationsSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await planNodeService.applyChecklist(workspace.id, String(event.params.nodeId), input.operations) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao alterar o checklist.');
+    }
+  }
+
+  /** A calendar on the Canvas, by node id or exact title, its events by date. */
+  async calendarRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await planNodeService.calendar(workspace.id, String(event.params.nodeId)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao ler o calendário.');
+    }
+  }
+
+  /** Adds, edits or removes calendar events on the latest content. */
+  async calendarUpdate(event: any) {
+    try {
+      const input = bridgeCalendarOperationsSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      return this.json({ data: await planNodeService.applyCalendar(workspace.id, String(event.params.nodeId), input.operations) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao alterar o calendário.');
     }
   }
 
@@ -1489,6 +1548,62 @@ export class BridgeController extends Controller {
     }
   }
 
+  /** The agent whose live terminal makes this call (ORKESTRAI_AGENT_TOKEN), or null without one. */
+  private terminalAgent(event: any, workspaceId: string): string | null {
+    return ptySessionManager.resolveBridgeAgent(workspaceId, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+  }
+
+  /** An agent posts to the team channel or to its conversation with the owner. */
+  async channelPost(event: any) {
+    try {
+      const input = await BridgeChannelPostRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      // A live terminal posts only as itself; `from` is the fallback for shells without a PTY token.
+      const from = this.terminalAgent(event, workspace.id) ?? input.from;
+      return this.json({ data: await bridgeService.postToChannel(workspace.id, { ...input, from }) }, 201);
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao postar na conversa.');
+    }
+  }
+
+  /** An agent asks the owner; the answer arrives later in the agent's inbox. */
+  async askOwner(event: any) {
+    try {
+      const input = await BridgeAskOwnerRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const from = this.terminalAgent(event, workspace.id) ?? input.from;
+      return this.json({ data: await bridgeService.askOwner(workspace, { ...input, from }) }, 201);
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao perguntar ao dono.');
+    }
+  }
+
+  async closeQuestion(event: any) {
+    try {
+      const input = await BridgeCloseQuestionRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      // Answering for the owner is the leader's (or the asker's) power: it acts only as the
+      // terminal that calls, never as the agent a shared workspace token names.
+      const actor = this.terminalAgent(event, workspace.id);
+      if (!actor) return this.json({ error: 'Fechar uma pergunta exige a identidade do terminal do agente (ORKESTRAI_AGENT_TOKEN).' }, 403);
+      return this.json({ data: await bridgeService.closeOwnerQuestion(workspace, { ...input, from: actor }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao fechar a pergunta.');
+    }
+  }
+
+  async escalateQuestion(event: any) {
+    try {
+      const input = await BridgeEscalateQuestionRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const actor = this.terminalAgent(event, workspace.id);
+      if (!actor) return this.json({ error: 'Levar uma pergunta ao dono exige a identidade do terminal do líder (ORKESTRAI_AGENT_TOKEN).' }, 403);
+      return this.json({ data: await bridgeService.escalateOwnerQuestion(workspace, { ...input, from: actor }) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao levar a pergunta ao dono.');
+    }
+  }
+
   async activity(event: any) {
     try {
       const input = await BridgeActivityRequest.validate(event);
@@ -1865,6 +1980,10 @@ export class BridgeController extends Controller {
       const input = cleanupFloorsSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
       const actor = await this.requireFloorCleanupActor(event, workspace.id, input);
+      if (input.entries.some((entry) => entry.archive)) {
+        const node = await workspaceRepository.getNode(actor);
+        if (!(node?.payload as { maestro?: boolean } | undefined)?.maestro) throw new Error('Só o líder arquiva andares com commits fora da main.');
+      }
       const result = await floorService.cleanup(workspace.id, input.entries);
       await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: actor, taskId: input.taskId,
         state: 'working', action: 'floor:cleanup', category: 'git', verb: 'executed', objectType: 'repository',

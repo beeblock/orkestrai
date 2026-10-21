@@ -8,6 +8,8 @@ const svelarRoot = dirname(require_.resolve('@beeblock/svelar/package.json'));
 export default defineConfig({
   test: {
     globals: true,
+    // The app isolates SQLite transactions at boot; tests run the same way.
+    setupFiles: ['tests/setup/sqlite-transactions.ts'],
     include: ['tests/unit/**/*.test.ts', 'tests/feature/**/*.test.ts'],
     exclude: ['tests/e2e/**'],
     alias: {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { useSvelteFlow, useViewport } from '@xyflow/svelte';
+  import { useSvelteFlow, useViewport, type FitViewOptions } from '@xyflow/svelte';
   import { createViewportSettler, isCanvasOverview } from './viewport-settle.js';
   import { settleCanvasViewport } from './edge-performance-runtime.svelte.js';
 
@@ -8,11 +8,13 @@
     fitView: (options?: { duration?: number }) => void;
     screenToFlowPosition: (position: { x: number; y: number }) => { x: number; y: number };
     getViewport: () => { x: number; y: number; zoom: number };
+    setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   };
 
-  let { onReady }: { onReady: (api: ZoomApi) => void } = $props();
+  // `padding` keeps fitted content clear of the chrome floating over the canvas.
+  let { onReady, padding }: { onReady: (api: ZoomApi) => void; padding?: () => FitViewOptions['padding'] } = $props();
 
-  const { setCenter, fitView, screenToFlowPosition, getViewport } = useSvelteFlow();
+  const { setCenter, fitView, screenToFlowPosition, getViewport, setViewport } = useSvelteFlow();
   const viewportStore = useViewport();
   let marker: HTMLSpanElement;
   let movingCanvas: HTMLElement | null = null;
@@ -54,9 +56,10 @@
   $effect(() => {
     onReady({
       setCenter: (x, y, options) => setCenter(x, y, options),
-      fitView: (options) => fitView(options),
+      fitView: (options) => fitView({ ...(padding ? { padding: padding() } : {}), ...options }),
       screenToFlowPosition: (position) => screenToFlowPosition(position),
       getViewport: () => getViewport(),
+      setViewport: (viewport) => void setViewport(viewport, { duration: 0 }),
     });
   });
 </script>

@@ -53,7 +53,8 @@ test('elastic edges settle without restarting from their own render updates', as
     await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', 'none');
     await page.mouse.up();
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
-    await expect(page.locator('.orkestrai-edge .edge-line').first()).toHaveCSS('stroke-dasharray', '7px, 5px');
+    // The dragged node stays selected, so its edge is a solid lit wire; quiet edges get their dashes back.
+    await expect(page.locator('.orkestrai-edge .edge-line:not(.lit)').first()).toHaveCSS('stroke-dasharray', '6px, 6px');
     await page.locator('.svelte-flow__edge').first().press('Enter');
     await expect(page.locator('.svelte-flow__edge.selected')).toHaveCount(1);
     await page.mouse.move(pane.x + 20, pane.y + pane.height - 70);
@@ -378,7 +379,13 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     });
     // Readable zoom restores the very same original elements and URLs, not a
     // thumbnail pretending to be the reference/master.
-    for (let i = 0; i < 5; i++) await zoomIn.click();
+    // The app top bar leaves a shorter canvas, so the fitted start is a little
+    // farther out; zoom until readable instead of counting a fixed number of steps.
+    for (let i = 0; i < 12; i++) {
+      await zoomIn.click();
+      if (i >= 4 && !(await page.locator('.svelte-flow').getAttribute('data-canvas-overview'))) break;
+      await page.waitForTimeout(200);
+    }
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
     await expect(page.locator('.canvas-image .overview-preview.active')).toHaveCount(0);
     await expect(page.locator('.canvas-image img.img-outline').first()).toHaveCSS('visibility', 'visible');

@@ -45,7 +45,7 @@ export const updateWorkspaceSchema = z.object({
   codeIntelligenceMode: codeIntelligenceModeSchema.optional(),
 });
 
-export const canvasNodeTypeSchema = z.enum(['terminal', 'note', 'fileTree', 'git', 'editor', 'diff', 'portal', 'apiClient', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'sequence', 'storyboard', 'usage', 'codeGraph', 'toolWorkshop', 'device', 'computer', 'design', 'document', 'knowledge']);
+export const canvasNodeTypeSchema = z.enum(['terminal', 'note', 'fileTree', 'git', 'editor', 'diff', 'portal', 'apiClient', 'loop', 'group', 'shape', 'tasks', 'flow', 'image', 'imageWorkflow', 'video', 'videoWorkflow', 'sequence', 'storyboard', 'usage', 'codeGraph', 'toolWorkshop', 'device', 'computer', 'design', 'document', 'knowledge', 'orchestrator', 'checklist', 'calendar']);
 
 export const createCanvasNodeSchema = z.object({
   floorId: z.string().uuid().nullable().optional(),

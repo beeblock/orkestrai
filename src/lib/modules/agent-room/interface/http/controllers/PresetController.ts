@@ -9,6 +9,8 @@ const createPresetSchema = z.object({
   name: z.string().trim().min(1, 'Informe o nome do preset.'),
   icon: z.string().trim().nullish(),
   description: z.string().trim().nullish(),
+  /** Saves only these nodes (a score) instead of the whole workspace. */
+  nodeIds: z.array(z.string().uuid()).min(1).max(300).optional(),
 });
 
 const publishTeamPackSchema = z.object({

@@ -10,6 +10,8 @@
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import { CircleAlert, CircleCheck, LoaderCircle } from '@lucide/svelte';
   import ModelCombobox from './ModelCombobox.svelte';
+  import { Label } from '$lib/components/ui/label';
+  import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import { createAgentNodeSchema } from '$lib/modules/agent-room/contracts/schemas/schemas.js';
   import type { AgentProviderInfo, ProviderProfile, Workspace, WorkspaceExecutionRuntime } from '$lib/modules/agent-room/domain/types.js';
   import { workspaceExecutionRuntime } from '$lib/modules/agent-room/domain/runtime.js';
@@ -33,9 +35,12 @@
     defaultLeader?: boolean;
     onConfirm: (creation: AgentCreation) => void;
     onCancel: () => void;
+    /** CLIs the owner can pick from; the dialog then shows a CLI selector. */
+    providers?: AgentProviderInfo[];
+    onProviderChange?: (provider: AgentProviderInfo) => void;
   };
 
-  let { open, provider, workspace, defaultLeader = false, onConfirm, onCancel }: Props = $props();
+  let { open, provider, workspace, defaultLeader = false, onConfirm, onCancel, providers = [], onProviderChange }: Props = $props();
   let runtimeMode = $state<'default' | 'native' | 'wsl'>('default');
   let wslDistribution = $state('');
   let wslWorkingDir = $state('');
@@ -200,6 +205,24 @@
     }
   }
 
+  // Switching CLI keeps a custom name and clears choices that belong to the previous CLI.
+  function chooseProvider(id: string) {
+    const next = providers.find((candidate) => candidate.id === id);
+    if (!next || next.id === provider?.id) return;
+    const currentTitle = String($formData!.title ?? '');
+    if (!currentTitle.trim() || currentTitle === provider?.displayName) $formData!.title = next.displayName;
+    $formData!.model = '';
+    $formData!.effort = null;
+    $formData!.profileId = null;
+    onProviderChange?.(next);
+    if (next.profileStrategy && next.profileStrategy.kind !== 'unsupported') void loadProfiles(next.id);
+    else {
+      profileLoadGeneration += 1;
+      profiles = [];
+      profilesLoading = false;
+    }
+  }
+
   async function loadWslAvailability(path: string) {
     try {
       const response = await fetch(`/api/agent-room/runtimes/wsl?path=${encodeURIComponent(path)}`);
@@ -229,6 +252,29 @@
     </Dialog.Header>
 
     <form method="POST" use:enhance class="grid gap-5">
+      {#if provider && providers.length > 1}
+        <div class="space-y-1.5" data-testid="agent-cli-select">
+          <Label class="text-[13px]">{m['dlg.cli']()}</Label>
+          <Select.Root type="single" value={provider.id} onValueChange={(value: string) => chooseProvider(value)}>
+            <Select.Trigger class="w-full" aria-label={m['dlg.cli']()}>
+              <span class="inline-flex items-center gap-2">
+                {#if providerIcons[provider.id]}<span class="app-logo-plate inline-grid size-5 place-items-center rounded-[5px]"><img src={providerIcons[provider.id]} width="13" height="13" alt="" /></span>{/if}
+                {provider.displayName}
+              </span>
+            </Select.Trigger>
+            <Select.Content>
+              {#each providers as option (option.id)}
+                <Select.Item value={option.id} label={option.displayName}>
+                  <span class="inline-flex items-center gap-2">
+                    {#if providerIcons[option.id]}<span class="app-logo-plate inline-grid size-5 place-items-center rounded-[5px]"><img src={providerIcons[option.id]} width="13" height="13" alt="" /></span>{/if}
+                    {option.displayName}
+                  </span>
+                </Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+      {/if}
       <Form.Field {form} name="title" class="space-y-1.5">
         <Form.Control>
           {#snippet children({ props })}

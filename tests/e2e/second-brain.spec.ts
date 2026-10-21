@@ -78,7 +78,7 @@ test('imports documents, searches fresh citations, opens PDFs and navigates the 
     await expect(embedded.getByTestId('knowledge-graph')).toHaveAttribute('data-count', '3');
     await embedded.getByTestId('knowledge-graph').locator('[data-graph-label]').filter({ hasText: 'brief.pdf' }).click();
     await expect(embedded.locator('aside')).toContainText('October 10');
-    await page.getByRole('link', { name: 'Workbench', exact: true }).click();
+    await page.getByRole('link', { name: 'Focus', exact: true }).click();
     await page.getByTestId('terminal-workspace-tree').getByRole('button', { name: /^budget\.xlsx Document$/ }).click();
     await expect(page.getByTestId('document-node')).toContainText('900');
     await page.screenshot({ path: testInfo.outputPath('workbench-document.png') });

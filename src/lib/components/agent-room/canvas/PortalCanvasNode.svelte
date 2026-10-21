@@ -3,7 +3,7 @@
   import { subscribeWorkspaceEvents } from '../workspace-events.js';
   import { reconcileCommands } from '../command-reconciler.js';
   import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowRight, ChevronDown, Globe, KeyRound, MousePointer2, Navigation, Pause, Play, Pencil, RotateCcw, Send, ShieldCheck, Smartphone, X } from '@lucide/svelte';
+  import { ArrowRight, Bug, ChevronDown, Globe, KeyRound, MousePointer2, Navigation, Pause, Play, Pencil, RotateCcw, Send, ShieldCheck, Smartphone, X } from '@lucide/svelte';
   import type { PortalViewport } from './portal-device-presets.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -599,6 +599,21 @@
     data.onDelete(id);
   }
 
+  // Web inspector for the page: the managed surface toggles DevTools in its own window.
+  async function toggleDevTools() {
+    const webview = desktopFrame() as (PortalWebviewElement & { isDevToolsOpened?: () => boolean; openDevTools?: () => void; closeDevTools?: () => void }) | null;
+    if (webview?.openDevTools) {
+      if (webview.isDevToolsOpened?.()) webview.closeDevTools?.();
+      else webview.openDevTools();
+      return;
+    }
+    if (!desktop?.portalSurface) {
+      toast.info(m['portal.devtools_unavailable']());
+      return;
+    }
+    await desktop.portalSurface({ workspaceId: data.workspaceId, nodeId: id, method: 'devtools' }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : m['portal.devtools_unavailable']()));
+  }
+
   async function togglePause() {
     const next = !paused;
     await desktop?.portalSurface({ workspaceId: data.workspaceId, nodeId: id, method: next ? 'pause' : 'resume' });
@@ -708,6 +723,7 @@
       active={inspecting}
       onclick={() => void startInspection()}
     ><MousePointer2 size={13} /></HeaderIconButton>
+    <HeaderIconButton class="node-action-btn" label={m['portal.devtools']()} onclick={() => void toggleDevTools()}><Bug size={13} /></HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={paused ? m['portal.control_resume']() : m['portal.control_pause']()} active={paused} onclick={togglePause}>{#if paused}<Play size={13} />{:else}<Pause size={13} />{/if}</HeaderIconButton>
     <HeaderIconButton class="node-action-btn" label={m['portal.close']()} danger onclick={() => void closePortal()}><X size={13} /></HeaderIconButton>
   {/snippet}

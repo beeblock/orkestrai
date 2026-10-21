@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import {
     Activity,
+    BellRing,
     ArrowRight,
     Bot,
     Check,
@@ -36,9 +37,11 @@
   import type { SharedWorkspaceDto } from "$lib/modules/collaboration/domain/types.js";
   import { TEXT_DICTATION_COMMAND } from "$lib/components/agent-room/text-dictation.js";
   import * as m from "$lib/paraglide/messages.js";
+  import { decisionLabels } from "$lib/components/agent-room/attention-decision-labels.js";
 
   type RemoteTab =
     | "overview"
+    | "needs"
     | "team"
     | "tasks"
     | "huddles"
@@ -59,6 +62,8 @@
     onCreateTask,
     onUpdateTask,
     onDecideReview,
+    onDecideAttention,
+    onAnswerAttention,
     onCreateDesignComment,
     onReplyDesignComment,
     onResolveDesignComment,
@@ -85,6 +90,8 @@
       reviewId: string,
       status: "approved" | "changes_requested" | "rejected",
     ) => void | Promise<void>;
+    onDecideAttention: (itemId: string, decision: "approve" | "reject") => void | Promise<void>;
+    onAnswerAttention: (itemId: string, text: string) => Promise<boolean>;
     onCreateDesignComment: (
       nodeId: string,
       pageId: string,
@@ -135,6 +142,11 @@
 
   const canWriteTasks = $derived(scopes.includes("tasks.write"));
   const canDecideReviews = $derived(scopes.includes("approvals.decide"));
+  let answerDrafts = $state<Record<string, string>>({});
+
+  function remoteDecisionLabels(kind: "gate" | "flow" | "tool" | "learning" | "review"): { approve: string; reject: string } {
+    return decisionLabels(kind);
+  }
   const canMessageLeader = $derived(scopes.includes("leader.message"));
   const canCommentDesign = $derived(scopes.includes("design.comment"));
   const canProposeDesign = $derived(scopes.includes("design.propose"));
@@ -229,6 +241,17 @@
   type TabTone = "attention" | "live" | "neutral";
   const tabs = $derived([
     { id: "overview" as const, label: m["remote.overview"](), icon: Activity, tone: "neutral" as TabTone },
+    ...(scopes.includes("approvals.view")
+      ? [
+          {
+            id: "needs" as const,
+            label: m["needs_you.title"](),
+            icon: BellRing,
+            count: (snapshot.attention ?? []).length || undefined,
+            tone: "attention" as TabTone,
+          },
+        ]
+      : []),
     {
       id: "team" as const,
       label: m["remote.team"](),
@@ -291,6 +314,10 @@
       reviews: {
         title: m["remote.approvals"](),
         body: m["remote.reviews_body"](),
+      },
+      needs: {
+        title: m["needs_you.title"](),
+        body: m["remote.needs_body"](),
       },
       activity: {
         title: m["remote.activity"](),
@@ -1504,6 +1531,42 @@
             <NodeEmptyState icon={Palette} title={m["remote.design_empty"]()} />
           </div>
         {/if}
+      {:else if activeTab === "needs"}
+        <div class="rw-panel mx-auto grid max-w-3xl grid-cols-1 gap-2" data-testid="remote-needs-you">
+          {#each snapshot.attention ?? [] as item (item.id)}
+            {@const labels = item.decision ? remoteDecisionLabels(item.decision) : null}
+            <article class="rw-card p-4">
+              <div class="flex items-start gap-2">
+                <span class="mt-1.5 size-2 shrink-0 rounded-full" style:background={item.severity === "error" ? "var(--app-danger)" : "var(--app-warning)"} aria-hidden="true"></span>
+                <div class="min-w-0 flex-1">
+                  <h3 class="text-ui-lg font-semibold text-pretty">{item.title}</h3>
+                  {#if item.body}<p class="mt-1 text-xs leading-5 text-pretty text-[var(--app-text-muted)]">{item.body}</p>{/if}
+                  {#if item.nodeTitle}<p class="mt-1 text-ui-xs text-[var(--app-text-soft)]">{item.nodeTitle}</p>{/if}
+                </div>
+              </div>
+              {#if canDecideReviews && labels}
+                <div class="mt-3 flex flex-wrap gap-2 border-t border-[var(--app-border)] pt-3">
+                  <Button size="sm" disabled={busy} onclick={() => onDecideAttention(item.id, "approve")}>{labels.approve}</Button>
+                  <Button size="sm" variant="outline" disabled={busy} onclick={() => onDecideAttention(item.id, "reject")}>{labels.reject}</Button>
+                </div>
+              {:else if canDecideReviews && item.question}
+                <div class="mt-3 flex flex-wrap gap-2 border-t border-[var(--app-border)] pt-3">
+                  {#each item.options as option (option)}
+                    <Button size="sm" disabled={busy} onclick={() => void onAnswerAttention(item.id, option)}>{option}</Button>
+                  {/each}
+                  <form class="flex min-w-0 flex-1 basis-60 gap-2" onsubmit={async (event: SubmitEvent) => { event.preventDefault(); const value = answerDrafts[item.id]?.trim(); if (value && await onAnswerAttention(item.id, value)) answerDrafts = { ...answerDrafts, [item.id]: "" }; }}>
+                    <Input class="h-8 min-w-0 flex-1" value={answerDrafts[item.id] ?? ""} oninput={(event: Event) => (answerDrafts = { ...answerDrafts, [item.id]: (event.currentTarget as HTMLInputElement).value })} placeholder={m["chat.answer_placeholder"]()} aria-label={m["chat.answer_placeholder"]()} />
+                    <Button size="sm" type="submit" variant="outline" disabled={busy || !answerDrafts[item.id]?.trim()}>{m["chat.answer_send"]()}</Button>
+                  </form>
+                </div>
+              {/if}
+            </article>
+          {:else}
+            <div class="rw-card">
+              <NodeEmptyState icon={BellRing} title={m["remote.needs_empty"]()} />
+            </div>
+          {/each}
+        </div>
       {:else if activeTab === "reviews"}
         <div class="rw-panel mx-auto grid max-w-4xl grid-cols-1 gap-2">
           {#each snapshot.reviews as review (review.id)}

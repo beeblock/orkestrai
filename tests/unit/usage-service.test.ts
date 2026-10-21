@@ -220,6 +220,7 @@ describe('UsageService', () => {
 
     expect(usages.map((usage) => usage.provider)).toEqual([
       'claude', 'codex', 'kimi', 'antigravity', 'cursor', 'devin', 'opencode', 'cline', 'copilot',
+      'gemini', 'qwen', 'aider', 'goose', 'amp',
     ]);
     expect(usages.find((usage) => usage.provider === 'antigravity')).toMatchObject({
       diagnostic: 'provider_cli_only',

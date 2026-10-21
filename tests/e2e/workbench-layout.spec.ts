@@ -45,7 +45,7 @@ test.describe('Workbench layout and search', () => {
       await page.getByRole('link', { name: 'Canvas' }).click();
       await expect(page).toHaveURL(new RegExp(`/canvas\\?workspace=${workspace.id}`));
       await expect.poll(() => page.evaluate(() => (window as Window & { workbenchMarker?: string }).workbenchMarker)).toBe('alive');
-      await page.getByRole('link', { name: 'Workbench' }).click();
+      await page.getByRole('link', { name: 'Foco', exact: true }).click();
       await expect(page.locator('section[data-pane-id]')).toHaveCount(8);
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);

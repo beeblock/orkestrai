@@ -7,6 +7,7 @@
  */
 
 import { Connection } from '@beeblock/svelar/database';
+import { isolateSqliteTransactions } from '$lib/database/sqlite-transactions.js';
 import { config } from '@beeblock/svelar/config';
 import { Hash } from '@beeblock/svelar/hashing';
 import { AuthManager } from '@beeblock/svelar/auth';
@@ -65,6 +66,8 @@ Connection.configure({
     },
   },
 });
+// Other requests' statements must never join (and roll back with) an open SQLite transaction.
+isolateSqliteTransactions();
 
 // ── Hashing (scrypt, zero dependencies) ───────────────────
 Hash.configure({ driver: 'scrypt' });

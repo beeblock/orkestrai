@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createNodeOnCanvas } from './helpers';
+import { createNodeOnCanvas, openWorkspace } from './helpers';
 
 /**
  * A CLI `orkestrai` autentica com `Authorization: Bearer <token>` e NAO envia
@@ -175,7 +175,7 @@ test.describe('ponte CLI (bridge)', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     // A selecao tambem detecta os providers locais. Esperar apenas "zero notas"
     // aceitava falsamente a tela vazia enquanto o workspace ainda carregava.
     await expect(page.locator('.toolbar')).toBeVisible({ timeout: 30_000 });

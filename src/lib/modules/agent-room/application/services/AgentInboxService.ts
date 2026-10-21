@@ -40,7 +40,10 @@ export type InboxKind =
   | 'task_completion'
   | 'task_recovery'
   | 'leader_supervision'
-  | 'handoff';
+  | 'handoff'
+  | 'owner'
+  | 'owner_question'
+  | 'owner_copy';
 
 export type InboxEnqueueInput = {
   workspaceId: string;
@@ -194,12 +197,24 @@ export class AgentInboxService {
   }
 
   async enqueue(input: InboxEnqueueInput): Promise<AgentMessageEnvelope> {
+    const { envelope, release } = await this.enqueueDeferred(input);
+    release();
+    return envelope;
+  }
+
+  /**
+   * Queues a message without announcing or delivering it yet, for a caller
+   * that writes it inside its own database transaction: `release`, called
+   * after the commit, tells the screens and wakes the dispatcher. A rolled
+   * back transaction never shows or types a message that does not exist.
+   */
+  async enqueueDeferred(input: InboxEnqueueInput): Promise<{ envelope: AgentMessageEnvelope; release: () => void }> {
     const content = input.content.trim();
     if (!content) throw new Error('A mensagem está vazia.');
     if (input.dedupKey) {
       const pending = await controlCenterRepository.inboxEnvelopes(input.toNodeId, ['queued', 'sent']);
       const duplicate = pending.find((envelope) => envelope.metadata.dedupKey === input.dedupKey);
-      if (duplicate) return duplicate;
+      if (duplicate) return { envelope: duplicate, release: () => undefined };
     }
     const messageId = input.messageId ?? uuidv7();
     const metadata: Record<string, unknown> = {
@@ -210,7 +225,7 @@ export class AgentInboxService {
       ...(input.replyTo ? { replyTo: input.replyTo } : {}),
       ...(input.dedupKey ? { dedupKey: input.dedupKey } : {}),
     };
-    await controlCenterService.recordDelivery({
+    const event = await controlCenterRepository.appendDelivery({
       messageId,
       workspaceId: input.workspaceId,
       fromNodeId: input.fromNodeId ?? null,
@@ -219,10 +234,15 @@ export class AgentInboxService {
       content,
       metadata,
     });
-    this.kick(input.workspaceId, input.toNodeId);
     const envelope = await controlCenterRepository.findEnvelope(messageId);
     if (!envelope) throw new Error('A mensagem não foi registrada.');
-    return envelope;
+    return {
+      envelope,
+      release: () => {
+        controlCenterService.announceDelivery(event);
+        this.kick(input.workspaceId, input.toNodeId);
+      },
+    };
   }
 
   /**
@@ -947,6 +967,11 @@ export class AgentInboxService {
       latestTurnComplete(context.provider, context.cwd, context.agentSessionId, context.options).catch(() => null),
     ]);
     return open === false && released === true;
+  }
+
+  /** Where an agent's conversation is recorded, without waking or restoring it. */
+  async transcriptFor(workspaceId: string, nodeId: string): Promise<TranscriptContext> {
+    return this.transcriptContext(workspaceId, nodeId, await this.liveSession(workspaceId, nodeId, false));
   }
 
   private async transcriptContext(workspaceId: string, nodeId: string, session: PtySessionInfo | null): Promise<TranscriptContext> {

@@ -1,4 +1,6 @@
-import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
+import { attentionDecisionService } from '$lib/modules/agent-room/application/services/AttentionDecisionService.js';
+import { channelService, OWNER_QUESTION_SOURCE } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { attentionRepository } from '$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js';
 import { reviewCenterService } from '$lib/modules/agent-room/application/services/ReviewCenterService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { DecideAgentReviewDto } from '$lib/modules/agent-room/application/dto/AgentReviewDto.js';
@@ -15,6 +17,14 @@ import { collaborationPolicy } from '../../domain/policies/CollaborationPolicy.j
 import { collaborationRepository } from '../../infrastructure/repositories/CollaborationRepository.js';
 import { sanitizeAuditMetadata } from '../projections/sanitize-shared-data.js';
 import { withCollaborationShareLock } from './CollaborationShareLock.js';
+import { directChannel } from '$lib/modules/agent-room/domain/channels.js';
+
+// A message only adds to a conversation, and a decision is checked against the
+// request it decides, so a guest whose snapshot is a moment old may still send
+// them; everything else must match the share revision the guest last saw.
+const REVISION_FREE_COMMANDS = new Set<CollaborationCommand['type']>([
+  'chat.post', 'leader.message', 'agent.message', 'attention.answer', 'attention.decide',
+]);
 
 export class SharedWorkspaceCommandBus {
   async execute(shareId: string, deviceRecordId: string, dto: ExecuteCollaborationCommandDto): Promise<CollaborationCommandResult> {
@@ -67,10 +77,12 @@ export class SharedWorkspaceCommandBus {
     if (!device.approvedAt || device.revokedAt) return reject('DEVICE_NOT_APPROVED');
     const requiredScope = collaborationPolicy.commandScope(dto.command.type);
     if (!collaborationPolicy.can(device.scopes, requiredScope)) return reject('SCOPE_DENIED', { requiredScope });
-    if (dto.revision !== share.revision) return reject('REVISION_CONFLICT', { currentRevision: share.revision });
+    if (!REVISION_FREE_COMMANDS.has(dto.command.type) && dto.revision !== share.revision) {
+      return reject('REVISION_CONFLICT', { currentRevision: share.revision });
+    }
 
     try {
-      const result = await this.perform(share.workspaceId, share.id, device.deviceId, device.displayName, dto.command);
+      const result = await this.perform(share.workspaceId, device.deviceId, device.displayName, dto.command);
       const revision = await collaborationRepository.incrementRevision(share.id);
       const safeResult = sanitizeAuditMetadata(result) as Record<string, unknown>;
       const row = await collaborationRepository.finishCommand(dto.commandId, {
@@ -89,7 +101,6 @@ export class SharedWorkspaceCommandBus {
 
   private async perform(
     workspaceId: string,
-    shareId: string,
     deviceId: string,
     deviceName: string,
     command: CollaborationCommand,
@@ -130,6 +141,20 @@ export class SharedWorkspaceCommandBus {
         assigneeNodeId: command.assigneeNodeId,
       });
       return { taskId: task.id, title: task.title, status: task.status };
+    }
+    if (command.type === 'attention.decide') {
+      const item = await attentionDecisionService.decide(workspaceId, command.itemId, command.decision, `remote:${deviceId}`);
+      return { itemId: command.itemId, resolved: item?.status === 'resolved' };
+    }
+    if (command.type === 'attention.answer') {
+      const item = await attentionRepository.find(workspaceId, command.itemId);
+      if (!item || item.sourceType !== OWNER_QUESTION_SOURCE || !item.sourceId || typeof item.action?.channel !== 'string') throw new Error('Esta pergunta não está mais aberta.');
+      const answer = await channelService.postOwner(workspaceId, item.action.channel, { body: command.text, replyToId: item.sourceId, via: 'remote' });
+      return { itemId: command.itemId, delivered: answer.delivered.every((entry) => entry.ok) };
+    }
+    if (command.type === 'chat.post') {
+      const posted = await channelService.postOwner(workspaceId, command.channel, { body: command.body, replyToId: command.replyToId ?? null, via: 'remote' });
+      return { messageId: posted.message.id, delivered: posted.delivered.every((entry) => entry.ok) };
     }
     if (command.type === 'review.decide') {
       const decision = await reviewCenterService.decide(
@@ -220,38 +245,20 @@ export class SharedWorkspaceCommandBus {
       const session = await agentSessionService.ensure(workspaceId, command.agentNodeId);
       return { agentNodeId: command.agentNodeId, sessionId: session.sessionId, state: session.state };
     }
+    // Guests built before the shared Conversa message an agent or the leader
+    // directly; those messages join that agent's direct conversation, like the
+    // ones written in the app, so every screen shows the same exchange.
+    const agents = await channelService.agents(workspaceId);
     if (command.type === 'agent.message') {
-      const target = (await bridgeService.listAgents(workspaceId)).find((agent) => agent.nodeId === command.agentNodeId);
+      const target = agents.find((agent) => agent.id === command.agentNodeId);
       if (!target) throw new Error('AGENT_NOT_FOUND');
-      if (!target.sessionAlive) throw new Error('AGENT_SESSION_OFFLINE');
-      const messageId = uuidv7();
-      void bridgeService.ask(workspaceId, {
-        to: target.nodeId,
-        message: command.message,
-        messageId,
-        metadata: {
-          remoteCollaboration: true,
-          remoteShareId: shareId,
-          remoteDeviceId: deviceId,
-        },
-      }).catch(() => undefined);
-      return { messageId, agentNodeId: target.nodeId, agentTitle: target.title };
+      const posted = await channelService.postOwner(workspaceId, directChannel(target.id), { body: command.message, via: 'remote' });
+      return { messageId: posted.message.id, agentNodeId: target.id, agentTitle: target.title };
     }
-    const leader = (await bridgeService.listAgents(workspaceId)).find((agent) => agent.maestro);
+    const leader = agents.find((agent) => agent.maestro);
     if (!leader) throw new Error('Workspace leader is unavailable.');
-    if (!leader.sessionAlive) throw new Error('Workspace leader is offline.');
-    const messageId = uuidv7();
-    void bridgeService.ask(workspaceId, {
-      to: leader.nodeId,
-      message: command.message,
-      messageId,
-      metadata: {
-        remoteCollaboration: true,
-        remoteShareId: shareId,
-        remoteDeviceId: deviceId,
-      },
-    }).catch(() => undefined);
-    return { messageId, agentNodeId: leader.nodeId, leaderTitle: leader.title };
+    const posted = await channelService.postOwner(workspaceId, directChannel(leader.id), { body: command.message, via: 'remote' });
+    return { messageId: posted.message.id, agentNodeId: leader.id, leaderTitle: leader.title };
   }
 }
 

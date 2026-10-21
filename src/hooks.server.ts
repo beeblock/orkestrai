@@ -1,7 +1,9 @@
+import { mobileAccessService } from '$lib/modules/agent-room/application/services/MobileAccessService.js';
 /**
  * SvelteKit Server Hooks — Svelar middleware pipeline
  */
 
+import { channelBridgeService } from '$lib/modules/agent-room/application/services/ChannelBridgeService.js';
 import { createSvelarApp } from '@beeblock/svelar/hooks';
 import { DatabaseSessionStore } from '@beeblock/svelar/session';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
@@ -17,6 +19,10 @@ import { afterDatabaseReady } from '$lib/modules/agent-room/infrastructure/backg
 import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
 import { creativeQueueService } from '$lib/modules/creative-media/application/services/CreativeQueueService.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
+import { agentLearningService } from '$lib/modules/agent-room/application/services/AgentLearningService.js';
+// Mirrors what the owner types in an agent's terminal into its conversation in Chat.
+import '$lib/modules/agent-room/application/services/TerminalMirrorService.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { startDatabaseMaintenance } from '$lib/modules/agent-room/infrastructure/database-maintenance.js';
 import { agentSessionRotationService } from '$lib/modules/agent-room/application/services/AgentSessionRotationService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
@@ -51,11 +57,16 @@ if (!building) {
       agentRuntimeService.startSupervisor();
       globalRef.__orkestraiAgentRuntimeSupervisor = true;
     }
+    channelBridgeService.start();
+    void mobileAccessService.resume();
     void agentSessionRotationService.rotateOversized()
       .then((rotated) => { for (const item of rotated) console.log(`[agent-runtime] Fresh conversation for ${item.title}: previous transcript ${Math.round(item.sizeBytes / 1024 / 1024)} MB.`); })
       .catch(() => console.warn('[agent-runtime] Oversized conversation check failed.'))
       .finally(() => agentInboxService.start());
     void startDatabaseMaintenance().catch(() => console.warn('[database] WAL maintenance could not start.'));
+    void agentLearningService.settleAllPending().catch(() => console.warn('[learning] Waiting lessons could not be settled.'));
+    void attentionService.resolveOrphaned().catch(() => console.warn('[attention] Items of removed nodes could not be closed.'));
+    void attentionService.handTeammateItemsToLeader().catch(() => console.warn('[attention] Teammate requests could not be handed to the leader.'));
   }).catch(() => console.error('[agent-runtime] Background services failed to start.'));
 }
 

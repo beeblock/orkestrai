@@ -26,6 +26,7 @@ export type PresetSummary = {
   category: 'product' | 'frontend' | 'backend' | 'creative' | 'growth' | 'orkestrai' | 'custom';
   version: string;
   updatedAt: string;
+  scope?: 'selection';
 };
 
 export type PresetData = {
@@ -66,6 +67,8 @@ export type PresetData = {
   taskColumns?: BoardColumnRecipe[];
   /** Arquivos SKILL.md portaveis, sempre relativos ao projeto de destino. */
   skills?: Array<{ relativePath: string; content: string }>;
+  /** 'selection' marks a score: part of a canvas saved to reuse in any workspace. */
+  scope?: 'selection';
   pack?: {
     packageId: string;
     version: string;
@@ -119,8 +122,45 @@ function sanitizePayload(payload: unknown): Record<string, unknown> {
   return clean;
 }
 
+const GROUP_ID_LISTS = [['members', 'memberIndexes'], ['designNodeIds', 'designNodeIndexes']] as const;
+
+/**
+ * A group names its members by node id, and ids are new in every workspace a
+ * preset fills. The preset keeps them as positions in its own node list.
+ */
+function portableGroupPayload(payload: Record<string, unknown>, indexOf: ReadonlyMap<string, number> | null): Record<string, unknown> {
+  const portable = { ...payload };
+  for (const [ids, indexes] of GROUP_ID_LISTS) {
+    const list = Array.isArray(payload[ids]) ? payload[ids] as unknown[] : [];
+    delete portable[ids];
+    if (!indexOf) continue;
+    portable[indexes] = list.map((id) => (typeof id === 'string' ? indexOf.get(id) : undefined)).filter((index): index is number => index !== undefined);
+  }
+  if (Array.isArray(portable.taskIds)) portable.taskIds = [];
+  return portable;
+}
+
+/** The ids a group's positions point to among the nodes just created; old presets point nowhere. */
+function appliedGroupLists(payload: Record<string, unknown>, nodeIds: readonly string[]): Record<string, string[]> {
+  const lists: Record<string, string[]> = {};
+  for (const [ids, indexes] of GROUP_ID_LISTS) {
+    const positions = Array.isArray(payload[indexes]) ? payload[indexes] as unknown[] : [];
+    lists[ids] = positions.map((index) => (typeof index === 'number' ? nodeIds[index] : undefined)).filter((id): id is string => Boolean(id));
+  }
+  return lists;
+}
+
 async function presetNodePayload(workspaceId: string, node: PresetData['nodes'][number]): Promise<Record<string, unknown>> {
   const payload = sanitizePayload(node.payload);
+  if (node.type === 'group') {
+    // Members are set once every node of the preset exists.
+    for (const [ids, indexes] of GROUP_ID_LISTS) {
+      delete payload[indexes];
+      payload[ids] = [];
+    }
+    if (Array.isArray(payload.taskIds)) payload.taskIds = [];
+    return payload;
+  }
   if (node.type !== 'terminal') return payload;
   const roleName = typeof payload.role === 'string' ? payload.role : null;
   const role = roleName ? await roleService.launchContext(workspaceId, roleName) : null;
@@ -130,10 +170,12 @@ async function presetNodePayload(workspaceId: string, node: PresetData['nodes'][
 function mapSummary(model: AgentPreset): PresetSummary {
   let agents = 0;
   let version = '1.0.0';
+  let scope: 'selection' | undefined;
   try {
     const data = JSON.parse(model.getAttribute('data')) as PresetData;
     agents = (data.nodes ?? []).filter((node) => node.type === 'terminal' && (node.payload as { provider?: string })?.provider).length;
     version = dataVersion(data);
+    if (data.scope === 'selection') scope = 'selection';
   } catch {
     // data invalido — agentes 0
   }
@@ -148,6 +190,7 @@ function mapSummary(model: AgentPreset): PresetSummary {
     category: 'custom',
     version,
     updatedAt: iso(model.getAttribute('updated_at')),
+    ...(scope ? { scope } : {}),
   };
 }
 
@@ -223,7 +266,7 @@ export class PresetService {
   }
 
   /** Snapshot: cria o preset a partir do workspace atual. */
-  async createFromWorkspace(workspaceId: string, meta: { name: string; icon?: string | null; description?: string | null }): Promise<PresetSummary> {
+  async createFromWorkspace(workspaceId: string, meta: { name: string; icon?: string | null; description?: string | null; nodeIds?: string[] }): Promise<PresetSummary> {
     const name = meta.name.trim();
     if (!name) throw new Error('Informe o nome do preset.');
     const exported = (await workspaceService.exportWorkspace(workspaceId)) as {
@@ -231,13 +274,36 @@ export class PresetService {
       nodes: PresetData['nodes'];
       edges: PresetData['edges'];
     };
+    // The export lists nodes in this same order; its entries carry no ids.
+    const listed = await workspaceRepository.listNodes(workspaceId);
+    let sourceIds: string[] | null = listed.length === exported.nodes.length
+      && listed.every((node, index) => node.type === exported.nodes[index].type && node.title === exported.nodes[index].title && node.x === exported.nodes[index].x && node.y === exported.nodes[index].y)
+      ? listed.map((node) => node.id)
+      : null;
+    const selection = meta.nodeIds?.length ? await this.selectionFilter(workspaceId, meta.nodeIds) : null;
+    if (selection) {
+      // A score keeps only the chosen nodes and the connections between them.
+      const kept = exported.nodes.map((_, index) => index).filter((index) => selection.indexes.has(index));
+      const remap = new Map(kept.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+      exported.edges = exported.edges
+        .filter((edge) => remap.has(edge.sourceIndex) && remap.has(edge.targetIndex))
+        .map((edge) => ({ ...edge, sourceIndex: remap.get(edge.sourceIndex)!, targetIndex: remap.get(edge.targetIndex)! }));
+      exported.nodes = kept.map((index) => exported.nodes[index]);
+      if (sourceIds) sourceIds = kept.map((index) => sourceIds![index]);
+      if (!exported.nodes.length) throw new Error('Selecione ao menos um nó deste workspace.');
+    }
     const sourceWorkingDir = exported.workspace.workingDir ?? '';
     // Preset nao leva a pasta do projeto original (quem aplica escolhe a dele).
     delete exported.workspace.workingDir;
-    const nodes = exported.nodes.map((node) => ({ ...node, payload: sanitizePayload(node.payload) }));
+    const indexOf = sourceIds ? new Map(sourceIds.map((id, index) => [id, index])) : null;
+    const nodes = exported.nodes.map((node) => {
+      const payload = sanitizePayload(node.payload);
+      return { ...node, payload: node.type === 'group' ? portableGroupPayload(payload, indexOf) : payload };
+    });
     // Rotinas viram receita por TITULO do agente (ids mudam a cada aplicacao).
     const routines: PresetData['routines'] = [];
     for (const routine of await routineService.list(workspaceId)) {
+      if (selection && (!routine.targetNodeId || !selection.ids.has(routine.targetNodeId))) continue;
       const node = routine.targetNodeId ? await workspaceRepository.getNode(routine.targetNodeId) : null;
       routines.push({
         targetTitle: node?.title ?? '',
@@ -248,7 +314,7 @@ export class PresetService {
     // Tarefas-template: titulo + responsavel/nota por TITULO (mesma regra).
     const sourceNodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
     const titleOf = (id: string | null) => (id ? (sourceNodes.find((node) => node.id === id)?.title ?? null) : null);
-    const tasks = (await taskBoardService.list(workspaceId)).map((task) => ({
+    const tasks = selection ? [] : (await taskBoardService.list(workspaceId)).map((task) => ({
       title: task.title,
       description: task.description,
       status: task.status,
@@ -257,7 +323,7 @@ export class PresetService {
       images: task.images,
     }));
     // MCPs extras (sem a entrada 'orkestrai' — provisionada sozinha).
-    const mcpServers = (await mcpService.list(workspaceId).catch(() => []))
+    const mcpServers = selection ? [] : (await mcpService.list(workspaceId).catch(() => []))
       .filter((server) => !server.builtin)
       .map(({ name, command, args }) => ({ name, command, args }));
     const id = uuidv7();
@@ -268,12 +334,14 @@ export class PresetService {
       workspace: exported.workspace,
       nodes,
       edges: exported.edges,
-      roles: await roleService.list(workspaceId),
+      roles: (await roleService.list(workspaceId)).filter((role) => !selection || selection.roles.has(role.name)),
       routines,
       tasks,
       mcpServers,
-      taskColumns: (await boardColumnService.list(workspaceId)).map(({ key, name, color, position }) => ({ key, name, color, position })),
-      skills: snapshotSkills(sourceWorkingDir),
+      ...(selection ? { scope: 'selection' as const } : {
+        taskColumns: (await boardColumnService.list(workspaceId)).map(({ key, name, color, position }) => ({ key, name, color, position })),
+        skills: snapshotSkills(sourceWorkingDir),
+      }),
       pack: { packageId: id, version: '1.0.0', minimumOrkestraiVersion: null, releaseNotes: null },
     };
     const now = new Date().toISOString();
@@ -289,6 +357,21 @@ export class PresetService {
     await AgentPresetRevision.create({ id: uuidv7(), preset_id: id, version: '1.0.0', revision_key: `${id}:1.0.0`, release_notes: null, data: JSON.stringify(data), checksum: checksum(data), created_at: now });
     const model = await AgentPreset.find(id);
     return mapSummary(model!);
+  }
+
+  /** Export indexes, ids and role names of the selected nodes of a workspace. */
+  private async selectionFilter(workspaceId: string, nodeIds: string[]): Promise<{ indexes: Set<number>; ids: Set<string>; roles: Set<string> }> {
+    const wanted = new Set(nodeIds);
+    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const indexes = new Set<number>();
+    const roles = new Set<string>();
+    nodes.forEach((node, index) => {
+      if (!wanted.has(node.id)) return;
+      indexes.add(index);
+      const role = (node.payload as { role?: string | null }).role;
+      if (role) roles.add(role);
+    });
+    return { indexes, ids: wanted, roles };
   }
 
   async remove(id: string): Promise<boolean> {
@@ -457,6 +540,13 @@ export class PresetService {
       const targetId = nodeIds[edge.targetIndex];
       if (!source || !targetId) continue;
       await workspaceRepository.createEdge({ workspaceId, sourceNodeId: source, targetNodeId: targetId, style: edge.style });
+    }
+    // Groups hold the copies made just now, never the nodes they were copied from.
+    for (const [index, node] of preset.nodes.entries()) {
+      if (node.type !== 'group' || !nodeIds[index]) continue;
+      const created = await workspaceRepository.getNode(nodeIds[index]);
+      if (!created) continue;
+      await workspaceRepository.updateNode(created.id, { payload: { ...created.payload, ...appliedGroupLists((node.payload ?? {}) as Record<string, unknown>, nodeIds) } as never });
     }
 
     // Rotinas: o alvo e resolvido por TITULO do agente instanciado agora.

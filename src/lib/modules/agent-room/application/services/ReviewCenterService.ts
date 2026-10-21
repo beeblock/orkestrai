@@ -11,6 +11,9 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { CreateAgentReviewCommentDto, CreateAgentReviewDto, DecideAgentReviewDto } from '../dto/AgentReviewDto.js';
 import { gitService } from './GitService.js';
 import { bridgeService } from './BridgeService.js';
+import { attentionService } from './AttentionService.js';
+
+export const REVIEW_ATTENTION_SOURCE = 'review';
 
 function broadcast(workspaceId: string): void {
   const send = (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast;
@@ -98,13 +101,21 @@ export class ReviewCenterService {
     if (dto.selectedPaths.some((path) => !changedPaths.has(path))) throw new Error('Um dos arquivos selecionados não pertence ao snapshot Git atual.');
     const model = await reviewCenterRepository.createReview(workspaceId, snapshot.git.revision, dto);
     broadcast(workspaceId);
-    return (await this.snapshot(workspaceId)).reviews.find((review) => review.id === model.getAttribute('id'))!;
+    const created = (await this.snapshot(workspaceId)).reviews.find((review) => review.id === model.getAttribute('id'))!;
+    await attentionService.raise({
+      workspaceId, nodeId: created.assigneeNodeId ?? null, taskId: created.taskId ?? null, category: 'review', severity: 'info',
+      title: created.title.slice(0, 200), body: null,
+      sourceType: REVIEW_ATTENTION_SOURCE, sourceId: created.id, correlationId: `${REVIEW_ATTENTION_SOURCE}:${created.id}`,
+      action: { target: 'review', decision: 'review', reviewId: created.id },
+    }).catch(() => undefined);
+    return created;
   }
 
   async decide(workspaceId: string, reviewId: string, dto: DecideAgentReviewDto): Promise<ReviewDecisionResult> {
     const review = await reviewCenterRepository.findReview(reviewId);
     if (!review || review.getAttribute('workspace_id') !== workspaceId) throw new Error('Review não encontrado neste workspace.');
     await reviewCenterRepository.decideReview(reviewId, dto);
+    await attentionService.resolveSource(workspaceId, REVIEW_ATTENTION_SOURCE, reviewId).catch(() => 0);
     const snapshot = await this.snapshot(workspaceId);
     const projected = snapshot.reviews.find((item) => item.id === reviewId)!;
     let feedback: ReviewDecisionResult['feedback'] = null;

@@ -27,3 +27,10 @@ export const updateAttentionSchema = z.object({
 
 export type ListAttentionInput = z.infer<typeof listAttentionSchema>;
 export type UpdateAttentionInput = z.infer<typeof updateAttentionSchema>;
+
+export const decideAttentionSchema = z.object({
+  workspaceId: z.string().uuid(),
+  decision: z.enum(['approve', 'reject']),
+});
+
+export type DecideAttentionInput = z.infer<typeof decideAttentionSchema>;

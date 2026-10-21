@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { attentionService } from './AttentionService.js';
 import { realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -136,6 +137,8 @@ function destinationAllowed(allowed: string[], destination: string): boolean {
   return allowed.some((candidate) => candidate === normalized || (candidate.startsWith('*.') && normalized.endsWith(candidate.slice(1))));
 }
 
+export const TOOL_DRAFT_ATTENTION_SOURCE = 'tool_draft';
+
 export class AgentWorkspaceToolService {
   async list(workspaceId: string) { return agentWorkspaceToolRepository.list(workspaceId); }
 
@@ -185,9 +188,11 @@ export class AgentWorkspaceToolService {
     if (actor.type !== 'user') throw new Error('Only the workspace owner can publish a tool revision.');
     const tool = await this.find(workspaceId, id);
     await this.assertDependenciesReady(tool);
-    return autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:publish', target: id,
+    const published = await autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:publish', target: id,
       actorType: 'user', actorId: actor.id, input: { revision: tool.currentRevision },
     }, () => agentWorkspaceToolRepository.setStatus(workspaceId, id, 'published', tool.currentRevision));
+    await attentionService.resolveSource(workspaceId, TOOL_DRAFT_ATTENTION_SOURCE, id).catch(() => 0);
+    return published;
   }
 
   private async tryAutoPublish(tool: WorkspaceToolRecord, actor: WorkspaceToolActor): Promise<WorkspaceToolRecord> {
@@ -240,9 +245,11 @@ export class AgentWorkspaceToolService {
 
   async archive(workspaceId: string, id: string, actor: WorkspaceToolActor) {
     if (actor.type !== 'user') throw new Error('Only the workspace owner can archive a tool.');
-    return autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:archive', target: id,
+    const archived = await autonomyPolicyService.execute({ workspaceId, capability: 'tool', operation: 'tool:archive', target: id,
       actorType: 'user', actorId: actor.id, mutation: true, auditOutput: () => ({ archived: true }),
     }, () => agentWorkspaceToolRepository.setStatus(workspaceId, id, 'archived'));
+    await attentionService.resolveSource(workspaceId, TOOL_DRAFT_ATTENTION_SOURCE, id).catch(() => 0);
+    return archived;
   }
 
   async revisions(workspaceId: string, id: string) { return agentWorkspaceToolRepository.revisions(workspaceId, id); }

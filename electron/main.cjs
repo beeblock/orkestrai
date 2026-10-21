@@ -826,10 +826,15 @@ async function createWindow() {
     title: 'Orkestrai',
     icon: path.join(appRoot, 'electron', 'resources', 'icon.png'),
     backgroundColor: '#0D0B2E',
+    // The renderer draws a 44px top bar on every platform (DesktopTitlebar):
+    // Windows overlays its native window buttons, macOS insets the traffic lights.
     ...(process.platform === 'win32' ? {
       titleBarStyle: 'hidden',
-      titleBarOverlay: { color: '#00000000', symbolColor: '#c7c8d0', height: 36 },
+      titleBarOverlay: { color: '#00000000', symbolColor: '#c7c8d0', height: 44 },
       autoHideMenuBar: true,
+    } : process.platform === 'darwin' ? {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 16, y: 15 },
     } : {}),
     webPreferences: {
       contextIsolation: true,
@@ -1138,7 +1143,7 @@ ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
   const request = await portalSurfaceRequest(event, input);
   if (input.method === 'attach') return managedPortalExecutor.surface(request, mainWindow, input.lease);
   if (input.method === 'detach') return managedPortalExecutor.detach(request.workspaceId, request.nodeId, input.lease);
-  if (!['navigate', 'inspectScript', 'capture', 'preview', 'state', 'close', 'activate', 'pause', 'resume'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
+  if (!['navigate', 'inspectScript', 'capture', 'preview', 'state', 'close', 'activate', 'pause', 'resume', 'devtools'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
   if (JSON.stringify(input.args || {}).length > 500000) throw new Error('Portal surface input is too large.');
   return managedPortalExecutor.userCommand(request, input.method, input.args || {});
 });
@@ -1257,7 +1262,7 @@ ipcMain.handle('orkestrai:titlebar-theme', (_event, theme) => {
   const color = String(theme.background ?? '');
   const symbolColor = String(theme.foreground ?? '');
   if (!/^#[0-9a-f]{6}$/i.test(color) || !/^#[0-9a-f]{6}$/i.test(symbolColor)) return false;
-  mainWindow.setTitleBarOverlay({ color, symbolColor, height: 36 });
+  mainWindow.setTitleBarOverlay({ color, symbolColor, height: 44 });
   return true;
 });
 

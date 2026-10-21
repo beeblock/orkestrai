@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getContext } from 'svelte';
   import { ChevronDown, LayoutTemplate, Palette } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -12,6 +13,8 @@
   };
 
   let { active, onBlank, onExploration }: Props = $props();
+  // Rails on the side of the canvas open their menus and tooltips sideways.
+  const railSide = getContext<'top' | 'bottom' | 'right' | 'left' | undefined>('toolbar-tooltip-side') ?? 'bottom';
 </script>
 
 <DropdownMenu.Root>
@@ -31,9 +34,9 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="top">{m['design.menu']()}</Tooltip.Content>
+    <Tooltip.Content side={railSide}>{m['design.menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="top" align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
+  <DropdownMenu.Content side={railSide} align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
     <DropdownMenu.Label>{m['design.menu']()}</DropdownMenu.Label>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onBlank}>
       <Palette size={16} class="shrink-0" aria-hidden="true" />

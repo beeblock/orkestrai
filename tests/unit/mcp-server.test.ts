@@ -85,6 +85,24 @@ describe('servidor MCP (orkestrai mcp)', () => {
       expect([...dispatched].sort()).toEqual(bridgeCanvasCommandSchema.shape.input.options.map(option => option.shape.command.value).sort());
     } finally { server.input.end(); await server.done; }
   });
+  it('reads and changes Canvas checklists and calendars as operations, and replies to an external chat by its message', async () => {
+    const server = startMcp();
+    try {
+      for (const name of ['checklist_read', 'checklist_update', 'calendar_read', 'calendar_update']) expect(MCP_TOOLS.some((tool) => tool.name === name)).toBe(true);
+      server.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'checklist_read', arguments: { node: 'Lançamento final' } } });
+      expect(JSON.parse((await server.waitFor(1)).result.content[0].text)).toMatchObject({ method: 'GET', path: '/api/agent-room/bridge/checklists/Lan%C3%A7amento%20final' });
+      const operations = [{ op: 'set', itemId: 'i1', done: true }];
+      server.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'checklist_update', arguments: { node: 'c1', operations } } });
+      expect(JSON.parse((await server.waitFor(2)).result.content[0].text)).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/checklists/c1', body: { operations, from: 'n1' } });
+      server.send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'calendar_update', arguments: { node: 'cal', operations: [{ op: 'add', title: 'Demo', date: '2026-10-23' }] } } });
+      expect(JSON.parse((await server.waitFor(3)).result.content[0].text)).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/calendars/cal' });
+      server.send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'channel_post', arguments: { message: 'Feito.', replyTo: 'm-1' } } });
+      expect(JSON.parse((await server.waitFor(4)).result.content[0].text)).toMatchObject({ path: '/api/agent-room/bridge/channel', body: { message: 'Feito.', channel: 'owner', replyTo: 'm-1' } });
+      server.send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'channel_post', arguments: { message: 'Só aqui.' } } });
+      expect(JSON.parse((await server.waitFor(5)).result.content[0].text).body).not.toHaveProperty('replyTo');
+    } finally { server.input.end(); await server.done; }
+  });
+
   it('exposes native floor audit and revision-bound batch cleanup without tool discovery round trips', async () => {
     const server = startMcp();
     const entries = [{ floorId: 'floor-1', revision: 'a'.repeat(64) }];

@@ -453,6 +453,7 @@ export function removeWorkbenchNode(layout: WorkbenchLayout, nodeId: string): Wo
   return next;
 }
 
+/** Tabs sit on top of each pane, like an editor, unless the owner chose the side list. */
 export function normalizeWorkbenchTabPlacement(value: unknown): WorkbenchTabPlacement {
-  return value === 'horizontal' ? 'horizontal' : 'vertical';
+  return value === 'vertical' ? 'vertical' : 'horizontal';
 }

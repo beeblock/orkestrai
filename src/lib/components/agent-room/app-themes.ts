@@ -47,10 +47,10 @@ export const BUILTIN_APP_THEMES: AppTheme[] = [
     dark: true,
     builtin: true,
     tokens: {
-      page: '#0d0f12', canvas: '#0a0d10', sidebar: '#111419', surface: '#171b20', surfaceRaised: '#20262d', surfaceSubtle: '#12161b',
-      text: '#f4f5f6', textSoft: '#c2c7cd', textMuted: '#85909a', border: '#2a3037', borderStrong: '#404852',
-      accent: '#f3c34f', accentSoft: '#302915', accentContrast: '#17130a', secondary: '#63b3d1', success: '#42c990', warning: '#e7b557',
-      danger: '#e26670', grid: '#252b31', edge: '#59636e',
+      page: '#0d0c0b', canvas: '#0a0908', sidebar: '#11100e', surface: '#141311', surfaceRaised: '#1b1a17', surfaceSubtle: '#0f0e0d',
+      text: '#efebe4', textSoft: '#aca59b', textMuted: '#8a847a', border: '#23211e', borderStrong: '#34312c',
+      accent: '#e8b84a', accentSoft: '#2b2414', accentContrast: '#1a1405', secondary: '#6db3dc', success: '#4fc08d', warning: '#f0883e',
+      danger: '#e5646c', grid: '#24211d', edge: '#57524a',
     },
   },
   {
@@ -83,10 +83,10 @@ export const BUILTIN_APP_THEMES: AppTheme[] = [
     dark: false,
     builtin: true,
     tokens: {
-      page: '#f5f6f7', canvas: '#edf0f2', sidebar: '#fbfcfd', surface: '#ffffff', surfaceRaised: '#e7ebee', surfaceSubtle: '#f2f4f5',
-      text: '#171a1f', textSoft: '#424951', textMuted: '#606a74', border: '#d4d9de', borderStrong: '#adb5bd',
-      accent: '#8a6300', accentSoft: '#fff1c7', accentContrast: '#ffffff', secondary: '#116f8f', success: '#167a55', warning: '#8a5c00',
-      danger: '#b83440', grid: '#cbd1d6', edge: '#7d8791',
+      page: '#f6f4f0', canvas: '#efece6', sidebar: '#faf8f4', surface: '#ffffff', surfaceRaised: '#ebe7e0', surfaceSubtle: '#f3f0ea',
+      text: '#1a1714', textSoft: '#4a443c', textMuted: '#655e54', border: '#dcd6cc', borderStrong: '#b9b1a5',
+      accent: '#8a6300', accentSoft: '#fbefcf', accentContrast: '#ffffff', secondary: '#116f8f', success: '#167a55', warning: '#8a5c00',
+      danger: '#b83440', grid: '#d8d2c7', edge: '#8a8378',
     },
   },
 ];
@@ -169,6 +169,13 @@ function derivedThemeVariables(theme: AppTheme): Record<string, string> {
     '--app-shadow-border-hover': theme.dark
       ? `0 0 0 1px ${hairlineStrong}`
       : `0 0 0 1px ${hairlineStrong}, 0 1px 2px -1px color-mix(in srgb, #000000 8%, transparent), 0 2px 4px color-mix(in srgb, #000000 6%, transparent)`,
+    // Liquid glass: translucent chrome over the canvas, a light top edge and a soft drop.
+    '--app-glass': `color-mix(in srgb, ${token.surface} ${theme.dark ? 66 : 72}%, transparent)`,
+    '--app-glass-strong': `color-mix(in srgb, ${token.surface} ${theme.dark ? 88 : 90}%, transparent)`,
+    '--app-glass-line': theme.dark ? 'color-mix(in srgb, #ffffff 9%, transparent)' : 'color-mix(in srgb, #000000 8%, transparent)',
+    '--app-glass-shadow': theme.dark
+      ? 'inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent), 0 18px 48px color-mix(in srgb, #000000 46%, transparent)'
+      : 'inset 0 1px 0 color-mix(in srgb, #ffffff 90%, transparent), 0 14px 40px color-mix(in srgb, #3a2f1c 14%, transparent)',
     '--app-info': token.secondary,
     '--app-info-soft': `color-mix(in srgb, ${token.secondary} 16%, transparent)`,
     '--app-danger-soft': `color-mix(in srgb, ${token.danger} 16%, transparent)`,

@@ -13,6 +13,7 @@ import { workspaceMemoryRepository } from '../../infrastructure/repositories/Wor
 import { extractKnowledgeDocument, KNOWLEDGE_EXTRACTOR_VERSION } from '../../infrastructure/knowledge/DocumentExtractor.js';
 import { workspacePathService } from './WorkspacePathService.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
+import { occupiedOnFloor } from '../../domain/canvas-floors.js';
 import { assertKnowledgePath } from '../../domain/knowledge-files.js';
 import { leaseKnowledgeWatch } from '../../infrastructure/knowledge/KnowledgeFileWatch.js';
 import type { KnowledgeCommandDto } from '../dto/KnowledgeCommandDto.js';
@@ -72,7 +73,7 @@ export class KnowledgeService {
     if (!info.isFile() || info.size > MAX_KNOWLEDGE_FILE_BYTES) throw new Error('knowledge_file_size');
     const nodes = await workspaceRepository.listNodes(workspaceId);
     if (input.floorId && (await AgentFloor.find(input.floorId))?.getAttribute('workspace_id') !== workspaceId) throw new Error('knowledge_floor_missing');
-    const position = findFreeCanvasPosition(nodes.filter(node => (node.floorId ?? null) === (input.floorId ?? null)), { x: input.x ?? 80, y: input.y ?? 80, width: 520, height: 460 });
+    const position = findFreeCanvasPosition(occupiedOnFloor(nodes, input.floorId ?? null), { x: input.x ?? 80, y: input.y ?? 80, width: 520, height: 460 });
     const node = await workspaceRepository.createNode({ workspaceId, type: 'document', title: input.title ?? input.path.split('/').at(-1), ...position, width: 520, height: 460, floorId: input.floorId, payload: { path: input.path, knowledgeTags: [] } });
     broadcast(workspaceId);
     return node;
@@ -84,7 +85,7 @@ export class KnowledgeService {
       const input = dto.input;
       if (input.floorId && (await AgentFloor.find(input.floorId))?.getAttribute('workspace_id') !== dto.workspaceId) throw new Error('knowledge_floor_missing');
       const nodes = await workspaceRepository.listNodes(dto.workspaceId);
-      const position = findFreeCanvasPosition(nodes.filter(node => (node.floorId ?? null) === (input.floorId ?? null)), { x: input.x ?? 80, y: input.y ?? 80, width: 960, height: 620 });
+      const position = findFreeCanvasPosition(occupiedOnFloor(nodes, input.floorId ?? null), { x: input.x ?? 80, y: input.y ?? 80, width: 960, height: 620 });
       const node = await workspaceRepository.createNode({ workspaceId: dto.workspaceId, type: 'knowledge', title: dto.input.title, ...position, width: 960, height: 620, floorId: dto.input.floorId, payload: {} });
       broadcast(dto.workspaceId);
       return node;

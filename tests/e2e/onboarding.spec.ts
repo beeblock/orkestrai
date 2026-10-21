@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openWorkspace } from './helpers';
 
 test.describe('onboarding guiado', () => {
   test('sempre abre nas boas-vindas e guia para criar workspace novo', async ({ page, request }) => {
@@ -11,7 +12,7 @@ test.describe('onboarding guiado', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.svelte-flow__pane')).toBeVisible();
 
     await page.goto('/canvas?onboarding=1');
@@ -44,7 +45,7 @@ test.describe('onboarding guiado', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.svelte-flow__pane')).toBeVisible();
 
     // Abre o wizard, pula pros tours usando o workspace atual
@@ -105,7 +106,7 @@ test.describe('onboarding guiado', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
     await expect(page.locator('.svelte-flow__pane')).toBeVisible();
 

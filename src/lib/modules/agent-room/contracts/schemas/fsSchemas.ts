@@ -12,6 +12,11 @@ export const terminalWriteSchema = z.object({
   submit: z.boolean().default(false),
 });
 
+export const terminalPauseSchema = z.object({
+  paused: z.boolean(),
+  nodeIds: z.array(z.string().trim().min(1).max(64)).max(200).optional(),
+});
+
 export const openWorkspaceFolderSchema = z.object({
   path: z.string().trim().min(1).max(4000)
     .refine(value => !/[\x00-\x1f\x7f]/.test(value), 'Invalid folder path.')

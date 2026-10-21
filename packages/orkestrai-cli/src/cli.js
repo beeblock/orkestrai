@@ -33,8 +33,14 @@ const INBOX_SINK = Symbol('inboxSink');
 export function formatInbox(items, remaining = 0) {
   if (!items?.length) return '';
   const lines = [`--- Orkestrai: ${items.length} mensagem(ns) nova(s) na sua caixa de entrada ---`];
-  for (const item of items) {
-    const from = item.fromTitle ? `De ${item.fromTitle}` : 'Orkestrai';
+  // The owner reads Chat and waits for an answer there: their messages come
+  // first and ask for a reply before the agent goes back to its work.
+  const fromOwner = items.filter((item) => item.kind === 'owner');
+  if (fromOwner.length) {
+    lines.push('O DONO ESTA ESPERANDO NA CONVERSA: responda agora com orkestrai post "<resposta>" (tool MCP channel_post), antes de continuar o trabalho. Se ainda nao pode tratar, diga quando vai tratar.');
+  }
+  for (const item of [...fromOwner, ...items.filter((candidate) => candidate.kind !== 'owner')]) {
+    const from = item.kind === 'owner' ? 'Do dono' : item.fromTitle ? `De ${item.fromTitle}` : 'Orkestrai';
     const task = item.taskId ? ` (tarefa ${item.taskId})` : '';
     const kind = item.kind === 'ask' && item.fromTitle ? ' [pergunta]' : item.kind === 'reply' ? ' [resposta]' : '';
     lines.push(`[${item.messageId}] ${from}${task}${kind}: ${item.content}`);
@@ -99,6 +105,9 @@ Uso:
   orkestrai note write <nodeId> <conteudo>
   orkestrai note edit <nodeId> <trecho-antigo> <trecho-novo>
   orkestrai note create <titulo> [--content <texto>] [--connect <agente|all>]
+  orkestrai checklist read <no> | checklist add <no> <texto> | checklist check|uncheck <no> <itemId> | checklist edit <no> <itemId> <texto> | checklist remove <no> <itemId>
+  orkestrai calendar read <no> | calendar add <no> --date AAAA-MM-DD [--time HH:MM] [--notes <texto>] <titulo> | calendar edit <no> <eventId> [--title <titulo>] [--date AAAA-MM-DD] [--time HH:MM|dia-todo] [--notes <texto>] | calendar remove <no> <eventId>
+    <no> e o id ou o titulo exato do checklist/calendario no Canvas.
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
   orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--preset <auto|instagram-square|instagram-portrait|instagram-story|tiktok|custom>] [--width <px> --height <px>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--preset <perfil>] [--width <px> --height <px>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--preset <perfil>] [--width <px> --height <px>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
@@ -117,6 +126,10 @@ Uso:
   orkestrai portal create <url> [--title <titulo>] [--connect <agente|all>] [--force-new]
   orkestrai portal <nodeId|nome> <navigate|tabs|snapshot|click|type|select|upload|download|wait|extract|screenshot|dom|eval> [...]
   orkestrai notify <mensagem> [--kind info|attention|project|task] [--title <titulo>]
+  orkestrai post <mensagem> [--channel owner|team]
+  orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]
+  orkestrai close-question <perguntaId> <resposta ou motivo>
+  orkestrai escalate-question <perguntaId> <por que so o dono decide>
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome>] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
@@ -564,6 +577,9 @@ async function runCommand(argv, options, sink) {
       let cancelled = false;
       let released = false;
       const owner = process.ppid;
+      // The agent reads nothing until the command ends, so waiting and heartbeats
+      // leave messages queued; releasing the slot hands them over with the result.
+      const quiet = { ...config, [INBOX_SINK]: null };
       const leave = async () => {
         const id = lease ?? ticket;
         if (!id || released) return;
@@ -578,7 +594,7 @@ async function runCommand(argv, options, sink) {
       try {
         while (!lease) {
           if (cancelled) throw new Error('Execucao pesada cancelada antes de iniciar.');
-          const slot = await bridge(config, 'POST', '/api/agent-room/bridge/heavy', { label, taskId: flags.task ?? null, ticket, waitMs: 20_000 });
+          const slot = await bridge(quiet, 'POST', '/api/agent-room/bridge/heavy', { label, taskId: flags.task ?? null, ticket, waitMs: 20_000 });
           if (slot.granted) lease = slot.leaseId;
           else {
             ticket = slot.ticket;
@@ -597,7 +613,7 @@ async function runCommand(argv, options, sink) {
           stoppedTree = stopHeavyTree(child);
         };
         const heartbeat = setInterval(() => {
-          void bridge(config, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`, { label, taskId: flags.task ?? null })
+          void bridge(quiet, 'POST', `/api/agent-room/bridge/heavy/${encodeURIComponent(lease)}/heartbeat`, { label, taskId: flags.task ?? null })
             .then((data) => {
               // A lost reservation the server cannot restore, or a nearly full
               // disk, ends the run: the machine never runs more than its slots.
@@ -1196,6 +1212,57 @@ async function runCommand(argv, options, sink) {
         return 0;
       }
       throw new Error(`Acao de nota desconhecida: ${action}`);
+    }
+    case 'checklist': {
+      const [action, node, ...values] = rest;
+      const usage = 'Uso: orkestrai checklist read <no> | add <no> <texto> | check|uncheck <no> <itemId> | edit <no> <itemId> <texto> | remove <no> <itemId>';
+      if (!action || !node) throw new Error(usage);
+      const path = `/api/agent-room/bridge/checklists/${encodeURIComponent(node)}`;
+      let operation;
+      if (action === 'add') operation = { op: 'add', text: values.join(' ') };
+      else if (action === 'check' || action === 'uncheck') operation = { op: 'set', itemId: values[0], done: action === 'check' };
+      else if (action === 'edit') operation = { op: 'edit', itemId: values[0], text: values.slice(1).join(' ') };
+      else if (action === 'remove') operation = { op: 'remove', itemId: values[0] };
+      else if (action !== 'read') throw new Error(usage);
+      const data = operation
+        ? await bridge(config, 'POST', path, { operations: [operation], from: selfAgent })
+        : await bridge(config, 'GET', path);
+      if (flags.json) out(JSON.stringify(data, null, 2));
+      else {
+        const done = data.items.filter((item) => item.done).length;
+        out(`${data.title || 'Checklist'} (${data.nodeId}) — ${done}/${data.items.length}`);
+        for (const item of data.items) out(`  [${item.done ? 'x' : ' '}] ${item.text}  (${item.id})`);
+      }
+      return 0;
+    }
+    case 'calendar': {
+      const [action, node, ...values] = rest;
+      const usage = 'Uso: orkestrai calendar read <no> | add <no> --date AAAA-MM-DD [--time HH:MM] [--notes <texto>] <titulo> | edit <no> <eventId> [--title] [--date] [--time HH:MM|dia-todo] [--notes] | remove <no> <eventId>';
+      if (!action || !node) throw new Error(usage);
+      const path = `/api/agent-room/bridge/calendars/${encodeURIComponent(node)}`;
+      const time = typeof flags.time === 'string' ? (flags.time === 'dia-todo' ? null : flags.time) : undefined;
+      let operation;
+      if (action === 'add') {
+        operation = { op: 'add', title: values.join(' '), date: flags.date, ...(time ? { time } : {}), ...(typeof flags.notes === 'string' ? { notes: flags.notes } : {}) };
+      } else if (action === 'edit') {
+        operation = {
+          op: 'edit', eventId: values[0],
+          ...(typeof flags.title === 'string' ? { title: flags.title } : {}),
+          ...(typeof flags.date === 'string' ? { date: flags.date } : {}),
+          ...(time !== undefined ? { time } : {}),
+          ...(typeof flags.notes === 'string' ? { notes: flags.notes } : {}),
+        };
+      } else if (action === 'remove') operation = { op: 'remove', eventId: values[0] };
+      else if (action !== 'read') throw new Error(usage);
+      const data = operation
+        ? await bridge(config, 'POST', path, { operations: [operation], from: selfAgent })
+        : await bridge(config, 'GET', path);
+      if (flags.json) out(JSON.stringify(data, null, 2));
+      else {
+        out(`${data.title || 'Calendario'} (${data.nodeId}) — ${data.events.length} eventos`);
+        for (const event of data.events) out(`  ${event.date} ${event.time ?? 'dia todo'}  ${event.title}  (${event.id})${event.notes ? ` — ${event.notes}` : ''}`);
+      }
+      return 0;
     }
     case 'api': {
       const [action, nodeId, requestId] = rest;
@@ -1802,6 +1869,41 @@ async function runCommand(argv, options, sink) {
       if (!message) throw new Error('Uso: orkestrai notify <mensagem>');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/notify', { message, kind: flags.kind, title: flags.title, from: flags.from });
       out(data.notified ? 'Notificacao enviada.' : 'Evento informativo registrado sem notificacao do sistema.');
+      return 0;
+    }
+    case 'post': {
+      const message = rest.join(' ');
+      if (!message || !flags.from) throw new Error('Uso: orkestrai post <mensagem> [--channel owner|team] [--reply-to <id da mensagem do Telegram/Slack>]');
+      const channel = flags.channel === 'team' ? 'team' : 'owner';
+      const replyTo = typeof flags['reply-to'] === 'string' ? flags['reply-to'] : undefined;
+      await bridge(config, 'POST', '/api/agent-room/bridge/channel', { message, channel, from: flags.from, ...(replyTo ? { replyTo } : {}) });
+      out(replyTo ? 'Resposta postada na conversa e enviada ao chat externo.' : channel === 'team' ? 'Postado no canal #equipe.' : 'Postado na conversa com o dono.');
+      return 0;
+    }
+    case 'ask-owner': {
+      const question = rest.join(' ');
+      if (!question || !flags.from) throw new Error('Uso: orkestrai ask-owner <pergunta> [--options "Sim|Não"] [--task <id>]');
+      const options = typeof flags.options === 'string' ? flags.options.split('|').map((option) => option.trim()).filter(Boolean) : undefined;
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/ask-owner', { question, options, taskId: flags.task, from: flags.from });
+      out(data.routedTo === 'leader'
+        ? `Pergunta enviada ao lider ${data.leader ?? ''} (${data.questionId}); ele decide ou leva ao dono. A resposta chega na sua caixa de entrada; continue o que nao depende dela.`
+        : `Pergunta enviada ao dono (${data.questionId}). A resposta chega na sua caixa de entrada; continue o que não depende dela.`);
+      return 0;
+    }
+    case 'close-question': {
+      const [questionId, ...answerParts] = rest;
+      const answer = answerParts.join(' ');
+      if (!questionId || !answer || !flags.from) throw new Error('Uso: orkestrai close-question <perguntaId> <resposta ou motivo>');
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/close-question', { questionId, answer, from: flags.from });
+      out(data.delivered ? 'Pergunta respondida; a resposta segue para quem perguntou e o dono a vê na Conversa.' : 'Pergunta fechada; o dono vê o motivo na Conversa.');
+      return 0;
+    }
+    case 'escalate-question': {
+      const [questionId, ...noteParts] = rest;
+      const note = noteParts.join(' ');
+      if (!questionId || !note || !flags.from) throw new Error('Uso: orkestrai escalate-question <perguntaId> <por que so o dono decide>');
+      await bridge(config, 'POST', '/api/agent-room/bridge/escalate-question', { questionId, note, from: flags.from });
+      out('Pergunta levada ao dono (Precisa de voce). Siga com o que nao depende dela.');
       return 0;
     }
     case 'status': {

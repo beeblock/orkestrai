@@ -41,7 +41,7 @@ for (const dpr of [1, 1.5]) {
         await expect(page.locator('.xterm-rows')).toContainText('line59');
         for (const scale of [0.55, 1.25]) {
           await page.locator('.svelte-flow__viewport').evaluate((element, scale) => {
-            (element as HTMLElement).style.setProperty('transform', `translate(60px, 80px) scale(${scale})`, 'important');
+            (element as HTMLElement).style.setProperty('transform', `translate(320px, 80px) scale(${scale})`, 'important');
           }, scale);
           // Use the actual rendered glyph, not xterm internals or assumed metrics.
           const box = await wordBox(page, 'bravo');

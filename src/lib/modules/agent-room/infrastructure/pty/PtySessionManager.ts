@@ -29,6 +29,8 @@ export type PtySessionInfo = {
   exitCode: number | null;
   /** true quando a sessão parou de produzir saída (estado neutro de ociosidade). */
   waiting: boolean;
+  /** The owner paused the process tree (SIGSTOP); it resumes with SIGCONT. */
+  paused?: boolean;
   /** Já produziu algum output — usado na espera de prontidao antes de escrever. */
   hasOutput: boolean;
   /** Rotulos humanos (título do no / workspace) para notificações. */
@@ -131,6 +133,10 @@ type PtySession = PtySessionInfo & {
   bracketedPaste: boolean;
   terminalModeTail: string;
   scrollback: string;
+  /** Modes in effect where the retained scrollback starts. */
+  trimmedModes: Map<string, boolean>;
+  /** Characters this session has output since it started, kept or trimmed. */
+  outputLength: number;
   listeners: Set<PtySessionListener>;
   exitListeners: Set<PtyExitListener>;
   attentionListeners: Set<PtyAttentionListener>;
@@ -148,12 +154,19 @@ type PtySession = PtySessionInfo & {
   deliveryReadyAt: number;
   deferredHumanInput: string[];
   humanComposerLength: number;
+  humanDraft: HumanDraft;
   humanComposerInput: HumanComposerInput;
   lastOutputAt: number;
   outputRevision: number;
   lastSubmitOutputRevision: number;
   conptySubmitGuard: boolean;
+  /** Output after idle reported the agent as working; the next quiet spell reports idle again. */
+  outputBurst: boolean;
+  /** A resize makes TUIs repaint; that repaint is not work. */
+  redrawUntil: number;
 };
+
+export type PtyOutputMark = { sessionId: string; length: number };
 
 type ComposerDelivery = {
   text: string;
@@ -163,6 +176,8 @@ type ComposerDelivery = {
   requiresAcceptance: boolean;
   confirmAcceptance?: () => Promise<boolean>;
   confirmationPending?: boolean;
+  /** Where the terminal's output stood when Enter submitted this delivery. */
+  onSubmitted?: (mark: PtyOutputMark) => void;
 };
 
 export type ComposerDeliveryHandle = {
@@ -221,6 +236,107 @@ const COMPOSER_SETTLE_LIMIT_MS = 5_000;
  * controle (atalhos como Ctrl+X abrem o editor externo do Claude!) e achata
  * newlines — \n solto num composer e um Enter (submit parcial da mensagem).
  */
+// Private modes a reattached terminal needs to keep working: the alternate
+// screen first, then key, mouse, focus and paste reporting, then the cursor.
+const REPLAYED_MODES = ['1049', '1047', '47', '1', '1000', '1002', '1003', '1004', '1005', '1006', '1015', '2004', '25'];
+
+/** Records the private modes (`ESC [ ? n h|l`) that `text` sets, in order. */
+export function applyTerminalModes(modes: Map<string, boolean>, text: string): void {
+  for (const match of text.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
+    for (const mode of match[1].split(';')) modes.set(mode, match[2] === 'h');
+  }
+}
+
+/**
+ * Restores, ahead of a trimmed replay, the modes set by output that no longer
+ * fits the scrollback. Without it an agent TUI that entered the alternate
+ * screen and mouse reporting long ago reattaches as a plain terminal, and the
+ * wheel no longer reaches it.
+ */
+export function terminalModePrefix(modes: Map<string, boolean>): string {
+  let prefix = '';
+  for (const mode of REPLAYED_MODES) {
+    const on = modes.get(mode);
+    if (on === undefined) continue;
+    if (mode === '25') {
+      if (!on) prefix += '\x1b[?25l';
+    } else if (on) {
+      prefix += `\x1b[?${mode}h`;
+    }
+  }
+  return prefix;
+}
+
+/** Splits output at the scrollback limit without cutting an escape sequence in two. */
+export function trimScrollback(text: string, limit: number): { kept: string; dropped: string } {
+  if (text.length <= limit) return { kept: text, dropped: '' };
+  let cut = text.length - limit;
+  const escape = text.lastIndexOf('\x1b', cut);
+  if (escape >= 0 && cut - escape < 64) cut = escape;
+  return { kept: text.slice(cut), dropped: text.slice(0, cut) };
+}
+
+/**
+ * The last `limit` characters of a terminal's output for a reattached viewer,
+ * preceded by the modes that the omitted output set (`modes` already holds the
+ * ones from output the scrollback no longer keeps). A plain tail would drop the
+ * alternate screen and mouse reporting of an agent TUI that started long ago.
+ */
+export function replayTail(modes: ReadonlyMap<string, boolean>, scrollback: string, limit: number): string {
+  const { kept, dropped } = trimScrollback(scrollback, limit);
+  const replayed = new Map(modes);
+  if (dropped) applyTerminalModes(replayed, dropped);
+  return terminalModePrefix(replayed) + kept;
+}
+
+/** Text the owner is typing into an agent's terminal, across input chunks. */
+export type HumanDraft = { text: string; paste: boolean };
+
+/**
+ * Follows what the owner types into an agent's terminal and returns each line
+ * they submit, so the conversation in Chat can show it. Bracketed pastes keep
+ * their line breaks; editing keys apply to the draft; other escape sequences
+ * (arrows, focus reports, mouse) are terminal controls, not text.
+ */
+export function trackHumanDraft(draft: HumanDraft, data: string): string[] {
+  const submitted: string[] = [];
+  let text = draft.text;
+  let index = 0;
+  while (index < data.length) {
+    if (data.startsWith('\x1b[200~', index)) { draft.paste = true; index += 6; continue; }
+    if (data.startsWith('\x1b[201~', index)) { draft.paste = false; index += 6; continue; }
+    const char = data[index];
+    const code = char.charCodeAt(0);
+    if (code === 0x1b) {
+      const next = data[index + 1];
+      if (next === '[') {
+        let end = index + 2;
+        while (end < data.length && !(data.charCodeAt(end) >= 0x40 && data.charCodeAt(end) <= 0x7e)) end++;
+        index = end + 1;
+      } else if (next === 'O') {
+        index += 3;
+      } else {
+        // Alt+Enter adds a line; Alt+Backspace deletes a word; a lone Escape keeps the draft.
+        if (next === '\r') text += '\n';
+        else if (next === '\x7f') text = text.replace(/\S+\s*$/, '');
+        index += next === undefined ? 1 : 2;
+      }
+      continue;
+    }
+    if (draft.paste) text += char === '\r' ? '\n' : char;
+    else if (char === '\r' || char === '\n') {
+      if (text.trim()) submitted.push(text);
+      text = '';
+    } else if (code === 0x7f || code === 0x08) text = text.slice(0, -1);
+    else if (code === 0x15 || code === 0x03) text = '';
+    else if (code === 0x17) text = text.replace(/\S+\s*$/, '');
+    else if (code >= 0x20) text += char;
+    index++;
+  }
+  draft.text = text.slice(-16_000);
+  return submitted;
+}
+
 export function sanitizeComposerText(text: string): string {
   return text
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -313,6 +429,8 @@ export class PtySessionManager {
       bracketedPaste: false,
       terminalModeTail: '',
       scrollback: '',
+      trimmedModes: new Map(),
+      outputLength: 0,
       listeners: new Set(),
       exitListeners: new Set(),
       attentionListeners: new Set(),
@@ -330,11 +448,14 @@ export class PtySessionManager {
       deliveryReadyAt: 0,
       deferredHumanInput: [],
       humanComposerLength: 0,
+      humanDraft: { text: '', paste: false },
       humanComposerInput: new HumanComposerInput(),
       lastOutputAt: 0,
       outputRevision: 0,
       lastSubmitOutputRevision: 0,
       conptySubmitGuard: platform() === 'win32' || input.runtime?.kind === 'wsl',
+      outputBurst: false,
+      redrawUntil: 0,
     };
 
     ptyProcess.onData((data) => {
@@ -342,7 +463,10 @@ export class PtySessionManager {
       const resumedFromIdle = session.waiting;
       session.lastOutputAt = Date.now();
       session.outputRevision += 1;
-      session.scrollback = (session.scrollback + data).slice(-SCROLLBACK_LIMIT);
+      session.outputLength += data.length;
+      const retained = trimScrollback(session.scrollback + data, SCROLLBACK_LIMIT);
+      if (retained.dropped) applyTerminalModes(session.trimmedModes, retained.dropped);
+      session.scrollback = retained.kept;
       const modes = session.terminalModeTail + data;
       for (const match of modes.matchAll(/\x1b\[\?2004([hl])/g)) session.bracketedPaste = match[1] === 'h';
       session.terminalModeTail = modes.slice(-12);
@@ -350,7 +474,13 @@ export class PtySessionManager {
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
       this.scheduleAttentionCheck(session);
-      if (firstOutput || resumedFromIdle) this.recordLifecycle(session, 'working');
+      // `waiting` stays set on purpose (deliveries rely on it), so the burst
+      // flag remembers to report idle once the output goes quiet again.
+      const repaint = resumedFromIdle && Date.now() < session.redrawUntil;
+      if (firstOutput || (resumedFromIdle && !repaint && !session.outputBurst)) {
+        if (resumedFromIdle) session.outputBurst = true;
+        this.recordLifecycle(session, 'working');
+      }
     });
 
     ptyProcess.onExit(({ exitCode }) => {
@@ -458,7 +588,7 @@ export class PtySessionManager {
     if (onAttention) session.attentionListeners.add(onAttention);
     if (onWorkingDirectory) session.workingDirectoryListeners.add(onWorkingDirectory);
 
-    const scrollback = session.scrollback;
+    const scrollback = terminalModePrefix(session.trimmedModes) + session.scrollback;
     if (session.exited && onExit) {
       queueMicrotask(() => onExit(session.exitCode ?? 0));
     }
@@ -472,6 +602,12 @@ export class PtySessionManager {
         if (onWorkingDirectory) session.workingDirectoryListeners.delete(onWorkingDirectory);
       },
     };
+  }
+
+  /** At most `limit` characters of recent output, replayable on its own (see `replayTail`). */
+  replay(id: string, limit: number): string {
+    const session = this.requireSession(id);
+    return replayTail(session.trimmedModes, session.scrollback, limit);
   }
 
   writeStartupOnce(id: string, input: string): boolean {
@@ -533,6 +669,7 @@ export class PtySessionManager {
     if (session.cols === cols && session.rows === rows) return;
     session.cols = cols;
     session.rows = rows;
+    session.redrawUntil = Date.now() + 1_500;
     session.pty.resize(cols, rows);
   }
 
@@ -583,6 +720,76 @@ export class PtySessionManager {
   }
 
   /** Retire owned duplicates or unclaimed orphans, never another node's PTY. */
+  /**
+   * Pauses or resumes every live process tree of a node (SIGSTOP/SIGCONT on the
+   * PTY's own process group). Only owned trees are signalled, so external CLIs
+   * are never touched; Windows has no equivalent and returns 0.
+   */
+  setNodePaused(workspaceId: string, nodeId: string, paused: boolean): number {
+    if (platform() === 'win32') return 0;
+    let count = 0;
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId !== workspaceId || session.nodeId !== nodeId || session.exited || !session.ownsProcessTree) continue;
+      if (Boolean(session.paused) === paused) continue;
+      const pid = Number(session.pty.pid);
+      if (!Number.isSafeInteger(pid) || pid <= 1) continue;
+      try {
+        const processGroup = Number(execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(pid)], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 2_000,
+        }).trim());
+        if (processGroup !== pid) continue;
+        process.kill(-processGroup, paused ? 'SIGSTOP' : 'SIGCONT');
+        session.paused = paused;
+        count += 1;
+      } catch {
+        // The process exited between the check and the signal.
+      }
+    }
+    return count;
+  }
+
+  /** Latest output of the node's live session (raw, bounded); null when none is live. */
+  outputTail(workspaceId: string, nodeId: string, chars = 8_000): string | null {
+    const latest = this.liveNodeSession(workspaceId, nodeId);
+    return latest ? latest.scrollback.slice(-Math.max(200, chars)) : null;
+  }
+
+  /** Where a node's live terminal output stands now, to read later only what came after. */
+  outputMark(workspaceId: string, nodeId: string): { sessionId: string; length: number } | null {
+    const latest = this.liveNodeSession(workspaceId, nodeId);
+    return latest ? { sessionId: latest.id, length: latest.outputLength } : null;
+  }
+
+  /**
+   * The output a node's terminal wrote after `mark`, as far as the scrollback
+   * still holds it; null when that terminal is gone or was restarted since.
+   */
+  outputSince(workspaceId: string, nodeId: string, mark: { sessionId: string; length: number }): string | null {
+    const latest = this.liveNodeSession(workspaceId, nodeId);
+    if (!latest || latest.id !== mark.sessionId) return null;
+    const retainedFrom = latest.outputLength - latest.scrollback.length;
+    return latest.scrollback.slice(Math.max(0, mark.length - retainedFrom));
+  }
+
+  private liveNodeSession(workspaceId: string, nodeId: string): PtySession | null {
+    let latest: PtySession | null = null;
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId !== workspaceId || session.nodeId !== nodeId || session.exited) continue;
+      if (!latest || session.createdAt > latest.createdAt) latest = session;
+    }
+    return latest;
+  }
+
+  pausedNodes(workspaceId: string): string[] {
+    const ids = new Set<string>();
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === workspaceId && session.paused && !session.exited && session.nodeId) ids.add(session.nodeId);
+    }
+    return [...ids];
+  }
+
   killAgentSession(provider: string, agentSessionId: string, owner: { workspaceId: string; nodeId: string }, keepSessionId?: string): number {
     const sessions = [...this.sessions.values()].filter(
       (session) => !session.exited
@@ -626,6 +833,7 @@ export class PtySessionManager {
       isAccepted?: () => Promise<boolean>;
       isStillRelevant?: () => Promise<boolean>;
       signal?: AbortSignal;
+      onSubmitted?: (mark: PtyOutputMark) => void;
     } = {},
   ): Promise<void> {
     const session = this.requireSession(id);
@@ -636,7 +844,7 @@ export class PtySessionManager {
       acceptanceRead ??= Promise.resolve().then(options.isAccepted!).finally(() => { acceptanceRead = undefined; });
       return acceptanceRead;
     } : undefined;
-    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance);
+    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance, options.onSubmitted);
     if (options.signal?.aborted) {
       queued.cancel();
       throw new Error('Agent message delivery cancelled.');
@@ -745,7 +953,14 @@ export class PtySessionManager {
     return false;
   }
 
-  queueWithSubmit(id: string, text: string, submitDelayMs = 200, requiresAcceptance = false, confirmAcceptance?: () => Promise<boolean>): ComposerDeliveryHandle {
+  queueWithSubmit(
+    id: string,
+    text: string,
+    submitDelayMs = 200,
+    requiresAcceptance = false,
+    confirmAcceptance?: () => Promise<boolean>,
+    onSubmitted?: (mark: PtyOutputMark) => void,
+  ): ComposerDeliveryHandle {
     const session = this.requireSession(id);
     if (session.exited) {
       return {
@@ -765,7 +980,7 @@ export class PtySessionManager {
 
     let delivery!: ComposerDelivery;
     const submitted = new Promise<void>((resolve, reject) => {
-      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance };
+      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance, onSubmitted };
       session.deliveryQueue.push(delivery);
       this.drainDeliveryQueue(session);
     });
@@ -815,6 +1030,10 @@ export class PtySessionManager {
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => {
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) return;
+      if (session.outputBurst && session.waiting) {
+        session.outputBurst = false;
+        this.recordLifecycle(session, 'idle');
+      }
       this.setWaiting(session, true);
       this.releaseDeliveryBarrierWhenReady(session);
       this.drainDeliveryQueue(session);
@@ -823,6 +1042,7 @@ export class PtySessionManager {
 
   private setWaiting(session: PtySession, waiting: boolean): void {
     if (waiting) session.initialIdleObserved = true;
+    if (!waiting) session.outputBurst = false;
     if (session.waiting === waiting) return;
     session.waiting = waiting;
     for (const listener of session.attentionListeners) listener(waiting);
@@ -902,6 +1122,7 @@ export class PtySessionManager {
           throw new Error('Complete the provider workspace trust confirmation in its terminal before sending agent messages.');
         }
         session.lastSubmitOutputRevision = session.outputRevision;
+        const submittedAt: PtyOutputMark = { sessionId: session.id, length: session.outputLength };
         this.write(session.id, '\r');
         session.lastSubmittedDelivery = delivery;
         session.lastDeliveryAccepted = false;
@@ -909,6 +1130,11 @@ export class PtySessionManager {
         session.awaitingDeliveryIdle = true;
         session.deliveryReadyAt = Date.now() + this.deliverySettleMs(session);
         this.scheduleDeliveryBarrierFallback(session);
+        try {
+          delivery.onSubmitted?.(submittedAt);
+        } catch {
+          // An observer never undoes a submitted delivery.
+        }
       } catch (error) {
         delivery.reject(error instanceof Error ? error : new Error(String(error)));
       } finally {
@@ -1020,9 +1246,15 @@ export class PtySessionManager {
 
   private writeHumanInputNow(session: PtySession, data: string): void {
     session.startupGuard?.humanInput(data);
+    const prompts = session.provider ? trackHumanDraft(session.humanDraft, data) : [];
     const submitted = this.updateHumanComposerState(session, data);
     this.write(session.id, data);
     if (session.provider && submitted) {
+      // The owner just started a turn: the agent is working from here on.
+      // Typing cleared `waiting` without a report, so say it explicitly.
+      session.outputBurst = true;
+      this.recordLifecycle(session, 'working');
+      for (const text of prompts) this.emitHumanPrompt(session, text);
       session.lastSubmittedDelivery = null;
       session.lastDeliveryAccepted = false;
       // The renderer may submit a human prompt while an automatic handoff is
@@ -1037,6 +1269,15 @@ export class PtySessionManager {
       return;
     }
     if (session.humanComposerLength === 0) queueMicrotask(() => this.drainDeliveryQueue(session));
+  }
+
+  /** Hands a line the owner submitted in the terminal to the Chat mirror. */
+  private emitHumanPrompt(session: PtySession, text: string): void {
+    if (!session.workspaceId || !session.nodeId) return;
+    const mirror = (globalThis as {
+      __orkestraiHumanPrompt?: (input: { workspaceId: string; nodeId: string; sessionId: string; text: string; at: number }) => void;
+    }).__orkestraiHumanPrompt;
+    mirror?.({ workspaceId: session.workspaceId, nodeId: session.nodeId, sessionId: session.id, text, at: Date.now() });
   }
 
   private updateHumanComposerState(session: PtySession, data: string): boolean {

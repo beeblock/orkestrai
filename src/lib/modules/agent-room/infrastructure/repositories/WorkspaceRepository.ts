@@ -25,6 +25,8 @@ import { AgentKnowledgeSource } from '../../domain/models/AgentKnowledgeSource.j
 import { AgentLearningEntry } from '../../domain/models/AgentLearningEntry.js';
 import { AgentMemorySource } from '../../domain/models/AgentMemorySource.js';
 import { AgentHuddle } from '../../domain/models/AgentHuddle.js';
+import { AgentChannelMessage } from '../../domain/models/AgentChannelMessage.js';
+import { AgentChannelBinding } from '../../domain/models/AgentChannelBinding.js';
 import { AgentHuddleParticipant } from '../../domain/models/AgentHuddleParticipant.js';
 import { AgentHuddleTurn } from '../../domain/models/AgentHuddleTurn.js';
 import { AgentAutonomyPolicy } from '../../domain/models/AgentAutonomyPolicy.js';
@@ -297,6 +299,8 @@ export class WorkspaceRepository {
       await AgentMemoryEntry.query().where('workspace_id', id).delete();
       await AgentKnowledgeSource.query().where('workspace_id', id).delete();
       await AgentLearningEntry.query().where('workspace_id', id).delete();
+      await AgentChannelMessage.query().where('workspace_id', id).delete();
+      await AgentChannelBinding.query().where('workspace_id', id).delete();
       await AgentHuddleTurn.query().where('workspace_id', id).delete();
       await AgentHuddleParticipant.query().where('workspace_id', id).delete();
       await AgentHuddle.query().where('workspace_id', id).delete();
@@ -354,6 +358,17 @@ export class WorkspaceRepository {
     if (!includeArchived) query.whereNull('archived_at');
     const rows = await query.get();
     return rows.map(mapNode);
+  }
+
+  /** Archived nodes of a workspace, newest first, for the restore list. */
+  async listArchivedNodes(workspaceId: string, limit = 200): Promise<Array<CanvasNode & { archivedAt: string }>> {
+    const rows = await AgentCanvasNode.query()
+      .where('workspace_id', workspaceId)
+      .whereNotNull('archived_at')
+      .orderBy('archived_at', 'desc')
+      .limit(limit)
+      .get();
+    return rows.map((row) => ({ ...mapNode(row), archivedAt: String(row.getAttribute('archived_at')) }));
   }
 
   /** Arquiva um no (some do canvas, continua no banco para o historico). */

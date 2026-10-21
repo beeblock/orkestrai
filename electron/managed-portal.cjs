@@ -667,6 +667,14 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
       return capturePreview(tab, Number.isInteger(requested) && requested >= 160 && requested <= 4096 ? requested : 1600);
     }
     if (method === 'state') return state(managed);
+    if (method === 'devtools') {
+      // The owner's web inspector for this Portal tab, toggled in its own window.
+      requireOpen(tab);
+      const contents = tab.window.webContents;
+      if (contents.isDevToolsOpened()) contents.closeDevTools();
+      else contents.openDevTools({ mode: 'detach', activate: true });
+      return { open: contents.isDevToolsOpened() };
+    }
     if (method === 'pause' || method === 'resume') { managed.pauseLocked = method === 'pause'; return state(managed); }
     if (method === 'activate') {
       if (!managed.tabs.has(args.tabId)) throw new Error('Portal tab not found.');

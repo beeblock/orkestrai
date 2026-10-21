@@ -11,13 +11,15 @@
   import { USAGE_PROVIDERS, usageProviderDefinition, type UsageDiagnostic } from '$lib/modules/agent-room/domain/usage-providers.js';
   import { refreshUsage, retainUsageFeed, usageStore } from '../usage-store.svelte.js';
   import { usageErrorText } from '../usage-i18n.js';
+  import TokenAnalyticsCard from './TokenAnalyticsCard.svelte';
 
   type Props = {
     onClose: () => void;
     onAddToCanvas?: () => void;
+    workspaceId?: string | null;
   };
 
-  let { onClose, onAddToCanvas }: Props = $props();
+  let { onClose, onAddToCanvas, workspaceId = null }: Props = $props();
 
   const usages = $derived(usageStore.values);
   const loading = $derived(usageStore.loading);
@@ -199,6 +201,8 @@
       {/if}
     </section>
   {/each}
+
+  <TokenAnalyticsCard {workspaceId} />
 
   {#if lastFetchAt}
     <footer class="panel-footer">{m['usage.updated']({ when: updatedText() })} · {m['usage.refresh_interval']()}</footer>

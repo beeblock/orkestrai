@@ -487,6 +487,28 @@ export class ControlCenterRepository {
     return rows.map(mapEnvelope);
   }
 
+  /** Agent-to-agent asks, newest first, for the team conversation. */
+  /**
+   * Agent-to-agent asks for the team channel, newest first. The channel lists
+   * one as `envelope:<id>`, after every channel message of the same instant,
+   * so a page cursor on a channel message leaves out the asks of its instant.
+   */
+  async listConversationEnvelopes(workspaceId: string, input: { before: string | null; beforeId?: string | null; limit: number }): Promise<AgentMessageEnvelopeData[]> {
+    const query = AgentMessageEnvelope.query()
+      .where('workspace_id', workspaceId)
+      .where('kind', 'ask')
+      .whereNotNull('from_node_id');
+    const { before } = input;
+    const envelopeId = input.beforeId?.startsWith('envelope:') ? input.beforeId.slice('envelope:'.length) : null;
+    if (before && envelopeId) {
+      query.whereNested((older) => {
+        older.where('created_at', '<', before).orWhereNested((same) => same.where('created_at', before).where('id', '<', envelopeId));
+      });
+    } else if (before) query.where('created_at', '<', before);
+    const rows = await query.orderBy('created_at', 'desc').orderBy('id', 'desc').limit(input.limit).get();
+    return rows.map(mapEnvelope);
+  }
+
   async latestLeaderSupervision(workspaceId: string, nodeId: string): Promise<AgentMessageEnvelopeData | null> {
     const row = await AgentMessageEnvelope.query()
       .where('workspace_id', workspaceId)

@@ -209,6 +209,11 @@ describe('BridgeService', () => {
       state: 'working',
       taskId: unassigned.id,
     })).rejects.toThrow('não tem responsável');
+
+    // A state that asks for a person must say what it needs.
+    for (const state of ['waiting_input', 'waiting_permission', 'blocked'] as const) {
+      await expect(bridgeService.reportActivity(workspace.id, { state, taskId: assigned.id })).rejects.toThrow('Informe o que você precisa');
+    }
   });
 
   it('resumes a known conversation before an ask when its Floor terminal was not mounted after restart', async () => {

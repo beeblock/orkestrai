@@ -6,6 +6,9 @@ import { agentInboxService } from '$lib/modules/agent-room/application/services/
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
+import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager, type PtySessionInfo } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
@@ -103,6 +106,109 @@ describe('Agent inbox', () => {
     expect(prompts[0].message).toContain('Mobile pronto para revisão');
     const delivered = await controlCenterRepository.inboxEnvelopes(nodes.Lider, ['delivered']);
     expect(delivered.map((envelope) => envelope.id).sort()).toEqual([web.messageId, mobile.messageId].sort());
+  });
+
+  it('shows the owner a message as queued until the busy agent receives it', async () => {
+    const { workspace, nodes } = await team();
+    const frames: Array<Record<string, unknown>> = [];
+    const scope = globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void };
+    const previous = scope.__orkestraiBroadcast;
+    scope.__orkestraiBroadcast = (frame) => { frames.push(frame); };
+    try {
+      session(nodes.Lider).ready = false;
+      const { message } = await channelService.postOwner(workspace.id, `dm:${nodes.Lider}`, { body: 'A mensagem chegou?' });
+      expect(message.meta).toEqual({ deliverTo: [nodes.Lider] });
+      await agentInboxService.drain(workspace.id, nodes.Lider);
+      expect(prompts).toHaveLength(0);
+      expect((await channelRepository.find(workspace.id, message.id))?.meta.deliveredAt).toBeUndefined();
+
+      session(nodes.Lider).ready = true;
+      await agentInboxService.drain(workspace.id, nodes.Lider);
+
+      expect(prompts).toHaveLength(1);
+      const delivered = await channelRepository.find(workspace.id, message.id);
+      expect(delivered?.meta).toMatchObject({ deliverTo: [nodes.Lider], deliveredAt: expect.any(String) });
+      expect(frames.filter((frame) => frame.type === 'channelMessage').map((frame) => (frame.message as { meta: Record<string, unknown> }).meta.deliveredAt ?? null))
+        .toEqual([null, delivered?.meta.deliveredAt]);
+      expect(await channelRepository.markDelivered(workspace.id, message.id, new Date().toISOString())).toBeNull();
+    } finally {
+      scope.__orkestraiBroadcast = previous;
+    }
+  });
+
+  it('sends a teammate question to the leader, who decides it without the owner', async () => {
+    const { workspace, nodes } = await team();
+    const question = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'O disco caiu para 1 GB; libero espaço ou paro?', options: ['Liberar', 'Parar'] });
+    expect(question.meta).toMatchObject({ awaiting: 'leader', leaderNodeId: nodes.Lider, leaderTitle: 'Lider' });
+    // Nothing waits for the owner: the leader decides.
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+    expect((await channelService.listChannels(workspace.id)).channels.find((channel) => channel.id === `dm:${nodes.Web}`)?.openQuestions).toBe(0);
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    const copy = prompts.find((prompt) => prompt.nodeId === nodes.Lider)?.message ?? '';
+    expect(copy).toContain(`orkestrai close-question ${question.id}`);
+    expect(copy).toContain(`orkestrai escalate-question ${question.id}`);
+    expect(copy).toContain('O disco caiu para 1 GB');
+
+    await expect(channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { body: 'Pode seguir.' }))
+      .rejects.toThrow('Só o líder ou o agente que perguntou');
+    const { message, delivered } = await channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { body: 'Já liberei 16 GB; pode seguir.' });
+    expect(delivered).toBe(true);
+    expect(message).toMatchObject({ kind: 'answer', authorKind: 'agent', authorNodeId: nodes.Lider, replyToId: question.id, meta: { closedBy: 'leader', authorTitle: 'Lider' } });
+    expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toEqual(expect.any(String));
+    expect((await attentionService.list({ workspaceId: workspace.id })).filter((item) => item.sourceId === question.id)).toEqual([]);
+    await expect(channelService.closeQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { body: 'De novo.' })).rejects.toThrow('já foi respondida');
+
+    await agentInboxService.drain(workspace.id, nodes.Web);
+    expect(prompts.find((prompt) => prompt.nodeId === nodes.Web)?.message).toContain('Resposta do líder Lider à sua pergunta ao dono');
+  });
+
+  it('lets only the leader bring a question to the owner, and asks the owner directly without a leader', async () => {
+    const { workspace, nodes } = await team();
+    const question = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'Assino o plano pago do provedor?' });
+    await expect(channelService.escalateQuestion(workspace.id, question.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { note: 'Gasto' }))
+      .rejects.toThrow('Só o líder');
+    const escalated = await channelService.escalateQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { note: 'Gasto mensal novo' });
+    expect(escalated.meta).toMatchObject({ awaiting: 'owner', escalationNote: 'Gasto mensal novo', escalatedBy: 'Lider' });
+    const [item] = await attentionService.list({ workspaceId: workspace.id });
+    expect(item).toMatchObject({ sourceId: question.id, nodeId: nodes.Web, title: 'Assino o plano pago do provedor? — Gasto mensal novo' });
+    await expect(channelService.escalateQuestion(workspace.id, question.id, { nodeId: nodes.Lider, title: 'Lider' }, { note: 'De novo' }))
+      .rejects.toThrow('já está com o dono');
+
+    const solo = await workspaceRepository.createWorkspace({ name: 'solo', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({ workspaceId: solo.id, type: 'terminal', title: 'Sozinho', payload: { provider: 'codex' } });
+    const direct = await channelService.askOwner(solo.id, { nodeId: agent.id, title: 'Sozinho' }, { question: 'Posso seguir?' });
+    expect(direct.meta.awaiting).toBeUndefined();
+    expect((await attentionService.list({ workspaceId: solo.id })).map((entry) => entry.sourceId)).toEqual([direct.id]);
+  });
+
+  it('lets the asker withdraw its question and drops the leader copy once the owner answered', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Lider).ready = false;
+    const withdrawn = await channelService.askOwner(workspace.id, { nodeId: nodes.Web, title: 'Web' }, { question: 'Preciso de outra porta?' });
+    const result = await channelService.closeQuestion(workspace.id, withdrawn.id, { nodeId: nodes.Web, title: 'Web' }, { body: 'Não preciso mais: a porta 5199 liberou.' });
+    expect(result).toMatchObject({ delivered: false, message: { meta: { closedBy: 'asker' } } });
+
+    const answered = await channelService.askOwner(workspace.id, { nodeId: nodes.Mobile, title: 'Mobile' }, { question: 'Publico na loja?' });
+    await channelService.postOwner(workspace.id, `dm:${nodes.Mobile}`, { body: 'Ainda não.', replyToId: answered.id });
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+
+    session(nodes.Lider).ready = true;
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    // The copies of both questions are gone; the owner's decision reaches the leader.
+    const leader = prompts.filter((prompt) => prompt.nodeId === nodes.Lider).map((prompt) => prompt.message).join('\n');
+    expect(leader).not.toContain('close-question');
+    expect(leader).toContain('o dono respondeu à pergunta de Mobile ("Publico na loja?"): Ainda não.');
+  });
+
+  it('tells the leader what the owner says to a teammate directly, and nothing when it is the leader', async () => {
+    const { workspace, nodes } = await team();
+    await channelService.postOwner(workspace.id, `dm:${nodes.Web}`, { body: 'A infra precisa seguir a do WhatsApp.' });
+    await channelService.postOwner(workspace.id, `dm:${nodes.Lider}`, { body: 'Como está a fila?' });
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    const leader = prompts.filter((prompt) => prompt.nodeId === nodes.Lider).map((prompt) => prompt.message).join('\n');
+    expect(leader).toContain('o dono mandou uma mensagem direta a Web: "A infra precisa seguir a do WhatsApp."');
+    expect(leader).toContain('Como está a fila?');
+    expect(leader.match(/Para sua coordenação/g)).toHaveLength(1);
   });
 
   it('routes a late answer to the asker inbox instead of losing it', async () => {

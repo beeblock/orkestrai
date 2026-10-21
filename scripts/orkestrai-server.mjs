@@ -17,6 +17,7 @@ import { WebSocketServer } from 'ws';
 import { installOrkestraiShim, writeOrkestraiRuntimeFile } from './install-orkestrai-shim.mjs';
 import { holdBackgroundStartup } from '../src/lib/modules/agent-room/infrastructure/background-startup.ts';
 import { compactStartupDatabase, runStartupMigrations } from './run-startup-migrations.mjs';
+import { createMobileGateway } from './mobile-gateway.mjs';
 
 // App Electron aberto pelo Finder recebe um PATH minimo do macOS; sem os
 // locais comuns de CLIs a deteccao e o spawn dos agentes falham com ENOENT.
@@ -187,6 +188,12 @@ const server = http.createServer((request, response) => {
   handler(request, response);
 });
 const wss = new WebSocketServer({ noServer: true });
+// Phone access stays off until the owner pairs a phone; the app starts and stops it.
+globalThis.__orkestraiMobileGateway = createMobileGateway({
+  handler,
+  loopbackHost: `${host}:${port}`,
+  extraHeaders: crossOriginIsolationHeaders,
+});
 
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url ?? '/', `http://${host}`).pathname;
@@ -223,6 +230,7 @@ async function shutdown() {
   await globalThis.__orkestraiShutdownCollaboration?.().catch(() => undefined);
   await globalThis.__orkestraiShutdownDevices?.().catch(() => undefined);
   wss.close();
+  await globalThis.__orkestraiMobileGateway?.stop().catch(() => undefined);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 15_000).unref();
 }

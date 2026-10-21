@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
-import { agentLearningMode, lessonNeedsReview, type AgentLesson } from '../../domain/agent-learning.js';
+import { agentLearningMode, LEARNING_ATTENTION_SOURCE, lessonNeedsReview, type AgentLesson, type AgentLessonStatus } from '../../domain/agent-learning.js';
 import { knowledgeNormalize, knowledgeTerms } from '../../domain/knowledge.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentLearningRepository } from '../../infrastructure/repositories/AgentLearningRepository.js';
 import type { AgentLearningCommandDto } from '../dto/AgentLearningCommandDto.js';
+import { attentionService } from './AttentionService.js';
+
+export { LEARNING_ATTENTION_SOURCE };
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 export class AgentLearningService {
@@ -62,6 +65,7 @@ export class AgentLearningService {
       if (input.command === 'decide' && input.status === 'active' && (!current.correction || !current.evidence)) throw new Error('learning_evidence_required');
       const at = new Date().toISOString();
       const status = input.command === 'skip' ? 'archived' : input.status;
+      await attentionService.resolveSource(workspaceId, LEARNING_ATTENTION_SOURCE, current.id).catch(() => 0);
       return agentLearningRepository.update({ ...current, status, evidenceLevel: actor.type === 'user' && status === 'active' ? 'owner_reviewed' : current.evidenceLevel, revision: current.revision + 1, updatedAt: at, history: [...current.history.slice(-49), { revision: current.revision + 1, status, at, actor: actor.type }] }, input.revision);
     }
     if (agentLearningMode(node.payload) === 'off') throw new Error('learning_disabled');
@@ -71,13 +75,60 @@ export class AgentLearningService {
     const content = [input.title, input.trigger, input.mistake, input.correction, input.evidence].join('\n');
     // Never retain raw credentials, even as a pending lesson.
     if (/(?:password|api[_ -]?key|access[_ -]?token|secret)\s*[:=]\s*\S+|-----BEGIN.{0,30}PRIVATE KEY|\b(?:sk-|ghp_)[A-Za-z0-9_-]{16,}/i.test(content)) throw new Error('learning_sensitive_content');
-    const pending = agentLearningMode(node.payload) === 'review' || status !== 'done' || lessonNeedsReview(content);
+    const ownerReview = agentLearningMode(node.payload) === 'review' || lessonNeedsReview(content);
+    const pending = ownerReview || status !== 'done';
     const now = new Date().toISOString();
     const entry = await agentLearningRepository.create({ id: uuidv7(), workspaceId, nodeId: node.id, taskId: input.taskId, title: input.title, status: pending ? 'pending' : 'active', revision: 1, fingerprint: hash(knowledgeNormalize(`${input.trigger}\n${input.correction}`)), trigger: input.trigger, mistake: input.mistake, correction: input.correction, evidence: input.evidence, sourceHash: hash(JSON.stringify([task.getAttribute('title'), task.getAttribute('description'), status])), sourceTitle: String(task.getAttribute('title')), sourceStatus: status, evidenceLevel: actor.type === 'user' ? 'owner_reviewed' : 'agent_reported', history: [{ revision: 1, status: pending ? 'pending' : 'active', actor: actor.type, at: now }], createdAt: now, updatedAt: now });
+    // A lesson that only waits for its task to finish settles on its own and
+    // never asks the owner; review mode and quarantined text do.
+    if (ownerReview) {
+      await attentionService.raise({
+        workspaceId, nodeId: node.id, taskId: input.taskId, category: 'agent', severity: 'info',
+        title: input.title.slice(0, 200), body: input.correction.length > 500 ? `${input.correction.slice(0, 499).trimEnd()}…` : input.correction || null,
+        sourceType: LEARNING_ATTENTION_SOURCE, sourceId: entry.id, correlationId: `${LEARNING_ATTENTION_SOURCE}:${entry.id}`,
+        action: { target: 'node', decision: 'learning', entryId: entry.id },
+      }).catch(() => undefined);
+    }
     for (const reflection of entries.filter(item => item.taskId === input.taskId && item.status === 'reflection')) {
       await agentLearningRepository.update({ ...reflection, status: 'archived', revision: reflection.revision + 1, updatedAt: now, history: [...reflection.history, { revision: reflection.revision + 1, status: 'archived', actor: actor.type, at: now }] }, reflection.revision);
     }
     return entry;
+  }
+  /**
+   * Settles lessons that wait on the owner for no remaining reason. A lesson
+   * written just before its task was closed becomes active like any lesson of
+   * a finished task, and one whose agent was removed is archived, since no
+   * agent recalls it again. Review mode and quarantined text still wait.
+   */
+  async settlePending(workspaceId: string, nodeId?: string): Promise<number> {
+    let settled = 0;
+    for (const lesson of await agentLearningRepository.list(workspaceId, nodeId, 'pending')) {
+      const node = await workspaceRepository.getNode(lesson.nodeId);
+      const agent = node?.workspaceId === workspaceId && node.type === 'terminal' ? node : null;
+      let status: AgentLessonStatus | null = agent ? null : 'archived';
+      if (agent && agentLearningMode(agent.payload) === 'automatic' && lesson.correction && lesson.evidence
+        && !lessonNeedsReview([lesson.title, lesson.trigger, lesson.mistake, lesson.correction, lesson.evidence].join('\n'))) {
+        const task = await AgentBoardTask.find(lesson.taskId);
+        if (task?.getAttribute('workspace_id') === workspaceId && task.getAttribute('status') === 'done') status = 'active';
+        // Still waiting for the task: nothing for the owner to decide meanwhile.
+        else if (await attentionService.resolveSource(workspaceId, LEARNING_ATTENTION_SOURCE, lesson.id).catch(() => 0)) settled += 1;
+      }
+      if (!status) continue;
+      const at = new Date().toISOString();
+      const revision = lesson.revision + 1;
+      // The owner may decide the same lesson meanwhile; that decision wins.
+      const saved = await agentLearningRepository.update({ ...lesson, status, revision, updatedAt: at, history: [...lesson.history.slice(-49), { revision, status, at, actor: 'system' }] }, lesson.revision).catch(() => null);
+      if (!saved) continue;
+      await attentionService.resolveSource(workspaceId, LEARNING_ATTENTION_SOURCE, lesson.id).catch(() => 0);
+      settled += 1;
+    }
+    return settled;
+  }
+  /** Settles every workspace's waiting lessons once, for those left before this rule existed. */
+  async settleAllPending(): Promise<number> {
+    let settled = 0;
+    for (const workspaceId of await agentLearningRepository.workspacesWith('pending')) settled += await this.settlePending(workspaceId);
+    return settled;
   }
   async context(workspaceId: string, nodeId: string, query: string): Promise<string> {
     const node = await workspaceRepository.getNode(nodeId);

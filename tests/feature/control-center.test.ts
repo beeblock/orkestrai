@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
@@ -9,9 +9,11 @@ import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoard
 import { uuidv7 } from '@beeblock/svelar/support';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 
 describe('ControlCenterService', () => {
   useSvelarTest({ refreshDatabase: true });
+  afterEach(() => vi.restoreAllMocks());
 
   it('does not let terminal redraws or silence erase a reported blocker', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'blocked terminal', workingDir: '/tmp' });
@@ -331,6 +333,87 @@ describe('ControlCenterService', () => {
       else delete lifecycle.__orkestraiRecoverBlockedTask;
       lifecycle.__orkestraiPendingTaskRecoveries = previousPending;
     }
+  });
+
+  it('keeps a blocked agent on its own item while it exchanges messages', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'blocked messages', workingDir: '/tmp' });
+    const agent = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev Plataforma', payload: { provider: 'claude' } });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: agent.id, state: 'blocked', action: 'Waiting for disk space' });
+    // The leader's answer reaches the blocked agent, and the agent replies.
+    for (const action of ['system:message_received', 'system:message_replied']) {
+      await controlCenterService.recordActivity({
+        workspaceId: workspace.id,
+        nodeId: agent.id,
+        state: 'blocked',
+        action,
+        category: 'message',
+        objectTitle: 'Resposta de Claude à sua mensagem: feito',
+        outcome: 'Recebido',
+        correlationId: 'task:blocked-messages',
+        sourceType: 'bridge',
+        sourceId: uuidv7(),
+      });
+    }
+
+    const open = await attentionService.list({ workspaceId: workspace.id });
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({ sourceType: 'agent_state', title: 'Waiting for disk space' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: agent.id, state: 'working', action: 'Queue resumed' });
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+  });
+
+  it('closes what a removed agent left for the owner, now and at startup', async () => {
+    vi.spyOn(workspaceService as never as { reprovisionBridge: () => Promise<void> }, 'reprovisionBridge').mockResolvedValue(undefined);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'removed agents', workingDir: '/tmp' });
+    const removed = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Naming', payload: { provider: 'claude' } });
+    const earlier = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Brand Designer 2', payload: { provider: 'claude' } });
+    const kept = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Claude', payload: { provider: 'claude' } });
+    for (const node of [removed, earlier, kept]) {
+      await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'blocked', action: `${node.title} needs the owner`, attentionRequired: true });
+    }
+
+    await workspaceService.deleteNode(workspace.id, removed.id);
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId).sort()).toEqual([earlier.id, kept.id].sort());
+
+    // Removed before removal closed its items: startup closes them.
+    await workspaceRepository.deleteNode(earlier.id);
+    expect(await attentionService.resolveOrphaned()).toBe(1);
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId)).toEqual([kept.id]);
+  });
+
+  it('hands a blocked teammate to the leader instead of the owner', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'team attention', workingDir: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Claude', payload: { provider: 'claude', maestro: true } });
+    const dev = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev Chat Realtime UI', payload: { provider: 'claude' } });
+    const { agentInboxService } = await import('$lib/modules/agent-room/application/services/AgentInboxService.js');
+    const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'blocked', action: 'Docker daemon 500', attentionRequired: true });
+    expect(await attentionService.list({ workspaceId: workspace.id })).toEqual([]);
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: leader.id, fromNodeId: dev.id, content: expect.stringContaining('Dev Chat Realtime UI está bloqueado: Docker daemon 500') }));
+
+    // The teammate's own approval request for the owner stays when it gets blocked again.
+    await attentionService.raise({ workspaceId: workspace.id, nodeId: dev.id, category: 'review', severity: 'warning', title: 'Publicar o pacote?', sourceType: 'autonomy_gate', sourceId: 'gate-1', correlationId: 'gate:gate-1' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'blocked', action: 'Esperando a aprovação do dono', attentionRequired: true });
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.sourceType)).toEqual(['autonomy_gate']);
+    await attentionService.resolveSource(workspace.id, 'autonomy_gate', 'gate-1');
+
+    // A terminal dialog waiting for a key press, and the leader's own state, still reach the owner.
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: dev.id, state: 'waiting_permission', action: 'Allow Bash?' });
+    await controlCenterService.recordActivity({ workspaceId: workspace.id, nodeId: leader.id, state: 'blocked', action: 'Precisa da chave da API', attentionRequired: true });
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId).sort()).toEqual([dev.id, leader.id].sort());
+  });
+
+  it('hands to the leader, at startup, the teammate requests earlier versions raised', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'team startup', workingDir: '/tmp' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Claude', payload: { provider: 'claude', maestro: true } });
+    const dev = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Dev', payload: { provider: 'codex' } });
+    const { attentionRepository } = await import('$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js');
+    for (const node of [dev, leader]) {
+      await attentionRepository.save({ workspaceId: workspace.id, nodeId: node.id, category: 'agent', severity: 'warning', title: 'Bloqueado', sourceType: 'agent_state', sourceId: node.id, correlationId: `agent:${node.id}:agent` });
+    }
+    expect(await attentionService.handTeammateItemsToLeader()).toBe(1);
+    expect((await attentionService.list({ workspaceId: workspace.id })).map((item) => item.nodeId)).toEqual([leader.id]);
   });
 
   it('preserva a mensagem completa e desabilita navegação para um agente removido', async () => {

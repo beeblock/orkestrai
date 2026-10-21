@@ -188,8 +188,26 @@
 
 <SidePanel class="side-panel" title={m['floor.title']()} icon={Layers} closeLabel={m['floor.close']()} {onClose}>
   {#snippet actions()}
-    <HeaderIconButton label={m['floor.hooks']()} class="node-action-btn" side="left" active={showHooks} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></HeaderIconButton>
+    <HeaderIconButton label={m['floor.hooks_button']()} class="node-action-btn" side="left" active={showHooks} onclick={() => (showHooks = !showHooks)}><Zap size={14} /></HeaderIconButton>
   {/snippet}
+
+  {#if showHooks}
+    <div class="hooks-editor" data-testid="floor-hooks-editor">
+      <h4>{m['floor.hooks']()}</h4>
+      <p class="hooks-explain">{m['floor.hooks_explain']()}</p>
+      <label>{m['floor.hook_setup']()}<Textarea bind:value={hooksText.setup} rows={2} placeholder={m['floor.hook_setup_placeholder']()} /></label>
+      <label>{m['floor.hook_run']()}<Textarea bind:value={hooksText.run} rows={2} placeholder={m['floor.hook_run_placeholder']()} /></label>
+      <label>{m['floor.hook_teardown']()}<Textarea bind:value={hooksText.teardown} rows={2} placeholder={m['floor.hook_teardown_placeholder']()} /></label>
+      <div class="flex items-center gap-2">
+        <Checkbox checked={hooks.autoRunSetup ?? false} onCheckedChange={(value: boolean | 'indeterminate') => (hooks = { ...hooks, autoRunSetup: value === true })} />
+        <span class="text-xs text-muted-foreground">{m['floor.hook_auto']()}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <Button size="sm" onclick={saveHooks}>{m['floor.save_hooks']()}</Button>
+        <Button size="sm" variant="ghost" onclick={() => (showHooks = false)}>{m['settings.cancel']()}</Button>
+      </div>
+    </div>
+  {/if}
 
   {#if errorMessage}
     <p role="alert" aria-live="polite" class="break-words text-sm text-destructive">{errorMessage}</p>
@@ -358,19 +376,6 @@
     </div>
   {/if}
 
-  {#if showHooks}
-    <div class="hooks-editor">
-      <h4>{m['floor.hooks']()}</h4>
-      <label>{m['floor.hook_setup']()}<Textarea bind:value={hooksText.setup} rows={2} /></label>
-      <label>{m['floor.hook_run']()}<Textarea bind:value={hooksText.run} rows={2} /></label>
-      <label>{m['floor.hook_teardown']()}<Textarea bind:value={hooksText.teardown} rows={2} /></label>
-      <div class="flex items-center gap-2">
-        <Checkbox checked={hooks.autoRunSetup ?? false} onCheckedChange={(value: boolean | 'indeterminate') => (hooks = { ...hooks, autoRunSetup: value === true })} />
-        <span class="text-xs text-muted-foreground">{m['floor.hook_auto']()}</span>
-      </div>
-      <Button size="sm" onclick={saveHooks}>{m['floor.save_hooks']()}</Button>
-    </div>
-  {/if}
 </SidePanel>
 
 <AlertDialog.Root open={removal !== null} onOpenChange={(open) => { if (!open) removal = null; }}>
@@ -447,6 +452,13 @@
     gap: 8px;
     border-top: 1px solid var(--app-border);
     padding-top: 10px;
+  }
+
+  .hooks-explain {
+    margin: 0;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    line-height: 1.5;
   }
 
   .hooks-editor h4 {

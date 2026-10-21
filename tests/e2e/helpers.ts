@@ -37,8 +37,28 @@ export async function selectCanvasTool(page: Page, buttonName: string) {
   if (await page.locator('[role="dialog"]:visible').count()) await page.keyboard.press('Escape');
 
   const button = page.locator('.toolbar button').filter({ hasText: buttonName });
-  await button.click();
-  await expect(button).toHaveClass(/bg-\[var\(--app-accent-soft\)\]/);
+  if (await button.count()) {
+    await button.click();
+    await expect(button).toHaveClass(/bg-\[var\(--app-accent-soft\)\]/);
+    return;
+  }
+
+  // Less frequent tools live in labelled dock groups: open each group until
+  // the tool appears, choose it and expect the group to show it as active.
+  const groups = page.locator('.toolbar [data-tool-group-trigger]');
+  const total = await groups.count();
+  for (let index = 0; index < total; index += 1) {
+    const group = groups.nth(index);
+    await group.click();
+    const item = page.getByRole('menuitem').filter({ hasText: buttonName });
+    if (await item.count()) {
+      await item.first().click();
+      await expect(group).toHaveClass(/bg-\[var\(--app-accent-soft\)\]/);
+      return;
+    }
+    await page.keyboard.press('Escape');
+  }
+  throw new Error(`Canvas tool not found in the dock: ${buttonName}`);
 }
 
 /**
@@ -47,7 +67,8 @@ export async function selectCanvasTool(page: Page, buttonName: string) {
  * e agentes abrem o dialogo de criacao — confirma com o nome padrao.
  * O lookup e escopado na .toolbar para nao colidir com nomes de workspace.
  */
-export async function createNodeOnCanvas(page: Page, buttonName: string, position = { x: 600, y: 400 }) {
+// The default spot keeps new nodes above the message bar and quick actions floating at the bottom.
+export async function createNodeOnCanvas(page: Page, buttonName: string, position = { x: 600, y: 140 }) {
   const dialog = page.locator('[role="dialog"]');
   // Garante que o dialog da criacao ANTERIOR ja fechou (animacao de saida)
   // — senao o waitFor abaixo resolve no dialog velho e o novo fica aberto.
@@ -61,4 +82,11 @@ export async function createNodeOnCanvas(page: Page, buttonName: string, positio
   } catch {
     // nos sem dialogo (nota, arquivos...) nascem direto
   }
+}
+
+/** Opens a workspace through the top bar switcher (the Canvas list now lives in a drawer). */
+export async function openWorkspace(page: Page, name: string) {
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menuitem').filter({ hasText: name }).first().click();
+  await expect(page.locator('.ws-tab.active')).toContainText(name, { timeout: 15_000 });
 }
