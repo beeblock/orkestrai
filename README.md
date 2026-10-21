@@ -105,14 +105,14 @@ Drag terminals, notes, task boards, flows, and more from the dock straight onto
 the canvas, write down what the team needs to know, and connect it to the right
 agent.
 
-<p align="center"><img src="docs/media/readme/canvas-tools.webp" alt="Dragging tools from the dock onto the Orkestrai canvas and connecting a note to an agent" width="880"></p>
+<p align="center"><img src="docs/media/readme/canvas-tools.webp" alt="Dragging the file tree and a sticky note from the side tool bar onto the Orkestrai canvas and connecting the note to an agent" width="880"></p>
 
 ### Work side by side in Focus
 
 Jump from the canvas to Focus in one click, drag items into split panes,
 and keep real terminals at full size next to boards, notes, and files.
 
-<p align="center"><img src="docs/media/readme/workbench.webp" alt="Opening canvas artifacts in Focus, dragging them into split panes and running a real terminal" width="880"></p>
+<p align="center"><img src="docs/media/readme/workbench.webp" alt="Focus opens on Needs you with the Maestro's question, then opens the agent, splits the view, receives the task board and runs a real terminal" width="880"></p>
 
 ### Talk with the team in Chat
 
@@ -164,7 +164,7 @@ References and context become a character atlas, and the connected Codex
 generates each image straight into your workspace: six views, one consistent
 character.
 
-<p align="center"><img src="docs/media/readme/image-flow.webp" alt="An image workflow turns a reference atlas into six consistent views of the same character" width="880"></p>
+<p align="center"><img src="docs/media/readme/image-flow.webp" alt="A character sheet becomes the reference for six image workflows that render the same character across every scene" width="880"></p>
 
 ### Create music, narration and sound effects
 
