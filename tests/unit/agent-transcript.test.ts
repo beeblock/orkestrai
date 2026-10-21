@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   findPromptInTranscript,
   findReplyToPrompt,
@@ -18,6 +19,8 @@ import {
   parseTranscriptReplyForPrompt,
   parseTranscriptReplyStateForPrompt,
   transcriptContainsPrompt,
+  transcriptMarks,
+  type TranscriptMark,
 } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 
 describe('async transcript lookup', () => {
@@ -520,27 +523,141 @@ describe('a question asked again in the same conversation', () => {
       reply('Resposta antiga: entregue.', '2026-10-20T16:00:01.000Z'),
       user('Qual o status?', '2026-10-20T16:00:02.000Z'),
     ].join('\n');
-    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', waiting, 'Qual o status?', sentAt)).toBeNull();
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', waiting, 'Qual o status?', { notBefore: sentAt })).toBeNull();
     const answered = [waiting, reply('Resposta nova: em revisão.', '2026-10-20T16:00:05.000Z')].join('\n');
-    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', answered, 'Qual o status?', sentAt)).toEqual({ text: 'Resposta nova: em revisão.', complete: true });
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', answered, 'Qual o status?', { notBefore: sentAt })).toEqual({ text: 'Resposta nova: em revisão.', complete: true });
     // Not yet written: nothing matches rather than the earlier turn.
     const notYet = waiting.split('\n').slice(0, 2).join('\n');
-    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', notYet, 'Qual o status?', sentAt)).toBeNull();
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', notYet, 'Qual o status?', { notBefore: sentAt })).toBeNull();
     // Callers without a lower bound keep the earlier behavior.
     expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', answered, 'Qual o status?')).toEqual({ text: 'Resposta antiga: entregue.', complete: true });
   });
 
-  it('matches a prompt the transcript records without a time only when it occurs once', () => {
-    const once = [user('Qual o status?'), reply('Entregue.')].join('\n');
-    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', once, 'Qual o status?', sentAt)).toEqual({ text: 'Entregue.', complete: true });
-    const twice = [once, user('Qual o status?'), reply('Em revisão.')].join('\n');
-    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', twice, 'Qual o status?', sentAt)).toBeNull();
+  it('matches a prompt the transcript records without a time only past the occurrences counted when it was sent', () => {
+    const answer = (transcript: string, before?: number) => parseTranscriptReplyStateForPrompt('claude-project-jsonl', transcript, 'Qual o status?', { notBefore: sentAt, before });
+    const once = [user('Qual o status?'), reply('Resposta antiga: entregue.')].join('\n');
+    // It was already there when the line was sent: the earlier question's turn.
+    expect(answer(once, 1)).toBeNull();
+    // Being the only one, without a count, proves nothing.
+    expect(answer(once)).toBeNull();
+    // Counted none: the one there now was written after the send.
+    expect(answer(once, 0)).toEqual({ text: 'Resposta antiga: entregue.', complete: true });
+    const twice = [once, user('Qual o status?'), reply('Resposta nova: em revisão.')].join('\n');
+    expect(answer(twice, 1)).toEqual({ text: 'Resposta nova: em revisão.', complete: true });
+    expect(answer(twice)).toBeNull();
   });
 
   it('reads a Kimi prompt time in milliseconds', () => {
     const prompt = (text: string, time: number) => JSON.stringify({ type: 'turn.prompt', input: [{ type: 'text', text }], origin: { kind: 'user' }, time });
     const part = (text: string) => JSON.stringify({ type: 'context.append_loop_event', event: { type: 'content.part', part: { type: 'text', text } } });
     const transcript = [prompt('Qual o status?', sentAt - 2_000), part('Antiga.'), prompt('Qual o status?', sentAt + 50), part('Nova.')].join('\n');
-    expect(parseTranscriptReplyStateForPrompt('kimi-session-dir', transcript, 'Qual o status?', sentAt)?.text).toBe('Nova.');
+    expect(parseTranscriptReplyStateForPrompt('kimi-session-dir', transcript, 'Qual o status?', { notBefore: sentAt })?.text).toBe('Nova.');
+  });
+
+  it('answers a CLI that appends untimed prompts only with what it wrote past the mark taken at the send', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'ork-transcript-untimed-'));
+    const line = (role: string, content: string) => JSON.stringify({ role, content });
+    // Cursor files the conversation under the real cwd (/private/tmp on macOS).
+    const files = ['tmp', 'private-tmp'].map((folder) => join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'repeated', 'repeated.jsonl'));
+    const append = async (...lines: string[]) => { for (const file of files) await appendFile(file, `${lines.join('\n')}\n`); };
+    for (const file of files) await mkdir(join(file, '..'), { recursive: true });
+    await append(line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.'));
+    try {
+      const at = Date.now();
+      const marks = await transcriptMarks('cursor', '/tmp', 'repeated', 'Qual o status?', { homeDir: home });
+      expect(marks.repeated).toMatchObject({ bytes: expect.any(Number), hash: expect.any(String) });
+      const lookup = (promptMarks?: Record<string, TranscriptMark>) => findReplyToPrompt('cursor', '/tmp', 'repeated', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks });
+      // The CLI has not written the repeated line yet: the earlier turn is not its answer.
+      expect(await lookup(marks)).toBeNull();
+      // Without a mark, the only occurrence proves nothing.
+      expect(await lookup()).toBeNull();
+      await append(line('user', 'Qual o status?'));
+      expect(await lookup(marks)).toBeNull();
+      await append(line('assistant', 'Resposta nova: em revisão.'));
+      expect(await lookup(marks)).toMatchObject({ sessionId: 'repeated', text: 'Resposta nova: em revisão.' });
+      // Timed CLIs need no mark.
+      expect(await transcriptMarks('claude', '/tmp', 'repeated', 'Qual o status?', { homeDir: home })).toEqual({});
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the mark exact past the part of a long transcript it reads, and when the file is written anew', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'ork-transcript-untimed-long-'));
+    const line = (role: string, content: string) => JSON.stringify({ role, content });
+    const files = ['tmp', 'private-tmp'].map((folder) => join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'long', 'long.jsonl'));
+    const append = async (...lines: string[]) => { for (const file of files) await appendFile(file, `${lines.join('\n')}\n`); };
+    for (const file of files) await mkdir(join(file, '..'), { recursive: true });
+    const filler = Array.from({ length: 5 }, (_, index) => line('assistant', `${index}:${'x'.repeat(1024 * 1024)}`));
+    await append(line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.'));
+    try {
+      const at = Date.now();
+      const marks = await transcriptMarks('cursor', '/tmp', 'long', 'Qual o status?', { homeDir: home });
+      const lookup = () => findReplyToPrompt('cursor', '/tmp', 'long', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks: marks });
+      // More than the 4 MB read since the send: what is read is all new, and the old turn is not in it.
+      await append(...filler);
+      expect(await lookup()).toBeNull();
+      await append(line('user', 'Qual o status?'), line('assistant', 'Resposta nova: em revisão.'));
+      expect(await lookup()).toMatchObject({ text: 'Resposta nova: em revisão.' });
+      // Written anew with the same start, what follows the mark is still new.
+      for (const file of files) await writeFile(file, `${[line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.'), line('user', 'Qual o status?'), line('assistant', 'Reescrita depois do envio.')].join('\n')}\n`);
+      expect(await lookup()).toMatchObject({ text: 'Reescrita depois do envio.' });
+      // Changed before the mark (compacted, say), it proves nothing, even holding the prompt again.
+      for (const file of files) await writeFile(file, `${[line('assistant', 'Resumo da conversa.'), line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.'), line('user', 'Qual o status?'), line('assistant', 'Reescrita.')].join('\n')}\n`);
+      expect(await lookup()).toBeNull();
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('answers a CLI that rewrites its untimed transcript whole only past the occurrences counted at the send', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'ork-transcript-untimed-cline-'));
+    const path = join(home, '.cline', 'data', 'sessions', 'task', 'task.messages.json');
+    const message = (role: string, text: string) => ({ role, content: [{ type: 'text', text }] });
+    await mkdir(join(path, '..'), { recursive: true });
+    await writeFile(path, JSON.stringify({ messages: [message('user', 'Qual o status?'), message('assistant', 'Resposta antiga: entregue.')] }));
+    try {
+      const at = Date.now();
+      const marks = await transcriptMarks('cline', '/tmp', 'task', 'Qual o status?', { homeDir: home });
+      expect(marks).toEqual({ task: { occurrences: 1 } });
+      const lookup = () => findReplyToPrompt('cline', '/tmp', 'task', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks: marks });
+      expect(await lookup()).toBeNull();
+      await writeFile(path, JSON.stringify({ messages: [message('user', 'Qual o status?'), message('assistant', 'Resposta antiga: entregue.'), message('user', 'Qual o status?'), message('assistant', 'Resposta nova: em revisão.')] }));
+      expect(await lookup()).toMatchObject({ sessionId: 'task', text: 'Resposta nova: em revisão.' });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('reads when OpenCode created each prompt', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'ork-transcript-opencode-'));
+    const databaseDir = join(home, '.local', 'share', 'opencode');
+    await mkdir(databaseDir, { recursive: true });
+    const database = new DatabaseSync(join(databaseDir, 'opencode.db'));
+    database.exec('CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL)');
+    database.exec('CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL)');
+    const insertMessage = database.prepare('INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)');
+    const insertPart = database.prepare('INSERT INTO part (id, message_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)');
+    const at = Date.now();
+    const add = (id: string, role: string, text: string, created: number) => {
+      insertMessage.run(id, 'ses_status', created, created, JSON.stringify({ role }));
+      insertPart.run(`${id}_part`, id, created, created, JSON.stringify({ type: 'text', text }));
+    };
+    add('msg_1', 'user', 'Qual o status?', at - 60_000);
+    add('msg_2', 'assistant', 'Resposta antiga: entregue.', at - 59_000);
+    try {
+      const lookup = () => findReplyToPrompt('opencode', '/tmp', 'ses_status', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at });
+      // Recent activity, but the only occurrence was created before the send.
+      add('msg_3', 'assistant', 'Ainda trabalhando no pedido anterior.', at - 1_000);
+      expect(await lookup()).toBeNull();
+      add('msg_4', 'user', 'Qual o status?', at + 100);
+      add('msg_5', 'assistant', 'Resposta nova: em revisão.', at + 2_000);
+      expect(await lookup()).toMatchObject({ sessionId: 'ses_status', text: 'Resposta nova: em revisão.' });
+      // A time is all the proof it needs.
+      expect(await transcriptMarks('opencode', '/tmp', 'ses_status', 'Qual o status?', { homeDir: home })).toEqual({});
+    } finally {
+      database.close();
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });

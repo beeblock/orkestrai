@@ -1,6 +1,6 @@
 import type { TerminalNodePayload } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { findPromptInTranscript, findReplyToPrompt, lastReplyText, latestTurnComplete, latestTurnStartedAt } from '../../infrastructure/transcript/AgentTranscript.js';
+import { findPromptInTranscript, findReplyToPrompt, lastReplyText, latestTurnComplete, latestTurnStartedAt, transcriptMarks, type TranscriptMark } from '../../infrastructure/transcript/AgentTranscript.js';
 import { agentInboxService } from './AgentInboxService.js';
 import { channelService } from './ChannelService.js';
 
@@ -26,18 +26,34 @@ export class TerminalMirrorService {
 
   async mirrorPrompt(input: { workspaceId: string; nodeId: string; text: string; at: number }): Promise<void> {
     if (!isConversationalPrompt(input.text)) return;
+    // Marked first: the CLI writes the line to its transcript moments after Enter.
+    const marks = this.marksAtSend(input.workspaceId, input.nodeId, input.text.trim());
     const node = await workspaceRepository.getNode(input.nodeId);
     if (!node || node.workspaceId !== input.workspaceId || !(node.payload as TerminalNodePayload).provider) return;
     const message = await channelService.recordTerminalPrompt(input.workspaceId, input.nodeId, input.text);
     this.latest.set(input.nodeId, message.id);
-    this.follow(input.workspaceId, input.nodeId, input.text.trim(), input.at, message.id);
+    this.follow(input.workspaceId, input.nodeId, input.text.trim(), input.at, message.id, await marks);
   }
 
-  private follow(workspaceId: string, nodeId: string, prompt: string, at: number, messageId: string): void {
+  /**
+   * Where the agent's conversations stand as the line is sent. A transcript
+   * that records no time for its prompts proves an occurrence is this line's
+   * only by its coming past this mark.
+   */
+  private async marksAtSend(workspaceId: string, nodeId: string, prompt: string): Promise<Record<string, TranscriptMark>> {
+    try {
+      const context = await agentInboxService.transcriptFor(workspaceId, nodeId);
+      return context.provider ? await transcriptMarks(context.provider, context.cwd, context.agentSessionId, prompt, context.options) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private follow(workspaceId: string, nodeId: string, prompt: string, at: number, messageId: string, marks: Record<string, TranscriptMark>): void {
     const started = Date.now();
     const tick = async (): Promise<void> => {
       try {
-        if (await this.recordReply(workspaceId, nodeId, prompt, at, messageId, Date.now() - started >= UNMATCHED_MS)) return;
+        if (await this.recordReply(workspaceId, nodeId, prompt, at, messageId, Date.now() - started >= UNMATCHED_MS, marks)) return;
       } catch {
         // A transcript being written or rotated is read again on the next tick.
       }
@@ -46,14 +62,20 @@ export class TerminalMirrorService {
     setTimeout(() => void tick(), POLL_MS).unref?.();
   }
 
-  private async recordReply(workspaceId: string, nodeId: string, prompt: string, at: number, messageId: string, allowUnmatched: boolean): Promise<boolean> {
+  private async recordReply(
+    workspaceId: string, nodeId: string, prompt: string, at: number, messageId: string, allowUnmatched: boolean,
+    marks: Record<string, TranscriptMark> = {},
+  ): Promise<boolean> {
     const context = await agentInboxService.transcriptFor(workspaceId, nodeId);
     if (!context.provider) return false;
     // Only the search for the transcript tolerates a few seconds. The turn itself
-    // is the line's own occurrence: one written once it was sent, so a question
-    // asked again is never answered with the reply to its earlier occurrence.
+    // is the line's own occurrence: one written once it was sent, or, without a
+    // recorded time, one written past where its conversation stood then. A
+    // question asked again is never answered with the reply to its earlier one.
     const since = at - 5_000;
-    const reply = await findReplyToPrompt(context.provider, context.cwd, context.agentSessionId, prompt, since, { ...context.options, promptNotBefore: at });
+    const reply = await findReplyToPrompt(context.provider, context.cwd, context.agentSessionId, prompt, since, {
+      ...context.options, promptNotBefore: at, promptMarks: marks,
+    });
     if (reply?.complete && reply.text.trim()) {
       await channelService.recordTerminalReply(workspaceId, nodeId, reply.text, messageId);
       return true;

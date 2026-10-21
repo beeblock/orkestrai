@@ -103,6 +103,33 @@ describe('terminal and Chat are one conversation', () => {
     expect(await agentReplies()).toEqual(['Resposta nova: em revisão.']);
   });
 
+  it('answers an agent that records no prompt time only with a turn written after the line was sent', async () => {
+    const { workspace, leader } = await team();
+    const home = await mkdtemp(join(tmpdir(), 'orkestrai-mirror-untimed-'));
+    const line = (role: string, content: string) => JSON.stringify({ role, content });
+    const files = ['tmp', 'private-tmp'].map((folder) => join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'repeated', 'repeated.jsonl'));
+    for (const file of files) {
+      await mkdir(join(file, '..'), { recursive: true });
+      await writeFile(file, `${[line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.')].join('\n')}\n`);
+    }
+    vi.mocked(agentInboxService.transcriptFor).mockResolvedValue({ provider: 'cursor', cwd: '/tmp', agentSessionId: 'repeated', options: { homeDir: home } } as never);
+    const follow = vi.spyOn(terminalMirrorService as unknown as { follow: (...args: unknown[]) => void }, 'follow').mockImplementation(() => undefined);
+    await terminalMirrorService.mirrorPrompt({ workspaceId: workspace.id, nodeId: leader.id, text: 'Qual o status?', at: Date.now() });
+    // Where the conversation stood, earlier question included, when the line was sent.
+    const [, , prompt, at, messageId, marks] = follow.mock.calls[0] as [string, string, string, number, string, Record<string, unknown>];
+    expect(marks).toEqual({ repeated: { bytes: expect.any(Number), hash: expect.any(String) } });
+    const service = terminalMirrorService as unknown as { recordReply: (...args: unknown[]) => Promise<boolean> };
+    const agentReplies = async () => (await channelRepository.list(workspace.id, `dm:${leader.id}`)).filter((message) => message.authorKind === 'agent').map((message) => message.body);
+
+    // Not written by the CLI yet: the earlier turn is not taken as its answer.
+    expect(await service.recordReply(workspace.id, leader.id, prompt, at, messageId, false, marks)).toBe(false);
+    expect(await service.recordReply(workspace.id, leader.id, prompt, at, messageId, true, marks)).toBe(false);
+    expect(await agentReplies()).toEqual([]);
+    for (const file of files) await appendFile(file, `${[line('user', 'Qual o status?'), line('assistant', 'Resposta nova: em revisão.')].join('\n')}\n`);
+    expect(await service.recordReply(workspace.id, leader.id, prompt, at, messageId, false, marks)).toBe(true);
+    expect(await agentReplies()).toEqual(['Resposta nova: em revisão.']);
+  });
+
   it('reads when the latest prompt of a transcript was written', () => {
     const claude = [
       JSON.stringify({ type: 'user', timestamp: '2026-10-20T12:00:00.000Z', message: { content: 'primeira' } }),
