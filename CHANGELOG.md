@@ -5,7 +5,11 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.43.0 - 2026-10-21
+
+### Security
+
+- Update follow-redirects to 1.16.1 and Vite to 6.4.5 to address cross-origin credential-header leaks and development editor command injection advisories. Keep the full dependency audit enabled.
 
 ### Changed
 

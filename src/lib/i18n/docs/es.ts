@@ -1001,7 +1001,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Sin publicar', title: 'Revamp: una barra superior, agentes en vivo y un dock más corto', summary: 'El Canvas se lee de un vistazo: quién está trabajando, qué te necesita y dónde está cada cosa.', items: [
+    { date: '21 de octubre de 2026 · 0.43.0', title: 'Orkestrai 0.43.0: Canvas, Focus y Chat', summary: 'El Canvas se lee de un vistazo: quién está trabajando, qué te necesita y dónde está cada cosa.', items: [
+      "Seguridad: follow-redirects 1.16.1 y Vite 6.4.5 corrigen filtraciones de cabeceras de credenciales en redirecciones e inyección de comandos en el editor de desarrollo, manteniendo la auditoría completa de dependencias.",
       'Una barra superior en todas las plataformas reúne el cambio Canvas/Workbench, la búsqueda, la campana de atención y el micrófono. En macOS los botones de la ventana quedan dentro de ella.',
       'El encabezado de cada terminal muestra el estado en vivo del agente, un color fijo con sus iniciales, el tiempo en el estado actual y el modelo elegido al iniciar.',
       'El dock del Canvas deja las herramientas de todos los días a un clic y lleva el resto a los menús Planificar, Código, Dispositivos y Workspace. Las herramientas de creación aún se pueden arrastrar al canvas.',
