@@ -246,6 +246,9 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     await expect(page.locator('.edge-line.animated')).toHaveCount(0);
     const deferred = await page.locator('.canvas-image .node-body').first().evaluate(element => getComputedStyle(element).contentVisibility);
     expect(deferred).toBe('auto');
+    // Node counts/edge SVGs can settle before the asynchronously mounted
+    // connection popover. Wait for the control the focus assertion exercises.
+    await expect(page.locator('.connections-badge').first()).toBeAttached();
     expect(await page.evaluate(() => {
       const badge = document.querySelector<HTMLElement>('.connections-badge')!;
       const flow = document.querySelector<HTMLElement>('.svelte-flow')!;
@@ -283,7 +286,11 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(start => {
       const gaps: number[] = [];
       let last = start;
-      const until = start + 15000;
+      // This bounds the collection, not a frame's rendering budget. The
+      // driver's eight actionable clicks, twenty native pan steps and DOM
+      // assertions can take >15 s on a traced/loaded runner even while frames
+      // stay below 500 ms. Keep sampling the whole gesture and restoration.
+      const until = start + 60000;
       let expired = false;
       let frameId = 0;
       const frame = (now: number) => {
@@ -355,9 +362,9 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     const sample = await page.evaluate(() => (window as any).__denseStopFrames());
     // A slow runner must not silently finish sampling before the pan. Measure
     // every zoom, the real pan and paint restoration, with a bounded failsafe.
-    expect(sample.expired).toBe(false);
     const gaps = await page.evaluate(() => (window as any).__denseFrameGaps as number[]);
     console.log(JSON.stringify({ nodes: nodes.length, loadedImages: 208, decodedImageMiB: 832, longNotes: 188, portals: 3, edges: 727, sampledMs: Math.round(sample.elapsedMs), maxFrameGapMs: Math.round(Math.max(...gaps)), initialFrameGapsMs: gaps.slice(0, 10).map(Math.round) }));
+    expect(sample.expired).toBe(false);
     expect(gaps.length).toBeGreaterThan(5);
     expect(Math.max(...gaps)).toBeLessThan(500);
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
