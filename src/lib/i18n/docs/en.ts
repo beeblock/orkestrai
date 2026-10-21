@@ -1001,7 +1001,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: 'Unreleased', title: 'Revamp: one top bar, live teammates and a shorter dock', summary: 'The Canvas reads at a glance: who is working, what needs you and where everything is.', items: [
+    { date: 'October 21, 2026 · 0.43.0', title: 'Orkestrai 0.43.0: Canvas, Focus and Chat', summary: 'The Canvas reads at a glance: who is working, what needs you and where everything is.', items: [
+      "Security: update follow-redirects to 1.16.1 and Vite to 6.4.5 to fix cross-origin credential-header leaks and development editor command injection advisories, with the full dependency audit still enabled.",
       'One top bar on every platform holds the Canvas/Workbench switch, search, the attention bell and the microphone. On macOS the window buttons sit inside it.',
       'Terminal headers show each agent\'s live state, a stable teammate color with initials, the time in the current state and the launch model.',
       'The Canvas dock keeps everyday tools one click away and moves the rest into Plan, Code, Devices and Workspace menus. Creation tools can still be dragged onto the canvas.',

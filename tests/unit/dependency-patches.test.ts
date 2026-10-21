@@ -93,6 +93,22 @@ describe('reviewed dependency patch application', () => {
 });
 
 describe('release dependency security', () => {
+  it.each([
+    ['follow-redirects', [1, 16, 1]],
+    ['vite', [6, 4, 5]],
+  ] as const)('keeps every locked %s at a patched version', (name, minimum) => {
+    const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+    const entries = Object.entries(lock.packages).filter(([path]) => path.endsWith(`node_modules/${name}`));
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [, entry] of entries) {
+      const version = (entry as { version: string }).version;
+      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+      const parts = version.split('.').map(Number);
+      const comparison = parts.map((part, index) => part - minimum[index]).find(value => value !== 0) ?? 0;
+      expect(comparison).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it('removes the vulnerable dependency chains without bypassing npm audit', () => {
     const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
