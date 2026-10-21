@@ -101,9 +101,9 @@ Portuguese, and Spanish at [orkestrai.app](https://orkestrai.app).
 
 ### Build the team on the canvas
 
-Drag terminals, notes, task boards, flows, and more from the dock straight onto
-the canvas, write down what the team needs to know, and connect it to the right
-agent.
+Drag terminals, notes, task boards, flows, and more from the side tool bar
+straight onto the canvas, write down what the team needs to know, and connect
+it to the right agent.
 
 <p align="center"><img src="docs/media/readme/canvas-tools.webp" alt="Dragging the file tree and a sticky note from the side tool bar onto the Orkestrai canvas and connecting the note to an agent" width="880"></p>
 
@@ -160,8 +160,8 @@ every change into a revision you can deliver back as code.
 
 ### Generate consistent images with Codex
 
-References and context become a character atlas, and the connected Codex
-generates each image straight into your workspace: six views, one consistent
+A character sheet becomes the reference for every flow, and the connected Codex
+generates each image straight into your workspace: six scenes, one consistent
 character.
 
 <p align="center"><img src="docs/media/readme/image-flow.webp" alt="A character sheet becomes the reference for six image workflows that render the same character across every scene" width="880"></p>
