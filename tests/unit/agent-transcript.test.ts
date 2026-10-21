@@ -508,3 +508,39 @@ describe('transcritos estruturados dos providers adicionais', () => {
     }
   });
 });
+
+describe('a question asked again in the same conversation', () => {
+  const user = (text: string, timestamp?: string) => JSON.stringify({ type: 'user', ...(timestamp ? { timestamp } : {}), message: { role: 'user', content: text } });
+  const reply = (text: string, timestamp?: string) => JSON.stringify({ type: 'assistant', ...(timestamp ? { timestamp } : {}), message: { role: 'assistant', content: [{ type: 'text', text }], stop_reason: 'end_turn' } });
+  const sentAt = Date.parse('2026-10-20T16:00:02.000Z');
+
+  it('is matched to its own turn, never to the reply of an earlier occurrence', () => {
+    const waiting = [
+      user('Qual o status?', '2026-10-20T16:00:00.000Z'),
+      reply('Resposta antiga: entregue.', '2026-10-20T16:00:01.000Z'),
+      user('Qual o status?', '2026-10-20T16:00:02.000Z'),
+    ].join('\n');
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', waiting, 'Qual o status?', sentAt)).toBeNull();
+    const answered = [waiting, reply('Resposta nova: em revisão.', '2026-10-20T16:00:05.000Z')].join('\n');
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', answered, 'Qual o status?', sentAt)).toEqual({ text: 'Resposta nova: em revisão.', complete: true });
+    // Not yet written: nothing matches rather than the earlier turn.
+    const notYet = waiting.split('\n').slice(0, 2).join('\n');
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', notYet, 'Qual o status?', sentAt)).toBeNull();
+    // Callers without a lower bound keep the earlier behavior.
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', answered, 'Qual o status?')).toEqual({ text: 'Resposta antiga: entregue.', complete: true });
+  });
+
+  it('matches a prompt the transcript records without a time only when it occurs once', () => {
+    const once = [user('Qual o status?'), reply('Entregue.')].join('\n');
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', once, 'Qual o status?', sentAt)).toEqual({ text: 'Entregue.', complete: true });
+    const twice = [once, user('Qual o status?'), reply('Em revisão.')].join('\n');
+    expect(parseTranscriptReplyStateForPrompt('claude-project-jsonl', twice, 'Qual o status?', sentAt)).toBeNull();
+  });
+
+  it('reads a Kimi prompt time in milliseconds', () => {
+    const prompt = (text: string, time: number) => JSON.stringify({ type: 'turn.prompt', input: [{ type: 'text', text }], origin: { kind: 'user' }, time });
+    const part = (text: string) => JSON.stringify({ type: 'context.append_loop_event', event: { type: 'content.part', part: { type: 'text', text } } });
+    const transcript = [prompt('Qual o status?', sentAt - 2_000), part('Antiga.'), prompt('Qual o status?', sentAt + 50), part('Nova.')].join('\n');
+    expect(parseTranscriptReplyStateForPrompt('kimi-session-dir', transcript, 'Qual o status?', sentAt)?.text).toBe('Nova.');
+  });
+});

@@ -206,6 +206,8 @@ describe('collaboration host core', () => {
     vi.spyOn(agentInboxService, 'kick').mockImplementation(() => undefined);
     const direct = `dm:${agent.id}`;
     const question = await channelService.askOwner(workspace.id, { nodeId: agent.id, title: 'Leader' }, { question: 'Publish to the store?', options: ['Yes', 'Not yet'] });
+    // Messages of one millisecond are ordered by id, not by creation: keep the question the oldest.
+    await new Promise((resolve) => setTimeout(resolve, 2));
     await controlCenterService.recordDelivery({
       messageId: uuidv7(), workspaceId: workspace.id, toNodeId: agent.id,
       state: 'replied', content: 'Internal agent ask', reply: 'Internal agent reply',

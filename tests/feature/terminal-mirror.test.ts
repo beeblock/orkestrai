@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appendFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
+import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
 import { terminalMirrorService } from '$lib/modules/agent-room/application/services/TerminalMirrorService.js';
 import * as transcript from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 
@@ -74,6 +78,29 @@ describe('terminal and Chat are one conversation', () => {
     expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, true)).toBe(true);
     const [reply] = await channelRepository.list(workspace.id, `dm:${leader.id}`);
     expect(reply).toMatchObject({ authorKind: 'agent', body: 'Os testes passaram.', meta: { promptId: prompt.id } });
+  });
+
+  it('answers a question asked again with its own reply, never the earlier one', async () => {
+    const { workspace, leader } = await team();
+    const home = await mkdtemp(join(tmpdir(), 'orkestrai-mirror-'));
+    const user = (text: string, timestamp: string) => JSON.stringify({ type: 'user', timestamp, message: { role: 'user', content: text } });
+    const reply = (text: string, timestamp: string) => JSON.stringify({ type: 'assistant', timestamp, message: { role: 'assistant', content: [{ type: 'text', text }], stop_reason: 'end_turn' } });
+    const files = ['-tmp', '-private-tmp'].map((folder) => join(home, '.claude', 'projects', folder, 'repeated.jsonl'));
+    const sentAt = Date.parse('2026-10-20T16:00:02.000Z');
+    for (const file of files) {
+      await mkdir(join(file, '..'), { recursive: true });
+      await writeFile(file, `${[user('Qual o status?', '2026-10-20T16:00:00.000Z'), reply('Resposta antiga: entregue.', '2026-10-20T16:00:01.000Z'), user('Qual o status?', '2026-10-20T16:00:02.000Z')].join('\n')}\n`);
+    }
+    vi.mocked(agentInboxService.transcriptFor).mockResolvedValue({ provider: 'claude', cwd: '/tmp', agentSessionId: 'repeated', options: { homeDir: home } } as never);
+    const prompt = await channelService.recordTerminalPrompt(workspace.id, leader.id, 'Qual o status?');
+    const service = terminalMirrorService as unknown as { recordReply: (...args: unknown[]) => Promise<boolean> };
+    const agentReplies = async () => (await channelRepository.list(workspace.id, `dm:${leader.id}`)).filter((message) => message.authorKind === 'agent').map((message) => message.body);
+
+    expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, false)).toBe(false);
+    expect(await agentReplies()).toEqual([]);
+    for (const file of files) await appendFile(file, `${reply('Resposta nova: em revisão.', '2026-10-20T16:00:06.000Z')}\n`);
+    expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, false)).toBe(true);
+    expect(await agentReplies()).toEqual(['Resposta nova: em revisão.']);
   });
 
   it('reads when the latest prompt of a transcript was written', () => {

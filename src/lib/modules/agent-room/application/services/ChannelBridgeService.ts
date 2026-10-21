@@ -54,6 +54,7 @@ export class ChannelBridgeService {
   private run(key: string, first: ChannelBinding & { cursor: string | null }): Loop {
     let stopped = false;
     let cursor = first.cursor;
+    const loop: Loop = { stop: () => { stopped = true; } };
     const tick = async (): Promise<void> => {
       while (!stopped) {
         const group = (await channelBindingRepository.listEnabled().catch(() => []))
@@ -65,7 +66,10 @@ export class ChannelBridgeService {
             chatId: first.kind === 'slack' ? first.externalChatId : null,
             waitSeconds: 20,
           });
-          cursor = await this.consume(first, group, cursor, result);
+          // Turned off (or replaced by a newer loop) while this read waited: the
+          // messages belong to whichever loop reads the chat from now on.
+          if (stopped) return;
+          cursor = await this.consume(first, group, cursor, result, () => stopped);
           for (const binding of group) if (binding.lastError) await channelBindingRepository.update(binding.id, { lastError: null });
           if (first.kind === 'slack') await delay(SLACK_INTERVAL_MS, () => stopped);
         } catch (error) {
@@ -75,24 +79,30 @@ export class ChannelBridgeService {
         }
       }
     };
-    void tick().finally(() => this.loops.delete(key));
-    return { stop: () => { stopped = true; } };
+    // A newer loop for the same chat may already have taken this key.
+    void tick().finally(() => { if (this.loops.get(key) === loop) this.loops.delete(key); });
+    return loop;
   }
 
   /**
    * Hands a polled batch to the agents, then records how far the chat was
    * read. The cursor moves only once every message is stored: after a failure
    * the same messages are read again, and the ones already stored are not
-   * stored twice. Returns the cursor to poll from next.
+   * stored twice. A loop stopped meanwhile hands over nothing more and leaves
+   * the cursor where it was. Returns the cursor to poll from next.
    */
   private async consume(
     first: ChannelBinding,
     group: ChannelBinding[],
     cursor: string | null,
     result: { messages: InboundChannelMessage[]; cursor: string | null },
+    stopped: () => boolean = () => false,
   ): Promise<string | null> {
-    for (const message of result.messages) await this.dispatch(group, message);
-    if (result.cursor === cursor) return cursor;
+    for (const message of result.messages) {
+      if (stopped()) return cursor;
+      await this.dispatch(group, message);
+    }
+    if (stopped() || result.cursor === cursor) return cursor;
     if (first.kind === 'telegram') await channelBindingRepository.updateIntegrationCursor(first.integrationId, result.cursor);
     else await channelBindingRepository.update(first.id, { cursor: result.cursor });
     return result.cursor;

@@ -6,6 +6,7 @@
 - Use Svelar CLI generators before hand-writing artifacts when a generator exists.
 - Use Svelar ORM and migrations. Avoid raw SQL unless it is a low-level driver/infrastructure exception.
 - Keep one migration per table or focused schema change.
+- SQLite transactions are isolated by `$lib/database/sqlite-transactions.ts` (installed in `src/app.ts` and in the vitest setup): while one is open, statements from outside it wait (at most 60 s, then they fail as `database is locked`). Inside `Connection.transaction`, never await work that runs outside it and touches the database, and defer broadcasts, inbox wake-ups and other side effects until after the commit (see `agentInboxService.enqueueDeferred`).
 - Use shared schemas for backend validation and frontend forms. Use Superforms where app forms need shared validation.
 - Keep validation consistent with `svelar.validation.json`. Use Zod schemas in Zod apps and Valibot schemas in Valibot apps.
 - Use policies, permissions, teams, middleware, rate limits, sessions, jobs, events, listeners, observers, cache, storage, search, PDF, and broadcasting through Svelar APIs instead of ad hoc implementations.

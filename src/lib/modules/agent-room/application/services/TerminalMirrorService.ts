@@ -49,9 +49,11 @@ export class TerminalMirrorService {
   private async recordReply(workspaceId: string, nodeId: string, prompt: string, at: number, messageId: string, allowUnmatched: boolean): Promise<boolean> {
     const context = await agentInboxService.transcriptFor(workspaceId, nodeId);
     if (!context.provider) return false;
-    // Only the search for the line in the transcript tolerates a few seconds.
+    // Only the search for the transcript tolerates a few seconds. The turn itself
+    // is the line's own occurrence: one written once it was sent, so a question
+    // asked again is never answered with the reply to its earlier occurrence.
     const since = at - 5_000;
-    const reply = await findReplyToPrompt(context.provider, context.cwd, context.agentSessionId, prompt, since, context.options);
+    const reply = await findReplyToPrompt(context.provider, context.cwd, context.agentSessionId, prompt, since, { ...context.options, promptNotBefore: at });
     if (reply?.complete && reply.text.trim()) {
       await channelService.recordTerminalReply(workspaceId, nodeId, reply.text, messageId);
       return true;
