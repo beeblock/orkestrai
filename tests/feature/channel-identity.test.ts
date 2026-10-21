@@ -73,17 +73,57 @@ describe('who speaks in the Conversa', () => {
     expect(mirror).toHaveBeenCalledTimes(1);
   });
 
-  it('stores an external message once when the chat is read again, and fails when the agent did not get it', async () => {
+  it('stores an external message once when the chat is read again, and keeps nothing when the agent did not get it', async () => {
     const { workspace, web } = await team();
-    const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockRejectedValueOnce(new Error('database is locked'));
+    const queued = vi.spyOn(agentInboxService, 'enqueueDeferred').mockRejectedValueOnce(new Error('database is locked'));
     const input = { body: 'Status?', via: 'telegram' as const, bindingId: 'binding-1', sender: '@ana', externalId: '10' };
     await expect(channelService.postExternal(workspace.id, web.id, input)).rejects.toThrow('caixa de entrada');
-    enqueue.mockResolvedValue({} as never);
+    expect((await channelRepository.list(workspace.id, `dm:${web.id}`)).filter((entry) => entry.authorKind === 'external')).toHaveLength(0);
     const message = await channelService.postExternal(workspace.id, web.id, input);
     const stored = (await channelRepository.list(workspace.id, `dm:${web.id}`)).filter((entry) => entry.authorKind === 'external');
     expect(stored).toHaveLength(1);
     expect(stored[0].id).toBe(message.id);
-    expect(enqueue.mock.calls.at(-1)?.[0]).toMatchObject({ content: expect.stringContaining(`orkestrai post --reply-to ${message.id}`), dedupKey: 'external:binding-1:10' });
+    expect(queued.mock.calls.at(-1)?.[0]).toMatchObject({ content: expect.stringContaining(`orkestrai post --reply-to ${message.id}`), dedupKey: 'external:binding-1:10' });
+  });
+
+  it('stores and queues an external message once when two reads deliver it at the same moment', async () => {
+    const { workspace, web } = await team();
+    const input = { body: 'Faça isto uma vez', via: 'slack' as const, bindingId: 'binding-1', sender: 'U1', externalId: '1700000000.000001' };
+    const messages = await Promise.all([
+      channelService.postExternal(workspace.id, web.id, input),
+      channelService.postExternal(workspace.id, web.id, input),
+      channelService.postExternal(workspace.id, web.id, input),
+    ]);
+    expect(new Set(messages.map((message) => message.id)).size).toBe(1);
+    expect((await channelRepository.list(workspace.id, `dm:${web.id}`)).filter((entry) => entry.authorKind === 'external')).toHaveLength(1);
+    expect((await controlCenterRepository.inboxByDedupKey(web.id, 'external:binding-1:1700000000.000001')).map((envelope) => envelope.state)).toEqual(['queued']);
+  });
+
+  it('never loses another accepted message when an answer rolls back', async () => {
+    const { workspace, leader, web } = await team();
+    vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+    const question = await channelService.askOwner(workspace.id, { nodeId: leader.id, title: 'Lead' }, { question: 'Qual ambiente?' });
+    // The answer's transaction pauses at its last write and then fails.
+    let paused!: () => void;
+    const atLastWrite = new Promise<void>((resolve) => { paused = resolve; });
+    let fail!: () => void;
+    const failing = new Promise<void>((resolve) => { fail = resolve; });
+    vi.spyOn(agentInboxService, 'enqueueDeferred').mockImplementationOnce(async () => {
+      paused();
+      await failing;
+      throw new Error('database is locked');
+    });
+    const answering = channelService.postOwner(workspace.id, `dm:${leader.id}`, { body: 'Staging', replyToId: question.id }).catch((error: Error) => error);
+    await atLastWrite;
+    // Meanwhile another screen posts: its message waits for the answer to settle instead of joining it.
+    const posts = Array.from({ length: 20 }, (_, index) => channelService.postAgent(workspace.id, web.id, { body: `Progresso ${index}` }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fail();
+    expect(((await answering) as Error).message).toContain('continua aberta');
+    const accepted = await Promise.all(posts);
+    const kept = new Set((await channelRepository.list(workspace.id, `dm:${web.id}`, { limit: 200 })).map((message) => message.id));
+    expect(accepted.every((message) => kept.has(message.id))).toBe(true);
+    expect((await channelRepository.find(workspace.id, question.id))?.answeredAt).toBeNull();
   });
 
   it('closes and escalates questions only as the terminal that calls, never as a name in the request', async () => {

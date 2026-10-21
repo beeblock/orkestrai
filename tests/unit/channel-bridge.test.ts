@@ -115,6 +115,47 @@ describe('channel bridge', () => {
     expect(updateCursor).toHaveBeenCalledWith('tg', '12');
   });
 
+  it('stops a read that was turned off from handing over what it brings, and keeps the loop that replaced it', async () => {
+    const slack = { ...binding({ id: 'b9', kind: 'slack', integrationId: 'sl', externalChatId: 'C1', allowedSenders: [] }), cursor: '1699999999' };
+    let enabled: Array<typeof slack> = [slack];
+    vi.spyOn(channelBindingRepository, 'listEnabled').mockImplementation(async () => enabled);
+    const update = vi.spyOn(channelBindingRepository, 'update').mockResolvedValue();
+    const reads: Array<(value: unknown) => void> = [];
+    vi.spyOn(integrationExecutionService, 'pollInbound').mockImplementation(() => new Promise((resolve) => { reads.push(resolve as (value: unknown) => void); }) as never);
+    const post = vi.spyOn(channelService, 'postExternal').mockResolvedValue({} as never);
+    const service = new ChannelBridgeService();
+    const loops = (service as unknown as { loops: Map<string, { stop: () => void }> }).loops;
+    try {
+      await service.refresh();
+      const first = loops.get('slack:b9');
+      await vi.waitFor(() => expect(reads).toHaveLength(1));
+      // Turned off and on again while the first read is still waiting.
+      enabled = [];
+      await service.refresh();
+      enabled = [slack];
+      await service.refresh();
+      const second = loops.get('slack:b9');
+      expect(second).toBeDefined();
+      expect(second).not.toBe(first);
+      await vi.waitFor(() => expect(reads).toHaveLength(2));
+
+      const batch = { cursor: '1700000000.000001', messages: [{ externalId: '1700000000.000001', chatId: 'C1', senderId: 'U1', senderHandle: null, senderName: 'U1', text: 'Faça isto uma vez', at: '2026-10-20T12:00:00.000Z' }] };
+      reads[0](batch);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(post).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalledWith('b9', { cursor: '1700000000.000001' });
+      // The stopped loop ending does not remove the one that replaced it.
+      expect(loops.get('slack:b9')).toBe(second);
+
+      reads[1](batch);
+      await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(update).toHaveBeenCalledWith('b9', { cursor: '1700000000.000001' }));
+    } finally {
+      enabled = [];
+      service.stop();
+    }
+  });
+
   it('hands only allowed messages from the bound chat to the agent', async () => {
     const post = vi.spyOn(channelService, 'postExternal').mockResolvedValue({} as never);
     vi.spyOn(channelBindingRepository, 'update').mockResolvedValue();

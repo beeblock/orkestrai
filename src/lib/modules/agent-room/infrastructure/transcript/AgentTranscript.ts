@@ -47,6 +47,13 @@ export type TranscriptLookupOptions = {
    * all older was left open by a process that no longer exists.
    */
   processStartedAt?: number;
+  /**
+   * Only a prompt written at or after this time (epoch ms) answers the lookup,
+   * so a question repeated in the same conversation is matched to its own
+   * turn, never to an earlier one. A transcript that records no time for its
+   * prompts matches only when the prompt occurs once.
+   */
+  promptNotBefore?: number;
 };
 
 type ParsedTranscriptTurn = {
@@ -475,10 +482,30 @@ function promptFromJsonlEvent(storage: string, event: any): string | null {
     : null;
 }
 
-function jsonlTurnForPrompt(storage: string, transcript: string, expectedPrompt: string): string | null {
+/** When a transcript event was written (epoch ms): ISO `timestamp` (Claude, Codex) or `time` in ms (Kimi). */
+function jsonlEventTime(event: any): number | null {
+  const at = typeof event?.timestamp === 'string' ? Date.parse(event.timestamp) : typeof event?.time === 'number' ? event.time : Number.NaN;
+  return Number.isFinite(at) ? at : null;
+}
+
+/**
+ * Which of the prompts that match is the turn asked for. Without a lower
+ * bound, the first one in the scanned history; with one, the first written at
+ * or after it, or a single untimed occurrence (a repeated untimed prompt is
+ * ambiguous and matches nothing).
+ */
+function chosenPromptOccurrence(matches: Array<{ index: number; at: number | null }>, notBefore: number | undefined): number {
+  if (notBefore === undefined) return matches[0]?.index ?? -1;
+  const timed = matches.find((match) => match.at !== null && match.at >= notBefore);
+  if (timed) return timed.index;
+  return matches.length === 1 && matches[0].at === null ? matches[0].index : -1;
+}
+
+function jsonlTurnForPrompt(storage: string, transcript: string, expectedPrompt: string, notBefore?: number): string | null {
   const lines = transcript.trim().split('\n');
   const expected = normalizedPrompt(expectedPrompt);
-  let match = -1;
+  const prompts: number[] = [];
+  const matches: Array<{ index: number; at: number | null }> = [];
   for (let index = 0; index < lines.length; index += 1) {
     let event: any;
     try {
@@ -488,30 +515,37 @@ function jsonlTurnForPrompt(storage: string, transcript: string, expectedPrompt:
     }
     const prompt = promptFromJsonlEvent(storage, event);
     if (!prompt) continue;
-    if (match >= 0) return lines.slice(match, index).join('\n');
-    if (promptMatches(storage, prompt, expected)) match = index;
+    prompts.push(index);
+    if (promptMatches(storage, prompt, expected)) matches.push({ index, at: jsonlEventTime(event) });
   }
-  return match >= 0 ? lines.slice(match).join('\n') : null;
+  const match = chosenPromptOccurrence(matches, notBefore);
+  if (match < 0) return null;
+  const next = prompts.find((index) => index > match);
+  return lines.slice(match, next ?? lines.length).join('\n');
 }
 
-function structuredTurnForPrompt(messages: unknown[], expectedPrompt: string): unknown[] | null {
+function structuredTurnForPrompt(messages: unknown[], expectedPrompt: string, notBefore?: number): unknown[] | null {
   const expected = normalizedPrompt(expectedPrompt);
-  let match = -1;
+  const prompts: number[] = [];
+  const matches: Array<{ index: number; at: number | null }> = [];
   for (let index = 0; index < messages.length; index += 1) {
     const prompt = structuredPrompt([messages[index]]);
     if (!prompt) continue;
-    if (match >= 0) return messages.slice(match, index);
-    if (normalizedPrompt(prompt) === expected) match = index;
+    prompts.push(index);
+    if (normalizedPrompt(prompt) === expected) matches.push({ index, at: null });
   }
-  return match >= 0 ? messages.slice(match) : null;
+  const match = chosenPromptOccurrence(matches, notBefore);
+  if (match < 0) return null;
+  const next = prompts.find((index) => index > match);
+  return messages.slice(match, next ?? messages.length);
 }
 
-function structuredReplyForPrompt(messages: unknown[], expectedPrompt: string): string | null {
-  const turn = structuredTurnForPrompt(messages, expectedPrompt);
+function structuredReplyForPrompt(messages: unknown[], expectedPrompt: string, notBefore?: number): string | null {
+  const turn = structuredTurnForPrompt(messages, expectedPrompt, notBefore);
   return turn ? parseStructuredMessagesReply(turn) : null;
 }
 
-function transcriptTurnForPrompt(storage: string, transcript: string, expectedPrompt: string): string | null {
+function transcriptTurnForPrompt(storage: string, transcript: string, expectedPrompt: string, notBefore?: number): string | null {
   if (storage === 'cline-session-manifest') {
     try {
       const payload = JSON.parse(transcript) as unknown;
@@ -520,7 +554,7 @@ function transcriptTurnForPrompt(storage: string, transcript: string, expectedPr
         : payload && typeof payload === 'object' && Array.isArray((payload as { messages?: unknown }).messages)
           ? (payload as { messages: unknown[] }).messages
           : [];
-      const turn = structuredTurnForPrompt(messages, expectedPrompt);
+      const turn = structuredTurnForPrompt(messages, expectedPrompt, notBefore);
       return turn ? JSON.stringify(turn) : null;
     } catch {
       return null;
@@ -531,21 +565,25 @@ function transcriptTurnForPrompt(storage: string, transcript: string, expectedPr
       const payload = JSON.parse(transcript) as { steps?: unknown };
       const steps = Array.isArray(payload.steps) ? payload.steps : [];
       const expected = normalizedPrompt(expectedPrompt);
-      let match = -1;
+      const prompts: number[] = [];
+      const matches: Array<{ index: number; at: number | null }> = [];
       for (let index = 0; index < steps.length; index += 1) {
         const step = steps[index] as { source?: unknown; message?: unknown };
         if (String(step?.source ?? '').toLowerCase() !== 'user') continue;
         const prompt = transcriptText(step.message);
         if (!prompt) continue;
-        if (match >= 0) return JSON.stringify({ steps: steps.slice(match, index) });
-        if (normalizedPrompt(prompt) === expected) match = index;
+        prompts.push(index);
+        if (normalizedPrompt(prompt) === expected) matches.push({ index, at: null });
       }
-      return match >= 0 ? JSON.stringify({ steps: steps.slice(match) }) : null;
+      const match = chosenPromptOccurrence(matches, notBefore);
+      if (match < 0) return null;
+      const next = prompts.find((index) => index > match);
+      return JSON.stringify({ steps: steps.slice(match, next ?? steps.length) });
     } catch {
       return null;
     }
   }
-  return jsonlTurnForPrompt(storage, transcript, expectedPrompt);
+  return jsonlTurnForPrompt(storage, transcript, expectedPrompt, notBefore);
 }
 
 export function transcriptContainsPrompt(storage: string, transcript: string, expectedPrompt: string): boolean {
@@ -594,10 +632,11 @@ export function parseTranscriptReplyStateForPrompt(
   storage: string,
   transcript: string,
   expectedPrompt: string,
+  notBefore?: number,
 ): { text: string; complete: boolean } | null {
   const parser = parserForStorage(storage);
   if (!parser) return null;
-  const scopedTranscript = transcriptTurnForPrompt(storage, transcript, expectedPrompt);
+  const scopedTranscript = transcriptTurnForPrompt(storage, transcript, expectedPrompt, notBefore);
   if (!scopedTranscript) return null;
   const turn = parser(scopedTranscript);
   if (!turn.prompt || !promptMatches(storage, turn.prompt, expectedPrompt)) return null;
@@ -1042,11 +1081,11 @@ function sessionIdForPath(storage: string | undefined, path: string): string | n
   return basename(path, '.jsonl');
 }
 
-function replyAtPath(storage: string | undefined, path: string, expectedPrompt: string): { text: string; complete: boolean } | null {
+function replyAtPath(storage: string | undefined, path: string, expectedPrompt: string, notBefore?: number): { text: string; complete: boolean } | null {
   const transcript = ['cline-session-manifest', 'devin-session-db'].includes(storage ?? '')
     ? readFileSync(path, 'utf8')
     : readTail(path, MATCH_TAIL_BYTES);
-  return transcript && storage ? parseTranscriptReplyStateForPrompt(storage, transcript, expectedPrompt) : null;
+  return transcript && storage ? parseTranscriptReplyStateForPrompt(storage, transcript, expectedPrompt, notBefore) : null;
 }
 
 function promptAtPath(storage: string | undefined, path: string, expectedPrompt: string): boolean {
@@ -1180,13 +1219,14 @@ async function findFileTurn(
   const read = async (path: string, sessionId: string) => {
     const revision = await transcriptRevision(path, since);
     if (!revision) return null;
-    const key = JSON.stringify([storage, path, sessionId, promptOnly, createHash('sha256').update(expectedPrompt).digest('hex')]);
+    const notBefore = promptOnly ? undefined : options.promptNotBefore;
+    const key = JSON.stringify([storage, path, sessionId, promptOnly, notBefore ?? null, createHash('sha256').update(expectedPrompt).digest('hex')]);
     const cached = fileTurnCache.get(key);
     if (cached?.revision === revision) return cached.value;
     const value = (async () => {
       const text = await transcriptTail(path, MATCH_TAIL_BYTES);
-      if (!text || !(promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt) : transcriptTurnForPrompt(storage, text, expectedPrompt))) return null;
-      return { sessionId, reply: promptOnly ? null : parseTranscriptReplyStateForPrompt(storage, text, expectedPrompt) };
+      if (!text || !(promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt) : transcriptTurnForPrompt(storage, text, expectedPrompt, notBefore))) return null;
+      return { sessionId, reply: promptOnly ? null : parseTranscriptReplyStateForPrompt(storage, text, expectedPrompt, notBefore) };
     })();
     fileTurnCache.set(key, { revision, value });
     // Polling an unchanged long conversation must not parse megabytes again.
@@ -1305,7 +1345,7 @@ export async function findReplyToPrompt(
           turn
           && turn.activity >= since - 2_000
         ) {
-          const reply = structuredReplyForPrompt(turn.messages, expectedPrompt);
+          const reply = structuredReplyForPrompt(turn.messages, expectedPrompt, options.promptNotBefore);
           if (reply) return { sessionId, text: reply, complete: true };
         }
       }
@@ -1313,19 +1353,19 @@ export async function findReplyToPrompt(
     }
     const preferredPath = preferredSessionId ? preferredTranscriptPath(storage, cwd, preferredSessionId, options) : null;
     if (preferredPath && transcriptModifiedSince(preferredPath, since)) {
-      const reply = replyAtPath(storage, preferredPath, expectedPrompt);
+      const reply = replyAtPath(storage, preferredPath, expectedPrompt, options.promptNotBefore);
       if (reply && preferredSessionId) return { sessionId: preferredSessionId, ...reply };
     }
     for (const path of candidateTranscriptPaths(storage, cwd, since, options)) {
       if (path === preferredPath) continue;
-      const reply = replyAtPath(storage, path, expectedPrompt);
+      const reply = replyAtPath(storage, path, expectedPrompt, options.promptNotBefore);
       const sessionId = reply ? sessionIdForPath(storage, path) : null;
       if (reply && sessionId) return { sessionId, ...reply };
     }
     for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId, options)) {
       const path = preferredTranscriptPath(storage, cwd, sessionId, options);
       if (!path || path === preferredPath || !transcriptModifiedSince(path, since)) continue;
-      const reply = replyAtPath(storage, path, expectedPrompt);
+      const reply = replyAtPath(storage, path, expectedPrompt, options.promptNotBefore);
       if (reply) return { sessionId, ...reply };
     }
     return null;
