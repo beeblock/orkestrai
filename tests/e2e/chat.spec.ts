@@ -1,7 +1,30 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AgentAttentionItem } from '../../src/lib/modules/agent-room/domain/types.js';
+
+// Preserve real questions while reproducing the independent notice a clean
+// CI host raises when it cannot start the provider CLI.
+async function keepTerminalExitNotice(page: Page, workspaceId: string, nodeId: string, nodeTitle: string) {
+  const now = new Date().toISOString();
+  const notice: AgentAttentionItem = {
+    id: '018f0000-0000-7000-8000-00000000ffff', workspaceId, workspaceName: null,
+    activityEventId: null, nodeId, nodeTitle, taskId: null, category: 'agent',
+    severity: 'error', status: 'open', title: 'PTY exited with code 1', body: 'Provider CLI fixture failed to start.',
+    sourceType: 'agent_state', sourceId: nodeId, correlationId: null,
+    action: { target: 'node', nodeId }, readAt: null, snoozedUntil: null, resolvedAt: null,
+    createdAt: now, updatedAt: now,
+  };
+  await page.route('**/api/agent-room/attention?*', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('workspaceId') !== workspaceId) return route.continue();
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    const payload = await response.json();
+    expect(Array.isArray(payload.data)).toBe(true);
+    await route.fulfill({ response, json: { ...payload, data: [...payload.data, notice] } });
+  });
+}
 
 test.describe('Chat', () => {
   test('owner talks to the team and answers a question an agent asked', async ({ page, request }) => {
@@ -12,6 +35,7 @@ test.describe('Chat', () => {
       const make = async (data: Record<string, unknown>) => (await (await request.post(`${base}/nodes`, { data })).json()).data;
       const leader = await make({ type: 'terminal', title: 'Lead', x: 80, y: 80, width: 480, height: 320, payload: { provider: 'claude', args: [], maestro: true } });
       const qa = await make({ type: 'terminal', title: 'QA Upload', x: 640, y: 80, width: 480, height: 320, payload: { provider: 'claude', args: [] } });
+      await keepTerminalExitNotice(page, workspace.id, leader.id, 'Lead');
 
       await page.goto(`/chat?workspace=${workspace.id}`);
       await expect(page.getByRole('link', { name: 'Conversa', exact: true })).toHaveAttribute('aria-current', 'page');
@@ -40,7 +64,7 @@ test.describe('Chat', () => {
       expect(ownQuestion.routedTo).toBe('owner');
       await expect(ownerQuestion).toHaveCount(1);
 
-      await page.getByRole('button', { name: /Lead/ }).first().click();
+      await page.getByRole('navigation', { name: 'Canais e mensagens diretas' }).locator('button.channel.dm').filter({ hasText: 'Lead' }).click();
       const question = page.getByTestId('chat-question');
       await expect(question).toContainText('Posso instalar o sharp?');
       await question.getByRole('button', { name: 'Sim', exact: true }).click();
@@ -48,6 +72,7 @@ test.describe('Chat', () => {
       // A clean CI host has no Claude CLI: delivery may also raise a legitimate
       // PTY-exit notice. Only the answered question must leave Needs you.
       await expect(ownerQuestion).toHaveCount(0);
+      await expect(page.getByTestId('needs-you-list')).toContainText('PTY exited with code 1');
 
       const messages = (await (await request.get(`${base}/channels/${encodeURIComponent(`dm:${leader.id}`)}/messages`)).json()).data as Array<{ id: string; kind: string; body: string; answeredAt: string | null }>;
       expect(messages.some((message) => message.kind === 'answer' && message.body === 'Sim')).toBe(true);
@@ -140,6 +165,7 @@ test.describe('Chat', () => {
       const make = async (data: Record<string, unknown>) => (await (await request.post(`${base}/nodes`, { data })).json()).data;
       const qa = await make({ type: 'terminal', title: 'QA Upload', x: 80, y: 80, width: 480, height: 320, payload: { provider: 'claude', args: [] } });
       const note = await make({ type: 'note', title: 'Plano', x: 640, y: 80, width: 320, height: 240, payload: { content: 'x' } });
+      await keepTerminalExitNotice(page, workspace.id, qa.id, 'QA Upload');
 
       await page.goto(`/canvas?workspace=${workspace.id}&node=${qa.id}`);
       const chatLink = page.getByRole('link', { name: 'Conversa', exact: true });
@@ -148,11 +174,12 @@ test.describe('Chat', () => {
       await chatLink.click();
       await expect(page).toHaveURL(new RegExp(`channel=dm%3A${qa.id}`));
       const channels = page.getByRole('navigation', { name: 'Canais e mensagens diretas' });
-      await expect(channels.getByRole('button', { name: /QA Upload/ })).toHaveAttribute('aria-current', 'page');
+      await expect(page.getByTestId('needs-you-list')).toContainText('PTY exited with code 1');
+      await expect(channels.locator('button.channel.dm').filter({ hasText: 'QA Upload' })).toHaveAttribute('aria-current', 'page');
 
       await page.goto(`/chat?workspace=${workspace.id}&channel=${encodeURIComponent(`dm:${note.id}`)}`);
       await expect(page).not.toHaveURL(/channel=/);
-      await expect(channels.getByRole('button', { name: /equipe/ })).toHaveAttribute('aria-current', 'page');
+      await expect(channels.locator('button.channel:not(.dm)')).toHaveAttribute('aria-current', 'page');
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }
