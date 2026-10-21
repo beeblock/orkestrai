@@ -27,7 +27,8 @@ test.describe('Chat', () => {
       // With a leader in the team, the question goes to the leader first.
       const { questionId, routedTo } = (await asked.json()).data;
       expect(routedTo).toBe('leader');
-      await expect(page.getByTestId('needs-you-list')).toHaveCount(0);
+      const ownerQuestion = page.getByTestId('needs-you-list').getByRole('button', { name: /Posso instalar o sharp\?/ });
+      await expect(ownerQuestion).toHaveCount(0);
       expect(questionId).toBeTruthy();
       // Only the leader's live terminal may bring it to the owner; the shared workspace token cannot.
       const spoofed = await request.post('/api/agent-room/bridge/escalate-question', { data: { token, from: 'Lead', questionId, note: 'Instalar dependência nova é do dono' } });
@@ -35,18 +36,22 @@ test.describe('Chat', () => {
 
       // The leader's own question goes straight to the owner.
       const own = await request.post('/api/agent-room/bridge/ask-owner', { data: { token, from: 'Lead', question: 'Posso instalar o sharp?', options: ['Sim', 'Não'] } });
-      expect((await own.json()).data.routedTo).toBe('owner');
-      await expect(page.getByTestId('needs-you-list')).toContainText('Posso instalar o sharp?');
+      const ownQuestion = (await own.json()).data;
+      expect(ownQuestion.routedTo).toBe('owner');
+      await expect(ownerQuestion).toHaveCount(1);
 
       await page.getByRole('button', { name: /Lead/ }).first().click();
       const question = page.getByTestId('chat-question');
       await expect(question).toContainText('Posso instalar o sharp?');
       await question.getByRole('button', { name: 'Sim', exact: true }).click();
       await expect(question).toContainText('Respondida');
-      await expect(page.getByTestId('needs-you-list')).toHaveCount(0);
+      // A clean CI host has no Claude CLI: delivery may also raise a legitimate
+      // PTY-exit notice. Only the answered question must leave Needs you.
+      await expect(ownerQuestion).toHaveCount(0);
 
-      const messages = (await (await request.get(`${base}/channels/${encodeURIComponent(`dm:${leader.id}`)}/messages`)).json()).data as Array<{ kind: string; body: string }>;
+      const messages = (await (await request.get(`${base}/channels/${encodeURIComponent(`dm:${leader.id}`)}/messages`)).json()).data as Array<{ id: string; kind: string; body: string; answeredAt: string | null }>;
       expect(messages.some((message) => message.kind === 'answer' && message.body === 'Sim')).toBe(true);
+      expect(messages.find((message) => message.id === ownQuestion.questionId)?.answeredAt).toBeTruthy();
       expect(qa.id).toBeTruthy();
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
