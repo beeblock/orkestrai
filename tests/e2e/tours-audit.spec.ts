@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import { openWorkspace } from './helpers';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -86,7 +87,7 @@ for (const tour of TOURS_PT) {
 
     try {
       await page.goto('/canvas');
-      await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+      await openWorkspace(page, workspaceName);
       await expect(page.locator('.svelte-flow__pane')).toBeVisible();
 
       await page.goto('/canvas?onboarding=1');

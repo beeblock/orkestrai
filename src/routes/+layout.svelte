@@ -4,6 +4,7 @@
   import { getCsrfToken, registerToast } from '@beeblock/svelar/http';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import UpdateNotifier from '$lib/components/agent-room/UpdateNotifier.svelte';
   import GlobalDictation from '$lib/components/agent-room/GlobalDictation.svelte';
@@ -25,7 +26,6 @@
   const desktopMenu = typeof window !== 'undefined'
     ? (window as unknown as { orkestraiDesktop?: DesktopMenuBridge }).orkestraiDesktop
     : undefined;
-  const windowsDesktop = desktopMenu?.platform === 'win32';
 
   $effect(() => {
     void desktopMenu?.setMenuLocale?.(localeState.current);
@@ -38,14 +38,26 @@
   });
 
   let { children } = $props();
+  // The phone page runs behind the LAN gateway, which serves no settings or
+  // desktop chrome: it sets its own language from the mobile session.
+  const phoneShell = $derived(page.url.pathname === '/m' || page.url.pathname.startsWith('/m/'));
   let localeReady = $state(false);
 
   $effect(() => {
+    if (phoneShell) return;
     const theme = applyAppTheme(appSettingsStore.values);
     void desktopMenu?.setTitlebarTheme?.({ background: theme.tokens.sidebar, foreground: theme.tokens.textSoft });
   });
 
+
   onMount(() => {
+    if (phoneShell) {
+      // The phone follows its own light or dark preference.
+      const light = window.matchMedia?.('(prefers-color-scheme: light)').matches;
+      applyAppTheme({ ...appSettingsStore.values, appTheme: light ? 'orkestrai-light' : 'orkestrai-dark' });
+      localeReady = true;
+      return;
+    }
     // Nao libere interacao antes da preferencia inicial chegar: caso contrario
     // o remount de locale pode descartar um clique feito durante o startup.
     void initLocaleRuntime().finally(() => {
@@ -110,10 +122,14 @@
 <Tooltip.Provider>
   <!-- #key no locale: ao trocar de idioma, a arvore inteira remonta e todo
        m.*() reavalia — i18n reativo garantido por construcao. -->
-  {#if localeReady}
+  {#if localeReady && phoneShell}
     {#key localeState.current}
-      {#if windowsDesktop}<DesktopTitlebar />{/if}
-      <div class="app-content" class:desktop-content={windowsDesktop}>
+      {@render children()}
+    {/key}
+  {:else if localeReady}
+    {#key localeState.current}
+      <DesktopTitlebar />
+      <div class="app-content desktop-content">
         {@render children()}
       </div>
       <GlobalDictation />
@@ -134,7 +150,7 @@
     default: { borderClass: '', progressClass: 'bg-[var(--app-text-muted)]' },
   }}
 />
-<UpdateNotifier />
+{#if !phoneShell}<UpdateNotifier />{/if}
 
 <style>
   :global(body) {
@@ -143,14 +159,10 @@
     font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
+  /* The app-wide top bar (DesktopTitlebar) takes 44px on every platform. */
   .app-content {
-    height: 100dvh;
+    height: calc(100dvh - 44px);
     min-height: 0;
-  }
-
-  .app-content.desktop-content {
-    height: calc(100dvh - 36px);
-    border-top: 1px solid var(--app-border);
     overflow: auto;
   }
 </style>

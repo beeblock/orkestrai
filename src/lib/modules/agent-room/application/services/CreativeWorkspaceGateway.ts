@@ -1,6 +1,7 @@
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
+import { shownOnFloor } from '../../domain/canvas-floors.js';
 import type { CanvasNode, CanvasNodePayload, Workspace } from '../../domain/types.js';
 import { workspacePathService } from './WorkspacePathService.js';
 import { AgentFloor } from '../../domain/models/AgentFloor.js';
@@ -12,7 +13,7 @@ export class CreativeWorkspaceGateway {
   async placeBrand(kit: CreativeBrandKit, position = { x: 100, y: 100 }, floorId: string | null = null) {
     const { workspaceId } = kit;
     await this.characterDestination(workspaceId, floorId);
-    const all = (await this.nodes(workspaceId)).filter(node => (node.floorId ?? null) === floorId);
+    const all = (await this.nodes(workspaceId)).filter(node => shownOnFloor(node, floorId));
     const width = 888, height = Math.max(420, Math.ceil(kit.definition.assets.length / 2) * 280 + 64);
     const origin = findFreeCanvasPosition(all, { ...position, width, height });
     const identity = { brandKitId: kit.id, brandVersion: kit.version, brandDigest: kit.snapshot!.digest };
@@ -34,7 +35,7 @@ export class CreativeWorkspaceGateway {
   async placeCharacter(character: CreativeCharacter, position = { x: 100, y: 100 }, floorId: string | null = null) {
     const { workspaceId } = character;
     await this.characterDestination(workspaceId, floorId);
-    const all = (await this.nodes(workspaceId)).filter(node => (node.floorId ?? null) === floorId);
+    const all = (await this.nodes(workspaceId)).filter(node => shownOnFloor(node, floorId));
     const count = character.definition.images.length;
     const width = 888, height = Math.max(380, Math.ceil(count / 2) * 280 + 64);
     const origin = findFreeCanvasPosition(all, { ...position, width, height });
@@ -67,7 +68,7 @@ export class CreativeWorkspaceGateway {
     const near = nodes.find(node => node.id === nearId);
     const size = ['storyboard', 'sequence'].includes(type) ? { width: 860, height: 600 } : type === 'image' ? { width: 280, height: 300 } : { width: type === 'video' ? 520 : 460, height: type === 'video' ? 390 : 640 };
     const floorId = targetFloorId ?? near?.floorId ?? null;
-    const rect = findFreeCanvasPosition(nodes.filter(node => (node.floorId ?? null) === floorId), { x: near ? near.x + near.width + 64 : 100, y: near?.y ?? 100, ...position, ...size });
+    const rect = findFreeCanvasPosition(nodes.filter(node => shownOnFloor(node, floorId)), { x: near ? near.x + near.width + 64 : 100, y: near?.y ?? 100, ...position, ...size });
     const node = await workspaceRepository.createNode({ workspaceId, type, title, payload, floorId, ...size, ...rect });
     if (near) await this.connect(workspaceId, near.id, node.id);
     this.broadcast(workspaceId);
@@ -80,7 +81,7 @@ export class CreativeWorkspaceGateway {
   }
   async createStoryboardNode(workspaceId: string, title: string, floorId: string | null, position?: { x: number; y: number }, nearId?: string) {
     await this.characterDestination(workspaceId, floorId);
-    const all = (await this.nodes(workspaceId)).filter(node => (node.floorId ?? null) === floorId);
+    const all = (await this.nodes(workspaceId)).filter(node => shownOnFloor(node, floorId));
     const origin = findFreeCanvasPosition(all, { ...(position ?? { x: 100, y: 100 }), width: 860, height: 600 });
     const node = await workspaceRepository.createNode({ workspaceId, floorId, type: 'storyboard', title, ...origin, width: 860, height: 600, payload: { schemaVersion: 1 } });
     if (nearId) await this.connect(workspaceId, nearId, node.id);

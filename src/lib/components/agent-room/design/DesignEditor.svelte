@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, setContext, tick } from 'svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import {
@@ -162,6 +162,8 @@
   import { pageDeleteInverseOperations } from './design-page-history.js';
   import { stripDesignChrome } from './design-export-chrome.js';
 
+  // The editor keeps its own toolbar tooltips above the buttons.
+  setContext('toolbar-tooltip-side', 'top');
   let {
     workspaceId,
     nodeId,

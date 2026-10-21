@@ -11,6 +11,9 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 import { AgentFloor } from '$lib/modules/agent-room/domain/models/AgentFloor.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import * as diskGuard from '$lib/modules/agent-room/infrastructure/disk-guard.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
+import { CreateCanvasNodeDto } from '$lib/modules/agent-room/application/dto/WorkspaceDtos.js';
+import { canvasRectsOverlap } from '$lib/modules/agent-room/domain/canvas-placement.js';
 
 const repos: string[] = [];
 
@@ -59,6 +62,26 @@ describe('FloorService', () => {
     await floorService.remove(floor.id, true);
     expect(await floorService.list(workspace.id)).toHaveLength(0);
     expect(git(dir, ['branch', '--list', 'orkestrai/*'])).not.toContain('fix-login');
+  });
+
+  it('keeps a node created in a floor view on that floor and places floor agents clear of the ground floor', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    // Skip bridge provisioning: it would write provider configuration under the real home.
+    vi.spyOn(workspaceService, 'get').mockResolvedValue(workspace as never);
+    const floor = await floorService.create(workspace.id, { name: 'frente' });
+    const leader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Leader', x: 80, y: 80, width: 560, height: 360, payload: { provider: 'claude', maestro: true } });
+    const create = (input: Record<string, unknown>) => workspaceService.createNode(CreateCanvasNodeDto.from(workspace.id, input as never));
+
+    const note = await create({ type: 'note', title: 'Floor note', payload: { content: '' }, floorId: floor.id });
+    expect(note.floorId).toBe(floor.id);
+    const agent = await create({ type: 'terminal', title: 'Dev', payload: { provider: 'claude', command: '/bin/cat', args: [] }, floorId: floor.id });
+    expect(agent.floorId).toBe(floor.id);
+    expect(canvasRectsOverlap(agent, leader)).toBe(false);
+    expect(canvasRectsOverlap(agent, note)).toBe(false);
+
+    await expect(create({ type: 'note', title: 'Lost', floorId: '018f0000-0000-7000-8000-000000000001' })).rejects.toThrow('Andar não encontrado');
+    expect((await workspaceRepository.listNodes(workspace.id)).map((node) => node.title)).not.toContain('Lost');
   });
 
   it('clona layout do terreo quando pedido', async () => {
@@ -135,6 +158,130 @@ describe('FloorService', () => {
     await expect(floorService.land(floor.id)).rejects.toThrow('Nenhum arquivo foi alterado');
     expect(readFileSync(join(dir, 'app.ts'), 'utf8')).toBe('const v = 99;\n');
     await expect(floorService.remove(floor.id, true)).rejects.toThrow('unmerged_commits_review_required');
+    expect(existsSync(floor.path)).toBe(true);
+  });
+
+  it('removes a floor whose files reached main by copy and keeps its branch', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'ported' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    writeFileSync(join(floor.path, 'new.ts'), 'export const added = true;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    // The leader ports the same files to main in its own commit; histories differ.
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    writeFileSync(join(dir, 'new.ts'), 'export const added = true;\n');
+    writeFileSync(join(dir, 'other.ts'), 'export const later = 1;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'porte conferido']);
+
+    expect(await floorService.remove(floor.id, true)).toMatchObject({ removed: true, branchDeleted: false });
+    expect(existsSync(floor.path)).toBe(false);
+    expect(git(dir, ['branch', '--list', 'orkestrai/ported']).trim()).toContain('orkestrai/ported');
+  });
+
+  it('still removes a ported floor after main changed those files again', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'ported-then-evolved' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    git(dir, ['commit', '-am', 'porte']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 3;\n');
+    git(dir, ['commit', '-am', 'evolucao posterior']);
+
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ integration: 'content_integrated', safeToRemove: true });
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision }]))[0]).toMatchObject({ removed: true });
+  });
+
+  it('archives a reviewed floor with commits main lacks only when it is clean, keeping the branch', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'adapted' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2; // adaptado\n');
+    git(dir, ['commit', '-am', 'porte adaptado']);
+
+    writeFileSync(join(floor.path, 'rascunho.ts'), 'nao commitado\n');
+    let [audit] = await floorService.audit(workspace.id);
+    expect(audit.blockers).toEqual(expect.arrayContaining(['unmerged_commits_review_required', 'local_changes_or_untracked_or_ignored_files']));
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision, archive: true }]))[0]).toMatchObject({ removed: false });
+    expect(existsSync(floor.path)).toBe(true);
+
+    rmSync(join(floor.path, 'rascunho.ts'));
+    [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ safeToRemove: false, blockers: ['unmerged_commits_review_required'] });
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision }]))[0]).toMatchObject({ removed: false });
+    expect((await floorService.cleanup(workspace.id, [{ floorId: floor.id, revision: audit.revision, archive: true }]))[0]).toMatchObject({ removed: true });
+    expect(existsSync(floor.path)).toBe(false);
+    expect(git(dir, ['branch', '--list', 'orkestrai/adapted']).trim()).toContain('orkestrai/adapted');
+    expect((await AgentFloor.find(floor.id))?.getAttribute('status')).toBe('archived');
+  });
+
+  it('keeps a floor that brings back content main had before the floor started', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    git(dir, ['commit', '-am', 'v2 antes do andar']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'revert' });
+    // The floor reverts app.ts to the first version, which main held before the fork.
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 1;\n');
+    git(floor.path, ['commit', '-am', 'reverte v2']);
+    writeFileSync(join(dir, 'other.ts'), 'export const later = 1;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'trabalho na main']);
+
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit).toMatchObject({ safeToRemove: false, blockers: ['unmerged_commits_review_required'] });
+    expect(audit.integration).not.toBe('content_integrated');
+    await expect(floorService.remove(floor.id)).rejects.toThrow('unmerged_commits_review_required');
+  });
+
+  it('keeps a floor whose only change is a file mode main lacks', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho ok\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'script']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'chmod' });
+    chmodSync(join(floor.path, 'run.sh'), 0o755);
+    git(floor.path, ['commit', '-am', 'torna executavel']);
+    // Main touches the same file's content but never makes it executable.
+    writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho ok\n# nota\n');
+    git(dir, ['commit', '-am', 'nota']);
+    writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho ok\n');
+    git(dir, ['commit', '-am', 'volta o conteudo']);
+
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit.integration).not.toBe('content_integrated');
+    expect(audit.safeToRemove).toBe(false);
+
+    // Once main also makes it executable, the floor's work is there.
+    chmodSync(join(dir, 'run.sh'), 0o755);
+    git(dir, ['commit', '-am', 'executavel na main']);
+    const [after] = await floorService.audit(workspace.id);
+    expect(after).toMatchObject({ integration: 'content_integrated', safeToRemove: true });
+  });
+
+  it('keeps a floor whose files differ from main', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'partial' });
+    writeFileSync(join(floor.path, 'app.ts'), 'const v = 2;\n');
+    writeFileSync(join(floor.path, 'new.ts'), 'export const added = true;\n');
+    git(floor.path, ['add', '.']);
+    git(floor.path, ['commit', '-m', 'trabalho do andar']);
+    writeFileSync(join(dir, 'app.ts'), 'const v = 2;\n');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'porte parcial']);
+
+    await expect(floorService.remove(floor.id)).rejects.toThrow('unmerged_commits_review_required');
     expect(existsSync(floor.path)).toBe(true);
   });
 

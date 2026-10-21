@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { selectCanvasTool } from './helpers';
 
 test.describe('usage dos providers', () => {
   test('endpoint retorna todos os providers com janelas ou orientação oficial', async ({ request }) => {
@@ -15,6 +16,8 @@ test.describe('usage dos providers', () => {
       helpUrl: string | null;
     }>;
     expect(usages.map((usage) => usage.provider).sort()).toEqual([
+      'aider',
+      'amp',
       'antigravity',
       'claude',
       'cline',
@@ -22,8 +25,11 @@ test.describe('usage dos providers', () => {
       'copilot',
       'cursor',
       'devin',
+      'gemini',
+      'goose',
       'kimi',
       'opencode',
+      'qwen',
     ]);
     for (const usage of usages) {
       // Providers sem telemetria oficial expõem diagnóstico e documentação,
@@ -45,12 +51,12 @@ test.describe('usage dos providers', () => {
     const workspace = (await created.json()).data as { id: string };
 
     try {
-      await page.goto('/canvas');
-      await page.getByRole('button', { name: workspaceName, exact: true }).click();
-      await page.getByRole('button', { name: /Usage/ }).click();
+      await page.goto(`/canvas?workspace=${workspace.id}`);
+      // Usage lives in the Canvas panel rail.
+      await page.locator('[data-rail-item="usage"]').click();
 
       await expect(page.locator('.usage-panel h3')).toHaveText('Uso dos providers');
-      await expect(page.locator('.usage-card')).toHaveCount(9, { timeout: 15_000 });
+      await expect(page.locator('.usage-card')).toHaveCount(14, { timeout: 15_000 });
       // Cada card mostra janelas, erro ou orientação oficial do provider.
       const cards = page.locator('.usage-card');
       for (const card of await cards.all()) {
@@ -137,7 +143,7 @@ test.describe('usage dos providers', () => {
         data: { ...originalSettings, uiLanguage: 'en' },
       });
       await page.goto(`/canvas?workspace=${workspace.id}`);
-      await page.getByRole('button', { name: /Usage/ }).click();
+      await selectCanvasTool(page, 'Usage');
       await expect(page.locator('.usage-error')).toHaveText(
         'No local credentials were found for Claude. Open its CLI and sign in.',
       );

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getContext } from 'svelte';
   import { AudioLines, ChevronDown, Image as ImageIcon, Sparkles, Film, BookUser, Clapperboard, Palette, Workflow } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -6,6 +7,8 @@
   import * as m from '$lib/paraglide/messages.js';
 
   let { active, onImage, onWorkflow, onVideo, onAudio, onCharacters, onStoryboard, onBrands, onRecipes, onSequence }: { active: boolean; onImage: () => void; onWorkflow: () => void; onVideo?: () => void; onAudio?: () => void; onCharacters?: () => void; onStoryboard?: () => void; onBrands?: () => void; onRecipes?: () => void; onSequence?: () => void } = $props();
+  // Rails on the side of the canvas open their menus and tooltips sideways.
+  const railSide = getContext<'top' | 'bottom' | 'right' | 'left' | undefined>('toolbar-tooltip-side') ?? 'bottom';
 </script>
 
 <DropdownMenu.Root>
@@ -22,9 +25,9 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="top">{m['image_workflow.menu']()}</Tooltip.Content>
+    <Tooltip.Content side={railSide}>{m['image_workflow.menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="top" align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
+  <DropdownMenu.Content side={railSide} align="start" sideOffset={10} class="w-[min(310px,calc(100vw-24px))] p-1.5">
     <DropdownMenu.Label>{m['image_workflow.menu']()}</DropdownMenu.Label>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onImage}><ImageIcon size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_image']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_image_hint']()}</small></span></DropdownMenu.Item>
     <DropdownMenu.Item class="min-h-11 gap-3" onclick={onWorkflow}><Sparkles size={16} class="shrink-0" /><span class="min-w-0"><strong class="block text-xs">{m['image_workflow.add_workflow']()}</strong><small class="mt-0.5 block text-ui-xs text-muted-foreground">{m['image_workflow.add_workflow_hint']()}</small></span></DropdownMenu.Item>

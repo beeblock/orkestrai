@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { cn } from '$lib/utils.js';
-  import type { Snippet } from 'svelte';
+  import { getContext, type Snippet } from 'svelte';
 
   type Props = {
     /** Texto do tooltip (obrigatorio — toda ferramenta explica o que faz). */
@@ -17,6 +17,9 @@
   };
 
   let { label, hint, dragTool, active = false, disabled = false, onclick, children }: Props = $props();
+
+  // Docks at the top of the screen open their tooltips downward.
+  const tooltipSide = getContext<'top' | 'bottom' | undefined>('toolbar-tooltip-side') ?? 'top';
 
   // O canvas le este tipo no drop e cria o no na posicao solta, pela mesma
   // rotina do clique na ferramenta.
@@ -47,7 +50,7 @@
       </button>
     {/snippet}
   </Tooltip.Trigger>
-  <Tooltip.Content side="top" class={hint ? 'flex-col items-start gap-0.5' : undefined}>
+  <Tooltip.Content side={tooltipSide} class={hint ? 'flex-col items-start gap-0.5' : undefined}>
     <span>{label}</span>
     {#if hint}<span class="font-normal opacity-70">{hint}</span>{/if}
   </Tooltip.Content>

@@ -98,6 +98,35 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
     expect(requests.at(-1)).toMatchObject({ method: 'DELETE', url: '/api/agent-room/bridge/heavy/00000000-0000-7000-8000-000000000099' });
   });
 
+  it('keeps messages queued while a heavy run works and hands them over with its result', async () => {
+    heavyPolls = 1;
+    pendingInbox = 1;
+    const io = capture();
+    const from = requests.length;
+    try {
+      const code = await run(['heavy', '--label', 'long chain', '--', process.execPath, '-e', 'setTimeout(() => {}, 600)'], {
+        ...io.options, env: { ...io.options.env, ORKESTRAI_HEAVY_HEARTBEAT_MS: '100' },
+      });
+      expect(code).toBe(0);
+    } finally {
+      pendingInbox = 0;
+    }
+    const calls = requests.slice(from).map((request) => `${request.method} ${request.url}`);
+    expect(calls.filter((call) => call.endsWith('/heartbeat')).length).toBeGreaterThan(1);
+    const claimed = calls.indexOf('GET /api/agent-room/bridge/inbox');
+    expect(claimed).toBeGreaterThan(calls.findIndex((call) => call.startsWith('DELETE /api/agent-room/bridge/heavy/')));
+    expect(io.err.join('\n')).toContain('1 mensagem(ns) nova(s)');
+  });
+
+  it('puts the owner first and asks for a reply in Chat', () => {
+    const owner = { ...QUESTION, messageId: '00000000-0000-7000-8000-000000000012', kind: 'owner', fromNodeId: null, fromTitle: null, content: 'Mensagem direta do dono: pode ser?' };
+    const digest = formatInbox([QUESTION, owner], 0).split('\n');
+    expect(digest[1]).toContain('O DONO ESTA ESPERANDO NA CONVERSA');
+    expect(digest[2]).toBe(`[${owner.messageId}] Do dono: Mensagem direta do dono: pode ser?`);
+    expect(digest[3]).toContain('De Lider [pergunta]');
+    expect(formatInbox([QUESTION], 0)).not.toContain('O DONO ESTA ESPERANDO');
+  });
+
   it('formats an empty inbox as nothing to print', () => {
     expect(formatInbox([], 0)).toBe('');
   });

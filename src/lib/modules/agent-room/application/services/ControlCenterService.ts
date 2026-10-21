@@ -222,15 +222,20 @@ export class ControlCenterService {
       ...input,
       messageId: input.messageId ?? uuidv7(),
     });
+    this.announceDelivery(event);
+    if (event.state === 'failed' && event.metadata.cancelled !== true) await this.recordMessageFailure(event);
+    return event;
+  }
+
+  /** Tells the screens about a delivery event, such as one written in a transaction that has now committed. */
+  announceDelivery(event: AgentMessageDeliveryEvent): void {
     broadcast({
       type: 'messageDelivery',
-      workspaceId: input.workspaceId,
+      workspaceId: event.workspaceId,
       messageId: event.messageId,
       state: event.state,
       event,
     });
-    if (event.state === 'failed' && event.metadata.cancelled !== true) await this.recordMessageFailure(event);
-    return event;
   }
 
   /**
@@ -354,9 +359,12 @@ export class ControlCenterService {
       const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
       const alive = Boolean(session && !session.exited);
       const latest = latestByNode.get(node.id);
-      const state: AgentActivityState = alive
+      const recorded: AgentActivityState = alive
         ? latest?.state ?? (session?.waiting ? 'idle' : 'working')
         : 'disconnected';
+      // A plain shell printing server logs is a running tool, not a teammate at work.
+      const isAgent = Boolean(payload.provider ?? session?.provider);
+      const state: AgentActivityState = !isAgent && (recorded === 'working' || recorded === 'starting') ? 'idle' : recorded;
       counts[state] += 1;
       const task = tasks.find((candidate) => candidate.assigneeNodeId === node.id) ?? null;
       return {

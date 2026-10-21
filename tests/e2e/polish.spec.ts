@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createNodeOnCanvas } from './helpers.js';
+import { createNodeOnCanvas, openWorkspace } from './helpers.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,8 +11,7 @@ async function createWorkspaceIn(page: import('@playwright/test').Page, name: st
   await page.getByPlaceholder('Nome', { exact: true }).fill(name);
   await page.getByPlaceholder('Diretório de trabalho').fill(dir);
   await page.getByRole('button', { name: 'Criar' }).click();
-  await page.locator('.workspace-list .workspace-item', { hasText: name }).click();
-  await expect(page.locator('.workspace-list li.active')).toContainText(name, { timeout: 15_000 });
+  await openWorkspace(page, name);
 }
 
 async function cleanup(request: import('@playwright/test').APIRequestContext, name: string) {

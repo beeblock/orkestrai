@@ -58,7 +58,7 @@ test.describe('workbench accessibility', () => {
     } finally {
       await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', {
-        data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'vertical' },
+        data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'horizontal' },
       });
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
       rmSync(dir, { recursive: true, force: true });
@@ -113,7 +113,7 @@ test.describe('workbench accessibility', () => {
     } finally {
       await page.goto('about:blank').catch(() => undefined);
       await request.put('/api/agent-room/settings', {
-        data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'vertical' },
+        data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'horizontal' },
       });
       if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`);
       rmSync(dir, { recursive: true, force: true });

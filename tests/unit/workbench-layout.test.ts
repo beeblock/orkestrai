@@ -176,6 +176,7 @@ describe('workbench layout', () => {
   it('normalizes the tab placement preference', () => {
     expect(normalizeWorkbenchTabPlacement('horizontal')).toBe('horizontal');
     expect(normalizeWorkbenchTabPlacement('vertical')).toBe('vertical');
-    expect(normalizeWorkbenchTabPlacement('other')).toBe('vertical');
+    expect(normalizeWorkbenchTabPlacement('other')).toBe('horizontal');
+    expect(normalizeWorkbenchTabPlacement(undefined)).toBe('horizontal');
   });
 });

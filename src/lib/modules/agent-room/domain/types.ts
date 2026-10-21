@@ -216,7 +216,7 @@ export type AgentModelOption = {
 // Canvas / Workspaces
 // ---------------------------------------------------------------------------
 
-export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'git' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'video' | 'videoWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'toolWorkshop' | 'device' | 'computer' | 'design' | 'document' | 'knowledge';
+export type CanvasNodeType = 'terminal' | 'note' | 'fileTree' | 'git' | 'editor' | 'diff' | 'portal' | 'apiClient' | 'loop' | 'group' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'video' | 'videoWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'controlCenter' | 'reviewCenter' | 'workstreams' | 'memory' | 'annotations' | 'huddles' | 'automation' | 'toolWorkshop' | 'device' | 'computer' | 'design' | 'document' | 'knowledge' | 'orchestrator' | 'checklist' | 'calendar';
 export type CanvasEdgeStyle = 'cord' | 'circuit';
 export type WorkspaceRuntimeKind = 'native' | 'wsl';
 export type WorkspaceExecutionRuntime =
@@ -680,10 +680,22 @@ export type TerminalNodePayload = {
   agentRuntimeLastError?: string | null;
 };
 
+export type ChecklistItem = { id: string; text: string; done: boolean };
+export type ChecklistNodePayload = { items?: ChecklistItem[] };
+
+export type CalendarEvent = { id: string; title: string; date: string; allDay: boolean; time?: string | null; color?: string; notes?: string | null };
+export type CalendarNodePayload = { events?: CalendarEvent[] };
+
 export type NoteNodePayload = {
   content: string;
   locked?: boolean;
   attachments?: WorkspaceAttachment[];
+  /** Paper color id (see the note palette); legacy ids stay valid. */
+  color?: string;
+  /** Typeface: handwriting, plain text or monospace. */
+  font?: 'hand' | 'sans' | 'mono';
+  /** Text size step. */
+  size?: 's' | 'm' | 'l';
 };
 
 export type ImageWorkflowRun = {
@@ -1077,7 +1089,9 @@ export type AutomationTriggerType =
   | 'github_pull_request'
   | 'webhook'
   | 'file_change'
-  | 'usage_threshold';
+  | 'usage_threshold'
+  | 'agent_idle'
+  | 'agent_output';
 
 export type AutomationActionType = 'prompt_agent' | 'create_task' | 'notify' | 'browser' | 'integration' | 'tool';
 export type AutomationRunStatus = 'queued' | 'running' | 'waiting_approval' | 'succeeded' | 'failed' | 'cancelled' | 'dead_letter';

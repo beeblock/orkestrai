@@ -264,6 +264,7 @@ test.describe('terminais PTY', () => {
 
       await page.goto(`/terminal?workspace=${first.id}&node=${firstNote.id}`);
       const tree = page.getByTestId('terminal-workspace-tree');
+      await page.getByTestId('focus-all-workspaces').click();
       await tree.locator('button', { hasText: secondName }).click();
       await tree.getByRole('button', { name: `Abrir ${secondNoteTitle} à direita` }).click();
 
@@ -343,10 +344,14 @@ test.describe('terminais PTY', () => {
       });
       const leader = (await leaderResponse.json()).data as { id: string };
 
+      await request.put('/api/agent-room/settings', {
+        data: { ...originalSettings, workbenchTabPlacement: 'horizontal' },
+      });
       await page.goto(`/terminal?workspace=${workspace.id}&node=${note.id}`);
       const tree = page.getByTestId('terminal-workspace-tree');
       await expect(tree).toContainText(workspaceName);
-      await expect(page.getByTestId('workbench-vertical-tabs')).toBeVisible();
+      await expect(page.getByTestId('workbench-vertical-tabs')).toHaveCount(0);
+      await expect(page.getByRole('tablist').first()).toBeVisible();
       await expect(page.locator('.canvas-note textarea')).toHaveValue('# Briefing persistido');
 
       const search = page.getByTestId('terminal-workspace-search');
@@ -371,7 +376,7 @@ test.describe('terminais PTY', () => {
       await page.getByTestId('terminal-open-canvas').click();
       await expect(page).toHaveURL(new RegExp(`/canvas\\?workspace=${workspace.id}&node=${shell.id}`));
       await expect(page.locator('.canvas-terminal').filter({ hasText: shellTitle })).toBeVisible();
-      await page.getByRole('link', { name: 'Workbench' }).click();
+      await page.getByRole('link', { name: 'Foco', exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`/terminal\\?workspace=${workspace.id}.*node=`));
       await expect(page.getByTestId('workbench-pane-secondary')).toBeVisible();
 
@@ -418,7 +423,7 @@ test.describe('terminais PTY', () => {
       await expect(page.locator('.canvas-terminal').filter({ hasText: leaderTitle })).toBeVisible();
     } finally {
       await request.put('/api/agent-room/settings', {
-        data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'vertical' },
+        data: { ...originalSettings, workbenchTabPlacement: originalSettings.workbenchTabPlacement ?? 'horizontal' },
       });
       if (workspace) await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     }

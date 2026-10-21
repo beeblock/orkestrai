@@ -19,6 +19,8 @@
     selected: NodeProps['selected'];
     /** Cor de destaque do tipo de no (borda selecionada / dot). */
     accent?: string;
+    /** Thin outline color for the node's live state (a working agent glows gold). */
+    edge?: string | null;
     minWidth?: number;
     minHeight?: number;
     onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void;
@@ -34,6 +36,8 @@
     onDrop?: (event: DragEvent) => void;
     /** Classe extra no wrapper (ex.: canvas-terminal) — mantida para testes/estilo. */
     class?: string;
+    /** Extra CSS custom properties for the node frame (e.g. a note's paper color). */
+    vars?: string;
     deferOffscreen?: boolean;
     icon: Snippet;
     title: Snippet;
@@ -45,6 +49,7 @@
     id,
     selected,
     accent = 'var(--app-accent)',
+    edge = null,
     minWidth = 320,
     minHeight = 200,
     onResize,
@@ -57,6 +62,7 @@
     onDragLeave,
     onDrop,
     class: klass = '',
+    vars = '',
     deferOffscreen = false,
     icon,
     title,
@@ -101,14 +107,14 @@
   );
 </script>
 
-<div class={`node-shell nowheel ${klass}`} class:selected style:--accent={accent} role="group" aria-label={titleText || undefined} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop}>
+<div class={`node-shell nowheel ${klass}`} class:selected style={vars} style:--accent={accent} style:--node-edge={edge ?? undefined} style:--node-edge-hover={edge ?? undefined} role="group" aria-label={titleText || undefined} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop}>
   <NodeResizer
     isVisible={selected ?? false}
     {minWidth}
     {minHeight}
     onResizeEnd={(_event, params) => onResize?.(id, params)}
     lineClass="node-resize-line"
-    handleStyle="width: 8px; height: 8px; border-radius: 3px; border: 1.5px solid var(--app-surface); background: var(--accent)"
+    handleStyle="width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--accent); background: #fff"
   />
   <!-- Handle unico bidirecional (connectionMode Loose), estilo Maestri: sem
        conexoes fica na lateral direita; com conexoes flutua pela borda ate a
@@ -175,6 +181,13 @@
   <div class="node-body" class:deferred-body={deferOffscreen}>
     {@render children()}
   </div>
+  {#if titleText}
+    <!-- Far out, the canvas reads as a map: the node becomes its name and status. -->
+    <div class="overview-label" aria-hidden="true">
+      <span class="overview-icon">{@render icon()}</span>
+      <span class="overview-title">{titleText}</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -189,9 +202,14 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--app-surface);
-    box-shadow: var(--app-shadow-card);
+    /* A thin edge in the node's state color (neutral by default) over a deep, soft drop. */
+    box-shadow:
+      0 0 0 1px var(--node-edge, color-mix(in srgb, var(--app-text) 10%, transparent)),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 4%, transparent),
+      0 22px 54px -12px color-mix(in srgb, #000000 55%, transparent);
+    animation: node-in var(--duration-fast) var(--ease-smooth-out);
     /* overflow visivel: os handles ficam a cavalo da borda (estilo Maestri)
        e precisam ser clicaveis fora da caixa; o recorte dos cantos fica a
        cargo do header/body. */
@@ -200,8 +218,15 @@
     transition: box-shadow var(--duration-quick) ease-out;
   }
 
+  @keyframes node-in {
+    from { opacity: 0; transform: scale(0.97); }
+  }
+
   .node-shell:hover {
-    box-shadow: 0 0 0 1px var(--app-ring-hairline-strong), var(--app-shadow-card);
+    box-shadow:
+      0 0 0 1px var(--node-edge-hover, color-mix(in srgb, var(--app-text) 18%, transparent)),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 4%, transparent),
+      0 22px 54px -12px color-mix(in srgb, #000000 55%, transparent);
   }
 
   /* lineStyle da xyflow nao chega as linhas (so aos handles): sem esta regra
@@ -212,24 +237,25 @@
 
   .node-shell.selected {
     box-shadow:
-      0 0 0 1px var(--accent),
-      0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent),
-      var(--app-shadow-overlay);
+      0 0 0 1.5px var(--accent),
+      0 0 0 6px color-mix(in srgb, var(--accent) 13%, transparent),
+      0 0 38px -6px color-mix(in srgb, var(--accent) 30%, transparent),
+      0 22px 54px -12px color-mix(in srgb, #000000 55%, transparent);
   }
 
   .node-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 34px;
+    height: 32px;
     flex-shrink: 0;
     padding: 0 5px 0 10px;
-    background: color-mix(in srgb, var(--app-surface-raised) 55%, var(--app-surface));
-    border-bottom: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
-    border-radius: 10px 10px 0 0;
+    background: color-mix(in srgb, var(--app-surface-raised) 62%, var(--app-surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--app-text) 6%, transparent);
+    border-radius: 12px 12px 0 0;
     color: var(--app-text);
     font-size: 12.5px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: grab;
     user-select: none;
   }
@@ -363,7 +389,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-radius: 0 0 10px 10px;
+    border-radius: 0 0 12px 12px;
   }
 
   .deferred-body {
@@ -377,6 +403,50 @@
   :global(.svelte-flow[data-canvas-overview='true']) .node-shell:global(.canvas-terminal) .node-body:not(:focus-within) {
     content-visibility: hidden;
     contain-intrinsic-size: auto 300px;
+  }
+
+  .overview-label {
+    display: none;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .node-shell:not(:global(.canvas-image)):not(:global(.canvas-design)):not(:focus-within) {
+    container-type: inline-size;
+  }
+
+  :global(.svelte-flow[data-canvas-overview='true']) .node-shell:not(:global(.canvas-image)):not(:global(.canvas-design)):not(:focus-within) .overview-label {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25em;
+    padding: 8%;
+    border-radius: inherit;
+    background: var(--app-surface);
+    color: var(--app-text);
+    font-family: var(--font-display);
+    font-size: clamp(36px, 13cqw, 120px);
+    font-weight: 650;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .overview-icon {
+    display: inline-flex;
+    zoom: 2.6;
+  }
+
+  .overview-title {
+    display: -webkit-box;
+    max-width: 100%;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
   }
 
   :global(.svelte-flow[data-canvas-moving='true']) .node-header:not(:focus-within) .node-actions,

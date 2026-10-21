@@ -8,6 +8,11 @@ import { antigravityAdapter } from '$lib/modules/agent-room/application/adapters
 import { clineAdapter } from '$lib/modules/agent-room/application/adapters/ClineAdapter.js';
 import { devinAdapter } from '$lib/modules/agent-room/application/adapters/DevinAdapter.js';
 import { copilotAdapter } from '$lib/modules/agent-room/application/adapters/CopilotAdapter.js';
+import { geminiAdapter } from '$lib/modules/agent-room/application/adapters/GeminiAdapter.js';
+import { qwenAdapter } from '$lib/modules/agent-room/application/adapters/QwenAdapter.js';
+import { aiderAdapter } from '$lib/modules/agent-room/application/adapters/AiderAdapter.js';
+import { gooseAdapter } from '$lib/modules/agent-room/application/adapters/GooseAdapter.js';
+import { ampAdapter } from '$lib/modules/agent-room/application/adapters/AmpAdapter.js';
 import type { AgentRunRequest } from '$lib/modules/agent-room/domain/types.js';
 
 function request(overrides: Partial<AgentRunRequest> = {}): AgentRunRequest {
@@ -259,5 +264,80 @@ describe('copilotAdapter', () => {
     const id = '0198db82-7eaf-7000-8b8e-fd721c2db512';
     expect(copilotAdapter.freshSessionArgs?.(id)).toEqual(['--session-id', id]);
     expect(copilotAdapter.resumeArgs(id)).toEqual(['--session-id', id]);
+  });
+});
+
+describe('geminiAdapter', () => {
+  it('runs headless with plan approval and yolo only for writes', () => {
+    const review = geminiAdapter.buildCommand(request({ agent: 'gemini', prompt: 'review this', model: 'gemini-2.5-pro' }));
+    expect(review.command).toBe('gemini');
+    expect(review.args).toContain('-p');
+    expect(review.args).toContain('--approval-mode=plan');
+    expect(review.args).toEqual(expect.arrayContaining(['-m', 'gemini-2.5-pro']));
+    expect(review.displayArgs).toContain('<prompt-arg>');
+    expect(review.promptDelivery).toBe('args');
+    expect(geminiAdapter.buildCommand(request({ agent: 'gemini', allowWrites: true })).args).toContain('--approval-mode=yolo');
+  });
+
+  it('opens the TUI in yolo and does not claim a resume it cannot track', () => {
+    expect(geminiAdapter.interactiveCommand().args).toEqual(['--approval-mode=yolo']);
+    expect(geminiAdapter.supportsResume).toBe(false);
+    expect(geminiAdapter.sessionStorage).toBeUndefined();
+    expect(geminiAdapter.resumeArgs('abc')).toBeNull();
+  });
+});
+
+describe('qwenAdapter', () => {
+  it('runs headless with plan approval and yolo only for writes', () => {
+    const review = qwenAdapter.buildCommand(request({ agent: 'qwen', model: 'qwen3-coder-plus' }));
+    expect(review.command).toBe('qwen');
+    expect(review.args).toEqual(expect.arrayContaining(['--approval-mode', 'plan', '-m', 'qwen3-coder-plus']));
+    expect(qwenAdapter.buildCommand(request({ agent: 'qwen', allowWrites: true })).args).toEqual(expect.arrayContaining(['--approval-mode', 'yolo']));
+    expect(qwenAdapter.interactiveCommand().args).toEqual(['--yolo']);
+    expect(qwenAdapter.supportsResume).toBe(false);
+    expect(qwenAdapter.resumeArgs('s-1')).toBeNull();
+  });
+});
+
+describe('aiderAdapter', () => {
+  it('uses --model (not -m) and a dry run for read-only work', () => {
+    const review = aiderAdapter.buildCommand(request({ agent: 'aider', model: 'sonnet' }));
+    expect(review.command).toBe('aider');
+    expect(review.args).toEqual(expect.arrayContaining(['--message', '--yes-always', '--dry-run', '--model', 'sonnet']));
+    expect(review.args).not.toContain('-m');
+    expect(aiderAdapter.buildCommand(request({ agent: 'aider', allowWrites: true })).args).not.toContain('--dry-run');
+    expect(aiderAdapter.interactiveCommand({ model: 'sonnet' }).args).toEqual(['--yes-always', '--model', 'sonnet']);
+    expect(aiderAdapter.resumeArgs('x')).toBeNull();
+  });
+});
+
+describe('gooseAdapter', () => {
+  it('picks the permission level through GOOSE_MODE', () => {
+    const review = gooseAdapter.buildCommand(request({ agent: 'goose' }));
+    expect(review.command).toBe('goose');
+    expect(review.args.slice(0, 2)).toEqual(['run', '-t']);
+    expect(review.args).toContain('--no-session');
+    expect(review.env?.GOOSE_MODE).toBe('chat');
+    expect(gooseAdapter.buildCommand(request({ agent: 'goose', allowWrites: true })).env?.GOOSE_MODE).toBe('auto');
+  });
+
+  it('opens a session and does not claim a resume it cannot track', () => {
+    const tui = gooseAdapter.interactiveCommand({ model: 'gpt-5' });
+    expect(tui.args).toEqual(['session']);
+    expect(tui.env).toEqual({ GOOSE_MODE: 'auto', GOOSE_MODEL: 'gpt-5' });
+    expect(gooseAdapter.supportsResume).toBe(false);
+    expect(gooseAdapter.resumeArgs('20261018_1')).toBeNull();
+  });
+});
+
+describe('ampAdapter', () => {
+  it('runs one instruction with -x and has no model flag', () => {
+    const run = ampAdapter.buildCommand(request({ agent: 'amp', model: 'ignored' }));
+    expect(run.command).toBe('amp');
+    expect(run.args[0]).toBe('-x');
+    expect(run.args).toHaveLength(2);
+    expect(ampAdapter.interactiveCommand()).toEqual({ command: 'amp', args: [] });
+    expect(ampAdapter.resumeArgs('x')).toBeNull();
+    expect(ampAdapter.setup.installCommands?.windows).toBeUndefined();
   });
 });

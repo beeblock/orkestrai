@@ -9,7 +9,7 @@
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import * as m from '$lib/paraglide/messages.js';
 
-  export type ShapeKind = 'rectangle' | 'rounded' | 'ellipse' | 'diamond' | 'arrow';
+  export type ShapeKind = 'rectangle' | 'rounded' | 'ellipse' | 'diamond' | 'arrow' | 'freehand';
 
   export type ShapeStyle = {
     shape?: ShapeKind;
@@ -530,6 +530,16 @@
           stroke={style.stroke}
           stroke-width={style.strokeWidth}
           stroke-dasharray={dashArray}
+          stroke-linejoin="round"
+        />
+      {:else if shape === 'freehand'}
+        <path
+          d={smoothPath(data.payload.points ?? [], geom.w, geom.h)}
+          fill="none"
+          stroke={style.stroke}
+          stroke-width={style.strokeWidth}
+          stroke-dasharray={dashArray}
+          stroke-linecap="round"
           stroke-linejoin="round"
         />
       {:else if shape === 'arrow'}

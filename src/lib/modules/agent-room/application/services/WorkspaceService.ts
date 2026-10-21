@@ -4,6 +4,7 @@ import { posix, resolve } from 'node:path';
 import { Connection } from '@beeblock/svelar/database';
 import type { CanvasNodePayload, Workspace, WorkspaceRepositoryRoot } from '../../domain/types.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
+import { isTeamAgentNode, occupiedOnFloor } from '../../domain/canvas-floors.js';
 import { executionRuntimeKey } from '../../domain/runtime.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -22,6 +23,8 @@ import { computerService } from './ComputerService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { portalProfileFromPayload } from './ManagedPortalService.js';
 import { workspaceGroupService } from './WorkspaceGroupService.js';
+import { agentLearningService } from './AgentLearningService.js';
+import { attentionService } from './AttentionService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
 import type {
   CreateCanvasEdgeDto,
@@ -445,12 +448,19 @@ export class WorkspaceService {
       if (profileId && !provider) throw new Error('A provider profile requires an agent provider.');
       if (profileId && provider) await providerProfileService.assertCompatible(profileId, provider);
     }
+    const floorId = dto.floorId ?? null;
+    if (floorId) {
+      const floor = await floorService.get(floorId);
+      if (!floor || floor.workspaceId !== dto.workspaceId || floor.status !== 'active') throw new Error('Andar não encontrado neste workspace.');
+    }
     const width = dto.width ?? 560;
     const height = dto.height ?? 360;
+    // An agent on a floor also shows on the ground floor, so it avoids both views.
+    const occupied = floorId && isTeamAgentNode({ type: dto.type, payload })
+      ? [...occupiedOnFloor(existingNodes, floorId), ...occupiedOnFloor(existingNodes, null)]
+      : occupiedOnFloor(existingNodes, floorId);
     const position = dto.x === undefined || dto.y === undefined
-      ? findFreeCanvasPosition(existingNodes
-          .filter((candidate) => (candidate.floorId ?? null) === null)
-          .map((candidate) => ({ x: candidate.x, y: candidate.y, width: candidate.width, height: candidate.height })), {
+      ? findFreeCanvasPosition(occupied, {
           x: dto.x ?? 80,
           y: dto.y ?? 80,
           width,
@@ -467,6 +477,7 @@ export class WorkspaceService {
       height,
       zIndex: dto.zIndex,
       payload,
+      floorId,
     });
     if (node.type === 'terminal' && terminalExecutionRuntime(workspace, node.payload as never).kind === 'wsl') {
       await this.reprovisionBridge(workspace);
@@ -683,9 +694,11 @@ export class WorkspaceService {
       await creativeStoryboardRepository.remove(workspaceId, nodeId);
     }
     await Connection.transaction(() => workspaceRepository.deleteNode(nodeId));
+    await attentionService.resolveNode(workspaceId, nodeId).catch(() => 0);
     if (node.type === 'terminal') {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       if (workspace) await this.reprovisionBridge(workspace);
+      await agentLearningService.settlePending(workspaceId, nodeId).catch(() => 0);
     }
     this.notifyStructureChanged(workspaceId);
     return { deleted: true };

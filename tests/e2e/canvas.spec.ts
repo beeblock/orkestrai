@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createNodeOnCanvas } from './helpers.js';
+import { createNodeOnCanvas, openWorkspace } from './helpers.js';
 
 test.describe('canvas de workspaces', () => {
   test('ignora atalhos globais cujo alvo não é um elemento', async ({ page }) => {
@@ -96,6 +96,8 @@ test.describe('canvas de workspaces', () => {
   });
 
   test('organiza requests em pastas sem arrastar o node e salva runners independentes', async ({ page, request }) => {
+    // Room for the 560px node below the app top bar and above the dock.
+    await page.setViewportSize({ width: 1280, height: 800 });
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     const created = await request.post('/api/agent-room/workspaces', { data: { name: `E2E API tree ${Date.now()}`, workingDir: '/tmp' } });
@@ -216,6 +218,8 @@ test.describe('canvas de workspaces', () => {
       await runnerDialog.getByRole('button', { name: 'Salvar runners' }).click();
       await expect.poll(runnerOrder).toEqual([[initialOrder[1], initialOrder[0]]]);
 
+      // Focus returns to the Runners button and reopens its tooltip over the tree.
+      await page.keyboard.press('Escape');
       await client.getByTestId(`api-folder-${folderId}`).click({ button: 'right' });
       await expect(page.getByRole('menuitem', { name: 'Executar pasta' })).toBeVisible();
       await page.keyboard.press('Escape');
@@ -245,14 +249,14 @@ test.describe('canvas de workspaces', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     await createNodeOnCanvas(page, 'Fluxo');
     await expect(page.locator('.canvas-flow')).toBeVisible();
 
     await page.reload();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.canvas-flow')).toBeVisible();
 
     const list = await request.get('/api/agent-room/workspaces');
@@ -271,7 +275,7 @@ test.describe('canvas de workspaces', () => {
     });
 
     await page.goto('/canvas');
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     const note = page.locator('.canvas-note');
@@ -307,7 +311,7 @@ test.describe('canvas de workspaces', () => {
     await page.getByRole('button', { name: 'Criar' }).click();
 
     // Workspace ativo na sidebar
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     // Adiciona uma nota e escreve nela
@@ -317,7 +321,8 @@ test.describe('canvas de workspaces', () => {
     await note.locator('textarea').fill('# tarefa e2e');
 
     // Adiciona um terminal shell
-    await createNodeOnCanvas(page, 'Shell', { x: 700, y: 600 });
+    // Clear of the message bar and quick actions floating at the bottom.
+    await createNodeOnCanvas(page, 'Shell', { x: 200, y: 120 });
     await expect(page.locator('.canvas-terminal')).toBeVisible();
     await expect(page.locator('.canvas-terminal .xterm')).toBeVisible({ timeout: 10_000 });
 
@@ -326,7 +331,7 @@ test.describe('canvas de workspaces', () => {
 
     // Recarrega: nota e terminal voltam do banco com conteudo
     await page.reload();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
     await expect(page.locator('.canvas-note textarea')).toHaveValue('# tarefa e2e');
     await expect(page.locator('.canvas-terminal')).toBeVisible();
@@ -346,7 +351,7 @@ test.describe('canvas de workspaces', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     await createNodeOnCanvas(page, 'Nota');
@@ -385,7 +390,7 @@ test.describe('canvas de workspaces', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
     await createNodeOnCanvas(page, 'Nota', { x: 450, y: 300 });
@@ -445,7 +450,7 @@ test.describe('canvas de workspaces', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
     await expect(page.locator('.svelte-flow__pane')).toBeVisible();
 
@@ -474,9 +479,11 @@ test.describe('canvas de workspaces', () => {
     await page.getByPlaceholder('Nome', { exact: true }).fill(workspaceName);
     await page.getByPlaceholder('Diretório de trabalho').fill('/tmp');
     await page.getByRole('button', { name: 'Criar' }).click();
-    await page.locator('.workspace-list .workspace-item', { hasText: workspaceName }).click();
+    await openWorkspace(page, workspaceName);
     await expect(page.locator('.workspace-list li.active')).toContainText(workspaceName);
 
+    // Workspace actions live in the workspaces drawer (right rail).
+    await page.locator('[data-rail-item="workspaces"]').click();
     await page.locator('.workspace-list li.active').getByRole('button', { name: 'Editar workspace' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -522,6 +529,8 @@ test.describe('canvas de workspaces', () => {
       await page.goto(`/canvas?workspace=${disposable.id}&node=${terminal.id}`);
       await expect(page.locator('.canvas-terminal .xterm-helper-textarea')).toBeAttached({ timeout: 15_000 });
 
+      // Workspace actions live in the workspaces drawer (right rail).
+      await page.locator('[data-rail-item="workspaces"]').click();
       await page.locator('.workspace-list li.active').getByRole('button', { name: 'Apagar workspace' }).click();
       await page.getByRole('alertdialog').getByRole('button', { name: 'Apagar' }).click();
 

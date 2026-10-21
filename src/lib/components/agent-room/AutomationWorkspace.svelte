@@ -44,7 +44,8 @@
     name: '', triggerType: 'manual', intervalMinutes: null, taskEvent: null,
     taskStatus: null, messageContains: null, gitBranch: null, githubEvent: null,
     webhookSecret: null, filePath: null, usageProvider: null, usageWindow: null,
-    usagePercent: null, actionType: 'prompt_agent', targetNodeId: null, prompt: null,
+    usagePercent: null, watchNodeId: null, idleMinutes: null, outputContains: null, goalText: null,
+    actionType: 'prompt_agent', targetNodeId: null, prompt: null,
     taskTitle: null, taskDescription: null, notificationTitle: null,
     notificationMessage: null, enabled: true, recipeId: null,
     portalNodeId: null, portalAction: null, portalUrl: null, portalRef: null,
@@ -148,6 +149,10 @@
       usageProvider: (trigger.provider as AutomationFormInput['usageProvider']) ?? null,
       usageWindow: (trigger.window as AutomationFormInput['usageWindow']) ?? null,
       usagePercent: Number(trigger.percent ?? 0) || null,
+      watchNodeId: automation.triggerType === 'agent_idle' || automation.triggerType === 'agent_output' ? String(trigger.nodeId ?? '') || null : null,
+      idleMinutes: Number(trigger.minutes ?? 0) || null,
+      outputContains: automation.triggerType === 'agent_output' ? String(trigger.contains ?? '') || null : null,
+      goalText: String(trigger.goal ?? '') || null,
       actionType: automation.actionType,
       targetNodeId: String(action.targetNodeId ?? automation.targetNodeId ?? '') || null,
       prompt: String(action.prompt ?? automation.prompt ?? '') || null,
@@ -179,13 +184,34 @@
       'marketing-handoff': m['automation.recipe_marketing_handoff'],
       'research-digest': m['automation.recipe_research_digest'],
       'operations-usage-guard': m['automation.recipe_operations_usage_guard'],
+      'loop-progress-check': m['automation.recipe_loop_progress_check'],
+      'loop-keep-moving': m['automation.recipe_loop_keep_moving'],
+      'loop-build-rescue': m['automation.recipe_loop_build_rescue'],
+      'loop-test-watchdog': m['automation.recipe_loop_test_watchdog'],
+      'loop-commit-checkpoint': m['automation.recipe_loop_commit_checkpoint'],
+      'loop-review-sweep': m['automation.recipe_loop_review_sweep'],
+      'loop-hourly-standup': m['automation.recipe_loop_hourly_standup'],
     };
     return names[id]?.() ?? id;
   }
 
+  // What the recipe asks for, in the interface language: shown on the card and written into the automation.
+  function recipeText(recipe: AutomationRecipe): string {
+    const localized = (m as unknown as Record<string, (() => string) | undefined>)[`automation.recipe_text_${recipe.id.replaceAll('-', '_')}`];
+    return localized?.() ?? recipe.defaults.prompt ?? recipe.defaults.taskDescription ?? recipe.defaults.notificationMessage ?? '';
+  }
+
+  function localizedDefaults(recipe: AutomationRecipe): Partial<AutomationFormInput> {
+    const text = recipeText(recipe);
+    if (recipe.defaults.prompt) return { ...recipe.defaults, prompt: text };
+    if (recipe.defaults.taskDescription) return { ...recipe.defaults, taskTitle: m['automation.recipe_task_title_marketing_handoff'](), taskDescription: text };
+    if (recipe.defaults.notificationMessage) return { ...recipe.defaults, notificationTitle: m['automation.recipe_notify_title_operations_usage_guard'](), notificationMessage: text };
+    return recipe.defaults;
+  }
+
   function applyRecipe(recipe: AutomationRecipe): void {
     openNew();
-    $formData = { ...$formData, ...recipe.defaults, name: recipeName(recipe.id), recipeId: recipe.id } as AutomationFormInput;
+    $formData = { ...$formData, ...localizedDefaults(recipe), name: recipeName(recipe.id), recipeId: recipe.id } as AutomationFormInput;
     activeTab = 'overview';
   }
 
@@ -249,6 +275,7 @@
       git_commit: m['automation.trigger_git_commit'], github_pull_request: m['automation.trigger_github_pr'],
       webhook: m['automation.trigger_webhook'], file_change: m['automation.trigger_file'],
       usage_threshold: m['automation.trigger_usage'],
+      agent_idle: m['automation.trigger_agent_idle'], agent_output: m['automation.trigger_agent_output'],
     }[type])();
   }
 
@@ -280,7 +307,7 @@
     const labels: Record<string, () => string> = {
       development: m['automation.category_development'], design: m['automation.category_design'],
       marketing: m['automation.category_marketing'], research: m['automation.category_research'],
-      operations: m['automation.category_operations'],
+      operations: m['automation.category_operations'], loops: m['automation.category_loops'],
     };
     return labels[category]?.() ?? category;
   }
@@ -300,6 +327,8 @@
     if (automation.triggerType === 'schedule') return m['automation.every']({ minutes: Number(automation.triggerConfig.intervalMinutes ?? 0) });
     if (automation.triggerType === 'usage_threshold') return `${automation.triggerConfig.provider} · ${automation.triggerConfig.window} · ${automation.triggerConfig.percent}%`;
     if (automation.triggerType === 'file_change') return String(automation.triggerConfig.path ?? '');
+    if (automation.triggerType === 'agent_idle') return m['automation.idle_for']({ minutes: Number(automation.triggerConfig.minutes ?? 0) });
+    if (automation.triggerType === 'agent_output') return m['automation.output_has']({ text: String(automation.triggerConfig.contains ?? '') });
     return triggerLabel(automation.triggerType);
   }
 
@@ -352,7 +381,7 @@
           <div class="mb-4 flex items-center justify-between gap-3"><h3 class="font-display text-[14px] font-semibold">{editingId ? m['automation.edit']() : m['automation.new']()}</h3><Button type="button" variant="ghost" size="icon-sm" aria-label={m['automation.cancel']()} onclick={resetEditor}><X size={14} /></Button></div>
           <div class={`grid gap-3 ${compact ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <label class="block"><span class="mb-1.5 block text-ui-md font-medium">{m['automation.name']()}</span><Input name="automation-name" bind:value={$formData.name} autocomplete="off" /></label>
-            <label class="block"><span class="mb-1.5 block text-ui-md font-medium">{m['automation.trigger']()}</span><Select.Root type="single" value={$formData.triggerType} onValueChange={(value) => { $formData.triggerType = value as AutomationFormInput['triggerType']; if (value === 'webhook' && !$formData.webhookSecret) $formData.webhookSecret = crypto.randomUUID(); }}><Select.Trigger class="w-full">{triggerLabel($formData.triggerType)}</Select.Trigger><Select.Content>{#each ['manual','schedule','task','message','git_commit','github_pull_request','webhook','file_change','usage_threshold'] as type}<Select.Item value={type}>{triggerLabel(type as Routine['triggerType'])}</Select.Item>{/each}</Select.Content></Select.Root></label>
+            <label class="block"><span class="mb-1.5 block text-ui-md font-medium">{m['automation.trigger']()}</span><Select.Root type="single" value={$formData.triggerType} onValueChange={(value) => { $formData.triggerType = value as AutomationFormInput['triggerType']; if (value === 'webhook' && !$formData.webhookSecret) $formData.webhookSecret = crypto.randomUUID(); }}><Select.Trigger class="w-full">{triggerLabel($formData.triggerType)}</Select.Trigger><Select.Content>{#each ['manual','schedule','task','message','git_commit','github_pull_request','webhook','file_change','usage_threshold','agent_idle','agent_output'] as type}<Select.Item value={type}>{triggerLabel(type as Routine['triggerType'])}</Select.Item>{/each}</Select.Content></Select.Root></label>
             {#if $formData.triggerType === 'schedule'}
               <label class="block"><span class="mb-1.5 block text-ui-md font-medium">{companionText['companion.schedule_mode']()}</span><Select.Root type="single" value={$formData.calendar ? 'calendar' : 'interval'} onValueChange={mode => { $formData.calendar = mode === 'calendar' ? calendarScheduleSchema.parse({ frequency: 'weekly', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', time: '14:00', weekdays: [1] }) : null; $formData.intervalMinutes = mode === 'calendar' ? null : 60; }}><Select.Trigger class="w-full">{$formData.calendar ? companionText['companion.calendar']() : m['automation.interval']()}</Select.Trigger><Select.Content><Select.Item value="interval">{m['automation.interval']()}</Select.Item><Select.Item value="calendar">{companionText['companion.calendar']()}</Select.Item></Select.Content></Select.Root></label>
               {#if $formData.calendar}<div class={compact ? '' : 'col-span-2'}><CalendarScheduleFields bind:value={$formData.calendar} /></div>
@@ -372,10 +401,13 @@
                 {/if}
               </div>
             {/if}
+            {#if $formData.triggerType === 'agent_idle' || $formData.triggerType === 'agent_output'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.watch_agent']()}</span><Select.Root type="single" value={$formData.watchNodeId ?? $formData.targetNodeId ?? undefined} onValueChange={(value) => ($formData.watchNodeId = value)}><Select.Trigger class="w-full">{terminals.find((item) => item.id === ($formData.watchNodeId ?? $formData.targetNodeId))?.title ?? m['automation.watch_agent']()}</Select.Trigger><Select.Content>{#each terminals as terminal}<Select.Item value={terminal.id}>{terminal.title}</Select.Item>{/each}</Select.Content></Select.Root></label>{/if}
+            {#if $formData.triggerType === 'agent_idle'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.idle_minutes']()}</span><Input type="number" min="1" max="1440" class="tabular-nums" bind:value={$formData.idleMinutes} /></label>{/if}
+            {#if $formData.triggerType === 'agent_output'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.output_contains']()}</span><Input bind:value={$formData.outputContains} placeholder="FAILED" /></label>{/if}
             {#if $formData.triggerType === 'file_change'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.file_path']()}</span><Input bind:value={$formData.filePath} placeholder="src" /></label>{/if}
             {#if $formData.triggerType === 'usage_threshold'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.provider']()}</span><Select.Root type="single" value={$formData.usageProvider ?? undefined} onValueChange={(value) => ($formData.usageProvider = value as AutomationFormInput['usageProvider'])}><Select.Trigger class="w-full">{$formData.usageProvider ?? m['automation.provider']()}</Select.Trigger><Select.Content><Select.Item value="claude">Claude</Select.Item><Select.Item value="codex">Codex</Select.Item><Select.Item value="kimi">Kimi</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.usage_window']()}</span><Select.Root type="single" value={$formData.usageWindow ?? undefined} onValueChange={(value) => ($formData.usageWindow = value as AutomationFormInput['usageWindow'])}><Select.Trigger class="w-full">{$formData.usageWindow ?? m['automation.usage_window']()}</Select.Trigger><Select.Content><Select.Item value="5h">5h</Select.Item><Select.Item value="weekly">Weekly</Select.Item><Select.Item value="monthly">Monthly</Select.Item></Select.Content></Select.Root></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.threshold']()}</span><div class="relative"><Input type="number" min="1" max="100" class="pr-8 tabular-nums" bind:value={$formData.usagePercent} /><span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ui-md text-[var(--app-text-muted)]" aria-hidden="true">%</span></div></label>{/if}
             <label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.action']()}</span><Select.Root type="single" value={$formData.actionType} onValueChange={(value) => ($formData.actionType = value as AutomationFormInput['actionType'])}><Select.Trigger class="w-full">{actionLabel($formData.actionType)}</Select.Trigger><Select.Content><Select.Item value="prompt_agent">{m['automation.action_prompt']()}</Select.Item><Select.Item value="create_task">{m['automation.action_task']()}</Select.Item><Select.Item value="notify">{m['automation.action_notify']()}</Select.Item><Select.Item value="browser">{m['automation.action_browser']()}</Select.Item><Select.Item value="integration">{m['automation.action_integration']()}</Select.Item><Select.Item value="tool">{m['automation.action_tool']()}</Select.Item></Select.Content></Select.Root></label>
-            {#if $formData.actionType === 'prompt_agent'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.target']()}</span><Select.Root type="single" value={$formData.targetNodeId ?? undefined} onValueChange={(value) => ($formData.targetNodeId = value)}><Select.Trigger class="w-full">{terminals.find((item) => item.id === $formData.targetNodeId)?.title ?? m['automation.target']()}</Select.Trigger><Select.Content>{#each terminals as terminal}<Select.Item value={terminal.id}>{terminal.title}</Select.Item>{/each}</Select.Content></Select.Root></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1.5 block text-ui-md font-medium">{m['automation.prompt']()}</span><Textarea class="min-h-24 resize-y" bind:value={$formData.prompt} /></label>{/if}
+            {#if $formData.actionType === 'prompt_agent'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.target']()}</span><Select.Root type="single" value={$formData.targetNodeId ?? undefined} onValueChange={(value) => ($formData.targetNodeId = value)}><Select.Trigger class="w-full">{terminals.find((item) => item.id === $formData.targetNodeId)?.title ?? m['automation.target']()}</Select.Trigger><Select.Content>{#each terminals as terminal}<Select.Item value={terminal.id}>{terminal.title}</Select.Item>{/each}</Select.Content></Select.Root></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1.5 block text-ui-md font-medium">{m['automation.prompt']()}</span><Textarea class="min-h-24 resize-y" bind:value={$formData.prompt} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1.5 block text-ui-md font-medium">{m['automation.goal_text']()}</span><Input bind:value={$formData.goalText} placeholder="ALL TESTS PASS" /><span class="mt-1.5 block text-pretty text-ui-xs text-[var(--app-text-muted)]">{m['automation.goal_hint']()}</span></label>{/if}
             {#if $formData.actionType === 'create_task'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.task_title']()}</span><Input bind:value={$formData.taskTitle} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1.5 block text-ui-md font-medium">{m['automation.task_description']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.taskDescription} /></label>{/if}
             {#if $formData.actionType === 'notify'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.notification_title']()}</span><Input bind:value={$formData.notificationTitle} /></label><label class={compact ? '' : 'col-span-2'}><span class="mb-1.5 block text-ui-md font-medium">{m['automation.notification_message']()}</span><Textarea class="min-h-20 resize-y" bind:value={$formData.notificationMessage} /></label>{/if}
             {#if $formData.actionType === 'browser'}
@@ -437,7 +469,7 @@
               <span class="rounded-md bg-[var(--app-hover)] px-1.5 py-px text-ui-xs font-medium text-[var(--app-text-soft)]">{recipeCategoryLabel(recipe.category)}</span>
             </div>
             <h3 class="mt-3 text-balance text-ui-lg font-semibold">{recipeName(recipe.id)}</h3>
-            <p class="mt-1 line-clamp-3 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{recipe.defaults.prompt ?? recipe.defaults.taskDescription ?? recipe.defaults.notificationMessage}</p>
+            <p class="mt-1 line-clamp-3 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{recipeText(recipe)}</p>
             <div class="mt-auto pt-4"><Button variant="outline" size="sm" onclick={() => applyRecipe(recipe)}>{m['automation.recipe_apply']()}</Button></div>
           </article>
         {/each}

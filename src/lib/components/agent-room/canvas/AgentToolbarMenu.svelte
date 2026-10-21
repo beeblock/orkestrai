@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Bot, ChevronDown, CodeXml, Pin, Settings2 } from '@lucide/svelte';
+  import { getContext } from 'svelte';
+  import { Bot, ChevronDown, CodeXml, LoaderCircle, Pin, Settings2 } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import ToolbarButton from './ToolbarButton.svelte';
@@ -28,6 +29,8 @@
     onTogglePin,
     onOpenProviderCenter,
   }: Props = $props();
+  // Rails on the side of the canvas open their menus and tooltips sideways.
+  const railSide = getContext<'top' | 'bottom' | 'right' | 'left' | undefined>('toolbar-tooltip-side') ?? 'bottom';
 
   const pinnedProviderSet = $derived(new Set(pinnedProviderIds));
   const unpinnedProviderActive = $derived(
@@ -62,10 +65,16 @@
         </DropdownMenu.Trigger>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="top">{m['canvas.agents_menu']()}</Tooltip.Content>
+    <Tooltip.Content side={railSide}>{m['canvas.agents_menu']()}</Tooltip.Content>
   </Tooltip.Root>
-  <DropdownMenu.Content side="top" align="start" sideOffset={10} class="agents-menu-content">
+  <DropdownMenu.Content side={railSide} align="start" sideOffset={10} class="agents-menu-content">
     <DropdownMenu.Label>{m['canvas.agents_available']()}</DropdownMenu.Label>
+    {#if providers.length === 0}
+      <DropdownMenu.Item disabled class="agent-menu-item" data-testid="agents-menu-loading">
+        <LoaderCircle size={14} class="animate-spin" aria-hidden="true" />
+        <span class="provider-menu-copy"><small>{m['canvas.agents_loading']()}</small></span>
+      </DropdownMenu.Item>
+    {/if}
     {#each providers as provider (provider.id)}
       <DropdownMenu.Item
         class="agent-menu-item"

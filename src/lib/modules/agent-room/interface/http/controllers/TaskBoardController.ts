@@ -2,7 +2,9 @@ import { Controller } from '@beeblock/svelar/routing';
 import { FormRequest } from '@beeblock/svelar/forms';
 import { z } from 'zod';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { taskHandoffService } from '$lib/modules/agent-room/application/services/TaskHandoffService.js';
 import {
+  taskHandoffSchema,
   createBoardTaskSchema,
   updateBoardTaskSchema,
 } from '$lib/modules/agent-room/contracts/schemas/taskSchemas.js';
@@ -22,6 +24,16 @@ function requestOf(schema: unknown) {
 export class TaskBoardController extends Controller {
   async listTasks(event: any) {
     return this.json({ data: await taskBoardService.list(event.params.id) });
+  }
+
+  /** The owner passes an agent's open task to another agent, with a brief. */
+  async handoffTask(event: any) {
+    try {
+      const input = await (requestOf(taskHandoffSchema)).validate(event);
+      return this.json({ data: await taskHandoffService.handoff(event.params.id, input) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao passar a tarefa.');
+    }
   }
 
   async createTask(event: any) {

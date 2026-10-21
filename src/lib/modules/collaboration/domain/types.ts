@@ -181,6 +181,24 @@ export type SharedWorkspaceDto = {
     diagnostic?: 'provider_cli_only' | 'admin_api_required' | 'enterprise_api_required' | 'model_provider_managed' | null;
     fetchedAt: string;
   }>;
+  /** Requests waiting for the owner; absent in snapshots from older hosts. */
+  attention?: Array<{
+    id: string;
+    title: string;
+    body: string | null;
+    nodeTitle: string | null;
+    severity: 'info' | 'success' | 'warning' | 'error';
+    decision: 'gate' | 'flow' | 'tool' | 'learning' | 'review' | null;
+    options: string[];
+    question: boolean;
+    createdAt: string;
+  }>;
+  /**
+   * The workspace's Conversa: the team channel and one direct channel per
+   * agent, with their recent messages. Absent in snapshots from older hosts
+   * and for guests that may not message agents.
+   */
+  chat?: SharedChatDto;
   activity: Array<{
     id: string;
     kind: 'agent' | 'task' | 'review';
@@ -190,6 +208,68 @@ export type SharedWorkspaceDto = {
     occurredAt: string;
   }>;
   generatedAt: string;
+};
+
+export type SharedChatChannelDto = {
+  /** `team` or `dm:<agent node id>`. */
+  id: string;
+  kind: 'team' | 'dm';
+  nodeId: string | null;
+  title: string;
+  leader: boolean;
+  /** Questions waiting for the owner (not the ones the leader decides). */
+  openQuestions: number;
+  lastAt: string | null;
+};
+
+export type SharedChatMessageDto = {
+  id: string;
+  channel: string;
+  authorKind: 'owner' | 'agent' | 'system' | 'external';
+  authorNodeId: string | null;
+  /** Who wrote it when the node title is not enough: an external sender, or who closed a question. */
+  authorName: string | null;
+  kind: 'text' | 'question' | 'answer' | 'event';
+  body: string;
+  /** The body was shortened to fit the snapshot; `chat.read` returns it whole. */
+  clipped: boolean;
+  replyToId: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+  /** Owner messages: still queued for a busy agent, or already in its terminal. */
+  delivery: 'queued' | 'delivered' | null;
+  /** Where it was written when that was not the Conversa itself. */
+  via: 'terminal' | 'remote' | 'telegram' | 'slack' | null;
+  options: string[];
+  /** Questions: the leader decides, or it waits for the owner (with the leader's reason). */
+  awaiting: 'leader' | 'owner' | null;
+  note: string | null;
+  /** Answers closed by an agent: the leader decided, or the agent that asked withdrew it. */
+  closedBy: 'leader' | 'asker' | null;
+  /** Team events: what happened, and the agent it is about (a finished task's assignee). */
+  event: 'task_done' | null;
+  eventNodeId: string | null;
+};
+
+/**
+ * The channels with their most recent messages (possibly clipped). A guest
+ * reads whole messages and older history with the `chat.read` command.
+ */
+export type SharedChatDto = {
+  channels: SharedChatChannelDto[];
+  /** Oldest first. */
+  messages: SharedChatMessageDto[];
+};
+
+/** The answer to `chat.read`, sent to the requesting guest as an `event`. */
+export type SharedChatPageDto = {
+  kind: 'chat.page';
+  requestId: string;
+  channel: string;
+  before: string | null;
+  /** Oldest first, with whole bodies unless one alone exceeds the frame. */
+  messages: SharedChatMessageDto[];
+  hasOlder: boolean;
 };
 
 export type CollaborationCommand =
@@ -207,7 +287,17 @@ export type CollaborationCommand =
   | { type: 'agent.invoke'; agentNodeId: string }
   | { type: 'huddle.create'; title: string; agenda?: string | null; agentNodeIds: string[]; facilitatorNodeId?: string | null }
   | { type: 'huddle.turn'; huddleId: string; text: string; targetNodeIds: string[] }
-  | { type: 'huddle.end'; huddleId: string };
+  | { type: 'huddle.end'; huddleId: string }
+  | { type: 'attention.decide'; itemId: string; decision: 'approve' | 'reject' }
+  | { type: 'attention.answer'; itemId: string; text: string }
+  | { type: 'chat.post'; channel: string; body: string; replyToId?: string | null };
+
+/**
+ * A read a guest sends in a `command` frame. The session answers it directly
+ * (an `event` with the data, then the result) without a share revision, since
+ * it changes nothing on the host.
+ */
+export type CollaborationReadCommand = { type: 'chat.read'; channel: string; before?: string | null; beforeId?: string | null };
 
 export type CollaborationCommandResult = {
   commandId: string;

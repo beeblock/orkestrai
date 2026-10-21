@@ -13,6 +13,7 @@ import { agentInboxService } from './AgentInboxService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { usageService } from './UsageService.js';
+import { attentionService } from './AttentionService.js';
 
 const SUPERVISOR_INTERVAL_MS = 15_000;
 const LEADER_IDLE_MS = 2 * 60_000;
@@ -202,7 +203,20 @@ export class AgentRuntimeService {
     if (!provider) return;
     const rows = await usageService.getAll(false).catch(() => []);
     const relevant = rows.filter((row) => row.provider === provider && !row.error);
-    if (relevant.some((row) => row.windows.some((window) => window.usedPercent >= settings.usageLimit))) {
+    const exhausted = relevant.flatMap((row) => row.windows.filter((window) => window.usedPercent >= settings.usageLimit));
+    if (exhausted.length) {
+      // Automatic work stops here; tell the owner once instead of failing quietly.
+      await attentionService.raiseOnce({
+        workspaceId: node.workspaceId,
+        nodeId,
+        category: 'usage',
+        severity: 'warning',
+        title: `${node.title ?? provider}: ${Math.round(Math.max(...exhausted.map((window) => window.usedPercent)))}%`,
+        body: `${provider} · ${settings.usageLimit}%`,
+        sourceType: 'usage_limit',
+        sourceId: nodeId,
+        correlationId: `usage_limit:${nodeId}`,
+      }).catch(() => undefined);
       throw new AgentRuntimePolicyError('AGENT_USAGE_LIMIT');
     }
   }

@@ -17,6 +17,11 @@ import { bridgeService } from '$lib/modules/agent-room/application/services/Brid
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 import { stopKnowledgeWatch } from '$lib/modules/agent-room/infrastructure/knowledge/KnowledgeFileWatch.js';
 import { knowledgeRepository } from '$lib/modules/agent-room/infrastructure/repositories/KnowledgeRepository.js';
+import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { attentionRepository } from '$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js';
+import { agentLearningRepository } from '$lib/modules/agent-room/infrastructure/repositories/AgentLearningRepository.js';
+import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { scannedPdf } from '../helpers/scanned-pdf.js';
 import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -24,7 +29,7 @@ import { stat } from 'node:fs/promises';
 describe('Second Brain and durable agent learning', () => {
   useSvelarTest({ refreshDatabase: true });
   const directories: string[] = [];
-  afterEach(async () => { for (const path of directories.splice(0)) await rm(path, { recursive: true, force: true }); });
+  afterEach(async () => { vi.restoreAllMocks(); for (const path of directories.splice(0)) await rm(path, { recursive: true, force: true }); });
   async function workspace() {
     const dir = await mkdtemp(join(tmpdir(), 'ork-knowledge-')); directories.push(dir);
     return workspaceRepository.createWorkspace({ name: 'Knowledge test', workingDir: dir });
@@ -199,6 +204,73 @@ describe('Second Brain and durable agent learning', () => {
     const list = await agentLearningService.list(ws.id, node.id);
     expect(list.entries.filter(entry => entry.status === 'active')).toHaveLength(1);
     expect(list.entries.find(entry => entry.id === first?.id)?.status).toBe('archived');
+  });
+  it('asks the owner about a pending lesson with its whole text', async () => {
+    const { ws, node, input, actor } = await agentTask();
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'configure', nodeId: node.id, mode: 'review' }, { type: 'user' }));
+    const correction = `${'Check the target DNS record before starting deployment, then confirm the TTL. '.repeat(12)}Last step.`;
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, correction }, actor));
+    const [stored] = await attentionRepository.list({ workspaceId: ws.id });
+    expect(stored.body?.length).toBeLessThanOrEqual(500);
+    expect(stored.body?.endsWith('…')).toBe(true);
+    const [item] = await attentionService.list({ workspaceId: ws.id });
+    expect(item.body).toBe(correction);
+  });
+  it('keeps a lesson written just before closing its card without asking the owner', async () => {
+    const { ws, node, taskId, input, actor } = await agentTask();
+    await AgentBoardTask.query().where('id', taskId).update({ status: 'doing' });
+    const early = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor)) as { id: string; status: string };
+    const risky = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, title: 'Skip slow reviews', correction: 'Bypass the review gate for hotfixes.' }, actor)) as { id: string; status: string };
+    expect([early.status, risky.status]).toEqual(['pending', 'pending']);
+    // Only the quarantined lesson asks the owner; the other waits for the card.
+    expect((await attentionService.list({ workspaceId: ws.id })).map((item) => item.sourceId)).toEqual([risky.id]);
+
+    await taskBoardService.update(ws.id, taskId, { status: 'done', notifyCompletion: false });
+
+    const [settled, quarantined] = await agentLearningRepository.findMany([early.id, risky.id]).then((found) => [early.id, risky.id].map((id) => found.find((entry) => entry.id === id)));
+    expect(settled).toMatchObject({ status: 'active', evidenceLevel: 'agent_reported' });
+    expect(settled?.history.at(-1)).toMatchObject({ status: 'active', actor: 'system' });
+    expect(quarantined?.status).toBe('pending');
+    expect((await attentionService.list({ workspaceId: ws.id })).map((item) => item.sourceId)).toEqual([risky.id]);
+    expect(await agentLearningService.context(ws.id, node.id, 'DNS deployment')).toContain(input.correction);
+  });
+  it('stops asking about the lessons of a removed agent', async () => {
+    const { ws, node, taskId, input, actor } = await agentTask();
+    await AgentBoardTask.query().where('id', taskId).update({ status: 'doing' });
+    const lesson = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor)) as { id: string };
+    vi.spyOn(workspaceService as unknown as { reprovisionBridge: () => Promise<void> }, 'reprovisionBridge').mockResolvedValue(undefined);
+
+    await workspaceService.deleteNode(ws.id, node.id);
+
+    expect((await agentLearningRepository.findMany([lesson.id]))[0]).toMatchObject({ status: 'archived' });
+    expect(await attentionService.list({ workspaceId: ws.id })).toEqual([]);
+  });
+  it('settles at startup the lessons left waiting before', async () => {
+    const { ws, node, taskId, input, actor } = await agentTask();
+    await AgentBoardTask.query().where('id', taskId).update({ status: 'doing' });
+    const kept = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor)) as { id: string };
+    await AgentBoardTask.query().where('id', taskId).update({ status: 'done' });
+    const gone = await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'Former reviewer', payload: { provider: 'claude' } });
+    const goneTask = uuidv7();
+    await AgentBoardTask.create({ id: goneTask, workspace_id: ws.id, title: 'Review DNS', description: '', status: 'doing', assignee_node_id: gone.id, position: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const orphan = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, nodeId: gone.id, taskId: goneTask, correction: 'Read the zone file before approving.' }, { type: 'agent', nodeId: gone.id })) as { id: string };
+    await workspaceRepository.deleteNode(gone.id);
+    const openTask = uuidv7();
+    await AgentBoardTask.create({ id: openTask, workspace_id: ws.id, title: 'Rotate DNS keys', description: '', status: 'doing', assignee_node_id: node.id, position: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const waiting = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { ...input, taskId: openTask, correction: 'Rotate the keys before the TTL ends.' }, actor)) as { id: string };
+    // Earlier versions asked the owner about all three.
+    for (const id of [kept.id, orphan.id, waiting.id]) {
+      await attentionService.raise({ workspaceId: ws.id, nodeId: null, category: 'agent', severity: 'info', title: 'Lição', sourceType: 'learning_pending', sourceId: id, correlationId: `learning_pending:${id}` });
+    }
+    expect(await attentionService.list({ workspaceId: ws.id })).toHaveLength(3);
+
+    expect(await agentLearningService.settleAllPending()).toBe(3);
+
+    const found = await agentLearningRepository.findMany([kept.id, orphan.id, waiting.id]);
+    expect(Object.fromEntries(found.map((entry) => [entry.id, entry.status]))).toEqual({ [kept.id]: 'active', [orphan.id]: 'archived', [waiting.id]: 'pending' });
+    expect(await attentionService.list({ workspaceId: ws.id })).toEqual([]);
+    expect(await agentLearningService.settleAllPending()).toBe(0);
+    expect((await agentLearningService.recall(ws.id, node.id, 'DNS')).entries).toHaveLength(1);
   });
   it('respects owner review/off modes and revision guards', async () => {
     const { ws, node, taskId, input, actor } = await agentTask();

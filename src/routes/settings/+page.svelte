@@ -1,7 +1,7 @@
 <script lang="ts">
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import { onDestroy, onMount } from 'svelte';
-  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, RotateCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
+  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, Smartphone, RotateCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
   import { isMacPlatform } from '$lib/components/agent-room/platform.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -33,6 +33,7 @@
   import { playAudioBlob } from '$lib/components/agent-room/audio-devices.js';
   import { applyAppTheme } from '$lib/components/agent-room/app-themes.js';
   import { createSettingsSectionSelection } from '$lib/components/agent-room/settings-section-navigation.js';
+  import PhoneAccessSettings from '$lib/components/agent-room/PhoneAccessSettings.svelte';
 
   let settings = $state<Record<string, string>>({});
   let loaded = $state(false);
@@ -61,6 +62,7 @@
   // onde esta numa pagina longa.
   const SETTINGS_NAV = [
     { id: 'autonomy', icon: Power, label: m['settings.section_autonomy'] },
+    { id: 'phone', icon: Smartphone, label: m['settings.section_phone'] },
     { id: 'terminal', icon: SquareTerminal, label: m['settings.section_terminal'] },
     { id: 'appearance', icon: Palette, label: m['settings.section_appearance'] },
     { id: 'dictation', icon: Mic, label: m['settings.section_dictation'] },
@@ -559,6 +561,8 @@
     </div>
   </section>
 
+  <PhoneAccessSettings sectionClass={settingsSectionClasses} />
+
   <section class={settingsSectionClasses} id="terminal">
     <header class="section-head">
       <span class="icon-chip"><SquareTerminal size={15} aria-hidden="true" /></span>
@@ -716,7 +720,7 @@
       <SegmentedControl
         class="w-fit max-w-full"
         label={m['settings.workbench_tabs']()}
-        value={settings.workbenchTabPlacement ?? 'vertical'}
+        value={settings.workbenchTabPlacement ?? 'horizontal'}
         onValueChange={(value: string) => (settings = { ...settings, workbenchTabPlacement: value })}
         options={[
           { value: 'vertical', label: m['settings.workbench_tabs_vertical']() },
@@ -1139,7 +1143,7 @@
   }
 
   .section-titles h2 {
-    font-family: 'Sora Variable', 'Sora', 'Inter Variable', 'Inter', sans-serif;
+    font-family: var(--font-display);
     font-size: 15px;
     font-weight: 650;
     letter-spacing: 0;

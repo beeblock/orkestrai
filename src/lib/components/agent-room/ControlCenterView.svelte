@@ -32,6 +32,7 @@
   } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
   import NodeEmptyState from './canvas/NodeEmptyState.svelte';
+  import { activityVerbLabel } from './agent-status-labels.js';
 
   let {
     workspaceName,
@@ -135,16 +136,6 @@
     portal: m['control_center.category_portal'], remote: m['control_center.category_remote'],
     usage: m['control_center.category_usage'], system: m['control_center.category_system'],
   };
-  const VERB_LABELS: Record<string, () => string> = {
-    updated: m['control_center.verb_updated'], started: m['control_center.verb_started'],
-    stopped: m['control_center.verb_stopped'], ended: m['control_center.verb_ended'],
-    executed: m['control_center.verb_executed'], analyzed: m['control_center.verb_analyzed'],
-    completed: m['control_center.verb_completed'], failed: m['control_center.verb_failed'],
-    synthesized: m['control_center.verb_synthesized'], decided: m['control_center.verb_decided'],
-    received: m['control_center.verb_received'], replied: m['control_center.verb_replied'],
-    requested: m['control_center.verb_requested'], resumed: m['control_center.verb_resumed'],
-    controlled: m['control_center.verb_controlled'],
-  };
   const agentTitles = $derived(new Map((snapshot?.agents ?? []).map((agent) => [agent.nodeId, agent.title])));
 
   function categoryLabel(category: string): string {
@@ -160,7 +151,7 @@
     if (event.action === 'system:task_review') return m['control_center.action_task_review']({ title: name('taskTitle') });
     if (event.action === 'system:task_working') return m['control_center.action_task_working']({ title: name('taskTitle') });
     if (event.action) return event.action;
-    const verb = VERB_LABELS[event.verb]?.() ?? event.verb;
+    const verb = activityVerbLabel(event.verb);
     const agentName = agentTitles.get(event.nodeId);
     return agentName ? m['control_center.activity_by']({ verb, name: agentName }) : verb;
   }

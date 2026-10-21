@@ -24,7 +24,7 @@
 
 Orkestrai is a local-first desktop application for macOS, Windows, and Linux. It
 brings Claude Code, Codex CLI, Kimi Code, OpenCode, Cursor, Antigravity, Cline,
-Devin, shells, tasks, notes,
+Devin, GitHub Copilot, Gemini CLI, Qwen Code, Aider, goose, Amp, shells, tasks, notes,
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
@@ -107,12 +107,28 @@ agent.
 
 <p align="center"><img src="docs/media/readme/canvas-tools.webp" alt="Dragging tools from the dock onto the Orkestrai canvas and connecting a note to an agent" width="880"></p>
 
-### Work side by side in the Workbench
+### Work side by side in Focus
 
-Jump from the canvas to the Workbench in one click, drag items into split panes,
+Jump from the canvas to Focus in one click, drag items into split panes,
 and keep real terminals at full size next to boards, notes, and files.
 
-<p align="center"><img src="docs/media/readme/workbench.webp" alt="Opening canvas artifacts in the Workbench, dragging them into split panes and running a real terminal" width="880"></p>
+<p align="center"><img src="docs/media/readme/workbench.webp" alt="Opening canvas artifacts in Focus, dragging them into split panes and running a real terminal" width="880"></p>
+
+### Talk with the team in Chat
+
+Chat is the third mode next to Canvas and Focus. The team channel shows what
+agents post, their conversations with each other and finished tasks; each agent
+also has a direct conversation and a profile with its task, memory and
+routines. Agents can ask you something without stopping (`orkestrai ask-owner`),
+and requests that need your permission show Approve and Refuse right where they
+appear: in Needs you, in the agent's node and in Chat.
+
+### Answer your team from the phone
+
+Pair a phone on the same network in **Settings > Phone** with a QR code and add
+it to the home screen. It shows Needs you (answers and decisions), Chat and the
+team's status. The pairing code is shown once and stored only as a hash; use it
+on networks you trust.
 
 ### Chain agents with human approval
 
@@ -152,7 +168,7 @@ character.
 
 ### Create music, narration and sound effects
 
-Open **Images > Audio workflow** in Canvas or Workbench. Use fal.ai's published
+Open **Images > Audio workflow** in Canvas or Focus. Use fal.ai's published
 music, speech and sound-effects models with their own parameters, encrypted account,
 workspace permissions and cost preview. Results stay in `generated/audio` as playable
 media nodes and can feed compatible video workflows. Agents use `audio_workflow_*`
@@ -187,7 +203,7 @@ device access.
 <details>
 <summary><strong>Everything Orkestrai can do</strong> (click to expand)</summary>
 
-- **Native Second Brain:** drop PDF, Markdown, XLSX, CSV and other files onto Canvas as document nodes. Search cited passages alongside notes, tasks and sourced memory; follow tags, backlinks and a knowledge graph in Canvas or Workbench. Scanned and mixed PDFs receive offline English, Portuguese and Spanish OCR with bundled models, page citations and recognition confidence. Originals stay intact. Extraction is bounded (25 MB, 200 PDF pages, two minutes); partial/failed pages are explicit, and critical OCR values must be checked against the original.
+- **Native Second Brain:** drop PDF, Markdown, XLSX, CSV and other files onto Canvas as document nodes. Search cited passages alongside notes, tasks and sourced memory; follow tags, backlinks and a knowledge graph in Canvas or Focus. Scanned and mixed PDFs receive offline English, Portuguese and Spanish OCR with bundled models, page citations and recognition confidence. Originals stay intact. Extraction is bounded (25 MB, 200 PDF pages, two minutes); partial/failed pages are explicit, and critical OCR values must be checked against the original.
 - **Durable agent learning:** named agents retain evidence-linked procedural lessons across sessions and provider changes. Choose automatic, review-first or off, inspect revision history, and activate, reject or archive lessons. New tasks recall bounded relevant lessons through the same CLI/MCP contracts, without modifying security grants or training model weights. See the Second Brain guide and interactive tour in How to use.
 
 - **Continuous desktop companions:** monitor an approved conversation, group
@@ -313,10 +329,10 @@ device access.
   Passwords remain redacted in reads and audit. OTP, private fields, pauses and
   explicitly enabled security gates remain protected; use manual login when
   private credentials must stay out of provider conversation history.
-- **Configurable Workbench:** keep open terminals, boards, notes, portals,
+- **Configurable Focus:** keep open terminals, boards, notes, portals,
   files, flows, and usage in vertical tabs by default or optional horizontal
   tabs, then arrange up to eight live artifacts in resizable right/down splits.
-  Tabs move between panes by drag and drop or an accessible menu. The Workbench
+  Tabs move between panes by drag and drop or an accessible menu. The Focus
   references canvas artifacts without duplicating sessions, while workspace
   files remain local editor tabs. Finished Floors retire their nodes instead of
   inflating the explorer, while active floor agents retain an explicit floor
@@ -347,7 +363,7 @@ device access.
   JavaScript, Svelte, and PHP repositories without running project code. Search
   symbols, paths, signatures, and docblocks, then explore bounded incoming and
   outgoing imports, calls, instantiation, inheritance, and implementation links
-  in the same Canvas and Workbench node. Assisted mode watches settled edits,
+  in the same Canvas and Focus node. Assisted mode watches settled edits,
   refreshes atomic revisions incrementally, and makes agent reads wait for the
   freshest known data; Manual keeps indexing explicit and user-only, while
   Disabled stops watchers and access without deleting local history. Agents
@@ -410,7 +426,7 @@ device access.
   import and export independently.
   A versioned `.orkestrai-api.json` format backs up the complete
   native collection, including folders, runners, environments, scripts, and
-  history. The same node persists in Canvas and Workbench, and
+  history. The same node persists in Canvas and Focus, and
   connected agents use typed MCP/CLI tools to import, fingerprint-read/replace,
   synchronize, execute, and export complete collections without receiving stored secrets in
   plaintext. Format-native requests, folders, scripts, tests, and variables are
@@ -433,7 +449,7 @@ device access.
   credentials in the desktop vault, workspace/model/agent permissions and cost
   reservations. Review outgoing data and estimates, follow persistent jobs,
   recover downloads without generating again, and play delivered workspace media
-  in Canvas or Workbench. CLI/MCP agents use the same revisioned contract.
+  in Canvas or Focus. CLI/MCP agents use the same revisioned contract.
   Video requires a funded API account for the selected provider; it does not
   change Codex image generation. Provider-specific limits are documented in-app.
   Approved characters keep versioned visual and voice references. Drag a character
@@ -441,7 +457,7 @@ device access.
   reference bundle without granting access to credentials or paid generation.
 - **Creative production:** native ordered storyboards, comparison and human review,
   contextual image edits, shot direction and approved brand kits share Canvas and
-  Workbench. Save versioned workflows with named local inputs, a script and format;
+  Focus. Save versioned workflows with named local inputs, a script and format;
   reuse them as editable storyboards without copying credentials or starting jobs.
   The generation queue shows actual image/video state and download recovery.
   Assemble delivered clips in a native Video sequence: reorder, trim, caption,
@@ -454,7 +470,7 @@ device access.
   reuse historical media that is no longer on Canvas.
 - **Native image workflows:** connect Notes, ordered PNG/JPEG/WebP Image
   references, and a live Codex agent to a Generate images node on the same
-  canvas; the same node opens in Workbench. A connected Codex can create and
+  canvas; the same node opens in Focus. A connected Codex can create and
   configure the workflow, attach, remove, or reorder context and references,
   request one to ten outputs, run or cancel generation, and remove the workflow
   through the same typed bridge. It uses its authenticated built-in
@@ -488,7 +504,7 @@ device access.
   Orkestrai installation as a session-only override, so stale global Codex
   configuration cannot hide the image workflow tools.
 - **Integrated mobile devices:** add a persistent Mobile Device node from the
-  Canvas toolbar; Workbench lists and opens that same node and session. Control
+  Canvas toolbar; Focus lists and opens that same node and session. Control
   iPhone and iPad Simulators on Apple Silicon Macs, or Android AVDs and explicitly
   authorized physical devices on macOS, Windows, and Linux. Stream the screen,
   send gestures and system buttons, install and launch workspace apps, manage
@@ -513,7 +529,7 @@ device access.
   Counts include only the Ground floor and currently active Floors; historical
   floor nodes stay archived for task attribution instead of appearing as agents.
 - **Traceable Workstreams:** every active Kanban task becomes a live delivery
-  view in Workbench, combining its assignee, Floor and branch, semantic history,
+  view in Focus, combining its assignee, Floor and branch, semantic history,
   Council decisions, Review Center evidence, exact Git revision, tests, risks,
   and linked files. It projects the existing records instead of creating a
   second tracker, and explicitly counts work that is not yet linked to a task.
@@ -523,7 +539,7 @@ device access.
   same memory on demand through typed MCP/CLI tools instead of receiving an
   expensive full-memory prompt on every turn.
 - **Traceable annotations:** review code and native Design feedback from one
-  Annotation Center in Canvas or Workbench. Every item keeps its canonical
+  Annotation Center in Canvas or Focus. Every item keeps its canonical
   artifact, author, target, captured revision, resolution state, and stale-code
   warning; opening it returns to the original review or Design document.
 - **Versioned Team Packs:** turn a working workspace into a portable team with
@@ -549,10 +565,11 @@ device access.
   non-extractable in the browser and the invitation secret is removed from the
   URL before connecting. Installed-app invites open Orkestrai automatically;
   guests can also paste one through **Workspace → Join remote workspace**.
-  Operators can hold a traceable structured conversation whose reply is bound
-  to the exact turn across every registered provider. The overview keeps the
-  leader thread visible and waits through intermediate tool use until the
-  provider finishes the turn. Dictation is available for leader, agent, and
+  Operators share the app's Conversa: the team channel and each agent's direct
+  conversation, with questions, answers and delivery state. What they write
+  there reaches the agent like a message written in the app, whole messages and
+  older history load on demand, and the agents' messages to each other stay on
+  the host. They also answer and decide what waits in Needs you. Dictation is available for leader, agent, and
   terminal input through the host's local STT without exposing plaintext audio
   to the relay; terminal dictation inserts text without submitting it.
   Administrators can start or restore an agent. Raw terminal control is a
@@ -573,7 +590,7 @@ device access.
   Monaco diff, create reviews linked to tasks and assignees, leave persistent
   file and line comments, and approve, reject, or request changes. Feedback is
   routed back to the responsible live agent without losing the review history.
-- **Native Git workspace:** add one persistent Git node to Canvas or Workbench
+- **Native Git workspace:** add one persistent Git node to Canvas or Focus
   to manage changes, commit history, branches, tags, remotes, stashes, and the
   worktrees owned by Floors. Every destructive operation is previewed against
   an exact repository revision; WSL uses the selected distribution, and agents
@@ -584,7 +601,7 @@ device access.
   a new leader-triage task, a task assigned to an agent, or an existing task.
   Browser secrets and hidden state stay excluded.
 - **Native Design Mode:** create structured interface documents directly on the
-  Canvas and open the same artifact in Workbench. Draw vector paths with direct
+  Canvas and open the same artifact in Focus. Draw vector paths with direct
   anchor, segment, and Bezier-handle editing; box-select and transform vector
   points, continue open paths, resize layers directly, and edit text in place,
   combine shapes, use masks, gradients, effects, snapping, guides, auto layout,
@@ -675,7 +692,7 @@ device access.
   remain inside the same revisioned Design document, editable by people and
   connected agents without a parallel prototype file.
 - **Council decisions:** open Council from the Canvas toolbar, the workspace in
-  Workbench, or `Cmd/Ctrl+K`, then ask two to five real agents for independent,
+  Focus, or `Cmd/Ctrl+K`, then ask two to five real agents for independent,
   budget-limited perspectives on one task or objective, compare the same
   evidence, risk, test, disagreement, and confidence contract, then record the
   human selection, consensus request, or rejection. Implementation prototypes
@@ -684,7 +701,7 @@ device access.
   notes, roles, skills, files, settings, and commands, with recent and favorite
   items plus direct actions to open in the current pane, right, or below.
 - **Rich local editor and previews:** browse the workspace's native file tree
-  and open files directly in local Workbench tabs, without creating canvas
+  and open files directly in local Focus tabs, without creating canvas
   nodes. The lazy-loaded Monaco editor keeps undo, cursor, dirty state, find/replace,
   formatting, outline, minimap, wrapping, and optional autosave. Preview
   Markdown, PDFs, and images offline; binary files show safe metadata and open
@@ -773,7 +790,7 @@ device access.
 - **Readable terminals:** choose 1 of 11 complete ANSI palettes from the compact
   terminal options menu, alongside provider, role, reload, and Maestro controls.
   Font metrics settle before PTY reattachment so the cursor remains aligned
-  after switching between Canvas, Workbench, Settings, and documentation.
+  after switching between Canvas, Focus, Settings, and documentation.
 - **Reusable terminal commands:** save searchable commands for one terminal or
   globally, execute them manually in any terminal, or opt pure shells into a
   once-per-session startup command. Agent conversations never auto-run saved
@@ -817,6 +834,11 @@ authenticate only the providers you plan to use:
 - [Cline CLI](https://docs.cline.bot/cli/cli-reference)
 - [Devin CLI](https://docs.devin.ai/cli)
 - [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
+- [Gemini CLI](https://geminicli.com/docs/)
+- [Qwen Code](https://qwenlm.github.io/qwen-code-docs/en/)
+- [Aider](https://aider.chat/docs/)
+- [goose](https://goose-docs.ai/docs/)
+- [Amp](https://ampcode.com/docs)
 
 You do not need every provider or terminal expertise. Orkestrai enables the CLIs
 it detects, keeps their conversations separate, and lets you organize agents by

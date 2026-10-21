@@ -19,6 +19,9 @@ import { AgentRoutineRun } from '../../domain/models/AgentRoutineRun.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { conversationRoot } from '../adapters/computers/reply-scope.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { attentionService } from './AttentionService.js';
+
+export const GATE_ATTENTION_SOURCE = 'autonomy_gate';
 
 export type AutonomyPolicyRecord = AutonomyPolicyInput & {
   id: string;
@@ -431,6 +434,7 @@ export class AutonomyPolicyService {
     const updated = await AgentApprovalGate.find(gateId);
     if (!updated) throw new Error('Approval gate disappeared while resolving.');
     const mapped = mapGate(updated);
+    await attentionService.resolveSource(workspaceId, GATE_ATTENTION_SOURCE, gateId).catch(() => 0);
     if (mapped.runId) {
       if (decision === 'approved') {
         await AgentRoutineRun.query().where('id', mapped.runId).where('status', 'waiting_approval').update({
@@ -720,7 +724,31 @@ export class AutonomyPolicyService {
       created_at: now,
       updated_at: now,
     });
-    return { status: 'gated', reason, policy, gate: mapGate(model) };
+    const gate = mapGate(model);
+    await this.raiseGateAttention(gate, reason);
+    return { status: 'gated', reason, policy, gate };
+  }
+
+  /** Puts a new gate in Needs you; the owner can decide gates that ask for the user. */
+  private async raiseGateAttention(gate: ApprovalGateRecord, reason: string): Promise<void> {
+    try {
+      const requester = gate.requestedBy ? await workspaceRepository.getNode(gate.requestedBy) : null;
+      const nodeId = requester?.workspaceId === gate.workspaceId ? requester.id : null;
+      await attentionService.raise({
+        workspaceId: gate.workspaceId,
+        nodeId,
+        category: 'workflow',
+        severity: ['bulk_destructive', 'force_push', 'irreversible', 'secret_export', 'production_deploy', 'purchase'].includes(gate.risk) ? 'error' : 'warning',
+        title: gate.summary.slice(0, 200),
+        body: reason,
+        sourceType: GATE_ATTENTION_SOURCE,
+        sourceId: gate.id,
+        correlationId: `${GATE_ATTENTION_SOURCE}:${gate.id}`,
+        action: { target: nodeId ? 'node' : 'gate', gateId: gate.id, ...(gate.requirement === 'user' ? { decision: 'gate' } : {}) },
+      });
+    } catch {
+      // The gate itself is authoritative; the attention item only points at it.
+    }
   }
 
   private async expireGates(workspaceId: string): Promise<void> {
@@ -734,6 +762,7 @@ export class AutonomyPolicyService {
           resolved_at: now,
           updated_at: now,
         });
+        await attentionService.resolveSource(workspaceId, GATE_ATTENTION_SOURCE, String(gate.getAttribute('id'))).catch(() => 0);
       }
     }
   }

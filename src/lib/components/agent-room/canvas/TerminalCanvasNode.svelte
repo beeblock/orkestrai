@@ -1,13 +1,26 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import type { NodeProps } from '@xyflow/svelte';
-  import { ArrowLeftRight, BadgeCheck, Bot, Ellipsis, Globe2, History, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
+  import { NodeToolbar, Position, type NodeProps } from '@xyflow/svelte';
+  import { ArrowLeftRight, BadgeCheck, Bot, Check, Clock3, Ellipsis, Focus, MessageSquare, MessagesSquare, Globe2, History, Layers, ListRestart, LoaderCircle, MonitorCog, Paperclip, Play, RotateCcw, Scale, SendHorizontal, SquareTerminal, Star, SwatchBook, UserRound, X } from '@lucide/svelte';
   import { toast } from '@beeblock/svelar/ui';
   import { Button } from '$lib/components/ui/button';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import type { AgentRole } from '$lib/modules/agent-room/application/services/RoleService.js';
   import NodeShell from './NodeShell.svelte';
   import NodeEmptyState from './NodeEmptyState.svelte';
+  import AgentAvatar from '../AgentAvatar.svelte';
+  import StatusPill from '../StatusPill.svelte';
+  import { agentPause } from '../agent-pause.svelte.js';
+  import { useNodes } from '@xyflow/svelte';
+  import { getCsrfToken as csrfForHandoff } from '@beeblock/svelar/http';
+  import { toast as handoffToast } from '@beeblock/svelar/ui';
+  import AgentGlyph from '../AgentGlyph.svelte';
+  import NodeAttentionBanner from './NodeAttentionBanner.svelte';
+  import AgentChatFace from '../chat/AgentChatFace.svelte';
+  import { sendToAgent } from './CanvasComposer.svelte';
+  import { agentStatus, statusClock } from '../agent-status.svelte.js';
+  import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
+  import { agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
   import TerminalNode from '../TerminalNode.svelte';
   import VoiceConfirmDialog from '../VoiceConfirmDialog.svelte';
   import { appSettingsStore, getAppSettings, updateAppSettings } from '../app-settings.svelte.js';
@@ -50,6 +63,9 @@
     workspaceRuntime: WorkspaceExecutionRuntime;
     workspaceId: string;
     payload: TerminalNodePayload;
+    /** On the ground floor: the floor (worktree) this agent codes in. */
+    floorName?: string | null;
+    onOpenFloor?: () => void;
     /** Avalia os args de resume exato por session-id NA HORA do respawn. */
     exactResumeArgsFor?: (agentSessionId: string) => string[] | null;
     /** Template que reserva um id novo na CLI e elimina races entre agentes. */
@@ -232,6 +248,53 @@
   /** Role exibida no header: curta (o nome completo fica no dropdown/aria). */
   const roleLabel = $derived(currentRole && currentRole.length > 24 ? `${currentRole.slice(0, 23).trimEnd()}…` : currentRole);
   const currentProvider = $derived((data.payload as TerminalNodePayload).provider ?? null);
+  // Terminal or conversation face; a per-viewer preference kept in this browser.
+  const FACE_KEY = `orkestrai.node.face.${id}`;
+  let face = $state<'terminal' | 'chat'>((() => {
+    try { return localStorage.getItem(FACE_KEY) === 'chat' ? 'chat' : 'terminal'; } catch { return 'terminal'; }
+  })());
+  function setFace(next: 'terminal' | 'chat') {
+    face = next;
+    try { localStorage.setItem(FACE_KEY, next); } catch { /* storage unavailable */ }
+  }
+  // Owner messages wait in the inbox while the agent finishes its turn and only
+  // show in the terminal once typed there, so the wait is shown on the node.
+  let queuedMessages = $state<string[]>([]);
+  let justDelivered = $state(false);
+  let deliveredTimer: ReturnType<typeof setTimeout> | null = null;
+  onMount(() => {
+    const onChannelMessage = (event: Event) => {
+      const message = (event as CustomEvent<{ message?: { id: string; authorKind: string; meta?: Record<string, unknown> } }>).detail?.message;
+      const deliverTo = message?.meta?.deliverTo;
+      if (!message || message.authorKind !== 'owner' || !Array.isArray(deliverTo) || !deliverTo.includes(id)) return;
+      if (!message.meta?.deliveredAt) {
+        if (!queuedMessages.includes(message.id)) queuedMessages = [...queuedMessages, message.id];
+        return;
+      }
+      if (!queuedMessages.includes(message.id)) return;
+      queuedMessages = queuedMessages.filter((queued) => queued !== message.id);
+      justDelivered = true;
+      if (deliveredTimer) clearTimeout(deliveredTimer);
+      deliveredTimer = setTimeout(() => (justDelivered = false), 4000);
+    };
+    window.addEventListener('orkestrai:channel-message', onChannelMessage);
+    return () => {
+      window.removeEventListener('orkestrai:channel-message', onChannelMessage);
+      if (deliveredTimer) clearTimeout(deliveredTimer);
+    };
+  });
+  const liveStatus = $derived(agentStatus.agents[id] ?? null);
+  // The field talks to an agent through Chat, except while its CLI asks something
+  // in the terminal (a permission or a choice): the inbox waits for that turn to end.
+  const fieldSendsToChat = $derived(Boolean(currentProvider) && liveStatus?.state !== 'waiting_permission' && liveStatus?.state !== 'waiting_input');
+  const statusTone = $derived(liveStatus ? agentTone(liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle');
+  const statusLabel = $derived(agentStateLabel(liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : 'idle'));
+  const launchModel = $derived(modelFromArgs((data.payload as TerminalNodePayload).args));
+  const statusSince = $derived.by(() => {
+    if (statusTone !== 'working' && statusTone !== 'attention' && statusTone !== 'blocked') return null;
+    const parts = elapsedParts(liveStatus?.stateSince, statusClock.now);
+    return parts ? elapsedLabel(parts) : null;
+  });
   const agentRuntimeMode = $derived((data.payload as TerminalNodePayload).agentRuntimeMode ?? 'interactive');
   const agentRuntimeSleeping = $derived(Boolean(currentProvider && agentRuntimeMode === 'on_demand' && !data.payload.sessionId && !forceRespawn));
   const currentProfileId = $derived((data.payload as TerminalNodePayload).profileId ?? null);
@@ -369,6 +432,7 @@
   let mentionFilter = $state('');
   let mentionTargets = $state<MentionTarget[]>([]);
   let promptInput: HTMLInputElement;
+  let chatFaceLayer = $state<HTMLDivElement | null>(null);
   let attachmentInput: HTMLInputElement;
   let attachmentBusy = $state(false);
   let attachmentDropActive = $state(false);
@@ -418,6 +482,13 @@
     promptSending = true;
     promptError = '';
     try {
+      // An agent gets the text as a direct message, so it and the reply show in
+      // Chat too; the inbox wakes a sleeping agent and holds it while one is busy.
+      if (fieldSendsToChat) {
+        if (!(await sendToAgent(data.workspaceId, id, text))) throw new Error('Delivery not confirmed');
+        if (prompt.trim() === text) prompt = '';
+        return;
+      }
       const sessionId = (data.payload as TerminalNodePayload).sessionId ?? (agentRuntimeSleeping ? await wakeAgent() : null);
       if (!sessionId) throw new Error('Terminal unavailable');
       const response = await fetch(`/api/agent-room/workspaces/${data.workspaceId}/terminals/${id}/write`, {
@@ -594,7 +665,40 @@
       workspaceRoot: data.workspaceRoot,
     };
   });
+
+  // "Pass the task to …": the open task moves to another agent with a brief.
+  const flowNodes = useNodes();
+  const handoffTargets = $derived(flowNodes.current
+    .filter((node) => node.id !== id && node.type === 'terminal' && (node.data as { payload?: { provider?: string } }).payload?.provider)
+    .map((node) => ({ id: node.id, title: String((node.data as { title?: string }).title ?? '') })));
+
+  async function handoffTo(targetId: string, targetTitle: string) {
+    const csrf = csrfForHandoff();
+    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(data.workspaceId)}/tasks/handoff`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+      body: JSON.stringify({ fromNodeId: id, toNodeId: targetId }),
+    }).catch(() => null);
+    const body = await response?.json().catch(() => null) as { data?: { title?: string }; error?: string; message?: string } | null;
+    if (response?.ok && body?.data?.title) handoffToast.success(m['term.handoff_done']({ title: body.data.title, name: targetTitle }));
+    else handoffToast.error(body?.error ?? body?.message ?? m['term.handoff_failed']());
+  }
 </script>
+
+{#if currentProvider}
+  <NodeToolbar position={Position.Top} offset={10} class="node-quickbar nodrag">
+    <a class="quick" href={`/terminal?workspace=${encodeURIComponent(data.workspaceId)}&node=${encodeURIComponent(id)}`} title={m['node_quickbar.focus_hint']()}>
+      <Focus size={13} />{m['node_quickbar.focus']()}
+    </a>
+    <button type="button" class="quick" onclick={() => window.dispatchEvent(new CustomEvent('orkestrai:composer-target', { detail: { nodeId: id } }))}>
+      <MessageSquare size={13} />{m['node_quickbar.message']()}
+    </button>
+    <span class="quick-sep" aria-hidden="true"></span>
+    <button type="button" class="quick icon" aria-label={m['term.actions']()} title={m['term.actions']()} onclick={() => (actionsOpen = true)}>
+      <Ellipsis size={14} />
+    </button>
+  </NodeToolbar>
+{/if}
 
 <NodeShell
   onDragOver={handleAttachmentDragOver}
@@ -604,6 +708,7 @@
   {selected}
   class="canvas-terminal"
   accent="var(--app-accent)"
+  edge={statusTone === 'working' ? 'color-mix(in srgb, var(--app-accent) 52%, transparent)' : statusTone === 'attention' ? 'color-mix(in srgb, var(--app-warning) 60%, transparent)' : statusTone === 'blocked' ? 'color-mix(in srgb, var(--app-danger) 60%, transparent)' : null}
   minWidth={360}
   minHeight={220}
   onResize={data.onResize}
@@ -614,14 +719,31 @@
   onRemoveConnection={data.onRemoveConnection}
 >
   {#snippet icon()}
-    {#if currentProvider && providerIcons[currentProvider]}
-      <span class="terminal-provider-mark app-logo-plate"><img src={providerIcons[currentProvider]} width="13" height="13" alt="" /></span>
+    {#if currentProvider}
+      <span class="terminal-identity">
+        <AgentGlyph tone={statusTone} label={statusLabel} />
+        <AgentAvatar nodeId={id} title={data.title} />
+      </span>
     {:else}
       <SquareTerminal size={13} />
     {/if}
   {/snippet}
   {#snippet title()}{data.title}{/snippet}
   {#snippet actions()}
+    {#if currentProvider}
+      <span class="terminal-meta" title={[statusLabel, statusSince, launchModel].filter(Boolean).join(' · ')}>
+        {#if statusSince}<span class="terminal-since">{statusSince}</span>{/if}
+        {#if providerIcons[currentProvider]}
+          <span class="terminal-provider-mark app-logo-plate"><img src={providerIcons[currentProvider]} width="12" height="12" alt="" /></span>
+        {/if}
+        {#if launchModel}<span class="terminal-model">{launchModel}</span>{/if}
+      </span>
+      {#if agentPause.ids.includes(id)}
+        <StatusPill tone="offline" label={m['agent_status.paused']()} />
+      {:else}
+        <StatusPill tone={statusTone} label={statusLabel} />
+      {/if}
+    {/if}
     {#if runtimeOverride}
       <span class="terminal-status-chip" role="status" title={runtimeTitle} aria-label={runtimeTitle}>
         <MonitorCog size={12} />
@@ -634,10 +756,29 @@
         <span>{roleLabel}</span>
       </span>
     {/if}
+    {#if data.floorName}
+      <button type="button" class="terminal-status-chip terminal-floor-chip nodrag" onclick={() => data.onOpenFloor?.()} title={m['term.floor_chip']({ floor: data.floorName })} aria-label={m['term.floor_chip']({ floor: data.floorName })}>
+        <Layers size={12} />
+        <span>{data.floorName}</span>
+      </button>
+    {/if}
     {#if data.payload.maestro}
       <span class="terminal-leader-state" role="img" title={m['term.maestro_active']()} aria-label={m['term.maestro_active']()}>
         <Star size={12} fill="currentColor" />
       </span>
+    {/if}
+    {#if currentProvider}
+      <button
+        type="button"
+        class="node-action-btn face-toggle nodrag"
+        class:active={face === 'chat'}
+        aria-pressed={face === 'chat'}
+        title={face === 'chat' ? m['term.face_terminal']() : m['term.face_chat']()}
+        aria-label={face === 'chat' ? m['term.face_terminal']() : m['term.face_chat']()}
+        onclick={() => setFace(face === 'chat' ? 'terminal' : 'chat')}
+      >
+        {#if face === 'chat'}<SquareTerminal size={14} />{:else}<MessagesSquare size={14} />{/if}
+      </button>
     {/if}
     <DropdownMenu.Root bind:open={actionsOpen}>
       <DropdownMenu.Trigger
@@ -705,6 +846,24 @@
             <Bot size={14} />
             {m['agent_runtime.menu']()}
           </DropdownMenu.Item>
+        {/if}
+        {#if currentProvider}
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <ArrowLeftRight size={14} />
+              {m['term.handoff']()}
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent sideOffset={6} class="max-h-72 w-56 overflow-y-auto">
+              {#each handoffTargets as target (target.id)}
+                <DropdownMenu.Item onclick={() => void handoffTo(target.id, target.title)}>
+                  <AgentAvatar nodeId={target.id} title={target.title} size={16} />
+                  <span class="min-w-0 flex-1 truncate">{target.title}</span>
+                </DropdownMenu.Item>
+              {:else}
+                <DropdownMenu.Item disabled>{m['term.handoff_none']()}</DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
         {/if}
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger>
@@ -823,6 +982,19 @@
     </div>
   {/if}
 
+  {#if data.payload.provider}
+    <NodeAttentionBanner
+      nodeId={id}
+      workspaceId={data.workspaceId}
+      activity={liveStatus ? (liveStatus.sessionAlive ? liveStatus.state : 'disconnected') : null}
+      onRespond={() => (face === 'chat' ? chatFaceLayer?.querySelector<HTMLInputElement>('input')?.focus() : promptInput?.focus())}
+      onShowTerminal={() => {
+        if (face === 'chat') setFace('terminal');
+        requestAnimationFrame(() => terminalNode?.focus());
+      }}
+    />
+  {/if}
+
   <div
     class="terminal-body nodrag"
     class:attachment-drop-active={attachmentDropActive}
@@ -897,6 +1069,19 @@
     {:else}
       <NodeEmptyState icon={SquareTerminal} compact title={m['term.no_command']()} />
     {/if}
+    {#if face === 'chat' && currentProvider}
+      <div class="chat-face-layer" bind:this={chatFaceLayer}>
+        <AgentChatFace workspaceId={data.workspaceId} nodeId={id} title={data.title} />
+      </div>
+    {:else if currentProvider && (queuedMessages.length || justDelivered)}
+      <div class="inbox-chip" class:delivered={!queuedMessages.length} role="status" data-testid="terminal-inbox-chip">
+        {#if queuedMessages.length}
+          <Clock3 size={12} aria-hidden="true" />{queuedMessages.length === 1 ? m['term.inbox_queued_one']({ name: data.title }) : m['term.inbox_queued_many']({ count: String(queuedMessages.length), name: data.title })}
+        {:else}
+          <Check size={12} aria-hidden="true" />{m['term.inbox_delivered']({ name: data.title })}
+        {/if}
+      </div>
+    {/if}
   </div>
   {#if voiceError}
     <p class="voice-error">{voiceError}</p>
@@ -938,6 +1123,7 @@
 
   <div
     class="composer nodrag"
+    class:hidden-face={face === 'chat' && Boolean(currentProvider)}
     class:attachment-drop-active={attachmentDropActive}
     role="group"
     aria-label={m['attachment.agent_drop_target']()}
@@ -961,7 +1147,7 @@
       data-testid="terminal-quick-prompt"
       oninput={handlePromptInput}
       onkeydown={handlePromptKeydown}
-      placeholder={m['ph.quick_prompt']()}
+      placeholder={fieldSendsToChat ? m['ph.agent_message']() : m['ph.quick_prompt']()}
       spellcheck="false"
     />
     <button class="composer-send" class:ready={Boolean(prompt.trim())} aria-label={m['term.send']()} aria-busy={promptSending} onclick={sendPrompt} disabled={!prompt.trim() || promptSending}>
@@ -972,9 +1158,113 @@
 </NodeShell>
 
 <style>
+  :global(.node-quickbar) {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+  }
+
+  :global(.node-quickbar .quick) {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  :global(.node-quickbar .quick:hover) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  :global(.node-quickbar .quick:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+  }
+
+  :global(.node-quickbar .quick.icon) {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  :global(.node-quickbar .quick-sep) {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--app-border);
+  }
+
   .terminal-body {
+    position: relative;
     flex: 1;
     min-height: 0;
+  }
+
+  /* The conversation face covers the live terminal, which keeps running underneath. */
+  .chat-face-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+  }
+
+  .composer.hidden-face {
+    display: none;
+  }
+
+  .inbox-chip {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 20px);
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--app-warning) 34%, transparent);
+    background: color-mix(in srgb, var(--app-warning) 14%, var(--app-surface-raised));
+    box-shadow: var(--app-shadow-overlay);
+    color: var(--app-text);
+    font-size: 11.5px;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  .inbox-chip :global(svg) {
+    flex: none;
+    color: var(--app-warning);
+  }
+
+  .inbox-chip.delivered {
+    border-color: color-mix(in srgb, var(--app-success) 34%, transparent);
+    background: color-mix(in srgb, var(--app-success) 14%, var(--app-surface-raised));
+  }
+
+  .inbox-chip.delivered :global(svg) {
+    color: var(--app-success);
+  }
+
+  :global(.face-toggle.active) {
+    color: var(--app-accent);
   }
 
   .terminal-body.attachment-drop-active,
@@ -1045,10 +1335,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    min-height: 40px;
+    min-height: 34px;
     padding: 0 6px;
-    border-top: 1px solid var(--app-border);
-    background: var(--app-surface);
+    border-top: 1px solid color-mix(in srgb, var(--app-text) 6%, transparent);
+    background: color-mix(in srgb, var(--app-surface-raised) 40%, var(--app-surface));
     transition: background-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
   }
 
@@ -1180,24 +1470,70 @@
     min-width: 0;
     max-width: 120px;
     height: 22px;
-    padding: 0 7px;
+    padding: 0 3px;
     border-radius: 6px;
-    background: var(--app-hover);
-    color: var(--app-text-soft);
+    background: transparent;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  /* Status, teammate color and initials stay together at the start of the header. */
+  .terminal-identity {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .terminal-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
     font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .terminal-since {
+    color: var(--app-text-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .terminal-model {
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .terminal-provider-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 19px;
-    height: 19px;
+    width: 18px;
+    height: 18px;
     border-radius: 5px;
     /* Placa fixa escura de proposito: os SVGs em /images sao preenchidos com
        branco, entao um token de superficie apagaria a marca no tema claro.
        Mesmo valor da Central de Providers (.provider-icon) e do no Usage. */
     background: var(--app-logo-plate);
+  }
+
+  .terminal-floor-chip {
+    border: 0;
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .terminal-floor-chip:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .terminal-floor-chip:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
   }
 
   .terminal-status-chip span {
@@ -1213,7 +1549,7 @@
     justify-content: center;
     width: 22px;
     height: 22px;
-    color: var(--app-warning);
+    color: var(--app-accent);
   }
 
   .theme-swatch {

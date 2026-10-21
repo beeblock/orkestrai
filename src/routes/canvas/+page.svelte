@@ -1,7 +1,7 @@
 <script lang="ts">
   import { applyEdgeActivity } from '$lib/components/agent-room/canvas/edge-activity.js';
   import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
-  import { onMount, tick } from 'svelte';
+  import { onMount, setContext, tick, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { toast } from '@beeblock/svelar/ui';
   import { getCsrfToken } from '@beeblock/svelar/http';
@@ -55,8 +55,7 @@
   import WorkspaceSharingDialog from '$lib/components/collaboration/WorkspaceSharingDialog.svelte';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
-  import WorkspaceModeSwitch from '$lib/components/agent-room/WorkspaceModeSwitch.svelte';
-  import AttentionCenter from '$lib/components/agent-room/AttentionCenter.svelte';
+  import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import WorkspaceMemoryDialog from '$lib/components/agent-room/WorkspaceMemoryDialog.svelte';
   import AnnotationCenterDialog from '$lib/components/agent-room/AnnotationCenterDialog.svelte';
   import HuddleDialog from '$lib/components/agent-room/HuddleDialog.svelte';
@@ -90,6 +89,7 @@
   import VideoCanvasNode from '$lib/components/agent-room/canvas/VideoCanvasNode.svelte';
   import ImageToolbarMenu from '$lib/components/agent-room/canvas/ImageToolbarMenu.svelte';
   import { MAX_WORKSPACE_ATTACHMENT_BYTES, uploadWorkspaceAttachment } from '$lib/components/agent-room/workspace-attachments.js';
+  import ToolGroupMenu, { type ToolGroupItem } from '$lib/components/agent-room/canvas/ToolGroupMenu.svelte';
   import ToolbarButton from '$lib/components/agent-room/canvas/ToolbarButton.svelte';
   import RoutinePanel from '$lib/components/agent-room/canvas/RoutinePanel.svelte';
   import RolesPanel from '$lib/components/agent-room/canvas/RolesPanel.svelte';
@@ -110,8 +110,9 @@
   import PresetLibraryPanel from '$lib/components/agent-room/canvas/PresetLibraryPanel.svelte';
   import AgentToolbarMenu from '$lib/components/agent-room/canvas/AgentToolbarMenu.svelte';
   import CommandPalette, { type PaletteAction } from '$lib/components/agent-room/canvas/CommandPalette.svelte';
-  import { alignRects, boundingBox, distributeRects, tidyRects, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
+  import { alignRects, arrangeGroupMembers, boundingBox, distributeRects, fitGroupFrame, organizeByConnections, type AlignMode } from '$lib/components/agent-room/canvas/layout.js';
   import { findFreeCanvasPosition } from '$lib/modules/agent-room/domain/canvas-placement.js';
+  import { settleFloorAgents, shownOnFloor } from '$lib/modules/agent-room/domain/canvas-floors.js';
   import type { TerminalThemeName } from '$lib/components/agent-room/terminal-themes.js';
   import {
     LEADER_DICTATION_COMMAND,
@@ -121,13 +122,41 @@
   } from '$lib/components/agent-room/leader-dictation.js';
   import { TEXT_DICTATION_FALLBACK, type TextDictationFallbackDetail } from '$lib/components/agent-room/text-dictation.js';
   import { invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
+  import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
+  import { agentColor, agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
+  import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
+  import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
+  import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
+  import { retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
+  import CanvasSummaryCard from '$lib/components/agent-room/canvas/CanvasSummaryCard.svelte';
+  import CanvasComposer from '$lib/components/agent-room/canvas/CanvasComposer.svelte';
+  import CanvasSideRail, { type RailItem } from '$lib/components/agent-room/canvas/CanvasSideRail.svelte';
+  import CanvasQuickChips, { type QuickChip } from '$lib/components/agent-room/canvas/CanvasQuickChips.svelte';
+  import CanvasGitPill from '$lib/components/agent-room/canvas/CanvasGitPill.svelte';
+  import OrchestratorCanvasNode from '$lib/components/agent-room/canvas/OrchestratorCanvasNode.svelte';
+  import TeamMapDialog from '$lib/components/agent-room/canvas/TeamMapDialog.svelte';
+  import TeamComposer from '$lib/components/agent-room/canvas/TeamComposer.svelte';
+  import ChecklistCanvasNode from '$lib/components/agent-room/canvas/ChecklistCanvasNode.svelte';
+  import CalendarCanvasNode from '$lib/components/agent-room/canvas/CalendarCanvasNode.svelte';
+  import InkPanel from '$lib/components/agent-room/canvas/InkPanel.svelte';
+  import StudioDialog, { type StudioRequest } from '$lib/components/agent-room/canvas/StudioDialog.svelte';
+  import { agentPause, refreshPausedAgents, setAgentsPaused } from '$lib/components/agent-room/agent-pause.svelte.js';
+  import { parseBoardCommand } from '$lib/modules/agent-room/domain/board-commands.js';
+  import ArchivedPanel from '$lib/components/agent-room/canvas/ArchivedPanel.svelte';
+  import ScoresPanel from '$lib/components/agent-room/canvas/ScoresPanel.svelte';
+  import SaveScoreDialog from '$lib/components/agent-room/canvas/SaveScoreDialog.svelte';
+  import MachinesDialog from '$lib/components/agent-room/canvas/MachinesDialog.svelte';
+  import { sshTerminalArgs, type SshMachine } from '$lib/modules/agent-room/domain/ssh-machines.js';
+  import { computeNoteStacks, hiddenStackedNotes } from '$lib/components/agent-room/canvas/note-stacks.js';
+  import { strokeToShape } from '$lib/components/agent-room/canvas/freehand.js';
+  import { noteStackState, publishNoteStacks, setNoteStackExpanded } from '$lib/components/agent-room/canvas/note-stacks.svelte.js';
   import {
     parsePinnedAgentProviders,
     PINNED_AGENT_PROVIDERS_SETTING,
     setAgentProviderPinned,
   } from '$lib/components/agent-room/provider-toolbar.js';
   import { BackgroundVariant, SvelteFlowProvider } from '@xyflow/svelte';
-  import { BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Copy, Download, FileDiff, Folder, FolderPlus, FolderTree, Gauge, GitFork, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorUp, MoreHorizontal, Palette, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Power, RadioTower, Scale, Search, Settings, Shapes, Smartphone, SquareKanban, StickyNote, Trash2, Upload, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
+  import { Archive, BadgeCheck, Blocks, BookMarked, Braces, Cable, CalendarClock, CalendarDays, ListChecks, LoaderCircle, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleHelp, CodeXml, Copy, Download, FileDiff, Folder, FolderCog, FolderPlus, FolderTree, Gauge, GitFork, Globe, Group as GroupIcon, Layers, LayoutGrid, LayoutTemplate, MessageCircleMore, MonitorCog, MonitorSmartphone, MousePointer2, Music4, MonitorUp, MoreHorizontal, Network, Orbit, Palette, Pause, Play, PanelLeftClose, PanelLeftOpen, PenLine, Pencil, Plus, Power, RadioTower, Scale, Search, Server, Settings, Shapes, Smartphone, Sparkles, SquareKanban, StickyNote, Trash2, Upload, UsersRound, Waypoints, Workflow, Wrench, X } from '@lucide/svelte';
   import ZoomBridge from '$lib/components/agent-room/canvas/ZoomBridge.svelte';
   import type {
     AgentProviderInfo,
@@ -172,40 +201,16 @@
     computer: ComputerCanvasNode,
     toolWorkshop: ToolWorkshopCanvasNode,
     design: DesignCanvasNode,
+    orchestrator: OrchestratorCanvasNode,
+    checklist: ChecklistCanvasNode,
+    calendar: CalendarCanvasNode,
   };
 
-  // Mesmo destaque que cada no passa para o NodeShell — o minimapa vira uma
-  // legenda de cores em vez de 19 retangulos cinzas iguais.
-  const nodeAccents: Record<string, string> = {
-    terminal: 'var(--app-accent)',
-    note: 'var(--app-warning)',
-    fileTree: 'var(--app-success)',
-    git: 'var(--app-success)',
-    editor: 'var(--app-secondary)',
-    diff: 'var(--app-secondary)',
-    portal: 'var(--app-secondary)',
-    apiClient: 'var(--app-secondary)',
-    loop: 'var(--app-success)',
-    group: 'var(--app-secondary)',
-    shape: 'var(--app-accent)',
-    tasks: 'var(--app-success)',
-    flow: 'var(--app-accent)',
-    image: 'var(--app-secondary)',
-    imageWorkflow: 'var(--app-secondary)',
-    videoWorkflow: 'var(--app-secondary)',
-    sequence: 'var(--app-secondary)',
-    storyboard: 'var(--app-secondary)',
-    video: 'var(--app-secondary)',
-    usage: 'var(--app-warning)',
-    codeGraph: 'var(--app-secondary)',
-    device: 'var(--app-secondary)',
-    computer: 'var(--app-secondary)',
-    toolWorkshop: 'var(--app-secondary)',
-    design: 'var(--app-secondary)',
-  };
-
+  // The minimap is a quiet silhouette: selected nodes in gold, groups barely there.
   function minimapNodeColor(node: Node): string {
-    return nodeAccents[node.type ?? ''] ?? 'var(--app-border-strong)';
+    if (node.selected) return 'var(--app-accent)';
+    if (node.type === 'group') return 'color-mix(in srgb, var(--app-text) 6%, transparent)';
+    return 'color-mix(in srgb, var(--app-text) 26%, transparent)';
   }
 
   let workspaces = $state<Workspace[]>([]);
@@ -513,6 +518,119 @@
       : workspaces
   );
   let activeWorkspace = $state<Workspace | null>(null);
+  // Teammates of the open workspace, the ones that need the owner first.
+  const TONE_ORDER = { attention: 0, blocked: 1, working: 2, review: 3, idle: 4, done: 5, offline: 6 } as const;
+  const teamMembers = $derived.by(() => nodes
+    .filter((node) => node.type === 'terminal' && Boolean((node.data as { payload?: TerminalNodePayload }).payload?.provider))
+    .map((node) => {
+      const status = agentStatus.agents[node.id];
+      const state = status ? (status.sessionAlive ? status.state : 'disconnected') : 'idle';
+      const tone = agentTone(state);
+      const parts = tone === 'working' || tone === 'attention' || tone === 'blocked' ? elapsedParts(status?.stateSince, statusClock.now) : null;
+      return { id: node.id, title: String((node.data as { title?: string }).title ?? ''), tone, label: agentStateLabel(state), since: parts ? elapsedLabel(parts) : null };
+    })
+    .sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.title.localeCompare(b.title)));
+  function workspaceTint(workspaceId: string): string {
+    const color = agentColor(workspaceId);
+    return `--ws-tint:${color.bg};--ws-ink:${color.ink}`;
+  }
+  // The tool rail floats on the left of the canvas, so its tooltips and menus open to the right.
+  setContext('toolbar-tooltip-side', 'right');
+  // The app top bar shows the mode switch and attention bell for this workspace.
+  $effect(() => {
+    publishWorkspaceContext('canvas', activeWorkspace?.id ?? null, nodes.find((node) => node.selected)?.id ?? canvasRouteNodeId());
+  });
+  onMount(() => () => clearWorkspaceContext('canvas'));
+  // Escape closes the workspaces drawer and the scores popover before anything else.
+  onMount(() => {
+    const closeOverlays = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || (!workspaceDrawerOpen && !scoresOpen && !archivedOpen && !teamComposerOpen)) return;
+      // A dialog above the board closes first.
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return;
+      workspaceDrawerOpen = false;
+      scoresOpen = false;
+      archivedOpen = false;
+      teamComposerOpen = false;
+      event.stopPropagation();
+    };
+    window.addEventListener('keydown', closeOverlays, true);
+    return () => window.removeEventListener('keydown', closeOverlays, true);
+  });
+  // The top bar's workspace tabs switch the board in place.
+  onMount(() => registerWorkspaceSelector(async (id) => {
+    await selectWorkspace(id);
+    if (activeWorkspace?.id === id) history.replaceState(history.state, '', `/canvas?workspace=${encodeURIComponent(id)}`);
+  }));
+  // Created, renamed or removed workspaces refresh the tabs and the switcher.
+  let announcedWorkspaces = '';
+  $effect(() => {
+    const signature = workspaces.map((workspace) => `${workspace.id}:${workspace.name}:${workspace.icon ?? ''}`).join('|');
+    if (!workspacesLoaded || signature === announcedWorkspaces) return;
+    announcedWorkspaces = signature;
+    window.dispatchEvent(new CustomEvent('orkestrai:workspaces-changed'));
+  });
+  // Live teammate status (headers, attention counts) follows the open workspace.
+  $effect(() => {
+    const workspaceId = activeWorkspace?.id ?? null;
+    return untrack(() => retainAgentStatus(workspaceId));
+  });
+  $effect(() => {
+    const workspaceId = activeWorkspace?.id ?? null;
+    return untrack(() => retainAttentionFeed(workspaceId));
+  });
+  // The arrival briefing shrinks to a chip once the owner starts working on the Canvas.
+  let summaryCompact = $state(false);
+  $effect(() => {
+    void activeWorkspace?.id;
+    summaryCompact = false;
+  });
+  // The composer talks to the selected agent, then the last one chosen, then the leader.
+  let composerTargetId = $state<string | null>(null);
+  const composerTargets = $derived(teamMembers.map((member) => ({ id: member.id, title: member.title })));
+  const composerTarget = $derived.by(() => {
+    const selected = nodes.find((node) => node.selected && composerTargets.some((target) => target.id === node.id));
+    if (selected) return selected.id;
+    if (composerTargetId && composerTargets.some((target) => target.id === composerTargetId)) return composerTargetId;
+    return nodes.find((node) => node.type === 'terminal' && (node.data?.payload as TerminalNodePayload | undefined)?.maestro)?.id ?? composerTargets[0]?.id ?? null;
+  });
+  onMount(() => {
+    const onComposerTarget = (event: Event) => {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (!nodeId) return;
+      composerTargetId = nodeId;
+      requestAnimationFrame(() => document.getElementById('canvas-composer-input')?.focus());
+    };
+    window.addEventListener('orkestrai:composer-target', onComposerTarget);
+    return () => window.removeEventListener('orkestrai:composer-target', onComposerTarget);
+  });
+  // Notes an agent keeps for itself collapse into one stack per agent.
+  const noteStackList = $derived.by(() => computeNoteStacks(nodes, edges));
+  // Members of a collapsed group hide behind its label until it opens again.
+  const collapsedGroupMembers = $derived.by(() => {
+    const ids = new Set<string>();
+    for (const node of nodes) {
+      const payload = node.type === 'group' ? (node.data?.payload as { collapsed?: boolean; members?: string[] } | undefined) : undefined;
+      if (payload?.collapsed) for (const memberId of payload.members ?? []) ids.add(memberId);
+    }
+    return ids;
+  });
+  $effect(() => {
+    const stacks = noteStackList;
+    const hidden = hiddenStackedNotes(stacks, new Set(noteStackState.expanded));
+    for (const memberId of collapsedGroupMembers) hidden.add(memberId);
+    untrack(() => {
+      publishNoteStacks(stacks);
+      const differs = (node: Node) => node.type !== 'group' && Boolean(node.hidden) !== hidden.has(node.id);
+      if (!nodes.some(differs)) return;
+      nodes = nodes.map((node) => differs(node)
+        ? { ...node, hidden: hidden.has(node.id), selected: hidden.has(node.id) ? false : node.selected }
+        : node);
+    });
+  });
+  const composerMentions = $derived.by(() => nodes
+    .filter((node) => node.type === 'terminal' || node.type === 'note' || node.type === 'portal')
+    .map((node) => ({ id: node.id, title: String(node.data?.title ?? ''), type: String(node.type) }))
+    .filter((mention) => mention.title));
   let providers = $state<AgentProviderInfo[]>([]);
   const canChooseAlternateRuntime = typeof navigator !== 'undefined' && navigator.platform.startsWith('Win');
   let nodes = $state.raw<Node[]>([]);
@@ -554,6 +672,8 @@
   let annotationsOpen = $state(false);
   let huddleOpen = $state(false);
   let transferOpen = $state(false);
+  let scoreDialogOpen = $state(false);
+  let machinesOpen = $state(false);
   /** workspaceId -> sessoes PTY vivas (indicador de ativo na sidebar). */
   let activity = $state<Record<string, number>>({});
   let editingWorkspace = $state<Workspace | null>(null);
@@ -566,7 +686,28 @@
     fitView: (options?: { duration?: number }) => void;
     screenToFlowPosition: (position: { x: number; y: number }) => { x: number; y: number };
     getViewport: () => { x: number; y: number; zoom: number };
+    setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   } | null>(null);
+  // Each workspace reopens where the owner left it (this browser only); a first visit fits the board.
+  const VIEWPORT_KEY = 'orkestrai.canvasViewport.';
+  function readSavedViewport(workspaceId: string): { x: number; y: number; zoom: number } | null {
+    try {
+      const value = JSON.parse(localStorage.getItem(VIEWPORT_KEY + workspaceId) ?? 'null') as { x?: unknown; y?: unknown; zoom?: unknown } | null;
+      if (!value || ![value.x, value.y, value.zoom].every((part) => typeof part === 'number' && Number.isFinite(part))) return null;
+      const zoom = Math.min(4, Math.max(0.02, value.zoom as number));
+      return { x: value.x as number, y: value.y as number, zoom };
+    } catch {
+      return null;
+    }
+  }
+  function saveViewport(viewport: { x: number; y: number; zoom: number }) {
+    if (!activeWorkspace || designModeNodeId) return;
+    try {
+      localStorage.setItem(VIEWPORT_KEY + activeWorkspace.id, JSON.stringify({ x: Math.round(viewport.x), y: Math.round(viewport.y), zoom: Number(viewport.zoom.toFixed(3)) }));
+    } catch {
+      // Storage may be unavailable; the board still fits on open.
+    }
+  }
   let flowWrapper: HTMLElement;
   const selectedTransferNodeIds = $derived(nodes.filter((node) => node.selected).map((node) => node.id));
   const selectedTransferNodeIdSet = $derived(new Set(selectedTransferNodeIds));
@@ -637,8 +778,28 @@
   }
 
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
-  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design';
+  type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design' | 'freehand' | 'checklist' | 'calendar';
   let drawTool = $state<DrawTool | null>(null);
+  // Points of the stroke being drawn with the pen, in flow coordinates.
+  let penStroke = $state.raw<Array<{ x: number; y: number }>>([]);
+  // Pen ink is remembered per device; strokes keep the ink they were drawn with.
+  let penColor = $state(readPenSetting('color', '#e8b84a'));
+  let penWidth = $state(Number(readPenSetting('width', '3')) || 3);
+  function readPenSetting(key: string, fallback: string): string {
+    try {
+      return localStorage.getItem(`orkestrai.pen.${key}`) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  $effect(() => {
+    try {
+      localStorage.setItem('orkestrai.pen.color', penColor);
+      localStorage.setItem('orkestrai.pen.width', String(penWidth));
+    } catch {
+      // Ink falls back to the defaults next time.
+    }
+  });
   let drawStart = $state<{ x: number; y: number } | null>(null);
   let drawCurrent = $state<{ x: number; y: number } | null>(null);
   // Provider armado junto com a ferramenta terminal (Claude/Codex/Kimi...) —
@@ -670,6 +831,7 @@
     toolWorkshop: async (rect) => { await addToolWorkshop(rect); },
     loop: async (rect) => { await addLoop(rect); },
     shape: async (rect) => { await addShape(rect); },
+    freehand: async () => {},
     tasks: async (rect) => { await addTasksNode(rect); },
     flow: async (rect) => { await addFlowNode(rect); },
     image: async (rect) => { await addImageNode(rect); },
@@ -681,6 +843,8 @@
     usage: async (rect) => { await addUsageNode(rect); },
     codeGraph: async (rect) => { await addCodeGraphNode(rect); },
     design: async (rect) => { await addDesignNode(rect); },
+    checklist: async (rect) => { await addPlanNode('checklist', rect); },
+    calendar: async (rect) => { await addPlanNode('calendar', rect); },
   };
 
   function toggleDrawTool(tool: DrawTool, provider?: AgentProviderInfo) {
@@ -705,19 +869,38 @@
   }
 
   function handlePanePointerDown(event: PointerEvent) {
+    if (!(event.target as HTMLElement).closest?.('.svelte-flow__panel')) summaryCompact = true;
     if (!drawTool || !activeWorkspace) return;
     // So inicia o desenho no fundo vazio do canvas — cliques em nos, handles
     // e na toolbar nao contam (e o pointer capture nao rouba o clique).
     if (!(event.target as HTMLElement).classList.contains('svelte-flow__pane')) return;
+    if (drawTool === 'freehand') {
+      penStroke = [flowPoint(event)];
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      return;
+    }
     drawStart = flowPoint(event);
     drawCurrent = drawStart;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
   function handlePanePointerMove(event: PointerEvent) {
+    if (drawTool === 'freehand' && penStroke.length) {
+      const point = flowPoint(event);
+      const last = penStroke[penStroke.length - 1];
+      const zoom = zoomApi?.getViewport().zoom ?? 1;
+      if (Math.hypot(point.x - last.x, point.y - last.y) * zoom >= 2) penStroke = [...penStroke, point];
+      return;
+    }
     if (!drawStart) return;
     drawCurrent = flowPoint(event);
   }
+
+  const penGhost = $derived.by(() => {
+    if (penStroke.length < 2) return '';
+    const viewport = zoomApi?.getViewport() ?? { x: 0, y: 0, zoom: 1 };
+    return penStroke.map((point, index) => `${index ? 'L' : 'M'} ${point.x * viewport.zoom + viewport.x} ${point.y * viewport.zoom + viewport.y}`).join(' ');
+  });
 
   // O ghost e um overlay HTML fora do viewport do flow: precisa de coordenadas
   // de TELA (flow * zoom + pan), senao ele aparece deslocado do cursor.
@@ -737,6 +920,12 @@
   });
 
   async function handlePanePointerUp(event: PointerEvent) {
+    if (drawTool === 'freehand' && penStroke.length) {
+      const stroke = penStroke;
+      penStroke = [];
+      await addFreehand(stroke);
+      return;
+    }
     if (!drawTool || !drawStart || !drawCurrent) return;
     const rect = {
       x: Math.min(drawStart.x, drawCurrent.x),
@@ -769,6 +958,19 @@
   let leaderDictationState = $state<LeaderDictationStatus>('idle');
   let leaderDictationNodeId = $state<string | null>(null);
   let sidebarCollapsed = $state(false);
+  // Workspaces, folders and their actions open as a drawer from the top bar or the right rail.
+  let workspaceDrawerOpen = $state(false);
+  // While the board opens, show that it is loading instead of the start screen.
+  let booting = $state(true);
+  let viewportZoom = $state(1);
+  let scoresOpen = $state(false);
+  let archivedOpen = $state(false);
+  let missionMapOpen = $state(false);
+  let teamComposerOpen = $state(false);
+  let studioOpen = $state(false);
+  // Fitted content stays clear of the two rails and the composer floating over the canvas.
+  const CANVAS_INSET = { top: 28, bottom: 132, left: 84, right: 84 } as const;
+  const fitPadding = { top: `${CANVAS_INSET.top}px`, bottom: `${CANVAS_INSET.bottom}px`, left: `${CANVAS_INSET.left}px`, right: `${CANVAS_INSET.right}px` } as const;
   let importInput: HTMLInputElement;
   let visibleFloorId = $state<string | null>(null);
   let floors = $state<Floor[]>([]);
@@ -814,6 +1016,12 @@
     else if (action === 'huddles' && activeWorkspace) huddleOpen = true;
     else if (action === 'organize' && activeWorkspace) void organizeCanvas();
     else if (action === 'command-palette') showPalette = true;
+    else if (action === 'workspaces') workspaceDrawerOpen = true;
+    else if (action === 'mission-map' && activeWorkspace) missionMapOpen = true;
+    else if (action === 'import-workspace') importInput.click();
+    else if (action === 'export-workspace' && activeWorkspace) void exportActiveWorkspace();
+    else if (action === 'unload-workspace' && activeWorkspace) confirmUnload = true;
+    else if (action === 'scores' && activeWorkspace) scoresOpen = true;
   }
 
   async function refreshAfterPresetApply() {
@@ -850,7 +1058,7 @@
     }
 
     leaderDictationNodeId = leader.id;
-    if ((leader.floorId ?? null) !== visibleFloorId) await selectFloor(leader.floorId ?? null);
+    if (!shownOnFloor(leader, visibleFloorId)) await selectFloor(leader.floorId ?? null);
     await tick();
     dispatchLeaderDictation(leader.id);
   }
@@ -1059,7 +1267,7 @@
       changedConnections.add(edge.target);
     }
     nodes = canvasNodes
-      .filter((node) => (node.floorId ?? null) === visibleFloorId)
+      .filter((node) => shownOnFloor(node, visibleFloorId))
       .map((node) => {
         const previous = previousById.get(node.id);
         // Keep live terminal/component inputs stable when a different node or
@@ -1141,7 +1349,7 @@
     const connect = () => {
     if (disposed) return;
     socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking'] }));
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking', 'attentionChanged', 'channelMessage'] }));
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(String(event.data));
@@ -1165,6 +1373,14 @@
         }
         if (message.type === 'controlCenterChanged' || message.type === 'messageDelivery') {
           scheduleActivity();
+          if (message.workspaceId === activeWorkspace?.id) scheduleAgentStatusRefresh();
+        }
+        if (message.type === 'attentionChanged') window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
+        if (message.type === 'attentionChanged' && (!message.workspaceId || message.workspaceId === activeWorkspace?.id)) {
+          scheduleAttentionRefresh();
+        }
+        if (message.type === 'channelMessage' && message.workspaceId === activeWorkspace?.id) {
+          window.dispatchEvent(new CustomEvent('orkestrai:channel-message', { detail: { channel: message.channel, message: message.message } }));
         }
       } catch {
         // frame nao-JSON: ignora
@@ -1241,6 +1457,7 @@
         }
       }
       workspacesLoaded = true;
+      booting = false;
       await tick();
       // Indicador de workspaces ativos (sessoes PTY vivas em background).
       await refreshActivity();
@@ -1275,28 +1492,14 @@
         if (!forced && requestedTourId && workspaceList.length) params.delete('tour');
         if (params.has('council') && workspaceList.length) params.delete('council');
         const query = params.toString();
-        history.replaceState(null, '', `/canvas${query ? `?${query}` : ''}`);
+        history.replaceState(history.state, '', `/canvas${query ? `?${query}` : ''}`);
       } catch {
         // storage indisponivel — nao bloqueia
       }
-    })();
+    })().finally(() => (booting = false));
     return () => {
-      toolbarResizeObserver?.disconnect();
       eventsSocket();
     };
-  });
-
-  // Overflow da toolbar: re-checa quando o tamanho/conteudo muda (resize,
-  // providers carregados, janela menor). Setas aparecem so quando ha para onde rolar.
-  let toolbarResizeObserver: ResizeObserver | null = null;
-
-  $effect(() => {
-    if (!toolbarEl) return;
-    void providers.length;
-    updateToolbarScroll();
-    toolbarResizeObserver ??= new ResizeObserver(updateToolbarScroll);
-    toolbarResizeObserver.observe(toolbarEl);
-    return () => toolbarResizeObserver?.disconnect();
   });
 
   function toFlowNode(node: CanvasNode): Node {
@@ -1322,6 +1525,9 @@
         providers,
         workingDir: floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.',
         workspaceRoot: activeWorkspace?.workingDir ?? '.',
+        // The ground floor shows every agent; its chip names the worktree it codes in.
+        floorName: visibleFloorId === null && node.floorId ? floors.find((floor) => floor.id === node.floorId)?.name ?? null : null,
+        onOpenFloor: node.floorId ? () => void selectFloor(node.floorId ?? null) : undefined,
         executionRuntime,
         workspaceRuntime,
         payload: node.payload,
@@ -1333,6 +1539,8 @@
         onAgentSessionFound: (id: string, agentSessionId: string) => updateNodePayload(id, { agentSessionId, resumeRecovery: false }),
         connections: connectionsFor(node.id),
         onJumpToNode: jumpToNode,
+        onRecruit: () => (pendingAgentCreation = { provider: preferredAgentProvider() }),
+        onConnectAll: (orchestratorId: string) => connectAllToOrchestrator(orchestratorId),
         onRemoveConnection: removeConnection,
         onDelete: deleteNode,
         onDuplicate: duplicateShape,
@@ -1366,8 +1574,10 @@
           }).catch(() => {});
         },
         onUngroup: (id: string) => ungroup(id),
+        onArrange: (id: string) => void arrangeGroup(id),
         onPayloadDraftChange: (id: string, partial: Record<string, unknown>) => stageNodePayload(id, partial),
         onPayloadChange: (id: string, partial: Record<string, unknown>) => updateNodePayload(id, partial),
+        onPlanOperations: (id: string, kind: 'checklist' | 'calendar', operations: unknown[]) => applyPlanOperations(id, kind, operations),
       },
     };
   }
@@ -1491,7 +1701,7 @@
       activeWorkspace = cached.workspace;
       floors = cached.floors;
       nodes = cached.nodes
-        .filter((node) => (node.floorId ?? null) === visibleFloorId)
+        .filter((node) => shownOnFloor(node, visibleFloorId))
         .map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = cached.edges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
@@ -1524,15 +1734,20 @@
       floors = floorList;
       if (!options.force) {
         queueMicrotask(() => {
-          if (canvasNodes.length) zoomApi?.fitView({ duration: 0, maxZoom: 1 } as never);
+          if (!canvasNodes.length) return;
+          const saved = readSavedViewport(workspace.id);
+          if (saved) zoomApi?.setViewport(saved);
+          else zoomApi?.fitView({ duration: 0, maxZoom: 1 } as never);
         });
       }
       nodes = canvasNodes
-        .filter((node) => (node.floorId ?? null) === visibleFloorId)
+        .filter((node) => shownOnFloor(node, visibleFloorId))
         .map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
       writeWorkspaceViewCache({ workspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
+      repairGroupFrames();
+      settleFloorAgentsOnGround(canvasNodes);
       void providerStatusRequest.then((providerStatus) => {
         if (requestId !== selectionRequestId || activeWorkspace?.id !== id) return;
         providers = providerStatus.providers ?? [];
@@ -1565,10 +1780,18 @@
         api<CanvasEdge[]>(`/api/agent-room/workspaces/${workspaceId}/edges`),
       ]);
       if (requestId !== selectionRequestId || activeWorkspace?.id !== workspaceId) return;
-      nodes = canvasNodes.filter((node) => (node.floorId ?? null) === visibleFloorId).map(toFlowNode);
+      nodes = canvasNodes.filter((node) => shownOnFloor(node, visibleFloorId)).map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+      settleFloorAgentsOnGround(canvasNodes);
     }
+  }
+
+  // Agents laid out while each floor had its own view can cover a ground-floor node: move them below the board.
+  function settleFloorAgentsOnGround(canvasNodes: CanvasNode[]) {
+    if (visibleFloorId !== null) return;
+    const moves = settleFloorAgents(canvasNodes);
+    if (moves.length) void applyPositions(new Map(moves.map((move) => [move.id, { x: move.x, y: move.y }])));
   }
 
   async function exportActiveWorkspace() {
@@ -1603,19 +1826,132 @@
   }
 
   // -- Setas de scroll da toolbar (so aparecem quando ha overflow) -----------
-  let toolbarEl = $state<HTMLDivElement | null>(null);
-  let canScrollLeft = $state(false);
-  let canScrollRight = $state(false);
 
-  function updateToolbarScroll() {
-    if (!toolbarEl) return;
-    canScrollLeft = toolbarEl.scrollLeft > 2;
-    canScrollRight = toolbarEl.scrollLeft < toolbarEl.scrollWidth - toolbarEl.clientWidth - 2;
+
+  // Less frequent tools live in labelled groups; the dock keeps the everyday ones.
+  const planTools = $derived<ToolGroupItem[]>([
+    { id: 'flow', label: m['canvas.default_flow'](), hint: m['tool.flow'](), icon: Workflow, dragTool: 'flow', active: drawTool === 'flow', onSelect: () => toggleDrawTool('flow') },
+    { id: 'loop', label: m['canvas.label_loop'](), hint: m['tool.loop'](), image: '/images/loop.svg', dragTool: 'loop', active: drawTool === 'loop', onSelect: () => toggleDrawTool('loop') },
+    { id: 'shape', label: m['canvas.label_shape'](), hint: m['tool.shape'](), icon: Shapes, dragTool: 'shape', active: drawTool === 'shape', onSelect: () => toggleDrawTool('shape') },
+    { id: 'freehand', label: m['canvas.label_pen'](), hint: m['tool.pen'](), icon: PenLine, active: drawTool === 'freehand', onSelect: () => toggleDrawTool('freehand') },
+    { id: 'council', label: m['council.title'](), hint: m['council.open'](), icon: Scale, active: councilOpen, onSelect: () => (councilOpen = true) },
+    { id: 'checklist', label: m['checklist.title'](), hint: m['checklist.tool_hint'](), icon: ListChecks, dragTool: 'checklist', active: drawTool === 'checklist', onSelect: () => toggleDrawTool('checklist') },
+    { id: 'calendar', label: m['calendar.title'](), hint: m['calendar.tool_hint'](), icon: CalendarDays, dragTool: 'calendar', active: drawTool === 'calendar', onSelect: () => toggleDrawTool('calendar') },
+  ]);
+  const codeTools = $derived<ToolGroupItem[]>([
+    { id: 'fileTree', label: m['canvas.default_files'](), hint: m['tool.files'](), icon: FolderTree, dragTool: 'fileTree', active: drawTool === 'fileTree', onSelect: () => toggleDrawTool('fileTree') },
+    { id: 'git', label: m['canvas.default_git'](), hint: m['tool.git'](), icon: GitFork, dragTool: 'git', active: drawTool === 'git', onSelect: () => toggleDrawTool('git') },
+    { id: 'diff', label: m['canvas.default_diff'](), hint: m['tool.diff'](), icon: FileDiff, dragTool: 'diff', active: drawTool === 'diff', onSelect: () => toggleDrawTool('diff') },
+    { id: 'codeGraph', label: m['code_graph.title'](), icon: Waypoints, dragTool: 'codeGraph', active: drawTool === 'codeGraph', onSelect: () => toggleDrawTool('codeGraph') },
+    { id: 'apiClient', label: m['api_client.title'](), hint: m['api_client.tool'](), icon: Braces, dragTool: 'apiClient', active: drawTool === 'apiClient', onSelect: () => toggleDrawTool('apiClient') },
+  ]);
+  const deviceTools = $derived<ToolGroupItem[]>([
+    { id: 'device', label: m['device.title'](), hint: m['tool.device'](), icon: Smartphone, dragTool: 'device', active: drawTool === 'device', onSelect: () => toggleDrawTool('device') },
+    { id: 'computer', label: m['computer.title'](), hint: m['computer.tool'](), icon: MonitorCog, dragTool: 'computer', active: drawTool === 'computer', onSelect: () => toggleDrawTool('computer') },
+    { id: 'toolWorkshop', label: m['tool_workshop.title'](), icon: Wrench, dragTool: 'toolWorkshop', active: drawTool === 'toolWorkshop', onSelect: () => toggleDrawTool('toolWorkshop') },
+    { id: 'machines', label: m['machines.title'](), hint: m['machines.description'](), icon: Server, active: machinesOpen, onSelect: () => (machinesOpen = true) },
+  ]);
+  const workspaceTools = $derived<ToolGroupItem[]>([
+    { id: 'organize', label: m['canvas.label_organize'](), hint: m['tool.organize'](), icon: LayoutGrid, onSelect: () => void organizeCanvas() },
+    { id: 'presets', label: m['canvas.label_presets'](), hint: m['tool.presets'](), icon: LayoutTemplate, active: showPresetPanel, onSelect: () => toggleSidePanel('presets') },
+    { id: 'floors', label: `${m['canvas.label_floors']()}${floors.length ? ` (${floors.length})` : ''}`, hint: m['tool.floors'](), icon: Layers, active: showFloorPanel, onSelect: () => toggleSidePanel('floors') },
+    { id: 'routines', label: m['canvas.label_routines'](), hint: m['tool.routines'](), icon: CalendarClock, active: showRoutinePanel, onSelect: () => toggleSidePanel('routines') },
+    { id: 'roles', label: m['canvas.label_roles'](), hint: m['tool.roles'](), icon: BadgeCheck, active: showRolesPanel, onSelect: () => toggleSidePanel('roles') },
+    { id: 'usage', label: m['canvas.label_usage'](), hint: m['tool.usage'](), icon: Gauge, active: showUsagePanel, onSelect: () => toggleSidePanel('usage') },
+    { id: 'ports', label: m['canvas.label_ports'](), hint: m['tool.ports'](), icon: RadioTower, active: showPortsPanel, onSelect: () => toggleSidePanel('ports') },
+  ]);
+
+  const rightRailItems = $derived<RailItem[]>([
+    { id: 'team-map', label: m['canvas.team_map'](), icon: Network, active: missionMapOpen, onSelect: () => (missionMapOpen = !missionMapOpen) },
+    { id: 'huddles', label: m['huddle.title'](), icon: MessageCircleMore, active: huddleOpen, onSelect: () => (huddleOpen = true) },
+    { id: 'memory', label: m['knowledge.title'](), icon: BookMarked, active: memoryOpen, onSelect: () => (memoryOpen = true) },
+    { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, active: scoresOpen, onSelect: () => { scoresOpen = !scoresOpen; archivedOpen = false; } },
+    { id: 'archived', label: m['archived.title'](), icon: Archive, active: archivedOpen, onSelect: () => { archivedOpen = !archivedOpen; scoresOpen = false; } },
+    { id: 'studio', label: m['studio.title'](), icon: Sparkles, active: studioOpen, onSelect: () => (studioOpen = true) },
+    { id: 'presets', label: m['canvas.label_presets'](), icon: LayoutTemplate, active: showPresetPanel, onSelect: () => toggleSidePanel('presets') },
+    { id: 'floors', label: m['canvas.label_floors'](), icon: Layers, active: showFloorPanel, badge: floors.length || undefined, onSelect: () => toggleSidePanel('floors') },
+    { id: 'routines', label: m['canvas.label_routines'](), icon: CalendarClock, active: showRoutinePanel, onSelect: () => toggleSidePanel('routines') },
+    { id: 'roles', label: m['canvas.label_roles'](), icon: BadgeCheck, active: showRolesPanel, onSelect: () => toggleSidePanel('roles') },
+    { id: 'usage', label: m['canvas.label_usage'](), icon: Gauge, active: showUsagePanel, onSelect: () => toggleSidePanel('usage') },
+    { id: 'ports', label: m['canvas.label_ports'](), icon: RadioTower, active: showPortsPanel, onSelect: () => toggleSidePanel('ports') },
+    { id: 'workspaces', label: m['canvas.workspaces_drawer'](), icon: FolderCog, active: workspaceDrawerOpen, onSelect: () => (workspaceDrawerOpen = !workspaceDrawerOpen) },
+  ]);
+
+  // Pause all / Resume all freeze the agents' processes where they are (not available on Windows).
+  const pauseSupported = typeof navigator !== 'undefined' && !/win/i.test(navigator.platform);
+  $effect(() => {
+    const id = activeWorkspace?.id ?? null;
+    void untrack(() => refreshPausedAgents(id));
+  });
+
+  // Typed or dictated board commands from the message bar; anything else goes to the team.
+  async function runBoardCommand(text: string): Promise<boolean> {
+    if (!activeWorkspace) return false;
+    const agentNodes = nodes.filter((node) => node.type === 'terminal' && (node.data?.payload as TerminalNodePayload | undefined)?.provider);
+    const command = parseBoardCommand(text, {
+      providers: providers.map((provider) => ({ id: provider.id, names: [provider.id, provider.displayName] })),
+      agents: agentNodes.map((node) => String(node.data?.title ?? '')).filter(Boolean),
+    });
+    if (!command) return false;
+    if (command.kind === 'spawn') {
+      const provider = providers.find((candidate) => candidate.id === command.provider) ?? quickProviders[0] ?? null;
+      if (command.count === 1 || !provider) pendingAgentCreation = { provider };
+      else await composeTeam({ name: m['canvas.voice_team_name'](), role: null, providerIds: Array.from({ length: command.count }, () => provider.id) }, () => {});
+    } else if (command.kind === 'handoff') {
+      const byTitle = (title: string) => agentNodes.find((node) => String(node.data?.title ?? '') === title);
+      const from = byTitle(command.from);
+      const to = byTitle(command.to);
+      if (!from || !to) return false;
+      const result = await api<{ title: string }>(`/api/agent-room/workspaces/${activeWorkspace.id}/tasks/handoff`, { method: 'POST', body: JSON.stringify({ fromNodeId: from.id, toNodeId: to.id }) }).catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : m['term.handoff_failed']());
+        return null;
+      });
+      if (result) toast.success(m['term.handoff_done']({ title: result.title, name: command.to }));
+    } else if (command.kind === 'pause') {
+      await pauseAll(command.paused);
+    } else if (command.kind === 'open') {
+      if (command.target === 'team-map') missionMapOpen = true;
+      else if (command.target === 'orchestrator') await addOrchestratorNode();
+      else if (command.target === 'team-composer') teamComposerOpen = true;
+      else if (command.target === 'memory') memoryOpen = true;
+      else if (command.target === 'scores') scoresOpen = true;
+      else if (command.target === 'focus') void goto(`/terminal?workspace=${encodeURIComponent(activeWorkspace.id)}`);
+      else void goto(`/chat?workspace=${encodeURIComponent(activeWorkspace.id)}`);
+    } else if (command.kind === 'note') {
+      const position = nextFreePosition(320, 220);
+      const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'note', title: m['canvas.default_note'](), ...position, width: 320, height: 220, payload: { content: command.text }, floorId: visibleFloorId }),
+      });
+      nodes = [...nodes, toFlowNode(node)];
+    } else if (command.kind === 'group') {
+      await groupSelection();
+    }
+    return true;
   }
 
-  function scrollToolbar(direction: 1 | -1) {
-    toolbarEl?.scrollBy({ left: direction * 220, behavior: 'smooth' });
+  async function pauseAll(paused: boolean) {
+    if (!activeWorkspace) return;
+    const changed = await setAgentsPaused(activeWorkspace.id, paused);
+    if (changed === null) toast.error(m['canvas.pause_unsupported']());
+    else if (!changed.length) toast.info(paused ? m['canvas.pause_none']() : m['canvas.resumed_count']({ count: 0 }));
+    else toast.success(paused ? m['canvas.paused_count']({ count: changed.length }) : m['canvas.resumed_count']({ count: changed.length }));
   }
+
+  const selectedForGroup = $derived(nodes.filter((node) => node.selected && node.type !== 'group').length);
+  const quickChips = $derived<QuickChip[]>([
+    { id: 'new-agent', label: m['canvas.chip_new_agent'](), icon: Plus, onSelect: () => (pendingAgentCreation = { provider: preferredAgentProvider() }) },
+    { id: 'orchestrator', label: m['orchestrator.title'](), icon: Orbit, onSelect: () => void addOrchestratorNode() },
+    { id: 'team', label: m['canvas.chip_team'](), icon: UsersRound, onSelect: () => (teamComposerOpen = !teamComposerOpen) },
+    { id: 'group', label: m['canvas.chip_group'](), icon: GroupIcon, hint: selectedForGroup < 2 ? m['canvas.chip_group_hint']() : undefined, disabled: selectedForGroup < 2, onSelect: () => groupSelection() },
+    { id: 'scores', label: m['canvas.chip_scores'](), icon: Music4, onSelect: () => (scoresOpen = !scoresOpen) },
+    ...(pauseSupported ? [
+      { id: 'pause-all', label: m['canvas.chip_pause_all'](), icon: Pause, hint: m['canvas.chip_pause_hint'](), onSelect: () => void pauseAll(true) },
+      ...(agentPause.ids.length ? [{ id: 'resume-all', label: m['canvas.chip_resume_all'](), icon: Play, onSelect: () => void pauseAll(false) }] : []),
+    ] : []),
+    { id: 'team-map', label: m['canvas.team_map'](), icon: Network, onSelect: () => (missionMapOpen = true) },
+  ]);
+
 
   // -- Descarregar workspace (encerra terminais vivos, mantem o layout) ---------
   let confirmUnload = $state(false);
@@ -1650,7 +1986,7 @@
       edges = [];
       floors = [];
       localStorage.removeItem('orkestrai.activeWorkspaceId');
-      history.replaceState(null, '', '/canvas');
+      history.replaceState(history.state, '', '/canvas');
       const count = result?.killedSessions ?? 0;
       unloadMessage = count > 0
         ? count === 1
@@ -1729,10 +2065,10 @@
       const nextWorkspace = workspaces[0] ?? null;
       if (nextWorkspace) {
         await selectWorkspace(nextWorkspace.id);
-        history.replaceState(null, '', `/canvas?workspace=${encodeURIComponent(nextWorkspace.id)}`);
+        history.replaceState(history.state, '', `/canvas?workspace=${encodeURIComponent(nextWorkspace.id)}`);
       } else {
         localStorage.removeItem('orkestrai.activeWorkspaceId');
-        history.replaceState(null, '', '/canvas');
+        history.replaceState(history.state, '', '/canvas');
       }
     }
   }
@@ -1843,6 +2179,48 @@
         width: nodeSize(rect, 120, 60, kind === 'arrow' ? 220 : 160, kind === 'arrow' ? 80 : 160).width,
         height: nodeSize(rect, 120, 60, kind === 'arrow' ? 220 : 160, kind === 'arrow' ? 80 : 160).height,
         payload: { shape: kind, color: '#7C4DFF', label: '' },
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
+  /** A terminal on another computer: a local `ssh` process running the program there. */
+  async function addSshTerminal(machine: SshMachine, directory: string, program: string | null) {
+    if (!activeWorkspace) return;
+    const position = nextFreePosition(Number(appSettings.newTerminalWidth ?? 560), Number(appSettings.newTerminalHeight ?? 340));
+    const label = program ? providers.find((provider) => provider.id === program)?.displayName ?? program : m['machines.shell']();
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'terminal',
+        title: uniqueNodeTitle(`${label} @ ${machine.alias}`),
+        ...position,
+        width: Number(appSettings.newTerminalWidth ?? 560),
+        height: Number(appSettings.newTerminalHeight ?? 340),
+        payload: { command: 'ssh', args: sshTerminalArgs(machine.alias, directory, program), theme: appSettings.terminalTheme },
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    jumpToNode(node.id);
+  }
+
+  /** A pen stroke becomes a freehand shape; the pen stays armed for the next one. */
+  async function addFreehand(stroke: Array<{ x: number; y: number }>) {
+    if (!activeWorkspace) return;
+    const shape = strokeToShape(stroke);
+    if (!shape) return;
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'shape',
+        title: '',
+        x: Math.round(shape.x),
+        y: Math.round(shape.y),
+        width: Math.round(shape.width),
+        height: Math.round(shape.height),
+        payload: { shape: 'freehand', points: shape.points, stroke: penColor, strokeWidth: penWidth, fill: 'transparent', label: '' },
         floorId: visibleFloorId,
       }),
     });
@@ -2028,6 +2406,112 @@
       body: JSON.stringify({ type: 'tasks', title: m['canvas.default_tasks'](), ...position, ...nodeSize(rect, 400, 260, 560, 360), payload: {}, floorId: visibleFloorId }),
     });
     nodes = [...nodes, toFlowNode(node)];
+  }
+
+  // Studios: an agent reads the repository and fills a native diagram or a note.
+  const STUDIO_DIAGRAM_BRIEFS: Record<string, string> = {
+    architecture: 'the system architecture: main modules, services, storage and external integrations, with arrows for dependencies',
+    user_flow: 'the main user flow: screens or steps in order, with decisions and the happy path highlighted',
+    data_flow: 'how data moves: sources, transformations, storage and consumers',
+    components: 'the UI or code component hierarchy: parents, children and shared building blocks',
+    request: 'the lifecycle of one request: entry point, middleware, handlers, services, storage and response',
+    states: 'the main state machine: states, events and transitions',
+  };
+  const STUDIO_DOCUMENT_BRIEFS: Record<string, string> = {
+    overview: 'a project overview: purpose, main features, stack, how it is organized and how to run it',
+    onboarding: 'an onboarding guide for a new developer: setup, first tasks, conventions and where things live',
+    architecture: 'an architecture document: layers, modules, data flow and key decisions',
+    readme: 'a README: what it is, install, usage, configuration and contributing',
+    api: 'an API reference: endpoints or public functions with inputs, outputs and examples',
+    data: 'the data model: entities, fields, relations and constraints',
+    security: 'a security overview: authentication, authorization, secrets handling, inputs and known risks',
+  };
+
+  async function createStudioRequest(request: StudioRequest): Promise<boolean> {
+    if (!activeWorkspace) return false;
+    const agent = nodes.find((node) => node.id === request.agentId);
+    if (!agent) return false;
+    try {
+      const diagram = request.mode === 'diagram';
+      const size = diagram ? [720, 520] : [420, 520];
+      const position = nextFreePosition(size[0], size[1]);
+      const target = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify(diagram
+          ? { type: 'design', title: `${m['studio.diagram']()}: ${request.kindLabel}`, ...position, width: size[0], height: size[1], payload: { schemaVersion: 1 }, floorId: visibleFloorId }
+          : { type: 'note', title: request.kindLabel, ...position, width: size[0], height: size[1], payload: { content: '', font: 'sans' }, floorId: visibleFloorId }),
+      });
+      nodes = [...nodes, toFlowNode(target)];
+      await handleConnect({ source: agent.id, target: target.id, sourceHandle: null, targetHandle: null }).catch(() => undefined);
+      const extra = request.notes ? `\n\nOwner notes: ${request.notes}` : '';
+      const description = diagram
+        ? `Read the repository and draw ${STUDIO_DIAGRAM_BRIEFS[request.kind] ?? request.kindLabel} in the native Design document ${target.id} ("${target.title}"). Use the design MCP tools (design_import_code with simple semantic boxes, or design_create_elements) with labeled boxes and arrows, a clear title, readable spacing and ${request.style === 'ink' ? 'a hand-drawn ink look: monochrome strokes, no fills' : 'a colorful look: one color per area, soft fills'}. Do not change application code.${extra}`
+        : `Read the repository and write ${STUDIO_DOCUMENT_BRIEFS[request.kind] ?? request.kindLabel} in markdown, then save it in the note ${target.id} ("${target.title}") with orkestrai note write. Be accurate to the code, use headings and short sections, and do not change application code.${extra}`;
+      await api(`/api/agent-room/workspaces/${activeWorkspace.id}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({ title: `${diagram ? m['studio.diagram']() : m['studio.document']()}: ${request.kindLabel}`, description, assigneeNodeId: agent.id }),
+      });
+      toast.success(m['studio.created']({ name: String(agent.data?.title ?? ''), title: request.kindLabel }));
+      requestAnimationFrame(() => jumpToNode(target.id, Math.max(0.6, zoomApi?.getViewport().zoom ?? 1)));
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m['studio.failed']());
+      return false;
+    }
+  }
+
+  // Checklists and calendars sit beside the work for planning.
+  async function addPlanNode(type: 'checklist' | 'calendar', rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const size = type === 'checklist' ? { min: [240, 180], def: [320, 360] } : { min: [360, 300], def: [540, 440] };
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(size.def[0], size.def[1]);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        type,
+        title: type === 'checklist' ? m['checklist.title']() : m['calendar.title'](),
+        ...position,
+        ...nodeSize(rect, size.min[0], size.min[1], size.def[0], size.def[1]),
+        payload: type === 'checklist' ? { items: [] } : { events: [] },
+        floorId: visibleFloorId,
+      }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+  }
+
+  // One orchestrator per board: the whole team in one node, beside the leader.
+  async function addOrchestratorNode(rect?: { x: number; y: number; width: number; height: number }) {
+    if (!activeWorkspace) return;
+    const existing = nodes.find((node) => node.type === 'orchestrator');
+    if (existing) {
+      jumpToNode(existing.id);
+      toast.info(m['orchestrator.already']());
+      return;
+    }
+    const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(380, 560);
+    const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'orchestrator', title: m['orchestrator.title'](), ...position, ...nodeSize(rect, 320, 360, 380, 560), payload: {}, floorId: visibleFloorId }),
+    });
+    nodes = [...nodes, toFlowNode(node)];
+    requestAnimationFrame(() => jumpToNode(node.id, Math.max(0.7, zoomApi?.getViewport().zoom ?? 1)));
+  }
+
+  /** Wires every agent on the board to the orchestrator; returns how many were added. */
+  async function connectAllToOrchestrator(orchestratorId: string): Promise<number> {
+    if (!activeWorkspace) return 0;
+    const linked = new Set(edges.flatMap((edge) => edge.source === orchestratorId ? [edge.target] : edge.target === orchestratorId ? [edge.source] : []));
+    const agents = nodes.filter((node) => node.type === 'terminal' && (node.data as { payload?: { provider?: string } }).payload?.provider && !linked.has(node.id));
+    let added = 0;
+    for (const agent of agents) {
+      try {
+        await handleConnect({ source: orchestratorId, target: agent.id, sourceHandle: null, targetHandle: null });
+        added += 1;
+      } catch {
+        // One failed wire must not stop the rest.
+      }
+    }
+    return added;
   }
 
   async function addUsageNode(rect?: { x: number; y: number; width: number; height: number }) {
@@ -2404,6 +2888,30 @@
     );
   }
 
+  /**
+   * Checklist and calendar changes travel as operations the Core applies to the
+   * latest content, so another screen or an agent editing at once keeps its
+   * items. Returns the content the Core holds afterwards, or null on failure.
+   */
+  async function applyPlanOperations(id: string, kind: 'checklist' | 'calendar', operations: unknown[]): Promise<Record<string, unknown> | null> {
+    if (!activeWorkspace) return null;
+    const workspaceId = activeWorkspace.id;
+    try {
+      const view = await api<{ items?: unknown[]; events?: unknown[] }>(`/api/agent-room/workspaces/${workspaceId}/nodes/${id}/${kind}`, {
+        method: 'POST',
+        body: JSON.stringify({ operations }),
+      });
+      const partial = kind === 'checklist' ? { items: view.items ?? [] } : { events: view.events ?? [] };
+      if (activeWorkspace?.id === workspaceId) {
+        nodes = nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, payload: { ...(node.data.payload as Record<string, unknown>), ...partial } } } : node);
+      }
+      return partial;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m['canvas.error_api']());
+      return null;
+    }
+  }
+
   async function updateNodePayload(id: string, partial: Record<string, unknown>) {
     if (!activeWorkspace) return;
     const workspaceId = activeWorkspace.id;
@@ -2527,24 +3035,154 @@
     if (!activeWorkspace) return;
     const selected = nodes.filter((node) => node.selected && node.type !== 'group');
     if (selected.length < 2) return;
-    const box = boundingBox(selectedRects())!;
-    const padding = 40;
-    const headerSpace = 20;
+    const frame = fitGroupFrame(selected.map(rectOf))!;
     const groupNode = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
         type: 'group',
         title: m['canvas.default_group'](),
-        x: box.x - padding,
-        y: box.y - padding - headerSpace,
-        width: box.width + padding * 2,
-        height: box.height + padding * 2 + headerSpace,
+        x: frame.x,
+        y: frame.y,
+        width: Math.round(frame.width),
+        height: Math.round(frame.height),
         zIndex: -1,
         payload: { members: selected.map((node) => node.id) },
         floorId: visibleFloorId,
       }),
     });
-    nodes = [...nodes, toFlowNode(groupNode)];
+    // The new group takes the selection, so dragging one member next moves only that member.
+    nodes = [...nodes.map((node) => (node.selected ? { ...node, selected: false } : node)), { ...toFlowNode(groupNode), selected: true }];
+  }
+
+  function rectOf(node: Node) {
+    return {
+      id: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: node.measured?.width ?? (node.width as number) ?? 560,
+      height: node.measured?.height ?? (node.height as number) ?? 360,
+    };
+  }
+
+  function groupMemberIds(group: Node): string[] {
+    return ((group.data?.payload as { members?: string[] } | undefined)?.members ?? []);
+  }
+
+  function groupMemberNodes(group: Node): Node[] {
+    const ids = new Set(groupMemberIds(group));
+    return nodes.filter((node) => ids.has(node.id));
+  }
+
+  // A group's frame always wraps its members; a collapsed group keeps its label size.
+  async function fitGroupsToMembers(groupIds: Iterable<string>) {
+    const updates = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const id of new Set(groupIds)) {
+      const group = nodes.find((node) => node.id === id && node.type === 'group');
+      if (!group || (group.data?.payload as { collapsed?: boolean } | undefined)?.collapsed) continue;
+      const frame = fitGroupFrame(groupMemberNodes(group).map(rectOf));
+      if (!frame) continue;
+      const width = (group.width as number | undefined) ?? group.measured?.width ?? 0;
+      const height = (group.height as number | undefined) ?? group.measured?.height ?? 0;
+      const same = Math.abs(group.position.x - frame.x) < 1 && Math.abs(group.position.y - frame.y) < 1
+        && Math.abs(width - frame.width) < 1 && Math.abs(height - frame.height) < 1;
+      if (!same) updates.set(id, { ...frame, width: Math.round(frame.width), height: Math.round(frame.height) });
+    }
+    if (!updates.size) return;
+    nodes = nodes.map((node) => {
+      const frame = updates.get(node.id);
+      return frame ? { ...node, position: { x: frame.x, y: frame.y }, width: frame.width, height: frame.height } : node;
+    });
+    await Promise.all([...updates].map(([id, frame]) => persistNodePosition(id, { x: frame.x, y: frame.y }, { width: frame.width, height: frame.height })));
+  }
+
+  // Organize: members line up on an even grid from the frame's corner, then the frame fits them.
+  async function arrangeGroup(groupId: string) {
+    const group = nodes.find((node) => node.id === groupId && node.type === 'group');
+    if (!group) return;
+    const members = groupMemberNodes(group).filter((node) => !node.hidden);
+    if (!members.length) return;
+    snapshot();
+    await applyPositions(arrangeGroupMembers(members.map(rectOf), group.position));
+    await fitGroupsToMembers([groupId]);
+    requestAnimationFrame(() => zoomApi?.fitView({ nodes: [{ id: groupId }], padding: fitPadding, duration: 300 } as never));
+  }
+
+  // Older boards may hold groups whose members drifted outside the frame.
+  function repairGroupFrames() {
+    const drifted = nodes.filter((group) => {
+      if (group.type !== 'group' || (group.data?.payload as { collapsed?: boolean } | undefined)?.collapsed) return false;
+      const frame = rectOf(group);
+      return groupMemberNodes(group).some((member) => {
+        const rect = rectOf(member);
+        return rect.x < frame.x || rect.y < frame.y || rect.x + rect.width > frame.x + frame.width || rect.y + rect.height > frame.y + frame.height;
+      });
+    });
+    if (drifted.length) void fitGroupsToMembers(drifted.map((group) => group.id));
+  }
+
+  // Team composer: up to twelve agents side by side inside one named group.
+  const TEAM_NAMES = ['Ada', 'Bia', 'Caio', 'Duda', 'Eva', 'Gil', 'Hugo', 'Iris', 'Juca', 'Lia', 'Nina', 'Otto'];
+  const teamProviders = $derived(providers.filter((provider) => provider.installed || canChooseAlternateRuntime));
+  // "New agent" starts from the CLI chosen last time; the dialog still lets the owner switch.
+  function preferredAgentProvider(): AgentProviderInfo | null {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem('orkestrai.lastAgentProvider');
+    } catch {
+      saved = null;
+    }
+    return teamProviders.find((provider) => provider.id === saved) ?? quickProviders[0] ?? teamProviders[0] ?? null;
+  }
+
+  async function composeTeam(team: { name: string; role: string | null; providerIds: string[] }, progress: (done: number) => void): Promise<boolean> {
+    if (!activeWorkspace) return false;
+    const chosen = team.providerIds
+      .map((id) => providers.find((provider) => provider.id === id))
+      .filter((provider): provider is AgentProviderInfo => Boolean(provider));
+    if (!chosen.length) return false;
+    const count = chosen.length;
+    const cols = Math.min(4, count);
+    const rows = Math.ceil(count / cols);
+    const width = 460, height = 300, gap = 28, pad = 36, top = 56;
+    const totalWidth = cols * width + (cols - 1) * gap + pad * 2;
+    const totalHeight = rows * height + (rows - 1) * gap + pad + top;
+    const origin = nextFreePosition(totalWidth, totalHeight);
+    const created: CanvasNode[] = [];
+    try {
+      for (const [index, provider] of chosen.entries()) {
+        const payload: TerminalNodePayload = provider.tui
+          ? { command: provider.tui.command, args: provider.tui.args, env: provider.tui.env, provider: provider.id }
+          : { command: provider.id, args: [], provider: provider.id };
+        if (team.role) payload.role = team.role;
+        const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'terminal',
+            title: uniqueNodeTitle(TEAM_NAMES[index % TEAM_NAMES.length]),
+            x: origin.x + pad + (index % cols) * (width + gap),
+            y: origin.y + top + Math.floor(index / cols) * (height + gap),
+            width,
+            height,
+            payload: { ...payload, theme: appSettings.terminalTheme },
+            floorId: visibleFloorId,
+          }),
+        });
+        created.push(node);
+        nodes = [...nodes, toFlowNode(node)];
+        progress(index + 1);
+      }
+      const groupNode = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'group', title: team.name, x: origin.x, y: origin.y, width: totalWidth, height: totalHeight, zIndex: -1, payload: { members: created.map((node) => node.id) }, floorId: visibleFloorId }),
+      });
+      nodes = [...nodes, toFlowNode(groupNode)];
+      toast.success(m['team_composer.created']({ name: team.name, count }));
+      requestAnimationFrame(() => zoomApi?.fitView({ nodes: [{ id: groupNode.id }], padding: fitPadding, duration: 400 } as never));
+      return true;
+    } catch {
+      toast.error(m['team_composer.failed']());
+      return false;
+    }
   }
 
   async function ungroup(groupId: string) {
@@ -2553,11 +3191,12 @@
     nodes = nodes.filter((node) => node.id !== groupId);
   }
 
-  function moveGroupWithMembers(groupNode: Node, previous: { x: number; y: number }) {
+  function moveGroupWithMembers(groupNode: Node, previous: { x: number; y: number }, alreadyMoved: Set<string> = new Set()) {
     const dx = groupNode.position.x - previous.x;
     const dy = groupNode.position.y - previous.y;
     if (!dx && !dy) return;
-    const members = ((groupNode.data?.payload as { members?: string[] })?.members ?? []) as string[];
+    // Members dragged along with the group (selected together) already moved once.
+    const members = groupMemberIds(groupNode).filter((id) => !alreadyMoved.has(id));
     nodes = nodes.map((node) =>
       members.includes(node.id)
         ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } }
@@ -2604,7 +3243,13 @@
     const rects = organizationRects();
     if (!rects.length) return;
     snapshot();
-    const positions = tidyRects(rects);
+    // Connected nodes stay together; a group moves as one block with its members.
+    const unitOf = new Map<string, string>();
+    for (const group of nodes.filter((node) => node.type === 'group')) {
+      for (const memberId of groupMemberIds(group)) unitOf.set(memberId, group.id);
+    }
+    const links = edges.map((edge) => [unitOf.get(edge.source) ?? edge.source, unitOf.get(edge.target) ?? edge.target] as [string, string]);
+    const positions = organizeByConnections(rects, links);
     for (const group of nodes.filter((node) => node.type === 'group')) {
       const next = positions.get(group.id);
       if (!next) continue;
@@ -2634,9 +3279,25 @@
   function jumpToNode(nodeId: string, zoom = 1, screenOffsetY = 0) {
     const node = nodes.find((item) => item.id === nodeId);
     if (!node) return;
+    if (node.hidden) {
+      const stack = noteStackList.find((candidate) => candidate.noteIds.includes(nodeId));
+      if (stack) setNoteStackExpanded(stack.agentId, true);
+    }
     const width = node.measured?.width ?? (node.width as number) ?? 560;
     const height = node.measured?.height ?? (node.height as number) ?? 360;
-    zoomApi?.setCenter(node.position.x + width / 2, node.position.y + height / 2 + screenOffsetY / zoom, { zoom, duration: 300 });
+    // The sidebar, dock and message bar float over the pane: center the node in
+    // the area they leave visible (design mode covers the chrome, so it keeps the plain center).
+    const inset = designModeNodeId === nodeId
+      ? { top: 0, bottom: 0, left: 0, right: 0 }
+      : CANVAS_INSET;
+    const scale = zoom;
+    const shiftX = (inset.left - inset.right) / 2;
+    const shiftY = (inset.top - inset.bottom) / 2;
+    zoomApi?.setCenter(
+      node.position.x + width / 2 - shiftX / scale,
+      node.position.y + height / 2 - shiftY / scale + screenOffsetY / scale,
+      { zoom: scale, duration: 300 },
+    );
     nodes = nodes.map((item) => ({ ...item, selected: item.id === nodeId }));
   }
 
@@ -2912,21 +3573,29 @@
     }));
   }
 
-  async function handleDragStop({ targetNode }: { targetNode: Node | null; nodes: Node[]; event: MouseEvent | TouchEvent }) {
+  async function handleDragStop({ targetNode, nodes: draggedNodes }: { targetNode: Node | null; nodes: Node[]; event: MouseEvent | TouchEvent }) {
     if (!activeWorkspace || !targetNode) return;
-    const previous = preDragPositions.get(targetNode.id);
-    preDragPositions.delete(targetNode.id);
-    if (targetNode.type === 'group' && previous) {
-      moveGroupWithMembers(targetNode, previous);
+    const moved = draggedNodes?.length ? draggedNodes : [targetNode];
+    const movedIds = new Set(moved.map((node) => node.id));
+    for (const node of moved) {
+      const previous = preDragPositions.get(node.id);
+      preDragPositions.delete(node.id);
+      if (node.type === 'group' && previous) moveGroupWithMembers(node, previous, movedIds);
     }
-    draggingNodeIds.delete(targetNode.id);
-    await persistNodePosition(targetNode.id, targetNode.position);
+    // A member dragged on its own carries its group's frame along.
+    const touchedGroups = nodes
+      .filter((node) => node.type === 'group' && !movedIds.has(node.id) && groupMemberIds(node).some((id) => movedIds.has(id)))
+      .map((node) => node.id);
+    for (const node of moved) draggingNodeIds.delete(node.id);
+    // Every node of a multi-selection keeps its new place, not only the one under the pointer.
+    await Promise.all(moved.map((node) => persistNodePosition(node.id, node.position)));
+    await fitGroupsToMembers(touchedGroups);
   }
 
-  function handleDragStart({ targetNode }: { targetNode: Node | null }) {
-    if (targetNode) {
-      draggingNodeIds.add(targetNode.id);
-      preDragPositions.set(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y });
+  function handleDragStart({ targetNode, nodes: draggedNodes }: { targetNode: Node | null; nodes: Node[] }) {
+    for (const node of draggedNodes?.length ? draggedNodes : targetNode ? [targetNode] : []) {
+      draggingNodeIds.add(node.id);
+      preDragPositions.set(node.id, { x: node.position.x, y: node.position.y });
     }
   }
 </script>
@@ -2937,22 +3606,8 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} oncopy={handleShapeCopy} onpaste={handleShapePaste} />
 
-<main class="canvas-page">
-  <aside class="sidebar" data-portal-occluder inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
-    {#if !sidebarCollapsed}
-      <div class="brand-row">
-        <img src="/brand/icon.svg" width="22" height="22" alt="Orkestrai" />
-        <span class="brand-name">Orkestrai</span>
-      </div>
-      <div class="mode-row">
-        <WorkspaceModeSwitch
-          active="canvas"
-          workspaceId={activeWorkspace?.id ?? null}
-          nodeId={nodes.find((node) => node.selected)?.id ?? canvasRouteNodeId()}
-        />
-        <AttentionCenter workspaceId={activeWorkspace?.id ?? null} />
-      </div>
-    {/if}
+<main class="canvas-page" style:--dock-side-clearance={sidebarCollapsed ? '64px' : '300px'}>
+  <aside class="sidebar" class:open={workspaceDrawerOpen} id="workspace-drawer" data-portal-occluder inert={designModeNodeId !== null || !workspaceDrawerOpen} aria-hidden={designModeNodeId || !workspaceDrawerOpen ? 'true' : undefined} aria-label={m['canvas.workspaces_drawer']()}>
       <div class="sidebar-header">
         {#if !sidebarCollapsed}
           <h2>
@@ -2987,12 +3642,8 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {/if}
-        <HeaderIconButton
-          label={sidebarCollapsed ? m['canvas.sidebar_expand']() : m['canvas.sidebar_collapse']()}
-          side={sidebarCollapsed ? 'right' : 'bottom'}
-          onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
-        >
-          {#if sidebarCollapsed}<PanelLeftOpen size={14} />{:else}<PanelLeftClose size={14} />{/if}
+        <HeaderIconButton label={m['canvas.close_drawer']()} side="bottom" onclick={() => (workspaceDrawerOpen = false)}>
+          <X size={14} />
         </HeaderIconButton>
       </div>
     </div>
@@ -3030,7 +3681,7 @@
         {#each visibleWorkspaces as workspace (workspace.id)}
           <li class:active={activeWorkspace?.id === workspace.id}>
             <HeaderIconButton label={workspace.suspendedAt ? m['canvas.ws_suspended']({ name: workspace.name }) : activity[workspace.id] ? m['canvas.ws_active_sessions']({ name: workspace.name, count: activity[workspace.id] }) : workspace.name} side="right" class="workspace-item" onclick={() => selectWorkspace(workspace.id)}>
-              <span class="workspace-icon">
+              <span class="workspace-icon tinted" style={workspaceTint(workspace.id)}>
                 {#if workspace.suspendedAt}<Power size={10} class="text-[var(--app-text-muted)]" aria-hidden="true" />{:else if activity[workspace.id]}<span class="live-dot rail" aria-hidden="true"></span>{/if}
                 <WorkspaceIcon name={workspace.icon} size={14} />
               </span>
@@ -3108,9 +3759,9 @@
       ondragstart={(event) => handleDragStartWorkspace(event, workspace)}
       ondragend={handleDragEnd}
     >
-      <button class="workspace-item" aria-current={activeWorkspace?.id === workspace.id ? 'true' : undefined} onclick={() => selectWorkspace(workspace.id)}>
-        <span class="workspace-icon">
-          <WorkspaceIcon name={workspace.icon} size={14} />
+      <button class="workspace-item" aria-current={activeWorkspace?.id === workspace.id ? 'true' : undefined} onclick={() => { workspaceDrawerOpen = false; void selectWorkspace(workspace.id); }}>
+        <span class="workspace-icon tinted" style={workspaceTint(workspace.id)}>
+          <WorkspaceIcon name={workspace.icon} size={13} />
         </span>
         <span class="workspace-name" title={workspace.name}>{workspace.name}</span>
         {#if workspace.suspendedAt}
@@ -3242,7 +3893,10 @@
         </div>
       {/if}
       <div class="contents" inert={designModeNodeId !== null} aria-hidden={designModeNodeId ? 'true' : undefined}>
-      <ZoomBridge onReady={(api) => (zoomApi = api)} />
+      <ZoomBridge onReady={(api) => (zoomApi = api)} padding={() => ({ ...fitPadding, right: document.querySelector('.canvas-summary') ? '336px' : fitPadding.right })} />
+      {#if penGhost}
+        <svg class="pen-ghost" aria-hidden="true"><path d={penGhost} style:stroke={penColor} style:stroke-width={`${penWidth * (zoomApi?.getViewport().zoom ?? 1)}px`} /></svg>
+      {/if}
       {#if ghostRect}
         <div
           class="draw-ghost"
@@ -3273,18 +3927,22 @@
         onpointerdown={handlePanePointerDown}
         onpointermove={handlePanePointerMove}
         onpointerup={handlePanePointerUp}
+        onmove={(_event, viewport) => { if (Math.abs(viewport.zoom - viewportZoom) > 0.004) viewportZoom = viewport.zoom; }}
+        onmoveend={(_event, viewport) => saveViewport(viewport)}
       >
         {#if backgroundVariant !== 'none'}
           <Background gap={20} variant={backgroundVariant} patternColor="var(--app-grid)" />
         {/if}
         {#if appSettings.showControls !== 'false'}
-          <Controls />
+          <Controls position="bottom-right" orientation="horizontal" fitViewOptions={{ padding: fitPadding, duration: 300 }}>
+            {#snippet before()}<span class="zoom-level" aria-label={m['canvas.zoom_level']({ percent: Math.round(viewportZoom * 100) })}>{Math.round(viewportZoom * 100)}%</span>{/snippet}
+          </Controls>
         {/if}
         {#if appSettings.showMinimap !== 'false'}
           <MiniMap bgColor="var(--app-surface)" maskColor="color-mix(in srgb, var(--app-canvas) 72%, transparent)" nodeColor={minimapNodeColor} pannable zoomable />
         {/if}
-        {#if selectedTransferNodeIds.length > 0}
-          <Panel position="top-center">
+        <Panel position="bottom-center" class="composer-panel">
+          {#if selectedTransferNodeIds.length > 0}
             <div class="selection-bar flex h-9 items-center gap-1 rounded-[10px] bg-[var(--app-surface)] py-1 pr-1 pl-3 shadow-overlay">
               <span class="whitespace-nowrap text-ui-sm font-medium text-[var(--app-text-soft)] tabular-nums">
                 {selectedTransferNodeIds.length === 1 ? m['canvas.transfer_selected_one']() : m['canvas.transfer_selected']({ count: selectedTransferNodeIds.length })}
@@ -3293,21 +3951,51 @@
               <Button size="sm" variant="ghost" class="h-7 gap-1.5 rounded-md px-2 text-xs text-[var(--app-text-soft)] hover:text-[var(--app-text)]" onclick={() => (transferOpen = true)}>
                 <Copy size={13} />{m['canvas.transfer_open']()}
               </Button>
+              <Button size="sm" variant="ghost" class="h-7 gap-1.5 rounded-md px-2 text-xs text-[var(--app-text-soft)] hover:text-[var(--app-text)]" onclick={() => (scoreDialogOpen = true)}>
+                <Music4 size={13} />{m['scores.save_selection']()}
+              </Button>
             </div>
+          {/if}
+          {#if activeWorkspace && teamComposerOpen}
+            <TeamComposer providers={teamProviders} onCreate={composeTeam} onClose={() => (teamComposerOpen = false)} />
+          {/if}
+          {#if activeWorkspace}
+            <CanvasQuickChips label={m['canvas.quick_actions']()} chips={quickChips} />
+          {/if}
+          {#if activeWorkspace}
+            <CanvasComposer
+              workspaceId={activeWorkspace.id}
+              targets={composerTargets}
+              targetId={composerTarget}
+              mentions={composerMentions}
+              onTargetChange={(id) => (composerTargetId = id)}
+              onJump={(id) => jumpToNode(id)}
+              onCommand={runBoardCommand}
+            />
+          {/if}
+        </Panel>
+        {#if activeWorkspace && composerTargets.length}
+          <Panel position="top-right" class="summary-panel">
+            <CanvasSummaryCard workspaceId={activeWorkspace.id} compact={summaryCompact || selectedTransferNodeIds.length > 0} onOpenAttention={() => window.dispatchEvent(new CustomEvent('orkestrai:open-attention'))} />
           </Panel>
         {/if}
-        <Panel position="bottom-center">
-          <div class="toolbar-wrap">
-            {#if canScrollLeft}
-              <button class="toolbar-arrow" aria-label={m['canvas.scroll_left']()} onclick={() => scrollToolbar(-1)}>
-                <ChevronLeft size={14} />
-              </button>
-            {/if}
-            <div class="toolbar" role="toolbar" aria-label={m['canvas.toolbar_label']()} bind:this={toolbarEl} onscroll={updateToolbarScroll}>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
-              <ToolbarButton label={m['tool.shell']()} hint={m['canvas.tool_drag_hint']()} dragTool="terminal" active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
-                <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
-              </ToolbarButton>
+        <Panel position="center-left" class="rail-panel">
+          {#if drawTool === 'freehand'}
+            <div class="ink-slot"><InkPanel bind:color={penColor} bind:width={penWidth} /></div>
+          {/if}
+          <div class="toolbar tool-rail" role="toolbar" aria-orientation="vertical" aria-label={m['canvas.toolbar_label']()}>
+            <Tooltip.Root>
+              <Tooltip.Trigger>
+                {#snippet child({ props })}
+                  <button {...props} type="button" class="rail-select" class:active={drawTool === null} aria-pressed={drawTool === null} aria-label={m['canvas.tool_select']()} data-testid="canvas-tool-select" onclick={() => { if (drawTool !== null) toggleDrawTool(drawTool, drawProvider ?? undefined); }}>
+                    <MousePointer2 size={15} strokeWidth={2} />
+                  </button>
+                {/snippet}
+              </Tooltip.Trigger>
+              <Tooltip.Content side="right" class="flex-col items-start gap-0.5"><span>{m['canvas.tool_select']()}</span><span class="font-normal opacity-70">{m['canvas.tool_select_hint']()}</span></Tooltip.Content>
+            </Tooltip.Root>
+            <span class="rail-sep" aria-hidden="true"></span>
+            <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
               <AgentToolbarMenu
                 {providers}
                 {pinnedProviderIds}
@@ -3317,109 +4005,69 @@
                 onTogglePin={togglePinnedProvider}
                 onOpenProviderCenter={() => void goto('/providers')}
               />
-              <ToolbarButton label={m['council.open']()} active={councilOpen} onclick={() => (councilOpen = true)}>
-                <Scale size={15} class="tool-icon-svg" /> {m['council.title']()}
+              <ToolbarButton label={m['tool.shell']()} hint={m['canvas.tool_drag_hint']()} dragTool="terminal" active={drawTool === 'terminal' && !drawProvider} onclick={() => toggleDrawTool('terminal')}>
+                <img src="/images/cli.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_shell']()}
               </ToolbarButton>
-              <ToolbarButton label={m['huddle.title']()} active={huddleOpen} onclick={() => (huddleOpen = true)}>
-                <MessageCircleMore size={15} class="tool-icon-svg" /> {m['huddle.title']()}
+              <ToolbarButton label={m['orchestrator.tool']()} hint={m['orchestrator.tool_hint']()} onclick={() => void addOrchestratorNode()}>
+                <Orbit size={15} class="tool-icon-svg" /> {m['orchestrator.tool']()}
               </ToolbarButton>
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_plan']()}>
+            </div>
+            <span class="rail-sep" aria-hidden="true"></span>
+            <div class="tool-group" role="group" aria-label={m['canvas.group_create']()}>
               <ToolbarButton label={m['tool.note']()} hint={m['canvas.tool_drag_hint']()} dragTool="note" active={drawTool === 'note'} onclick={() => toggleDrawTool('note')}>
                 <StickyNote size={15} class="tool-icon-svg" /> {m['canvas.default_note']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['canvas.label_pen']()} hint={m['tool.pen']()} active={drawTool === 'freehand'} onclick={() => toggleDrawTool('freehand')}>
+                <PenLine size={15} class="tool-icon-svg" /> {m['canvas.label_pen']()}
+              </ToolbarButton>
+              <ToolbarButton label={m['canvas.label_shape']()} hint={m['tool.shape']()} dragTool="shape" active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
+                <Shapes size={15} class="tool-icon-svg" /> {m['canvas.label_shape']()}
               </ToolbarButton>
               <ToolbarButton label={m['tool.tasks']()} hint={m['canvas.tool_drag_hint']()} dragTool="tasks" active={drawTool === 'tasks'} onclick={() => toggleDrawTool('tasks')}>
                 <SquareKanban size={15} class="tool-icon-svg" /> {m['canvas.default_tasks']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.flow']()} hint={m['canvas.tool_drag_hint']()} dragTool="flow" active={drawTool === 'flow'} onclick={() => toggleDrawTool('flow')}>
-                <Workflow size={15} class="tool-icon-svg" /> {m['canvas.default_flow']()}
+              <ToolbarButton label={m['tool.portal']()} hint={m['canvas.tool_drag_hint']()} dragTool="portal" active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
+                <Globe size={15} class="tool-icon-svg" /> {m['canvas.default_portal']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.loop']()} hint={m['canvas.tool_drag_hint']()} dragTool="loop" active={drawTool === 'loop'} onclick={() => toggleDrawTool('loop')}>
-                <img src="/images/loop.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.label_loop']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.shape']()} hint={m['canvas.tool_drag_hint']()} dragTool="shape" active={drawTool === 'shape'} onclick={() => toggleDrawTool('shape')}>
-                <Shapes size={15} class="tool-icon-svg" /> {m['canvas.label_shape']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['knowledge.title']()} active={memoryOpen} onclick={() => memoryOpen = true}>
-                <BookMarked size={15} class="tool-icon-svg" /> {m['knowledge.title']()}
-              </ToolbarButton>
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_code']()}>
               <ToolbarButton label={m['tool.files']()} hint={m['canvas.tool_drag_hint']()} dragTool="fileTree" active={drawTool === 'fileTree'} onclick={() => toggleDrawTool('fileTree')}>
                 <FolderTree size={15} class="tool-icon-svg" /> {m['canvas.default_files']()}
               </ToolbarButton>
-              <ToolbarButton label={m['tool.git']()} hint={m['canvas.tool_drag_hint']()} dragTool="git" active={drawTool === 'git'} onclick={() => toggleDrawTool('git')}>
-                <GitFork size={15} class="tool-icon-svg" /> {m['canvas.default_git']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.diff']()} hint={m['canvas.tool_drag_hint']()} dragTool="diff" active={drawTool === 'diff'} onclick={() => toggleDrawTool('diff')}>
-                <FileDiff size={15} class="tool-icon-svg" /> {m['canvas.default_diff']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['code_graph.title']()} hint={m['canvas.tool_drag_hint']()} dragTool="codeGraph" active={drawTool === 'codeGraph'} onclick={() => toggleDrawTool('codeGraph')}>
-                <Waypoints size={15} class="tool-icon-svg" /> {m['code_graph.title']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['api_client.tool']()} hint={m['canvas.tool_drag_hint']()} dragTool="apiClient" active={drawTool === 'apiClient'} onclick={() => toggleDrawTool('apiClient')}>
-                <Braces size={15} class="tool-icon-svg" /> {m['api_client.title']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.portal']()} hint={m['canvas.tool_drag_hint']()} dragTool="portal" active={drawTool === 'portal'} onclick={() => toggleDrawTool('portal')}>
-                <img src="/images/portal.svg" width="15" height="15" alt="" class="tool-icon" /> {m['canvas.default_portal']()}
-              </ToolbarButton>
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_creative']()}>
               <ImageToolbarMenu active={showCharacterLibrary || drawTool === 'image' || drawTool === 'imageWorkflow' || drawTool === 'videoWorkflow' || drawTool === 'audioWorkflow' || drawTool === 'storyboard' || drawTool === 'sequence'} onImage={() => toggleDrawTool('image')} onWorkflow={() => toggleDrawTool('imageWorkflow')} onVideo={() => toggleDrawTool('videoWorkflow')} onAudio={() => toggleDrawTool('audioWorkflow')} onCharacters={() => toggleSidePanel('characters')} onStoryboard={() => toggleDrawTool('storyboard')} onBrands={() => showBrands = true} onRecipes={() => showRecipes = true} onSequence={() => toggleDrawTool('sequence')} />
               <DesignToolbarMenu
                 active={drawTool === 'design' || designExplorationOpen}
                 onBlank={() => toggleDrawTool('design')}
                 onExploration={() => (designExplorationOpen = true)}
               />
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_devices']()}>
-              <ToolbarButton label={m['tool.device']()} hint={m['canvas.tool_drag_hint']()} dragTool="device" active={drawTool === 'device'} onclick={() => toggleDrawTool('device')}>
-                <Smartphone size={15} class="tool-icon-svg" /> {m['device.title']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['computer.tool']()} hint={m['canvas.tool_drag_hint']()} dragTool="computer" active={drawTool === 'computer'} onclick={() => toggleDrawTool('computer')}>
-                <MonitorCog size={15} class="tool-icon-svg" /> {m['computer.title']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool_workshop.title']()} hint={m['canvas.tool_drag_hint']()} dragTool="toolWorkshop" active={drawTool === 'toolWorkshop'} onclick={() => toggleDrawTool('toolWorkshop')}>
-                <Wrench size={15} class="tool-icon-svg" /> {m['tool_workshop.title']()}
-              </ToolbarButton>
-              </div>
-              <span class="toolbar-sep" aria-hidden="true"></span>
-              <div class="tool-group" role="group" aria-label={m['canvas.group_workspace']()}>
-              <ToolbarButton label={m['tool.organize']()} onclick={() => void organizeCanvas()}>
-                <LayoutGrid size={15} class="tool-icon-svg" /> {m['canvas.label_organize']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.presets']()} active={showPresetPanel} onclick={() => toggleSidePanel('presets')}>
-                <LayoutTemplate size={15} class="tool-icon-svg" /> {m['canvas.label_presets']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.floors']()} active={showFloorPanel} onclick={() => toggleSidePanel('floors')}>
-                <Layers size={15} class="tool-icon-svg" /> {m['canvas.label_floors']()}{floors.length ? ` (${floors.length})` : ''}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.routines']()} active={showRoutinePanel} onclick={() => toggleSidePanel('routines')}>
-                <CalendarClock size={15} class="tool-icon-svg" /> {m['canvas.label_routines']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.roles']()} active={showRolesPanel} onclick={() => toggleSidePanel('roles')}>
-                <BadgeCheck size={15} class="tool-icon-svg" /> {m['canvas.label_roles']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.usage']()} active={showUsagePanel} onclick={() => toggleSidePanel('usage')}>
-                <Gauge size={15} class="tool-icon-svg" /> {m['canvas.label_usage']()}
-              </ToolbarButton>
-              <ToolbarButton label={m['tool.ports']()} active={showPortsPanel} onclick={() => toggleSidePanel('ports')}>
-                <RadioTower size={15} class="tool-icon-svg" /> {m['canvas.label_ports']()}
-              </ToolbarButton>
-              <WorkspaceSharingButton variant="icon" workspaceId={activeWorkspace?.id ?? null} onOpen={() => (sharingOpen = true)} />
-              </div>
             </div>
-            {#if canScrollRight}
-              <button class="toolbar-arrow" aria-label={m['canvas.scroll_right']()} onclick={() => scrollToolbar(1)}>
-                <ChevronRight size={14} />
-              </button>
-            {/if}
+            <span class="rail-sep" aria-hidden="true"></span>
+            <div class="tool-group" role="group" aria-label={m['canvas.group_more']()}>
+              <ToolGroupMenu icon={Workflow} label={m['canvas.dock_plan']()} heading={m['canvas.group_plan']()} items={planTools} />
+              <ToolGroupMenu icon={CodeXml} label={m['canvas.dock_code']()} heading={m['canvas.group_code']()} items={codeTools} />
+              <ToolGroupMenu icon={MonitorSmartphone} label={m['canvas.dock_devices']()} heading={m['canvas.group_devices']()} items={deviceTools} />
+              <ToolGroupMenu icon={LayoutGrid} label={m['canvas.dock_workspace']()} heading={m['canvas.group_workspace']()} items={workspaceTools} />
+            </div>
           </div>
         </Panel>
+        {#if activeWorkspace}
+          <Panel position="center-right" class="side-rail-panel">
+            {#if archivedOpen}
+              <div class="scores-pop archived-pop" role="dialog" aria-label={m['archived.title']()}>
+                <ArchivedPanel workspaceId={activeWorkspace.id} onChanged={() => { if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
+              </div>
+            {/if}
+            {#if scoresOpen}
+              <div class="scores-pop" role="dialog" aria-label={m['canvas.chip_scores']()}>
+                <ScoresPanel standalone workspaceId={activeWorkspace.id} selectionCount={selectedTransferNodeIds.length} onSaveSelection={() => { scoresOpen = false; scoreDialogOpen = true; }} onInserted={() => { scoresOpen = false; if (activeWorkspace) void refreshCanvasGraph(activeWorkspace.id); }} />
+              </div>
+            {/if}
+            <CanvasSideRail label={m['canvas.panels_label']()} items={rightRailItems}>
+              <WorkspaceSharingButton variant="icon" workspaceId={activeWorkspace.id} onOpen={() => (sharingOpen = true)} />
+            </CanvasSideRail>
+          </Panel>
+          <Panel position="bottom-left" class="git-pill-panel">
+            <CanvasGitPill workspaceId={activeWorkspace.id} onOpen={() => toggleSidePanel('floors')} />
+          </Panel>
+        {/if}
       </SvelteFlow>
       {#if showBlankCanvas}
         <div class="blank-canvas" role="region" aria-label={m['canvas.blank_title']()}>
@@ -3466,7 +4114,12 @@
       </div>
     {:else}
       <div class="canvas-empty">
-        {#if workspacesLoaded}
+        {#if booting}
+          <div class="canvas-loading" role="status" data-testid="canvas-loading">
+            <LoaderCircle size={18} class="animate-spin" aria-hidden="true" />
+            <span>{m['canvas.loading_workspace']()}</span>
+          </div>
+        {:else if workspacesLoaded}
           <div class="empty-hero">
             <img src="/brand/icon.svg" width="40" height="40" alt="" class="empty-mark" />
             <h1>{workspaces.length ? m['canvas.empty_title_pick']() : m['canvas.empty_title_new']()}</h1>
@@ -3541,6 +4194,7 @@
     {/if}
     {#if showUsagePanel}
       <UsagePanel
+        workspaceId={activeWorkspace?.id ?? null}
         onClose={() => (showUsagePanel = false)}
         onAddToCanvas={() => {
           void addUsageNode();
@@ -3559,9 +4213,18 @@
       onConfirm={async (creation) => {
         const pending = pendingAgentCreation;
         pendingAgentCreation = null;
+        if (pending?.provider) {
+          try {
+            localStorage.setItem('orkestrai.lastAgentProvider', pending.provider.id);
+          } catch {
+            // Remembering the CLI is a convenience only.
+          }
+        }
         await addTerminal(pending?.provider ?? undefined, pending?.rect, creation);
       }}
       onCancel={() => (pendingAgentCreation = null)}
+      providers={teamProviders}
+      onProviderChange={(next) => { if (pendingAgentCreation) pendingAgentCreation = { ...pendingAgentCreation, provider: next }; }}
     />
     {#if activeWorkspace}
       <DesignExplorationDialog
@@ -3584,7 +4247,7 @@
           const params = new URLSearchParams(location.search);
           params.delete('tour');
           const query = params.toString();
-          history.replaceState(null, '', `/canvas${query ? `?${query}` : ''}`);
+          history.replaceState(history.state, '', `/canvas${query ? `?${query}` : ''}`);
         } catch {}
       }}
       onCreateWorkspace={createWorkspaceFromWizard}
@@ -3700,10 +4363,32 @@
     {/if}
     </SvelteFlowProvider>
   </section>
+{#if activeWorkspace}
+    <StudioDialog
+      bind:open={studioOpen}
+      agents={composerTargets}
+      defaultAgentId={composerTarget}
+      onCreate={createStudioRequest}
+    />
+  {/if}
+  {#if activeWorkspace}
+    <TeamMapDialog
+      bind:open={missionMapOpen}
+      {nodes}
+      onJump={(nodeId) => jumpToNode(nodeId, Math.max(0.8, zoomApi?.getViewport().zoom ?? 1))}
+      onOpenFocus={(nodeId) => void goto(`/terminal?workspace=${encodeURIComponent(activeWorkspace?.id ?? '')}&node=${encodeURIComponent(nodeId)}`)}
+      onChat={(nodeId) => void goto(`/chat?workspace=${encodeURIComponent(activeWorkspace?.id ?? '')}&channel=${encodeURIComponent(`dm:${nodeId}`)}`)}
+    />
+  {/if}
+  <MachinesDialog bind:open={machinesOpen} programs={providers.map((provider) => ({ id: provider.id, label: provider.displayName }))} onOpenTerminal={addSshTerminal} />
+{#if activeWorkspace}
+  <SaveScoreDialog bind:open={scoreDialogOpen} workspaceId={activeWorkspace.id} nodeIds={selectedTransferNodeIds} />
+{/if}
 </main>
 
 <style>
   .canvas-page {
+    position: relative;
     display: flex;
     height: 100%;
     background: var(--app-canvas);
@@ -3728,11 +4413,20 @@
     margin-left: 0;
   }
 
+  /* Workspaces drawer: liquid glass beside the tool rail, closed until asked for. */
   .sidebar {
+    position: absolute;
+    top: 12px;
+    left: 70px;
+    z-index: var(--z-canvas-overlay);
     width: 288px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--app-border);
-    background: var(--app-sidebar);
+    max-height: calc(100% - 24px);
+    border-radius: 18px;
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
     padding: 10px 8px;
     display: flex;
     flex-direction: column;
@@ -3740,33 +4434,16 @@
     /* A lista de workspaces rola; o cabecalho nunca encolhe (flex-shrink do
        flex container esmagava o cabecalho em 2 linhas sobre a lista). */
     overflow: hidden;
+    transform-origin: top left;
+    animation: drawer-in var(--duration-fast) var(--ease-smooth-out);
   }
 
-  .brand-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 32px;
-    padding: 0 6px;
+  .sidebar:not(.open) {
+    display: none;
   }
 
-  .brand-name {
-    font-family: var(--font-display);
-    font-size: 14.5px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--app-text);
-  }
-
-  .mode-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 2px 6px;
-  }
-
-  .mode-row > :global(nav) {
-    flex: 1;
+  @keyframes drawer-in {
+    from { opacity: 0; transform: translateX(-8px) scale(0.98); }
   }
 
   .sidebar-header {
@@ -3870,10 +4547,84 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
-    flex: 1;
-    min-height: 0;
+    flex: 0 1 auto;
+    min-height: 60px;
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  .team-section {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 6px;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .team-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px 8px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-text-muted);
+  }
+
+  .team-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    max-height: 32vh;
+  }
+
+  .team-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--app-text-soft);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out;
+  }
+
+  .team-row:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .team-row:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: -2px;
+  }
+
+  .team-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .team-since {
+    color: var(--app-text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
   }
 
   .workspace-list li {
@@ -3907,8 +4658,22 @@
     background: var(--app-accent);
   }
 
-  .workspace-list li.active :global(.workspace-icon) {
+  .workspace-list li.active :global(.workspace-icon:not(.tinted)) {
     color: var(--app-accent);
+  }
+
+  /* Each workspace keeps one color, so a long or collapsed list stays scannable. */
+  .canvas-page :global(.workspace-icon.tinted) {
+    width: 22px;
+    height: 22px;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--ws-tint);
+    color: var(--ws-ink);
+  }
+
+  .workspace-list li.active :global(.workspace-icon.tinted) {
+    box-shadow: 0 0 0 2px var(--app-sidebar), 0 0 0 3.5px var(--ws-tint);
   }
 
   .workspace-list li.active :global(.workspace-name) {
@@ -4339,14 +5104,18 @@
    * Minimapa e zoom flutuam acima da linha do dock (nunca por baixo da barra
    * de ferramentas), com a mesma superficie elevada dos outros flutuantes.
    */
+  /* Minimap with the zoom row under it, bottom right; the composer owns the bottom center. */
   .canvas-area :global(.svelte-flow__minimap) {
-    bottom: 64px;
+    bottom: 58px;
+    right: 4px;
     width: 176px;
-    height: 116px;
-    background: var(--app-surface);
-    border: 0;
-    border-radius: 10px;
-    box-shadow: var(--app-shadow-panel);
+    height: 112px;
+    background: var(--app-glass);
+    border: 1px solid var(--app-glass-line);
+    border-radius: 14px;
+    box-shadow: var(--app-glass-shadow);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
     overflow: hidden;
   }
 
@@ -4355,23 +5124,44 @@
     height: 100%;
   }
 
+  /* Zoom pill: − 75% + then fit and lock, like a native window control. */
   .canvas-area :global(.svelte-flow__controls) {
-    bottom: 64px;
+    bottom: 4px;
+    margin-bottom: 14px;
+    margin-right: 14px;
     padding: 3px;
-    gap: 2px;
-    border: 0;
-    border-radius: 10px;
-    background: var(--app-surface);
-    box-shadow: var(--app-shadow-panel);
+    gap: 1px;
+    align-items: center;
+    border: 1px solid var(--app-glass-line);
+    border-radius: 999px;
+    background: var(--app-glass);
+    box-shadow: var(--app-glass-shadow);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
     overflow: hidden;
   }
 
+  .canvas-area :global(.svelte-flow__controls-zoomout) { order: 1; }
+  .canvas-area :global(.zoom-level) { order: 2; }
+  .canvas-area :global(.svelte-flow__controls-zoomin) { order: 3; }
+  .canvas-area :global(.svelte-flow__controls-fitview) { order: 4; }
+  .canvas-area :global(.svelte-flow__controls-interactive) { order: 5; }
+
+  .canvas-area :global(.zoom-level) {
+    min-width: 44px;
+    text-align: center;
+    color: var(--app-text-soft);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .canvas-area :global(.svelte-flow__controls-button) {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     padding: 6px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 999px;
     background: transparent;
     color: var(--app-text-soft);
     transition: background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
@@ -4452,6 +5242,24 @@
     animation: banner-in var(--duration-fast) var(--ease-smooth-out) both;
   }
 
+  .pen-ghost {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 40;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .pen-ghost path {
+    fill: none;
+    stroke: #7c4dff;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .draw-ghost {
     position: absolute;
     border: 1.5px dashed var(--app-accent);
@@ -4461,57 +5269,71 @@
     pointer-events: none;
   }
 
-  .toolbar-wrap {
+  .canvas-area :global(.composer-panel) {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 14px;
+    /* Only the bars themselves take clicks; the gaps between them stay canvas. */
+    pointer-events: none;
   }
 
-  .toolbar-arrow {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    flex-shrink: 0;
-    border: 0;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--app-surface-raised) 94%, transparent);
-    color: var(--app-text-soft);
-    cursor: pointer;
-    backdrop-filter: blur(12px);
-    box-shadow: var(--app-shadow-panel);
-    transition: color var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out);
+  .canvas-area :global(.composer-panel > *) {
+    pointer-events: auto;
   }
 
-  .toolbar-arrow:hover {
-    background: var(--app-surface-raised);
-    color: var(--app-text);
+  /* The command tip floats above the quick actions; selection actions and the team composer take that spot. */
+  .canvas-area :global(.composer-panel:has(.selection-bar, .team-composer) .command-hint) {
+    display: none;
   }
 
-  .toolbar-arrow:active {
-    transform: scale(var(--scale-press));
+  /* While writing to the team, the selection actions step aside for mentions. */
+  .canvas-area :global(.composer-panel:has(.composer:focus-within) .selection-bar) {
+    display: none;
+  }
+
+  .canvas-area :global(.summary-panel) {
+    margin-top: 14px;
+    margin-right: 14px;
+  }
+
+  /* Below this width the centred dock reaches the corner, so the card sits under it. */
+  @media (max-width: 1400px) {
+    .canvas-area :global(.summary-panel) {
+      margin-top: 66px;
+    }
   }
 
   /*
-   * Dock de ferramentas: grupos por categoria separados por divisores finos.
-   * Raio concentrico: dock 12px com 4px de respiro -> botoes 8px.
+   * Tool rail: one vertical liquid-glass column on the left of the board.
+   * The active tool glows gold; Select is a solid gold disc like a cursor.
    */
+  .canvas-area :global(.rail-panel) {
+    margin-left: 14px;
+  }
+
+  .ink-slot {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
   .toolbar {
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 4px;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--app-surface) 94%, transparent);
-    box-shadow: var(--app-shadow-overlay);
-    backdrop-filter: blur(12px);
-    /* Muitos botoes (providers + paineis): rola em vez de cortar fora da tela.
-       O painel do xyflow nao tem largura propria — limita pelo viewport
-       (sidebar 288 + setas + margens). */
-    max-width: max(320px, calc(100vw - 360px));
-    overflow-x: auto;
+    padding: 6px 5px;
+    border-radius: 18px;
+    background: var(--app-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    backdrop-filter: blur(22px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+    max-height: calc(100vh - 230px);
+    overflow-y: auto;
     scrollbar-width: none;
   }
 
@@ -4521,17 +5343,84 @@
 
   .tool-group {
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 2px;
     flex-shrink: 0;
   }
 
-  .toolbar-sep {
-    width: 1px;
-    height: 18px;
+  .toolbar :global(button) {
+    border-radius: 11px;
+  }
+
+  .rail-select {
+    width: 32px;
+    height: 32px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50% !important;
+    background: transparent;
+    color: var(--app-text-muted);
+    transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, transform var(--duration-quick) var(--ease-smooth-out), box-shadow var(--duration-quick) ease-out;
+  }
+
+  .rail-select:hover {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .rail-select.active {
+    background: var(--app-accent);
+    color: var(--app-accent-contrast);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 18%, transparent), 0 6px 16px color-mix(in srgb, var(--app-accent) 30%, transparent);
+  }
+
+  .rail-select:active {
+    transform: scale(var(--scale-press));
+  }
+
+  .rail-select:focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  .rail-sep {
+    width: 18px;
+    height: 1px;
     flex-shrink: 0;
-    margin: 0 4px;
-    background: var(--app-border);
+    margin: 4px 0;
+    background: var(--app-glass-line);
+  }
+
+  .canvas-area :global(.side-rail-panel) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 14px;
+  }
+
+  .scores-pop.archived-pop {
+    width: 320px;
+  }
+
+  .scores-pop {
+    width: 280px;
+    max-height: min(460px, calc(100vh - 260px));
+    overflow-y: auto;
+    padding: 8px;
+    border-radius: 16px;
+    background: var(--app-glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid var(--app-glass-line);
+    box-shadow: var(--app-glass-shadow);
+    animation: drawer-in var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  .canvas-area :global(.git-pill-panel) {
+    margin: 0 0 18px 14px;
   }
 
   /* Sem workspace aberto: ponto de partida com a acao principal a vista. */
@@ -4718,6 +5607,19 @@
     box-shadow: var(--app-shadow-panel);
     backdrop-filter: blur(10px);
     pointer-events: auto;
+    animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
+  }
+
+  .canvas-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--app-glass-line);
+    background: var(--app-glass);
+    color: var(--app-text-soft);
+    font-size: 13px;
     animation: hero-in var(--duration-slow) var(--ease-smooth-out) both;
   }
 

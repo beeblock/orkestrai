@@ -1,4 +1,5 @@
 import { appendFile, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { attentionService } from './AttentionService.js';
 import { dirname, join, resolve, sep } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
 import {
@@ -1371,6 +1372,8 @@ export function applyDesignOperations(document: DesignDocument, operations: Desi
   return designDocumentSchema.parse(next);
 }
 
+export const DESIGN_PROPOSAL_ATTENTION_SOURCE = 'design_proposal';
+
 export class DesignDocumentService {
   private async serialized<T>(workspaceId: string, nodeId: string, operation: () => Promise<T>): Promise<T> {
     const key = `${workspaceId}:${nodeId}`;
@@ -1634,12 +1637,40 @@ export class DesignDocumentService {
         broadcast?.({ type: 'workspaceChanged', workspaceId: dto.workspaceId, nodeId: dto.nodeId });
       }
       broadcastDesignChanged(dto.workspaceId, dto.nodeId, validated.revision);
+      await this.syncProposalAttention(dto, context.node.title ?? null);
       await Promise.all(deletedAssetPaths.map(async (path) => {
         const absolute = resolve(context.root, path);
         if (absolute.startsWith(context.root + sep)) await rm(absolute, { force: true });
       }));
       return validated;
     });
+  }
+
+  /** Agent proposals wait in Needs you until the owner decides them in the design. */
+  private async syncProposalAttention(dto: ApplyDesignOperationsDto, designTitle: string | null): Promise<void> {
+    for (const operation of dto.operations) {
+      try {
+        if (operation.kind === 'add-design-proposal' && operation.proposal.author.kind === 'agent') {
+          await attentionService.raise({
+            workspaceId: dto.workspaceId,
+            nodeId: dto.nodeId,
+            taskId: dto.actor.taskId ?? null,
+            category: 'design',
+            severity: 'info',
+            title: operation.proposal.title,
+            body: [operation.proposal.author.name, designTitle].filter(Boolean).join(' · ') || null,
+            sourceType: DESIGN_PROPOSAL_ATTENTION_SOURCE,
+            sourceId: operation.proposal.id,
+            correlationId: `${DESIGN_PROPOSAL_ATTENTION_SOURCE}:${operation.proposal.id}`,
+          });
+        }
+        if (operation.kind === 'decide-design-proposal' || operation.kind === 'delete-design-proposal') {
+          await attentionService.resolveSource(dto.workspaceId, DESIGN_PROPOSAL_ATTENTION_SOURCE, operation.proposalId);
+        }
+      } catch {
+        // The design write succeeded; the attention item only points at it.
+      }
+    }
   }
 
   async importAsset(
