@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answersByQuestion, buildTimeline, oldestCursor, upsertMessage } from '../../src/lib/components/agent-room/chat/chat-timeline.js';
+import { answersByQuestion, buildTimeline, oldestCursor, pinnedQuestions, upsertMessage } from '../../src/lib/components/agent-room/chat/chat-timeline.js';
 import type { ChannelMessage } from '../../src/lib/modules/agent-room/domain/channels.js';
 
 function message(id: string, minute: number, extra: Partial<ChannelMessage> = {}): ChannelMessage {
@@ -47,5 +47,16 @@ describe('chat timeline', () => {
     const list = upsertMessage([message('1', 0)], message('1', 0, { body: 'edited' }));
     expect(list).toHaveLength(1);
     expect(list[0].body).toBe('edited');
+  });
+
+  it('pins an open question that scrolled behind the latest messages until it is answered', () => {
+    const old = message('old', 0, { kind: 'question' });
+    const fresh = message('fresh', 9, { kind: 'question' });
+    const later = Array.from({ length: 6 }, (_, index) => message(`later-${index}`, 1 + index));
+    expect(pinnedQuestions([old, fresh], [old, ...later, fresh])).toEqual([old]);
+    // Not loaded at all: still pinned.
+    expect(pinnedQuestions([old], later)).toEqual([old]);
+    const answer = message('answer', 8, { kind: 'answer', replyToId: 'old', authorKind: 'owner' });
+    expect(pinnedQuestions([old], [old, ...later, answer])).toEqual([]);
   });
 });

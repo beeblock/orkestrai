@@ -1001,6 +1001,10 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: "Sin publicar", title: "Conversación, Te necesita y adjuntos", summary: "Adjuntos en cada campo de mensaje, estados de los agentes sincronizados y Te necesita solo con lo tuyo.", items: [
+      "Te necesita solo muestra lo que puedes resolver: un mensaje que quedó en la cola para un agente que el líder ya despidió ya no se convierte en un aviso atascado. Los que ya existen se cierran la próxima vez que se abre la app, y un aviso sin nada que decidir ahora tiene Descartar.",
+      "Una pregunta que un agente te hizo queda fijada al final de su conversación, en Esperándote, hasta que la respondas. El número junto al agente en Conversación siempre apunta a algo en pantalla, aunque la pregunta sea de hace horas.",
+    ] },
     { date: '21 de octubre de 2026 · 0.43.0', title: 'Orkestrai 0.43.0: Canvas, Focus y Chat', summary: 'El Canvas se lee de un vistazo: quién está trabajando, qué te necesita y dónde está cada cosa.', items: [
       "Seguridad: follow-redirects 1.16.1 y Vite 6.4.5 corrigen filtraciones de cabeceras de credenciales en redirecciones e inyección de comandos en el editor de desarrollo, manteniendo la auditoría completa de dependencias.",
       'Una barra superior en todas las plataformas reúne el cambio Canvas/Workbench, la búsqueda, la campana de atención y el micrófono. En macOS los botones de la ventana quedan dentro de ella.',

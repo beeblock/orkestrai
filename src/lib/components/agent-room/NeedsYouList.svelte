@@ -2,7 +2,7 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { ChevronDown } from '@lucide/svelte';
-  import { answerOwnerQuestion, attentionDecisionKind, attentionFeed, decideAttentionItem, ownerQuestionOptions } from './attention-feed.svelte.js';
+  import { answerOwnerQuestion, attentionDecisionKind, attentionFeed, decideAttentionItem, ownerQuestionOptions, updateAttentionItem } from './attention-feed.svelte.js';
   import { decisionLabels } from './attention-decision-labels.js';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -32,6 +32,14 @@
     const delivered = await answerOwnerQuestion(item, option, getCsrfToken());
     setBusy(item.id, false);
     if (!delivered) toast.error(m['node_attention.answer_failed']());
+  }
+
+  // A notice with nothing to decide, such as an undelivered message, closes once the owner has seen it.
+  async function dismiss(item: AgentAttentionItem) {
+    setBusy(item.id, true);
+    const closed = await updateAttentionItem(item, 'resolved', getCsrfToken());
+    setBusy(item.id, false);
+    if (!closed) toast.error(m['attention.update_error']());
   }
 </script>
 
@@ -63,6 +71,10 @@
                 {#each options.slice(0, 3) as option (option)}
                   <button type="button" class="primary" disabled={busy.has(item.id)} title={option} onclick={() => void answer(item, option)}><span class="option">{option}</span></button>
                 {/each}
+              </div>
+            {:else}
+              <div class="actions">
+                <button type="button" disabled={busy.has(item.id)} onclick={() => void dismiss(item)}>{m['needs_you.dismiss']()}</button>
               </div>
             {/if}
           </li>

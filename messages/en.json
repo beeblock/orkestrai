@@ -5286,6 +5286,7 @@
   "topbar.search_label": "Open search",
   "needs_you.title": "Needs you",
   "needs_you.more": "{count} more in Needs you",
+  "needs_you.dismiss": "Dismiss",
   "chat.via": "via {channel}",
   "always_on.title": "Always on",
   "always_on.configure": "Configure",

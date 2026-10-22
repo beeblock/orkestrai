@@ -6,6 +6,8 @@ export const listChannelMessagesSchema = z.object({
   /** The id of the oldest message held, so a page continues past others of the same instant. */
   beforeId: z.string().trim().min(1).max(200).nullable().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(80),
+  /** `open` lists only the questions of this channel still waiting for the owner. */
+  questions: z.enum(['open']).nullable().optional(),
 });
 
 export const postChannelMessageSchema = z.object({

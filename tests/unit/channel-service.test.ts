@@ -93,4 +93,18 @@ describe('ChannelService', () => {
     expect(messages.map((message) => message.id)).toEqual(['envelope:e1', 'b']);
     expect(messages[0].meta).toMatchObject({ to: QA, reply: 'Rodando' });
   });
+
+  it('lists the questions of a conversation still waiting for the owner, oldest first', async () => {
+    mockWorkspace();
+    vi.spyOn(channelRepository, 'openQuestions').mockResolvedValue([
+      stored({ id: 'newer', channel: `dm:${LEAD}`, kind: 'question', createdAt: '2026-10-17T12:30:00.000Z' }),
+      stored({ id: 'teammate', channel: `dm:${QA}`, kind: 'question', meta: { awaiting: 'leader' } }),
+      stored({ id: 'older', channel: `dm:${LEAD}`, kind: 'question', createdAt: '2026-10-17T09:30:00.000Z' }),
+      stored({ id: 'escalated', channel: `dm:${QA}`, kind: 'question', meta: { awaiting: 'owner' } }),
+    ]);
+    const service = new ChannelService();
+    expect((await service.openQuestions('w', `dm:${LEAD}`)).map((question) => question.id)).toEqual(['older', 'newer']);
+    expect((await service.openQuestions('w', `dm:${QA}`)).map((question) => question.id)).toEqual(['escalated']);
+    await expect(service.openQuestions('w', `dm:${NOTE}`)).rejects.toThrow();
+  });
 });

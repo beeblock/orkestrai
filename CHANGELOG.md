@@ -5,6 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Keep Needs you to what the owner can act on. A message still queued for an agent the leader had dismissed failed after the agent was gone and left a notice that nothing could close (one workspace collected 52 of them). Such notices are no longer raised, the ones already stored close at the next start, and a notice with nothing to decide now has Dismiss.
+- Pin a question an agent asked the owner to the end of its conversation in Chat, under Waiting for you, until it is answered. A question asked hours earlier had scrolled out of view, so the number next to the agent pointed to nothing on screen.
+
 ## 0.43.0 - 2026-10-21
 
 ### Security

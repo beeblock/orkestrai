@@ -15,7 +15,7 @@
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
-  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCursor, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
+  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCursor, pinnedQuestions, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
@@ -38,6 +38,8 @@
   let channels = $state<ChannelSummary[]>([]);
   let channel = $state<string>(TEAM_CHANNEL);
   let messages = $state<ChannelMessage[]>([]);
+  // Questions of this conversation still waiting for the owner, however far back they were asked.
+  let openQuestions = $state<ChannelMessage[]>([]);
   let loading = $state(true);
   let loadingOlder = $state(false);
   let hasOlder = $state(false);
@@ -64,6 +66,7 @@
   const channelTitle = $derived(channel === TEAM_CHANNEL ? m['chat.team_channel']() : agentById.get(directNode ?? '')?.title ?? '');
   const timeline = $derived(buildTimeline(messages));
   const answers = $derived(answersByQuestion(messages));
+  const pinned = $derived(pinnedQuestions(openQuestions, messages));
   const leader = $derived(agents.find((agent) => agent.payload.maestro) ?? null);
   const filteredMentions = $derived(agents.filter((agent) => agent.title.toLowerCase().includes(mentionFilter.toLowerCase())).slice(0, 8));
   const profileAgent = $derived(profileHidden ? null : agentById.get(profileNodeId ?? directNode ?? leader?.id ?? '') ?? null);
@@ -167,6 +170,7 @@
         if (scroller) scroller.scrollTop += scroller.scrollHeight - height;
       } else {
         messages = mergeLoaded(page, messages.filter((message) => message.channel === current));
+        void loadOpenQuestions();
         await tick();
         scrollToEnd();
       }
@@ -176,6 +180,19 @@
       loadingOlder = false;
       loading = false;
     }
+  }
+
+  async function loadOpenQuestions() {
+    if (!workspaceId) return;
+    const id = workspaceId;
+    const current = channel;
+    const list = await api<ChannelMessage[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels/${encodeURIComponent(current)}/messages?questions=open`).catch(() => null);
+    if (list && id === workspaceId && current === channel) openQuestions = list;
+  }
+
+  function askedLabel(iso: string): string {
+    const day = new Date(iso).toDateString() === new Date().toDateString() ? '' : `${dayLabel(iso)} · `;
+    return `${day}${timeLabel(iso)}`;
   }
 
   function scrollToEnd() {
@@ -190,6 +207,7 @@
     if (next === channel) return;
     channel = next;
     messages = [];
+    openQuestions = [];
     loading = true;
     draft = '';
     sendError = '';
@@ -312,6 +330,7 @@
       workspaceId = id;
       channel = TEAM_CHANNEL;
       messages = [];
+      openQuestions = [];
       profileNodeId = null;
       profileHidden = false;
     });
@@ -388,6 +407,7 @@
           if (frame.channel !== channel) return;
           const stick = nearEnd();
           messages = upsertMessage(messages, frame.message);
+          if (frame.message.kind === 'question' || frame.message.kind === 'answer') void loadOpenQuestions();
           await tick();
           if (stick) scrollToEnd();
         }
@@ -397,6 +417,8 @@
         if (frame.type === 'controlCenterChanged') scheduleAgentStatusRefresh();
         if (frame.type === 'attentionChanged') {
           scheduleAttentionRefresh();
+          // A question the leader escalated or closed changes what waits here.
+          if (directNode) void loadOpenQuestions();
           window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
         }
       };
@@ -554,8 +576,14 @@
           </article>
         {/if}
       {/each}
-      {#if pendingRequests.length && !loading}
+      {#if (pinned.length || pendingRequests.length) && !loading}
         <div class="day"><span>{m['chat.pending_requests']()}</span></div>
+        {#each pinned as question (question.id)}
+          <div class="pinned-question" data-testid="chat-pinned-question">
+            <time datetime={question.createdAt}>{askedLabel(question.createdAt)}</time>
+            <QuestionCard {question} answer={answers.get(question.id) ?? null} authorTitle={titleOf(question.authorNodeId)} onAnswer={answer} />
+          </div>
+        {/each}
         {#each pendingRequests as item (item.id)}<RequestCard {item} highlighted={highlightedId === item.id} />{/each}
       {/if}
     </div>
@@ -909,6 +937,18 @@
     gap: 2px;
     padding: 16px 24px 12px;
     overflow-y: auto;
+  }
+
+  .pinned-question {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 6px 0 6px 46px;
+  }
+
+  .pinned-question time {
+    color: var(--app-text-muted);
+    font-size: 11.5px;
   }
 
   /* Cards that clip their own overflow must not shrink into thin stripes once the timeline scrolls. */
