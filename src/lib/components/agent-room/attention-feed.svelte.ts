@@ -116,6 +116,20 @@ export function ownerQuestionOptions(item: AgentAttentionItem): string[] {
   return (item.action.options as unknown[]).filter((option): option is string => typeof option === 'string');
 }
 
+// Notices the owner can only acknowledge, such as an undelivered message.
+const NOTICE_SOURCES = new Set(['bridge', 'notification', 'usage_limit']);
+
+/**
+ * What the owner can do with an item in place: decide it, pick an answer,
+ * answer a free-text question in its conversation, or dismiss a notice. A
+ * question is never dismissible: that would hide it while it stays unanswered.
+ */
+export function attentionFollowUp(item: AgentAttentionItem): 'decide' | 'options' | 'answer' | 'dismiss' | null {
+  if (attentionDecisionKind(item)) return 'decide';
+  if (item.sourceType === 'owner_question') return ownerQuestionOptions(item).length ? 'options' : 'answer';
+  return NOTICE_SOURCES.has(item.sourceType ?? '') ? 'dismiss' : null;
+}
+
 function dropItem(id: string): void {
   attentionFeed.items = attentionFeed.items.filter((candidate) => candidate.id !== id);
   const byNode: Record<string, AgentAttentionItem[]> = {};

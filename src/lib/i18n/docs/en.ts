@@ -1002,7 +1002,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Unreleased", title: "Chat, Needs you and attachments", summary: "Attachments in every message field, agent states in sync and Needs you holding only what is yours.", items: [
-      "Needs you only shows what you can resolve: a message left queued for an agent the leader already dismissed no longer becomes a stuck notice. Existing ones close the next time the app starts, and a notice with nothing to decide now has Dismiss.",
+      "Needs you only shows what you can resolve: a message left queued for an agent the leader already dismissed no longer becomes a stuck notice. Existing ones close the next time the app starts, and a notice with nothing to decide now has Dismiss. A question without preset answers shows Answer, which opens its conversation, and never disappears unanswered.",
       "A question an agent asked you stays pinned at the end of its conversation, under Waiting for you, until you answer it. The number next to the agent in Chat always points to something on screen, even when the question is hours old.",
       "Each agent's state (working, idle, waiting) is the same on the Canvas, in Focus and in Chat, live: Chat and Focus no longer need a trip to the Canvas to update. An agent that receives a queued message shows as working right away.",
       "Attach images, PDFs and other files to messages in Chat, the Canvas message bar, the leader panel, Focus and an agent's chat face: paste them, drop them on the field or use the paperclip. Attachments show as chips before you send, sent images appear in the conversation and the agent receives each file's path to open it, on floors and in WSL too. A node's chat face also gets the microphone.",
