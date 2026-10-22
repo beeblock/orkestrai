@@ -2,6 +2,7 @@
  * What an agent reads after a Portal screenshot: the PNG saved in the
  * workspace, to open with its own image viewer (Read in Claude Code,
  * view_image in Codex). The image itself never travels as base64 text.
+ * @param {any} data the bridge response
  */
 export function portalScreenshotMessage(data) {
   const file = data?.result;

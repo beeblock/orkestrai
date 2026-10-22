@@ -105,6 +105,31 @@ describe('authenticated Portal control', () => {
     expect(f.execute.mock.calls.filter(([request]) => !request.inspect)).toHaveLength(1);
   });
 
+  it('saves an agent screenshot in the workspace and names it in the agent\'s own runtime', async () => {
+    const f = await fixture();
+    const current = await autonomyPolicyService.get(f.workspace.id);
+    await autonomyPolicyService.update(f.workspace.id, { enabled: false, mode: 'observe', policy: current.policy });
+    await workspaceRepository.updateNode(f.portal.id, { payload: { url: 'https://example.test/' } });
+    // The agent runs in its own WSL distribution although the workspace is native.
+    await workspaceRepository.updateNode(f.agent.id, { payload: { executionRuntime: { kind: 'wsl', distribution: 'Ubuntu', linuxWorkingDir: '/home/dev/qa' } } as never });
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    runtime.__orkestraiExecutePortal = vi.fn(async (request) => request.inspect
+      ? { ok: true, result: { url: 'https://example.test/', element: null } }
+      : { ok: true, result: { dataUrl: `data:image/png;base64,${png}`, width: 1, height: 1 } });
+    const token = await bridgeService.getOrCreateToken(f.workspace.id);
+    vi.spyOn(ptySessionManager, 'resolveBridgeAgent').mockReturnValue(f.agent.id);
+    const response = await new BridgeController().portal({ request: new Request('http://localhost/api/agent-room/bridge/portal', {
+      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-orkestrai-agent-token': 'live-agent' },
+      body: JSON.stringify({ nodeId: f.portal.id, action: 'screenshot', args: {} }),
+    }) });
+    expect(response.status, await response.clone().text()).toBe(200);
+    const { data } = await response.json();
+    expect(JSON.stringify(data)).not.toContain('base64');
+    expect(data.result.relativePath).toMatch(/^\.orkestrai\/portal\/screenshots\/qa-browser-.+\.png$/);
+    expect(data.result.path).toBe(`/home/dev/qa/${data.result.relativePath}`);
+    expect((await stat(join(f.workspace.workingDir, data.result.relativePath))).isFile()).toBe(true);
+  });
+
   it('denies ungranted agents before inspecting or mutating the page', async () => {
     const f=await fixture();
     await expect(managedPortalService.execute(f.workspace.id,f.command('snapshot'),{actorType:'agent',actorId:'not-granted'})).rejects.toThrow(/not been granted/);

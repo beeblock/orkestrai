@@ -15,6 +15,8 @@ import { boardColumnService } from '$lib/modules/agent-room/application/services
 import { floorService } from '$lib/modules/agent-room/application/services/FloorService.js';
 import { cleanupFloorsSchema } from '$lib/modules/agent-room/contracts/schemas/floorSchemas.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { workspaceFileForTerminal } from '$lib/modules/agent-room/infrastructure/WslRuntime.js';
+import type { TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { OpenWorkspaceFolderRequest } from '$lib/modules/agent-room/interface/http/requests/OpenWorkspaceFolderRequest.js';
 import { OpenWorkspaceFolderDto } from '$lib/modules/agent-room/application/dto/OpenWorkspaceFolderDto.js';
@@ -1723,10 +1725,13 @@ export class BridgeController extends Controller {
       }
       const result = await managedPortalService.execute(workspace.id, { ...input, from: actor, nodeId: portal.id }, { actorType: 'agent', actorId: actor });
       if (input.action === 'screenshot' && result.ok) {
-        // The agent gets a PNG it can open, not megabytes of base64 it cannot view.
+        // The agent gets a PNG it can open, not megabytes of base64 it cannot view,
+        // by a path in its own runtime: WSL terminals read the Linux path.
         const file = await savePortalScreenshot(workspace.workingDir, portal.title ?? null, result.result);
         if (!file) throw new Error('Portal screenshot could not be saved.');
-        return this.json({ data: { ...result, result: file } });
+        const agent = await workspaceRepository.getNode(actor);
+        const path = workspaceFileForTerminal(workspace, agent?.payload as TerminalNodePayload | undefined, file.relativePath);
+        return this.json({ data: { ...result, result: { ...file, path } } });
       }
       return this.json({ data: result }, result.ok ? 200 : 400);
     } catch (error) {

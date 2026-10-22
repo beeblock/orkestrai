@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { CanvasNodePayload } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -107,8 +107,17 @@ export async function savePortalScreenshot(
   const directory = await preparePortalDirectory(root, PORTAL_SCREENSHOT_DIRECTORY);
   const slug = (portalTitle ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'portal';
-  const path = join(directory, `${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}.png`);
-  await writeFile(path, png);
+  // A name no other capture shares, created exclusively: `wx` fails on any
+  // existing entry, so a link left at that path is never followed or replaced.
+  const path = join(directory, `${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.png`);
+  const file = await open(path, 'wx', 0o644);
+  try { await file.writeFile(png); } finally { await file.close(); }
+  // The folder was confined before the file existed: if it was swapped for a
+  // link meanwhile, remove what was just written there and fail.
+  if (await realpath(dirname(path)).catch(() => null) !== directory) {
+    await rm(path, { force: true }).catch(() => undefined);
+    throw new Error('Portal screenshot folder changed while saving.');
+  }
   await prunePortalScreenshots(directory).catch(() => undefined);
   return { path, relativePath: relative(root, path).split(sep).join('/'), width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
@@ -116,7 +125,8 @@ export async function savePortalScreenshot(
 async function prunePortalScreenshots(directory: string): Promise<void> {
   const files = (await readdir(directory)).filter((name) => name.endsWith('.png'));
   if (files.length <= KEPT_PORTAL_SCREENSHOTS) return;
-  const dated = await Promise.all(files.map(async (name) => ({ name, time: (await stat(join(directory, name))).mtimeMs })));
+  // lstat: a link is pruned as itself, never through its target.
+  const dated = await Promise.all(files.map(async (name) => ({ name, time: (await lstat(join(directory, name))).mtimeMs })));
   dated.sort((a, b) => b.time - a.time);
   await Promise.all(dated.slice(KEPT_PORTAL_SCREENSHOTS).map(({ name }) => rm(join(directory, name), { force: true })));
 }
