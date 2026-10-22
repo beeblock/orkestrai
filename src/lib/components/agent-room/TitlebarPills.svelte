@@ -6,6 +6,7 @@
   import { retainUsageFeed, usageStore } from './usage-store.svelte.js';
   import { usageSeverity } from '$lib/modules/agent-room/domain/usage.js';
   import { usageProviderDefinition } from '$lib/modules/agent-room/domain/usage-providers.js';
+  import { tightestAccountUsage } from '$lib/modules/agent-room/domain/usage-routing.js';
   import { workspaceContext } from './workspace-context.svelte.js';
   import { runCanvasAction } from './canvas-actions.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -21,15 +22,12 @@
     return { working, attention, live, idle: Math.max(0, live - working - attention) };
   });
 
+  // The account this workspace's agents run on, named when its provider has others.
   const tightest = $derived.by(() => {
-    let best: { provider: string; percent: number; resetsAt: string | null } | null = null;
-    for (const usage of usageStore.values) {
-      if (usage.error) continue;
-      for (const window of usage.windows) {
-        if (!best || window.usedPercent > best.percent) best = { provider: usage.provider, percent: Math.round(window.usedPercent), resetsAt: window.resetsAt };
-      }
-    }
-    return best;
+    const found = tightestAccountUsage(usageStore.values, Object.values(agentStatus.agents));
+    if (!found) return null;
+    const account = found.usage.profileId ? found.usage.profileName ?? null : found.shared ? m['term.profile_default']() : null;
+    return { provider: found.usage.provider, account, percent: found.percent, resetsAt: found.resetsAt };
   });
 
   function resetLabel(value: string | null): string {
@@ -64,10 +62,11 @@
 
 {#if tightest}
   {@const meta = usageProviderDefinition(tightest.provider)}
+  {@const name = tightest.account ? `${meta.name} · ${tightest.account}` : meta.name}
   <Tooltip.Root>
     <Tooltip.Trigger>
       {#snippet child({ props })}
-        <button {...props} type="button" class="pill" data-testid="topbar-usage" aria-label={m['topbar.usage_detail']({ provider: meta.name, percent: tightest.percent, time: resetLabel(tightest.resetsAt) })} onclick={() => runCanvasAction('usage', workspaceContext.workspaceId)}>
+        <button {...props} type="button" class="pill" data-testid="topbar-usage" aria-label={m['topbar.usage_detail']({ provider: name, percent: tightest.percent, time: resetLabel(tightest.resetsAt) })} onclick={() => runCanvasAction('usage', workspaceContext.workspaceId)}>
           <span class="ring" style:--pct={`${Math.min(100, Math.max(0, tightest.percent))}%`} style:--tone={tone(tightest.percent)} aria-hidden="true"></span>
           {#if meta.icon}<img src={meta.icon} width="12" height="12" alt="" class="logo" />{/if}
           <span class="mono strong">{tightest.percent}%</span>
@@ -75,7 +74,7 @@
         </button>
       {/snippet}
     </Tooltip.Trigger>
-    <Tooltip.Content side="bottom">{m['topbar.usage_detail']({ provider: meta.name, percent: tightest.percent, time: resetLabel(tightest.resetsAt) })}</Tooltip.Content>
+    <Tooltip.Content side="bottom">{m['topbar.usage_detail']({ provider: name, percent: tightest.percent, time: resetLabel(tightest.resetsAt) })}</Tooltip.Content>
   </Tooltip.Root>
 {/if}
 

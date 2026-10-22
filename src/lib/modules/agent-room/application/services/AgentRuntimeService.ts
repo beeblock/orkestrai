@@ -13,6 +13,7 @@ import { agentInboxService } from './AgentInboxService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { usageService } from './UsageService.js';
+import { usageRoutingId } from '../../domain/usage-routing.js';
 import { attentionService } from './AttentionService.js';
 
 const SUPERVISOR_INTERVAL_MS = 15_000;
@@ -199,10 +200,12 @@ export class AgentRuntimeService {
       const position = active.findIndex((run) => String(run.getAttribute('id')) === runId);
       if (position < 0 || position >= settings.concurrency) throw new AgentRuntimePolicyError('AGENT_CONCURRENCY_LIMIT');
     }
-    const provider = (node.payload as TerminalNodePayload).provider;
+    const { provider, profileId } = node.payload as TerminalNodePayload;
     if (!provider) return;
     const rows = await usageService.getAll(false).catch(() => []);
-    const relevant = rows.filter((row) => row.provider === provider && !row.error);
+    // Only the account this agent runs on: another profile of the same provider near its limit does not stop it.
+    const account = usageRoutingId({ provider, profileId: profileId ?? null });
+    const relevant = rows.filter((row) => usageRoutingId(row) === account && !row.error);
     const exhausted = relevant.flatMap((row) => row.windows.filter((window) => window.usedPercent >= settings.usageLimit));
     if (exhausted.length) {
       // Automatic work stops here; tell the owner once instead of failing quietly.

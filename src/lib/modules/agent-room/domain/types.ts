@@ -350,6 +350,8 @@ export type AgentActivitySnapshot = {
   nodeId: string;
   title: string;
   provider: string | null;
+  /** The provider account profile the agent runs on; null for the default account. */
+  profileId?: string | null;
   role: string | null;
   floorId: string | null;
   floorName: string | null;

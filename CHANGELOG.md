@@ -19,6 +19,7 @@ pt-BR, English, and Spanish translations.
 - Send images from the terminal's quick message field. A pasted image was ignored by the field and reached the agent's CLI instead, and a dropped one became a workspace-relative path in the text, which an agent on a floor could not open; both now travel as attachments. An image pasted straight into an agent's terminal (Ctrl+V) also counts as a draft, so a queued message waits instead of being typed on top of it and never confirmed.
 - Draw the focus ring of the Chat message field only around the rounded field. The app-wide focus outline added a second, square and misaligned one inside it.
 - On Windows, open tooltips near the top of the window below their buttons instead of behind the native minimize, maximize and close buttons (the Focus header buttons included), and start Design mode and the prototype player below those buttons so their close controls stay reachable. The native buttons, and Snap Layouts with them, stay.
+- Show in the top bar the usage of the account the open workspace's agents run on, and name the profile when a provider has more than one account. The pill took the highest percentage of every account on the machine, so with two Claude Code accounts it could show the work profile's usage in a workspace that runs on the default one. Automatic work also stops only when the agent's own account reaches its limit, not another profile of the same provider.
 
 ## 0.43.0 - 2026-10-21
 
