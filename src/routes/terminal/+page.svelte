@@ -113,7 +113,7 @@
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
-  import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
+  import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import FocusInbox from '$lib/components/agent-room/FocusInbox.svelte';
