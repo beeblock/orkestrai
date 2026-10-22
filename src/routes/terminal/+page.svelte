@@ -1657,7 +1657,7 @@
               </Button>
             {/snippet}
           </Tooltip.Trigger>
-          <Tooltip.Content>{visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : m['workbench.split_right']()}</Tooltip.Content>
+          <Tooltip.Content side="bottom">{visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : m['workbench.split_right']()}</Tooltip.Content>
         </Tooltip.Root>
         <Tooltip.Root>
           <Tooltip.Trigger>
@@ -1675,7 +1675,7 @@
               </Button>
             {/snippet}
           </Tooltip.Trigger>
-          <Tooltip.Content>{visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : m['workbench.split_down']()}</Tooltip.Content>
+          <Tooltip.Content side="bottom">{visiblePanes.length >= MAX_WORKBENCH_PANES ? m['workbench.pane_limit']({ count: MAX_WORKBENCH_PANES }) : m['workbench.split_down']()}</Tooltip.Content>
         </Tooltip.Root>
         <Tooltip.Root>
           <Tooltip.Trigger>
@@ -1693,7 +1693,7 @@
               </Button>
             {/snippet}
           </Tooltip.Trigger>
-          <Tooltip.Content>{m['workbench.close_pane']()}</Tooltip.Content>
+          <Tooltip.Content side="bottom">{m['workbench.close_pane']()}</Tooltip.Content>
         </Tooltip.Root>
         {#if selectedNode && !isVirtualWorkbenchItemId(selectedNode.id)}
           <Tooltip.Root>
@@ -1711,7 +1711,7 @@
                 </Button>
               {/snippet}
             </Tooltip.Trigger>
-            <Tooltip.Content>{m['terminal_browser.open_canvas']()}</Tooltip.Content>
+            <Tooltip.Content side="bottom">{m['terminal_browser.open_canvas']()}</Tooltip.Content>
           </Tooltip.Root>
         {/if}
         {#if selectedAgent}
@@ -1732,7 +1732,7 @@
                 </Button>
               {/snippet}
             </Tooltip.Trigger>
-            <Tooltip.Content>{inspectorOpen ? m['focus_agent.toggle_hide']() : m['focus_agent.toggle_show']()}</Tooltip.Content>
+            <Tooltip.Content side="bottom">{inspectorOpen ? m['focus_agent.toggle_hide']() : m['focus_agent.toggle_show']()}</Tooltip.Content>
           </Tooltip.Root>
         {/if}
         </div>

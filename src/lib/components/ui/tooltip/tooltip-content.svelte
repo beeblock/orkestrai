@@ -10,6 +10,7 @@
 		class: className,
 		sideOffset = 0,
 		side = "top",
+		collisionPadding,
 		children,
 		arrowClasses,
 		portalProps,
@@ -18,6 +19,12 @@
 		arrowClasses?: string;
 		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof TooltipPortal>>;
 	} = $props();
+
+	// On Windows the OS paints min/max/close above the app's 44px top bar, over
+	// any web content: a tooltip opening upward into that band flips below its trigger.
+	const windowsTitlebar = typeof window !== "undefined"
+		&& (window as unknown as { orkestraiDesktop?: { platform?: string } }).orkestraiDesktop?.platform === "win32";
+	const padding = $derived(collisionPadding ?? (windowsTitlebar && side === "top" ? { top: 44 } : undefined));
 </script>
 
 <TooltipPortal {...portalProps}>
@@ -26,6 +33,7 @@
 		data-slot="tooltip-content"
 		{sideOffset}
 		{side}
+		collisionPadding={padding}
 		class={cn(
 			"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] leading-snug font-medium duration-150 ease-out has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-98 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-98 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-98 z-50 w-fit max-w-xs origin-(--bits-tooltip-content-transform-origin) bg-foreground text-background",
 			className

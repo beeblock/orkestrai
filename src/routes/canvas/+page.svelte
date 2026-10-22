@@ -3598,6 +3598,9 @@
       preDragPositions.set(node.id, { x: node.position.x, y: node.position.y });
     }
   }
+  // Windows paints min/max/close over the top 44px of the window, above any web content.
+  const windowsTitlebar = typeof window !== 'undefined'
+    && (window as unknown as { orkestraiDesktop?: { platform?: string } }).orkestraiDesktop?.platform === 'win32';
 </script>
 
 <svelte:head>
@@ -3880,7 +3883,7 @@
     <SvelteFlowProvider>
     {#if activeWorkspace}
       {#if designModeNodeId}
-        <div class="fixed inset-0 z-40 flex min-h-0 flex-col bg-[var(--app-canvas)]" data-testid="canvas-design-mode" role="dialog" aria-modal="true" aria-label={m['design.focus_mode']()}>
+        <div class={['fixed inset-0 z-40 flex min-h-0 flex-col bg-[var(--app-canvas)]', windowsTitlebar && 'top-11']} data-testid="canvas-design-mode" role="dialog" aria-modal="true" aria-label={m['design.focus_mode']()}>
           <header class="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-surface)] px-3 shadow-sm">
             <Palette size={15} class="text-[var(--app-secondary)]" />
             <strong class="min-w-0 flex-1 truncate text-xs">{String(nodes.find((item) => item.id === designModeNodeId)?.data?.title ?? m['design.title']())}</strong>

@@ -274,9 +274,12 @@
       clearDelayedInteractions();
     };
   });
+  // Windows paints min/max/close over the top 44px of the window, above any web content.
+  const windowsTitlebar = typeof window !== 'undefined'
+    && (window as unknown as { orkestraiDesktop?: { platform?: string } }).orkestraiDesktop?.platform === 'win32';
 </script>
 
-<div bind:this={root} class="fixed inset-0 z-[180] grid grid-rows-[48px_minmax(0,1fr)] bg-[#101012] text-white" data-design-prototype-player>
+<div bind:this={root} class={['fixed inset-0 z-[180] grid grid-rows-[48px_minmax(0,1fr)] bg-[#101012] text-white', windowsTitlebar && 'top-11']} data-design-prototype-player>
   <!-- Barra de apresentacao: identidade e fluxo a esquerda, navegacao no
        meio do grupo, opcoes de exibicao e saida a direita. Estados ligados
        (hotspots, preencher) ficam com fundo, nao so com o icone trocado. -->
