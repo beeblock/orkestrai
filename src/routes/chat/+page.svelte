@@ -1210,6 +1210,12 @@
     padding: 7px 8px;
   }
 
+  /* The composer draws the focus ring around the whole field; the app-wide
+     outline would add a second, square one inside its rounded border. */
+  textarea:focus-visible {
+    outline: none;
+  }
+
   textarea::placeholder {
     color: var(--app-text-muted);
   }

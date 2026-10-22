@@ -17,6 +17,7 @@ pt-BR, English, and Spanish translations.
 - Pin a question an agent asked the owner to the end of its conversation in Chat, under Waiting for you, until it is answered. A question asked hours earlier had scrolled out of view, so the number next to the agent pointed to nothing on screen.
 - Keep each agent's state (working, idle, waiting) in sync across Canvas, Focus and Chat. The shared status feed now keeps its own live connection while any view shows it, reloads after reconnecting and replaces a connection that stopped answering. Chat ignored delivery events, Focus started listening only after its workspace loaded, and a page whose socket dropped silently kept stale states until it was reopened, so an agent shown working on the Canvas could read idle in Chat. An agent that receives a queued message now shows as working right away, and a reply no longer copies an older idle state over working.
 - Send images from the terminal's quick message field. A pasted image was ignored by the field and reached the agent's CLI instead, and a dropped one became a workspace-relative path in the text, which an agent on a floor could not open; both now travel as attachments. An image pasted straight into an agent's terminal (Ctrl+V) also counts as a draft, so a queued message waits instead of being typed on top of it and never confirmed.
+- Draw the focus ring of the Chat message field only around the rounded field. The app-wide focus outline added a second, square and misaligned one inside it.
 
 ## 0.43.0 - 2026-10-21
 
