@@ -32,7 +32,6 @@
   import type { AgentProviderInfo, ProviderProfile, TerminalNodePayload, WorkspaceExecutionRuntime } from '$lib/modules/agent-room/domain/types.js';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import * as m from '$lib/paraglide/messages.js';
-  import { attachmentPromptReference } from '../workspace-attachments.js';
   import AttachmentList from '../AttachmentList.svelte';
   import { ComposerAttachments } from '../composer-attachments.svelte.js';
   import CouncilDialog from '../CouncilDialog.svelte';
@@ -432,6 +431,8 @@
   let attachmentInput: HTMLInputElement;
   // Pasted, dropped or picked files wait as chips and travel with the message.
   const staged = new ComposerAttachments(() => data.workspaceId);
+  // Removing the node discards the files of a draft that was never sent.
+  $effect(() => staged.reset);
 
   const filteredMentions = $derived(
     mentionTargets.filter((target) => target.title.toLowerCase().includes(mentionFilter.toLowerCase())).slice(0, 8)
@@ -473,16 +474,16 @@
 
   async function sendPrompt() {
     const text = prompt.trim();
-    const attachments = [...staged.items];
-    if ((!text && !attachments.length) || promptSending || staged.busy) return;
+    if ((!text && !staged.items.length) || promptSending || staged.busy) return;
+    const submission = staged.reserve();
     promptSending = true;
     promptError = '';
     try {
       // An agent gets the text as a direct message, so it and the reply show in
       // Chat too; the inbox wakes a sleeping agent and holds it while one is busy.
       if (fieldSendsToChat) {
-        if (!(await sendToAgent(data.workspaceId, id, text, attachments))) throw new Error('Delivery not confirmed');
-        staged.clear();
+        if (!(await sendToAgent(data.workspaceId, id, text, submission.attachments))) throw new Error('Delivery not confirmed');
+        submission.commit();
         if (prompt.trim() === text) prompt = '';
         return;
       }
@@ -494,15 +495,16 @@
           'content-type': 'application/json',
           ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}),
         },
-        // Typed straight into the terminal, files go as their workspace paths.
-        body: JSON.stringify({ data: [text, ...attachments.map(attachmentPromptReference)].filter(Boolean).join(' · '), submit: true }),
+        // Typed straight into the terminal, files are named by a path in its own runtime.
+        body: JSON.stringify({ data: text, submit: true, attachments: submission.attachments }),
       });
       const result = await response.json();
       if (!response.ok || result.data?.written !== true) throw new Error('Delivery not confirmed');
-      staged.clear();
+      submission.commit();
       // Preserve a new draft typed while the previous message was in flight.
       if (prompt.trim() === text) prompt = '';
     } catch {
+      submission.release();
       promptError = m['term.prompt_delivery_failed']();
     } finally {
       promptSending = false;
@@ -1087,7 +1089,7 @@
   />
 
   {#if staged.items.length && quickFieldShown}
-    <div class="staged-attachments nodrag"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>
+    <div class="staged-attachments nodrag"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>
   {/if}
   <div
     class="composer nodrag"

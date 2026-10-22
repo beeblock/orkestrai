@@ -12,6 +12,8 @@ import { filesystemService } from '$lib/modules/agent-room/application/services/
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
+import { workspaceAttachmentService } from '$lib/modules/agent-room/application/services/WorkspaceAttachmentService.js';
+import type { TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { portalService } from '$lib/modules/agent-room/application/services/PortalService.js';
 import { gitService } from '$lib/modules/agent-room/application/services/GitService.js';
 import { agentPauseService } from '$lib/modules/agent-room/application/services/AgentPauseService.js';
@@ -295,15 +297,23 @@ export class FilesystemController extends Controller {
       }
       const sessionId = (node.payload as { sessionId?: string }).sessionId;
       if (!sessionId) throw new Error('O terminal não tem sessão PTY ativa.');
+      let message = body.data;
+      if (body.attachments.length) {
+        const workspace = await workspaceRepository.getWorkspace(event.params.id);
+        if (!workspace) throw new Error('Workspace não encontrado.');
+        await workspaceAttachmentService.assertPresent(workspace, body.attachments);
+        const files = workspaceAttachmentService.describeFor(workspace, node.payload as TerminalNodePayload, body.attachments);
+        message = [body.data.trim(), `[Anexos: ${files.join('; ')}]`].filter(Boolean).join(' ');
+      }
       if (body.submit === true) await agentTerminalDeliveryService.deliver({
         workspaceId: event.params.id,
         nodeId: node.id,
         sessionId,
-        message: body.data,
+        message,
         queueTimeoutMs: 30_000,
         signal: event.request.signal,
       });
-      else ptySessionManager.writeHumanInput(sessionId, body.data);
+      else ptySessionManager.writeHumanInput(sessionId, message);
       return this.json({ data: { written: true } });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao escrever no terminal.');

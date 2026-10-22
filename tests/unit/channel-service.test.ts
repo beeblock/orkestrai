@@ -115,24 +115,57 @@ describe('ChannelService', () => {
     const enqueue = mockWorkspace();
     const root = mkdtempSync(join(tmpdir(), 'channel-attachments-'));
     try {
+      const image = { id: '01a14a44-5d87-7d1c-90e7-7b697f79bf60', kind: 'file' as const, name: 'print.png', path: '.orkestrai/attachments/01a14a44-5d87-7d1c-90e7-7b697f79bf60-print.png', url: null, mimeType: 'image/png', size: 3 };
       mkdirSync(join(root, '.orkestrai', 'attachments'), { recursive: true });
-      writeFileSync(join(root, '.orkestrai', 'attachments', 'a-print.png'), 'png');
-      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue({ id: 'w', workingDir: root, wslWorkingDir: null } as never);
-      const image = { id: '01a14a44-5d87-7d1c-90e7-7b697f79bf60', kind: 'file' as const, name: 'print.png', path: '.orkestrai/attachments/a-print.png', url: null, mimeType: 'image/png', size: 3 };
+      writeFileSync(join(root, image.path), 'png');
+      const native = { id: 'w', workingDir: root, runtimeKind: 'native', wslDistribution: null, wslWorkingDir: null };
+      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue(native as never);
       const result = await new ChannelService().postOwner('w', `dm:${QA}`, { body: '', attachments: [image] });
       expect(result.message.meta).toMatchObject({ attachments: [image], attachmentsOnly: true });
       expect(result.message.body).toBe('print.png');
       expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
         toNodeId: QA,
-        content: expect.stringContaining(`arquivo "print.png" (image/png) em ${join(root, '.orkestrai', 'attachments', 'a-print.png')}`),
+        content: expect.stringContaining(`arquivo "print.png" (image/png) em ${join(root, image.path)}`),
       }));
-      // A file removed after it was attached fails the send instead of reaching the agent.
-      await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'veja', attachments: [{ ...image, path: '.orkestrai/attachments/gone.png' }] }))
+      // A file removed after it was attached, or a path that is not its own, fails the send.
+      await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'veja', attachments: [{ ...image, path: `.orkestrai/attachments/${image.id}-gone.png` }] }))
         .rejects.toThrow('não está mais no workspace');
-      // In WSL the agent opens the same file through its Linux path.
-      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue({ id: 'w', workingDir: root, wslWorkingDir: '/home/dev/app' } as never);
-      await new ChannelService().postOwner('w', `dm:${QA}`, { body: 'veja', attachments: [image] });
-      expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: QA, content: expect.stringContaining('em /home/dev/app/.orkestrai/attachments/a-print.png') }));
+      await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'veja', attachments: [{ ...image, id: '01a14a44-5d87-7d1c-90e7-7b697f79bf61' }] }))
+        .rejects.toThrow('não está mais no workspace');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('names each attachment in the runtime of the terminal that receives it', async () => {
+    const enqueue = mockWorkspace();
+    const root = mkdtempSync(join(tmpdir(), 'channel-runtimes-'));
+    try {
+      const image = { id: '01a14a44-5d87-7d1c-90e7-7b697f79bf70', kind: 'file' as const, name: 'tela.png', path: '.orkestrai/attachments/01a14a44-5d87-7d1c-90e7-7b697f79bf70-tela.png', url: null, mimeType: 'image/png', size: 3 };
+      mkdirSync(join(root, '.orkestrai', 'attachments'), { recursive: true });
+      writeFileSync(join(root, image.path), 'png');
+      const host = join(root, image.path);
+      const wsl = { id: 'w', workingDir: root, runtimeKind: 'wsl', wslDistribution: 'Ubuntu', wslWorkingDir: '/home/dev/app' };
+      const native = { ...wsl, runtimeKind: 'native', wslDistribution: null, wslWorkingDir: null };
+      const nodes = (lead: Record<string, unknown>, qa: Record<string, unknown>) => vi.spyOn(workspaceRepository, 'listNodes').mockResolvedValue([
+        { id: LEAD, type: 'terminal', title: 'Codex Lider', payload: { provider: 'codex', maestro: true, ...lead } },
+        { id: QA, type: 'terminal', title: 'QA Upload', payload: { provider: 'claude', ...qa } },
+      ] as never);
+      const contentFor = (nodeId: string) => enqueue.mock.calls.map(([input]) => input).filter((input) => input.toNodeId === nodeId && input.kind === 'owner').at(-1)?.content ?? '';
+
+      // A WSL workspace: its default terminals read the Linux path; a native terminal in it, the host path.
+      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue(wsl as never);
+      nodes({}, { executionRuntime: { kind: 'native' } });
+      await new ChannelService().postOwner('w', 'team', { body: '@Codex Lider @QA Upload vejam', attachments: [image] });
+      expect(contentFor(LEAD)).toContain(`em /home/dev/app/${image.path}`);
+      expect(contentFor(QA)).toContain(`em ${host}`);
+
+      // A native workspace: a terminal in its own WSL distribution reads that distribution's path.
+      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue(native as never);
+      nodes({}, { executionRuntime: { kind: 'wsl', distribution: 'Debian', linuxWorkingDir: '/srv/app' } });
+      await new ChannelService().postOwner('w', 'team', { body: '@Codex Lider @QA Upload vejam', attachments: [image] });
+      expect(contentFor(LEAD)).toContain(`em ${host}`);
+      expect(contentFor(QA)).toContain(`em /srv/app/${image.path}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

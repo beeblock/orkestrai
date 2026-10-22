@@ -202,6 +202,11 @@
   // The conversation with the target opens above the bar, like a chat thread.
   let threadOpen = $state(false);
   const staged = new ComposerAttachments(() => workspaceId);
+  // Staged files belong to this workspace's draft: switching workspace or closing the bar discards them.
+  $effect(() => {
+    void workspaceId;
+    return staged.reset;
+  });
 
   const target = $derived(targets.find((candidate) => candidate.id === targetId) ?? targets[0] ?? null);
   const filteredMentions = $derived(mentions
@@ -235,10 +240,9 @@
 
   async function send() {
     const text = draft.trim();
-    const attachments = [...staged.items];
-    if ((!text && !attachments.length) || sending || staged.busy) return;
+    if ((!text && !staged.items.length) || sending || staged.busy) return;
     // Board commands are plain sentences; a message with files always goes to the agent.
-    if (!attachments.length && onCommand && await onCommand(text)) {
+    if (!staged.items.length && onCommand && await onCommand(text)) {
       if (draft.trim() === text) draft = '';
       onInput();
       showFeedback(true, m['composer.command_done']());
@@ -247,16 +251,18 @@
     if (!target) return;
     const recipient = target;
     const at = new Date().toISOString();
+    const submission = staged.reserve();
     sending = true;
-    const messageId = await sendToAgent(workspaceId, recipient.id, text, attachments);
+    const messageId = await sendToAgent(workspaceId, recipient.id, text, submission.attachments);
     sending = false;
     if (messageId) {
-      staged.clear();
+      submission.commit();
       if (draft.trim() === text) draft = '';
       onInput();
-      trackSent(messageId, recipient.id, recipient.title, text || attachments.map((attachment) => attachment.name).join(', '), at);
+      trackSent(messageId, recipient.id, recipient.title, text || submission.attachments.map((attachment) => attachment.name).join(', '), at);
     } else {
-      showFeedback(false, m['composer.failed']({ name: target.title }));
+      submission.release();
+      showFeedback(false, m['composer.failed']({ name: recipient.title }));
     }
   }
 
@@ -313,7 +319,7 @@
   {/if}
   <div class="composer" class:dropping={staged.dragging} data-testid="canvas-composer" role="group" aria-label={m['composer.drop_files']()} ondragover={(event) => { if (target) staged.dragover(event); }} ondragleave={staged.dragleave} ondrop={(event) => { if (target) staged.drop(event); }}>
     {#if staged.items.length}
-      <div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>
+      <div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>
     {/if}
     {#if target}
       <DropdownMenu.Root>

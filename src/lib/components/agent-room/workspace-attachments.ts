@@ -114,12 +114,6 @@ export function attachmentHref(workspaceId: string, attachment: WorkspaceAttachm
   return `/api/agent-room/workspaces/${workspaceId}/fs/raw?path=${encodeURIComponent(attachment.path ?? '')}`;
 }
 
-export function attachmentPromptReference(attachment: WorkspaceAttachment): string {
-  return attachment.kind === 'link'
-    ? `Reference link "${attachment.name}": ${attachment.url}`
-    : `Attached file "${attachment.name}": ${attachment.path}`;
-}
-
 export function attachmentMarkdown(workspaceId: string, attachment: WorkspaceAttachment): string {
   if (attachment.kind === 'link') return `[${attachment.name}](${attachment.url})`;
   const href = attachmentHref(workspaceId, attachment);

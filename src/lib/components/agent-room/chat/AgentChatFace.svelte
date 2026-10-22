@@ -30,6 +30,12 @@
   let field = $state<HTMLInputElement | null>(null);
   let listening = $state(false);
   const staged = new ComposerAttachments(() => workspaceId);
+  // The draft is this agent's: another agent, another workspace or closing the face discards its files.
+  $effect(() => {
+    void workspaceId;
+    void nodeId;
+    return staged.reset;
+  });
   const channel = $derived(directChannel(nodeId));
   const url = $derived(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(channel)}/messages`);
   const timeline = $derived(buildTimeline(messages));
@@ -65,13 +71,16 @@
 
   async function send() {
     const text = draft.trim();
-    const attachments = [...staged.items];
-    if ((!text && !attachments.length) || sending || staged.busy) return;
+    if ((!text && !staged.items.length) || sending || staged.busy) return;
+    const submission = staged.reserve();
     sending = true;
-    failed = !(await post(text, null, attachments));
+    failed = !(await post(text, null, submission.attachments));
     sending = false;
-    if (failed) return;
-    staged.clear();
+    if (failed) {
+      submission.release();
+      return;
+    }
+    submission.commit();
     if (draft.trim() === text) draft = '';
   }
 
@@ -126,7 +135,7 @@
     {/each}
   </div>
   {#if failed || staged.error}<p class="error" role="alert">{staged.error || m['composer.failed']({ name: title })}</p>{/if}
-  {#if staged.items.length}<div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>{/if}
+  {#if staged.items.length}<div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>{/if}
   <form class="composer" class:dropping={staged.dragging} aria-label={m['composer.drop_files']()} onsubmit={(event) => { event.preventDefault(); void send(); }} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>
     {#if listening}
       <ComposerVoice onTranscript={onVoice} onClose={() => (listening = false)} onSetupNeeded={onVoiceSetup} />
