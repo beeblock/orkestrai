@@ -157,16 +157,16 @@
     sending = true;
     if (recipient) {
       const target = recipient;
-      const delivered = await sendToAgent(data.workspaceId, target.id, text, submission.attachments);
+      const sent = await sendToAgent(data.workspaceId, target.id, text, submission.attachments);
       sending = false;
-      if (delivered) {
+      // Stored, the message owns its files and text; only a message never stored stays a draft.
+      if (sent.messageId) {
         submission.commit();
         if (draft.trim() === text) draft = '';
-        flash(true, m['orchestrator.sent_direct']({ name: target.title }));
       } else {
         submission.release();
-        flash(false, m['orchestrator.failed']());
       }
+      flash(sent.delivered, sent.delivered ? m['orchestrator.sent_direct']({ name: target.title }) : m['orchestrator.failed']());
       return;
     }
     const csrf = getCsrfToken();

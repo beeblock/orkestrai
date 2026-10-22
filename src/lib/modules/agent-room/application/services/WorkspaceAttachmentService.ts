@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
 import type { TerminalNodePayload, Workspace, WorkspaceAttachment } from '../../domain/types.js';
 import { workspaceFileForTerminal } from '../../infrastructure/WslRuntime.js';
+import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
 import { MAX_WORKSPACE_ATTACHMENT_BYTES } from '../../contracts/schemas/workspaceAttachmentSchemas.js';
 import type { WorkspaceAttachmentDto } from '../dto/WorkspaceAttachmentDto.js';
 import type { WorkspaceAttachmentDeleteDto } from '../dto/WorkspaceAttachmentDto.js';
@@ -35,6 +36,25 @@ function canonicalMime(name: string, declared: string): string {
 }
 
 export class WorkspaceAttachmentService {
+  private ownership = new Map<string, Promise<unknown>>();
+
+  /**
+   * Runs one change of attachment ownership at a time per workspace: a
+   * message claiming files (checked, then stored) never interleaves with a
+   * file being deleted, so a stored message never points to a deleted file.
+   */
+  async exclusive<T>(workspaceId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.ownership.get(workspaceId) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(operation);
+    const tail = run.catch(() => undefined);
+    this.ownership.set(workspaceId, tail);
+    try {
+      return await run;
+    } finally {
+      if (this.ownership.get(workspaceId) === tail) this.ownership.delete(workspaceId);
+    }
+  }
+
   async create(workspaceId: string, dto: WorkspaceAttachmentDto): Promise<WorkspaceAttachment> {
     if (dto.kind === 'link') {
       return {
@@ -98,7 +118,13 @@ export class WorkspaceAttachmentService {
     if (!attachment.path?.startsWith(expectedPrefix)) {
       throw new Error('The attachment path does not match its identifier.');
     }
-    await filesystemService.deleteFile(workspaceId, attachment.path);
+    const path = attachment.path;
+    await this.exclusive(workspaceId, async () => {
+      // A message that was stored keeps its file, even when the screen that sent it
+      // never learned so (a lost response) and discards its draft afterwards.
+      if (await channelRepository.referencesAttachment(workspaceId, attachment.id)) return;
+      await filesystemService.deleteFile(workspaceId, path);
+    });
   }
 }
 

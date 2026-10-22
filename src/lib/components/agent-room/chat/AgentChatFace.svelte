@@ -55,7 +55,8 @@
     }
   }
 
-  async function post(text: string, replyToId: string | null = null, attachments: WorkspaceAttachment[] = []): Promise<boolean> {
+  /** Whether the message was stored (then it owns its attachments) and whether the agent's inbox took it. */
+  async function post(text: string, replyToId: string | null = null, attachments: WorkspaceAttachment[] = []): Promise<{ stored: boolean; delivered: boolean }> {
     const csrf = getCsrfToken();
     const response = await fetch(url, {
       method: 'POST',
@@ -63,10 +64,10 @@
       body: JSON.stringify({ body: text, replyToId, attachments }),
     }).catch(() => null);
     const result = response?.ok ? await response.json().catch(() => null) : null;
-    if (!result?.data?.message) return false;
+    if (!result?.data?.message) return { stored: false, delivered: false };
     messages = upsertMessage(messages, result.data.message);
     await scrollEnd();
-    return !(result.data.delivered ?? []).some((entry: { ok: boolean }) => !entry.ok);
+    return { stored: true, delivered: !(result.data.delivered ?? []).some((entry: { ok: boolean }) => !entry.ok) };
   }
 
   async function send() {
@@ -74,9 +75,11 @@
     if ((!text && !staged.items.length) || sending || staged.busy) return;
     const submission = staged.reserve();
     sending = true;
-    failed = !(await post(text, null, submission.attachments));
+    const result = await post(text, null, submission.attachments);
     sending = false;
-    if (failed) {
+    failed = !result.delivered;
+    // Stored, the message owns its files and text; only a message never stored stays a draft.
+    if (!result.stored) {
       submission.release();
       return;
     }
@@ -120,7 +123,7 @@
           <small>{#if row.authorKind === 'owner'}<UserRound size={11} />{m['chat.you']()}{:else if row.authorKind === 'external'}{String(row.messages[0].meta.sender ?? '')}{:else if row.authorNodeId && row.authorNodeId !== nodeId && typeof row.messages[0].meta.authorTitle === 'string'}{row.messages[0].meta.authorTitle}{:else}{title}{/if}</small>
           {#each row.messages as message (message.id)}
             {#if message.kind === 'question'}
-              <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id)} />
+              <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id).then((result) => result.delivered)} />
             {:else}
               <div class="bubble">
                 {#if message.meta.attachmentsOnly !== true}<MarkdownView content={message.body} compact {workspaceId} />{/if}

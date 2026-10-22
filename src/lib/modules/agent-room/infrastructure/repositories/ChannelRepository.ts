@@ -105,6 +105,17 @@ export class ChannelRepository {
     return rows.map(mapChannelMessage).find((message) => message.meta.bindingId === bindingId && message.meta.externalId === externalId) ?? null;
   }
 
+  /** Whether a stored message of the workspace carries this attachment: then its file belongs to that message. */
+  async referencesAttachment(workspaceId: string, attachmentId: string): Promise<boolean> {
+    const rows = await AgentChannelMessage.query()
+      .where('workspace_id', workspaceId)
+      .where('meta_json', 'like', `%${JSON.stringify({ id: attachmentId }).slice(1, -1)}%`)
+      .limit(50)
+      .get();
+    return rows.map(mapChannelMessage).some((message) => Array.isArray(message.meta.attachments)
+      && message.meta.attachments.some((attachment) => (attachment as { id?: unknown } | null)?.id === attachmentId));
+  }
+
   /** The newest message of every channel in the workspace, for the channel list. */
   async latestByChannel(workspaceId: string, limit = 400): Promise<Map<string, ChannelMessage>> {
     const rows = await AgentChannelMessage.query()
