@@ -32,6 +32,31 @@ describe('AutonomyPolicyService', () => {
     } finally { raw.mockRestore(); submit.mockRestore(); }
   });
 
+  it('types quick-field attachments into the terminal by a path in that terminal\'s runtime', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orkestrai-quick-attachments-'));
+    const { mkdir } = await import('node:fs/promises');
+    const id = '01a14a44-5d87-7d1c-90e7-7b697f79bf80';
+    const path = `.orkestrai/attachments/${id}-erro.png`;
+    await mkdir(join(root, '.orkestrai', 'attachments'), { recursive: true });
+    await writeFile(join(root, path), 'png');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Quick attachments', workingDir: root });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', payload: {
+      sessionId: 'quick-session', executionRuntime: { kind: 'wsl', distribution: 'Ubuntu', linuxWorkingDir: '/home/dev/app' },
+    } as never });
+    const submit = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue();
+    try {
+      const controller = new FilesystemController();
+      const event = (body: unknown) => ({ url: new URL('http://localhost/api'), params: { id: workspace.id, nodeId: node.id }, request: new Request('http://localhost/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
+      const attachment = { id, kind: 'file', name: 'erro.png', path, url: null, mimeType: 'image/png', size: 3 };
+      expect((await controller.writeTerminal(event({ data: 'veja', submit: true, attachments: [attachment] }))).status).toBe(200);
+      expect(submit).toHaveBeenCalledWith(expect.objectContaining({ message: `veja [Anexos: arquivo "erro.png" (image/png) em /home/dev/app/${path}]` }));
+      // A file that is no longer there is refused before anything is typed.
+      const missing = await controller.writeTerminal(event({ data: 'veja', submit: true, attachments: [{ ...attachment, path: `.orkestrai/attachments/${id}-gone.png` }] }));
+      expect(missing.status).toBe(400);
+      expect(submit).toHaveBeenCalledTimes(1);
+    } finally { submit.mockRestore(); }
+  });
+
   it('validates policy, gate, and vault HTTP bodies alongside the Svelar route parameters', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orkestrai-autonomy-http-'));
     const workspace = await workspaceRepository.createWorkspace({ name: 'HTTP acceptance', workingDir: root });

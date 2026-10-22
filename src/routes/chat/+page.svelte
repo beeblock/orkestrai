@@ -214,7 +214,6 @@
     channel = next;
     messages = [];
     openQuestions = [];
-    staged.clear();
     loading = true;
     draft = '';
     sendError = '';
@@ -272,16 +271,17 @@
 
   async function send() {
     const text = draft.trim();
-    const attachments = [...staged.items];
-    if ((!text && !attachments.length) || sending || staged.busy) return;
+    if ((!text && !staged.items.length) || sending || staged.busy) return;
+    const submission = staged.reserve();
     sending = true;
     sendError = '';
     try {
-      await post(text, null, attachments);
-      staged.clear();
+      await post(text, null, submission.attachments);
+      submission.commit();
       if (draft.trim() === text) draft = '';
       onInput();
     } catch (error) {
+      submission.release();
       sendError = error instanceof Error ? error.message : m['chat.send_failed']();
     } finally {
       sending = false;
@@ -361,6 +361,13 @@
 
   $effect(() => {
     publishWorkspaceContext('chat', workspaceId, profileNodeId ?? directNode);
+  });
+
+  // Staged files belong to one conversation: another channel or workspace, or leaving Chat, discards them.
+  $effect(() => {
+    void workspaceId;
+    void channel;
+    return staged.reset;
   });
 
   $effect(() => {
@@ -611,7 +618,7 @@
       {#if sendError || staged.error}<p class="send-error" role="alert">{sendError || staged.error}</p>{/if}
       <div class="composer" class:dropping={staged.dragging} role="group" aria-label={m['composer.drop_files']()} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>
         {#if staged.items.length && workspaceId}
-          <div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>
+          <div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>
         {/if}
         {#if listening}
           <ComposerVoice onTranscript={onVoice} onClose={() => (listening = false)} onSetupNeeded={onVoiceSetup} />

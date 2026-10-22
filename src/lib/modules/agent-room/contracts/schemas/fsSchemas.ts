@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_WORKSPACE_ATTACHMENTS, workspaceAttachmentSchema } from './workspaceAttachmentSchemas.js';
 
 // Schemas de filesystem/git — compartilhados backend/frontend.
 
@@ -8,9 +9,11 @@ export const fsWriteSchema = z.object({
 });
 
 export const terminalWriteSchema = z.object({
-  data: z.string().min(1).max(256 * 1024),
+  data: z.string().max(256 * 1024).default(''),
   submit: z.boolean().default(false),
-});
+  /** Files the owner attached in the quick field, named by a path in this terminal's runtime. */
+  attachments: z.array(workspaceAttachmentSchema).max(MAX_WORKSPACE_ATTACHMENTS).default([]),
+}).refine((input) => input.data.length > 0 || input.attachments.length > 0, { message: 'Nada para escrever no terminal.', path: ['data'] });
 
 export const terminalPauseSchema = z.object({
   paused: z.boolean(),

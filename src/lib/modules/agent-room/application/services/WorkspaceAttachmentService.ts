@@ -1,5 +1,8 @@
+import { stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
-import type { WorkspaceAttachment } from '../../domain/types.js';
+import type { TerminalNodePayload, Workspace, WorkspaceAttachment } from '../../domain/types.js';
+import { workspaceFileForTerminal } from '../../infrastructure/WslRuntime.js';
 import { MAX_WORKSPACE_ATTACHMENT_BYTES } from '../../contracts/schemas/workspaceAttachmentSchemas.js';
 import type { WorkspaceAttachmentDto } from '../dto/WorkspaceAttachmentDto.js';
 import type { WorkspaceAttachmentDeleteDto } from '../dto/WorkspaceAttachmentDto.js';
@@ -60,6 +63,32 @@ export class WorkspaceAttachmentService {
       mimeType: canonicalMime(file.name, file.type),
       size: file.size,
     };
+  }
+
+  /** Fails, before anything is sent, when an attached file is gone or does not match its identifier. */
+  async assertPresent(workspace: Pick<Workspace, 'workingDir'>, attachments: readonly WorkspaceAttachment[]): Promise<void> {
+    for (const attachment of attachments) {
+      if (attachment.kind === 'link') continue;
+      const path = attachment.path ?? '';
+      const present = path.startsWith(`.orkestrai/attachments/${attachment.id}-`)
+        && await stat(resolve(workspace.workingDir, path)).then((info) => info.isFile()).catch(() => false);
+      if (!present) throw new Error(`O anexo "${attachment.name}" não está mais no workspace. Anexe de novo.`);
+    }
+  }
+
+  /**
+   * Each attachment as the terminal that receives it can open it: a link by
+   * its URL, a file by an absolute path in that terminal's own runtime (WSL
+   * or host), which also reaches the file from a Floor.
+   */
+  describeFor(
+    workspace: Pick<Workspace, 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir'>,
+    payload: Pick<TerminalNodePayload, 'executionRuntime'> | null | undefined,
+    attachments: readonly WorkspaceAttachment[],
+  ): string[] {
+    return attachments.map((attachment) => attachment.kind === 'link'
+      ? `link "${attachment.name}": ${attachment.url}`
+      : `arquivo "${attachment.name}"${attachment.mimeType ? ` (${attachment.mimeType})` : ''} em ${workspaceFileForTerminal(workspace, payload, attachment.path ?? '')}`);
   }
 
   async remove(workspaceId: string, dto: WorkspaceAttachmentDeleteDto): Promise<void> {

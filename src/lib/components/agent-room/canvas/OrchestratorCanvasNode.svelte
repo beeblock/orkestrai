@@ -36,6 +36,8 @@
 
   let { id, data, selected } = $props<NodeProps & { data: OrchestratorNodeData }>();
   const staged = new ComposerAttachments(() => data.workspaceId);
+  // Removing the panel discards the files of a draft that was never sent.
+  $effect(() => staged.reset);
 
   const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', kimi: 'Kimi', opencode: 'OpenCode', cursor: 'Cursor', antigravity: 'Antigravity', cline: 'Cline', devin: 'Devin', copilot: 'Copilot', gemini: 'Gemini', qwen: 'Qwen', aider: 'Aider', goose: 'goose', amp: 'Amp' };
 
@@ -150,18 +152,19 @@
   // distributes it; @mentions reach those teammates directly.
   async function send() {
     const text = draft.trim();
-    const attachments = [...staged.items];
-    if ((!text && !attachments.length) || sending || !canSend || staged.busy) return;
+    if ((!text && !staged.items.length) || sending || !canSend || staged.busy) return;
+    const submission = staged.reserve();
     sending = true;
     if (recipient) {
       const target = recipient;
-      const delivered = await sendToAgent(data.workspaceId, target.id, text, attachments);
+      const delivered = await sendToAgent(data.workspaceId, target.id, text, submission.attachments);
       sending = false;
       if (delivered) {
-        staged.clear();
+        submission.commit();
         if (draft.trim() === text) draft = '';
         flash(true, m['orchestrator.sent_direct']({ name: target.title }));
       } else {
+        submission.release();
         flash(false, m['orchestrator.failed']());
       }
       return;
@@ -170,14 +173,15 @@
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(data.workspaceId)}/channels/${encodeURIComponent(TEAM_CHANNEL)}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
-      body: JSON.stringify({ body: text, attachments }),
+      body: JSON.stringify({ body: text, attachments: submission.attachments }),
     }).catch(() => null);
     sending = false;
     if (response?.ok) {
-      staged.clear();
+      submission.commit();
       if (draft.trim() === text) draft = '';
       flash(true, leader && !text.includes('@') ? m['orchestrator.sent_leader']({ name: leader.title }) : m['orchestrator.sent']());
     } else {
+      submission.release();
       flash(false, m['orchestrator.failed']());
     }
   }
@@ -313,7 +317,7 @@
       </div>
     {/if}
     {#if staged.error}<p class="staged-error" role="alert">{staged.error}</p>{/if}
-    {#if staged.items.length}<div class="staged"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>{/if}
+    {#if staged.items.length}<div class="staged"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>{/if}
     <form class="command" class:voice={voiceOpen} class:dropping={staged.dragging} aria-label={m['composer.drop_files']()} onsubmit={(event) => { event.preventDefault(); void send(); }} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>
       {#if voiceOpen}
         <ComposerVoice onTranscript={onVoiceTranscript} onClose={() => (voiceOpen = false)} onSetupNeeded={onVoiceSetup} />
