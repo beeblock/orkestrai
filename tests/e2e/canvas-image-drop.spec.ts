@@ -68,12 +68,19 @@ test('external images become separate Canvas references or agent attachments acc
     await page.getByTestId('terminal-quick-prompt').fill('Keep this draft.');
     await terminal.dispatchEvent('drop', { dataTransfer: refs });
     const prompt = page.getByTestId('terminal-quick-prompt');
-    await expect(prompt).toHaveValue(/agent-one\.png.*agent-two\.png/);
-    await expect(prompt).toHaveValue(/\.orkestrai\/attachments\//);
-    await expect(prompt).toHaveValue(/^Keep this draft\./);
+    const attachments = page.locator(`[data-id="${agentId}"] .staged-attachments`).getByRole('link');
+    await expect(attachments).toHaveText(['agent-one.png', 'agent-two.png']);
+    for (const name of ['agent-one.png', 'agent-two.png']) {
+      const attached = attachments.filter({ hasText: name });
+      await expect(attached).toHaveAttribute('title', /^\.orkestrai\/attachments\//);
+      const attachmentPath = await attached.getAttribute('title');
+      expect(readFileSync(join(workingDir, attachmentPath!))).toEqual(Buffer.from(png, 'base64'));
+    }
+    await expect(prompt).toHaveValue('Keep this draft.');
     const headerRef = await transfer(page, ['header-reference.png']);
     await page.locator(`[data-id="${agentId}"] .node-header`).dispatchEvent('drop', { dataTransfer: headerRef });
-    await expect(prompt).toHaveValue(/agent-one\.png.*agent-two\.png.*header-reference\.png/);
+    await expect(attachments).toHaveText(['agent-one.png', 'agent-two.png', 'header-reference.png']);
+    await expect(prompt).toHaveValue('Keep this draft.');
     expect((await list()).filter((node: { type: string }) => node.type === 'image')).toHaveLength(3);
     await headerRef.dispose();
     await images.dispose();
