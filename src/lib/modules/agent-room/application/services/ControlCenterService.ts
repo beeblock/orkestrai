@@ -367,6 +367,7 @@ export class ControlCenterService {
     const agents = terminalNodes.map((node) => {
       const payload = node.payload as {
         provider?: string;
+        profileId?: string | null;
         role?: string | null;
         sessionId?: string;
         agentRuntimeMode?: 'interactive' | 'on_demand' | 'persistent';
@@ -386,6 +387,7 @@ export class ControlCenterService {
         nodeId: node.id,
         title: node.title ?? 'Terminal',
         provider: payload.provider ?? session?.provider ?? null,
+        profileId: typeof payload.profileId === 'string' ? payload.profileId : null,
         role: payload.role ?? null,
         floorId: node.floorId,
         floorName: node.floorId ? floorNames.get(node.floorId) ?? null : null,

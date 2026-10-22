@@ -24,6 +24,32 @@ export function usageRoutingId(usage: Pick<ProviderUsage, 'provider' | 'profileI
   return usage.profileId ? `${usage.provider}:profile:${usage.profileId}` : usage.provider;
 }
 
+/**
+ * The tightest usage window among the accounts a workspace's agents run on:
+ * another profile of the same provider, busy elsewhere, says nothing about
+ * that work. With no agents to follow, only the default accounts count.
+ * `shared` tells whether the provider has other accounts, so the account
+ * should be named next to the percentage.
+ */
+export function tightestAccountUsage(
+  rows: readonly ProviderUsage[],
+  agents: ReadonlyArray<{ provider: string | null; profileId?: string | null }>,
+): { usage: ProviderUsage; percent: number; resetsAt: string | null; shared: boolean } | null {
+  const accounts = new Set(agents.flatMap((agent) => (agent.provider ? [usageRoutingId({ provider: agent.provider, profileId: agent.profileId ?? null })] : [])));
+  let best: { usage: ProviderUsage; percent: number; resetsAt: string | null } | null = null;
+  for (const usage of rows) {
+    if (usage.error) continue;
+    if (accounts.size ? !accounts.has(usageRoutingId(usage)) : Boolean(usage.profileId)) continue;
+    for (const window of usage.windows) {
+      if (!best || window.usedPercent > best.percent) best = { usage, percent: Math.round(window.usedPercent), resetsAt: window.resetsAt };
+    }
+  }
+  if (!best) return null;
+  const chosen = best.usage;
+  const shared = rows.some((other) => other.provider === chosen.provider && (other.profileId ?? null) !== (chosen.profileId ?? null));
+  return { ...best, shared };
+}
+
 /** Inverso de `usageRoutingId` — usado por quem recebe `recommendedProvider`
     e precisa saber se deve passar `--profile` junto do `--provider`. */
 export function parseUsageRoutingId(routingId: string): { providerId: string; profileId: string | null } {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildUsageRoutingReport, normalizeUsageRoutingPolicy } from '$lib/modules/agent-room/domain/usage-routing.js';
+import { buildUsageRoutingReport, normalizeUsageRoutingPolicy, tightestAccountUsage } from '$lib/modules/agent-room/domain/usage-routing.js';
 import type { ProviderUsage } from '$lib/modules/agent-room/application/services/UsageService.js';
 
 const usage = (provider: ProviderUsage['provider'], usedPercent: number, error: ProviderUsage['error'] = null): ProviderUsage => ({
@@ -88,5 +88,18 @@ describe('usage routing', () => {
     const report = buildUsageRoutingReport([profileUsage, usage('codex', 10)], policy);
     expect(report.providers[0].routingId).toBe(routingId);
     expect(report.recommendedProvider).toBe('codex');
+  });
+
+  it('shows the usage of the account the workspace agents run on, not the busiest one on the machine', () => {
+    const standard = usage('claude', 12);
+    const work = { ...usage('claude', 30), profileId: 'work', profileName: 'Trabalho' };
+    const codex = usage('codex', 55);
+    // The workspace runs Claude on the default account: the work profile's 30% is not its usage.
+    expect(tightestAccountUsage([standard, work, codex], [{ provider: 'claude', profileId: null }])).toMatchObject({ usage: standard, percent: 12, shared: true });
+    expect(tightestAccountUsage([standard, work], [{ provider: 'claude', profileId: 'work' }])).toMatchObject({ usage: work, percent: 30, shared: true });
+    // An unreadable default account shows nothing rather than another account's figure.
+    expect(tightestAccountUsage([usage('claude', 0, 'credentials_missing'), work], [{ provider: 'claude' }])).toBeNull();
+    // Without agents, only default accounts count.
+    expect(tightestAccountUsage([standard, work, codex], [])).toMatchObject({ usage: codex, percent: 55, shared: false });
   });
 });
