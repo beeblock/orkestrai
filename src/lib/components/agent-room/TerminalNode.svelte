@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { TerminalInputBuffer, terminalInputFrame } from './terminal-input-buffer.js';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { createTerminalOutputBuffer } from './terminal-output-buffer.js';
@@ -545,7 +546,7 @@
     let attached = false;
     let disposed = false;
     let resizeFrame: number | null = null;
-    const pendingInput: string[] = [];
+    const pendingInput = new TerminalInputBuffer();
 
     const handleLeaderDictation = (event: Event) => {
       const detail = (event as CustomEvent<LeaderDictationCommandDetail>).detail;
@@ -563,11 +564,10 @@
     const sendTerminalInput = (data: string, imagePaste = false) => {
       const id = currentSessionId();
       if (!id || !attached || socket?.readyState !== WebSocket.OPEN) {
-        pendingInput.push(data);
-        while (pendingInput.join('').length > 16_384) pendingInput.shift();
+        pendingInput.push(data, imagePaste);
         return;
       }
-      send({ type: 'input', sessionId: id, data, ...(imagePaste ? { imagePaste: true } : {}) });
+      send(terminalInputFrame(id, { data, imagePaste }));
     };
     // Ctrl+V reaches the CLI as a key, and only an image on the clipboard turns
     // it into a draft chip there. The app answers whether one is there (never
@@ -587,7 +587,7 @@
     const flushPendingInput = () => {
       const id = currentSessionId();
       if (!id || !attached || socket?.readyState !== WebSocket.OPEN) return;
-      for (const data of pendingInput.splice(0)) send({ type: 'input', sessionId: id, data });
+      for (const input of pendingInput.drain()) send(terminalInputFrame(id, input));
     };
 
     const fitAndReportSize = () => {
