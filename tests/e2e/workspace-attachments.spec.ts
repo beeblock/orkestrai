@@ -74,8 +74,11 @@ test.describe('workspace attachments', () => {
       await page.goto(`/terminal?workspace=${workspace.id}&node=${agent.id}`);
       const agentTransfer = await fileTransfer(page, 'agent-context.pdf', 'application/pdf', 'PDF context');
       await page.locator('.composer').dispatchEvent('drop', { dataTransfer: agentTransfer });
-      await expect(page.getByTestId('terminal-quick-prompt')).toHaveValue(/agent-context\.pdf/);
-      await expect(page.getByTestId('terminal-quick-prompt')).toHaveValue(/\.orkestrai\/attachments\//);
+      // Quick messages carry files as staged attachments, not paths inserted
+      // into the text (which were wrong for agents running on Floors or WSL).
+      await expect(page.locator('.staged-attachments')).toContainText('agent-context.pdf');
+      await expect(page.getByTestId('terminal-quick-prompt')).toHaveValue('');
+      await expect(page.locator('.staged-attachments').getByRole('link', { name: 'agent-context.pdf' })).toHaveAttribute('title', /^\.orkestrai\/attachments\//);
 
       await page.goto(`/terminal?workspace=${workspace.id}&node=${board.id}`);
       await expect(page.locator('article.tb-card')).toHaveCount(1);
