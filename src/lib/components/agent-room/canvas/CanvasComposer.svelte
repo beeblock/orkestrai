@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import { getCsrfToken } from '@beeblock/svelar/http';
+  import type { WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
 
   export type ComposerTarget = { id: string; title: string };
   export type ComposerMention = { id: string; title: string; type: string };
@@ -10,12 +11,12 @@
    * and waits for a busy one to finish its turn. Returns the stored message
    * id once it is queued, or null when it was not accepted.
    */
-  export async function sendToAgent(workspaceId: string, nodeId: string, text: string): Promise<string | null> {
+  export async function sendToAgent(workspaceId: string, nodeId: string, text: string, attachments: WorkspaceAttachment[] = []): Promise<string | null> {
     const csrf = getCsrfToken();
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(`dm:${nodeId}`)}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
-      body: JSON.stringify({ body: text }),
+      body: JSON.stringify({ body: text, attachments }),
     }).catch(() => null);
     const result = response?.ok ? await response.json().catch(() => null) as { data?: { message?: { id?: string }; delivered?: Array<{ ok: boolean }> } } | null : null;
     const accepted = Boolean(result?.data?.delivered?.length) && !result!.data!.delivered!.some((entry) => !entry.ok);
@@ -35,6 +36,9 @@
   import { appSettingsStore } from '../app-settings.svelte.js';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import AgentAvatar from '../AgentAvatar.svelte';
+  import AttachmentList from '../AttachmentList.svelte';
+  import ComposerAttachButton from '../ComposerAttachButton.svelte';
+  import { ComposerAttachments } from '../composer-attachments.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
 
   let {
@@ -197,6 +201,7 @@
   let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   // The conversation with the target opens above the bar, like a chat thread.
   let threadOpen = $state(false);
+  const staged = new ComposerAttachments(() => workspaceId);
 
   const target = $derived(targets.find((candidate) => candidate.id === targetId) ?? targets[0] ?? null);
   const filteredMentions = $derived(mentions
@@ -230,8 +235,10 @@
 
   async function send() {
     const text = draft.trim();
-    if (!text || sending) return;
-    if (onCommand && await onCommand(text)) {
+    const attachments = [...staged.items];
+    if ((!text && !attachments.length) || sending || staged.busy) return;
+    // Board commands are plain sentences; a message with files always goes to the agent.
+    if (!attachments.length && onCommand && await onCommand(text)) {
       if (draft.trim() === text) draft = '';
       onInput();
       showFeedback(true, m['composer.command_done']());
@@ -241,12 +248,13 @@
     const recipient = target;
     const at = new Date().toISOString();
     sending = true;
-    const messageId = await sendToAgent(workspaceId, recipient.id, text);
+    const messageId = await sendToAgent(workspaceId, recipient.id, text, attachments);
     sending = false;
     if (messageId) {
+      staged.clear();
       if (draft.trim() === text) draft = '';
       onInput();
-      trackSent(messageId, recipient.id, recipient.title, text, at);
+      trackSent(messageId, recipient.id, recipient.title, text || attachments.map((attachment) => attachment.name).join(', '), at);
     } else {
       showFeedback(false, m['composer.failed']({ name: target.title }));
     }
@@ -282,7 +290,9 @@
       {/each}
     </div>
   {/if}
-  {#if feedback}
+  {#if staged.error}
+    <p class="feedback error" role="alert">{staged.error}</p>
+  {:else if feedback}
     <p class="feedback" class:error={!feedback.ok} role="status">{feedback.text}</p>
   {:else if lastSent && !threadOpen}
     <div class="sent" class:delivered={lastSent.state !== 'queued'} role="status" data-testid="composer-sent" data-state={lastSent.state}>
@@ -301,7 +311,10 @@
   {:else if onCommand && !hintHidden && !threadOpen}
     <p class="command-hint">{m['composer.command_hint']()}<button type="button" aria-label={m['composer.command_hint_close']()} onclick={hideHint}><X size={11} /></button></p>
   {/if}
-  <div class="composer" data-testid="canvas-composer">
+  <div class="composer" class:dropping={staged.dragging} data-testid="canvas-composer" role="group" aria-label={m['composer.drop_files']()} ondragover={(event) => { if (target) staged.dragover(event); }} ondragleave={staged.dragleave} ondrop={(event) => { if (target) staged.drop(event); }}>
+    {#if staged.items.length}
+      <div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>
+    {/if}
     {#if target}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger class="target" aria-label={m['composer.choose_target']()}>
@@ -336,14 +349,16 @@
       oninput={onInput}
       oncompositionend={onInput}
       onkeydown={onKeydown}
+      onpaste={(event) => { if (target) staged.paste(event); }}
     ></textarea>
+    <ComposerAttachButton attachments={staged} class="icon attach" disabled={!target} />
     <button type="button" class="icon" disabled={!target} onclick={() => (threadOpen = !threadOpen)} aria-pressed={threadOpen} aria-label={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })} title={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })}><ChevronUp size={16} class={threadOpen ? 'rotate-180 transition-transform' : 'transition-transform'} /></button>
     <button type="button" class="icon" disabled={!target} onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()}><AtSign size={16} /></button>
     <button type="button" class="icon" class:on={speakReplies} disabled={!target} onclick={toggleSpeakReplies} aria-pressed={speakReplies} aria-label={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()} title={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()}>
       {#if speakReplies}<Volume2 size={16} />{:else}<VolumeX size={16} />{/if}
     </button>
-    {#if draft.trim() || sending}
-      <button type="button" class="send" disabled={(!target && !onCommand) || !draft.trim() || sending} onclick={() => void send()} aria-label={m['composer.send']()}>
+    {#if draft.trim() || staged.items.length || sending}
+      <button type="button" class="send" disabled={(!target && !onCommand) || (!draft.trim() && !staged.items.length) || sending || staged.busy} onclick={() => void send()} aria-label={m['composer.send']()}>
         {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
       </button>
     {:else}
@@ -432,6 +447,7 @@
 
   .composer {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: 6px;
     padding: 7px;
@@ -502,6 +518,7 @@
   }
 
   .icon,
+  .composer :global(.attach),
   .send {
     width: 34px;
     height: 34px;
@@ -513,14 +530,31 @@
     cursor: pointer;
   }
 
-  .icon {
+  .icon,
+  .composer :global(.attach) {
     background: transparent;
     color: var(--app-text-muted);
   }
 
-  .icon:hover:not(:disabled) {
+  .icon:hover:not(:disabled),
+  .composer :global(.attach:hover:not(:disabled)) {
     background: var(--app-hover);
     color: var(--app-text);
+  }
+
+  .composer :global(.attach:disabled) {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .composer.dropping {
+    border-color: var(--app-accent);
+    border-style: dashed;
+  }
+
+  .staged {
+    flex: 1 0 100%;
+    padding: 2px 4px;
   }
 
   .icon.on {
@@ -548,6 +582,7 @@
   }
 
   .icon:focus-visible,
+  .composer :global(.attach:focus-visible),
   .send:focus-visible {
     outline: 2px solid var(--app-accent);
     outline-offset: 2px;

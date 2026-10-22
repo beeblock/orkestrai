@@ -7,11 +7,16 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Added
+
+- Attach images, PDFs and other files to messages in Chat, the Canvas message bar, the leader panel, Focus and an agent's chat face. Paste them, drop them on the field or pick them with the paperclip; they show as chips before sending, sent images appear in the conversation, and the agent receives each file's absolute path in its own runtime (on floors and in WSL too) so it can open it. A message may hold only attachments. An agent node's chat face also gets the microphone.
+
 ### Fixed
 
 - Keep Needs you to what the owner can act on. A message still queued for an agent the leader had dismissed failed after the agent was gone and left a notice that nothing could close (one workspace collected 52 of them). Such notices are no longer raised, the ones already stored close at the next start, and a notice with nothing to decide now has Dismiss.
 - Pin a question an agent asked the owner to the end of its conversation in Chat, under Waiting for you, until it is answered. A question asked hours earlier had scrolled out of view, so the number next to the agent pointed to nothing on screen.
 - Keep each agent's state (working, idle, waiting) in sync across Canvas, Focus and Chat. The shared status feed now keeps its own live connection while any view shows it, reloads after reconnecting and replaces a connection that stopped answering. Chat ignored delivery events, Focus started listening only after its workspace loaded, and a page whose socket dropped silently kept stale states until it was reopened, so an agent shown working on the Canvas could read idle in Chat. An agent that receives a queued message now shows as working right away, and a reply no longer copies an older idle state over working.
+- Send images from the terminal's quick message field. A pasted image was ignored by the field and reached the agent's CLI instead, and a dropped one became a workspace-relative path in the text, which an agent on a floor could not open; both now travel as attachments. An image pasted straight into an agent's terminal (Ctrl+V) also counts as a draft, so a queued message waits instead of being typed on top of it and never confirmed.
 
 ## 0.43.0 - 2026-10-21
 

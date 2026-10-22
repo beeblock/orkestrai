@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_CHANNEL_BODY, MAX_OPTION_LENGTH, MAX_QUESTION_OPTIONS } from '../../domain/channels.js';
+import { MAX_WORKSPACE_ATTACHMENTS, workspaceAttachmentSchema } from './workspaceAttachmentSchemas.js';
 
 export const listChannelMessagesSchema = z.object({
   before: z.string().datetime().nullable().optional(),
@@ -11,9 +12,11 @@ export const listChannelMessagesSchema = z.object({
 });
 
 export const postChannelMessageSchema = z.object({
-  body: z.string().trim().min(1, 'A mensagem está vazia.').max(MAX_CHANNEL_BODY),
+  body: z.string().trim().max(MAX_CHANNEL_BODY).default(''),
   replyToId: z.string().uuid().nullable().optional(),
-});
+  /** Images, PDFs, files or links already uploaded to the workspace's attachment folder. */
+  attachments: z.array(workspaceAttachmentSchema).max(MAX_WORKSPACE_ATTACHMENTS).default([]),
+}).refine((input) => input.body.length > 0 || input.attachments.length > 0, { message: 'A mensagem está vazia.', path: ['body'] });
 
 export const bridgeChannelPostSchema = z.object({
   token: z.string().trim().min(1).nullish(),

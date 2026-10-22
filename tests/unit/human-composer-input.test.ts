@@ -52,4 +52,11 @@ describe('incremental human composer input', () => {
     expect(chars.length).toBeGreaterThan(0);
     expect(chars.join('')).toContain('human draft');
   });
+
+  it('hands Ctrl+V to the draft counter, since the CLI turns it into a pasted image', () => {
+    const parser = new HumanComposerInput();
+    const chars: string[] = [];
+    parser.consume('\x16', char => chars.push(char));
+    expect(chars).toEqual(['\x16']);
+  });
 });
