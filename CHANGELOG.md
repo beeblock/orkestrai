@@ -9,7 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
-- Attach images, PDFs and other files to messages in Chat, the Canvas message bar, the leader panel, Focus and an agent's chat face. Paste them, drop them on the field or pick them with the paperclip; they show as chips before sending, sent images appear in the conversation, and each agent that receives the message gets every file by an absolute path in its own terminal's runtime (native or WSL, also from a floor) so it can open it. A message may hold only attachments. Files added while a message is sending stay for the next one, and the unsent files of a draft are discarded when its conversation or workspace changes. An agent node's chat face also gets the microphone.
+- Attach images, PDFs and other files to messages in Chat, the Canvas message bar, the leader panel, Focus and an agent's chat face. Paste them, drop them on the field or pick them with the paperclip; they show as chips before sending, sent images appear in the conversation, and each agent that receives the message gets every file by an absolute path in its own terminal's runtime (native or WSL, also from a floor) so it can open it. A message may hold only attachments. Files added while a message is sending stay for the next one, and the unsent files of a draft are discarded when its conversation or workspace changes; a file a stored message carries is kept even when its delivery to the agent failed. An agent node's chat face also gets the microphone.
 
 ### Fixed
 

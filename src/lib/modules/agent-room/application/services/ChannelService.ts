@@ -187,6 +187,16 @@ export class ChannelService {
     channel: string,
     input: { body: string; replyToId?: string | null; via?: 'remote'; attachments?: readonly WorkspaceAttachment[] },
   ): Promise<OwnerPostResult> {
+    if (!input.attachments?.length) return this.postOwnerNow(workspaceId, channel, input);
+    // No file can be deleted between the check that it exists and the message that owns it.
+    return workspaceAttachmentService.exclusive(workspaceId, () => this.postOwnerNow(workspaceId, channel, input));
+  }
+
+  private async postOwnerNow(
+    workspaceId: string,
+    channel: string,
+    input: { body: string; replyToId?: string | null; via?: 'remote'; attachments?: readonly WorkspaceAttachment[] },
+  ): Promise<OwnerPostResult> {
     const attachments = input.attachments ?? [];
     const body = ownerBody(input.body, attachments);
     // Checked before anything is stored: a missing file fails the send instead of reaching the agent.

@@ -8,10 +8,11 @@
   /**
    * Sends `text` to the agent's direct conversation: it is recorded in Chat
    * and reaches the agent through its inbox, which wakes an on-demand agent
-   * and waits for a busy one to finish its turn. Returns the stored message
-   * id once it is queued, or null when it was not accepted.
+   * and waits for a busy one to finish its turn. Returns the stored message's
+   * id (null when nothing was stored) and whether the agent's inbox took it.
+   * A stored message owns its attachments even when the delivery failed.
    */
-  export async function sendToAgent(workspaceId: string, nodeId: string, text: string, attachments: WorkspaceAttachment[] = []): Promise<string | null> {
+  export async function sendToAgent(workspaceId: string, nodeId: string, text: string, attachments: WorkspaceAttachment[] = []): Promise<{ messageId: string | null; delivered: boolean }> {
     const csrf = getCsrfToken();
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(`dm:${nodeId}`)}/messages`, {
       method: 'POST',
@@ -19,8 +20,9 @@
       body: JSON.stringify({ body: text, attachments }),
     }).catch(() => null);
     const result = response?.ok ? await response.json().catch(() => null) as { data?: { message?: { id?: string }; delivered?: Array<{ ok: boolean }> } } | null : null;
-    const accepted = Boolean(result?.data?.delivered?.length) && !result!.data!.delivered!.some((entry) => !entry.ok);
-    return accepted ? result?.data?.message?.id ?? null : null;
+    const messageId = result?.data?.message?.id ?? null;
+    const delivered = Boolean(messageId) && Boolean(result?.data?.delivered?.length) && !result!.data!.delivered!.some((entry) => !entry.ok);
+    return { messageId, delivered };
   }
 </script>
 
@@ -253,17 +255,18 @@
     const at = new Date().toISOString();
     const submission = staged.reserve();
     sending = true;
-    const messageId = await sendToAgent(workspaceId, recipient.id, text, submission.attachments);
+    const sent = await sendToAgent(workspaceId, recipient.id, text, submission.attachments);
     sending = false;
-    if (messageId) {
+    // Stored, the message owns its files and text; only a message never stored stays a draft.
+    if (sent.messageId) {
       submission.commit();
       if (draft.trim() === text) draft = '';
       onInput();
-      trackSent(messageId, recipient.id, recipient.title, text || submission.attachments.map((attachment) => attachment.name).join(', '), at);
     } else {
       submission.release();
-      showFeedback(false, m['composer.failed']({ name: recipient.title }));
     }
+    if (sent.messageId && sent.delivered) trackSent(sent.messageId, recipient.id, recipient.title, text || submission.attachments.map((attachment) => attachment.name).join(', '), at);
+    else showFeedback(false, m['composer.failed']({ name: recipient.title }));
   }
 
   function onKeydown(event: KeyboardEvent) {

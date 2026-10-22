@@ -482,9 +482,13 @@
       // An agent gets the text as a direct message, so it and the reply show in
       // Chat too; the inbox wakes a sleeping agent and holds it while one is busy.
       if (fieldSendsToChat) {
-        if (!(await sendToAgent(data.workspaceId, id, text, submission.attachments))) throw new Error('Delivery not confirmed');
-        submission.commit();
-        if (prompt.trim() === text) prompt = '';
+        const sent = await sendToAgent(data.workspaceId, id, text, submission.attachments);
+        // Stored, the message owns its files and text; only a message never stored stays a draft.
+        if (sent.messageId) {
+          submission.commit();
+          if (prompt.trim() === text) prompt = '';
+        }
+        if (!sent.delivered) throw new Error('Delivery not confirmed');
         return;
       }
       const sessionId = (data.payload as TerminalNodePayload).sessionId ?? (agentRuntimeSleeping ? await wakeAgent() : null);
