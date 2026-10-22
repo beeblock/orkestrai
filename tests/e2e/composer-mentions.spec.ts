@@ -31,7 +31,7 @@ test('typing @ opens mentions in the Canvas message bar, the leader panel and Ch
     await page.keyboard.press('Enter');
     await expect(bar).toHaveValue('@QA Upload ');
 
-    const panelInput = page.getByTestId('orchestrator-node').locator('input');
+    const panelInput = page.getByTestId('orchestrator-node').getByRole('textbox');
     await panelInput.click();
     await page.keyboard.type('fala @q');
     await expect(page.getByTestId('orchestrator-node').getByRole('option', { name: /QA Upload/ })).toBeVisible();

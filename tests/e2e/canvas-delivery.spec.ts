@@ -76,7 +76,7 @@ test('shows the whole agent notice and follows a message from the queue to the r
     const posted = page.waitForRequest((request) => request.method() === 'POST' && request.url().includes(`/channels/${encodeURIComponent(`dm:${lead.id}`)}/messages`));
     await quick.fill('Pergunta pelo campo do agente');
     await quick.press('Enter');
-    expect((await posted).postDataJSON()).toEqual({ body: 'Pergunta pelo campo do agente' });
+    expect((await posted).postDataJSON()).toEqual({ body: 'Pergunta pelo campo do agente', attachments: [] });
     await expect(quick).toHaveValue('');
     expect(wroteToTerminal).toBe(false);
 

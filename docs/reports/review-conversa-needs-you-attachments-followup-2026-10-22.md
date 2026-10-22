@@ -148,3 +148,13 @@ The owner subsequently authorized integration, website publication and release. 
 - Gitleaks found no secrets in the 15 reviewed commits or staged release changes.
 
 The first browser attempt could not launch because the expected Playwright headless Chromium executable was absent. After installing that exact test browser without garbage-collecting other browser versions, all 15 browser tests passed. No installed Orkestrai restart or local installation was performed by this release preparation. CI, official signing/notarization and public artifact validation are separate subsequent gates; the local checks above do not claim their completion.
+
+## Full CI follow-up — attachment contract consumers
+
+The first full CI on `2448089e` passed unit tests, the production build, dependency auditing, the Git history secret scan and Windows native transport. Its 275-browser-test run finished with 269 passed, three failed, one flaky pass and two skipped. All three failures were stale test expectations introduced by the attachment UI contract:
+
+- `canvas-delivery` required a request without `attachments`; it now asserts the exact payload including the empty attachment list.
+- `canvas-image-drop` expected uploaded filenames/paths inside the text field; it now checks the staged links, workspace-confined paths and real PNG bytes, while requiring the draft text to remain unchanged and header drops not to create extra Canvas images.
+- `composer-mentions` selected every input in the leader panel, now also matching the hidden file picker; it selects the accessible textbox instead, keeping the actual mention and insertion assertions.
+
+The affected acceptance group passed locally against the unchanged production application: **7/7, 12.2 seconds**. No runtime source, assertion timeout, performance threshold or retry policy was changed. A new full CI remains required on the follow-up commit before tagging. The unrelated terminal clipboard test passed on its configured retry in the first CI; this follow-up does not claim to fix that intermittent timing.
