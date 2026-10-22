@@ -2,7 +2,7 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { ChevronDown } from '@lucide/svelte';
-  import { answerOwnerQuestion, attentionDecisionKind, attentionFeed, decideAttentionItem, ownerQuestionOptions, updateAttentionItem } from './attention-feed.svelte.js';
+  import { answerOwnerQuestion, attentionDecisionKind, attentionFeed, attentionFollowUp, decideAttentionItem, ownerQuestionOptions, updateAttentionItem } from './attention-feed.svelte.js';
   import { decisionLabels } from './attention-decision-labels.js';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -55,6 +55,7 @@
         {#each items.slice(0, limit) as item (item.id)}
           {@const kind = attentionDecisionKind(item)}
           {@const options = ownerQuestionOptions(item)}
+          {@const followUp = attentionFollowUp(item)}
           <li class:danger={item.severity === 'error'}>
             <button type="button" class="open" onclick={() => onOpen(item)} title={item.title}>
               <span class="dot" aria-hidden="true"></span>
@@ -72,7 +73,11 @@
                   <button type="button" class="primary" disabled={busy.has(item.id)} title={option} onclick={() => void answer(item, option)}><span class="option">{option}</span></button>
                 {/each}
               </div>
-            {:else}
+            {:else if followUp === 'answer'}
+              <div class="actions">
+                <button type="button" class="primary" onclick={() => onOpen(item)}>{m['node_attention.answer_in_chat']()}</button>
+              </div>
+            {:else if followUp === 'dismiss'}
               <div class="actions">
                 <button type="button" disabled={busy.has(item.id)} onclick={() => void dismiss(item)}>{m['needs_you.dismiss']()}</button>
               </div>
