@@ -1008,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     { date: "Ainda não publicado", title: "Conversa, Precisa de você e anexos", summary: "Anexos em todo campo de mensagem, estados dos agentes em sincronia e Precisa de você só com o que é seu.", items: [
       "Precisa de você mostra só o que você pode resolver: uma mensagem que ficou na fila para um agente já dispensado pelo líder não vira mais um aviso preso. Os avisos que já existem fecham na próxima abertura do app, e um aviso sem nada para decidir ganhou Dispensar.",
       "Uma pergunta que um agente te fez fica fixada no fim da conversa dele, em Aguardando você, até ser respondida. O número ao lado do agente na Conversa sempre aponta para algo na tela, mesmo que a pergunta seja de horas atrás.",
+      "O estado de cada agente (trabalhando, ocioso, esperando) fica igual no Canvas, no Foco e na Conversa, ao vivo: a Conversa e o Foco não precisam mais de uma ida ao Canvas para atualizar. Um agente que recebe uma mensagem da fila aparece trabalhando na hora.",
     ] },
     { date: '21 de outubro de 2026 · 0.43.0', title: 'Orkestrai 0.43.0: Canvas, Focus e Chat', summary: 'O Canvas se lê de relance: quem está trabalhando, o que precisa de você e onde está cada coisa.', items: [
       "Segurança: follow-redirects 1.16.1 e Vite 6.4.5 corrigem vazamentos de cabeçalhos de credenciais em redirecionamentos e injeção de comandos no editor de desenvolvimento, mantendo a auditoria completa das dependências.",

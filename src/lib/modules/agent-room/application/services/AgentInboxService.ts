@@ -410,7 +410,7 @@ export class AgentInboxService {
     await controlCenterService.recordActivity({
       workspaceId: envelope.workspaceId,
       nodeId: envelope.toNodeId,
-      state: (await controlCenterRepository.latestActivity(envelope.toNodeId))?.state ?? 'idle',
+      state: await controlCenterService.currentState(envelope.workspaceId, envelope.toNodeId),
       action: 'system:message_replied',
       metadata: { ...envelope.metadata, toTitle: envelope.fromNodeId ? titles.get(envelope.fromNodeId) ?? null : null },
       category: 'message',

@@ -1124,6 +1124,13 @@ export class PtySessionManager {
         session.lastSubmitOutputRevision = session.outputRevision;
         const submittedAt: PtyOutputMark = { sessionId: session.id, length: session.outputLength };
         this.write(session.id, '\r');
+        if (session.provider) {
+          // Like a prompt the owner submits: the agent works from here on, and
+          // `write` cleared `waiting` without a report, so every screen would
+          // keep showing it idle until its next quiet spell.
+          session.outputBurst = true;
+          this.recordLifecycle(session, 'working');
+        }
         session.lastSubmittedDelivery = delivery;
         session.lastDeliveryAccepted = false;
         delivery.resolve();

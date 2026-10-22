@@ -11,6 +11,7 @@ pt-BR, English, and Spanish translations.
 
 - Keep Needs you to what the owner can act on. A message still queued for an agent the leader had dismissed failed after the agent was gone and left a notice that nothing could close (one workspace collected 52 of them). Such notices are no longer raised, the ones already stored close at the next start, and a notice with nothing to decide now has Dismiss.
 - Pin a question an agent asked the owner to the end of its conversation in Chat, under Waiting for you, until it is answered. A question asked hours earlier had scrolled out of view, so the number next to the agent pointed to nothing on screen.
+- Keep each agent's state (working, idle, waiting) in sync across Canvas, Focus and Chat. The shared status feed now keeps its own live connection while any view shows it, reloads after reconnecting and replaces a connection that stopped answering. Chat ignored delivery events, Focus started listening only after its workspace loaded, and a page whose socket dropped silently kept stale states until it was reopened, so an agent shown working on the Canvas could read idle in Chat. An agent that receives a queued message now shows as working right away, and a reply no longer copies an older idle state over working.
 
 ## 0.43.0 - 2026-10-21
 
