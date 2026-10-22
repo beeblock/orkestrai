@@ -1001,7 +1001,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "Unreleased", title: "Chat, Needs you and attachments", summary: "Attachments in every message field, agent states in sync and Needs you holding only what is yours.", items: [
+    { date: "October 22, 2026 · 0.44.0", title: "Orkestrai 0.44.0: Chat, Needs you and attachments", summary: "Attachments in every message field, agent states in sync and Needs you holding only what is yours.", items: [
+      "Security: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 and ip-address 10.7.4 address sanitizer, frame-permission, development mock-registration and IPv6 parsing advisories, without changing Electron's major or Monaco's version; the full dependency audit stays enabled.",
       "Needs you only shows what you can resolve: a message left queued for an agent the leader already dismissed no longer becomes a stuck notice. Existing ones close the next time the app starts, and a notice with nothing to decide now has Dismiss. A question without preset answers shows Answer, which opens its conversation, and never disappears unanswered.",
       "A question an agent asked you stays pinned at the end of its conversation, under Waiting for you, until you answer it. The number next to the agent in Chat always points to something on screen, even when the question is hours old.",
       "Each agent's state (working, idle, waiting) is the same on the Canvas, in Focus and in Chat, live: Chat and Focus no longer need a trip to the Canvas to update. An agent that receives a queued message shows as working right away.",

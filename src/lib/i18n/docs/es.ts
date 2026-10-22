@@ -1001,7 +1001,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "Sin publicar", title: "Conversación, Te necesita y adjuntos", summary: "Adjuntos en cada campo de mensaje, estados de los agentes sincronizados y Te necesita solo con lo tuyo.", items: [
+    { date: "22 de octubre de 2026 · 0.44.0", title: "Orkestrai 0.44.0: Conversación, Te necesita y adjuntos", summary: "Adjuntos en cada campo de mensaje, estados de los agentes sincronizados y Te necesita solo con lo tuyo.", items: [
+      "Seguridad: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 e ip-address 10.7.4 corrigen alertas de sanitización, permisos de frames, registro de mocks en desarrollo y análisis de IPv6, sin cambiar la versión principal de Electron ni la versión de Monaco; la auditoría completa de dependencias sigue activa.",
       "Te necesita solo muestra lo que puedes resolver: un mensaje que quedó en la cola para un agente que el líder ya despidió ya no se convierte en un aviso atascado. Los que ya existen se cierran la próxima vez que se abre la app, y un aviso sin nada que decidir ahora tiene Descartar. Una pregunta sin respuestas predefinidas muestra Responder, que abre su conversación, y nunca desaparece sin respuesta.",
       "Una pregunta que un agente te hizo queda fijada al final de su conversación, en Esperándote, hasta que la respondas. El número junto al agente en Conversación siempre apunta a algo en pantalla, aunque la pregunta sea de hace horas.",
       "El estado de cada agente (trabajando, inactivo, esperando) es el mismo en el Canvas, en Foco y en Conversación, en vivo: Conversación y Foco ya no necesitan pasar por el Canvas para actualizarse. Un agente que recibe un mensaje de la cola aparece trabajando enseguida.",

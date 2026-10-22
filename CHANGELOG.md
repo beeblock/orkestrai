@@ -5,7 +5,11 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.44.0 - 2026-10-22
+
+### Security
+
+- Update DOMPurify to 3.4.17, Electron to 42.11.9, Vitest to 4.1.12 and the ip-address override to 10.7.4 to address the latest sanitizer, frame-permission attribution, development mock-registration and IPv6 parsing advisories. Keep Electron 42, Monaco's existing version and the full dependency audit enabled.
 
 ### Added
 
