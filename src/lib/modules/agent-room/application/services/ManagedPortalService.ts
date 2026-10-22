@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { realpath, mkdir } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { mkdir, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { CanvasNodePayload } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { controlCenterService } from './ControlCenterService.js';
@@ -82,6 +82,43 @@ export async function preparePortalDirectory(root: string, candidate: string): P
   }
   await mkdir(requested, { recursive: true });
   return confinePortalPath(root, await realpath(requested));
+}
+
+export const PORTAL_SCREENSHOT_DIRECTORY = '.orkestrai/portal/screenshots';
+// Older captures are pruned so repeated checks do not fill the workspace.
+const KEPT_PORTAL_SCREENSHOTS = 40;
+const PNG_DATA_URL = 'data:image/png;base64,';
+
+/**
+ * Writes a Portal capture into the workspace as a PNG file. Agents read
+ * images from files (Claude Code's Read, Codex's image viewer); a data URL
+ * printed as text is too large for their tool output and cannot be viewed.
+ */
+export async function savePortalScreenshot(
+  workspaceRoot: string,
+  portalTitle: string | null,
+  capture: unknown,
+): Promise<{ path: string; relativePath: string; width: number; height: number } | null> {
+  const value = capture as { dataUrl?: unknown; width?: unknown; height?: unknown } | null;
+  if (typeof value?.dataUrl !== 'string' || !value.dataUrl.startsWith(PNG_DATA_URL)) return null;
+  const png = Buffer.from(value.dataUrl.slice(PNG_DATA_URL.length), 'base64');
+  if (png.length < 24 || png.readUInt32BE(0) !== 0x89504e47) return null;
+  const root = await realpath(workspaceRoot);
+  const directory = await preparePortalDirectory(root, PORTAL_SCREENSHOT_DIRECTORY);
+  const slug = (portalTitle ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'portal';
+  const path = join(directory, `${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}.png`);
+  await writeFile(path, png);
+  await prunePortalScreenshots(directory).catch(() => undefined);
+  return { path, relativePath: relative(root, path).split(sep).join('/'), width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+async function prunePortalScreenshots(directory: string): Promise<void> {
+  const files = (await readdir(directory)).filter((name) => name.endsWith('.png'));
+  if (files.length <= KEPT_PORTAL_SCREENSHOTS) return;
+  const dated = await Promise.all(files.map(async (name) => ({ name, time: (await stat(join(directory, name))).mtimeMs })));
+  dated.sort((a, b) => b.time - a.time);
+  await Promise.all(dated.slice(KEPT_PORTAL_SCREENSHOTS).map(({ name }) => rm(join(directory, name), { force: true })));
 }
 
 async function requestElectron(request: ManagedPortalExecutorRequest, inspect = false): Promise<ManagedPortalExecutorResult | null> {

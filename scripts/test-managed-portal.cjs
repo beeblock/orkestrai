@@ -48,7 +48,7 @@ async function main() {
   // Visual acceptance belongs in an actual Canvas Portal, not this isolated host.
   parent = new BrowserWindow({ width: 1200, height: 900, show: showWindow, webPreferences: { sandbox: true } });
   await parent.loadURL('data:text/html,<body style="margin:0;background:white"><h1>Host QA</h1></body>');
-  executor = createManagedPortalExecutor({ WebContentsView, View, session });
+  executor = createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, session });
   const request = { requestId: randomUUID(), workspaceId: randomUUID(), nodeId: randomUUID(), initialUrl: url,
     profile: { profileId: 'qa', profileScope: 'private', allowedHosts: ['127.0.0.1'], paused: false, allowBackground: !showWindow },
     action: 'snapshot', args: {}, timeoutMs: 5000 };
@@ -156,7 +156,12 @@ async function main() {
   assert.deepEqual([...detachedImage.toBitmap().subarray(pixel, pixel + 3)], [68, 68, 68], 'protected fields remain masked in background captures');
   console.log('Portal regression: never-mounted screenshot');
   const unmountedCapture = await executor.execute({ ...background, nodeId: randomUUID(), action: 'screenshot' });
-  assert.equal(unmountedCapture.ok, false, 'a never-mounted browser without a display surface must fail promptly instead of hanging');
+  assert.equal(unmountedCapture.ok, true, `a Portal never shown since launch is captured in a hidden window: ${unmountedCapture.error}`);
+  const unmountedImage = nativeImage.createFromDataURL(unmountedCapture.result.dataUrl);
+  assert.equal(unmountedImage.isEmpty(), false);
+  // The page background (#168766, BGRA), within the display color profile's rounding.
+  const corner = [...unmountedImage.toBitmap().subarray(0, 3)];
+  assert.ok([102, 135, 22].every((value, index) => Math.abs(corner[index] - value) <= 10), `the hidden capture shows the real page: ${corner}`);
   console.log(JSON.stringify({ ok:true, screenshot, protectedFieldsMasked:true, samePage:true, sameWebContents:true }));
 }
 

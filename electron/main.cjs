@@ -1439,7 +1439,7 @@ if (!gotLock) {
       });
     });
     configurePortalSession();
-    managedPortalExecutor = createManagedPortalExecutor({ WebContentsView, View, session, diagnostics,
+    managedPortalExecutor = createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, session, diagnostics,
       onOpenRequest: (request) => mainWindow?.webContents.send('orkestrai:portal-open-request', request),
       onState: (workspaceId, nodeId, state) => {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('orkestrai:portal-state', { workspaceId, nodeId, state });

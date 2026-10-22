@@ -23,7 +23,7 @@ import { heavyRunService } from '$lib/modules/agent-room/application/services/He
 import { orchestrationStatsService } from '$lib/modules/agent-room/application/services/OrchestrationStatsService.js';
 import { bridgeDesignApplySchema, bridgeFigmaSelectionSchema, bridgeReassignSchema, bridgeRoleEditSchema, bridgeRoleWriteSchema, bridgeFloorCreateSchema, bridgeFloorLandSchema, bridgeNoteCreateSchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 import { bridgeBoardTaskSchema, bridgeBoardTaskUpdateSchema } from '$lib/modules/agent-room/contracts/schemas/taskSchemas.js';
-import { managedPortalService } from '$lib/modules/agent-room/application/services/ManagedPortalService.js';
+import { managedPortalService, savePortalScreenshot } from '$lib/modules/agent-room/application/services/ManagedPortalService.js';
 import { managedPortalCommandSchema } from '$lib/modules/agent-room/contracts/schemas/managed-portal.schema.js';
 import { usageService } from '$lib/modules/agent-room/application/services/UsageService.js';
 import { deviceService } from '$lib/modules/agent-room/application/services/DeviceService.js';
@@ -1722,6 +1722,12 @@ export class BridgeController extends Controller {
         if (!task || task.assigneeNodeId !== actor || task.status === 'done') throw new Error('The supplied Portal task must be active and assigned to this agent.');
       }
       const result = await managedPortalService.execute(workspace.id, { ...input, from: actor, nodeId: portal.id }, { actorType: 'agent', actorId: actor });
+      if (input.action === 'screenshot' && result.ok) {
+        // The agent gets a PNG it can open, not megabytes of base64 it cannot view.
+        const file = await savePortalScreenshot(workspace.workingDir, portal.title ?? null, result.result);
+        if (!file) throw new Error('Portal screenshot could not be saved.');
+        return this.json({ data: { ...result, result: file } });
+      }
       return this.json({ data: result }, result.ok ? 200 : 400);
     } catch (error) {
       return this.errorResponse(error, 'Falha na automacao do portal.');
