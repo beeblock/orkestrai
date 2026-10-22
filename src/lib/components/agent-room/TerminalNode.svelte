@@ -377,6 +377,15 @@
     }
   }
 
+  async function clipboardHasImage(): Promise<boolean> {
+    const desktop = (window as typeof window & { orkestraiDesktop?: { clipboardHasImage?: () => Promise<boolean> } }).orkestraiDesktop;
+    try {
+      return Boolean(await desktop?.clipboardHasImage?.());
+    } catch {
+      return false;
+    }
+  }
+
   async function pasteTerminalClipboard(terminal: Terminal) {
     const desktop = (window as typeof window & {
       orkestraiDesktop?: {
@@ -551,14 +560,29 @@
 
     let createdSessionId: string | undefined;
     const currentSessionId = () => createdSessionId ?? sessionId;
-    const sendTerminalInput = (data: string) => {
+    const sendTerminalInput = (data: string, imagePaste = false) => {
       const id = currentSessionId();
       if (!id || !attached || socket?.readyState !== WebSocket.OPEN) {
         pendingInput.push(data);
         while (pendingInput.join('').length > 16_384) pendingInput.shift();
         return;
       }
-      send({ type: 'input', sessionId: id, data });
+      send({ type: 'input', sessionId: id, data, ...(imagePaste ? { imagePaste: true } : {}) });
+    };
+    // Ctrl+V reaches the CLI as a key, and only an image on the clipboard turns
+    // it into a draft chip there. The app answers whether one is there (never
+    // what); keys typed meanwhile wait behind the answer to keep their order.
+    let pasteCheck: Promise<void> | null = null;
+    const forwardInput = (data: string) => {
+      if (!pasteCheck && !data.includes('\x16')) {
+        sendTerminalInput(data);
+        return;
+      }
+      const run: Promise<void> = (pasteCheck ?? Promise.resolve())
+        .then(async () => sendTerminalInput(data, data.includes('\x16') && await clipboardHasImage()))
+        .catch(() => undefined)
+        .finally(() => { if (pasteCheck === run) pasteCheck = null; });
+      pasteCheck = run;
     };
     const flushPendingInput = () => {
       const id = currentSessionId();
@@ -779,13 +803,13 @@
     void initializeTerminal();
 
     terminal.onData((data) => {
-      sendTerminalInput(data);
+      forwardInput(data);
       // Enter depois de um ditado: agora sim arma a captura da resposta.
       if (pendingDictation && data.includes('\r')) {
         armDictationReplyCapture();
       }
     });
-    sendInput = sendTerminalInput;
+    sendInput = forwardInput;
 
     const resizeObserver = new ResizeObserver(scheduleFitAndReportSize);
     resizeObserver.observe(container);

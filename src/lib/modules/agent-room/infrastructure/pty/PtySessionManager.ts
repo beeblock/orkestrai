@@ -152,7 +152,7 @@ type PtySession = PtySessionInfo & {
   lastSubmittedDelivery: ComposerDelivery | null;
   lastDeliveryAccepted: boolean;
   deliveryReadyAt: number;
-  deferredHumanInput: string[];
+  deferredHumanInput: Array<{ data: string; imagePaste: boolean }>;
   humanComposerLength: number;
   humanDraft: HumanDraft;
   humanComposerInput: HumanComposerInput;
@@ -635,14 +635,15 @@ export class PtySessionManager {
    * milissegundos e são reproduzidas logo depois. Isso impede que o rascunho
    * humano seja concatenado a uma mensagem de outro agente.
    */
-  writeHumanInput(id: string, data: string): void {
+  writeHumanInput(id: string, data: string, options: { imagePaste?: boolean } = {}): void {
     const session = this.requireSession(id);
     if (session.exited) throw new Error(`Sessão PTY ${id} já finalizada.`);
+    const imagePaste = options.imagePaste === true;
     if (session.deliveryInProgress) {
-      session.deferredHumanInput.push(data);
+      session.deferredHumanInput.push({ data, imagePaste });
       return;
     }
-    this.writeHumanInputNow(session, data);
+    this.writeHumanInputNow(session, data, imagePaste);
     if (/[\r\n]/.test(data)) this.scheduleWorkingDirectoryRefresh(session);
   }
 
@@ -1248,13 +1249,13 @@ export class PtySessionManager {
 
   private flushDeferredHumanInput(session: PtySession): void {
     const chunks = session.deferredHumanInput.splice(0);
-    for (const chunk of chunks) this.writeHumanInputNow(session, chunk);
+    for (const chunk of chunks) this.writeHumanInputNow(session, chunk.data, chunk.imagePaste);
   }
 
-  private writeHumanInputNow(session: PtySession, data: string): void {
+  private writeHumanInputNow(session: PtySession, data: string, imagePaste = false): void {
     session.startupGuard?.humanInput(data);
     const prompts = session.provider ? trackHumanDraft(session.humanDraft, data) : [];
-    const submitted = this.updateHumanComposerState(session, data);
+    const submitted = this.updateHumanComposerState(session, data, imagePaste);
     this.write(session.id, data);
     if (session.provider && submitted) {
       // The owner just started a turn: the agent is working from here on.
@@ -1287,16 +1288,17 @@ export class PtySessionManager {
     mirror?.({ workspaceId: session.workspaceId, nodeId: session.nodeId, sessionId: session.id, text, at: Date.now() });
   }
 
-  private updateHumanComposerState(session: PtySession, data: string): boolean {
+  private updateHumanComposerState(session: PtySession, data: string, imagePaste = false): boolean {
     return session.humanComposerInput.consume(data, char => {
       const code = char.charCodeAt(0);
       if (char === '\r' || char === '\n' || code === 0x03 || code === 0x15 || code === 0x1b) {
         session.humanComposerLength = 0;
       } else if (code === 0x7f || code === 0x08) {
         session.humanComposerLength = Math.max(0, session.humanComposerLength - 1);
-      } else if (code >= 0x20 || code === 0x16) {
-        // Ctrl+V pastes the clipboard image as a chip in the CLI's own field:
-        // a draft the inbox must not type over until it is sent or cleared.
+      } else if (code >= 0x20 || (code === 0x16 && imagePaste)) {
+        // Ctrl+V with an image on the clipboard (the renderer asks the app)
+        // becomes a chip in the CLI's own field: a draft the inbox must not
+        // type over. Without one the CLI pastes nothing, and nothing is held.
         session.humanComposerLength += 1;
       }
     });

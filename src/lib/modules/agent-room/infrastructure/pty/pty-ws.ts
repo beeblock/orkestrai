@@ -39,7 +39,7 @@ export const PTY_WS_PATH = '/ws/agent-room/pty';
 type ClientMessage =
   | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; agentSessionId?: string; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string }
   | { type: 'attach'; sessionId: string; cols?: number; rows?: number }
-  | { type: 'input'; sessionId: string; data: string }
+  | { type: 'input'; sessionId: string; data: string; imagePaste?: boolean }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
   | { type: 'kill'; sessionId: string }
   | { type: 'ping' }
@@ -380,7 +380,7 @@ export function handlePtyConnection(socket: WebSocket): void {
           break;
         }
         case 'input': {
-          ptySessionManager.writeHumanInput(message.sessionId, String(message.data ?? ''));
+          ptySessionManager.writeHumanInput(message.sessionId, String(message.data ?? ''), { imagePaste: message.imagePaste === true });
           break;
         }
         case 'resize': {

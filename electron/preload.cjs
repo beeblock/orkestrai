@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   writeClipboardText: (value) => ipcRenderer.invoke('orkestrai:clipboard-write', value),
   /** Cola texto no elemento focado sem expor o conteudo do clipboard ao renderer. */
   pasteClipboardText: () => ipcRenderer.invoke('orkestrai:clipboard-paste-text'),
+  /** Diz se o clipboard tem uma imagem, sem expor o conteudo ao renderer. */
+  clipboardHasImage: () => ipcRenderer.invoke('orkestrai:clipboard-has-image'),
   openFigmaPluginFolder: () => ipcRenderer.invoke('orkestrai:figma-plugin-folder'),
   /** Mantém o menu nativo no mesmo idioma selecionado dentro do app. */
   setMenuLocale: (locale) => ipcRenderer.invoke('orkestrai:menu-locale', locale),
