@@ -30,7 +30,7 @@ function bounded(value) {
   return { truncated: true, content: serialized.slice(0, MAX_RESULT_CHARS) };
 }
 
-function createManagedPortalExecutor({ WebContentsView, View, session, diagnostics, onState, onOpenRequest }) {
+function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, session, diagnostics, onState, onOpenRequest }) {
   const sessions = new Map();
   const queues = new Map();
   const opening = new Map();
@@ -169,6 +169,33 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     }
   }
 
+  // A Portal never shown since launch has no compositor surface, so an agent
+  // could not capture it while the owner stayed in Chat or Focus. Its first
+  // frame is drawn in a hidden window that is never displayed or focused.
+  let captureHost = null;
+  function hiddenCaptureHost() {
+    if (!BrowserWindow) return null;
+    if (!captureHost || captureHost.isDestroyed()) {
+      captureHost = new BrowserWindow({
+        show: false, width: 1440, height: 1000, skipTaskbar: true, focusable: false, paintWhenInitiallyHidden: true,
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+      });
+    }
+    return captureHost;
+  }
+
+  async function withHiddenSurface(tab, operation) {
+    const host = hiddenCaptureHost();
+    if (!host) return operation();
+    host.contentView.addChildView(tab.view);
+    tab.view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
+    tab.view.setVisible(true);
+    try { return await operation(); } finally {
+      tab.view.setVisible(false);
+      if (!host.isDestroyed()) host.contentView.removeChildView(tab.view);
+    }
+  }
+
   // Motion previews copy the frame already on screen. The logical-page capture
   // below detaches the view, resets device metrics and relays the page out,
   // which made the live Portal blink whenever a preview was refreshed. Agent
@@ -240,14 +267,15 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
     const area = rect ?? { x: 0, y: 0, ...viewport };
     const scale = maxDimension ? Math.min(1, maxDimension / (Math.max(area.width, area.height) * scroll.density)) : 1;
     // Capture the logical page, not just the slice visible beside Canvas controls.
+    const screenshot = () => debuggerCommand(tab, 'Page.captureScreenshot', {
+      format: 'png', captureBeyondViewport: true, clip: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
+    });
     const capture = async () => {
       // CDP produces the new logical frame itself. A parallel capturePage can
       // target a surface which CDP just resized, and a preceding one can stall
       // once the view has been detached from its host window.
-      if (!tab.managed.geometry) await capturePresentedPage(tab);
-      return debuggerCommand(tab, 'Page.captureScreenshot', {
-        format: 'png', captureBeyondViewport: true, clip: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
-      });
+      if (!tab.managed.geometry) return withHiddenSurface(tab, async () => { await capturePresentedPage(tab); return screenshot(); });
+      return screenshot();
     };
     let result;
     if (protect) {
@@ -700,7 +728,10 @@ function createManagedPortalExecutor({ WebContentsView, View, session, diagnosti
 
   function closeAll() {
     closed = true;
-    closingAll ??= Promise.all([...sessions.values()].map(dispose));
+    closingAll ??= Promise.all([...sessions.values()].map(dispose)).finally(() => {
+      if (captureHost && !captureHost.isDestroyed()) captureHost.destroy();
+      captureHost = null;
+    });
     return closingAll;
   }
 

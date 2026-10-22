@@ -13,6 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { DESIGN_REFERENCE_TOPICS, designReference } from './design-reference.js';
 import { apiClientReference } from './api-client-reference.js';
 import { KNOWLEDGE_TOOLS, knowledgeCall } from './knowledge-reference.js';
+import { portalScreenshotMessage } from './portal-reference.js';
 
 const DESIGN_LAYOUT_FIELDS = new Set([
   'layoutMode', 'layoutWrap', 'layoutGap', 'layoutRowGap', 'layoutColumnGap',
@@ -1861,6 +1862,7 @@ async function runCommand(argv, options, sink) {
       else if (action === 'extract') args = { kind: values[0] ?? 'text', ...(values[1] ? { ref: values[1] } : {}), ...(flags.attribute ? { attribute: flags.attribute } : {}) };
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/portal', { nodeId, action, args, from: flags.from, taskId: flags.task });
       if (flags.json) out(JSON.stringify(data, null, 2));
+      else if (action === 'screenshot') out(String(portalScreenshotMessage(data)));
       else out(typeof data.result === 'string' ? data.result : JSON.stringify(data.result ?? data, null, 2));
       return 0;
     }
