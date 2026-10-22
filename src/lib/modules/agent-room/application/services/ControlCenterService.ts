@@ -177,6 +177,17 @@ export class ControlCenterService {
     return event;
   }
 
+  /**
+   * The agent's state once its pending writes have landed, for events that
+   * leave it as it is: read straight from the table, a reply recorded right
+   * after a `working` write could copy the older `idle` over it.
+   */
+  async currentState(workspaceId: string, nodeId: string): Promise<AgentActivity['state']> {
+    const key = `${workspaceId}:${nodeId}`;
+    await this.writes.get(key)?.catch(() => null);
+    return (this.latest.get(key) ?? await controlCenterRepository.latestActivity(nodeId))?.state ?? 'idle';
+  }
+
   async recordActivity(input: RecordActivityInput): Promise<AgentActivity | null> {
     const key = `${input.workspaceId}:${input.nodeId}`;
     const previousWrite = this.writes.get(key) ?? Promise.resolve(null);
@@ -207,8 +218,12 @@ export class ControlCenterService {
         throw error;
       }
       this.latest.set(key, event);
-      await attentionService.syncActivity(event);
-      broadcast({ type: 'controlCenterChanged', workspaceId: input.workspaceId, nodeId: input.nodeId, event });
+      try {
+        await attentionService.syncActivity(event);
+      } finally {
+        // The state is recorded: the screens hear of it even if its Needs you item failed.
+        broadcast({ type: 'controlCenterChanged', workspaceId: input.workspaceId, nodeId: input.nodeId, event });
+      }
       return event;
     }).finally(() => {
       if (this.writes.get(key) === write) this.writes.delete(key);

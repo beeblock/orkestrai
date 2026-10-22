@@ -113,7 +113,7 @@
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
-  import { retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
+  import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import FocusInbox from '$lib/components/agent-room/FocusInbox.svelte';
@@ -849,8 +849,14 @@
     return counts ? counts.waiting_input + counts.waiting_permission + counts.blocked + counts.error : 0;
   }
 
+  // The open workspace follows the shared live feed, like the team list and headers beside it.
+  function agentSnapshot(workspaceId: string, nodeId: string) {
+    if (workspaceId === agentStatus.workspaceId && agentStatus.agents[nodeId]) return agentStatus.agents[nodeId];
+    return controlCenters[workspaceId]?.agents.find((agent) => agent.nodeId === nodeId);
+  }
+
   function agentStateColor(workspaceId: string, nodeId: string): string {
-    const state = controlCenters[workspaceId]?.agents.find((agent) => agent.nodeId === nodeId)?.state;
+    const state = agentSnapshot(workspaceId, nodeId)?.state;
     if (state === 'working') return 'var(--app-success)';
     if (state === 'waiting_input' || state === 'waiting_permission') return 'var(--app-warning)';
     if (state === 'blocked' || state === 'error' || state === 'disconnected') return 'var(--app-danger)';
@@ -859,7 +865,7 @@
   }
 
   function agentActivityLabel(workspaceId: string, nodeId: string): string | null {
-    const agent = controlCenters[workspaceId]?.agents.find((candidate) => candidate.nodeId === nodeId);
+    const agent = agentSnapshot(workspaceId, nodeId);
     if (!agent) return null;
     return agentActionLabel(agent.lastAction, agent.lastActionData) ?? agent.currentTask?.title ?? null;
   }

@@ -43,6 +43,26 @@ describe('PTY activity lifecycle', () => {
     expect(states.at(-1)).toBe('working');
   }, 12_000);
 
+  it.skipIf(process.platform === 'win32')('reports working once an automatic message is submitted to an idle agent', async () => {
+    const states: string[] = [];
+    hook.__orkestraiRecordActivity = (input) => {
+      if (input.nodeId === 'inbox-node') states.push(input.state);
+    };
+    const session = ptySessionManager.create({
+      command: '/bin/sh',
+      args: ['-c', 'echo ready; read line; sleep 30'],
+      cwd: tmpdir(),
+      workspaceId: 'inbox-workspace',
+      nodeId: 'inbox-node',
+      provider: 'codex',
+    });
+    sessions.push(session.id);
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    expect(states).toEqual(['starting', 'working', 'idle']);
+    await ptySessionManager.writeWithConfirmedSubmit(session.id, 'Mensagem da fila', { submitDelayMs: 50, maxAttempts: 1 });
+    expect(states.at(-1)).toBe('working');
+  }, 12_000);
+
   it.skipIf(process.platform === 'win32')('reports idle again when output after a quiet spell stops', async () => {
     const states: string[] = [];
     hook.__orkestraiRecordActivity = (input) => {
