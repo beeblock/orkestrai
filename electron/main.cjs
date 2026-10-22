@@ -1213,6 +1213,13 @@ ipcMain.handle('orkestrai:clipboard-paste-text', (event) => {
   return true;
 });
 
+ipcMain.handle('orkestrai:clipboard-has-image', (event) => {
+  // Only whether an image is there, never its contents: a Ctrl+V in an agent's
+  // terminal is a pasted draft only when the CLI has an image to attach.
+  if (!mainWindow || event.sender !== mainWindow.webContents) return false;
+  return !clipboard.readImage().isEmpty();
+});
+
 ipcMain.handle('orkestrai:collaboration-invite-consume', () => {
   const invite = pendingCollaborationInvite;
   pendingCollaborationInvite = null;
