@@ -13,6 +13,11 @@
   import QuestionCard from '$lib/components/agent-room/chat/QuestionCard.svelte';
   import RequestCard from '$lib/components/agent-room/chat/RequestCard.svelte';
   import NeedsYouList from '$lib/components/agent-room/NeedsYouList.svelte';
+  import AttachmentList from '$lib/components/agent-room/AttachmentList.svelte';
+  import ComposerAttachButton from '$lib/components/agent-room/ComposerAttachButton.svelte';
+  import MessageAttachments, { messageAttachments } from '$lib/components/agent-room/MessageAttachments.svelte';
+  import { ComposerAttachments } from '$lib/components/agent-room/composer-attachments.svelte.js';
+  import type { WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
   import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCursor, pinnedQuestions, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
@@ -56,6 +61,7 @@
   let scroller = $state<HTMLElement | null>(null);
   let input = $state<HTMLTextAreaElement | null>(null);
   let listening = $state(false);
+  const staged = new ComposerAttachments(() => workspaceId);
   // A request opened from Needs you, waiting to be scrolled into view once its channel has loaded.
   let revealId = $state<string | null>(null);
   let highlightedId = $state<string | null>(null);
@@ -208,6 +214,7 @@
     channel = next;
     messages = [];
     openQuestions = [];
+    staged.clear();
     loading = true;
     draft = '';
     sendError = '';
@@ -248,11 +255,11 @@
     input?.focus();
   }
 
-  async function post(body: string, replyToId: string | null = null): Promise<boolean> {
+  async function post(body: string, replyToId: string | null = null, attachments: WorkspaceAttachment[] = []): Promise<boolean> {
     if (!workspaceId) return false;
     const result = await api<{ message: ChannelMessage; answer?: ChannelMessage | null; delivered: Array<{ nodeId: string; ok: boolean }> }>(
       `/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(channel)}/messages`,
-      { method: 'POST', body: JSON.stringify({ body, replyToId }) },
+      { method: 'POST', body: JSON.stringify({ body, replyToId, attachments }) },
     );
     messages = upsertMessage(messages, result.message);
     if (result.answer) messages = upsertMessage(messages, result.answer);
@@ -265,11 +272,13 @@
 
   async function send() {
     const text = draft.trim();
-    if (!text || sending) return;
+    const attachments = [...staged.items];
+    if ((!text && !attachments.length) || sending || staged.busy) return;
     sending = true;
     sendError = '';
     try {
-      await post(text);
+      await post(text, null, attachments);
+      staged.clear();
       if (draft.trim() === text) draft = '';
       onInput();
     } catch (error) {
@@ -562,7 +571,8 @@
                     {:else if message.kind === 'answer'}
                       <span class="to"><CornerDownRight size={12} />{m['chat.answered_question']()}</span>
                     {/if}
-                    <MarkdownView content={message.body} compact {workspaceId} />
+                    {#if message.meta.attachmentsOnly !== true}<MarkdownView content={message.body} compact {workspaceId} />{/if}
+                    {#if workspaceId && messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
                     {#if typeof message.meta.reply === 'string' && message.meta.reply}
                       <div class="reply">
                         <AgentAvatar nodeId={String(message.meta.to)} title={titleOf(String(message.meta.to))} size={18} />
@@ -598,8 +608,11 @@
           {/each}
         </div>
       {/if}
-      {#if sendError}<p class="send-error" role="alert">{sendError}</p>{/if}
-      <div class="composer">
+      {#if sendError || staged.error}<p class="send-error" role="alert">{sendError || staged.error}</p>{/if}
+      <div class="composer" class:dropping={staged.dragging} role="group" aria-label={m['composer.drop_files']()} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>
+        {#if staged.items.length && workspaceId}
+          <div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>
+        {/if}
         {#if listening}
           <ComposerVoice onTranscript={onVoice} onClose={() => (listening = false)} onSetupNeeded={onVoiceSetup} />
         {:else}
@@ -614,12 +627,14 @@
             oninput={onInput}
             oncompositionend={onInput}
             onkeydown={onKeydown}
+            onpaste={staged.paste}
           ></textarea>
+          <ComposerAttachButton attachments={staged} class="icon attach" disabled={!workspace || !agents.length} />
           <button type="button" class="icon" onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()} disabled={!agents.length}><AtSign size={16} /></button>
-          {#if !draft.trim() && !sending}
+          {#if !draft.trim() && !staged.items.length && !sending}
             <button type="button" class="send" onclick={() => (listening = true)} disabled={!workspace || !agents.length} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={15} /></button>
           {:else}
-            <button type="button" class="send" onclick={() => void send()} disabled={!draft.trim() || sending} aria-label={m['composer.send']()}>
+            <button type="button" class="send" onclick={() => void send()} disabled={(!draft.trim() && !staged.items.length) || sending || staged.busy} aria-label={m['composer.send']()}>
               {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
             </button>
           {/if}
@@ -773,6 +788,7 @@
 
   .channel:focus-visible,
   .icon:focus-visible,
+  .composer :global(.attach:focus-visible),
   .send:focus-visible,
   .who:focus-visible,
   .avatar-button:focus-visible,
@@ -897,6 +913,7 @@
   }
 
   .icon,
+  .composer :global(.attach),
   .send {
     width: 34px;
     height: 34px;
@@ -908,12 +925,14 @@
     cursor: pointer;
   }
 
-  .icon {
+  .icon,
+  .composer :global(.attach) {
     background: transparent;
     color: var(--app-text-muted);
   }
 
-  .icon:hover:not(:disabled) {
+  .icon:hover:not(:disabled),
+  .composer :global(.attach:hover:not(:disabled)) {
     background: var(--app-hover);
     color: var(--app-text);
   }
@@ -924,6 +943,7 @@
   }
 
   .send:disabled,
+  .composer :global(.attach:disabled),
   .icon:disabled {
     opacity: 0.45;
     cursor: default;
@@ -1142,6 +1162,7 @@
 
   .composer {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: 6px;
     padding: 7px;
@@ -1150,6 +1171,16 @@
     background: var(--app-surface);
     box-shadow: var(--app-shadow-card);
     transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out;
+  }
+
+  .composer.dropping {
+    border-color: var(--app-accent);
+    border-style: dashed;
+  }
+
+  .staged {
+    flex: 1 0 100%;
+    padding: 2px 4px 2px;
   }
 
   .composer:focus-within {

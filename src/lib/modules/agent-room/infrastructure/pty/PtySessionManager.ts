@@ -1294,7 +1294,9 @@ export class PtySessionManager {
         session.humanComposerLength = 0;
       } else if (code === 0x7f || code === 0x08) {
         session.humanComposerLength = Math.max(0, session.humanComposerLength - 1);
-      } else if (code >= 0x20) {
+      } else if (code >= 0x20 || code === 0x16) {
+        // Ctrl+V pastes the clipboard image as a chip in the CLI's own field:
+        // a draft the inbox must not type over until it is sent or cleared.
         session.humanComposerLength += 1;
       }
     });

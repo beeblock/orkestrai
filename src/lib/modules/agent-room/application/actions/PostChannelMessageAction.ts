@@ -4,7 +4,11 @@ import { channelService, type OwnerPostResult } from '../services/ChannelService
 
 export class PostChannelMessageAction extends Action<PostChannelMessageDto, OwnerPostResult> {
   async execute(input: PostChannelMessageDto): Promise<OwnerPostResult> {
-    return channelService.postOwner(input.workspaceId, input.channel, { body: input.input.body, replyToId: input.input.replyToId ?? null });
+    return channelService.postOwner(input.workspaceId, input.channel, {
+      body: input.input.body,
+      replyToId: input.input.replyToId ?? null,
+      attachments: input.input.attachments,
+    });
   }
 }
 

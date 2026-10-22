@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Connection } from '@beeblock/svelar/database';
 import { ChannelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
@@ -106,5 +109,32 @@ describe('ChannelService', () => {
     expect((await service.openQuestions('w', `dm:${LEAD}`)).map((question) => question.id)).toEqual(['older', 'newer']);
     expect((await service.openQuestions('w', `dm:${QA}`)).map((question) => question.id)).toEqual(['escalated']);
     await expect(service.openQuestions('w', `dm:${NOTE}`)).rejects.toThrow();
+  });
+
+  it('hands the owner\'s attachments to the agent by absolute path and keeps them on the message', async () => {
+    const enqueue = mockWorkspace();
+    const root = mkdtempSync(join(tmpdir(), 'channel-attachments-'));
+    try {
+      mkdirSync(join(root, '.orkestrai', 'attachments'), { recursive: true });
+      writeFileSync(join(root, '.orkestrai', 'attachments', 'a-print.png'), 'png');
+      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue({ id: 'w', workingDir: root, wslWorkingDir: null } as never);
+      const image = { id: '01a14a44-5d87-7d1c-90e7-7b697f79bf60', kind: 'file' as const, name: 'print.png', path: '.orkestrai/attachments/a-print.png', url: null, mimeType: 'image/png', size: 3 };
+      const result = await new ChannelService().postOwner('w', `dm:${QA}`, { body: '', attachments: [image] });
+      expect(result.message.meta).toMatchObject({ attachments: [image], attachmentsOnly: true });
+      expect(result.message.body).toBe('print.png');
+      expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({
+        toNodeId: QA,
+        content: expect.stringContaining(`arquivo "print.png" (image/png) em ${join(root, '.orkestrai', 'attachments', 'a-print.png')}`),
+      }));
+      // A file removed after it was attached fails the send instead of reaching the agent.
+      await expect(new ChannelService().postOwner('w', `dm:${QA}`, { body: 'veja', attachments: [{ ...image, path: '.orkestrai/attachments/gone.png' }] }))
+        .rejects.toThrow('não está mais no workspace');
+      // In WSL the agent opens the same file through its Linux path.
+      vi.spyOn(workspaceRepository, 'getWorkspace').mockResolvedValue({ id: 'w', workingDir: root, wslWorkingDir: '/home/dev/app' } as never);
+      await new ChannelService().postOwner('w', `dm:${QA}`, { body: 'veja', attachments: [image] });
+      expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: QA, content: expect.stringContaining('em /home/dev/app/.orkestrai/attachments/a-print.png') }));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

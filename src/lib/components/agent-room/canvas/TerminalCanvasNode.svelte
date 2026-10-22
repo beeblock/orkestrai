@@ -29,16 +29,12 @@
   import { speakText } from '../voice-speech.js';
   import { terminalThemeLabel } from '../terminal-theme-label.js';
   import { normalizeTerminalTheme, TERMINAL_THEMES, TERMINAL_THEME_ORDER, type TerminalThemeName } from '../terminal-themes.js';
-  import type { AgentProviderInfo, ProviderProfile, TerminalNodePayload, WorkspaceAttachment, WorkspaceExecutionRuntime } from '$lib/modules/agent-room/domain/types.js';
+  import type { AgentProviderInfo, ProviderProfile, TerminalNodePayload, WorkspaceExecutionRuntime } from '$lib/modules/agent-room/domain/types.js';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import * as m from '$lib/paraglide/messages.js';
-  import {
-    attachmentPromptReference,
-    MAX_WORKSPACE_ATTACHMENTS,
-    attachmentsFromTransfer,
-    transferHasWorkspaceAttachments,
-    uploadWorkspaceAttachment,
-  } from '../workspace-attachments.js';
+  import { attachmentPromptReference } from '../workspace-attachments.js';
+  import AttachmentList from '../AttachmentList.svelte';
+  import { ComposerAttachments } from '../composer-attachments.svelte.js';
   import CouncilDialog from '../CouncilDialog.svelte';
   import TerminalRuntimeDialog from './TerminalRuntimeDialog.svelte';
   import TerminalCommandsDialog from './TerminalCommandsDialog.svelte';
@@ -434,9 +430,8 @@
   let promptInput: HTMLInputElement;
   let chatFaceLayer = $state<HTMLDivElement | null>(null);
   let attachmentInput: HTMLInputElement;
-  let attachmentBusy = $state(false);
-  let attachmentDropActive = $state(false);
-  let attachmentError = $state('');
+  // Pasted, dropped or picked files wait as chips and travel with the message.
+  const staged = new ComposerAttachments(() => data.workspaceId);
 
   const filteredMentions = $derived(
     mentionTargets.filter((target) => target.title.toLowerCase().includes(mentionFilter.toLowerCase())).slice(0, 8)
@@ -478,14 +473,16 @@
 
   async function sendPrompt() {
     const text = prompt.trim();
-    if (!text || promptSending) return;
+    const attachments = [...staged.items];
+    if ((!text && !attachments.length) || promptSending || staged.busy) return;
     promptSending = true;
     promptError = '';
     try {
       // An agent gets the text as a direct message, so it and the reply show in
       // Chat too; the inbox wakes a sleeping agent and holds it while one is busy.
       if (fieldSendsToChat) {
-        if (!(await sendToAgent(data.workspaceId, id, text))) throw new Error('Delivery not confirmed');
+        if (!(await sendToAgent(data.workspaceId, id, text, attachments))) throw new Error('Delivery not confirmed');
+        staged.clear();
         if (prompt.trim() === text) prompt = '';
         return;
       }
@@ -497,10 +494,12 @@
           'content-type': 'application/json',
           ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}),
         },
-        body: JSON.stringify({ data: text, submit: true }),
+        // Typed straight into the terminal, files go as their workspace paths.
+        body: JSON.stringify({ data: [text, ...attachments.map(attachmentPromptReference)].filter(Boolean).join(' · '), submit: true }),
       });
       const result = await response.json();
       if (!response.ok || result.data?.written !== true) throw new Error('Delivery not confirmed');
+      staged.clear();
       // Preserve a new draft typed while the previous message was in flight.
       if (prompt.trim() === text) prompt = '';
     } catch {
@@ -526,58 +525,24 @@
     }
   }
 
-  function appendPromptAttachments(attachments: WorkspaceAttachment[]) {
-    if (!attachments.length) return;
-    const references = attachments.map(attachmentPromptReference).join(' · ');
-    prompt = `${prompt.trim()}${prompt.trim() ? ' · ' : ''}${references}`;
+  // With the chat face shown, its own field takes the files; the hidden quick field must not.
+  const quickFieldShown = $derived(!(face === 'chat' && Boolean(currentProvider)));
+
+  function handleAttachmentDragOver(event: DragEvent) {
+    if (quickFieldShown) staged.dragover(event);
+  }
+
+  function handleAttachmentDrop(event: DragEvent) {
+    if (!quickFieldShown) return;
+    staged.drop(event);
     promptInput?.focus();
   }
 
-  function handleAttachmentDragOver(event: DragEvent) {
-    if (!transferHasWorkspaceAttachments(event.dataTransfer)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-    attachmentDropActive = true;
-  }
-
-  async function handleAttachmentDrop(event: DragEvent) {
-    if (!event.dataTransfer || !transferHasWorkspaceAttachments(event.dataTransfer)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    attachmentDropActive = false;
-    attachmentBusy = true;
-    attachmentError = '';
-    try {
-      appendPromptAttachments(await attachmentsFromTransfer(data.workspaceId, event.dataTransfer));
-    } catch (error) {
-      attachmentError = error instanceof Error && error.message === 'attachment_too_large'
-        ? m['attachment.too_large']()
-        : error instanceof Error && error.message === 'attachment_too_many'
-        ? m['attachment.too_many']({ count: MAX_WORKSPACE_ATTACHMENTS })
-        : m['attachment.error']();
-    } finally {
-      attachmentBusy = false;
-    }
-  }
-
-  async function handleAttachmentFiles(event: Event) {
+  function handleAttachmentFiles(event: Event) {
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
-    attachmentBusy = true;
-    attachmentError = '';
-    try {
-      const attachments: WorkspaceAttachment[] = [];
-      for (const file of files) attachments.push(await uploadWorkspaceAttachment(data.workspaceId, file));
-      appendPromptAttachments(attachments);
-    } catch (error) {
-      attachmentError = error instanceof Error && error.message === 'attachment_too_large'
-        ? m['attachment.too_large']()
-        : m['attachment.error']();
-    } finally {
-      attachmentBusy = false;
-    }
+    void staged.addFiles(files).then(() => promptInput?.focus());
   }
 
   // -- Voz de volta (TTS pt-BR) ------------------------------------------------
@@ -702,7 +667,7 @@
 
 <NodeShell
   onDragOver={handleAttachmentDragOver}
-  onDragLeave={() => (attachmentDropActive = false)}
+  onDragLeave={staged.dragleave}
   onDrop={handleAttachmentDrop}
   {id}
   {selected}
@@ -997,11 +962,11 @@
 
   <div
     class="terminal-body nodrag"
-    class:attachment-drop-active={attachmentDropActive}
+    class:attachment-drop-active={staged.dragging}
     role="group"
     aria-label={m['attachment.agent_drop_target']()}
     ondragover={handleAttachmentDragOver}
-    ondragleave={() => (attachmentDropActive = false)}
+    ondragleave={staged.dragleave}
     ondrop={handleAttachmentDrop}
   >
     {#if data.payload.sessionId && !forceRespawn && !ownsCreatedSession}
@@ -1071,7 +1036,7 @@
     {/if}
     {#if face === 'chat' && currentProvider}
       <div class="chat-face-layer" bind:this={chatFaceLayer}>
-        <AgentChatFace workspaceId={data.workspaceId} nodeId={id} title={data.title} />
+        <AgentChatFace workspaceId={data.workspaceId} nodeId={id} title={data.title} voice />
       </div>
     {:else if currentProvider && (queuedMessages.length || justDelivered)}
       <div class="inbox-chip" class:delivered={!queuedMessages.length} role="status" data-testid="terminal-inbox-chip">
@@ -1121,14 +1086,17 @@
     onClose={() => (commandsOpen = false)}
   />
 
+  {#if staged.items.length && quickFieldShown}
+    <div class="staged-attachments nodrag"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>
+  {/if}
   <div
     class="composer nodrag"
     class:hidden-face={face === 'chat' && Boolean(currentProvider)}
-    class:attachment-drop-active={attachmentDropActive}
+    class:attachment-drop-active={staged.dragging}
     role="group"
     aria-label={m['attachment.agent_drop_target']()}
     ondragover={handleAttachmentDragOver}
-    ondragleave={() => (attachmentDropActive = false)}
+    ondragleave={staged.dragleave}
     ondrop={handleAttachmentDrop}
   >
     <input bind:this={attachmentInput} type="file" multiple class="attachment-input" onchange={handleAttachmentFiles} />
@@ -1136,10 +1104,10 @@
       class="composer-attach"
       aria-label={m['attachment.add']()}
       title={m['attachment.add']()}
-      disabled={attachmentBusy}
+      disabled={staged.busy}
       onclick={() => attachmentInput.click()}
     >
-      {#if attachmentBusy}<LoaderCircle size={14} class="animate-spin" aria-hidden="true" />{:else}<Paperclip size={14} aria-hidden="true" />{/if}
+      {#if staged.busy}<LoaderCircle size={14} class="animate-spin" aria-hidden="true" />{:else}<Paperclip size={14} aria-hidden="true" />{/if}
     </button>
     <input
       bind:this={promptInput}
@@ -1147,14 +1115,15 @@
       data-testid="terminal-quick-prompt"
       oninput={handlePromptInput}
       onkeydown={handlePromptKeydown}
+      onpaste={staged.paste}
       placeholder={fieldSendsToChat ? m['ph.agent_message']() : m['ph.quick_prompt']()}
       spellcheck="false"
     />
-    <button class="composer-send" class:ready={Boolean(prompt.trim())} aria-label={m['term.send']()} aria-busy={promptSending} onclick={sendPrompt} disabled={!prompt.trim() || promptSending}>
+    <button class="composer-send" class:ready={Boolean(prompt.trim()) || staged.items.length > 0} aria-label={m['term.send']()} aria-busy={promptSending} onclick={sendPrompt} disabled={(!prompt.trim() && !staged.items.length) || promptSending || staged.busy}>
       <SendHorizontal size={14} />
     </button>
   </div>
-  {#if attachmentError}<p class="attachment-error" role="status">{attachmentError}</p>{/if}
+  {#if staged.error}<p class="attachment-error" role="status">{staged.error}</p>{/if}
 </NodeShell>
 
 <style>
@@ -1306,6 +1275,16 @@
 
   .composer-attach:disabled {
     opacity: 0.45;
+  }
+
+  .staged-attachments {
+    padding: 5px 8px 0;
+    border-top: 1px solid color-mix(in srgb, var(--app-text) 6%, transparent);
+    background: color-mix(in srgb, var(--app-surface-raised) 40%, var(--app-surface));
+  }
+
+  .staged-attachments + .composer {
+    border-top: 0;
   }
 
   .attachment-error {

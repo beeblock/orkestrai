@@ -8,6 +8,9 @@
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
+  import AttachmentList from '../AttachmentList.svelte';
+  import ComposerAttachButton from '../ComposerAttachButton.svelte';
+  import { ComposerAttachments } from '../composer-attachments.svelte.js';
   import StatusPill from '../StatusPill.svelte';
   import { agentStatus } from '../agent-status.svelte.js';
   import { agentColor, agentTone } from '../agent-identity.js';
@@ -32,6 +35,7 @@
   };
 
   let { id, data, selected } = $props<NodeProps & { data: OrchestratorNodeData }>();
+  const staged = new ComposerAttachments(() => data.workspaceId);
 
   const PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', kimi: 'Kimi', opencode: 'OpenCode', cursor: 'Cursor', antigravity: 'Antigravity', cline: 'Cline', devin: 'Devin', copilot: 'Copilot', gemini: 'Gemini', qwen: 'Qwen', aider: 'Aider', goose: 'goose', amp: 'Amp' };
 
@@ -146,13 +150,15 @@
   // distributes it; @mentions reach those teammates directly.
   async function send() {
     const text = draft.trim();
-    if (!text || sending || !canSend) return;
+    const attachments = [...staged.items];
+    if ((!text && !attachments.length) || sending || !canSend || staged.busy) return;
     sending = true;
     if (recipient) {
       const target = recipient;
-      const delivered = await sendToAgent(data.workspaceId, target.id, text);
+      const delivered = await sendToAgent(data.workspaceId, target.id, text, attachments);
       sending = false;
       if (delivered) {
+        staged.clear();
         if (draft.trim() === text) draft = '';
         flash(true, m['orchestrator.sent_direct']({ name: target.title }));
       } else {
@@ -164,10 +170,11 @@
     const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(data.workspaceId)}/channels/${encodeURIComponent(TEAM_CHANNEL)}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
-      body: JSON.stringify({ body: text }),
+      body: JSON.stringify({ body: text, attachments }),
     }).catch(() => null);
     sending = false;
     if (response?.ok) {
+      staged.clear();
       if (draft.trim() === text) draft = '';
       flash(true, leader && !text.includes('@') ? m['orchestrator.sent_leader']({ name: leader.title }) : m['orchestrator.sent']());
     } else {
@@ -305,13 +312,16 @@
         {/each}
       </div>
     {/if}
-    <form class="command" class:voice={voiceOpen} onsubmit={(event) => { event.preventDefault(); void send(); }}>
+    {#if staged.error}<p class="staged-error" role="alert">{staged.error}</p>{/if}
+    {#if staged.items.length}<div class="staged"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>{/if}
+    <form class="command" class:voice={voiceOpen} class:dropping={staged.dragging} aria-label={m['composer.drop_files']()} onsubmit={(event) => { event.preventDefault(); void send(); }} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>
       {#if voiceOpen}
         <ComposerVoice onTranscript={onVoiceTranscript} onClose={() => (voiceOpen = false)} onSetupNeeded={onVoiceSetup} />
       {:else}
-        <input bind:this={inputEl} bind:value={draft} placeholder={prompt} aria-label={prompt} disabled={total === 0} oninput={onDraftInput} onkeydown={onDraftKeydown} oncompositionend={onDraftInput} />
-        {#if draft.trim() || sending}
-          <button type="submit" class="send" aria-label={recipient ? m['orchestrator.send_leader']({ name: recipient.title }) : leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={!draft.trim() || sending || !canSend}>
+        <input bind:this={inputEl} bind:value={draft} placeholder={prompt} aria-label={prompt} disabled={total === 0} oninput={onDraftInput} onkeydown={onDraftKeydown} oncompositionend={onDraftInput} onpaste={staged.paste} />
+        <ComposerAttachButton attachments={staged} class="attach" disabled={total === 0} />
+        {#if draft.trim() || staged.items.length || sending}
+          <button type="submit" class="send" aria-label={recipient ? m['orchestrator.send_leader']({ name: recipient.title }) : leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={(!draft.trim() && !staged.items.length) || sending || !canSend || staged.busy}>
             {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} strokeWidth={2.4} />{/if}
           </button>
         {:else}
@@ -745,6 +755,50 @@
 
   .command:focus-within {
     border-color: color-mix(in srgb, var(--app-accent) 50%, transparent);
+  }
+
+  .command.dropping {
+    border-color: var(--app-accent);
+    border-style: dashed;
+  }
+
+  .command :global(.attach) {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+  }
+
+  .command :global(.attach:hover:not(:disabled)) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .command :global(.attach:disabled) {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .command :global(.attach:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+    border-radius: 50%;
+  }
+
+  .staged {
+    margin: 0 12px 6px;
+  }
+
+  .staged-error {
+    margin: 0 14px 6px;
+    color: var(--app-danger);
+    font-size: 11.5px;
   }
 
   .command input {

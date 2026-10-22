@@ -1,3 +1,5 @@
+import { stat } from 'node:fs/promises';
+import { posix, resolve } from 'node:path';
 import { Connection } from '@beeblock/svelar/database';
 import {
   directChannel,
@@ -8,7 +10,7 @@ import {
   TEAM_CHANNEL,
   type ChannelMessage,
 } from '../../domain/channels.js';
-import type { AgentMessageEnvelope, TerminalNodePayload } from '../../domain/types.js';
+import type { AgentMessageEnvelope, TerminalNodePayload, WorkspaceAttachment } from '../../domain/types.js';
 import { attentionRepository } from '../../infrastructure/repositories/AttentionRepository.js';
 import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
 import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
@@ -48,6 +50,33 @@ function boundedBody(value: string): string {
   if (!body) throw new Error('A mensagem está vazia.');
   if (body.length > MAX_CHANNEL_BODY) throw new Error(`A mensagem passa de ${MAX_CHANNEL_BODY} caracteres.`);
   return body;
+}
+
+/**
+ * What an agent reads about the owner's attachments: each file by an absolute
+ * path in the agent's own runtime, so an agent working on a floor (a worktree
+ * in another folder) or inside WSL opens the same file the owner attached.
+ */
+async function attachmentNote(workspaceId: string, attachments: readonly WorkspaceAttachment[]): Promise<string> {
+  if (!attachments.length) return '';
+  const workspace = await workspaceRepository.getWorkspace(workspaceId);
+  if (!workspace) throw new Error('Workspace não encontrado.');
+  const parts = await Promise.all(attachments.map(async (attachment) => {
+    if (attachment.kind === 'link') return `link "${attachment.name}": ${attachment.url}`;
+    const file = resolve(workspace.workingDir, attachment.path ?? '');
+    const present = await stat(file).then((info) => info.isFile()).catch(() => false);
+    if (!present) throw new Error(`O anexo "${attachment.name}" não está mais no workspace. Anexe de novo.`);
+    const path = workspace.wslWorkingDir ? posix.join(workspace.wslWorkingDir, attachment.path ?? '') : file;
+    return `arquivo "${attachment.name}"${attachment.mimeType ? ` (${attachment.mimeType})` : ''} em ${path}`;
+  }));
+  return ` [Anexos do dono, abra cada um antes de responder: ${parts.join('; ')}]`;
+}
+
+/** The text stored for an owner message; one made only of attachments is named by them. */
+function ownerBody(body: string, attachments: readonly WorkspaceAttachment[]): string {
+  const text = body.trim();
+  if (text || !attachments.length) return boundedBody(text);
+  return boundedBody(attachments.map((attachment) => attachment.name).join(', '));
 }
 
 class QuestionAlreadyAnsweredError extends Error {
@@ -157,12 +186,22 @@ export class ChannelService {
    * direct channel; in the team channel the agents mentioned with @, else the
    * leader. An answer goes back to the agent that asked and closes its question.
    */
-  async postOwner(workspaceId: string, channel: string, input: { body: string; replyToId?: string | null; via?: 'remote' }): Promise<OwnerPostResult> {
-    const body = boundedBody(input.body);
+  async postOwner(
+    workspaceId: string,
+    channel: string,
+    input: { body: string; replyToId?: string | null; via?: 'remote'; attachments?: readonly WorkspaceAttachment[] },
+  ): Promise<OwnerPostResult> {
+    const attachments = input.attachments ?? [];
+    const body = ownerBody(input.body, attachments);
+    // Checked before anything is stored: a missing file fails the send instead of reaching the agent.
+    const note = await attachmentNote(workspaceId, attachments);
     const { agents, directNodeId } = await this.requireChannel(workspaceId, channel);
-    // Written from the remote companion rather than in this app.
-    const origin = input.via ? { via: input.via } : {};
-    if (input.replyToId) return this.answer(workspaceId, channel, input.replyToId, body, origin);
+    // `via` marks a message written from the remote companion; the attachments stay on it for the screens.
+    const origin = {
+      ...(input.via ? { via: input.via } : {}),
+      ...(attachments.length ? { attachments, ...(input.body.trim() ? {} : { attachmentsOnly: true }) } : {}),
+    };
+    if (input.replyToId) return this.answer(workspaceId, channel, input.replyToId, body, origin, note);
     let recipients: string[];
     if (directNodeId) recipients = [directNodeId];
     else {
@@ -175,7 +214,7 @@ export class ChannelService {
     const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', body, meta: { ...(recipients.length ? { deliverTo: recipients } : {}), ...origin } });
     broadcast(message);
     const where = directNodeId ? 'Mensagem direta do dono' : 'Mensagem do dono no canal #equipe';
-    const content = `${where}: ${body} -- Responda com orkestrai post "<resposta>"${directNodeId ? '' : ' --channel team'} (tool MCP channel_post) para a resposta aparecer na Conversa.`;
+    const content = `${where}: ${body}${note} -- Responda com orkestrai post "<resposta>"${directNodeId ? '' : ' --channel team'} (tool MCP channel_post) para a resposta aparecer na Conversa.`;
     const delivered = await Promise.all(recipients.map(async (nodeId) => ({
       nodeId,
       ok: await this.deliver(workspaceId, nodeId, content, `channel:${message.id}:${nodeId}`, { channel, channelMessageId: message.id }),
@@ -192,7 +231,7 @@ export class ChannelService {
     return { message, delivered };
   }
 
-  private async answer(workspaceId: string, channel: string, questionId: string, body: string, origin: Record<string, unknown> = {}): Promise<OwnerPostResult> {
+  private async answer(workspaceId: string, channel: string, questionId: string, body: string, origin: Record<string, unknown> = {}, note = ''): Promise<OwnerPostResult> {
     const question = await channelRepository.find(workspaceId, questionId);
     if (!question || question.kind !== 'question' || question.channel !== channel) throw new Error('Pergunta não encontrada neste canal.');
     if (question.answeredAt) throw new QuestionAlreadyAnsweredError();
@@ -201,7 +240,7 @@ export class ChannelService {
       workspaceId,
       question,
       { authorKind: 'owner', body, meta: { ...(asker ? { deliverTo: [asker] } : {}), ...origin } },
-      asker ? { toNodeId: asker, content: `Resposta do dono à sua pergunta "${question.body.slice(0, 240)}": ${body}`, dedupKey: `owner-answer:${questionId}` } : null,
+      asker ? { toNodeId: asker, content: `Resposta do dono à sua pergunta "${question.body.slice(0, 240)}": ${body}${note}`, dedupKey: `owner-answer:${questionId}` } : null,
     );
     if (!asker) return { message, delivered: [] };
     const title = (await this.agents(workspaceId)).find((agent) => agent.id === asker)?.title ?? 'o agente';

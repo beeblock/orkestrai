@@ -6,6 +6,11 @@
   import QuestionCard from './QuestionCard.svelte';
   import ComposerVoice from '../canvas/ComposerVoice.svelte';
   import { TEXT_DICTATION_COMMAND } from '../text-dictation.js';
+  import AttachmentList from '../AttachmentList.svelte';
+  import ComposerAttachButton from '../ComposerAttachButton.svelte';
+  import MessageAttachments, { messageAttachments } from '../MessageAttachments.svelte';
+  import { ComposerAttachments } from '../composer-attachments.svelte.js';
+  import type { WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
   import { answersByQuestion, buildTimeline, mergeLoaded, upsertMessage } from './chat-timeline.js';
   import { directChannel, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -24,6 +29,7 @@
   let scroller = $state<HTMLElement | null>(null);
   let field = $state<HTMLInputElement | null>(null);
   let listening = $state(false);
+  const staged = new ComposerAttachments(() => workspaceId);
   const channel = $derived(directChannel(nodeId));
   const url = $derived(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(channel)}/messages`);
   const timeline = $derived(buildTimeline(messages));
@@ -43,12 +49,12 @@
     }
   }
 
-  async function post(text: string, replyToId: string | null = null): Promise<boolean> {
+  async function post(text: string, replyToId: string | null = null, attachments: WorkspaceAttachment[] = []): Promise<boolean> {
     const csrf = getCsrfToken();
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
-      body: JSON.stringify({ body: text, replyToId }),
+      body: JSON.stringify({ body: text, replyToId, attachments }),
     }).catch(() => null);
     const result = response?.ok ? await response.json().catch(() => null) : null;
     if (!result?.data?.message) return false;
@@ -59,11 +65,14 @@
 
   async function send() {
     const text = draft.trim();
-    if (!text || sending) return;
+    const attachments = [...staged.items];
+    if ((!text && !attachments.length) || sending || staged.busy) return;
     sending = true;
-    failed = !(await post(text));
+    failed = !(await post(text, null, attachments));
     sending = false;
-    if (!failed && draft.trim() === text) draft = '';
+    if (failed) return;
+    staged.clear();
+    if (draft.trim() === text) draft = '';
   }
 
   async function onVoice(text: string, mode: 'send' | 'edit') {
@@ -104,7 +113,10 @@
             {#if message.kind === 'question'}
               <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id)} />
             {:else}
-              <div class="bubble"><MarkdownView content={message.body} compact {workspaceId} /></div>
+              <div class="bubble">
+                {#if message.meta.attachmentsOnly !== true}<MarkdownView content={message.body} compact {workspaceId} />{/if}
+                {#if messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
+              </div>
             {/if}
           {/each}
         </div>
@@ -113,16 +125,18 @@
       <p class="empty">{m['chat.empty_direct_hint']()}</p>
     {/each}
   </div>
-  {#if failed}<p class="error" role="alert">{m['composer.failed']({ name: title })}</p>{/if}
-  <form class="composer" onsubmit={(event) => { event.preventDefault(); void send(); }}>
+  {#if failed || staged.error}<p class="error" role="alert">{staged.error || m['composer.failed']({ name: title })}</p>{/if}
+  {#if staged.items.length}<div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.remove} /></div>{/if}
+  <form class="composer" class:dropping={staged.dragging} aria-label={m['composer.drop_files']()} onsubmit={(event) => { event.preventDefault(); void send(); }} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>
     {#if listening}
       <ComposerVoice onTranscript={onVoice} onClose={() => (listening = false)} onSetupNeeded={onVoiceSetup} />
     {:else}
-      <input bind:this={field} bind:value={draft} placeholder={m['chat.placeholder_direct']({ name: title })} aria-label={m['chat.placeholder_direct']({ name: title })} />
-      {#if voice && !draft.trim() && !sending}
+      <input bind:this={field} bind:value={draft} placeholder={m['chat.placeholder_direct']({ name: title })} aria-label={m['chat.placeholder_direct']({ name: title })} onpaste={staged.paste} />
+      <ComposerAttachButton attachments={staged} class="attach" />
+      {#if voice && !draft.trim() && !staged.items.length && !sending}
         <button type="button" onclick={() => (listening = true)} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={14} /></button>
       {:else}
-        <button type="submit" disabled={!draft.trim() || sending} aria-label={m['composer.send']()}>
+        <button type="submit" disabled={(!draft.trim() && !staged.items.length) || sending || staged.busy} aria-label={m['composer.send']()}>
           {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} />{/if}
         </button>
       {/if}
@@ -237,8 +251,46 @@
     cursor: pointer;
   }
 
-  .composer button:disabled {
+  .composer button:disabled,
+  .composer :global(.attach:disabled) {
     opacity: 0.45;
     cursor: default;
+  }
+
+  .composer :global(.attach) {
+    width: 32px;
+    height: 32px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--app-text-muted);
+    cursor: pointer;
+  }
+
+  .composer :global(.attach:hover:not(:disabled)) {
+    background: var(--app-hover);
+    color: var(--app-text);
+  }
+
+  .composer :global(.attach:focus-visible) {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 1px;
+    border-radius: 8px;
+  }
+
+  .composer.dropping {
+    box-shadow: inset 0 0 0 1px var(--app-accent);
+  }
+
+  .staged {
+    padding: 6px 8px 0;
+    border-top: 1px solid var(--app-border);
+  }
+
+  .staged + .composer {
+    border-top: 0;
   }
 </style>
