@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { win32, posix, resolve } from 'node:path';
-import type { Workspace, WorkspaceExecutionRuntime } from '../domain/types.js';
-import { workspaceExecutionRuntime } from '../domain/runtime.ts';
+import { join, win32, posix, resolve } from 'node:path';
+import type { TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from '../domain/types.js';
+import { terminalExecutionRuntime, workspaceExecutionRuntime } from '../domain/runtime.ts';
 
 export { terminalExecutionRuntime, workspaceExecutionRuntime } from '../domain/runtime.ts';
 
@@ -57,6 +57,24 @@ export function inferWslRuntimeFromPath(path: string): { distribution: string; l
 export function wslHostPath(distribution: string, linuxPath: string): string {
   const tail = linuxPath.replace(/^\/+/, '').split('/').filter(Boolean).join('\\');
   return `\\\\wsl.localhost\\${distribution}${tail ? `\\${tail}` : ''}`;
+}
+
+/**
+ * A workspace file as the terminal that receives it sees it: the Linux path
+ * when that terminal runs in WSL (its own override or the workspace's), the
+ * host path otherwise. The file stays in the original workspace; an agent on
+ * a Floor reaches it by this absolute path as well.
+ */
+export function workspaceFileForTerminal(
+  workspace: Pick<Workspace, 'workingDir' | 'runtimeKind' | 'wslDistribution' | 'wslWorkingDir'>,
+  payload: Pick<TerminalNodePayload, 'executionRuntime'> | null | undefined,
+  relativePath: string,
+): string {
+  const parts = relativePath.split(/[\\/]+/).filter(Boolean);
+  // A terminal with an incomplete WSL runtime cannot start, so the host path is never wrong for a live one.
+  let runtime: WorkspaceExecutionRuntime = { kind: 'native' };
+  try { runtime = terminalExecutionRuntime(workspace, payload ?? {}); } catch { /* host path */ }
+  return runtime.kind === 'wsl' ? posix.join(runtime.linuxWorkingDir, ...parts) : join(workspace.workingDir, ...parts);
 }
 
 export function currentWorkspaceExecutionRuntime(): WorkspaceExecutionRuntime {
