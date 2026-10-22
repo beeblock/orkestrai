@@ -1001,6 +1001,10 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: "Unreleased", title: "Chat, Needs you and attachments", summary: "Attachments in every message field, agent states in sync and Needs you holding only what is yours.", items: [
+      "Needs you only shows what you can resolve: a message left queued for an agent the leader already dismissed no longer becomes a stuck notice. Existing ones close the next time the app starts, and a notice with nothing to decide now has Dismiss.",
+      "A question an agent asked you stays pinned at the end of its conversation, under Waiting for you, until you answer it. The number next to the agent in Chat always points to something on screen, even when the question is hours old.",
+    ] },
     { date: 'October 21, 2026 · 0.43.0', title: 'Orkestrai 0.43.0: Canvas, Focus and Chat', summary: 'The Canvas reads at a glance: who is working, what needs you and where everything is.', items: [
       "Security: update follow-redirects to 1.16.1 and Vite to 6.4.5 to fix cross-origin credential-header leaks and development editor command injection advisories, with the full dependency audit still enabled.",
       'One top bar on every platform holds the Canvas/Workbench switch, search, the attention bell and the microphone. On macOS the window buttons sit inside it.',

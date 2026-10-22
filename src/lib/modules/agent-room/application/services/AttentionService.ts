@@ -148,8 +148,13 @@ export class AttentionService {
     /** Overrides the default open-the-node action, e.g. to open a conversation. */
     action?: Record<string, unknown>;
   }): Promise<void> {
-    // A teammate's undelivered message or alert is the leader's to handle.
-    if (TEAM_SOURCES.includes(input.sourceType) && await teamLeaderFor(input.workspaceId, input.nodeId)) return;
+    if (TEAM_SOURCES.includes(input.sourceType)) {
+      // A message still queued for an agent that was dismissed fails after its
+      // removal closed the agent's items: no one is left to act on it.
+      if (input.nodeId && !(await workspaceRepository.getNode(input.nodeId))) return;
+      // A teammate's undelivered message or alert is the leader's to handle.
+      if (await teamLeaderFor(input.workspaceId, input.nodeId)) return;
+    }
     const item = await attentionRepository.save({
       workspaceId: input.workspaceId,
       activityEventId: null,

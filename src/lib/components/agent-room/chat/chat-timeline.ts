@@ -60,6 +60,17 @@ export function answersByQuestion(messages: readonly ChannelMessage[]): Map<stri
   return answers;
 }
 
+/**
+ * Open questions to pin beside the composer: the ones not among the latest
+ * messages on screen, so a question asked hours ago never hides behind the
+ * conversation that followed it, while a fresh one keeps its place inline.
+ */
+export function pinnedQuestions(open: readonly ChannelMessage[], messages: readonly ChannelMessage[], recent = 6): ChannelMessage[] {
+  const answered = answersByQuestion(messages);
+  const latest = new Set([...messages].sort((a, b) => chronological(b, a)).slice(0, recent).map((message) => message.id));
+  return open.filter((question) => !question.answeredAt && !answered.has(question.id) && !latest.has(question.id));
+}
+
 function chronological(a: ChannelMessage, b: ChannelMessage): number {
   return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }

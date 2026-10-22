@@ -20,8 +20,11 @@ export class ChannelController extends Controller {
         before: event.url.searchParams.get('before') || null,
         beforeId: event.url.searchParams.get('beforeId') || null,
         limit: event.url.searchParams.get('limit') ?? undefined,
+        questions: event.url.searchParams.get('questions') || null,
       });
-      return this.json({ data: await channelService.listMessages(event.params.id, decodeURIComponent(event.params.channel), query) });
+      const channel = decodeURIComponent(event.params.channel);
+      if (query.questions === 'open') return this.json({ data: await channelService.openQuestions(event.params.id, channel) });
+      return this.json({ data: await channelService.listMessages(event.params.id, channel, query) });
     } catch (error) {
       return this.failure(error, 'Could not load the conversation.');
     }

@@ -128,6 +128,16 @@ export class ChannelService {
   }
 
   /**
+   * The questions of one channel still waiting for the owner, oldest first: a
+   * question asked hours ago stays answerable even when it scrolled out of view.
+   */
+  async openQuestions(workspaceId: string, channel: string): Promise<ChannelMessage[]> {
+    await this.requireChannel(workspaceId, channel);
+    const open = await channelRepository.openQuestions(workspaceId);
+    return open.filter((question) => question.channel === channel && question.meta.awaiting !== 'leader').reverse();
+  }
+
+  /**
    * Newest first. The team channel merges the agents' conversations with each
    * other. `before` with `beforeId` (the oldest message held) pages back from
    * exactly that message.

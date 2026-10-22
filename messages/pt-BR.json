@@ -5286,6 +5286,7 @@
   "topbar.search_label": "Abrir busca",
   "needs_you.title": "Precisa de você",
   "needs_you.more": "Mais {count} em Precisa de você",
+  "needs_you.dismiss": "Dispensar",
   "chat.via": "via {channel}",
   "always_on.title": "Sempre ligado",
   "always_on.configure": "Configurar",
