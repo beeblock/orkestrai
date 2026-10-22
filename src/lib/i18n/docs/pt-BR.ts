@@ -1005,7 +1005,8 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "Ainda não publicado", title: "Conversa, Precisa de você e anexos", summary: "Anexos em todo campo de mensagem, estados dos agentes em sincronia e Precisa de você só com o que é seu.", items: [
+    { date: "22 de outubro de 2026 · 0.44.0", title: "Orkestrai 0.44.0: Conversa, Precisa de você e anexos", summary: "Anexos em todo campo de mensagem, estados dos agentes em sincronia e Precisa de você só com o que é seu.", items: [
+      "Segurança: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 e ip-address 10.7.4 corrigem alertas de sanitização, permissões de frames, registro de mocks em desenvolvimento e análise de IPv6, sem mudar a versão principal do Electron nem a versão do Monaco; a auditoria completa de dependências continua ativa.",
       "Precisa de você mostra só o que você pode resolver: uma mensagem que ficou na fila para um agente já dispensado pelo líder não vira mais um aviso preso. Os avisos que já existem fecham na próxima abertura do app, e um aviso sem nada para decidir ganhou Dispensar. Uma pergunta sem opções prontas mostra Responder, que abre a conversa, e nunca some sem resposta.",
       "Uma pergunta que um agente te fez fica fixada no fim da conversa dele, em Aguardando você, até ser respondida. O número ao lado do agente na Conversa sempre aponta para algo na tela, mesmo que a pergunta seja de horas atrás.",
       "O estado de cada agente (trabalhando, ocioso, esperando) fica igual no Canvas, no Foco e na Conversa, ao vivo: a Conversa e o Foco não precisam mais de uma ida ao Canvas para atualizar. Um agente que recebe uma mensagem da fila aparece trabalhando na hora.",

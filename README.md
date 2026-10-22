@@ -123,6 +123,11 @@ routines. Agents can ask you something without stopping (`orkestrai ask-owner`),
 and requests that need your permission show Approve and Refuse right where they
 appear: in Needs you, in the agent's node and in Chat.
 
+Paste, drop or pick images, PDFs and files in Chat, the Canvas message bar,
+the leader panel, Focus or an agent's chat face. Each receiving agent gets an
+absolute file path in its own native or WSL runtime, including on a Floor.
+Stored messages keep their attachments even if agent delivery fails.
+
 ### Answer your team from the phone
 
 Pair a phone on the same network in **Settings > Phone** with a QR code and add
@@ -709,7 +714,7 @@ device access.
 - **Shared reference material:** drop, paste, or select images, PDFs, files, and
   HTTP/HTTPS links in agent prompts, task cards, notes, and composers. Files up
   to 10 MB stay inside the workspace under `.orkestrai/attachments/`, and agents
-  receive the complete relative path or URL.
+  receive each message attachment's absolute path in their own runtime or the URL.
 - **Maestro mode:** assign a leader that can propose a team, recruit agents,
   delegate complete task briefings, coordinate work, and dismiss agents when the
   work is done. Recruitment inherits the leader's active Floor and is confirmed
