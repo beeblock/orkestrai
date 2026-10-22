@@ -173,6 +173,10 @@ describe('collaboration host core', () => {
   it('puts messages from guests built before the shared Conversa into the agent direct conversation', async () => {
     const { share, workspace, device, agent } = await setup('operator');
     const enqueue = vi.spyOn(agentInboxService, 'enqueue').mockResolvedValue({} as never);
+    // This scenario asserts chronological pairing, not the UUID tie-break
+    // for messages stored in the same instant. Give each exchange its time.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-22T16:00:00.000Z'));
 
     const result = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
       command(), 0, { type: 'leader.message', message: 'Review the release.' },
@@ -183,6 +187,7 @@ describe('collaboration host core', () => {
     expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ toNodeId: agent.id, kind: 'owner', content: expect.stringContaining('Review the release.') }));
 
     // A message is never refused for a snapshot a moment old.
+    vi.setSystemTime(new Date('2026-10-22T16:00:01.000Z'));
     const stale = await sharedWorkspaceCommandBus.execute(share.id, device.id, new ExecuteCollaborationCommandDto(
       command(), 0, { type: 'agent.message', agentNodeId: agent.id, message: 'And the changelog.' },
     ));
@@ -193,6 +198,7 @@ describe('collaboration host core', () => {
     expect(missing).toMatchObject({ accepted: false, errorCode: 'COMMAND_FAILED' });
 
     // Those guests read the exchange as a message and its reply.
+    vi.setSystemTime(new Date('2026-10-22T16:00:02.000Z'));
     await channelService.postAgent(workspace.id, agent.id, { body: 'Release reviewed.' });
     const snapshot = scopeSharedWorkspaceSnapshot(await sharedWorkspaceQuery.snapshot(share.id), device.scopes);
     expect(snapshot.conversations[0]).toMatchObject({ agentNodeId: agent.id, message: 'And the changelog.', reply: 'Release reviewed.', state: 'replied' });
