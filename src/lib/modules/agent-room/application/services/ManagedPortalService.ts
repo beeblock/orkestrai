@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readdir, realpath, rm } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { CanvasNodePayload } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -24,6 +24,7 @@ const runtime = globalThis as typeof globalThis & {
   __orkestraiPortalListenerReady?: boolean;
   __orkestraiPortalDigestKey?: Buffer;
   __orkestraiExecutePortal?: (request: ManagedPortalExecutorRequest) => Promise<ManagedPortalExecutorResult>;
+  __orkestraiPortalCaptures?: Map<string, PortalCapture[]>;
 };
 const pending = runtime.__orkestraiPortalPending ??= new Map<string, PendingPortalRequest>();
 // A persisted unkeyed digest of a short login password permits offline guessing.
@@ -87,6 +88,17 @@ export async function preparePortalDirectory(root: string, candidate: string): P
 export const PORTAL_SCREENSHOT_DIRECTORY = '.orkestrai/portal/screenshots';
 // Older captures are pruned so repeated checks do not fill the workspace.
 const KEPT_PORTAL_SCREENSHOTS = 40;
+
+/** A capture this process wrote: its name and the identity of the file itself. */
+type PortalCapture = { name: string; dev: bigint; ino: bigint };
+// Retention deletes only these, oldest first, per screenshots folder.
+const captures = runtime.__orkestraiPortalCaptures ??= new Map<string, PortalCapture[]>();
+
+/** Whether `path` is still the very file this app wrote (not a link, not another file under that name). */
+async function sameCapture(path: string, capture: PortalCapture): Promise<boolean> {
+  const info = await lstat(path, { bigint: true }).catch(() => null);
+  return Boolean(info?.isFile() && info.dev === capture.dev && info.ino === capture.ino);
+}
 const PNG_DATA_URL = 'data:image/png;base64,';
 
 /**
@@ -109,26 +121,46 @@ export async function savePortalScreenshot(
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'portal';
   // A name no other capture shares, created exclusively: `wx` fails on any
   // existing entry, so a link left at that path is never followed or replaced.
-  const path = join(directory, `${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.png`);
+  const name = `${slug}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.png`;
+  const path = join(directory, name);
   const file = await open(path, 'wx', 0o644);
-  try { await file.writeFile(png); } finally { await file.close(); }
+  let written: PortalCapture;
+  try {
+    await file.writeFile(png);
+    const info = await file.stat({ bigint: true });
+    written = { name, dev: info.dev, ino: info.ino };
+  } finally {
+    await file.close();
+  }
   // The folder was confined before the file existed: if it was swapped for a
-  // link meanwhile, remove what was just written there and fail.
+  // link meanwhile, remove only the file just written there and fail.
   if (await realpath(dirname(path)).catch(() => null) !== directory) {
-    await rm(path, { force: true }).catch(() => undefined);
+    if (await sameCapture(path, written)) await rm(path, { force: true }).catch(() => undefined);
     throw new Error('Portal screenshot folder changed while saving.');
   }
-  await prunePortalScreenshots(directory).catch(() => undefined);
+  const own = captures.get(directory) ?? [];
+  own.push(written);
+  captures.set(directory, own);
+  await pruneOwnPortalScreenshots(directory).catch(() => undefined);
   return { path, relativePath: relative(root, path).split(sep).join('/'), width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
-async function prunePortalScreenshots(directory: string): Promise<void> {
-  const files = (await readdir(directory)).filter((name) => name.endsWith('.png'));
-  if (files.length <= KEPT_PORTAL_SCREENSHOTS) return;
-  // lstat: a link is pruned as itself, never through its target.
-  const dated = await Promise.all(files.map(async (name) => ({ name, time: (await lstat(join(directory, name))).mtimeMs })));
-  dated.sort((a, b) => b.time - a.time);
-  await Promise.all(dated.slice(KEPT_PORTAL_SCREENSHOTS).map(({ name }) => rm(join(directory, name), { force: true })));
+/**
+ * Deletes the oldest captures this process wrote beyond `keep`. It never
+ * lists the folder: only a file with a recorded name and the identity it had
+ * when written is removed, so a folder exchanged for a link elsewhere, with
+ * the owner's files in it, loses nothing. (Node cannot unlink relative to a
+ * directory handle; between the identity check and the removal, only a file
+ * placed under that exact random name by whoever controls the other folder
+ * could be affected.) Captures from earlier runs are left to the owner.
+ */
+export async function pruneOwnPortalScreenshots(directory: string, keep = KEPT_PORTAL_SCREENSHOTS): Promise<void> {
+  const own = captures.get(directory) ?? [];
+  while (own.length > keep) {
+    const oldest = own.shift()!;
+    const path = join(directory, oldest.name);
+    if (await sameCapture(path, oldest)) await rm(path, { force: true });
+  }
 }
 
 async function requestElectron(request: ManagedPortalExecutorRequest, inspect = false): Promise<ManagedPortalExecutorResult | null> {
