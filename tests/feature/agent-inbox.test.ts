@@ -293,7 +293,7 @@ describe('Agent inbox', () => {
     const task = await taskBoardService.create(workspace.id, { title: 'Review the implementation plan', assigneeNodeId: nodes.Web, dispatch: false });
     await taskBoardService.update(workspace.id, task.id, { status: 'todo' });
     await expect(bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Mobile, taskId: task.id, message: 'Work assigned to someone else' })).rejects.toThrow('no longer active');
-    const pending = bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Web, taskId: task.id, message: 'Confirm the plan before starting', busyGraceMs: 50 }).catch(error => error);
+    const pending = bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Web, taskId: task.id, message: 'Confirm the plan before starting', timeoutMs: 1_000, busyGraceMs: 50 }).catch(error => error);
     await vi.waitFor(() => expect(prompts.some(prompt => prompt.nodeId === nodes.Web && prompt.message.includes('Confirm the plan'))).toBe(true));
     expect(await pending).toMatchObject({ deliveryState: 'delivered' });
   });
