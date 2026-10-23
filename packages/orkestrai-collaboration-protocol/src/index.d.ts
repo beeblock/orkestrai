@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v3';
 
 export const COLLABORATION_PROTOCOL: 'orkestrai-collaboration.v1';
 export const MAX_ENCRYPTED_FRAME_BYTES: number;

@@ -1,5 +1,5 @@
 import { FormRequest } from '@beeblock/svelar/forms';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { PortalDesignFeedbackDto } from '$lib/modules/agent-room/application/dto/PortalDesignFeedbackDto.js';
 import { sendPortalDesignFeedbackSchema } from '$lib/modules/agent-room/contracts/schemas/portal-design-feedback.schema.js';
 

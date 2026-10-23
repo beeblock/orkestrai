@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { CODE_GRAPH_CONTEXT_PURPOSES, CODE_GRAPH_EDGE_KINDS, CODE_GRAPH_EVIDENCE_KINDS, CODE_GRAPH_SYMBOL_KINDS } from '../../domain/code-graph.js';
 
 export const codeGraphIndexSchema = z.object({

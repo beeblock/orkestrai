@@ -1,6 +1,6 @@
 import { Controller } from '@beeblock/svelar/routing';
 import { FormRequest } from '@beeblock/svelar/forms';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { taskHandoffService } from '$lib/modules/agent-room/application/services/TaskHandoffService.js';
 import {

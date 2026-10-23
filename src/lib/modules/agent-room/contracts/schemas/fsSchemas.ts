@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { MAX_WORKSPACE_ATTACHMENTS, workspaceAttachmentSchema } from './workspaceAttachmentSchemas.js';
 
 // Schemas de filesystem/git — compartilhados backend/frontend.

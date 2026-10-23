@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const agentLoopSchema = z.object({
   message: z.string().trim().min(1, 'Informe um objetivo ou comando para o loop.'),

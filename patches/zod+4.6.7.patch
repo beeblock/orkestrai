@@ -1,0 +1,22 @@
+===================================================================
+--- a/node_modules/zod/v3/types.js
++++ b/node_modules/zod/v3/types.js
+@@ -1773,0 +1774,1 @@
++                if (tooBig) return INVALID;
+@@ -1800,1 +1801,1 @@
+-                status.dirty();
++                return INVALID;
+@@ -2823,1 +2824,1 @@
+-                status.dirty();
++                return INVALID;
+===================================================================
+--- a/node_modules/zod/v3/types.cjs
++++ b/node_modules/zod/v3/types.cjs
+@@ -1794,0 +1795,1 @@
++                if (tooBig) return parseUtil_js_1.INVALID;
+@@ -1821,1 +1822,1 @@
+-                status.dirty();
++                return parseUtil_js_1.INVALID;
+@@ -2852,1 +2853,1 @@
+-                status.dirty();
++                return parseUtil_js_1.INVALID;

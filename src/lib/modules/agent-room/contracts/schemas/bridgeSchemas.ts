@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const bridgeFigmaSelectionSchema = z.object({
   baseRevision: z.number().int().min(0),

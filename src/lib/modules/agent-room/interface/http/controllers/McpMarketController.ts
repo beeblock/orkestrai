@@ -1,5 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { mcpMarketService, type McpMarketEntry } from '$lib/modules/agent-room/application/services/McpMarketService.js';
 
 const installSchema = z.object({

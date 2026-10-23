@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { autonomyCapabilitySchema } from './autonomy-policy.schema.js';
 
 const actorSchema = z.object({

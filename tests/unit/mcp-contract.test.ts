@@ -16,7 +16,7 @@ import {
 import { bridgeBoardTaskSchema, bridgeBoardTaskUpdateSchema } from '$lib/modules/agent-room/contracts/schemas/taskSchemas.js';
 import { bridgeApplyDesignDeliverySchema, bridgeImportDesignMarkupSchema, previewDesignDeliverySchema } from '$lib/modules/agent-room/contracts/schemas/design-delivery.schema.js';
 import { createAgentApiClientSchema, executeAgentApiClientRunnerSchema, exportAgentApiClientSchema, importAgentApiClientSchema, replaceAgentApiClientSchema, syncAgentApiClientSchema } from '$lib/modules/agent-room/contracts/schemas/apiClient.schema.js';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { creativeVideoImportSchema } from '$lib/modules/creative-media/contracts/schemas/creative-media.schema.js';
 import { saveWorkspaceMemorySchema, reviseWorkspaceMemorySchema } from '$lib/modules/agent-room/contracts/schemas/workspace-memory.schema.js';
 import { contributeHuddleTurnSchema } from '$lib/modules/agent-room/contracts/schemas/huddle.schema.js';

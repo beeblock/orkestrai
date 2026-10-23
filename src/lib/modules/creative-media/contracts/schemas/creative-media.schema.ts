@@ -1,5 +1,5 @@
 // Shared with the renderer; Svelar's validation barrel includes Node-only rules.
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { CREATIVE_MODEL_IDS, CREATIVE_MODELS } from '../../domain/catalog.js';
 import { FAL_ENDPOINT_PATTERN } from '../../domain/model-contract.js';
 import { shotDirectionSchema } from '../../domain/shot-direction.js';

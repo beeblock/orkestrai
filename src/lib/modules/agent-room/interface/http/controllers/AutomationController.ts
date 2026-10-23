@@ -1,7 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Controller } from '@beeblock/svelar/routing';
 import { FormRequest } from '@beeblock/svelar/forms';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { automationEnabledSchema, automationFormSchema, githubIntegrationSchema } from '../../../contracts/schemas/automation.schema.js';
 import { AutomationTriggerReceived } from '../../../domain/events/AutomationTriggerReceived.js';
 import { routineService } from '../../../application/services/RoutineService.js';

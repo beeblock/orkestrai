@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const MAX_CHECKLIST_ITEMS = 500;
 export const MAX_CALENDAR_EVENTS = 2_000;

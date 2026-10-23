@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const workspaceMemoryKindSchema = z.enum(['decision', 'fact', 'preference', 'constraint', 'reference', 'lesson']);
 export const workspaceMemorySourceTypeSchema = z.enum(['user', 'note', 'task', 'message', 'file', 'url', 'git', 'review', 'council', 'agent']);

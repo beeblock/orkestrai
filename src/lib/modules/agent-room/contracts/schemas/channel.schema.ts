@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { MAX_CHANNEL_BODY, MAX_OPTION_LENGTH, MAX_QUESTION_OPTIONS } from '../../domain/channels.js';
 import { MAX_WORKSPACE_ATTACHMENTS, workspaceAttachmentSchema } from './workspaceAttachmentSchemas.js';
 

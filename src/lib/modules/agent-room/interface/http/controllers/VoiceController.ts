@@ -10,7 +10,7 @@ import {
   embeddedModelsSize,
   ensureEmbeddedModels,
 } from '$lib/modules/agent-room/infrastructure/voice/EmbeddedVoice.js';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 const speakSchema = z.object({
   text: z.string().trim().min(1, 'Informe o texto.'),

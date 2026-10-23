@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 const profilePathSchema = z.string().trim().max(4_096).refine(
   (value) => !/[\u0000\r\n]/.test(value),

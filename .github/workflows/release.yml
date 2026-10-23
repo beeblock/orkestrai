@@ -228,6 +228,7 @@ jobs:
           if [[ "$TARGET_ARCH" == "x64" ]]; then
             node scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app"
           fi
+          node tests/fixtures/zod-size-validation.mjs "$APP_DIR/Contents/Resources/app"
           verify_trusted_app "$APP_DIR"
           hdiutil verify "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX.dmg"
           unzip -tq "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX-mac.zip"
@@ -290,6 +291,7 @@ jobs:
           codesign --verify --deep --strict "$VOICE_QA_DIR/Orkestrai.app"
           env -u NODE_PATH -u ELECTRON_RUN_AS_NODE node scripts/validate-voice-runtime.mjs \
             "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
+          node tests/fixtures/zod-size-validation.mjs "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
 
   build-windows:
     name: Build Windows (x64)
@@ -361,7 +363,9 @@ jobs:
           }
 
       - name: Verify packaged native voice
-        run: node scripts/validate-voice-runtime.mjs release/win-unpacked/resources/app
+        run: |
+          node scripts/validate-voice-runtime.mjs release/win-unpacked/resources/app
+          node tests/fixtures/zod-size-validation.mjs release/win-unpacked/resources/app
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
@@ -435,7 +439,9 @@ jobs:
         run: test -f release/linux-unpacked/resources/app/node_modules/electron-updater/package.json
 
       - name: Verify packaged native voice
-        run: node scripts/validate-voice-runtime.mjs release/linux-unpacked/resources/app
+        run: |
+          node scripts/validate-voice-runtime.mjs release/linux-unpacked/resources/app
+          node tests/fixtures/zod-size-validation.mjs release/linux-unpacked/resources/app
 
       - name: Verify RPM does not claim shared build-id paths
         shell: bash

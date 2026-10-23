@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const councilModeSchema = z.enum(['advisory', 'implementation']);
 export const councilCriterionSchema = z.enum(['balanced', 'quality', 'speed', 'risk', 'cost', 'custom']);

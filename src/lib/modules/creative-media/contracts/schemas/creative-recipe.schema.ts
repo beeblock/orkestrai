@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { storyboardSceneContentSchema } from './creative-storyboard.schema.js';
 
 const id = z.string().uuid();

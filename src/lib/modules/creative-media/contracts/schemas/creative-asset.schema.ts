@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { creativeEditSchema } from './creative-edit.schema.js';
 export const creativeAssetCommandSchema = z.object({
   command: z.enum(['list', 'inspect', 'decide', 'prepare']),

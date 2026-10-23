@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 /** Restore archived canvas nodes by id. */
 export const restoreArchivedNodesSchema = z.object({

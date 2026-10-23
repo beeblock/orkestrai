@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 // Schemas de andares, hooks e rotinas — compartilhados backend/frontend.
 

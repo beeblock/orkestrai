@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { creativePathSchema, creativeModelIdSchema, creativeConfigSchema } from './creative-media.schema.js';
 
 const language = z.string().trim().min(2).max(40);

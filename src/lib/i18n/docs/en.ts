@@ -1002,6 +1002,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "October 23, 2026 · 0.44.1", title: "Orkestrai 0.44.1: local voice and agent messages", summary: "Restore voice on Apple Silicon and recover message delivery after a missing receipt.", items: [
+      "Security: Zod 4.6.7 and a verified compatibility fix reject oversized constrained collections before parsing their elements. Existing app schemas, Svelar 0.7.9 and JSON Schema contracts are preserved; every installer tests the actual ESM and CommonJS entry points, and the full dependency audit stays enabled.",
       "Fix Could not find sherpa-onnx-node on Apple Silicon: each installer includes the voice library for its target system and CPU, verified against the lockfile SHA-512 and the actual binary architecture before signing. Downloaded voice models are preserved.",
       "Publication requires native voice to execute under real Node on macOS Intel, Apple Silicon, Windows and Linux. The ARM64 check runs against the signed installer on an Apple Silicon runner, without downloading models or rebuilding the app.",
       "Queued messages resume when the exact conversation proves that a newer turn started and finished, even if the previous prompt's receipt is missing. The old prompt is never retyped or falsely confirmed, and a human draft or startup dialog stays protected. Recovery covers native and WSL terminals and reaches the waiting sender even if a background monitor sees completion first.",

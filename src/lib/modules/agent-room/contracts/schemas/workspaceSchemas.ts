@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const listCanvasNodesQuerySchema = z.object({ view: z.literal('board').optional() });
 

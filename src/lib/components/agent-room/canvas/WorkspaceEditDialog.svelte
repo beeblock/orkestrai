@@ -1,7 +1,7 @@
 <script lang="ts">
   import { defaults, superForm } from 'sveltekit-superforms';
   import { zod } from 'sveltekit-superforms/adapters';
-  import { z } from 'zod';
+  import { z } from 'zod/v3';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Tooltip from '$lib/components/ui/tooltip';

@@ -4,7 +4,7 @@
 
   import { defaults, superForm } from 'sveltekit-superforms';
   import { zod } from 'sveltekit-superforms/adapters';
-  import { z } from 'zod';
+  import { z } from 'zod/v3';
   import MarkdownView from '../MarkdownView.svelte';
   import * as Form from '$lib/components/ui/form';
   import { Input } from '$lib/components/ui/input';

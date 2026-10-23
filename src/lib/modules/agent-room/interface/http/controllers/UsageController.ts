@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { tokenAnalyticsService } from '$lib/modules/agent-room/application/services/TokenAnalyticsService.js';
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
 import { usageService } from '$lib/modules/agent-room/application/services/UsageService.js';

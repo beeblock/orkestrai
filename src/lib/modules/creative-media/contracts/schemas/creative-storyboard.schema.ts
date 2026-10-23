@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { creativeConfigSchema } from './creative-media.schema.js';
 import { shotDirectionSchema } from '../../domain/shot-direction.js';
 

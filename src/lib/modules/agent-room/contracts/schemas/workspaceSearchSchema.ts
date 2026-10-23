@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 const booleanQuery = z.preprocess(
   (value) => value === true || value === 'true' || value === '1',

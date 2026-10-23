@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const MAX_WORKSPACE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_WORKSPACE_ATTACHMENTS = 12;

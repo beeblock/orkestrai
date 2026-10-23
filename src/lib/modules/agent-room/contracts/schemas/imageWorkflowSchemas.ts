@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const imageWorkflowReadQuerySchema = z.object({
   includeHistory: z.enum(['true', 'false']).optional().transform(value => value === 'true'),

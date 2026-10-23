@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const designElementTypeSchema = z.enum(['frame', 'group', 'rectangle', 'ellipse', 'text', 'path', 'image']);
 const legacyDesignPaintSchema = z.string().trim().regex(/^(transparent|#[0-9a-f]{3,8})$/i).default('transparent');

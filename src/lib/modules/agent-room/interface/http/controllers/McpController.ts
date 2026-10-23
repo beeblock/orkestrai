@@ -1,5 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { mcpService } from '$lib/modules/agent-room/application/services/McpService.js';
 
 const addMcpSchema = z.object({

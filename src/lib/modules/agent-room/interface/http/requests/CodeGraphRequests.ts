@@ -1,5 +1,5 @@
 import { FormRequest } from '@beeblock/svelar/forms';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import {
   codeGraphIndexSchema,
   codeGraphSearchSchema,

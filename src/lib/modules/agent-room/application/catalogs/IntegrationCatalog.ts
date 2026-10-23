@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { AutonomyRisk } from '../../contracts/schemas/autonomy-policy.schema.js';
 import type { IntegrationType } from '../../contracts/schemas/integration.schema.js';
 

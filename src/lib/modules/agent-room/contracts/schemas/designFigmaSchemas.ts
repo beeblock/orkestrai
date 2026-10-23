@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 const figmaUrlSchema = z.string().trim().url().max(2_000).refine((value) => {
   try {

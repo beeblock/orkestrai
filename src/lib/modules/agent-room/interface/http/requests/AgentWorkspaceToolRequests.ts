@@ -1,6 +1,6 @@
 import { FormRequest } from '@beeblock/svelar/forms';
 import type { RequestEvent } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import {
   createWorkspaceToolSchema, executeWorkspaceToolSchema, rollbackWorkspaceToolSchema,
   updateWorkspaceToolSchema,
