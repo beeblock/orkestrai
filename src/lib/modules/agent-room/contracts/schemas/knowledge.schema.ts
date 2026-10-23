@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const knowledgeCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('create'), title: z.string().trim().min(1).max(180).default('Second Brain'), x: z.number().finite().optional(), y: z.number().finite().optional(), floorId: z.string().uuid().nullable().optional() }).strict(),

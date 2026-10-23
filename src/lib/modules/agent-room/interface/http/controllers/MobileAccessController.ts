@@ -1,5 +1,5 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { mobileAccessService } from '../../../application/services/MobileAccessService.js';
 
 const pairSchema = z.object({ port: z.number().int().min(1024).max(65535).optional() }).strict();

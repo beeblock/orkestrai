@@ -11,7 +11,7 @@ import { DesignLeaseConflictError } from '$lib/modules/agent-room/application/se
 import { auditDesignDocument } from '$lib/modules/agent-room/domain/design-quality.js';
 import { createDesignTemplate, designTemplateIds } from '$lib/modules/agent-room/domain/design-templates.js';
 import { uuidv7 } from '@beeblock/svelar/support';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 const designMaintenanceActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('restore-backup') }),

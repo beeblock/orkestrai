@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { computerReplyGrantSchema } from './computer-reply.schema.js';
 
 export const autonomyModeSchema = z.enum(['observe', 'prepare', 'ask_mutations', 'bounded']);

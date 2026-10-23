@@ -1,6 +1,6 @@
 import { Controller } from '@beeblock/svelar/routing';
 import { FormRequest, FormValidationError } from '@beeblock/svelar/forms';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import {
   autonomyAuditQuerySchema,
   autonomyGateResolutionSchema,

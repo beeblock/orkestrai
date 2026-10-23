@@ -32,7 +32,7 @@ import { deviceService } from '$lib/modules/agent-room/application/services/Devi
 import { ExecuteDeviceCommandAction } from '$lib/modules/agent-room/application/actions/ExecuteDeviceCommandAction.js';
 import { ExecuteDeviceCommandDto } from '$lib/modules/agent-room/application/dto/ExecuteDeviceCommandDto.js';
 import { buildUsageRoutingReport } from '$lib/modules/agent-room/domain/usage-routing.js';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import {
   BridgeAskRequest,
   BridgeReplyRequest,

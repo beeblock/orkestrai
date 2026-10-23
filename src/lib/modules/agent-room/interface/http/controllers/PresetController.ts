@@ -1,5 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { presetService } from '$lib/modules/agent-room/application/services/PresetService.js';
 import { normalizePresetLocale } from '$lib/modules/agent-room/application/catalogs/BuiltinPresetCatalog.js';
 import { ApplyPresetRequest } from '$lib/modules/agent-room/interface/http/requests/PresetRequests.js';

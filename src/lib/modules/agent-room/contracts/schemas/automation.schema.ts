@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { calendarScheduleSchema } from './calendar-schedule.schema.js';
 
 export const automationTriggerTypeSchema = z.enum([

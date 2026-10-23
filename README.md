@@ -889,6 +889,11 @@ voice under real Node on Intel and Apple Silicon Macs, Windows and Linux.
 Orkestrai is built with Svelte 5, SvelteKit, Electron, Svelar, SQLite,
 `node-pty`, and `@xyflow/svelte`.
 
+Shared app schemas import `zod/v3` from the pinned Zod 4.6.7 package to preserve
+their existing contracts. Verified postinstall patches add early collection
+size limits to that compatibility API and keep Svelar 0.7.9 on it; see
+[release validation notes](docs/releases.md#validação-de-coleções-na-0441).
+
 - `src/lib/modules/agent-room/` contains the application, domain, persistence,
   PTY, bridge, voice, and provider adapter layers.
 - `src/lib/modules/collaboration/` owns host sessions, sanitized projections,

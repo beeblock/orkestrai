@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const createWorkspaceGroupSchema = z.object({
   name: z.string().trim().min(1).max(80),

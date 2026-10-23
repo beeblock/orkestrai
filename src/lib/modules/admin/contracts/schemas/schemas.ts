@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const updateUserRoleSchema = z.object({
   userId: z.coerce.number().int().positive(),

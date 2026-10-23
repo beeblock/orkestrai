@@ -88,11 +88,14 @@ describe('release artifact validation', () => {
     expect(smoke).toContain('process.arch !== "arm64"');
     expect(smoke).toContain('codesign --verify --deep --strict');
     expect(smoke).toContain('scripts/validate-voice-runtime.mjs');
+    expect(smoke).toContain('tests/fixtures/zod-size-validation.mjs');
     expect(smoke).not.toContain('--structure-only');
     expect(workflow.jobs.publish.needs).toContain('verify-macos-arm64-voice');
     for (const name of ['build-linux', 'build-windows']) {
       expect(workflow.jobs[name].steps.find((step: { name?: string }) => step.name === 'Verify packaged native voice').run)
         .toMatch(/^node scripts\/validate-voice-runtime\.mjs release\//);
+      expect(workflow.jobs[name].steps.find((step: { name?: string }) => step.name === 'Verify packaged native voice').run)
+        .toContain('tests/fixtures/zod-size-validation.mjs');
     }
     const mac = workflow.jobs['build-macos'].steps.find((step: { name?: string }) => step.name === 'Verify macOS packages').run;
     expect(mac).toContain('scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app" darwin "$TARGET_ARCH" --structure-only');

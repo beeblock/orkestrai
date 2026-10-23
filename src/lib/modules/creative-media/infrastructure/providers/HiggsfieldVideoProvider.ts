@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { CreativeConfig } from '../../contracts/schemas/creative-media.schema.js';
 import type { FalModelContract, FalModelPrice } from '../../domain/model-contract.js';
 import catalog from '../../domain/higgsfield-video-contracts.json';

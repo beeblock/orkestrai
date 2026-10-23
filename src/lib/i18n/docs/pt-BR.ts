@@ -1006,6 +1006,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "23 de outubro de 2026 · 0.44.1", title: "Orkestrai 0.44.1: voz local e mensagens dos agentes", summary: "Corrige a voz no Apple Silicon e recupera a entrega de mensagens após uma confirmação ausente.", items: [
+      "Segurança: Zod 4.6.7 e uma correção de compatibilidade verificada recusam coleções acima do limite antes de percorrer seus elementos. Os schemas do app, o Svelar 0.7.9 e os contratos JSON Schema são preservados; cada instalador testa os pontos de entrada reais em ESM e CommonJS, e a auditoria completa continua habilitada.",
       "Corrige Could not find sherpa-onnx-node no Apple Silicon: cada instalador inclui a biblioteca de voz do sistema e processador de destino, com verificação do SHA-512 do lockfile e da arquitetura real dos binários antes da assinatura. Os modelos de voz já baixados são preservados.",
       "A publicação exige executar a voz nativa em Node real no macOS Intel, Apple Silicon, Windows e Linux. A verificação ARM64 usa o instalador assinado em um runner Apple Silicon, sem baixar modelos nem recompilar o app.",
       "Mensagens na fila voltam a chegar quando a conversa exata comprova que um novo turno começou e terminou, mesmo sem a confirmação do envio anterior. O prompt antigo nunca é redigitado nem confirmado sem prova, e rascunhos humanos e diálogos de inicialização continuam protegidos. A recuperação cobre terminais nativos e WSL e chega a quem aguarda mesmo quando um monitor em segundo plano vê o fim primeiro.",

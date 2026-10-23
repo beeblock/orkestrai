@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## 0.44.1 - 2026-10-23
 
+### Security
+
+- Update Zod to 4.6.7 and reject oversized constrained collections before parsing elements. Preserve the app's v3 schema contracts through the official compatibility subpath with a verified early-bound backport for arrays and sets in both ESM and CommonJS; keep Svelar 0.7.9 and JSON Schema behavior. Verify the actual validation entry points in every packaged installer, with the full dependency audit enabled.
+
 ### Fixed
 
 - Restore embedded dictation and speech on Apple Silicon. An ARM64 installer built on an Intel runner could include only the Intel sherpa-onnx native library and fail with "Could not find sherpa-onnx-node". Stage the exact target-specific package and all shared libraries from the lockfile, verify SHA-512 and binary architectures before signing, and preserve downloaded voice models.

@@ -1,5 +1,5 @@
 // Shared with the renderer; Svelar's validation barrel includes Node-only rules.
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { importedVideoMime, MAX_IMPORTED_VIDEO_BYTES } from '../../domain/video-format.js';
 
 export const creativeVideoUploadSchema = z.object({

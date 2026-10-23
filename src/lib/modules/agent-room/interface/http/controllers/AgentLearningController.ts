@@ -1,5 +1,5 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { agentLearningService } from '../../../application/services/AgentLearningService.js';
 import { bridgeService } from '../../../application/services/BridgeService.js';
 import { ptySessionManager } from '../../../infrastructure/pty/PtySessionManager.ts';

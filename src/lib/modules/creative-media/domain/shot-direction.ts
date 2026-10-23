@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { FalModelContract, ModelSchema } from './model-contract.js';
 import { concreteSchema } from './model-contract.js';
 import { CreativeMediaError } from './types.js';

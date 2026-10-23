@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 const id = z.string().uuid();
 const time = z.number().finite().min(0).max(600);
 export const sequenceClipSchema = z.object({

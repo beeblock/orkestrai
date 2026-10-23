@@ -158,6 +158,38 @@ confere um único envio do primeiro prompt e mantém seu recibo não confirmado.
 Desativar a recuperação faz esse teste falhar. Testes menores cobrem a corrida
 dos monitores, nativo/WSL, reinício, turnos abertos e proteção do rascunho.
 
+## Validação de coleções na 0.44.1
+
+O advisory [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)
+passou a ser retornado pela auditoria durante esta preparação. O
+[fix oficial do Zod](https://github.com/colinhacks/zod/commit/a0ebf97)
+rejeita coleções com limite superior antes de percorrer seus elementos. O
+pacote 4.6.7 incorpora esse fix na API v4, mas sua API de compatibilidade v3
+ainda percorria arrays e sets acima do limite: mudar só a versão não corrige
+essa execução.
+
+A dependência é fixada em 4.6.7 em todos os workspaces. Os schemas existentes
+passam a importar explicitamente `zod/v3`, preservando defaults, refinamentos,
+erros e os contratos JSON Schema. O patch `zod+4.6.7.patch` adiciona rejeição
+antecipada a arrays acima de max/length e sets acima de max, nos arquivos ESM
+e CommonJS. Arrays válidos e schemas sem limite mantêm a validação anterior.
+Não há supressão global de issues nem exceção à auditoria.
+
+O Svelar continua em 0.7.9: migrar para 0.8.0 envolveria mudanças de banco,
+autenticação e outros subsistemas. Seu patch altera apenas os imports Zod dos
+nove arquivos de runtime/declarations publicados para o subpath v3. Cada
+fonte foi comparada ao tarball oficial com SHA-512 e tem hashes anterior e
+posterior no mesmo contrato de patches. O postinstall valida agora 19 alvos
+antes de escrever, preservando a aplicação atômica e a recusa de symlinks.
+
+`tests/fixtures/zod-size-validation.mjs` exercita os entry points reais v4/v3
+em ESM/CommonJS, parsing síncrono/assíncrono, arrays, sets, maps v4 e paths
+aninhados; exige uma única issue e zero elementos visitados para inputs acima
+do limite. Também confirma a mesma instância v3 no Svelar e a conversão JSON
+Schema. Roda nas dependências locais e no payload de cada instalador, incluindo
+o ZIP assinado ARM64, sem depender de módulos do checkout. A auditoria completa
+`npm audit --audit-level=moderate` permanece obrigatória.
+
 ## Runtime nativo do Computer
 
 O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema

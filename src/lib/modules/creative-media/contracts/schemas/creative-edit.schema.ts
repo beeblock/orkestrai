@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { creativeConfigSchema } from './creative-media.schema.js';
 export const creativeAnnotationSchema = z.object({
   sourceWidth: z.number().int().min(1).max(16384), sourceHeight: z.number().int().min(1).max(16384),

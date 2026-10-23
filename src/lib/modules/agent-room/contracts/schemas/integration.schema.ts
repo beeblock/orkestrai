@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 export const integrationTypeSchema = z.enum([
   'github', 'gmail', 'slack', 'telegram', 'whatsapp', 'webhook',

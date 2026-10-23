@@ -1,5 +1,5 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { knowledgeService } from '../../../application/services/KnowledgeService.js';
 import { bridgeService } from '../../../application/services/BridgeService.js';
 import { KnowledgeCommandDto } from '../../../application/dto/KnowledgeCommandDto.js';

@@ -1,5 +1,5 @@
 import { Controller } from '@beeblock/svelar/routing';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { flowService } from '$lib/modules/agent-room/application/services/FlowService.js';
 
 const runFlowSchema = z.object({

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { normalizePortalHost } from '../../domain/portal-hosts.js';
 
 const portalRefSchema = z.string().trim().regex(/^e\d{1,6}$/);

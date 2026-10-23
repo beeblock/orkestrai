@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { workspaceAttachmentSchema } from './workspaceAttachmentSchemas.js';
 
 export const PORTAL_DESIGN_LIMITS = {

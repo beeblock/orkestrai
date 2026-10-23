@@ -38,11 +38,11 @@ afterEach(() => {
 });
 
 describe('reviewed dependency patch application', () => {
-  it.each([false, true])('preserves all eight exact patches and is idempotent (CRLF: %s)', (crlf) => {
+  it.each([false, true])('preserves every reviewed exact patch and is idempotent (CRLF: %s)', (crlf) => {
     const root = fixture(crlf);
-    expect(applyDependencyPatches(root)).toEqual({ verified: 8, applied: 8 });
+    expect(applyDependencyPatches(root)).toEqual({ verified: contract.files.length, applied: contract.files.length });
     for (const entry of contract.files) expect(sha(fs.readFileSync(join(root, entry.file), 'utf8'))).toBe(entry.after);
-    expect(applyDependencyPatches(root)).toEqual({ verified: 8, applied: 0 });
+    expect(applyDependencyPatches(root)).toEqual({ verified: contract.files.length, applied: 0 });
   });
 
   it.each(['corrupt', 'missing', 'version', 'postimage', 'extra_patch'])('refuses %s before writing any target', (problem) => {
