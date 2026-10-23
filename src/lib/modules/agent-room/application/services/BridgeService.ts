@@ -768,7 +768,6 @@ export class BridgeService {
     const task = await AgentBoardTask.find(taskId);
     if (!task || task.getAttribute('workspace_id') !== workspaceId || task.getAttribute('archived_at')) return false;
     const status = String(task.getAttribute('status'));
-    if (status === 'todo') return false;
     const assigneeNodeId = task.getAttribute('assignee_node_id') as string | null;
     if (status === 'done') {
       const target = await workspaceRepository.getNode(targetNodeId);

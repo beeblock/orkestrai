@@ -57,6 +57,7 @@ describe('Agent inbox', () => {
     vi.spyOn(ptySessionManager, 'get').mockImplementation((id) => sessions.get(id) ?? null);
     vi.spyOn(ptySessionManager, 'canAcceptAutomaticMessage').mockImplementation((id) => Boolean(sessions.get(id)?.ready));
     vi.spyOn(transcript, 'latestTurnComplete').mockResolvedValue(true);
+    vi.spyOn(transcript, 'latestTurnBoundary').mockResolvedValue({ ready: true, startedAt: null, finishedAt: null });
     vi.spyOn(transcript, 'findPromptInTranscript').mockResolvedValue(null);
     vi.spyOn(transcript, 'findReplyToPrompt').mockImplementation(async (_provider, _cwd, sessionId, prompt) => {
       const text = [...replies.entries()].find(([key]) => sessionId === key && prompt.length > 0)?.[1];
@@ -285,6 +286,29 @@ describe('Agent inbox', () => {
     await agentInboxService.drain(workspace.id, nodes.Web);
     expect(prompts.filter((prompt) => prompt.message.includes('Ajuste o contraste'))).toHaveLength(0);
     expect(await controlCenterRepository.findEnvelope(queued.messageId)).toMatchObject({ state: 'failed', metadata: expect.objectContaining({ cancelled: true }) });
+  });
+
+  it('delivers an assigned todo task question instead of cancelling it as obsolete', async () => {
+    const { workspace, nodes } = await team();
+    const task = await taskBoardService.create(workspace.id, { title: 'Review the implementation plan', assigneeNodeId: nodes.Web, dispatch: false });
+    await taskBoardService.update(workspace.id, task.id, { status: 'todo' });
+    await expect(bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Mobile, taskId: task.id, message: 'Work assigned to someone else' })).rejects.toThrow('no longer active');
+    const pending = bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Web, taskId: task.id, message: 'Confirm the plan before starting', busyGraceMs: 50 }).catch(error => error);
+    await vi.waitFor(() => expect(prompts.some(prompt => prompt.nodeId === nodes.Web && prompt.message.includes('Confirm the plan'))).toBe(true));
+    expect(await pending).toMatchObject({ deliveryState: 'delivered' });
+  });
+
+  it('cancels a queued todo question when the card is reassigned', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Web).ready = false;
+    const task = await taskBoardService.create(workspace.id, { title: 'Assigned planning question', assigneeNodeId: nodes.Web, dispatch: false });
+    await taskBoardService.update(workspace.id, task.id, { status: 'todo' });
+    const queued = await bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Web, taskId: task.id, message: 'Review the plan', busyGraceMs: 50 });
+    await taskBoardService.update(workspace.id, task.id, { assigneeNodeId: nodes.Mobile });
+    session(nodes.Web).ready = true;
+    await agentInboxService.drain(workspace.id, nodes.Web);
+    expect(await controlCenterRepository.findEnvelope(queued.messageId)).toMatchObject({ state: 'failed', metadata: { cancelled: true } });
+    expect(prompts.some(prompt => prompt.nodeId === nodes.Web && prompt.message.includes('Review the plan'))).toBe(false);
   });
 
   it('reconciles a late provider confirmation without sending the prompt twice', async () => {

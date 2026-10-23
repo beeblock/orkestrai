@@ -1001,9 +1001,11 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "October 23, 2026 · 0.44.1", title: "Orkestrai 0.44.1: local voice on Apple Silicon", summary: "Restore embedded voice on ARM64 Macs and verify native voice in every installer.", items: [
+    { date: "October 23, 2026 · 0.44.1", title: "Orkestrai 0.44.1: local voice and agent messages", summary: "Restore voice on Apple Silicon and recover message delivery after a missing receipt.", items: [
       "Fix Could not find sherpa-onnx-node on Apple Silicon: each installer includes the voice library for its target system and CPU, verified against the lockfile SHA-512 and the actual binary architecture before signing. Downloaded voice models are preserved.",
       "Publication requires native voice to execute under real Node on macOS Intel, Apple Silicon, Windows and Linux. The ARM64 check runs against the signed installer on an Apple Silicon runner, without downloading models or rebuilding the app.",
+      "Queued messages resume when the exact conversation proves that a newer turn started and finished, even if the previous prompt's receipt is missing. The old prompt is never retyped or falsely confirmed, and a human draft or startup dialog stays protected. Recovery covers native and WSL terminals and reaches the waiting sender even if a background monitor sees completion first.",
+      "Agents can ask about assigned To do cards without moving them to Doing first. A closed, archived, unrelated or reassigned card still cancels a stale message.",
     ] },
     { date: "October 22, 2026 · 0.44.0", title: "Orkestrai 0.44.0: Chat, Needs you and attachments", summary: "Attachments in every message field, agent states in sync and Needs you holding only what is yours.", items: [
       "Security: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 and ip-address 10.7.4 address sanitizer, frame-permission, development mock-registration and IPv6 parsing advisories, without changing Electron's major or Monaco's version; the full dependency audit stays enabled.",

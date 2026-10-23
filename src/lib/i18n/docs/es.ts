@@ -1001,9 +1001,11 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "23 de octubre de 2026 · 0.44.1", title: "Orkestrai 0.44.1: voz local en Apple Silicon", summary: "Corrige la voz integrada en los Mac ARM64 y verifica la voz nativa de cada instalador.", items: [
+    { date: "23 de octubre de 2026 · 0.44.1", title: "Orkestrai 0.44.1: voz local y mensajes de agentes", summary: "Corrige la voz en Apple Silicon y recupera la entrega de mensajes tras una confirmación ausente.", items: [
       "Corrige Could not find sherpa-onnx-node en Apple Silicon: cada instalador incluye la biblioteca de voz del sistema y procesador de destino, verificada con el SHA-512 del lockfile y la arquitectura real de los binarios antes de firmar. Se conservan los modelos de voz descargados.",
       "La publicación exige ejecutar la voz nativa en Node real en macOS Intel, Apple Silicon, Windows y Linux. La verificación ARM64 usa el instalador firmado en un runner Apple Silicon, sin descargar modelos ni recompilar la app.",
+      "Los mensajes en cola vuelven a llegar cuando la conversación exacta demuestra que un turno nuevo empezó y terminó, incluso sin la confirmación del envío anterior. El prompt antiguo nunca se vuelve a escribir ni se confirma sin pruebas, y los borradores humanos y diálogos de inicio siguen protegidos. La recuperación cubre terminales nativos y WSL y llega a quien espera aunque un monitor en segundo plano vea el fin primero.",
+      "Los agentes pueden preguntar sobre tarjetas Por hacer asignadas sin moverlas antes a En curso. Las tarjetas completadas, archivadas, ajenas o reasignadas siguen cancelando mensajes antiguos.",
     ] },
     { date: "22 de octubre de 2026 · 0.44.0", title: "Orkestrai 0.44.0: Conversación, Te necesita y adjuntos", summary: "Adjuntos en cada campo de mensaje, estados de los agentes sincronizados y Te necesita solo con lo tuyo.", items: [
       "Seguridad: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 e ip-address 10.7.4 corrigen alertas de sanitización, permisos de frames, registro de mocks en desarrollo y análisis de IPv6, sin cambiar la versión principal de Electron ni la versión de Monaco; la auditoría completa de dependencias sigue activa.",

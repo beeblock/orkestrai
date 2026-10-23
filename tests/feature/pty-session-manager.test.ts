@@ -123,6 +123,40 @@ describe('PtySessionManager', () => {
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
+  it('recovers an unconfirmed delivery only after a proven newer completed turn, without retyping it', async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let emitData!: (data: string) => void;
+    const fakePty = { write: (data: string) => writes.push(data), resize() {}, kill() {}, pid: 1,
+      onData: (listener: typeof emitData) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
+    const session = manager.create({ command: 'codex', provider: 'codex', cwd: process.cwd() });
+    try {
+      emitData('Ready');
+      await vi.advanceTimersByTimeAsync(3000);
+      const first = manager.writeWithConfirmedSubmit(session.id, 'first handoff', { isAccepted: async () => false, confirmationWindowMs: 1000 });
+      const uncertain = expect(first).rejects.toThrow('confirm');
+      await vi.advanceTimersByTimeAsync(2000); await uncertain;
+      emitData('Turn finished, prompt ready');
+      await vi.advanceTimersByTimeAsync(3000);
+      const submittedAt = manager.pendingAutomaticDeliveryAt(session.id)!;
+      expect(submittedAt).toBeTypeOf('number');
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt - 1000, submittedAt + 1000)).toBe(false);
+      manager.writeHumanInput(session.id, 'unsent draft');
+      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(false);
+      manager.writeHumanInput(session.id, '\x15');
+      emitData('Ready'); await vi.advanceTimersByTimeAsync(3000);
+      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(true);
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(true);
+      const next = manager.queueWithSubmit(session.id, 'second handoff');
+      await vi.advanceTimersByTimeAsync(1000); await next.submitted;
+      expect(writes.filter(text => text === 'first handoff')).toHaveLength(1);
+      expect(writes.slice(-2)).toEqual(['second handoff', '\r']);
+      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(false);
+    } finally { manager.kill(session.id); vi.useRealTimers(); }
+  });
+
   it('uses negotiated paste boundaries and waits for real acceptance on native terminals', async () => {
     vi.useFakeTimers();
     const writes: string[] = [];

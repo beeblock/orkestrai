@@ -176,6 +176,8 @@ type ComposerDelivery = {
   requiresAcceptance: boolean;
   confirmAcceptance?: () => Promise<boolean>;
   confirmationPending?: boolean;
+  /** Actual Enter time, rather than when the delivery joined the queue. */
+  submittedAt?: number;
   /** Where the terminal's output stood when Enter submitted this delivery. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -1014,6 +1016,41 @@ export class PtySessionManager {
       && (!session.startupGuard || session.startupGuard.canAcceptMessages));
   }
 
+  /** Only an idle, empty composer may recover an unconfirmed automatic submit. */
+  pendingAutomaticDeliveryAt(id: string): number | null {
+    const session = this.sessions.get(id);
+    return session && !session.exited && session.waiting && session.scrollback.length > 0
+      && !session.deliveryInProgress && session.humanComposerLength === 0
+      && (!session.startupGuard || session.startupGuard.canAcceptMessages)
+      && session.awaitingDeliveryIdle && session.lastSubmittedDelivery?.requiresAcceptance
+      && !session.lastDeliveryAccepted ? session.lastSubmittedDelivery.submittedAt ?? null : null;
+  }
+
+  /** Immutable identity of the most recent automatic Enter, including while the TUI is busy. */
+  automaticDeliverySubmittedAt(id: string): number | null {
+    const session = this.sessions.get(id);
+    return session && !session.exited && session.lastSubmittedDelivery?.requiresAcceptance
+      ? session.lastSubmittedDelivery.submittedAt ?? null : null;
+  }
+
+  /**
+   * A newer structured turn has started AND ended in this exact conversation.
+   * This frees the composer, but never acknowledges the old prompt or retypes it.
+   * An old observation cannot release another delivery, a dialog or a human draft.
+   */
+  releaseAutomaticDeliveryAfterTurn(id: string, submittedAt: number, startedAt: number, finishedAt: number): boolean {
+    if (![submittedAt, startedAt, finishedAt].every(Number.isFinite) || startedAt < submittedAt || finishedAt < startedAt
+      || this.pendingAutomaticDeliveryAt(id) !== submittedAt) return false;
+    const session = this.sessions.get(id)!;
+    session.awaitingDeliveryIdle = false;
+    session.lastSubmittedDelivery = null;
+    session.lastDeliveryAccepted = false;
+    if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
+    session.deliveryTimer = null;
+    this.drainDeliveryQueue(session);
+    return true;
+  }
+
   /** Reenvia Enter apenas se não houver um rascunho humano em andamento. */
   submitIfComposerFree(id: string): boolean {
     const session = this.requireSession(id);
@@ -1124,6 +1161,7 @@ export class PtySessionManager {
         }
         session.lastSubmitOutputRevision = session.outputRevision;
         const submittedAt: PtyOutputMark = { sessionId: session.id, length: session.outputLength };
+        delivery.submittedAt = Date.now();
         this.write(session.id, '\r');
         if (session.provider) {
           // Like a prompt the owner submits: the agent works from here on, and

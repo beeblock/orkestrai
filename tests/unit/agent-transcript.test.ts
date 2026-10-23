@@ -9,6 +9,8 @@ import {
   findReplyToPrompt,
   latestTurnComplete,
   parseLatestTurnComplete,
+  parseLatestTurnBoundary,
+  latestTurnBoundary,
   parseClaudeTranscriptReply,
   parseCodexTranscriptReply,
   parseCodexTranscriptReplyForPrompt,
@@ -41,6 +43,7 @@ describe('async transcript lookup', () => {
       const options = { homeDir: home, posixCwd };
       expect(await findPromptInTranscript('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toEqual({ sessionId });
       expect(await latestTurnComplete('codex', cwd, sessionId, options)).toBe(false);
+      expect(await latestTurnBoundary('codex', cwd, sessionId, options)).toMatchObject({ ready: false });
       expect(await latestTurnComplete('codex', cwd, 'missing-session', options)).toBeNull();
       expect(await findReplyToPrompt('codex', cwd, sessionId, 'first prompt', Date.now() - 1_000, options)).toEqual({ sessionId, text: 'First answer', complete: true });
       expect(await findReplyToPrompt('codex', cwd, sessionId, 'second prompt', Date.now() - 1_000, options)).toBeNull();
@@ -55,6 +58,40 @@ describe('async transcript lookup', () => {
 });
 
 describe('latest turn completion for supervision', () => {
+  it('distinguishes a completed or aborted Codex composer from an actual reply', () => {
+    const start = '2026-10-23T12:00:00Z', end = '2026-10-23T12:00:10Z';
+    const prompt = { timestamp: start, type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Continue' }] } };
+    const completed = { timestamp: end, type: 'event_msg', payload: { type: 'task_complete', last_agent_message: 'Done' } };
+    const text = (events: unknown[]) => events.map(event => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([prompt, completed])))
+      .toEqual({ ready: true, startedAt: Date.parse(start), finishedAt: Date.parse(end) });
+    const aborted = { ...completed, payload: { type: 'turn_aborted' } };
+    expect(parseLatestTurnComplete('codex-rollout-jsonl', text([prompt, aborted]))).toBe(false);
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([prompt, aborted]))).toMatchObject({ ready: true, finishedAt: Date.parse(end) });
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([prompt, completed, { ...prompt, timestamp: '2026-10-23T12:01:00Z' }])))
+      .toEqual({ ready: false, startedAt: Date.parse('2026-10-23T12:01:00Z'), finishedAt: null });
+  });
+
+  it('requires explicit Claude completion, respecting pending input and newer work', () => {
+    const prompt = { timestamp: '2026-10-23T12:00:00Z', type: 'user', message: { content: 'Continue' } };
+    const duration = { timestamp: '2026-10-23T12:00:10Z', type: 'system', subtype: 'turn_duration' };
+    const thinking = { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: 'Not a final answer' }] } };
+    const text = (events: unknown[]) => events.map(event => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnBoundary('claude-project-jsonl', text([prompt, thinking])).ready).toBe(false);
+    expect(parseLatestTurnBoundary('claude-project-jsonl', text([prompt, thinking, duration])))
+      .toEqual({ ready: true, startedAt: Date.parse(prompt.timestamp), finishedAt: Date.parse(duration.timestamp) });
+    expect(parseLatestTurnBoundary('claude-project-jsonl', text([prompt, duration, { type: 'assistant', message: { stop_reason: 'tool_use', content: [{ type: 'tool_use' }] } }])).ready).toBe(false);
+    expect(parseLatestTurnBoundary('claude-project-jsonl', text([prompt, duration, { type: 'queue-operation', operation: 'enqueue' }])).ready).toBe(false);
+    expect(parseLatestTurnBoundary('unregistered', '{}')).toEqual({ ready: null, startedAt: null, finishedAt: null });
+  });
+
+  it('uses Kimi epoch times without inventing timestamps for legacy transcripts', () => {
+    const events = [{ type: 'turn.prompt', time: 1000, input: [{ type: 'text', text: 'Continue' }] }, { type: 'turn.ended', reason: 'completed', time: 2000 }];
+    expect(parseLatestTurnBoundary('kimi-session-dir', events.map(event => JSON.stringify(event)).join('\n')))
+      .toEqual({ ready: true, startedAt: 1000, finishedAt: 2000 });
+    expect(parseLatestTurnBoundary('kimi-session-dir', events.map(({ time: _time, ...event }) => JSON.stringify(event)).join('\n')))
+      .toEqual({ ready: true, startedAt: null, finishedAt: null });
+  });
   it('does not mistake an earlier final answer for completion of a repeated prompt', () => {
     const prompt = { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Continue' }] } };
     const complete = { type: 'event_msg', payload: { type: 'task_complete', last_agent_message: 'Done' } };
@@ -86,8 +123,10 @@ describe('latest turn completion for supervision', () => {
     ].map((event) => JSON.stringify(event)).join('\n');
     expect(parseLatestTurnComplete('codex-rollout-jsonl', interrupted)).toBe(false);
     expect(parseLatestTurnComplete('codex-rollout-jsonl', interrupted, restartedAt)).toBe(true);
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', interrupted, restartedAt)).toMatchObject({ ready: true, finishedAt: null });
     // A turn running in the live process is still running.
     expect(parseLatestTurnComplete('codex-rollout-jsonl', interrupted, Date.parse(at('01:07:20')))).toBe(false);
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', interrupted, Date.parse(at('01:07:20'))).ready).toBe(false);
     const claude = [
       { timestamp: at('01:07:00'), type: 'user', message: { content: 'Continue' } },
       { timestamp: at('01:07:05'), type: 'assistant', message: { content: [{ type: 'tool_use' }], stop_reason: 'tool_use' } },
