@@ -224,6 +224,10 @@ jobs:
           test -f "$APP_DIR/Contents/Resources/app/node_modules/electron-updater/package.json"
           test -f "$APP_DIR/Contents/Resources/app/build/desktop-messages/index.cjs"
           test -f "$APP_DIR/Contents/Resources/app/scripts/run-startup-migrations.mjs"
+          node scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app" darwin "$TARGET_ARCH" --structure-only
+          if [[ "$TARGET_ARCH" == "x64" ]]; then
+            node scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app"
+          fi
           verify_trusted_app "$APP_DIR"
           hdiutil verify "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX.dmg"
           unzip -tq "release/Orkestrai-${{ needs.validate.outputs.version }}$SUFFIX-mac.zip"
@@ -231,7 +235,7 @@ jobs:
 
       - name: Verify signed packaged startup with the reported legacy schema
         # Both packaging runners are Intel. Only execute their native target;
-        # Apple Silicon is also exercised locally on actual Apple Silicon.
+        # Apple Silicon voice is executed by verify-macos-arm64-voice below.
         if: matrix.arch == 'x64'
         run: |
           ELECTRON_RUN_AS_NODE=1 release/mac/Orkestrai.app/Contents/MacOS/Orkestrai \
@@ -250,6 +254,42 @@ jobs:
             release/*-mac.zip
             release/*-mac.zip.blockmap
             release/latest-mac-${{ matrix.arch }}.yml
+
+  verify-macos-arm64-voice:
+    name: Verify packaged voice on Apple Silicon
+    needs: [validate, build-macos]
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+
+      - name: Set up native ARM64 Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          architecture: arm64
+
+      - name: Download signed Apple Silicon installer
+        uses: actions/download-artifact@v8
+        with:
+          name: release-macos-arm64
+          path: release
+
+      - name: Execute voice from the signed ARM64 package
+        env:
+          PACKAGE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          node -e 'if (process.platform !== "darwin" || process.arch !== "arm64") process.exit(1)'
+          VOICE_QA_DIR="$(mktemp -d "$RUNNER_TEMP/orkestrai-voice.XXXXXX")"
+          trap 'rm -rf "$VOICE_QA_DIR"' EXIT
+          ditto -x -k "release/Orkestrai-$PACKAGE_VERSION-arm64-mac.zip" "$VOICE_QA_DIR"
+          codesign --verify --deep --strict "$VOICE_QA_DIR/Orkestrai.app"
+          env -u NODE_PATH -u ELECTRON_RUN_AS_NODE node scripts/validate-voice-runtime.mjs \
+            "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
 
   build-windows:
     name: Build Windows (x64)
@@ -319,6 +359,9 @@ jobs:
           if (-not (Test-Path "release/win-unpacked/resources/app/node_modules/electron-updater/package.json")) {
             throw "electron-updater is missing from the packaged Windows application"
           }
+
+      - name: Verify packaged native voice
+        run: node scripts/validate-voice-runtime.mjs release/win-unpacked/resources/app
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
@@ -391,6 +434,9 @@ jobs:
       - name: Verify updater is packaged
         run: test -f release/linux-unpacked/resources/app/node_modules/electron-updater/package.json
 
+      - name: Verify packaged native voice
+        run: node scripts/validate-voice-runtime.mjs release/linux-unpacked/resources/app
+
       - name: Verify RPM does not claim shared build-id paths
         shell: bash
         run: |
@@ -415,7 +461,7 @@ jobs:
   publish:
     name: Publish verified release
     if: github.event_name != 'workflow_dispatch' || !inputs.build_only
-    needs: [validate, build-macos, build-windows, build-linux]
+    needs: [validate, build-macos, verify-macos-arm64-voice, build-windows, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tagged source

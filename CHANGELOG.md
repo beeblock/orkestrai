@@ -5,6 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.44.1 - 2026-10-23
+
+### Fixed
+
+- Restore embedded dictation and speech on Apple Silicon. An ARM64 installer built on an Intel runner could include only the Intel sherpa-onnx native library and fail with "Could not find sherpa-onnx-node". Stage the exact target-specific package and all shared libraries from the lockfile, verify SHA-512 and binary architectures before signing, and preserve downloaded voice models.
+- Block release publication unless packaged voice executes under real Node on macOS Intel, Apple Silicon, Windows and Linux. The Apple Silicon check unpacks the signed installer on an ARM64 runner and exercises native audio buffers without downloading models or rebuilding the app.
+
 ## 0.44.0 - 2026-10-22
 
 ### Security

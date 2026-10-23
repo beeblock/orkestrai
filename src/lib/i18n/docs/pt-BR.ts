@@ -1005,6 +1005,10 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: "23 de outubro de 2026 · 0.44.1", title: "Orkestrai 0.44.1: voz local no Apple Silicon", summary: "Corrige a voz embarcada nos Macs ARM64 e verifica a voz nativa de cada instalador.", items: [
+      "Corrige Could not find sherpa-onnx-node no Apple Silicon: cada instalador inclui a biblioteca de voz do sistema e processador de destino, com verificação do SHA-512 do lockfile e da arquitetura real dos binários antes da assinatura. Os modelos de voz já baixados são preservados.",
+      "A publicação exige executar a voz nativa em Node real no macOS Intel, Apple Silicon, Windows e Linux. A verificação ARM64 usa o instalador assinado em um runner Apple Silicon, sem baixar modelos nem recompilar o app.",
+    ] },
     { date: "22 de outubro de 2026 · 0.44.0", title: "Orkestrai 0.44.0: Conversa, Precisa de você e anexos", summary: "Anexos em todo campo de mensagem, estados dos agentes em sincronia e Precisa de você só com o que é seu.", items: [
       "Segurança: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 e ip-address 10.7.4 corrigem alertas de sanitização, permissões de frames, registro de mocks em desenvolvimento e análise de IPv6, sem mudar a versão principal do Electron nem a versão do Monaco; a auditoria completa de dependências continua ativa.",
       "Precisa de você mostra só o que você pode resolver: uma mensagem que ficou na fila para um agente já dispensado pelo líder não vira mais um aviso preso. Os avisos que já existem fecham na próxima abertura do app, e um aviso sem nada para decidir ganhou Dispensar. Uma pergunta sem opções prontas mostra Responder, que abre a conversa, e nunca some sem resposta.",
