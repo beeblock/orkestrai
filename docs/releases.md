@@ -115,6 +115,24 @@ terminadores de script pré-compilado. Os testes existentes também executam
 as visualizações do Postman e os scripts do Bruno. O gate completo
 `npm audit --audit-level=moderate` permanece obrigatório, sem exceções.
 
+## Voz embarcada e arquitetura dos instaladores
+
+A 0.44.1 corrige um pacote ARM64 da 0.44.0 que continha apenas a biblioteca
+Intel do sherpa-onnx. Os dois empacotadores macOS continuam em runners Intel
+com memória para o build, mas o hook `package-voice-runtime.mjs` busca o pacote
+da arquitetura de destino no endereço e versão do lockfile. Verifica SHA-512,
+metadados, arquivos regulares e o cabeçalho Mach-O/ELF/PE de cada biblioteca
+antes de copiar para o aplicativo e assinar. Preserva os modelos já baixados.
+
+`validate-voice-runtime.mjs` verifica a estrutura e executa o addon com um WAV
+curto em Node real, incluindo os buffers externos que o Electron não permite.
+Os jobs Intel, Windows e Linux executam esse teste no pacote final. Um job
+separado em `macos-15` ARM64 extrai o ZIP assinado, verifica sua assinatura e
+executa o mesmo teste sem instalar dependências do projeto ou baixar modelos.
+A publicação depende desse job. Isso prova o carregamento nativo e buffers,
+não a permissão do microfone nem a inferência de todos os modelos; esses
+continuam exigindo testes específicos.
+
 ## Runtime nativo do Computer
 
 O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema

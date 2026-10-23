@@ -77,6 +77,30 @@ function fixture() {
 }
 
 describe('release artifact validation', () => {
+  it('blocks publication until every packaged voice runtime executes on its native CPU', () => {
+    const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
+    const arm = workflow.jobs['verify-macos-arm64-voice'];
+    expect(arm['runs-on']).toBe('macos-15');
+    expect(arm.needs).toEqual(['validate', 'build-macos']);
+    expect(arm.steps[0].with.ref).toBe('${{ needs.validate.outputs.source_sha }}');
+    expect(arm.steps.find((step: { name?: string }) => step.name === 'Set up native ARM64 Node.js').with.architecture).toBe('arm64');
+    const smoke = arm.steps.find((step: { name?: string }) => step.name === 'Execute voice from the signed ARM64 package').run;
+    expect(smoke).toContain('process.arch !== "arm64"');
+    expect(smoke).toContain('codesign --verify --deep --strict');
+    expect(smoke).toContain('scripts/validate-voice-runtime.mjs');
+    expect(smoke).not.toContain('--structure-only');
+    expect(workflow.jobs.publish.needs).toContain('verify-macos-arm64-voice');
+    for (const name of ['build-linux', 'build-windows']) {
+      expect(workflow.jobs[name].steps.find((step: { name?: string }) => step.name === 'Verify packaged native voice').run)
+        .toMatch(/^node scripts\/validate-voice-runtime\.mjs release\//);
+    }
+    const mac = workflow.jobs['build-macos'].steps.find((step: { name?: string }) => step.name === 'Verify macOS packages').run;
+    expect(mac).toContain('scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app" darwin "$TARGET_ARCH" --structure-only');
+    expect(mac).toContain('node scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app"');
+    const afterPack = readFileSync('scripts/after-pack.mjs', 'utf8');
+    expect(afterPack).toContain('await packageVoiceRuntime(context)');
+  });
+
   it('uses a standard macOS runner with enough memory for the production build', () => {
     const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
     expect(workflow.jobs['build-macos']['runs-on']).toBe('macos-15-intel');

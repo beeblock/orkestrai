@@ -879,7 +879,10 @@ npm run electron:dev   # production build followed by Electron
 
 Voice works without Docker or Python. On first use, Orkestrai asks before
 downloading the embedded runtime and local models. An OpenAI-compatible voice
-sidecar remains available as an optional backend.
+sidecar remains available as an optional backend. Desktop installers include
+the native voice libraries for their target CPU, with lockfile integrity and
+binary architecture checks before signing. Release gates execute packaged
+voice under real Node on Intel and Apple Silicon Macs, Windows and Linux.
 
 ## Architecture
 

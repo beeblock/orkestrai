@@ -6,6 +6,7 @@ import extractZip from '@electron-internal/extract-zip';
 import { packageComputerRuntime } from './package-computer-runtime.mjs';
 import { packageKnowledgeRuntime } from './package-knowledge-runtime.mjs';
 import { packageSqliteRuntime } from './package-sqlite-runtime.mjs';
+import { packageVoiceRuntime } from './package-voice-runtime.mjs';
 
 const NODE_VERSION = 'v24.12.0';
 const WINDOWS_NODE_ARCHIVE = `node-${NODE_VERSION}-win-x64.zip`;
@@ -41,6 +42,7 @@ export default async function afterPack(context) {
   await packageSqliteRuntime(context);
   await packageComputerRuntime(context);
   await packageKnowledgeRuntime(context);
+  await packageVoiceRuntime(context);
   if (context.electronPlatformName !== 'win32') return;
   const archivePath = await verifiedArchive(context.packager.projectDir);
   const staging = await mkdtemp(join(tmpdir(), 'orkestrai-cli-runtime-'));

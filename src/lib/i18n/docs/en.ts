@@ -1001,6 +1001,10 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: "October 23, 2026 · 0.44.1", title: "Orkestrai 0.44.1: local voice on Apple Silicon", summary: "Restore embedded voice on ARM64 Macs and verify native voice in every installer.", items: [
+      "Fix Could not find sherpa-onnx-node on Apple Silicon: each installer includes the voice library for its target system and CPU, verified against the lockfile SHA-512 and the actual binary architecture before signing. Downloaded voice models are preserved.",
+      "Publication requires native voice to execute under real Node on macOS Intel, Apple Silicon, Windows and Linux. The ARM64 check runs against the signed installer on an Apple Silicon runner, without downloading models or rebuilding the app.",
+    ] },
     { date: "October 22, 2026 · 0.44.0", title: "Orkestrai 0.44.0: Chat, Needs you and attachments", summary: "Attachments in every message field, agent states in sync and Needs you holding only what is yours.", items: [
       "Security: DOMPurify 3.4.17, Electron 42.11.9, Vitest 4.1.12 and ip-address 10.7.4 address sanitizer, frame-permission, development mock-registration and IPv6 parsing advisories, without changing Electron's major or Monaco's version; the full dependency audit stays enabled.",
       "Needs you only shows what you can resolve: a message left queued for an agent the leader already dismissed no longer becomes a stuck notice. Existing ones close the next time the app starts, and a notice with nothing to decide now has Dismiss. A question without preset answers shows Answer, which opens its conversation, and never disappears unanswered.",
