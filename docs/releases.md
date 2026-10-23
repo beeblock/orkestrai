@@ -133,6 +133,31 @@ A publicação depende desse job. Isso prova o carregamento nativo e buffers,
 não a permissão do microfone nem a inferência de todos os modelos; esses
 continuam exigindo testes específicos.
 
+## Recuperação da fila de mensagens
+
+Uma confirmação exata ausente podia deixar `awaitingDeliveryIdle` ativo para
+sempre. O dispatcher consultava esse bloqueio antes do transcript e nunca
+chegava à evidência de que o agente já havia terminado. A 0.44.1 recupera a
+fila apenas quando o transcript da conversa exata, no home nativo ou WSL,
+comprova um turno iniciado depois do Enter real e já encerrado. Preserva
+rascunhos humanos, diálogos de inicialização, identidade da entrega e
+restrições explícitas. A liberação não confirma nem redigita o prompt antigo.
+
+O monitor do PTY e o remetente compartilham a confirmação. A recuperação fica
+registrada nessa chamada para que, se o monitor a observar primeiro, o
+remetente também saia da espera. A consulta adicional é limitada a uma vez
+por 1,5 s e lê um único snapshot limitado do transcript. Um turno abortado
+pode estar pronto para receber sem ser tratado como uma resposta concluída.
+Cards A fazer atribuídos aceitam perguntas; conclusão, arquivamento e troca
+de responsável continuam invalidando mensagens antigas.
+
+`tests/feature/inbox-turn-boundary.test.ts` usa PTY e transcript reais em um
+home temporário, sem CLI autenticada ou uso de modelos. Reproduz a ausência da
+confirmação exata, exige a próxima mensagem antes do timeout de confirmação,
+confere um único envio do primeiro prompt e mantém seu recibo não confirmado.
+Desativar a recuperação faz esse teste falhar. Testes menores cobrem a corrida
+dos monitores, nativo/WSL, reinício, turnos abertos e proteção do rascunho.
+
 ## Runtime nativo do Computer
 
 O hook `scripts/after-pack.mjs` inclui o runtime do Cua correspondente ao sistema

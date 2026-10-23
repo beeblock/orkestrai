@@ -10,6 +10,7 @@ import {
   findPromptInTranscript,
   findReplyToPrompt,
   latestTurnComplete,
+  latestTurnBoundary,
   type TranscriptLookupOptions,
 } from '../../infrastructure/transcript/AgentTranscript.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
@@ -679,12 +680,17 @@ export class AgentInboxService {
     // Notices never wake an offline agent; questions and work may restore it.
     const session = await this.liveSession(workspaceId, nodeId, live.some((envelope) => envelope.metadata.wake !== false));
     if (!session) return null;
-    if (!ptySessionManager.canAcceptAutomaticMessage(session.id)) return null;
+    const pendingAt = ptySessionManager.pendingAutomaticDeliveryAt(session.id);
+    if (!ptySessionManager.canAcceptAutomaticMessage(session.id) && pendingAt === null) return null;
     const context = await this.transcriptContext(workspaceId, nodeId, session);
     if (context.provider) {
-      const complete = await latestTurnComplete(context.provider, context.cwd, context.agentSessionId, context.options).catch(() => null);
-      if (complete === false) return null;
+      const boundary = await latestTurnBoundary(context.provider, context.cwd, context.agentSessionId, context.options);
+      if (boundary.ready === false) return null;
+      if (pendingAt !== null && boundary.ready === true && boundary.startedAt !== null && boundary.finishedAt !== null) {
+        ptySessionManager.releaseAutomaticDeliveryAfterTurn(session.id, pendingAt, boundary.startedAt, boundary.finishedAt);
+      }
     }
+    if (!ptySessionManager.canAcceptAutomaticMessage(session.id)) return null;
 
     const batch: AgentMessageEnvelope[] = [];
     let chars = 0;
@@ -746,7 +752,7 @@ export class AgentInboxService {
         for (const envelope of batch.envelopes) await this.cancel(envelope, 'obsolete');
         return;
       }
-      if (UNCERTAIN_DELIVERY.test(message)) {
+      if (UNCERTAIN_DELIVERY.test(message) || (error as { code?: string }).code === 'PTY_DELIVERY_UNCONFIRMED') {
         const provider = batch.context.provider;
         if (!provider || !hasAgentAdapter(provider) || !getAgentAdapter(provider).sessionStorage) {
           // Nothing can prove consumption later; typing it again risks a duplicate turn.

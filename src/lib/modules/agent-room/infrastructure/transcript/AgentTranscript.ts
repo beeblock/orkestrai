@@ -1317,6 +1317,56 @@ export async function latestTurnComplete(
   }
 }
 
+export type TranscriptTurnBoundary = { ready: boolean | null; startedAt: number | null; finishedAt: number | null };
+
+/** Composer readiness is distinct from having an answer: an aborted turn has no reply. */
+export function parseLatestTurnBoundary(storage: string, transcript: string, processStartedAt?: number): TranscriptTurnBoundary {
+  const unknown = { ready: null, startedAt: null, finishedAt: null };
+  if (!FILE_LOOKUP_STORAGES.has(storage)) return unknown;
+  const records = transcript.trim().split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } });
+  const start = records.findLastIndex(event => event && promptFromJsonlEvent(storage, event));
+  const scoped = records.slice(Math.max(0, start));
+  let ready = parseLatestTurnComplete(storage, transcript, processStartedAt);
+  let finish: any = null;
+  let beginning = start >= 0 ? records[start] : null;
+  if (processStartedAt && turnActivityBefore(storage, scoped, processStartedAt)) {
+    return { ready: true, startedAt: jsonlEventTime(beginning), finishedAt: null };
+  }
+  if (storage === 'codex-rollout-jsonl') {
+    const lifecycle = scoped.findLast(event => ['task_started', 'task_complete', 'turn_aborted'].includes(event?.payload?.type));
+    beginning ??= scoped.findLast(event => event?.payload?.type === 'task_started');
+    if (lifecycle) {
+      ready = lifecycle.payload.type !== 'task_started';
+      if (ready) finish = lifecycle;
+    }
+  } else if (storage === 'claude-project-jsonl') {
+    const queue = scoped.findLast(event => event?.type === 'queue-operation');
+    const duration = scoped.findLastIndex(event => event?.type === 'system' && event.subtype === 'turn_duration');
+    const work = scoped.findLastIndex(event => ['user', 'assistant', 'api-request'].includes(event?.type));
+    // Older CLIs may omit stop_reason. Their explicit turn-duration record is
+    // still completion; a silent terminal or a thinking block alone is not.
+    if (duration >= 0 && duration > work) ready = true;
+    if (queue?.operation === 'enqueue') ready = false;
+    if (ready) finish = duration > work ? scoped[duration]
+      : scoped.findLast(event => event?.type === 'assistant' && event.message?.stop_reason === 'end_turn');
+  } else if (storage === 'kimi-session-dir') {
+    const lifecycle = scoped.findLast(event => ['turn.begin', 'turn.prompt', 'turn.ended'].includes(event?.type));
+    if (lifecycle?.type === 'turn.ended') { ready = true; finish = lifecycle; }
+  }
+  return { ready, startedAt: jsonlEventTime(beginning), finishedAt: jsonlEventTime(finish) };
+}
+
+/** All boundary evidence comes from one bounded snapshot of the exact native/WSL transcript. */
+export async function latestTurnBoundary(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
+): Promise<TranscriptTurnBoundary> {
+  try {
+    const tail = await conversationTail(provider, cwd, sessionId, options);
+    return tail ? parseLatestTurnBoundary(tail.storage, tail.text, options.processStartedAt)
+      : { ready: null, startedAt: null, finishedAt: null };
+  } catch { return { ready: null, startedAt: null, finishedAt: null }; }
+}
+
 /** When the conversation's latest prompt was written, in ms; null when the transcript does not say. */
 export function parseLatestTurnStart(storage: string, transcript: string): number | null {
   if (!FILE_LOOKUP_STORAGES.has(storage)) return null;

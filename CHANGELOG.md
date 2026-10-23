@@ -11,6 +11,8 @@ pt-BR, English, and Spanish translations.
 
 - Restore embedded dictation and speech on Apple Silicon. An ARM64 installer built on an Intel runner could include only the Intel sherpa-onnx native library and fail with "Could not find sherpa-onnx-node". Stage the exact target-specific package and all shared libraries from the lockfile, verify SHA-512 and binary architectures before signing, and preserve downloaded voice models.
 - Block release publication unless packaged voice executes under real Node on macOS Intel, Apple Silicon, Windows and Linux. The Apple Silicon check unpacks the signed installer on an ARM64 runner and exercises native audio buffers without downloading models or rebuilding the app.
+- Keep queued agent messages flowing after a missing transcript receipt. A verified newer turn can release an old terminal barrier without retyping the first prompt or claiming it was confirmed. Reconcile native and WSL conversations, preserve human drafts and startup dialogs, and propagate recovery to the waiting sender even when a background monitor observes it first.
+- Allow task-scoped questions about assigned To do cards. Pending work is still relevant before it moves to Doing; closed, archived, unrelated or reassigned work continues to reject stale messages.
 
 ## 0.44.0 - 2026-10-22
 
