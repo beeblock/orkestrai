@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -596,16 +596,18 @@ describe('a question asked again in the same conversation', () => {
   it('answers a CLI that appends untimed prompts only with what it wrote past the mark taken at the send', async () => {
     const home = await mkdtemp(join(tmpdir(), 'ork-transcript-untimed-'));
     const line = (role: string, content: string) => JSON.stringify({ role, content });
-    // Cursor files the conversation under the real cwd (/private/tmp on macOS).
-    const files = ['tmp', 'private-tmp'].map((folder) => join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'repeated', 'repeated.jsonl'));
+    // Use an actual canonical workspace on each OS, including Windows drives.
+    const cwd = await realpath(home);
+    const folder = cwd.replace(/^[\\/]+/, '').replace(/[^a-zA-Z0-9]/g, '-');
+    const files = [join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'repeated', 'repeated.jsonl')];
     const append = async (...lines: string[]) => { for (const file of files) await appendFile(file, `${lines.join('\n')}\n`); };
     for (const file of files) await mkdir(join(file, '..'), { recursive: true });
     await append(line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.'));
     try {
       const at = Date.now();
-      const marks = await transcriptMarks('cursor', '/tmp', 'repeated', 'Qual o status?', { homeDir: home });
+      const marks = await transcriptMarks('cursor', cwd, 'repeated', 'Qual o status?', { homeDir: home });
       expect(marks.repeated).toMatchObject({ bytes: expect.any(Number), hash: expect.any(String) });
-      const lookup = (promptMarks?: Record<string, TranscriptMark>) => findReplyToPrompt('cursor', '/tmp', 'repeated', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks });
+      const lookup = (promptMarks?: Record<string, TranscriptMark>) => findReplyToPrompt('cursor', cwd, 'repeated', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks });
       // The CLI has not written the repeated line yet: the earlier turn is not its answer.
       expect(await lookup(marks)).toBeNull();
       // Without a mark, the only occurrence proves nothing.
@@ -615,7 +617,7 @@ describe('a question asked again in the same conversation', () => {
       await append(line('assistant', 'Resposta nova: em revisão.'));
       expect(await lookup(marks)).toMatchObject({ sessionId: 'repeated', text: 'Resposta nova: em revisão.' });
       // Timed CLIs need no mark.
-      expect(await transcriptMarks('claude', '/tmp', 'repeated', 'Qual o status?', { homeDir: home })).toEqual({});
+      expect(await transcriptMarks('claude', cwd, 'repeated', 'Qual o status?', { homeDir: home })).toEqual({});
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -624,15 +626,17 @@ describe('a question asked again in the same conversation', () => {
   it('keeps the mark exact past the part of a long transcript it reads, and when the file is written anew', async () => {
     const home = await mkdtemp(join(tmpdir(), 'ork-transcript-untimed-long-'));
     const line = (role: string, content: string) => JSON.stringify({ role, content });
-    const files = ['tmp', 'private-tmp'].map((folder) => join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'long', 'long.jsonl'));
+    const cwd = await realpath(home);
+    const folder = cwd.replace(/^[\\/]+/, '').replace(/[^a-zA-Z0-9]/g, '-');
+    const files = [join(home, '.cursor', 'projects', folder, 'agent-transcripts', 'long', 'long.jsonl')];
     const append = async (...lines: string[]) => { for (const file of files) await appendFile(file, `${lines.join('\n')}\n`); };
     for (const file of files) await mkdir(join(file, '..'), { recursive: true });
     const filler = Array.from({ length: 5 }, (_, index) => line('assistant', `${index}:${'x'.repeat(1024 * 1024)}`));
     await append(line('user', 'Qual o status?'), line('assistant', 'Resposta antiga: entregue.'));
     try {
       const at = Date.now();
-      const marks = await transcriptMarks('cursor', '/tmp', 'long', 'Qual o status?', { homeDir: home });
-      const lookup = () => findReplyToPrompt('cursor', '/tmp', 'long', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks: marks });
+      const marks = await transcriptMarks('cursor', cwd, 'long', 'Qual o status?', { homeDir: home });
+      const lookup = () => findReplyToPrompt('cursor', cwd, 'long', 'Qual o status?', at - 5_000, { homeDir: home, promptNotBefore: at, promptMarks: marks });
       // More than the 4 MB read since the send: what is read is all new, and the old turn is not in it.
       await append(...filler);
       expect(await lookup()).toBeNull();
