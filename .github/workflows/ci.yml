@@ -81,8 +81,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-0t64 libnss3 libasound2t64 libgbm1
 
+      - name: Verify offline OCR without competing test workers
+        run: npm test -- --maxWorkers=1 tests/unit/knowledge-runtime.test.ts
+
       - name: Run tests
-        run: npm test
+        run: npm test -- --maxWorkers=2 --exclude tests/unit/knowledge-runtime.test.ts
 
       - name: Build production application
         run: npm run build
