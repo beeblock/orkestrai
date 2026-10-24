@@ -68,6 +68,7 @@ class CaptureHost {
   contentView = new View();
   closed = false;
   constructor(public options: Record<string, unknown>) { CaptureHost.instances.push(this); }
+  loadURL = vi.fn(async () => {});
   isDestroyed() { return this.closed; }
   destroy() { this.closed = true; }
 }
@@ -126,7 +127,8 @@ describe('embedded Portal surface lifecycle', () => {
       expect(CaptureHost.instances[0].contentView.children.size).toBe(0);
     }
     expect(CaptureHost.instances).toHaveLength(1);
-    expect(CaptureHost.instances[0].options).toMatchObject({ show: false, focusable: false, paintWhenInitiallyHidden: true });
+    expect(CaptureHost.instances[0].loadURL).toHaveBeenCalledExactlyOnceWith('about:blank');
+    expect(CaptureHost.instances[0].options).toMatchObject({ show: false, focusable: false, paintWhenInitiallyHidden: true, webPreferences: { backgroundThrottling: false } });
   });
 
   it('serializes the shared hidden compositor across different Portals', async () => {

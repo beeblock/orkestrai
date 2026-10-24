@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process');
 const ts = require('typescript');
 const assert = require('node:assert/strict');
 
-const profile = mkdtempSync(join(tmpdir(), 'orkestrai-terminal-renderer-'));
+const profile = process.env.ORKESTRAI_TEST_USER_DATA ?? mkdtempSync(join(tmpdir(), 'orkestrai-terminal-renderer-'));
 app.setPath('userData', profile);
 let window, server;
 const watchdog = setTimeout(() => finish(1, new Error('Terminal renderer lifecycle timed out')), 120_000);
@@ -17,9 +17,11 @@ async function finish(code, error) {
   ending = true;
   clearTimeout(watchdog);
   if (error) console.error(error);
-  window?.destroy(); server?.close();
-  rmSync(profile, { recursive: true, force: true });
-  app.exit(code);
+  try {
+    window?.destroy(); server?.close();
+    if (!process.env.ORKESTRAI_TEST_USER_DATA) rmSync(profile, { recursive: true, force: true });
+  } catch (cleanupError) { console.error(cleanupError); code = 1; }
+  finally { app.exit(code); }
 }
 
 const html = String.raw`<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/xterm.css">
@@ -74,7 +76,7 @@ app.whenReady().then(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   window = new BrowserWindow({ show: false, width: 1400, height: 1100, paintWhenInitiallyHidden: true,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, offscreen: true } });
   await window.loadURL(`http://127.0.0.1:${server.address().port}/`);
   for (let i=0;i<100&&!await window.webContents.executeJavaScript('!!window.ready');i++) await new Promise(resolve=>setTimeout(resolve,20));
   window.webContents.debugger.attach('1.3');
