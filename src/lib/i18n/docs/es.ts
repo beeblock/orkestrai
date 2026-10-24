@@ -1008,7 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "En desarrollo", title: "Próxima versión", summary: "Correcciones de fiabilidad en validación.", items: [
+    { date: "24 de octubre de 2026 · 0.45.0", title: "Orkestrai 0.45.0: Portales fiables, terminales ágiles y cuentas del equipo", summary: "Capturas repetidas de Portales, renderizado acotado de terminales, herencia de la cuenta del líder y soporte para Pi/Oh My Pi.", items: [
       "Los nuevos agentes heredan el perfil de cuenta del líder de la misma CLI en Canvas, equipos, presets y reclutamiento CLI/MCP. Las selecciones explícitas tienen prioridad y un perfil ausente nunca cambia silenciosamente a la cuenta predeterminada.",
       "Libera las suscripciones al cierre de ventana al desconectar, mover o cerrar Portales y comparte un listener por ventana para no retener estados anteriores al alternar entre Conversación y Canvas.",
       "Identifica los comboboxes del grafo y del perfil de conversación con etiquetas explícitas y limita el ancho del formulario de autorización de Computer. Las pruebas usan la semántica actual de los selectores, restauran ajustes tras timeout y detienen CI pronto ante fallos repetidos.",

@@ -1008,7 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+    { date: "October 24, 2026 · 0.45.0", title: "Orkestrai 0.45.0: reliable Portals, responsive terminals and team accounts", summary: "Repeated Portal captures, bounded terminal rendering, leader account inheritance and Pi/Oh My Pi support.", items: [
       "New agents inherit the account profile of their same-CLI leader in Canvas, team creation, presets and CLI/MCP recruitment. Explicit choices remain authoritative, and a missing profile never silently falls back to the default account.",
       "Release Portal window-close subscriptions on detach, reparenting and close, sharing one listener per window so repeated Chat/Canvas navigation does not retain old Portal state.",
       "Label graph and companion-profile comboboxes explicitly and keep the Computer conversation-authorization form at a readable width. Browser checks follow current select semantics, restore settings after timeouts and stop CI early on repeated failures.",
