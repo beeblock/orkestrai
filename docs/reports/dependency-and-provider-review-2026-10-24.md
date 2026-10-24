@@ -60,6 +60,16 @@ Two compatibility corrections are required:
 
 ## Security resolutions
 
+Dependabot opened #72 during integration. Its two updates are included too:
+Drizzle ORM 0.45.4 changes explicitly named postgres-js prepared queries; SQLite
+behavior is unchanged. Superforms 2.31.0 adds optional action-result transports;
+the published runtime diff leaves the client and Zod adapters unchanged. The
+24 focused SQLite transaction, schema, validation, patch and catalog tests pass.
+The same package lock retains all security overrides and verified patch guards.
+
+Primary release contracts: [Drizzle 0.45.4](https://github.com/drizzle-team/drizzle-orm/releases/tag/0.45.4)
+and [Superforms 2.31.0](https://github.com/ciscoheat/sveltekit-superforms/releases/tag/v2.31.0).
+
 During final verification Dependabot superseded #69 with #71
 (`6ae30f88e73cdc1f33d0efa1cb831f3474776c4b`). Its additional native canvas
 1.0.13 and electron-updater 6.8.11 patches are reviewed separately; the sampler
