@@ -1008,6 +1008,8 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Keep Bruno's Azure Identity at 4.13.0 with the unaffected MSAL 3.x branch until newer Azure Identity versions support patched MSAL; do not force a different authentication-client major.",
+      "Update development dependencies, including Electron 42.11.18, electron-builder 26.18.0 and Playwright 1.64.1, keeping the native ABI and verified patches. Undici 7.30.1/6.29.1 and fast-uri 3.1.9 address memory-exhaustion, response-crash, integrity and URI-normalization advisories; the complete dependency audit remains enabled.",
       "Add Pi and Oh My Pi terminals, headless JSON output, model/thinking controls and native role prompts. Both use the workspace bridge. Automatic session restoration and transcript mirroring are not advertised until their exact conversation readers are implemented.",
       "Busy terminals return without parsing all retained histories together. Viewer queues and WebSocket buffers are bounded; parser acknowledgements share the rendering budget. Hidden or covered viewers stop output streaming while their agents keep running, and restore a current snapshot when shown again.",
       "Closed Canvas graphs and expired workspace snapshots are released; the workspace cache keeps at most four snapshots. Regression tests use real garbage collection and repeated Chat/Canvas navigation.",
