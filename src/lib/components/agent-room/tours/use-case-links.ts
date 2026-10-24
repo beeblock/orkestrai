@@ -16,6 +16,7 @@ export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'team-conversation': 'team-conversation',
   'owner-decisions': 'owner-decisions',
   'canvas-command-surface': 'canvas-command-surface',
+  'pi-omp-collaboration': 'pi-omp-collaboration',
   'native-shell-repair': 'native-shell-repair',
   'portal-host-configuration': 'portal-host-configuration',
   'native-canvas-delivery': 'native-canvas-delivery',

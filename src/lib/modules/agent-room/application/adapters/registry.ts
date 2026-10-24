@@ -13,6 +13,8 @@ import { qwenAdapter } from './QwenAdapter.js';
 import { aiderAdapter } from './AiderAdapter.js';
 import { gooseAdapter } from './GooseAdapter.js';
 import { ampAdapter } from './AmpAdapter.js';
+import { piAdapter } from './PiAdapter.js';
+import { ohMyPiAdapter } from './OhMyPiAdapter.js';
 
 /**
  * Registry de adaptadores de agente. Novos providers (kimi, opencode, ...)
@@ -110,3 +112,5 @@ registerAgentAdapter(qwenAdapter);
 registerAgentAdapter(aiderAdapter);
 registerAgentAdapter(gooseAdapter);
 registerAgentAdapter(ampAdapter);
+registerAgentAdapter(piAdapter);
+registerAgentAdapter(ohMyPiAdapter);

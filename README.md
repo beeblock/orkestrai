@@ -24,7 +24,7 @@
 
 Orkestrai is a local-first desktop application for macOS, Windows, and Linux. It
 brings Claude Code, Codex CLI, Kimi Code, OpenCode, Cursor, Antigravity, Cline,
-Devin, GitHub Copilot, Gemini CLI, Qwen Code, Aider, goose, Amp, shells, tasks, notes,
+Devin, GitHub Copilot, Gemini CLI, Qwen Code, Aider, goose, Amp, Pi, Oh My Pi, shells, tasks, notes,
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
@@ -806,7 +806,7 @@ device access.
   Laravel's `APP_KEY` for encrypted application data.
 - **Operational controls:** manage local portal ports, configure recurring
   routines, and install skills from the marketplace.
-- **Provider Center:** detect all nine supported CLIs locally, follow OS-aware
+- **Provider Center:** detect registered CLIs locally, follow OS-aware
   installation and official sign-in guidance, inspect public service status,
   and route named account profiles without persisting credentials in canvas
   data.
@@ -814,8 +814,9 @@ device access.
   and pin up to four ready favorites globally across workspaces and restarts.
 - **Replaceable providers:** switch a team member from Claude to Codex, Kimi, or
   another installed provider while preserving its role, floor, and connections.
-- **Session continuity:** each terminal resumes its own provider conversation
-  after the application is closed and reopened.
+- **Session continuity:** providers with an implemented conversation reader resume
+  their exact session after restart. Other providers start a new conversation;
+  Orkestrai never resumes a neighboring agent's latest session by directory.
 
 </details>
 
@@ -844,6 +845,15 @@ authenticate only the providers you plan to use:
 - [Aider](https://aider.chat/docs/)
 - [goose](https://goose-docs.ai/docs/)
 - [Amp](https://ampcode.com/docs)
+- [Pi](https://pi.dev/docs/latest/)
+- [Oh My Pi](https://github.com/can1357/oh-my-pi)
+
+Pi and Oh My Pi support interactive terminals, model/thinking controls, native
+role prompts and headless JSON execution. Their agents use `orkestrai ask`,
+`orkestrai inbox` and `orkestrai reply` through the workspace bridge. Pi profiles
+use its documented `PI_CODING_AGENT_DIR`; Oh My Pi profile selection stays in its
+CLI until the app implements that separate contract. Automatic session restore
+and transcript mirroring are not available for these two providers yet.
 
 You do not need every provider or terminal expertise. Orkestrai enables the CLIs
 it detects, keeps their conversations separate, and lets you organize agents by

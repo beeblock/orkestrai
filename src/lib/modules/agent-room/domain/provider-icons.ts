@@ -14,4 +14,6 @@ export const providerIcons: Record<string, string> = {
   aider: '/images/aider.svg',
   goose: '/images/goose.svg',
   amp: '/images/amp.svg',
+  pi: '/images/cli.svg',
+  omp: '/images/cli.svg',
 };
