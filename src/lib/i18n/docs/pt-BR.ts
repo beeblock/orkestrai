@@ -1012,6 +1012,8 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Mantém o Azure Identity do Bruno em 4.13.0, com o MSAL 3.x não afetado, até as versões seguintes adotarem um MSAL corrigido, sem forçar outra versão principal do cliente de autenticação.",
+      "Atualiza dependências de desenvolvimento, incluindo Electron 42.11.18, electron-builder 26.18.0 e Playwright 1.64.1, preservando a ABI nativa e os patches verificados. Undici 7.30.1/6.29.1 e fast-uri 3.1.9 corrigem avisos de esgotamento de memória, falhas em respostas, integridade e normalização de URI; a auditoria completa continua habilitada.",
       "Adiciona terminais Pi e Oh My Pi, saída JSON sem interface, controles de modelo e raciocínio e instruções nativas de papel. Ambos usam a ponte do workspace. A retomada automática de sessão e o espelho de conversa aguardam leitores das conversas exatas.",
       "Terminais ocupados voltam sem processar todos os históricos ao mesmo tempo. Filas da tela e buffers WebSocket têm limite; confirmações do parser dividem o trabalho de renderização. Telas ocultas ou cobertas param de receber saída enquanto seus agentes continuam trabalhando e recuperam uma imagem atual ao reaparecer.",
       "Grafos de Canvas fechados e snapshots vencidos de workspaces são liberados; o cache mantém no máximo quatro snapshots. Os testes usam coleta de lixo real e navegação repetida entre Conversa e Canvas.",

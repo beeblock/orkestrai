@@ -7,11 +7,18 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Security
+
+- Update Undici to 7.30.1 and its 6.x consumers to 6.29.1, and fast-uri to 3.1.9, addressing EventSource memory exhaustion, excessive content-encoding crashes, integrity verification and URI normalization advisories. Keep the complete dependency audit enabled.
+- Keep Bruno's Azure Identity dependency at 4.13.0, which uses the unaffected MSAL 3.x branch, until its newer releases support a patched MSAL. Avoid forcing an incompatible MSAL major into the authentication client.
+
 ### Added
 
 - Add Pi and Oh My Pi providers with interactive terminals, headless JSON execution, model/thinking controls, native role prompts and workspace bridge communication. Keep automatic resume and transcript mirroring disabled until exact conversation readers exist.
 
 ### Fixed
+
+- Refresh development dependencies, including Electron 42.11.18, electron-builder 26.18.0 and Playwright 1.64.1, while retaining Electron 42's native ABI and verified dependency patches.
 
 - Keep repeated Portal screenshots working after the Canvas hides or detaches a page. Every capture uses a live hidden compositor, including Portals with saved geometry; serialize its shared surface across Portals, preserve the page/session and protected-field masking, and never display or focus a capture window.
 - Restore busy terminal views without parsing every retained history at once. Bound viewer and WebSocket queues, acknowledge parser work, share the rendering budget, and pause output streaming for covered or offscreen viewers while their agents keep running. Returning to a view restores the current PTY snapshot without restarting or resizing a hidden agent.
