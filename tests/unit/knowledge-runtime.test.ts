@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fork, type ForkOptions } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { scannedPdf } from '../helpers/scanned-pdf.js';
 import { knowledgeCanvasTarget, KNOWLEDGE_RUNTIME_FILES } from '../../scripts/package-knowledge-runtime.mjs';
@@ -22,14 +22,19 @@ describe('offline packaged OCR runtime', () => {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'], serialization: 'advanced', windowsHide: true,
     } as ForkOptions & { windowsHide: boolean });
     const closed = new Promise(resolve => child.once('close', resolve));
-    child.stdout?.resume(); child.stderr?.resume();
+    let diagnostics = '', lastProgress: unknown = null;
+    const captureDiagnostic = (chunk: Buffer) => { diagnostics = (diagnostics + chunk.toString()).slice(-2048); };
+    child.stdout?.on('data', captureDiagnostic); child.stderr?.on('data', captureDiagnostic);
     let timer: ReturnType<typeof setTimeout>;
     try {
       const result = await new Promise<DocumentExtraction>((resolveResult, reject) => {
-        timer = setTimeout(() => reject(new Error('OCR runtime timed out')), 25_000);
+        timer = setTimeout(() => reject(new Error(`OCR runtime timed out: ${JSON.stringify({ lastProgress, diagnostics, load: loadavg() })}`)), 25_000);
         child.once('error', reject);
         child.once('exit', () => reject(new Error('OCR runtime exited before completion')));
-        child.on('message', (message: { type: string; result: DocumentExtraction }) => { if (message.type === 'complete') resolveResult(message.result); });
+        child.on('message', (message: { type: string; result: DocumentExtraction }) => {
+          if (message.type === 'complete') resolveResult(message.result);
+          else if (message.type === 'progress') lastProgress = message.result.extraction;
+        });
         child.send({ bytes, extension: 'pdf', directory });
       });
       expect(result.status).toBe('ready');

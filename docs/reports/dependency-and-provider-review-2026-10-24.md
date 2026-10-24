@@ -130,3 +130,11 @@ package manifest and lockfile, no open files under the test-app root were found,
 and the cleanup audit records their lock hashes. Source, databases and training
 artifacts were not cleanup targets. Available disk space fluctuates with other
 work and macOS swap; the latter occupied roughly 10.6 GiB before the final build.
+
+The first two Linux CI attempts passed 2,505 tests but hit the actual OCR test's
+25-second deadline. Windows passed that same native OCR test and both desktop
+lifecycle fixtures. The Linux workflow now runs actual OCR separately from the
+other test workers, then runs the remaining suite with two workers. Its deadline
+and offline assertions are unchanged. Bounded child diagnostics and the last
+extraction progress are retained on timeout to distinguish resource contention
+from a native-runtime failure; a successful final CI is still required.
