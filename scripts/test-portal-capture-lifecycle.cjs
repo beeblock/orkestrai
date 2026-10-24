@@ -60,11 +60,11 @@ app.whenReady().then(async () => {
     let last;
     for (let i = 0; i < rounds; i++) {
       await inspect(`document.querySelector('#value').textContent=${++count};document.body.style.background='rgb(${20 + count * 4},135,102)'`);
-      const box = await inspect(`(() => { const r=document.querySelector('input').getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth}; })()`);
       const start = Date.now();
       const result = await executor.execute({ ...target, requestId: randomUUID() });
       console.log(JSON.stringify({ label, index: i, ok: result.ok, ms: Date.now() - start, error: result.error }));
       assert.equal(result.ok, true, `${label}: ${result.error}`);
+      const box = await inspect(`(() => { const r=document.querySelector('input').getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth}; })()`);
       const image = nativeImage.createFromDataURL(result.result.dataUrl);
       assert.equal(image.isEmpty(), false);
       const scale = image.getSize().width / box.viewport;
@@ -103,5 +103,8 @@ app.whenReady().then(async () => {
   assert.deepEqual(crop.getSize(), { width: 240 * density, height: 180 * density });
   assert.equal(await raw('scrollY'), 600, 'Cropped capture must preserve page scroll');
   assert.equal(await raw('window.identity'), identity);
+  await raw("const style=document.createElement('style');style.textContent='@media(min-width:1500px){input{left:600px!important;top:1100px!important}}';document.head.append(style)");
+  executor.setGeometry(request.workspaceId, request.nodeId, { ...geometry, visible: false, viewport: { width: 1920, height: 1280 } }, lease);
+  await captureSeries('resized-offscreen-responsive-private-field');
   console.log(JSON.stringify({ portalCaptureLifecycle: 'passed', freshCaptures: count }));
 }).then(() => finish(0), error => finish(1, error));
