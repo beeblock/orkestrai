@@ -43,6 +43,21 @@ function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
 }
 
 describe('servidor MCP (orkestrai mcp)', () => {
+  it('exposes inherited, named and explicit default recruitment accounts', async () => {
+    const recruit = MCP_TOOLS.find(tool => tool.name === 'recruit');
+    expect(recruit).toMatchObject({ inputSchema: { properties: { defaultProfile: { type: 'boolean' } } } });
+    const server = startMcp();
+    try {
+      for (const [index, fields] of [{}, { profile: 'Work' }, { defaultProfile: true }].entries()) {
+        server.send({ jsonrpc: '2.0', id: index + 1, method: 'tools/call', params: { name: 'recruit', arguments: { title: 'Engineer', provider: 'claude', ...fields } } });
+        const result = JSON.parse((await server.waitFor(index + 1)).result.content[0].text);
+        expect(result.body).toMatchObject({ title: 'Engineer', provider: 'claude', ...fields });
+        if (!Object.keys(fields).length) { expect(result.body).not.toHaveProperty('profile'); expect(result.body).not.toHaveProperty('defaultProfile'); }
+      }
+      server.send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'recruit', arguments: { title: 'Conflict', provider: 'claude', profile: 'Work', defaultProfile: true } } });
+      expect((await server.waitFor(4)).result.isError).toBe(true);
+    } finally { server.input.end(); await server.done; }
+  });
   it('has a dispatcher for every advertised tool and no duplicate tool ids', async () => {
     expect(new Set(MCP_TOOLS.map(tool => tool.name)).size).toBe(MCP_TOOLS.length);
     const server = startMcp({}, '00000000-0000-7000-8000-000000000001');

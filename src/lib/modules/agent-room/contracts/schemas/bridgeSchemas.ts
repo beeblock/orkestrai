@@ -115,6 +115,7 @@ export const bridgeRecruitSchema = z.object({
   title: z.string().trim().min(1, 'Informe o titulo do recruta.'),
   provider: z.string().trim().nullish(),
   profile: z.string().trim().nullish(),
+  defaultProfile: z.boolean().optional(),
   model: z.string().trim().nullish(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']).nullish(),
   role: z.string().trim().nullish(),
@@ -123,11 +124,14 @@ export const bridgeRecruitSchema = z.object({
   replace: z.string().trim().nullish(),
   floorId: z.string().trim().nullish(),
 }).superRefine((input, ctx) => {
-  if (input.profile && !input.provider) {
+  if (input.profile && input.defaultProfile) {
+    ctx.addIssue({ code: 'custom', path: ['profile'], message: 'Escolha um perfil nomeado ou a conta padrão.' });
+  }
+  if ((input.profile || input.defaultProfile) && !input.provider) {
     ctx.addIssue({
       code: 'custom',
       path: ['provider'],
-      message: 'Informe --provider junto com --profile.',
+      message: 'Informe --provider junto com --profile ou --default-profile.',
     });
   }
 });

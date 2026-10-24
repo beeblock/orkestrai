@@ -545,6 +545,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   useCases: [
+    { id: 'inherit-leader-account', title: 'Criar colegas com a conta do líder', body: 'Configure Trabalho na Central de Providers e selecione esse perfil no líder. Novos agentes da mesma CLI herdam Trabalho pelo Canvas, montador de equipes, presets e recrutamento CLI/MCP. Outra CLI usa sua própria conta padrão. Uma escolha explícita de perfil tem prioridade; agentes existentes mantêm suas contas. Use orkestrai recruit "Dev" --provider claude para herdar, --profile "Pessoal" para outra conta nomeada ou --default-profile para a conta padrão (MCP: defaultProfile: true). Um perfil herdado ausente impede a criação, sem gastar a cota de outra conta.', tags: ['Agentes', 'Providers', 'Equipes'] },
     {
       id: 'pi-omp-collaboration',
       title: 'Colaborar entre agentes Pi e Oh My Pi',
@@ -1012,6 +1013,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Novos agentes herdam o perfil de conta do líder da mesma CLI pelo Canvas, montador de equipes, presets e recrutamento CLI/MCP. Escolhas explícitas têm prioridade, e um perfil ausente nunca provoca fallback silencioso para a conta padrão.",
       "Libera as inscrições de fechamento da janela ao desconectar, mover ou fechar Portais, com um listener compartilhado por janela para não reter estados antigos nas trocas entre Conversa e Canvas.",
       "Identifica os comboboxes do grafo e do perfil de conversa com rótulos explícitos e limita a largura do formulário de autorização do Computer. Os testes usam a semântica atual dos seletores, restauram configurações após timeout e interrompem o CI cedo diante de falhas repetidas.",
       "Copia screenshots completos do Portal pela captura nativa com recorte lógico explícito, preparando o frame da view anexada antes de redimensioná-la. Evita capturas CDP travadas no Windows/Linux e preserva as máscaras de campos privados, dimensões, scroll e a mesma página/sessão.",

@@ -132,7 +132,7 @@ Uso:
   orkestrai close-question <perguntaId> <resposta ou motivo>
   orkestrai escalate-question <perguntaId> <por que so o dono decide>
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
-  orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome>] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
+  orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome> | --default-profile] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
   orkestrai connect <de> <para> --from <maestro>
   orkestrai task list [--json]
@@ -347,12 +347,13 @@ async function bridge(config, method, path, body) {
 function parseFlags(args) {
   const flags = {};
   const positional = [];
-  const known = new Set(['raw', 'json', 'from', 'provider', 'role', 'replace', 'timeout']);
+  const known = new Set(['raw', 'json', 'default-profile', 'from', 'provider', 'role', 'replace', 'timeout']);
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (known.has(arg.slice(2))) {
       if (arg === '--raw') flags.raw = true;
       else if (arg === '--json') flags.json = true;
+      else if (arg === '--default-profile') flags['default-profile'] = true;
       else if (arg === '--timeout') flags.timeout = Number(args[++i]);
       else flags[arg.slice(2)] = args[++i];
     } else if (arg.startsWith('--')) {
@@ -1803,11 +1804,14 @@ async function runCommand(argv, options, sink) {
       const [title] = rest;
       if (!title || !flags.from) throw new Error('Uso: orkestrai recruit <titulo> --from <maestro> [--provider id] [--profile nome] [--model id] [--effort medium] [--role papel] [--replace agente] [--floor id]');
       if (flags.profile && !flags.provider) throw new Error('--profile exige --provider para identificar a CLI da conta.');
+      if (flags['default-profile'] && !flags.provider) throw new Error('--default-profile exige --provider para identificar a CLI da conta.');
+      if (flags.profile && flags['default-profile']) throw new Error('Use --profile ou --default-profile, nao ambos.');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/recruit', {
         title,
         from: flags.from,
         provider: flags.provider,
         profile: flags.profile,
+        defaultProfile: flags['default-profile'] === true || undefined,
         model: flags.model,
         effort: flags.effort,
         role: flags.role,

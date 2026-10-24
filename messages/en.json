@@ -1059,6 +1059,7 @@
   "dlg.ws_folder_root": "No folder (root)",
   "dlg.runtime_label": "Execution environment",
   "dlg.profile_label": "Profile",
+  "dlg.profile_inherit_hint": "By default, uses the leader's profile for the same CLI. You can choose another account for this agent.",
   "dlg.profile_loading": "Loading profiles...",
   "dlg.runtime_native": "Windows",
   "dlg.runtime_wsl": "WSL",

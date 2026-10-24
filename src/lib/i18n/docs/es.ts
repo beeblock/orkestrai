@@ -541,6 +541,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   useCases: [
+    { id: 'inherit-leader-account', title: 'Crear compañeros con la cuenta del líder', body: 'Configura Trabajo en la Central de Providers y selecciona ese perfil en el líder. Los nuevos agentes de la misma CLI heredan Trabajo desde Canvas, equipos, presets y reclutamiento CLI/MCP. Otra CLI usa su propia cuenta predeterminada. Una selección explícita tiene prioridad; los agentes existentes conservan sus cuentas. Usa orkestrai recruit "Dev" --provider claude para heredar, --profile "Personal" para otra cuenta o --default-profile para la cuenta predeterminada (MCP: defaultProfile: true). Un perfil heredado ausente impide la creación, sin consumir la cuota de otra cuenta.', tags: ['Agentes', 'Providers', 'Equipos'] },
     {
       id: 'pi-omp-collaboration',
       title: 'Colaborar entre agentes Pi y Oh My Pi',
@@ -1008,6 +1009,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "En desarrollo", title: "Próxima versión", summary: "Correcciones de fiabilidad en validación.", items: [
+      "Los nuevos agentes heredan el perfil de cuenta del líder de la misma CLI en Canvas, equipos, presets y reclutamiento CLI/MCP. Las selecciones explícitas tienen prioridad y un perfil ausente nunca cambia silenciosamente a la cuenta predeterminada.",
       "Libera las suscripciones al cierre de ventana al desconectar, mover o cerrar Portales y comparte un listener por ventana para no retener estados anteriores al alternar entre Conversación y Canvas.",
       "Identifica los comboboxes del grafo y del perfil de conversación con etiquetas explícitas y limita el ancho del formulario de autorización de Computer. Las pruebas usan la semántica actual de los selectores, restauran ajustes tras timeout y detienen CI pronto ante fallos repetidos.",
       "Copia capturas completas del Portal mediante captura nativa con recorte lógico explícito, preparando el frame de la vista adjunta antes de redimensionarla. Evita capturas CDP bloqueadas en Windows/Linux y conserva las máscaras de campos privados, dimensiones, scroll y la misma página/sesión.",

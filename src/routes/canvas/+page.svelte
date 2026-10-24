@@ -2137,7 +2137,7 @@
       payload = { command: '', args: [] };
     }
     if (creation?.executionRuntime) payload.executionRuntime = creation.executionRuntime;
-    if (creation?.profileId) payload.profileId = creation.profileId;
+    if (creation?.profileId !== undefined) payload.profileId = creation.profileId;
     const node = await api<CanvasNode>(`/api/agent-room/workspaces/${activeWorkspace.id}/nodes`, {
       method: 'POST',
       body: JSON.stringify({
@@ -4229,6 +4229,7 @@
       open={pendingAgentCreation !== null}
       provider={pendingAgentCreation?.provider ?? null}
       workspace={activeWorkspace}
+      leaderProfile={nodes.find((node) => node.type === 'terminal' && (node.data?.payload as TerminalNodePayload | undefined)?.maestro)?.data?.payload as TerminalNodePayload | undefined}
       defaultLeader={!nodes.some((node) => node.type === 'terminal' && (node.data?.payload as { maestro?: boolean } | undefined)?.maestro)}
       onConfirm={async (creation) => {
         const pending = pendingAgentCreation;

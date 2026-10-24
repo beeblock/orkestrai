@@ -2,7 +2,7 @@ import { constants as fsConstants, existsSync, readFileSync, realpathSync, statS
 import { access, readFile } from 'node:fs/promises';
 import { posix, resolve } from 'node:path';
 import { Connection } from '@beeblock/svelar/database';
-import type { CanvasNodePayload, Workspace, WorkspaceRepositoryRoot } from '../../domain/types.js';
+import type { CanvasNodePayload, TerminalNodePayload, Workspace, WorkspaceRepositoryRoot } from '../../domain/types.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import { isTeamAgentNode, occupiedOnFloor } from '../../domain/canvas-floors.js';
 import { executionRuntimeKey } from '../../domain/runtime.js';
@@ -443,10 +443,13 @@ export class WorkspaceService {
       : dto.payload;
     if (dto.type === 'terminal') {
       const terminalPayload = (payload ?? {}) as Record<string, unknown>;
-      const profileId = typeof terminalPayload.profileId === 'string' ? terminalPayload.profileId : null;
       const provider = typeof terminalPayload.provider === 'string' ? terminalPayload.provider : null;
-      if (profileId && !provider) throw new Error('A provider profile requires an agent provider.');
-      if (profileId && provider) await providerProfileService.assertCompatible(profileId, provider);
+      if (terminalPayload.profileId && !provider) throw new Error('A provider profile requires an agent provider.');
+      if (provider) {
+        const leader = existingNodes.find((node) => node.type === 'terminal' && (node.payload as TerminalNodePayload).maestro);
+        const profileId = await providerProfileService.resolveCreationProfile(provider, terminalPayload.profileId, leader?.payload as TerminalNodePayload | undefined);
+        if (profileId !== null || Object.hasOwn(terminalPayload, 'profileId')) terminalPayload.profileId = profileId;
+      }
     }
     const floorId = dto.floorId ?? null;
     if (floorId) {

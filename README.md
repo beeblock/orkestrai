@@ -809,7 +809,10 @@ device access.
 - **Provider Center:** detect registered CLIs locally, follow OS-aware
   installation and official sign-in guidance, inspect public service status,
   and route named account profiles without persisting credentials in canvas
-  data.
+  data. New agents inherit their same-CLI leader's account in Canvas, teams,
+  presets and CLI/MCP recruitment. Explicit selections take priority; use
+  `recruit --default-profile` (MCP: `defaultProfile: true`) to deliberately use
+  the default account. Existing agents keep their accounts.
 - **Personal agent toolbar:** choose any service from one compact Agents menu
   and pin up to four ready favorites globally across workspaces and restarts.
 - **Replaceable providers:** switch a team member from Claude to Codex, Kimi, or

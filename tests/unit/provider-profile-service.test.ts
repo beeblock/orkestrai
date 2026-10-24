@@ -93,6 +93,21 @@ function service(seed: ProviderProfile[] = []) {
 }
 
 describe('ProviderProfileService', () => {
+  it('inherits an account reference without resolving its host or WSL environment early', async () => {
+    const svc = service();
+    const profile = await svc.create({ providerId: 'claude', name: 'Work', configDir: '~/.claude-work' });
+    const inherited = await svc.resolveCreationProfile('claude', undefined, { provider: 'claude', profileId: profile.id });
+    expect(inherited).toBe(profile.id);
+    await expect(svc.resolveEnv(inherited!, 'claude', { runtimeHome: '/home/wsl' })).resolves.toEqual({ CLAUDE_CONFIG_DIR: '/home/wsl/.claude-work' });
+    await expect(svc.resolveEnv(inherited!, 'claude', { runtimeHome: '/Users/native' })).resolves.toEqual({ CLAUDE_CONFIG_DIR: '/Users/native/.claude-work' });
+    expect((await svc.list())[0].configDir).toBe('~/.claude-work');
+  });
+  it('does not inherit a malformed or incompatible account as the default account', async () => {
+    const svc = service();
+    await expect(svc.resolveCreationProfile('claude', undefined, { provider: 'claude', profileId: 123 })).rejects.toMatchObject({ code: 'profile_not_found' });
+    const other = await svc.create({ providerId: 'opencode', name: 'Other', configDir: '/tmp/other-config', dataDir: '/tmp/other-data' });
+    await expect(svc.resolveCreationProfile('claude', undefined, { provider: 'claude', profileId: other.id })).rejects.toMatchObject({ code: 'profile_not_found' });
+  });
   it('creates a configDir profile and resolves its env by the provider strategy', async () => {
     const svc = service();
     const created = await svc.create({ providerId: 'claude', name: 'Trabalho', configDir: '/tmp/claude-trabalho' });

@@ -23,7 +23,7 @@
     effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra' | null;
     leader: boolean;
     executionRuntime: WorkspaceExecutionRuntime | null;
-    profileId: string | null;
+    profileId?: string | null;
   };
 
   type Props = {
@@ -33,6 +33,7 @@
     workspace: Workspace | null;
     /** Pre-marca "Lider" (primeiro agente do workspace — fluxo zero-config). */
     defaultLeader?: boolean;
+    leaderProfile?: { provider?: string | null; profileId?: string | null } | null;
     onConfirm: (creation: AgentCreation) => void;
     onCancel: () => void;
     /** CLIs the owner can pick from; the dialog then shows a CLI selector. */
@@ -40,7 +41,7 @@
     onProviderChange?: (provider: AgentProviderInfo) => void;
   };
 
-  let { open, provider, workspace, defaultLeader = false, onConfirm, onCancel, providers = [], onProviderChange }: Props = $props();
+  let { open, provider, workspace, defaultLeader = false, leaderProfile = null, onConfirm, onCancel, providers = [], onProviderChange }: Props = $props();
   let runtimeMode = $state<'default' | 'native' | 'wsl'>('default');
   let wslDistribution = $state('');
   let wslWorkingDir = $state('');
@@ -48,6 +49,7 @@
   let runtimeChecking = $state(false);
   let profiles = $state<ProviderProfile[]>([]);
   let profilesLoading = $state(false);
+  let profileSelectionExplicit = $state(false);
   let profileLoadGeneration = 0;
   let wsl = $state<{ supported: boolean; distributions: Array<{ name: string }>; inferred: { distribution: string; linuxWorkingDir: string } | null; error: string | null }>({
     supported: false,
@@ -123,7 +125,7 @@
           : runtimeMode === 'native'
             ? { kind: 'native' }
             : { kind: 'wsl', distribution: wslDistribution, linuxWorkingDir: wslWorkingDir.trim() },
-        profileId: f.data.profileId ?? null,
+        profileId: profileSelectionExplicit ? (f.data.profileId ?? null) : undefined,
       });
     },
   });
@@ -134,6 +136,7 @@
   let lastOpen = false;
   $effect(() => {
     if (open && !lastOpen) {
+      profileSelectionExplicit = false;
       formData.set({
         title: provider?.displayName ?? 'Shell',
         model: '',
@@ -158,6 +161,12 @@
       profilesLoading = false;
     }
     lastOpen = open;
+  });
+
+  $effect(() => {
+    if (!open || profileSelectionExplicit) return;
+    const inherited = selectedProvider?.id === leaderProfile?.provider ? (leaderProfile?.profileId ?? null) : null;
+    if ($formData.profileId !== inherited) $formData.profileId = inherited;
   });
 
   $effect(() => {
@@ -213,7 +222,8 @@
     if (!currentTitle.trim() || currentTitle === provider?.displayName) $formData!.title = next.displayName;
     $formData!.model = '';
     $formData!.effort = null;
-    $formData!.profileId = null;
+    profileSelectionExplicit = false;
+    $formData!.profileId = next.id === leaderProfile?.provider ? (leaderProfile?.profileId ?? null) : null;
     onProviderChange?.(next);
     if (next.profileStrategy && next.profileStrategy.kind !== 'unsupported') void loadProfiles(next.id);
     else {
@@ -340,7 +350,7 @@
               <Form.Control>
                 {#snippet children({ props })}
                   <Form.Label class="text-[13px]">{m['dlg.profile_label']()}</Form.Label>
-                  <Select.Root type="single" value={$formData!.profileId || '__default__'} onValueChange={(value: string) => ($formData!.profileId = value === '__default__' ? null : value)}>
+                  <Select.Root type="single" value={$formData!.profileId || '__default__'} onValueChange={(value: string) => { profileSelectionExplicit = true; $formData!.profileId = value === '__default__' ? null : value; }}>
                     <Select.Trigger {...props} class="w-full">
                       <span class="truncate">{$formData!.profileId ? (profiles.find((item) => item.id === $formData!.profileId)?.name ?? $formData!.profileId) : m['term.profile_default']()}</span>
                     </Select.Trigger>
@@ -354,6 +364,7 @@
                 {/snippet}
               </Form.Control>
               <Form.FieldErrors class="text-[12px] font-normal" children={fieldError} />
+              <p class="text-ui-md text-muted-foreground">{m['dlg.profile_inherit_hint']()}</p>
               {#if profilesLoading}
                 <p class="flex items-center gap-1.5 text-ui-md text-muted-foreground"><LoaderCircle size={12} class="animate-spin" aria-hidden="true" />{m['dlg.profile_loading']()}</p>
               {:else if !profiles.length}

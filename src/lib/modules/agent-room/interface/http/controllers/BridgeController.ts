@@ -1625,6 +1625,7 @@ export class BridgeController extends Controller {
         title: input.title,
         provider: input.provider,
         profile: input.profile,
+        defaultProfile: input.defaultProfile,
         model: input.model,
         effort: input.effort,
         role: input.role,

@@ -541,6 +541,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   useCases: [
+    { id: 'inherit-leader-account', title: 'Create teammates using the leader’s account', body: 'Configure Work in Provider Center and select it on the leader. New agents using the same CLI inherit Work in Canvas, team creation, presets and CLI/MCP recruitment. Another CLI uses its own default account. An explicit profile selection takes priority; existing agents keep their accounts. Use orkestrai recruit "Engineer" --provider claude to inherit, --profile "Personal" for a named override, or --default-profile for the default account (MCP: defaultProfile: true). A missing inherited profile blocks creation instead of falling back to another account.', tags: ['Agents', 'Providers', 'Teams'] },
     {
       id: 'pi-omp-collaboration',
       title: 'Collaborate between Pi and Oh My Pi agents',
@@ -1008,6 +1009,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "New agents inherit the account profile of their same-CLI leader in Canvas, team creation, presets and CLI/MCP recruitment. Explicit choices remain authoritative, and a missing profile never silently falls back to the default account.",
       "Release Portal window-close subscriptions on detach, reparenting and close, sharing one listener per window so repeated Chat/Canvas navigation does not retain old Portal state.",
       "Label graph and companion-profile comboboxes explicitly and keep the Computer conversation-authorization form at a readable width. Browser checks follow current select semantics, restore settings after timeouts and stop CI early on repeated failures.",
       "Copy full Portal screenshots through a native capture lease with explicit logical clipping, priming the attached widget before resizing it. Avoid stalled CDP captures on Windows/Linux while preserving private-field masks, dimensions, scroll and the same page/session.",

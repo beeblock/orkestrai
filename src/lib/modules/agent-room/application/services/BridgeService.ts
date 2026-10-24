@@ -4,7 +4,7 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
-import type { AgentActivityState, CanvasNode, ImageNodePayload, ModelEffort, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
+import type { AgentActivityState, CanvasNode, ImageNodePayload, ModelEffort, TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { workspaceProjectContext } from '../../domain/runtime.js';
 import { LEADER_EXECUTION_CONTRACT } from '../../domain/leader-execution.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
@@ -1234,7 +1234,7 @@ export class BridgeService {
    */
   async recruit(
     workspaceId: string,
-    input: { from: string; title: string; provider?: string | null; profile?: string | null; model?: string | null; effort?: ModelEffort | null; role?: string | null; x?: number; y?: number; replace?: string | null; floorId?: string | null }
+    input: { from: string; title: string; provider?: string | null; profile?: string | null; defaultProfile?: boolean; model?: string | null; effort?: ModelEffort | null; role?: string | null; x?: number; y?: number; replace?: string | null; floorId?: string | null }
   ) {
     const origin = await this.requireMaestro(workspaceId, input.from);
     const originNode = await workspaceRepository.getNode(origin.nodeId);
@@ -1244,8 +1244,13 @@ export class BridgeService {
     if (input.profile && !input.provider) {
       throw new Error('Use --provider together with --profile when recruiting an agent.');
     }
-    const profileId = input.provider && input.profile
+    if (input.defaultProfile && !input.provider) throw new Error('Use --provider together with --default-profile when recruiting an agent.');
+    if (input.defaultProfile && input.profile) throw new Error('Choose either a named profile or the default account.');
+    const requestedProfileId = input.defaultProfile ? null : input.provider && input.profile
       ? (await providerProfileService.resolveByIdOrName(input.provider, input.profile))?.id ?? (() => { throw new Error(`Perfil "${input.profile}" não encontrado para o provider "${input.provider}".`); })()
+      : undefined;
+    const profileId = input.provider
+      ? await providerProfileService.resolveCreationProfile(input.provider, requestedProfileId, originNode?.payload as TerminalNodePayload | undefined)
       : null;
     const command = this.commandForProvider(input.provider, { model: input.model, effort: input.effort });
     // Fail before changing the canvas when a profile is incomplete, without
@@ -1701,7 +1706,7 @@ PROIBIDO usar subagentes internos da sua CLI (Task, background agents, subagente
 Antes de propor o time e antes de cada nova rodada de delegação, consulte \`orkestrai usage\`. Cada perfil de multi-conta configurado na Central de Providers aparece como uma linha própria (\`profileId\`/\`profileName\`), roteável separadamente da conta padrão do mesmo provider. Se \`shouldFallback\` vier verdadeiro, use o \`recommendedProvider\` para novas tarefas — se ele tiver \`:profile:\`, passe o \`--provider\` base e o \`--profile\` (nome do perfil) juntos no recruit; ou reatribua somente tarefas que ainda não começaram. Se não houver fallback saudável, avise o usuário com \`orkestrai notify --kind attention\`; nunca invente estimativas de cota e nunca interrompa um agente no meio de uma tarefa apenas para trocar de provider ou perfil.
 
 1. Reutilize o time/plano aprovado. Um pedido explícito para montar o time e entregar já autoriza recrutar dentro desse escopo; não peça a mesma aprovação novamente. Se o usuário pediu SOMENTE planejamento, proponha sem executar. Respeite os providers/contas permitidos e excluídos pelo usuário; diversidade é opcional, nunca imponha outro provider.
-2. Aprovado, crie com \`orkestrai recruit "<Título>" [--provider ${providerIds}] [--profile <nome-do-perfil>] [--model <id>] [--effort medium|high|xhigh] [--role <papel>]\`. \`--profile\` usa uma conta alternativa já cadastrada na Central de Providers para esse provider (multi-conta); sem isso, usa a conta padrão. Recrutas nascem CONECTADOS a você no organograma (não precisa de \`connect\`). Para composição visual estruturada, use \`medium\` ou \`high\`: \`xhigh\` aumenta muito a latência de payloads sem melhorar o gate visual. Use títulos CURTOS (2-3 palavras, ex.: "Dev API", "Designer UI") e roles de UMA palavra ("frontend", "qa", "design") — descrições longas vão para a nota de briefing.
+2. Aprovado, crie com \`orkestrai recruit "<Título>" [--provider ${providerIds}] [--profile <nome-do-perfil> | --default-profile] [--model <id>] [--effort medium|high|xhigh] [--role <papel>]\`. \`--profile\` usa uma conta alternativa já cadastrada na Central de Providers para esse provider (multi-conta); sem perfil explícito, herda a conta do líder da mesma CLI. Use --default-profile para escolher deliberadamente a conta padrão, sem copiar credenciais ou env do líder. Recrutas nascem CONECTADOS a você no organograma (não precisa de \`connect\`). Para composição visual estruturada, use \`medium\` ou \`high\`: \`xhigh\` aumenta muito a latência de payloads sem melhorar o gate visual. Use títulos CURTOS (2-3 palavras, ex.: "Dev API", "Designer UI") e roles de UMA palavra ("frontend", "qa", "design") — descrições longas vão para a nota de briefing.
 3. Escreva o spec/briefing do projeto numa nota: \`orkestrai note create "Spec — <projeto>" --content "..." --connect all\`. Sem \`--connect\`, a nota fica restrita ao agente que a criou.
 4. Trabalho em código? Cada agente trabalha no PRÓPRIO ANDAR (worktree isolada): \`orkestrai floor create "<frente>"\` antes do agente começar — NUNCA deixe vários agentes codando na mesma branch. O andar já parte do estado real da main. Quando a tarefa for concluída, integre com \`orkestrai floor preview\` e \`orkestrai floor land\` — uma chamada que commita na main, sem freezes, hashes ou composição manual.
 5. Distribua TODO trabalho com \`orkestrai task add --assign\`: essa chamada JÁ entrega o briefing. NÃO duplique o handoff com \`ask\` ou \`run\`; use \`ask ... --task <taskId>\` somente para uma dúvida/revisão necessária. É PROIBIDO delegar trabalho apenas por mensagem direta ou agrupar tarefas independentes numa única cobrança. Reutilize a nota de plano aprovada; cada task deve ser AUTOSSUFICIENTE ou citar uma nota existente acessível ao agente. Cada especialista produz os próprios artefatos. O líder só atribui a si coordenação/revisão explícita, nunca implementação.

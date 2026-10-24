@@ -790,6 +790,18 @@ describe('orkestrai CLI', () => {
     expect(requests).toHaveLength(before);
   });
 
+  it('leaves an omitted profile for server-side leader inheritance and supports an explicit default account', async () => {
+    await run(['recruit', 'Inherited', '--provider', 'claude'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out: () => undefined });
+    const inherited = requests.at(-1).body;
+    expect(inherited).not.toHaveProperty('profile');
+    expect(inherited).not.toHaveProperty('defaultProfile');
+    await run(['recruit', '--default-profile', 'Default', '--provider', 'claude'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out: () => undefined });
+    expect(requests.at(-1).body).toMatchObject({ title: 'Default', provider: 'claude', defaultProfile: true });
+    const before = requests.length;
+    await expect(run(['recruit', 'Conflict', '--provider', 'claude', '--profile', 'Work', '--default-profile'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out: () => undefined })).rejects.toThrow('nao ambos');
+    expect(requests).toHaveLength(before);
+  });
+
   it('flag --from explicito tem precedencia sobre o env', async () => {
     const { out } = capture();
     await run(['recruit', 'QA', '--from', 'Outro'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out });

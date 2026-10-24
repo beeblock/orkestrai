@@ -7,6 +7,8 @@ import { AgentPresetRevision } from '../../domain/models/AgentPresetRevision.js'
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { workspaceService } from './WorkspaceService.js';
 import { roleService } from './RoleService.js';
+import { providerProfileService } from './ProviderProfileService.js';
+import type { TerminalNodePayload } from '../../domain/types.js';
 import { routineService } from './RoutineService.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { mcpService } from './McpService.js';
@@ -479,6 +481,23 @@ export class PresetService {
     }) & { locale?: PresetLocale }
   ): Promise<{ workspaceId: string; nodes: number; edges: number; roles: number; routines: number; tasks: number; columns: number; mcps: number; skills: number }> {
     const preset = await this.data(presetId, target.locale ?? 'pt-BR');
+    const existingNodes = 'workspaceId' in target ? await workspaceRepository.listNodes(target.workspaceId) : [];
+    const existingLeader = existingNodes.find(node => node.type === 'terminal' && (node.payload as TerminalNodePayload).maestro)?.payload as TerminalNodePayload | undefined;
+    const payloads = preset.nodes.map(node => sanitizePayload(node.payload));
+    const leaderIndex = preset.nodes.findIndex((node, index) => node.type === 'terminal' && payloads[index].provider && payloads[index].maestro);
+    let profileLeader: { provider?: unknown; profileId?: unknown } | undefined = existingLeader;
+    if (leaderIndex >= 0) {
+      const leader = payloads[leaderIndex];
+      const profileId = await providerProfileService.resolveCreationProfile(String(leader.provider), leader.profileId, existingLeader);
+      profileLeader = { provider: leader.provider, profileId };
+    }
+    // Validate every account before writing roles, columns or any team member.
+    for (const [index, node] of preset.nodes.entries()) {
+      const payload = payloads[index];
+      if (node.type !== 'terminal' || typeof payload.provider !== 'string' || !payload.provider) continue;
+      const profileId = await providerProfileService.resolveCreationProfile(payload.provider, payload.profileId, profileLeader);
+      if (profileId !== null || Object.hasOwn(payload, 'profileId')) payload.profileId = profileId;
+    }
     let workspaceId: string;
     let offsetX = 0;
     let offsetY = 0;
@@ -521,7 +540,7 @@ export class PresetService {
 
     // Nos + arestas (por indice, como o import de workspace).
     const nodeIds: string[] = [];
-    for (const node of preset.nodes) {
+    for (const [index, node] of preset.nodes.entries()) {
       const created = await workspaceRepository.createNode({
         workspaceId,
         type: node.type as never,
@@ -531,7 +550,7 @@ export class PresetService {
         width: node.width ?? 560,
         height: node.height ?? 360,
         zIndex: node.zIndex ?? 0,
-        payload: await presetNodePayload(workspaceId, node) as never,
+        payload: await presetNodePayload(workspaceId, { ...node, payload: payloads[index] }) as never,
       });
       nodeIds.push(created.id);
     }

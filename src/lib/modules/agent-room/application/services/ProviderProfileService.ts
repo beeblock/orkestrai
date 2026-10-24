@@ -107,6 +107,23 @@ export class ProviderProfileService {
     return this.adapterProfileStrategy(providerId);
   }
 
+  /** Omission inherits a same-provider leader; explicit null selects the default account. */
+  async resolveCreationProfile(
+    providerId: string,
+    requestedProfileId: unknown,
+    leader?: { provider?: unknown; profileId?: unknown } | null,
+  ): Promise<string | null> {
+    const selected = requestedProfileId === undefined
+      ? (leader?.provider === providerId ? leader.profileId : null)
+      : requestedProfileId;
+    if (selected == null || selected === '') return null;
+    if (typeof selected !== 'string') throw new ProviderProfileError('profile_not_found', 'Invalid agent profile.');
+    const profileId = selected.trim();
+    if (!profileId) return null;
+    await this.assertCompatible(profileId, providerId);
+    return profileId;
+  }
+
   async assertCompatible(profileId: string, expectedProviderId: string): Promise<void> {
     const profile = await this.repository.find(profileId);
     if (!profile || profile.providerId !== expectedProviderId) {
