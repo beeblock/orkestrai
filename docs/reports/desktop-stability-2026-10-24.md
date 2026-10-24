@@ -66,3 +66,21 @@ was verified as 0.44.1, with production provenance pointing to
 `91b3af3a75d7486dc89ce7c56906a0e681f47c2c`; the earlier 0.44.0 reference was
 inaccurate. These tests did not replace or restart that app, and its current
 memory is not evidence that a long-running leak has been fixed.
+
+## Local installation follow-up: parent-window listeners
+
+The packaged smoke test exposed `MaxListenersExceededWarning` during repeated
+Chat/Canvas navigation. Each Portal reattachment registered another `closed`
+listener on its parent window, without removing it on detach or disposal.
+These subscriptions could retain Portal state until the parent window closed.
+
+Parent lifecycle subscriptions now share one listener and a set of attached
+Portals per window. Detach, reparenting and disposal remove the Portal; removing
+the last Portal also removes the listener. Closing a parent clears its bindings.
+
+Three regressions failed against the previous implementation and pass with the
+correction: 50 detach/attach cycles, multiple Portals sharing one parent, and
+moving a Portal between windows. All 51 focused Portal/documentation/tour checks
+pass. The real Electron fixture also passes 50 listener-lifecycle cycles and
+40 fresh protected screenshots plus a cropped screenshot. This is bounded
+lifecycle evidence, not a 24-hour whole-app memory claim.

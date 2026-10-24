@@ -1012,6 +1012,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Libera as inscrições de fechamento da janela ao desconectar, mover ou fechar Portais, com um listener compartilhado por janela para não reter estados antigos nas trocas entre Conversa e Canvas.",
       "Identifica os comboboxes do grafo e do perfil de conversa com rótulos explícitos e limita a largura do formulário de autorização do Computer. Os testes usam a semântica atual dos seletores, restauram configurações após timeout e interrompem o CI cedo diante de falhas repetidas.",
       "Copia screenshots completos do Portal pela captura nativa com recorte lógico explícito, preparando o frame da view anexada antes de redimensioná-la. Evita capturas CDP travadas no Windows/Linux e preserva as máscaras de campos privados, dimensões, scroll e a mesma página/sessão.",
       "Inicializa o host oculto de captura do Portal antes de anexar páginas e reafirma a pintura nativa após mover a view entre hosts. As verificações nativas exigem confirmação explícita de conclusão e removem perfis Chromium após o processo sair, impedindo falsas aprovações no Windows.",

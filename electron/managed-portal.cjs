@@ -34,8 +34,44 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
   const sessions = new Map();
   const queues = new Map();
   const opening = new Map();
+  const parentBindings = new WeakMap();
   let closingAll;
   let closed = false;
+
+  function detachParent(managed) {
+    const parent = managed.parent;
+    if (!parent) return;
+    const binding = parentBindings.get(parent);
+    binding?.portals.delete(managed);
+    if (binding && !binding.portals.size) {
+      parent.removeListener('closed', binding.onClosed);
+      parentBindings.delete(parent);
+    }
+    if (!parent.isDestroyed()) parent.contentView.removeChildView(managed.clip);
+    managed.parent = null;
+  }
+
+  function attachParent(managed, parent) {
+    detachParent(managed);
+    parent.contentView.addChildView(managed.clip);
+    managed.parent = parent;
+    let binding = parentBindings.get(parent);
+    if (!binding) {
+      const portals = new Set();
+      const onClosed = () => {
+        for (const portal of portals) if (portal.parent === parent) {
+          portal.parent = null;
+          portal.visible = false;
+        }
+        portals.clear();
+        parentBindings.delete(parent);
+      };
+      binding = { portals, onClosed };
+      parentBindings.set(parent, binding);
+      parent.once('closed', onClosed);
+    }
+    binding.portals.add(managed);
+  }
 
   function nativeOperation(tab, operation) {
     tab.nativeOperations ??= new Set();
@@ -67,8 +103,7 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
     managed.disposed = true;
     managed.visible = false;
     managed.clip.setVisible(false);
-    if (managed.parent && !managed.parent.isDestroyed()) managed.parent.contentView.removeChildView(managed.clip);
-    managed.parent = null;
+    detachParent(managed);
     managed.cleanup?.();
     managed.disposal = Promise.all([...managed.tabs.values()].map(closeTab)).then(async () => {
       await managed.flushStorage?.();
@@ -702,9 +737,7 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
     const managed = await getManaged(request);
     managed.lease = lease;
     if (managed.parent !== parent) {
-      managed.parent?.contentView.removeChildView(managed.clip);
-      managed.parent = parent; parent.contentView.addChildView(managed.clip);
-      parent.once('closed', () => { if (managed.parent === parent) { managed.parent = null; managed.visible = false; } });
+      attachParent(managed, parent);
     }
     layout(managed); return state(managed);
   }
@@ -718,7 +751,7 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
   function detach(workspaceId, nodeId, lease) {
     for (const managed of sessions.values()) if (managed.workspaceId === workspaceId && managed.nodeId === nodeId && managed.lease === lease) {
       managed.visible = false; layout(managed);
-      managed.parent?.contentView.removeChildView(managed.clip); managed.parent = null;
+      detachParent(managed);
     }
   }
 

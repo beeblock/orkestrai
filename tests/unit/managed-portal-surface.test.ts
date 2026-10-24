@@ -111,6 +111,46 @@ async function setup(BrowserWindow?: unknown) {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('releases window listeners through repeated Canvas detach and close', async () => {
+    const { executor, parent, request, lease } = await setup();
+    for (let round = 0; round < 50; round++) {
+      expect(parent.listenerCount('closed')).toBe(1);
+      executor.detach(request.workspaceId, request.nodeId, lease);
+      expect(parent.listenerCount('closed')).toBe(0);
+      await executor.surface(request, parent, lease);
+    }
+    await executor.userCommand(request, 'close', {});
+    expect(parent.listenerCount('closed')).toBe(0);
+  });
+
+  it('shares one parent listener across attached Portals and removes it after the last close', async () => {
+    const { executor, parent, request, lease } = await setup();
+    const requests = [request];
+    for (let index = 1; index < 8; index++) {
+      const next = { ...request, nodeId: randomUUID() };
+      await executor.surface(next, parent, lease);
+      requests.push(next);
+      expect(parent.listenerCount('closed')).toBe(1);
+    }
+    for (const next of requests.slice(0, -1)) {
+      await executor.userCommand(next, 'close', {});
+      expect(parent.listenerCount('closed')).toBe(1);
+    }
+    await executor.userCommand(requests.at(-1), 'close', {});
+    expect(parent.listenerCount('closed')).toBe(0);
+  });
+
+  it('unsubscribes the previous parent and releases Portals when their new window closes', async () => {
+    const { executor, parent, request, lease } = await setup();
+    const next = Object.assign(new EventEmitter(), { contentView: new View(), isVisible: () => true, isDestroyed: () => false });
+    await executor.surface(request, next, lease);
+    expect(parent.listenerCount('closed')).toBe(0);
+    expect(next.listenerCount('closed')).toBe(1);
+    next.emit('closed');
+    expect(next.listenerCount('closed')).toBe(0);
+    expect((await executor.inspect(request)).visible).toBe(false);
+  });
+
   it('hosts every offscreen capture even when the Portal retains Canvas geometry', async () => {
     const { executor, request, contents, lease } = await setup(CaptureHost);
     executor.setGeometry(request.workspaceId, request.nodeId, {

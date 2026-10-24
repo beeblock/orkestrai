@@ -79,7 +79,14 @@ app.whenReady().then(async () => {
   };
   await captureSeries('never-mounted');
   const lease = randomUUID();
+  const parentCloseListeners = host.listenerCount('closed');
   await executor.surface(request, host, lease);
+  for (let round = 0; round < 50; round++) {
+    assert.equal(host.listenerCount('closed'), parentCloseListeners + 1, 'Attached Portals share one parent lifecycle listener');
+    executor.detach(request.workspaceId, request.nodeId, lease);
+    assert.equal(host.listenerCount('closed'), parentCloseListeners, 'Leaving Canvas must release the parent lifecycle listener');
+    await executor.surface(request, host, lease);
+  }
   const geometry = { bounds: { x: 0, y: 0, width: 640, height: 480 }, clip: { x: 0, y: 0, width: 640, height: 480 },
     viewport: { width: 1280, height: 960 }, zoom: 0.5, visible: true };
   executor.setGeometry(request.workspaceId, request.nodeId, geometry, lease);

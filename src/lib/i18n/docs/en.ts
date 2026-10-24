@@ -1008,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Release Portal window-close subscriptions on detach, reparenting and close, sharing one listener per window so repeated Chat/Canvas navigation does not retain old Portal state.",
       "Label graph and companion-profile comboboxes explicitly and keep the Computer conversation-authorization form at a readable width. Browser checks follow current select semantics, restore settings after timeouts and stop CI early on repeated failures.",
       "Copy full Portal screenshots through a native capture lease with explicit logical clipping, priming the attached widget before resizing it. Avoid stalled CDP captures on Windows/Linux while preserving private-field masks, dimensions, scroll and the same page/session.",
       "Initialize the hidden Portal capture host before attaching pages and reassert native painting after reparenting. Native checks require an explicit successful completion and remove Chromium profiles after process exit, preventing false approvals on Windows.",

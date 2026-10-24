@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Release Portal window-close subscriptions when leaving the Canvas, moving a Portal to another window or closing it. Share one listener per window so repeated Chat/Canvas navigation does not retain closed Portal state or accumulate listeners.
+
 - Give graph and companion-profile comboboxes explicit translated labels and keep the Computer conversation-authorization form at a readable width. Update browser checks for current select roles and isolate settings cleanup after timeouts. Report CI browser failures immediately and stop after three failing cases instead of retrying stale selectors throughout the suite.
 
 - Copy full Portal screenshots through native visible-capture leases with an explicit logical viewport/clip, avoiding CDP's stalled hidden-surface resize on Windows/Linux. Prime a newly attached widget's frame before resizing its surface. Preserve protected-field masks, pixel dimensions, scroll and page identity; restore the current Canvas presentation afterward.
