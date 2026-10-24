@@ -10,6 +10,18 @@ const assert = require('node:assert/strict');
 const profile = process.env.ORKESTRAI_TEST_USER_DATA ?? mkdtempSync(join(tmpdir(), 'orkestrai-capture-lifecycle-'));
 app.setPath('userData', profile);
 let executor, host, server;
+function TracedContentsView(options) {
+  const view = new WebContentsView(options);
+  for (const [owner, method] of [[view.webContents, 'capturePage'], [view.webContents, 'executeJavaScriptInIsolatedWorld'], [view.webContents.debugger, 'sendCommand']]) {
+    const original = owner[method].bind(owner);
+    owner[method] = (...args) => {
+      const operation = method === 'sendCommand' ? args[0] : method;
+      const timer = setTimeout(() => console.error(JSON.stringify({ pendingNativeOperation: operation })), 500);
+      return Promise.resolve(original(...args)).finally(() => clearTimeout(timer));
+    };
+  }
+  return view;
+}
 let ending = false;
 const watchdog = setTimeout(() => finish(1, new Error('Capture lifecycle timed out')), 60000);
 async function finish(code, error) {
@@ -34,7 +46,7 @@ app.whenReady().then(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   host = new BrowserWindow({ show: false, width: 1000, height: 800 });
-  executor = createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, session });
+  executor = createManagedPortalExecutor({ WebContentsView: TracedContentsView, View, BrowserWindow, session });
   const request = { requestId: randomUUID(), workspaceId: randomUUID(), nodeId: randomUUID(),
     initialUrl: `http://127.0.0.1:${server.address().port}/`,
     profile: { profileId: 'qa', profileScope: 'private', allowedHosts: ['127.0.0.1'], paused: false, allowBackground: true },
