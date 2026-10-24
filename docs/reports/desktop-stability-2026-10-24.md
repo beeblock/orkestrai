@@ -61,6 +61,8 @@ to native notifications. Unexpected nonzero exits still report failures.
 
 These accelerated fixtures establish bounds and collection for the reproduced
 paths. They do not establish that every source of memory growth is eliminated,
-nor replace a 24-hour run of the complete installed app. The owner's installed
-0.44.0 app was not replaced or restarted by these tests; its post-restart memory
-is not evidence that a long-running leak has been fixed.
+nor replace a 24-hour run of the complete installed app. The installed bundle
+was verified as 0.44.1, with production provenance pointing to
+`91b3af3a75d7486dc89ce7c56906a0e681f47c2c`; the earlier 0.44.0 reference was
+inaccurate. These tests did not replace or restart that app, and its current
+memory is not evidence that a long-running leak has been fixed.

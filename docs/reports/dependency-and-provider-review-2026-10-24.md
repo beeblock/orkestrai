@@ -246,3 +246,36 @@ PTYs at maximum first paint 1,211 ms and final collected heap 56,975,840 bytes;
 the 205-node/601-edge keyboard latencies were 156, 69, 126, 68 and 61 ms.
 The final complete CI run, including every guided-tour case, remains the shipping
 gate. These bounded runs do not establish a 24-hour whole-app memory ceiling.
+
+## Final verification
+
+[CI run 40118046345](https://github.com/beeblock/orkestrai/actions/runs/40118046345)
+passed for code commit `36c166ab90458bac36600addebf459385c7b3da0`:
+
+- Linux: 2,506 unit/feature tests passed, with 17 skipped cases; production build
+  passed. Native software-compositor checks returned 40 fresh Portal captures
+  plus the cropped capture and 168 terminal mounts with zero hidden DOM writes.
+- Windows: 95 focused checks passed, plus the 40-capture Portal check and 168
+  terminal mounts. Maximum native terminal first paint was 261 ms.
+- Browser: 274 cases passed on their first attempt, one passed on retry and two
+  were skipped. The intermittent case was the native Design text editor not
+  opening after Enter (`native-design-mode.spec.ts:286`); that case also passed
+  in the local no-retry browser run. This is a green run with a recorded flake,
+  not evidence that the browser suite is entirely free of timing instability.
+- SPA: 36 switches with eight PTYs, maximum first paint 868 ms and final
+  collected heap 59,535,060 bytes. The 205-node/601-edge keyboard latencies were
+  69, 73, 72, 76 and 62 ms. All 106 guided-tour cases passed, also independently
+  verified locally without retries (10.6 minutes).
+- Complete workflow: 33 min 22 s; browser step: 21.9 minutes. The tested
+  production artifact was uploaded successfully (28,320,304 bytes).
+
+All four current PRs (#63, #70, #71 and #72) are merged; #67 and #69 were
+superseded. No PR remains open at final inspection. Generated local test-results
+and the isolated test runtime were removed after the test processes exited.
+
+The installed app was finally verified from Info.plist, package.json and
+production provenance as **0.44.1**, source
+`91b3af3a75d7486dc89ce7c56906a0e681f47c2c`. The earlier 0.44.0 reference was
+inaccurate. No app installation, restart, tag or desktop release was performed
+by this work. The corrections above are committed and pushed to main; the
+documentation-only follow-up records these results without changing tested code.
