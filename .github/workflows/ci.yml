@@ -46,14 +46,10 @@ jobs:
         run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/agent-transcript.test.ts tests/unit/zod-size-validation.test.ts
 
       - name: Verify repeated and concurrent native Portal screenshots
-        run: |
-          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-          npx --no-install electron scripts/test-portal-capture-lifecycle.cjs
+        run: node scripts/run-electron-lifecycle.mjs scripts/test-portal-capture-lifecycle.cjs
 
       - name: Verify terminal renderer backpressure and collection
-        run: |
-          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-          npx --no-install electron scripts/test-terminal-renderer-lifecycle.cjs
+        run: node scripts/run-electron-lifecycle.mjs scripts/test-terminal-renderer-lifecycle.cjs
 
   verify:
     name: Test and build
@@ -79,10 +75,16 @@ jobs:
       - name: Install Electron runtime libraries for offline OCR tests
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-0t64 libnss3 libasound2t64 libgbm1
+          sudo apt-get install -y libgtk-3-0t64 libnss3 libasound2t64 libgbm1 xvfb
 
       - name: Verify offline OCR without competing test workers
         run: npm test -- --maxWorkers=1 tests/unit/knowledge-runtime.test.ts
+
+      - name: Verify repeated and concurrent native Portal screenshots
+        run: xvfb-run -a node scripts/run-electron-lifecycle.mjs scripts/test-portal-capture-lifecycle.cjs
+
+      - name: Verify terminal renderer backpressure and collection
+        run: xvfb-run -a node scripts/run-electron-lifecycle.mjs scripts/test-terminal-renderer-lifecycle.cjs
 
       - name: Run tests
         run: npm test -- --maxWorkers=2 --exclude tests/unit/knowledge-runtime.test.ts
@@ -95,12 +97,6 @@ jobs:
 
       - name: Run end-to-end tests
         run: npm run test:e2e
-
-      - name: Verify repeated and concurrent native Portal screenshots
-        run: xvfb-run -a env -u ELECTRON_RUN_AS_NODE npx --no-install electron --no-sandbox scripts/test-portal-capture-lifecycle.cjs
-
-      - name: Verify terminal renderer backpressure and collection
-        run: xvfb-run -a env -u ELECTRON_RUN_AS_NODE npx --no-install electron --no-sandbox scripts/test-terminal-renderer-lifecycle.cjs
 
       - name: Stamp tested production bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

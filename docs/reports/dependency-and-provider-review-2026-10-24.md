@@ -167,3 +167,18 @@ font resources. The native fixture uses the actual sanitized parser environment
 instead of inheriting the CI host's full environment. All 21 focused runtime,
 PDF/spreadsheet extraction and catalog tests passed locally; Linux confirmation
 is pending rather than inferred from the Mac result.
+
+Linux's actual offline OCR then passed and the suite advanced through unit tests
+to the production build. A separate audit of the Windows job logs exposed false
+green native fixtures: assertions failed, then profile cleanup threw EPERM before
+the intended failing exit. Earlier green step statuses were therefore insufficient
+evidence of native success. A parent runner now requires both exit 0 and the
+fixture's explicit JSON completion marker, and removes its private profile only
+after the child exits. The terminal-only fixture uses offscreen rendering to avoid
+OS occlusion throttling an intentionally invisible test window's RAF callbacks.
+The Portal host explicitly loads its blank document before attaching a page and
+disables host background throttling. Mac checks passed 32 fresh/masked captures,
+168 terminal mounts (zero hidden writes, maximum first paint 648 ms), and 30 unit
+checks. Running the old terminal implementation through the new runner exits 1,
+proving that the harness rejects the reproduced regression. Native Linux checks
+now run before the expensive full suite/build so failures surface earlier.

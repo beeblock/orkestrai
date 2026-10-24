@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Initialize the hidden Portal capture host's blank document without background throttling before attaching pages. Require explicit native-test completion and clean Chromium profiles after process exit, so Windows cleanup failures cannot report a successful screenshot or terminal check.
+
 - Disable system-font discovery in the isolated PDF parser. PDF.js uses packaged/embedded fonts; initializing canvas's system-font manager under headless Electron can hang Linux OCR before document parsing begins.
 
 - Wait for the document parser's IPC readiness before sending PDF or spreadsheet bytes, so cold module startup cannot lose an extraction request. Keep extraction deadlines, cancellation and offline OCR checks unchanged.

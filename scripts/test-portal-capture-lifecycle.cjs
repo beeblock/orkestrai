@@ -7,7 +7,7 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const assert = require('node:assert/strict');
 
-const profile = mkdtempSync(join(tmpdir(), 'orkestrai-capture-lifecycle-'));
+const profile = process.env.ORKESTRAI_TEST_USER_DATA ?? mkdtempSync(join(tmpdir(), 'orkestrai-capture-lifecycle-'));
 app.setPath('userData', profile);
 let executor, host, server;
 let ending = false;
@@ -17,11 +17,13 @@ async function finish(code, error) {
   ending = true;
   clearTimeout(watchdog);
   if (error) console.error(error);
-  await executor?.closeAll();
-  host?.destroy();
-  server?.close();
-  rmSync(profile, { recursive: true, force: true });
-  app.exit(code);
+  try {
+    await executor?.closeAll();
+    host?.destroy();
+    server?.close();
+    if (!process.env.ORKESTRAI_TEST_USER_DATA) rmSync(profile, { recursive: true, force: true });
+  } catch (cleanupError) { console.error(cleanupError); code = 1; }
+  finally { app.exit(code); }
 }
 
 app.whenReady().then(async () => {

@@ -173,15 +173,18 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
   // could not capture it while the owner stayed in Chat or Focus. Its first
   // frame is drawn in a hidden window that is never displayed or focused.
   let captureHost = null;
+  let captureHostReady;
   let captureHostFlight = Promise.resolve();
-  function hiddenCaptureHost() {
+  async function hiddenCaptureHost() {
     if (!BrowserWindow) return null;
     if (!captureHost || captureHost.isDestroyed()) {
       captureHost = new BrowserWindow({
         show: false, width: 1440, height: 1000, skipTaskbar: true, focusable: false, paintWhenInitiallyHidden: true,
-        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
       });
+      captureHostReady = captureHost.loadURL('about:blank');
     }
+    await boundedNative(captureHostReady, 2000);
     return captureHost;
   }
 
@@ -192,7 +195,7 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
     // shared, so serialize its use across Portals as well as within each tab.
     const next = captureHostFlight.then(async () => {
       requireOpen(tab);
-      const host = hiddenCaptureHost();
+      const host = await hiddenCaptureHost();
       if (!host) return operation(false);
       host.contentView.addChildView(tab.view);
       tab.view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
