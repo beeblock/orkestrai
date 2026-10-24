@@ -157,3 +157,13 @@ test deliberately delays parser import by 200 ms and waits for that readiness.
 All 17 focused extraction/runtime tests pass locally, including cancellation,
 scanned/rotated/mixed PDFs and spreadsheet parsing. The Linux result remains the
 required check; this hardening alone is not yet evidence of its root cause.
+
+The next Linux trace confirmed readiness and receipt: execution entered PDF.js,
+loaded canvas and its JS dependencies, but never loaded the PDF worker. Canvas
+1.0.13 initializes its system-font manager at the end of import unless
+`DISABLE_SYSTEM_FONTS_LOAD` is set. The parser now explicitly disables that unused
+discovery, consistent with PDF.js's existing `useSystemFonts: false` and packaged
+font resources. The native fixture uses the actual sanitized parser environment
+instead of inheriting the CI host's full environment. All 21 focused runtime,
+PDF/spreadsheet extraction and catalog tests passed locally; Linux confirmation
+is pending rather than inferred from the Mac result.

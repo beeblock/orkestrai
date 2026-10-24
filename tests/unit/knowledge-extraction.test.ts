@@ -24,7 +24,7 @@ describe('bounded knowledge extraction', () => {
   });
   it('does not pass application secrets or runtime injection flags to the document parser', () => {
     expect(knowledgeParserEnvironment({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows', APP_KEY: 'private', FAL_KEY: 'private', OPENAI_API_KEY: 'private', NODE_OPTIONS: '--require attacker.cjs', ORKESTRAI_WORKSPACE_TOKEN: 'private' }))
-      .toEqual({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows', ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' });
+      .toEqual({ PATH: '/usr/bin', SystemRoot: 'C:\\Windows', ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '', DISABLE_SYSTEM_FONTS_LOAD: '1' });
   });
   it('extracts Markdown with line citations and normalizes search/tags', async () => {
     const result = await extractKnowledgeDocument(Buffer.from('# Budget\nPayment 450 reais. #Finance\n[[Campaign|brief]]'), 'md');

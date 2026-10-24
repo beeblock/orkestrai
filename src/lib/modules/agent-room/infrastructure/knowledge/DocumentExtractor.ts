@@ -9,7 +9,9 @@ export const KNOWLEDGE_EXTRACTOR_VERSION = 'pdf-ocr-1';
 let pending: Promise<unknown> = Promise.resolve();
 
 export function knowledgeParserEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const result: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' };
+  // PDF.js supplies its own fonts and disables system-font fallback. Canvas must
+  // not initialize Electron's Linux system-font manager during headless import.
+  const result: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '', DISABLE_SYSTEM_FONTS_LOAD: '1' };
   for (const key of ['PATH', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL']) {
     if (env[key]) result[key] = env[key];
   }
