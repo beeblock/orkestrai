@@ -34,6 +34,7 @@ export async function extractKnowledgeDocument(bytes: Uint8Array, extension: str
         if (options.signal?.aborted) { resolveResult(failed); return; }
         let latest = failed;
         let settled = false;
+        let dispatched = false;
         const worker = fork(resolve('src/lib/modules/agent-room/infrastructure/knowledge/document-worker.mjs'), [], {
           execArgv: ['--max-old-space-size=256'], serialization: 'advanced', windowsHide: true,
           env: knowledgeParserEnvironment(), stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
@@ -55,12 +56,20 @@ export async function extractKnowledgeDocument(bytes: Uint8Array, extension: str
         options.signal?.addEventListener('abort', abort, { once: true });
         worker.stdout?.resume(); worker.stderr?.resume();
         worker.on('message', (message: { type: string; result: DocumentExtraction }) => {
+          if (settled) return;
+          if (message.type === 'ready') {
+            if (!dispatched) {
+              dispatched = true;
+              worker.send({ bytes, extension, directory }, error => { if (error) interrupted('parser_error'); });
+            }
+            return;
+          }
+          if (!['progress', 'complete'].includes(message.type)) return;
           latest = message.result;
           if (message.type === 'complete') finish(latest);
         });
         worker.once('error', () => interrupted('parser_error'));
         worker.once('exit', () => { if (!settled) interrupted('parser_error'); });
-        worker.send({ bytes, extension, directory }, error => { if (error) interrupted('parser_error'); });
       });
     } finally { await rm(directory, { recursive: true, force: true }); }
   }).catch((): DocumentExtraction => ({ passages: [], truncated: false, status: 'error' }));

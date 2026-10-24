@@ -1012,6 +1012,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Espera o parser de documentos confirmar que a comunicação está pronta antes de enviar PDFs ou planilhas, preservando os limites de tempo, o cancelamento e a verificação de OCR offline.",
       "Integra as atualizações revisadas do Drizzle ORM 0.45.4 e Superforms 2.31.0, preservando as transações SQLite e os contratos existentes dos formulários com Zod v3.",
       "Inclui canvas nativo 1.0.13 e electron-updater 6.8.11, verificando OCR offline, caminhos confinados do cache de atualização, metadados inválidos e SHA-512, mantendo as políticas de confiança e download manual do macOS.",
       "Identifica os seletores de controle e agentes autorizados do Portal para tecnologias assistivas com a nova semântica de combobox. Os testes de tela exercitam esses papéis e restauram o idioma após falhas.",

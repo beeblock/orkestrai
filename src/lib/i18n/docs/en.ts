@@ -1008,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Wait for the document parser to confirm IPC readiness before sending PDF or spreadsheet bytes, preserving extraction deadlines, cancellation and offline OCR verification.",
       "Integrate reviewed Drizzle ORM 0.45.4 and Superforms 2.31.0 updates, preserving SQLite transactions and existing Zod v3 form contracts.",
       "Include native canvas 1.0.13 and electron-updater 6.8.11, checking offline OCR, confined update-cache paths, malformed metadata and SHA-512 validation while retaining macOS trust and manual-download policies.",
       "Name Portal control and authorized-agent selectors explicitly for assistive technology under the updated combobox semantics. Browser tests exercise those roles and restore their locale after failures.",
