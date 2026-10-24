@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { scannedPdf } from '../helpers/scanned-pdf.js';
 import { knowledgeCanvasTarget, KNOWLEDGE_RUNTIME_FILES } from '../../scripts/package-knowledge-runtime.mjs';
 import type { DocumentExtraction } from '$lib/modules/agent-room/infrastructure/knowledge/DocumentExtractor.js';
+import { knowledgeParserEnvironment } from '$lib/modules/agent-room/infrastructure/knowledge/DocumentExtractor.js';
 
 describe('offline packaged OCR runtime', () => {
   it('checks the actual pinned engine and font assets rather than obsolete PDF font names', async () => {
@@ -18,7 +19,7 @@ describe('offline packaged OCR runtime', () => {
     const electron = createRequire(import.meta.url)('electron') as string;
     const child = fork(resolve('tests/fixtures/knowledge-delayed-worker.mjs'), [], {
       execPath: electron, execArgv: ['--require', resolve('tests/fixtures/knowledge-no-network.cjs')],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' },
+      env: knowledgeParserEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'], serialization: 'advanced', windowsHide: true,
     } as ForkOptions & { windowsHide: boolean });
     const closed = new Promise(resolve => child.once('close', resolve));

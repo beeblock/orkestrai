@@ -1008,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "En desarrollo", title: "Próxima versión", summary: "Correcciones de fiabilidad en validación.", items: [
+      "Desactiva la búsqueda de fuentes del sistema en el parser aislado de PDF, que usa fuentes incluidas o incorporadas, evitando el bloqueo al iniciar Electron sin ventana antes del OCR en Linux.",
       "Espera que el parser de documentos confirme que la comunicación está lista antes de enviar PDF u hojas de cálculo, conservando los límites de tiempo, la cancelación y la verificación de OCR sin conexión.",
       "Integra las actualizaciones revisadas de Drizzle ORM 0.45.4 y Superforms 2.31.0, preservando las transacciones SQLite y los contratos existentes de formularios con Zod v3.",
       "Incluye canvas nativo 1.0.13 y electron-updater 6.8.11, verificando OCR sin conexión, rutas confinadas de caché, metadatos inválidos y SHA-512, manteniendo las políticas de confianza y descarga manual de macOS.",

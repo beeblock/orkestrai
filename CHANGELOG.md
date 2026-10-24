@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Disable system-font discovery in the isolated PDF parser. PDF.js uses packaged/embedded fonts; initializing canvas's system-font manager under headless Electron can hang Linux OCR before document parsing begins.
+
 - Wait for the document parser's IPC readiness before sending PDF or spreadsheet bytes, so cold module startup cannot lose an extraction request. Keep extraction deadlines, cancellation and offline OCR checks unchanged.
 
 - Integrate reviewed Drizzle ORM 0.45.4 and Superforms 2.31.0 updates, preserving SQLite transactions and existing Zod v3 form contracts.
