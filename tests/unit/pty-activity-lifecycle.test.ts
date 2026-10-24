@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
@@ -14,6 +14,30 @@ describe('PTY activity lifecycle', () => {
     for (const id of sessions.splice(0)) ptySessionManager.kill(id);
     delete hook.__orkestraiRecordActivity;
     delete hook.__orkestraiHumanPrompt;
+  });
+
+  it.skipIf(process.platform === 'win32')('does not report an intentional PTY shutdown as a teammate failure', async () => {
+    const states: string[] = [];
+    hook.__orkestraiRecordActivity = input => { if (input.nodeId === 'planned-stop') states.push(input.state); };
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: tmpdir(), workspaceId: 'planned-workspace', nodeId: 'planned-stop' });
+    const exit = vi.fn();
+    ptySessionManager.attach(session.id, () => {}, exit);
+    sessions.push(session.id);
+    expect(ptySessionManager.kill(session.id)).toBe(true);
+    await vi.waitFor(() => expect(states).toContain('disconnected'), { timeout: 3000 });
+    expect(states).not.toContain('error');
+    expect(exit).toHaveBeenCalledWith(expect.any(Number), true);
+  });
+
+  it.skipIf(process.platform === 'win32')('still reports an unexpected nonzero exit to supervision', async () => {
+    const states: string[] = [];
+    hook.__orkestraiRecordActivity = input => { if (input.nodeId === 'unexpected-stop') states.push(input.state); };
+    const session = ptySessionManager.create({ command: '/bin/sh', args: ['-c', 'exit 129'], cwd: tmpdir(), workspaceId: 'unexpected-workspace', nodeId: 'unexpected-stop' });
+    const exit = vi.fn();
+    ptySessionManager.attach(session.id, () => {}, exit);
+    sessions.push(session.id);
+    await vi.waitFor(() => expect(states).toContain('error'), { timeout: 3000 });
+    expect(exit).toHaveBeenCalledWith(129, false);
   });
 
   it.skipIf(process.platform === 'win32')('reports working when the owner sends a line in the terminal and hands the line to Chat', async () => {

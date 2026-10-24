@@ -1,20 +1,61 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handlePtyConnection, isAllowedPtyWsOrigin } from '$lib/modules/agent-room/infrastructure/pty/pty-ws.js';
+import { handlePtyConnection, isAllowedPtyWsOrigin, MAX_PTY_SOCKET_BUFFER_BYTES, sendPtyFrame } from '$lib/modules/agent-room/infrastructure/pty/pty-ws.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/AgentSessionTracker.ts';
 
 class FakeSocket extends EventEmitter {
   readonly OPEN = 1;
   readyState = this.OPEN;
+  bufferedAmount = 0;
   frames: Array<Record<string, unknown>> = [];
 
   send(frame: string) {
     this.frames.push(JSON.parse(frame) as Record<string, unknown>);
   }
+  terminate = vi.fn(() => { this.readyState = 3; this.emit('close'); });
 }
 
 describe('PTY WebSocket protocol', () => {
+  it('disconnects a backlogged viewer before adding more output to its socket buffer', () => {
+    const socket = new FakeSocket();
+    socket.bufferedAmount = MAX_PTY_SOCKET_BUFFER_BYTES;
+    expect(sendPtyFrame(socket as never, 'another frame')).toBe(false);
+    expect(socket.terminate).toHaveBeenCalledTimes(1);
+    expect(socket.frames).toEqual([]);
+    expect(sendPtyFrame(socket as never, 'after close')).toBe(false);
+    expect(socket.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it.skipIf(process.platform === 'win32')('pauses only the viewer stream, preserves PTY size and returns fresh snapshots on the same connection', async () => {
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', cols: 100, rows: 30 });
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+    const attach = vi.spyOn(ptySessionManager, 'attach');
+    try {
+      socket.emit('message', JSON.stringify({ type: 'attach', sessionId: session.id, stream: false, cols: 2, rows: 1 }));
+      expect(ptySessionManager.get(session.id)).toMatchObject({ cols: 100, rows: 30, exited: false });
+      expect(socket.frames.at(-1)).toMatchObject({ type: 'attached', scrollback: '', streamingOutput: false });
+      ptySessionManager.writeHumanInput(session.id, 'hidden-progress-marker\r');
+      await vi.waitFor(() => expect(ptySessionManager.replay(session.id)).toContain('hidden-progress-marker'));
+      expect(socket.frames.filter(frame => frame.type === 'output')).toHaveLength(0);
+      socket.emit('message', JSON.stringify({ type: 'attach', sessionId: session.id, stream: true, cols: 120, rows: 36 }));
+      expect(socket.frames.at(-1)).toMatchObject({ type: 'attached', streamingOutput: true, scrollback: expect.stringContaining('hidden-progress-marker') });
+      expect(ptySessionManager.get(session.id)).toMatchObject({ cols: 120, rows: 36, exited: false });
+      socket.emit('message', JSON.stringify({ type: 'attach', sessionId: session.id }));
+      expect(socket.frames.at(-1)).toMatchObject({ type: 'attached', scrollback: expect.stringContaining('hidden-progress-marker') });
+      expect(attach).toHaveBeenCalledTimes(1);
+      const frames = socket.frames.length;
+      socket.bufferedAmount = MAX_PTY_SOCKET_BUFFER_BYTES;
+      ptySessionManager.writeHumanInput(session.id, 'viewer-behind-marker\r');
+      await vi.waitFor(() => expect(socket.terminate).toHaveBeenCalledTimes(1));
+      expect(socket.frames).toHaveLength(frames);
+      expect(ptySessionManager.get(session.id)?.exited).toBe(false);
+    } finally {
+      socket.emit('close'); ptySessionManager.kill(session.id);
+    }
+  });
+
   it('filters broadcasts per subscriber without filtering heartbeat or PTY replies', () => {
     const socket = new FakeSocket();
     handlePtyConnection(socket as never);

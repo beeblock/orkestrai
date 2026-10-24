@@ -7,6 +7,7 @@ import type {
 } from '$lib/modules/agent-room/domain/types.js';
 
 const CACHE_TTL_MS = 60_000;
+const MAX_WORKSPACE_SNAPSHOTS = 4;
 
 type TimedValue<T> = {
   value: T;
@@ -46,11 +47,18 @@ export function writeProviderCache(providers: AgentProviderInfo[]): void {
 }
 
 export function readWorkspaceViewCache(workspaceId: string): WorkspaceViewSnapshot | null {
-  return fresh(workspaceSnapshots.get(workspaceId));
+  const entry = workspaceSnapshots.get(workspaceId);
+  const value = fresh(entry);
+  workspaceSnapshots.delete(workspaceId);
+  if (value && entry) workspaceSnapshots.set(workspaceId, entry);
+  return value;
 }
 
 export function writeWorkspaceViewCache(snapshot: WorkspaceViewSnapshot): void {
+  for (const [id, entry] of workspaceSnapshots) if (!fresh(entry)) workspaceSnapshots.delete(id);
+  workspaceSnapshots.delete(snapshot.workspace.id);
   workspaceSnapshots.set(snapshot.workspace.id, { value: snapshot, updatedAt: Date.now() });
+  while (workspaceSnapshots.size > MAX_WORKSPACE_SNAPSHOTS) workspaceSnapshots.delete(workspaceSnapshots.keys().next().value!);
 }
 
 export function removeWorkspaceViewCache(workspaceId: string): void {

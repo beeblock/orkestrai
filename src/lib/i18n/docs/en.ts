@@ -1002,6 +1002,9 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Busy terminals return without parsing all retained histories together. Viewer queues and WebSocket buffers are bounded; parser acknowledgements share the rendering budget. Hidden or covered viewers stop output streaming while their agents keep running, and restore a current snapshot when shown again.",
+      "Closed Canvas graphs and expired workspace snapshots are released; the workspace cache keeps at most four snapshots. Regression tests use real garbage collection and repeated Chat/Canvas navigation.",
+      "Intentional terminal shutdown is a disconnect, so closing the app no longer creates misleading code-129 agent failure notices. Unexpected failures still report errors.",
       "Repeated Portal screenshots keep working outside the Canvas viewport, after detaching the page and during Canvas movement. Captures use a hidden compositor even when saved geometry exists, serialize the shared surface across Portals, preserve the same page and session, and keep private fields masked without opening or focusing a window.",
     ] },
     { date: "October 23, 2026 · 0.44.1", title: "Orkestrai 0.44.1: local voice and agent messages", summary: "Restore voice on Apple Silicon and recover message delivery after a missing receipt.", items: [

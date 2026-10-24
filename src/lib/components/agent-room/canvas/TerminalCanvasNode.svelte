@@ -976,6 +976,7 @@
     ondrop={handleAttachmentDrop}
   >
     {#if data.payload.sessionId && !forceRespawn && !ownsCreatedSession}
+      {#key data.payload.sessionId}
       <TerminalNode
         bind:this={terminalNode}
         sessionId={data.payload.sessionId}
@@ -985,6 +986,7 @@
         workspaceName={data.workspaceName}
         onOpenPath={(path) => data.onOpenFile?.(path)}
         themeName={currentTheme}
+        paintable={face === 'terminal'}
         provider={data.payload.provider}
         sessionStorage={data.sessionStorageFor?.() ?? undefined}
         onRespawn={resolveRespawn}
@@ -996,6 +998,7 @@
         {voiceOn}
         onToggleVoice={toggleVoice}
       />
+      {/key}
     {:else if agentRuntimeSleeping}
       <div class="h-full" role="status">
         <NodeEmptyState icon={Bot} title={m['agent_runtime.sleeping_title']()} description={m['agent_runtime.sleeping_hint']()}>
@@ -1019,6 +1022,7 @@
           onSessionCreated={persistCreatedSession}
           onOpenPath={(path) => data.onOpenFile?.(path)}
           themeName={currentTheme}
+          paintable={face === 'terminal'}
           provider={data.payload.provider}
           sessionStorage={data.sessionStorageFor?.() ?? undefined}
           onAgentSession={(agentSessionId) => data.onAgentSessionFound?.(id, agentSessionId)}

@@ -19,24 +19,26 @@ type Rect = { cx: number; cy: number; halfW: number; halfH: number; x: number; y
 const nodeIndexCache = new WeakMap<object, ReadonlyMap<string, unknown>>();
 const edgeIndexCache = new WeakMap<object, ReadonlyMap<string, readonly unknown[]>>();
 type Anchor = { x: number; y: number } | null;
-const anchorSnapshots: { nodes: readonly NodeLike[]; edges: readonly Pick<Edge, 'source' | 'target'>[]; anchors: Map<string, Anchor> }[] = [];
+const anchorSnapshots: Array<{ nodes: WeakRef<object>; edges: WeakRef<object>; anchors: Map<string, Anchor> }> = [];
 
 /**
  * XYFlow publishes new node arrays for drag, dimensions and selection changes.
  * Compute a hub's nearest-neighbor anchor once per immutable node/edge snapshot,
  * not once per incident edge (quadratic work at a highly connected leader).
- * Keep at most four snapshots, including multiple Canvas/Workbench views.
+ * Both graph references are weak: a cached node carries callbacks into its Canvas,
+ * so even a small strong snapshot cache can retain entire closed views.
  * Mutable callers must keep using floatingAnchorFor instead.
  */
 export function floatingAnchorForSnapshot(nodeId: string, nodes: readonly NodeLike[], edges: readonly Pick<Edge, 'source' | 'target'>[]): Anchor {
-  let snapshot = anchorSnapshots.find(entry => entry.nodes === nodes && entry.edges === edges);
+  let snapshot = anchorSnapshots.find(item => item.nodes.deref() === nodes && item.edges.deref() === edges);
   if (!snapshot) {
-    snapshot = { nodes, edges, anchors: new Map() };
+    snapshot = { nodes: new WeakRef(nodes), edges: new WeakRef(edges), anchors: new Map() };
     anchorSnapshots.unshift(snapshot);
-    if (anchorSnapshots.length > 4) anchorSnapshots.pop();
+    anchorSnapshots.length = Math.min(4, anchorSnapshots.length);
   }
-  if (!snapshot.anchors.has(nodeId)) snapshot.anchors.set(nodeId, floatingAnchorFor(nodeId, nodes, edges));
-  return snapshot.anchors.get(nodeId)!;
+  const anchors = snapshot.anchors;
+  if (!anchors.has(nodeId)) anchors.set(nodeId, floatingAnchorFor(nodeId, nodes, edges));
+  return anchors.get(nodeId)!;
 }
 
 /** Shared indexes prevent every rendered edge from scanning the full canvas. */
