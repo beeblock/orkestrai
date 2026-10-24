@@ -121,7 +121,7 @@
     type LeaderDictationStatus,
   } from '$lib/components/agent-room/leader-dictation.js';
   import { TEXT_DICTATION_FALLBACK, type TextDictationFallbackDetail } from '$lib/components/agent-room/text-dictation.js';
-  import { invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
+  import { appSettingsStore, getAppSettings, invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { agentColor, agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
   import { agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
@@ -1403,8 +1403,11 @@
   }
 
   onMount(() => {
+    let mounted = true;
     const eventsSocket = connectWorkspaceEvents();
     void (async () => {
+      const params = new URLSearchParams(location.search);
+      requestedTourId = params.get('tour');
       const cachedWorkspaces = readWorkspaceListCache();
       const cachedProviders = readProviderCache();
       if (cachedWorkspaces) {
@@ -1412,13 +1415,22 @@
         workspacesLoaded = true;
       }
       if (cachedProviders) providers = cachedProviders;
+      appSettings = appSettingsStore.values;
+      const explicitWorkspaceId = params.get('workspace');
+      const rememberedWorkspaceId = localStorage.getItem('orkestrai.activeWorkspaceId');
+      const cachedRequested = cachedWorkspaces?.find((workspace) => workspace.id === (explicitWorkspaceId ?? rememberedWorkspaceId) && !workspace.suspendedAt);
+      // Paint a warm board before unrelated list/settings revalidation. The
+      // normal load and PTY identity checks still run against the server.
+      const eagerSelection = cachedRequested && readWorkspaceViewCache(cachedRequested.id)
+        ? selectWorkspace(cachedRequested.id)
+        : null;
+      const eagerRequestId = selectionRequestId;
       void loadWorkspaceGroups();
       const [workspaceList, settingsResponse] = await Promise.all([
         api<Workspace[]>('/api/agent-room/workspaces'),
-        api<Record<string, string>>('/api/agent-room/settings'),
+        getAppSettings(),
       ]);
-      const params = new URLSearchParams(location.search);
-      requestedTourId = params.get('tour');
+      if (!mounted) return;
       appSettings = settingsResponse ?? {};
       const availableProviderIds = new Set(providers.map((provider) => provider.id));
       pinnedProviderIds = parsePinnedAgentProviders(appSettings[PINNED_AGENT_PROVIDERS_SETTING])
@@ -1426,16 +1438,16 @@
       persistedPinnedProviderIds = pinnedProviderIds;
       // Se o usuario ja criou/selecionou algo enquanto o fetch inicial estava
       // em voo, a lista antiga nao sobrescreve o estado mais novo.
-      if (selectionRequestId === 0) {
+      if (selectionRequestId === 0 || (eagerSelection && selectionRequestId === eagerRequestId)) {
         workspaces = workspaceList;
         writeWorkspaceListCache(workspaceList);
-        const explicitWorkspaceId = params.get('workspace');
-        const rememberedWorkspaceId = localStorage.getItem('orkestrai.activeWorkspaceId');
         const requestedWorkspace = workspaceList.find((workspace) => workspace.id === explicitWorkspaceId)
           ?? workspaceList.find((workspace) => workspace.id === rememberedWorkspaceId && !workspace.suspendedAt)
           ?? workspaceList.find((workspace) => !workspace.suspendedAt);
         if (requestedWorkspace) {
-          await selectWorkspace(requestedWorkspace.id);
+          if (eagerSelection && requestedWorkspace.id === cachedRequested?.id) await eagerSelection;
+          else await selectWorkspace(requestedWorkspace.id);
+          if (!mounted) return;
           const requestedNodeId = params.get('node');
           if (requestedNodeId && nodes.some((node) => node.id === requestedNodeId)) {
             await tick();
@@ -1461,6 +1473,7 @@
       await tick();
       // Indicador de workspaces ativos (sessoes PTY vivas em background).
       await refreshActivity();
+      if (!mounted) return;
       void api<{ providers: AgentProviderInfo[] }>(`/api/agent-room/status${activeWorkspace ? `?workspaceId=${encodeURIComponent(activeWorkspace.id)}` : ''}`)
         .then((status) => {
           providers = status.providers ?? [];
@@ -1496,8 +1509,12 @@
       } catch {
         // storage indisponivel — nao bloqueia
       }
-    })().finally(() => (booting = false));
+    })().catch(error => {
+      if (mounted) errorMessage = error instanceof Error ? error.message : m['canvas.error_open_ws']();
+    }).finally(() => { if (mounted) booting = false; });
     return () => {
+      mounted = false;
+      selectionRequestId++;
       eventsSocket();
     };
   });

@@ -10,6 +10,9 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Keep repeated Portal screenshots working after the Canvas hides or detaches a page. Every capture uses a live hidden compositor, including Portals with saved geometry; serialize its shared surface across Portals, preserve the page/session and protected-field masking, and never display or focus a capture window.
+- Restore busy terminal views without parsing every retained history at once. Bound viewer and WebSocket queues, acknowledge parser work, share the rendering budget, and pause output streaming for covered or offscreen viewers while their agents keep running. Returning to a view restores the current PTY snapshot without restarting or resizing a hidden agent.
+- Release closed Canvas graphs and expired workspace snapshots instead of retaining callback closures indefinitely; cap workspace snapshots at four. Exercise actual garbage collection and repeated Chat/Canvas navigation in regression tests.
+- Treat intentional PTY shutdown as a disconnect rather than an agent failure. Unexpected nonzero exits still report an error; closing the app no longer creates misleading code-129 failure notices.
 
 ## 0.44.1 - 2026-10-23
 

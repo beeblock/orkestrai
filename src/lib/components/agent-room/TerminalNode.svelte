@@ -83,9 +83,11 @@
     onToggleVoice?: () => void;
     /** Tema do terminal (payload.theme). */
     themeName?: TerminalThemeName;
+    /** A covered renderer may stop painting while its PTY keeps running. */
+    paintable?: boolean;
   };
 
-  let { sessionId, createRequest, provider, sessionStorage, workspaceId, nodeId, sessionLabel, workspaceName, onExit, onSessionCreated, onSessionReady, onOpenPath, onRespawn, onAgentSession, onWorkingDirectoryChange, onTalking, onAgentReply, voiceOn = false, onToggleVoice, themeName = 'dark' }: Props = $props();
+  let { sessionId, createRequest, provider, sessionStorage, workspaceId, nodeId, sessionLabel, workspaceName, onExit, onSessionCreated, onSessionReady, onOpenPath, onRespawn, onAgentSession, onWorkingDirectoryChange, onTalking, onAgentReply, voiceOn = false, onToggleVoice, themeName = 'dark', paintable = true }: Props = $props();
 
   let container: HTMLDivElement;
   let xtermInstance: Terminal | null = null;
@@ -454,22 +456,23 @@
       event.stopPropagation();
       return true;
     });
-    fitAddon.fit();
-
-    // Off-screen terminals do not paint: agent TUIs redraw spinners and timers
-    // several times a second, and every write mutates the DOM renderer. Output
-    // is kept in order and written when the node scrolls back into view, with
-    // a bounded background flush so the parser never falls far behind.
-    const outputBuffer = createTerminalOutputBuffer(data => terminal.write(data));
+    let requestOutputSnapshot: () => boolean = () => false;
+    let outputVisibilityChanged: (visible: boolean) => void = () => {};
+    // Both live output and reattach histories use parser acknowledgements.
+    // Hidden viewers stop their stream; their PTY and agent keep running.
+    const outputBuffer = createTerminalOutputBuffer((data, parsed) => terminal.write(data, parsed), {
+      requestSnapshot: () => requestOutputSnapshot(),
+      onVisibilityChange: visible => outputVisibilityChanged(visible),
+    });
     const writeOutput = (data: string) => outputBuffer.write(data);
-    let intersects = true;
+    let intersects = false;
     const paintBody = container.closest<HTMLElement>('.node-body');
     const paintCanvas = container.closest<HTMLElement>('.svelte-flow');
     const syncPaintEligibility = () => {
       const focused = paintBody?.matches(':focus-within') ?? false;
       const deferred = !!paintBody && (paintCanvas?.dataset.canvasMoving === 'true'
         || paintCanvas?.dataset.canvasOverview === 'true');
-      outputBuffer.setVisible(intersects && document.visibilityState !== 'hidden' && (!deferred || focused), focused);
+      outputBuffer.setVisible(paintable && intersects && document.visibilityState !== 'hidden' && (!deferred || focused), focused);
     };
     // A terminal swept past while panning or zooming stays buffered: only one
     // that remains in view is painted, so a pan never parses every backlog.
@@ -488,6 +491,7 @@
     paintBody?.addEventListener('focusout', syncFocusPaint);
     document.addEventListener('visibilitychange', syncPaintEligibility);
     syncPaintEligibility();
+    $effect(() => { void paintable; syncPaintEligibility(); });
 
     // OSC 7 e o contrato padrao de shells integrados para publicar o cwd.
     // A deteccao no servidor cobre zsh/bash sem integracao no macOS/Linux.
@@ -544,6 +548,8 @@
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let lastPongAt = 0;
     let attached = false;
+    let viewAttachPending = 0;
+    let lastReportedSize: string | null = null;
     let disposed = false;
     let resizeFrame: number | null = null;
     const pendingInput = new TerminalInputBuffer();
@@ -556,7 +562,9 @@
     window.addEventListener(LEADER_DICTATION_COMMAND, handleLeaderDictation);
 
     const send = (payload: Record<string, unknown>) => {
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+      if (socket?.readyState !== WebSocket.OPEN) return false;
+      socket.send(JSON.stringify(payload));
+      return true;
     };
 
     let createdSessionId: string | undefined;
@@ -591,10 +599,12 @@
     };
 
     const fitAndReportSize = () => {
-      if (disposed) return;
+      if (disposed || !outputBuffer.isVisible || !container.clientWidth || !container.clientHeight) return;
       fitAddon.fit();
       const id = currentSessionId();
-      if (id) send({ type: 'resize', sessionId: id, cols: terminal.cols, rows: terminal.rows });
+      const size = `${terminal.cols}:${terminal.rows}`;
+      if (id && attached && size !== lastReportedSize
+        && send({ type: 'resize', sessionId: id, cols: terminal.cols, rows: terminal.rows })) lastReportedSize = size;
       terminal.refresh(0, terminal.rows - 1);
     };
 
@@ -606,29 +616,41 @@
       });
     };
 
+    requestOutputSnapshot = () => {
+      const id = currentSessionId();
+      if (disposed || !id || !attached || socket?.readyState !== WebSocket.OPEN) return false;
+      const stream = outputBuffer.isVisible;
+      const measured = stream && container.clientWidth > 0 && container.clientHeight > 0;
+      if (measured) fitAddon.fit();
+      const sent = send({ type: 'attach', sessionId: id, stream,
+        ...(measured ? { cols: terminal.cols, rows: terminal.rows } : {}) });
+      if (sent) {
+        viewAttachPending++;
+        if (measured) lastReportedSize = `${terminal.cols}:${terminal.rows}`;
+      }
+      return sent;
+    };
+    outputVisibilityChanged = visible => {
+      if (!visible || !outputBuffer.needsSnapshot) requestOutputSnapshot();
+    };
+
     const replayScrollback = (scrollback: unknown) => {
       const replay = typeof scrollback === 'string' ? scrollback : '';
-      if (!replay) {
-        scheduleFitAndReportSize();
-        return;
-      }
       // xterm parses large ANSI histories asynchronously. Refit only after the
       // parser reaches the final cursor position, otherwise a remounted Canvas
       // can keep drawing the cursor with the previous renderer geometry.
       // Reattach sends the complete retained history, not an incremental delta.
       // Reset in the parser queue so old queued output cannot duplicate it.
       // The full history supersedes any output batched while off-screen.
-      outputBuffer.clearPending();
-      terminal.write(`\x1bc${replay}`, () => {
+      outputBuffer.replaceSnapshot(`\x1bc${replay}`, () => {
         if (disposed) return;
-        terminal.clearTextureAtlas();
         scheduleFitAndReportSize();
       });
     };
 
     const initializeTerminal = async () => {
       try {
-        const settings = await getAppSettings(true);
+        const settings = await getAppSettings();
         if (disposed) return;
         terminalPaddingPx = Number(settings.terminalPadding ?? 6);
         terminal.options.fontSize = Number(settings.terminalFontSize) || 13;
@@ -641,11 +663,13 @@
       // telling the existing PTY its rows/columns and asking for scrollback.
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       if (disposed) return;
-      fitAddon.fit();
+      if (outputBuffer.isVisible && container.clientWidth && container.clientHeight) fitAddon.fit();
       connect();
     };
 
     const handleOpen = () => {
+      viewAttachPending = 0;
+      lastReportedSize = null;
       lastPongAt = Date.now();
       send({ type: 'subscribe', workspaceId, events: ['agentSession', 'agentReply', 'say', ...(onTalking ? ['talking'] : [])] });
       if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -658,8 +682,11 @@
       }, 10_000);
       const existingId = currentSessionId();
       if (existingId) {
-        fitAddon.fit();
-        send({ type: 'attach', sessionId: existingId, cols: terminal.cols, rows: terminal.rows });
+        const measured = outputBuffer.isVisible && container.clientWidth > 0 && container.clientHeight > 0;
+        if (measured) fitAddon.fit();
+        send({ type: 'attach', sessionId: existingId, stream: outputBuffer.isVisible,
+          ...(measured ? { cols: terminal.cols, rows: terminal.rows } : {}) });
+        if (measured) lastReportedSize = `${terminal.cols}:${terminal.rows}`;
       } else if (createRequest) {
         send({
           type: 'create',
@@ -672,6 +699,7 @@
           nodeId,
           cols: terminal.cols,
           rows: terminal.rows,
+          stream: outputBuffer.isVisible,
         });
       } else {
         statusMessage = m['term.no_session']();
@@ -690,14 +718,17 @@
           void Promise.resolve(onSessionCreated?.(message.session.id))
             .then(() => onSessionReady?.(message.session.id, 'created'))
             .catch(() => undefined);
-          replayScrollback(message.scrollback);
+          if (message.streamingOutput !== false) replayScrollback(message.scrollback);
           statusMessage = '';
           reconnectAttempts = 0;
           flushPendingInput();
+          if (typeof message.streamingOutput === 'boolean' && outputBuffer.isVisible !== message.streamingOutput) requestOutputSnapshot();
           break;
-        case 'attached':
+        case 'attached': {
+          const internal = viewAttachPending > 0;
+          if (internal) viewAttachPending--;
           attached = true;
-          replayScrollback(message.scrollback);
+          if (message.streamingOutput !== false) replayScrollback(message.scrollback);
           statusMessage = '';
           reconnectAttempts = 0;
           waiting = Boolean(message.session?.waiting);
@@ -705,9 +736,11 @@
           flushPendingInput();
           {
             const attachedSessionId = String(message.session?.id ?? sessionId ?? '');
-            if (attachedSessionId) void onSessionReady?.(attachedSessionId, 'attached');
+            if (attachedSessionId && !internal) void onSessionReady?.(attachedSessionId, 'attached');
           }
+          if (typeof message.streamingOutput === 'boolean' && outputBuffer.isVisible !== message.streamingOutput && !viewAttachPending) requestOutputSnapshot();
           break;
+        }
         case 'output':
           writeOutput(String(message.data));
           if (captureAfterDictation) {
@@ -794,11 +827,12 @@
 
     function connect() {
       if (disposed) return;
-      socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
-      socket.onopen = handleOpen;
-      socket.onmessage = handleMessage;
-      socket.onerror = handleError;
-      socket.onclose = handleClose;
+      const next = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
+      socket = next;
+      next.onopen = () => { if (socket === next && !disposed) handleOpen(); };
+      next.onmessage = event => { if (socket === next && !disposed) handleMessage(event); };
+      next.onerror = () => { if (socket === next && !disposed) handleError(); };
+      next.onclose = () => { if (socket === next && !disposed) handleClose(); };
     }
     void initializeTerminal();
 

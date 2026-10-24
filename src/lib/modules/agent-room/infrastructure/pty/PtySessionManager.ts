@@ -50,7 +50,7 @@ export type PtySessionInfo = {
 };
 
 export type PtySessionListener = (data: string) => void;
-export type PtyExitListener = (exitCode: number) => void;
+export type PtyExitListener = (exitCode: number, expected?: boolean) => void;
 export type PtyAttentionListener = (waiting: boolean) => void;
 export type PtyWorkingDirectoryListener = (cwd: string) => void;
 
@@ -128,6 +128,8 @@ type PtySession = PtySessionInfo & {
   bridgeAgentToken: string | null;
   managedStartupState: 'none' | 'submitted' | 'uncertain';
   ownsProcessTree: boolean;
+  /** An owner action or Core shutdown is ending this PTY, not an agent failure. */
+  stopping?: boolean;
   initialIdleObserved: boolean;
   startupGuard: InteractiveStartupGuard | null;
   bracketedPaste: boolean;
@@ -493,8 +495,9 @@ export class PtySessionManager {
       if (session.workingDirectoryTimer) clearTimeout(session.workingDirectoryTimer);
       this.rejectDeliveries(session, new Error(`Sessão PTY ${id} finalizada com código ${exitCode}.`));
       this.setWaiting(session, false);
-      for (const listener of session.exitListeners) listener(exitCode);
-      this.recordLifecycle(session, exitCode === 0 ? 'disconnected' : 'error', exitCode === 0 ? null : `PTY exited with code ${exitCode}`);
+      const expected = session.stopping || exitCode === 0;
+      for (const listener of session.exitListeners) listener(exitCode, expected);
+      this.recordLifecycle(session, expected ? 'disconnected' : 'error', expected ? null : `PTY exited with code ${exitCode}`);
     });
 
     this.sessions.set(id, session);
@@ -592,7 +595,7 @@ export class PtySessionManager {
 
     const scrollback = terminalModePrefix(session.trimmedModes) + session.scrollback;
     if (session.exited && onExit) {
-      queueMicrotask(() => onExit(session.exitCode ?? 0));
+      queueMicrotask(() => onExit(session.exitCode ?? 0, Boolean(session.stopping || session.exitCode === 0)));
     }
 
     return {
@@ -607,7 +610,7 @@ export class PtySessionManager {
   }
 
   /** At most `limit` characters of recent output, replayable on its own (see `replayTail`). */
-  replay(id: string, limit: number): string {
+  replay(id: string, limit = SCROLLBACK_LIMIT): string {
     const session = this.requireSession(id);
     return replayTail(session.trimmedModes, session.scrollback, limit);
   }
@@ -679,6 +682,7 @@ export class PtySessionManager {
   kill(id: string): boolean {
     const session = this.sessions.get(id);
     if (!session) return false;
+    session.stopping = true;
     if (session.idleTimer) clearTimeout(session.idleTimer);
     if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
     if (session.workingDirectoryTimer) clearTimeout(session.workingDirectoryTimer);

@@ -50,6 +50,11 @@ jobs:
           Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
           npx --no-install electron scripts/test-portal-capture-lifecycle.cjs
 
+      - name: Verify terminal renderer backpressure and collection
+        run: |
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          npx --no-install electron scripts/test-terminal-renderer-lifecycle.cjs
+
   verify:
     name: Test and build
     runs-on: ubuntu-latest
@@ -90,6 +95,9 @@ jobs:
 
       - name: Verify repeated and concurrent native Portal screenshots
         run: xvfb-run -a env -u ELECTRON_RUN_AS_NODE npx --no-install electron --no-sandbox scripts/test-portal-capture-lifecycle.cjs
+
+      - name: Verify terminal renderer backpressure and collection
+        run: xvfb-run -a env -u ELECTRON_RUN_AS_NODE npx --no-install electron --no-sandbox scripts/test-terminal-renderer-lifecycle.cjs
 
       - name: Stamp tested production bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

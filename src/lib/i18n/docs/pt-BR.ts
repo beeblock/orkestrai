@@ -1006,6 +1006,9 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Terminais ocupados voltam sem processar todos os históricos ao mesmo tempo. Filas da tela e buffers WebSocket têm limite; confirmações do parser dividem o trabalho de renderização. Telas ocultas ou cobertas param de receber saída enquanto seus agentes continuam trabalhando e recuperam uma imagem atual ao reaparecer.",
+      "Grafos de Canvas fechados e snapshots vencidos de workspaces são liberados; o cache mantém no máximo quatro snapshots. Os testes usam coleta de lixo real e navegação repetida entre Conversa e Canvas.",
+      "Encerrar um terminal intencionalmente conta como desconexão: fechar o app não cria mais avisos enganosos de falha do agente com código 129. Falhas inesperadas continuam gerando erro.",
       "Capturas seguidas dos Portais continuam funcionando fora da tela, depois de desanexar a página e durante o movimento do Canvas. Uma superfície oculta gera cada imagem mesmo quando há geometria salva; Portais compartilham essa superfície em sequência, mantendo a página, a sessão e a ocultação de campos privados, sem abrir nem focar uma janela.",
     ] },
     { date: "23 de outubro de 2026 · 0.44.1", title: "Orkestrai 0.44.1: voz local e mensagens dos agentes", summary: "Corrige a voz no Apple Silicon e recupera a entrega de mensagens após uma confirmação ausente.", items: [

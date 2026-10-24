@@ -37,8 +37,8 @@ import {
 export const PTY_WS_PATH = '/ws/agent-room/pty';
 
 type ClientMessage =
-  | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; agentSessionId?: string; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string }
-  | { type: 'attach'; sessionId: string; cols?: number; rows?: number }
+  | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; agentSessionId?: string; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string; stream?: boolean }
+  | { type: 'attach'; sessionId: string; cols?: number; rows?: number; stream?: boolean }
   | { type: 'input'; sessionId: string; data: string; imagePaste?: boolean }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
   | { type: 'kill'; sessionId: string }
@@ -48,6 +48,19 @@ type ClientMessage =
 
 export function isPtyWsPath(pathname: string): boolean {
   return pathname === PTY_WS_PATH;
+}
+
+export const MAX_PTY_SOCKET_BUFFER_BYTES = 4 * 1024 * 1024;
+
+/** Disconnect only a slow viewer, never its PTY, before ws retains GBs of output. */
+export function sendPtyFrame(socket: WebSocket, frame: string): boolean {
+  if (socket.readyState !== socket.OPEN) return false;
+  if ((socket.bufferedAmount ?? 0) + Buffer.byteLength(frame) > MAX_PTY_SOCKET_BUFFER_BYTES) {
+    socket.terminate();
+    return false;
+  }
+  socket.send(frame);
+  return true;
 }
 
 // Registro global de sockets vivos + broadcast para eventos de workspace
@@ -68,7 +81,7 @@ wsGlobal.__orkestraiBroadcast = (payload) => {
     const subscription = subscriptions.get(client);
     if (subscription && (!subscription.events.has(String(payload.type))
       || (subscription.workspaceId && payload.workspaceId && payload.workspaceId !== subscription.workspaceId))) continue;
-    if (client.readyState === client.OPEN) client.send(frame);
+    sendPtyFrame(client, frame);
   }
 };
 
@@ -109,25 +122,27 @@ function resolveCwd(cwd: unknown): string {
 
 export function handlePtyConnection(socket: WebSocket): void {
   const detachers = new Map<string, () => void>();
+  const streaming = new Map<string, boolean>();
   const sessionTrackers = new Map<string, AgentSessionTracker>();
   allSockets.add(socket);
   socket.on('close', () => allSockets.delete(socket));
 
   const send = (payload: Record<string, unknown>) => {
-    if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(payload));
+    sendPtyFrame(socket, JSON.stringify(payload));
   };
 
-  const attachSession = (sessionId: string) => {
-    if (detachers.has(sessionId)) return;
+  const attachSession = (sessionId: string, stream = true) => {
+    streaming.set(sessionId, stream);
+    if (detachers.has(sessionId)) return stream ? ptySessionManager.replay(sessionId) : '';
     const { scrollback, detach } = ptySessionManager.attach(
       sessionId,
-      (data) => send({ type: 'output', sessionId, data }),
+      (data) => { if (streaming.get(sessionId)) send({ type: 'output', sessionId, data }); },
       (exitCode) => send({ type: 'exit', sessionId, exitCode }),
       (waiting) => send({ type: 'idle', sessionId, idle: waiting }),
       (cwd) => send({ type: 'cwd', sessionId, cwd }),
     );
     detachers.set(sessionId, detach);
-    return scrollback;
+    return stream ? scrollback : '';
   };
 
   socket.on('message', async (raw) => {
@@ -140,6 +155,9 @@ export function handlePtyConnection(socket: WebSocket): void {
     }
 
     try {
+      if ((message.type === 'create' || message.type === 'attach') && message.stream !== undefined && typeof message.stream !== 'boolean') {
+        throw new Error('Invalid terminal stream visibility.');
+      }
       switch (message.type) {
         case 'ping':
           send({ type: 'pong' });
@@ -208,8 +226,8 @@ export function handlePtyConnection(socket: WebSocket): void {
             if (expectedProvider && expectedAgentSessionId) {
               ptySessionManager.killAgentSession(expectedProvider, expectedAgentSessionId, { workspaceId: message.workspaceId, nodeId: message.nodeId }, existing.id);
             }
-            const scrollback = attachSession(existing.id);
-            send({ type: 'created', session: existing, scrollback, reused: true });
+            const scrollback = attachSession(existing.id, message.stream);
+            send({ type: 'created', session: existing, scrollback, reused: true, streamingOutput: message.stream !== false });
             return true;
           };
 
@@ -299,8 +317,8 @@ export function handlePtyConnection(socket: WebSocket): void {
             bridgeAgentToken: bridgeAgentToken ?? undefined,
           });
           sessionTrackers.set(session.id, tracker);
-          const scrollback = attachSession(session.id);
-          send({ type: 'created', session, scrollback });
+          const scrollback = attachSession(session.id, message.stream);
+          send({ type: 'created', session, scrollback, streamingOutput: message.stream !== false });
 
           // Encerramento normal pode ser unload/reload solicitado pelo usuário
           // e não deve gerar ruído. Só uma saída anormal vira notificação; para
@@ -311,8 +329,8 @@ export function handlePtyConnection(socket: WebSocket): void {
             ptySessionManager.attach(
               session.id,
               () => {},
-              (exitCode) => {
-                if (exitCode !== 0) {
+              (exitCode, expected) => {
+                if (exitCode !== 0 && !expected) {
                   console.log(`[orkestrai:notify] [${workspaceName}] ${label} encerrou com erro (código ${exitCode}).`);
                 }
               }
@@ -370,13 +388,13 @@ export function handlePtyConnection(socket: WebSocket): void {
             });
             break;
           }
-          if (message.cols !== undefined || message.rows !== undefined) {
+          if (message.stream !== false && (message.cols !== undefined || message.rows !== undefined)) {
             const cols = Math.max(2, Math.min(500, Number(message.cols) || info.cols));
             const rows = Math.max(2, Math.min(200, Number(message.rows) || info.rows));
             ptySessionManager.resize(message.sessionId, cols, rows);
           }
-          const scrollback = attachSession(message.sessionId);
-          send({ type: 'attached', session: ptySessionManager.get(message.sessionId), scrollback });
+          const scrollback = attachSession(message.sessionId, message.stream);
+          send({ type: 'attached', session: ptySessionManager.get(message.sessionId), scrollback, streamingOutput: message.stream !== false });
           break;
         }
         case 'input': {
@@ -395,6 +413,7 @@ export function handlePtyConnection(socket: WebSocket): void {
           sessionTrackers.delete(message.sessionId);
           detachers.get(message.sessionId)?.();
           detachers.delete(message.sessionId);
+          streaming.delete(message.sessionId);
           send({ type: 'killed', sessionId: message.sessionId, killed });
           break;
         }
@@ -417,6 +436,7 @@ export function handlePtyConnection(socket: WebSocket): void {
   socket.on('close', () => {
     for (const detach of detachers.values()) detach();
     detachers.clear();
+    streaming.clear();
   });
 
 }
