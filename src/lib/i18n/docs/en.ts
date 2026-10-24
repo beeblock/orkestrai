@@ -1008,7 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
-      "Initialize the hidden Portal capture host before attaching pages. Native checks require an explicit successful completion and remove Chromium profiles after process exit, preventing false approvals on Windows.",
+      "Initialize the hidden Portal capture host before attaching pages and reassert native painting after reparenting. Native checks require an explicit successful completion and remove Chromium profiles after process exit, preventing false approvals on Windows.",
       "Disable system-font discovery in the isolated PDF parser, which uses packaged or embedded fonts, avoiding a headless Electron initialization stall before Linux OCR starts.",
       "Wait for the document parser to confirm IPC readiness before sending PDF or spreadsheet bytes, preserving extraction deadlines, cancellation and offline OCR verification.",
       "Integrate reviewed Drizzle ORM 0.45.4 and Superforms 2.31.0 updates, preserving SQLite transactions and existing Zod v3 form contracts.",

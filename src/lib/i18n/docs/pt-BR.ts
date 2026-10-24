@@ -1012,7 +1012,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
-      "Inicializa o host oculto de captura do Portal antes de anexar páginas. As verificações nativas exigem confirmação explícita de conclusão e removem perfis Chromium após o processo sair, impedindo falsas aprovações no Windows.",
+      "Inicializa o host oculto de captura do Portal antes de anexar páginas e reafirma a pintura nativa após mover a view entre hosts. As verificações nativas exigem confirmação explícita de conclusão e removem perfis Chromium após o processo sair, impedindo falsas aprovações no Windows.",
       "Desativa a busca de fontes do sistema no parser isolado de PDF, que usa fontes empacotadas ou incorporadas, evitando o travamento na inicialização do Electron sem janela antes do OCR no Linux.",
       "Espera o parser de documentos confirmar que a comunicação está pronta antes de enviar PDFs ou planilhas, preservando os limites de tempo, o cancelamento e a verificação de OCR offline.",
       "Integra as atualizações revisadas do Drizzle ORM 0.45.4 e Superforms 2.31.0, preservando as transações SQLite e os contratos existentes dos formulários com Zod v3.",
