@@ -148,3 +148,12 @@ other test workers, then runs the remaining suite with two workers. Its deadline
 and offline assertions are unchanged. Bounded child diagnostics and the last
 extraction progress are retained on timeout to distinguish resource contention
 from a native-runtime failure; a successful final CI is still required.
+
+Isolation still timed out with no progress or child output, ruling out competing
+test workers as a sufficient explanation. The extraction protocol now waits for
+an IPC ready message emitted after the parser's listener is registered, rather
+than sending bytes during asynchronous module startup. The real offline Electron
+test deliberately delays parser import by 200 ms and waits for that readiness.
+All 17 focused extraction/runtime tests pass locally, including cancellation,
+scanned/rotated/mixed PDFs and spreadsheet parsing. The Linux result remains the
+required check; this hardening alone is not yet evidence of its root cause.

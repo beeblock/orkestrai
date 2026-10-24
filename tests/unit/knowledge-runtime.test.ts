@@ -16,26 +16,29 @@ describe('offline packaged OCR runtime', () => {
     const directory = await mkdtemp(join(tmpdir(), 'ork-ocr-runtime-test-'));
     const bytes = await scannedPdf([{ text: 'Invoice 4567. Total: 650 reais.' }]);
     const electron = createRequire(import.meta.url)('electron') as string;
-    const child = fork(resolve('src/lib/modules/agent-room/infrastructure/knowledge/document-worker.mjs'), [], {
+    const child = fork(resolve('tests/fixtures/knowledge-delayed-worker.mjs'), [], {
       execPath: electron, execArgv: ['--require', resolve('tests/fixtures/knowledge-no-network.cjs')],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'], serialization: 'advanced', windowsHide: true,
     } as ForkOptions & { windowsHide: boolean });
     const closed = new Promise(resolve => child.once('close', resolve));
-    let diagnostics = '', lastProgress: unknown = null;
+    let diagnostics = '', lastProgress: unknown = null, ready = false;
     const captureDiagnostic = (chunk: Buffer) => { diagnostics = (diagnostics + chunk.toString()).slice(-2048); };
     child.stdout?.on('data', captureDiagnostic); child.stderr?.on('data', captureDiagnostic);
     let timer: ReturnType<typeof setTimeout>;
     try {
       const result = await new Promise<DocumentExtraction>((resolveResult, reject) => {
-        timer = setTimeout(() => reject(new Error(`OCR runtime timed out: ${JSON.stringify({ lastProgress, diagnostics, load: loadavg() })}`)), 25_000);
+        timer = setTimeout(() => reject(new Error(`OCR runtime timed out: ${JSON.stringify({ ready, lastProgress, diagnostics, load: loadavg() })}`)), 25_000);
         child.once('error', reject);
         child.once('exit', () => reject(new Error('OCR runtime exited before completion')));
         child.on('message', (message: { type: string; result: DocumentExtraction }) => {
+          if (message.type === 'ready' && !ready) {
+            ready = true;
+            child.send({ bytes, extension: 'pdf', directory }, error => { if (error) reject(error); });
+          }
           if (message.type === 'complete') resolveResult(message.result);
           else if (message.type === 'progress') lastProgress = message.result.extraction;
         });
-        child.send({ bytes, extension: 'pdf', directory });
       });
       expect(result.status).toBe('ready');
       expect(result.extraction?.ocrPages).toEqual([1]);

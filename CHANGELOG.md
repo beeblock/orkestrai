@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Wait for the document parser's IPC readiness before sending PDF or spreadsheet bytes, so cold module startup cannot lose an extraction request. Keep extraction deadlines, cancellation and offline OCR checks unchanged.
+
 - Integrate reviewed Drizzle ORM 0.45.4 and Superforms 2.31.0 updates, preserving SQLite transactions and existing Zod v3 form contracts.
 
 - Include the superseding dependency group's native canvas 1.0.13 and electron-updater 6.8.11 patches. Verify native offline OCR and updater cache containment, malformed metadata handling and SHA-512 validation; retain the existing macOS trust and manual-download policies.

@@ -2,7 +2,10 @@ import { Readable } from 'node:stream';
 import { extractPdf } from './pdf-extractor.mjs';
 
 process.once('disconnect', () => process.exit(0));
-const workerData = await new Promise(resolve => process.once('message', resolve));
+const workerData = await new Promise(resolve => {
+  process.once('message', resolve);
+  if (process.connected) process.send({ type: 'ready' });
+});
 const send = (type, result) => { if (process.connected) process.send({ type, result }); };
 
 // No formulas, macros, scripts, remote links or external document resources run here.
