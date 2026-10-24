@@ -59,7 +59,7 @@ export class CuaComputerHost {
         process.env.CUA_DRIVER_RS_TELEMETRY_ENABLED = '0';
         const driver: Driver = this.host.loadDriver
           ? await this.host.loadDriver()
-          : (await import('@trycua/cua-driver')).CuaDriver.create(undefined);
+          : (await import('@trycua/cua-driver')).CuaDriver.create({ embedded: true });
         const options = () => {
           if (!this.cancellation) throw new NativeInteractionError('Native operation admission expired.', false);
           return { signal: this.cancellation.signal };

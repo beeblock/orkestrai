@@ -1012,6 +1012,9 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Identifica os seletores de controle e agentes autorizados do Portal para tecnologias assistivas com a nova semântica de combobox. Os testes de tela exercitam esses papéis e restauram o idioma após falhas.",
+      "Usa a versão corrigida do YAML 2.x do app também nos pacotes de arquivos e scripts do Bruno, removendo as cópias vulneráveis fixadas por eles sem mudar a versão principal do parser.",
+      "Atualiza dependências revisadas de Canvas, editor, PDF, Bruno e Computer. Mantém explicitamente o Computer embutido no Orkestrai apesar do novo padrão do SDK com daemon externo. Preserva o Svelar 0.7.9 e seus patches verificados de compatibilidade até concluir a migração dos schemas.",
       "Mantém o Azure Identity do Bruno em 4.13.0, com o MSAL 3.x não afetado, até as versões seguintes adotarem um MSAL corrigido, sem forçar outra versão principal do cliente de autenticação.",
       "Atualiza dependências de desenvolvimento, incluindo Electron 42.11.18, electron-builder 26.18.0 e Playwright 1.64.1, preservando a ABI nativa e os patches verificados. Undici 7.30.1/6.29.1 e fast-uri 3.1.9 corrigem avisos de esgotamento de memória, falhas em respostas, integridade e normalização de URI; a auditoria completa continua habilitada.",
       "Adiciona terminais Pi e Oh My Pi, saída JSON sem interface, controles de modelo e raciocínio e instruções nativas de papel. Ambos usam a ponte do workspace. A retomada automática de sessão e o espelho de conversa aguardam leitores das conversas exatas.",

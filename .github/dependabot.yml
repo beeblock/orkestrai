@@ -17,6 +17,10 @@ updates:
           - minor
           - patch
     ignore:
+      # 0.8.0 changes validation to Zod 4; migrate application contracts first.
+      - dependency-name: "@beeblock/svelar"
+        versions:
+          - "0.8.0"
       - dependency-name: "*"
         update-types:
           - version-update:semver-major

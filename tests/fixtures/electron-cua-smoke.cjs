@@ -16,7 +16,7 @@ const deadline = setTimeout(() => {
 }, 20_000);
 app.whenReady().then(async () => {
   const { CuaDriver } = await import('@trycua/cua-driver');
-  driver = CuaDriver.create(undefined);
+  driver = CuaDriver.create({ embedded: true });
   const metadata = await driver.metadata();
   const result = await driver.callTool('check_permissions', JSON.stringify({ prompt: false }));
   const payload = JSON.parse(result.structuredJson || '{}');

@@ -1008,6 +1008,9 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Name Portal control and authorized-agent selectors explicitly for assistive technology under the updated combobox semantics. Browser tests exercise those roles and restore their locale after failures.",
+      "Use the app's patched YAML 2.x release in Bruno's filestore and scripting packages too, avoiding their vulnerable pinned copies without changing the parser major.",
+      "Update reviewed Canvas, editor, PDF, Bruno and Computer dependencies. Explicitly keep Computer embedded in Orkestrai despite the SDK's new daemon default. Retain Svelar 0.7.9 and its verified validation compatibility patches until the schema migration is complete.",
       "Keep Bruno's Azure Identity at 4.13.0 with the unaffected MSAL 3.x branch until newer Azure Identity versions support patched MSAL; do not force a different authentication-client major.",
       "Update development dependencies, including Electron 42.11.18, electron-builder 26.18.0 and Playwright 1.64.1, keeping the native ABI and verified patches. Undici 7.30.1/6.29.1 and fast-uri 3.1.9 address memory-exhaustion, response-crash, integrity and URI-normalization advisories; the complete dependency audit remains enabled.",
       "Add Pi and Oh My Pi terminals, headless JSON output, model/thinking controls and native role prompts. Both use the workspace bridge. Automatic session restoration and transcript mirroring are not advertised until their exact conversation readers are implemented.",

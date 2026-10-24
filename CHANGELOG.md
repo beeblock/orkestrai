@@ -11,12 +11,16 @@ pt-BR, English, and Spanish translations.
 
 - Update Undici to 7.30.1 and its 6.x consumers to 6.29.1, and fast-uri to 3.1.9, addressing EventSource memory exhaustion, excessive content-encoding crashes, integrity verification and URI normalization advisories. Keep the complete dependency audit enabled.
 - Keep Bruno's Azure Identity dependency at 4.13.0, which uses the unaffected MSAL 3.x branch, until its newer releases support a patched MSAL. Avoid forcing an incompatible MSAL major into the authentication client.
+- Keep Bruno's YAML consumers on the same patched 2.x release as the app, avoiding the vulnerable 2.3.4 copies pinned by its newer filestore and scripting packages.
 
 ### Added
 
 - Add Pi and Oh My Pi providers with interactive terminals, headless JSON execution, model/thinking controls, native role prompts and workspace bridge communication. Keep automatic resume and transcript mirroring disabled until exact conversation readers exist.
 
 ### Fixed
+
+- Integrate reviewed production dependency updates, including Canvas, editor, PDF, Bruno and the native Computer SDK. Explicitly select the embedded Computer runtime so the SDK's new macOS daemon default never changes permission ownership. Retain Svelar 0.7.9 and its verified Zod compatibility patches pending a dedicated schema migration.
+- Give Portal control and authorized-agent selectors explicit translated accessible names for the updated combobox semantics. Keep browser tests aligned with those roles and restore test locales even after a timeout.
 
 - Refresh development dependencies, including Electron 42.11.18, electron-builder 26.18.0 and Playwright 1.64.1, while retaining Electron 42's native ABI and verified dependency patches.
 

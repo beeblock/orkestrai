@@ -3,6 +3,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('@beeblock/svelar/http', () => ({ getCsrfToken: () => null }));
 vi.mock('$lib/i18n/locale.svelte.js', () => ({ localeState: { current: 'pt-BR' } }));
+// This regression exercises the tour state machine; catalog integrity has its
+// own tests. Loading thousands of generated message modules obscures this test.
+vi.mock('$lib/paraglide/messages.js', () => ({}));
 
 describe('guided tour engine', () => {
   const nodes: Array<Record<string, unknown>> = [];
@@ -33,7 +36,7 @@ describe('guided tour engine', () => {
   });
 
   afterAll(() => {
-    engine.stopTour();
+    engine?.stopTour();
     vi.unstubAllGlobals();
   });
 

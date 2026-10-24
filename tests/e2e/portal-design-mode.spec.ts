@@ -4,6 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 test.describe('Portal Design Mode', () => {
+  let settingsToRestore: Record<string, unknown> | null = null;
+  test.afterEach(async ({ request }) => {
+    // Cleanup gets its own timeout budget even if a UI assertion times out.
+    if (settingsToRestore) {
+      const settings = settingsToRestore;
+      settingsToRestore = null;
+      expect((await request.put('/api/agent-room/settings', { data: settings })).ok()).toBe(true);
+    }
+  });
   test('persists SPA addresses without recapturing, reattaching or reloading the native document', async ({ page, request }) => {
     const dir = mkdtempSync(join(tmpdir(), 'orkestrai-portal-spa-e2e-'));
     const workspace = (await (await request.post('/api/agent-room/workspaces', {
@@ -67,6 +76,7 @@ test.describe('Portal Design Mode', () => {
   test('suspends native presentation for actual responsive dropdowns and restores it on close', async ({ page, request }) => {
     const dir = mkdtempSync(join(tmpdir(), 'orkestrai-portal-overlay-e2e-'));
     const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data;
+    settingsToRestore = originalSettings;
     const workspaceResponse = await request.post('/api/agent-room/workspaces', {
       data: { name: `E2E Portal overlays ${Date.now()}`, workingDir: dir },
     });
@@ -103,13 +113,13 @@ test.describe('Portal Design Mode', () => {
       await expect.poll(visible).toBe(true);
       await portalNode.getByRole('button', { name: 'Test responsiveness' }).click();
       const toolbar = portalNode.getByTestId('portal-viewport-toolbar');
-      await toolbar.getByRole('button', { name: 'Device' }).click();
+      await toolbar.getByRole('combobox', { name: 'Device' }).click();
       await expect(page.getByRole('option', { name: /Laptop/ })).toBeVisible();
       await expect.poll(visible).toBe(false);
       await page.keyboard.press('Escape');
       await page.mouse.move(5, 5);
       await expect.poll(visible).toBe(true);
-      await toolbar.getByRole('button', { name: 'Device' }).click();
+      await toolbar.getByRole('combobox', { name: 'Device' }).click();
       await page.getByRole('option', { name: /Laptop/ }).click();
       await page.mouse.move(5, 5);
       await expect.poll(() => page.evaluate(() => (window as any).__portalGeometry?.viewport)).toEqual({ width: 1366, height: 768 });
@@ -127,6 +137,7 @@ test.describe('Portal Design Mode', () => {
   test('keeps browser fallback explicit instead of silently exposing a broken inspector', async ({ page, request }) => {
     const dir = mkdtempSync(join(tmpdir(), 'orkestrai-portal-design-e2e-'));
     const originalSettings = (await (await request.get('/api/agent-room/settings')).json()).data as Record<string, string>;
+    settingsToRestore = originalSettings;
     const workspaceResponse = await request.post('/api/agent-room/workspaces', {
       data: { name: `E2E Portal Design ${Date.now()}`, workingDir: dir },
     });
@@ -153,12 +164,14 @@ test.describe('Portal Design Mode', () => {
       await expect(portalNode.locator('.portal-address')).toHaveValue('http://127.0.0.1:5199/docs');
       await portalNode.locator('.portal-control-chip').click();
       const settings = page.getByRole('dialog', { name: 'Managed browser' });
-      await expect(settings.getByRole('button').filter({ hasText: 'Read and interact' })).toBeVisible();
-      const agentAccess = settings.getByRole('button', { name: 'All workspace agents', exact: true });
+      await expect(settings.getByRole('combobox', { name: 'Agent control', exact: true })).toContainText('Read and interact');
+      const agentAccess = settings.getByRole('combobox', { name: 'Authorized agents', exact: true });
       await expect(agentAccess).toBeVisible();
+      await expect(agentAccess).toContainText('All workspace agents');
       await agentAccess.click();
       await page.getByRole('option', { name: 'Selected agents only', exact: true }).click();
-      await settings.getByRole('button', { name: 'Selected agents only', exact: true }).click();
+      await expect(agentAccess).toContainText('Selected agents only');
+      await agentAccess.click();
       await page.getByRole('option', { name: 'All workspace agents', exact: true }).click();
       const savedAccess = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().endsWith(`/nodes/${portal.id}`));
       await settings.screenshot({ path: test.info().outputPath('portal-team-access.png') });
@@ -187,7 +200,7 @@ test.describe('Portal Design Mode', () => {
       expect(stageBox).not.toBeNull();
       expect(toolbarBox!.y + toolbarBox!.height).toBeLessThanOrEqual(stageBox!.y + 1);
 
-      await toolbar.getByRole('button', { name: 'Device' }).click();
+      await toolbar.getByRole('combobox', { name: 'Device' }).click();
       await page.getByRole('option', { name: /Laptop/ }).click();
       await expect(toolbar.getByRole('button', { name: 'Viewport dimensions: 1366 by 768 pixels' })).toBeVisible();
       const scrollState = await portalNode.locator('.portal-scroll').evaluate((element) => ({
