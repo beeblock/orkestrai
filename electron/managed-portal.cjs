@@ -291,6 +291,9 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
       // view or in parallel with CDP's temporary screenshot viewport.
       return withHiddenSurface(tab, async hosted => {
         if (!hosted) return screenshot();
+        // Establish the newly attached widget's original surface before a
+        // metrics resize allocates another LocalSurfaceId (cold Aura hosts).
+        await capturePresentedPage(tab);
         // CDP's screenshot temporarily resizes a hidden native widget and then
         // waits for a newly presented surface; Aura can never present it there.
         // Apply the same logical clip explicitly, then copy a native frame while
