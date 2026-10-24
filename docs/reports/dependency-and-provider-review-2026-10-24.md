@@ -60,6 +60,18 @@ Two compatibility corrections are required:
 
 ## Security resolutions
 
+During final verification Dependabot superseded #69 with #71
+(`6ae30f88e73cdc1f33d0efa1cb831f3474776c4b`). Its additional native canvas
+1.0.13 and electron-updater 6.8.11 patches are reviewed separately; the sampler
+minimum is aligned with the already-tested 1.7.9 lockfile. Svelar remains held.
+The updater's changes preserve the public download array contract, reject invalid
+cached names and discard stale blockmaps. The app continues disabling differential
+downloads and enforcing its own macOS trust policy.
+The 67 focused checks passed, including actual offline OCR under Electron with
+canvas 1.0.13, updater-cache traversal/malformed-name rejection and actual SHA-512
+validation. All 19 dependency patches still verify and the complete audit remains
+below its moderate threshold.
+
 Keep the complete audit enabled. Additional reviewed resolutions:
 
 - Undici 7.30.1 and 6.29.1 address EventSource retained-state exhaustion,

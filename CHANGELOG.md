@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Include the superseding dependency group's native canvas 1.0.13 and electron-updater 6.8.11 patches. Verify native offline OCR and updater cache containment, malformed metadata handling and SHA-512 validation; retain the existing macOS trust and manual-download policies.
+
 - Integrate reviewed production dependency updates, including Canvas, editor, PDF, Bruno and the native Computer SDK. Explicitly select the embedded Computer runtime so the SDK's new macOS daemon default never changes permission ownership. Retain Svelar 0.7.9 and its verified Zod compatibility patches pending a dedicated schema migration.
 - Give Portal control and authorized-agent selectors explicit translated accessible names for the updated combobox semantics. Keep browser tests aligned with those roles and restore test locales even after a timeout.
 
