@@ -208,3 +208,9 @@ fixture run, before any PNG was returned. Hosted captures now prime the attached
 widget's original surface before changing emulation/LocalSurfaceId. The 40-capture
 Mac fixture and 34 focused unit/catalog checks pass with that initialization;
 the remaining cross-platform CI result is still required.
+
+Linux/Xvfb still stalled at the first native copy while Windows passed. The Linux
+fixture now explicitly selects software rendering (`--software`) to test that
+headless backend independently; Windows and the normal Mac fixture retain their
+default graphics backend. Software rendering also passes all 40 captures on Mac.
+This fixture flag does not change the installed application's graphics settings.
