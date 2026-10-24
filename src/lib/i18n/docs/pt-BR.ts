@@ -1012,6 +1012,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Inclui canvas nativo 1.0.13 e electron-updater 6.8.11, verificando OCR offline, caminhos confinados do cache de atualização, metadados inválidos e SHA-512, mantendo as políticas de confiança e download manual do macOS.",
       "Identifica os seletores de controle e agentes autorizados do Portal para tecnologias assistivas com a nova semântica de combobox. Os testes de tela exercitam esses papéis e restauram o idioma após falhas.",
       "Usa a versão corrigida do YAML 2.x do app também nos pacotes de arquivos e scripts do Bruno, removendo as cópias vulneráveis fixadas por eles sem mudar a versão principal do parser.",
       "Atualiza dependências revisadas de Canvas, editor, PDF, Bruno e Computer. Mantém explicitamente o Computer embutido no Orkestrai apesar do novo padrão do SDK com daemon externo. Preserva o Svelar 0.7.9 e seus patches verificados de compatibilidade até concluir a migração dos schemas.",
