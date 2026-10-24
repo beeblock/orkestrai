@@ -832,12 +832,12 @@
     <div class="grid min-h-0 gap-4 overflow-y-auto py-2">
       <label class="grid gap-1.5 text-ui-sm font-medium">
         <span>{m['portal.control_title']()}</span>
-        <Select.Root type="single" bind:value={control}><Select.Trigger class="w-full">{control === 'disabled' ? m['portal.control_disabled']() : control === 'read' ? m['portal.control_read']() : m['portal.control_interact']()}</Select.Trigger><Select.Content><Select.Item value="disabled">{m['portal.control_disabled']()}</Select.Item><Select.Item value="read">{m['portal.control_read']()}</Select.Item><Select.Item value="interact">{m['portal.control_interact']()}</Select.Item></Select.Content></Select.Root>
+        <Select.Root type="single" bind:value={control}><Select.Trigger class="w-full" aria-label={m['portal.control_title']()}>{control === 'disabled' ? m['portal.control_disabled']() : control === 'read' ? m['portal.control_read']() : m['portal.control_interact']()}</Select.Trigger><Select.Content><Select.Item value="disabled">{m['portal.control_disabled']()}</Select.Item><Select.Item value="read">{m['portal.control_read']()}</Select.Item><Select.Item value="interact">{m['portal.control_interact']()}</Select.Item></Select.Content></Select.Root>
         <span class="text-ui-xs font-normal leading-5 text-[var(--app-text-muted)]">{m['portal.control_policy_help']()}</span>
       </label>
       <fieldset class="grid gap-2"><legend class="text-ui-sm font-medium">{m['portal.control_agents']()}</legend>
         <Select.Root type="single" bind:value={agentAccess}>
-          <Select.Trigger class="w-full">{agentAccess === 'workspace' ? m['portal.control_team']() : m['portal.control_selected']()}</Select.Trigger>
+          <Select.Trigger class="w-full" aria-label={m['portal.control_agents']()}>{agentAccess === 'workspace' ? m['portal.control_team']() : m['portal.control_selected']()}</Select.Trigger>
           <Select.Content><Select.Item value="workspace">{m['portal.control_team']()}</Select.Item><Select.Item value="selected">{m['portal.control_selected']()}</Select.Item></Select.Content>
         </Select.Root>
         {#if agentAccess === 'selected'}

@@ -145,7 +145,7 @@ test.describe('andares e rotinas', () => {
     const marker = `rotina-${Date.now()}`;
     await panel.getByRole('button', { name: 'Nova automação' }).click();
     await panel.getByLabel('Nome').fill(marker);
-    await panel.getByRole('button', { name: 'Agente de destino', exact: true }).click();
+    await panel.getByRole('combobox', { name: 'Agente de destino', exact: true }).click();
     await page.locator('[data-slot="select-item"]').filter({ hasText: 'Shell' }).click();
     await panel.getByRole('textbox', { name: 'Prompt', exact: true }).fill(`echo ${marker}`);
     await panel.getByRole('button', { name: 'Salvar automação' }).click();

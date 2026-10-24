@@ -3,6 +3,9 @@ import { CuaComputerHost } from '$lib/modules/agent-room/application/adapters/co
 import { computerHostRequestSchema } from '$lib/modules/agent-room/contracts/schemas/computer-host.schema.js';
 import { NativeInteractionError } from '$lib/modules/agent-room/application/adapters/computers/native-interaction-error.js';
 
+const sdk = vi.hoisted(() => ({ create: vi.fn() }));
+vi.mock('@trycua/cua-driver', () => ({ CuaDriver: { create: sdk.create } }));
+
 afterEach(() => vi.useRealTimers());
 
 function fixture(granted = true) {
@@ -19,6 +22,16 @@ function fixture(granted = true) {
 }
 
 describe('Electron-owned Cua host', () => {
+  it('explicitly selects the embedded runtime instead of the SDK daemon default', async () => {
+    const f = fixture();
+    sdk.create.mockReset().mockReturnValue(f.driver);
+    const host = new CuaComputerHost({ permissions: f.permissions, displays: () => [] });
+    try {
+      await host.execute({ operation: 'snapshot' });
+      expect(sdk.create).toHaveBeenCalledExactlyOnceWith({ embedded: true });
+      expect(f.driver.listApps).toHaveBeenCalledOnce();
+    } finally { await host.stop(); }
+  });
   it('exports only allowlisted diagnostics from trusted adapter failures', async () => {
     const f = fixture(false);
     expect(f.host.failureCode(new Error('private text'))).toBeUndefined();
