@@ -263,6 +263,59 @@ describe('Agent inbox', () => {
     });
   });
 
+  it('permite comunicacao direta entre nós Pi e OMP preservando remetente e destinatario', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'pi-omp-collab', workingDir: '/tmp' });
+    const piSessionId = uuidv7();
+    const ompSessionId = uuidv7();
+
+    const piNode = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'Pi Agent',
+      payload: { command: 'pi', provider: 'pi', sessionId: piSessionId, maestro: true },
+    });
+    const ompNode = await workspaceRepository.createNode({
+      workspaceId: workspace.id,
+      type: 'terminal',
+      title: 'OMP Agent',
+      payload: { command: 'omp', provider: 'omp', sessionId: ompSessionId, maestro: false },
+    });
+
+    sessions.set(piSessionId, {
+      id: piSessionId, workspaceId: workspace.id, nodeId: piNode.id, provider: 'pi', command: 'pi', args: [],
+      cols: 80, rows: 24, cwd: '/tmp', transcriptCwd: '/tmp', runtimeKey: 'native', agentSessionId: 'pi-conv-1',
+      createdAt: new Date().toISOString(), lastActivityAt: new Date().toISOString(),
+      exited: false, exitCode: null, waiting: true, hasOutput: true, ready: true,
+    });
+    sessions.set(ompSessionId, {
+      id: ompSessionId, workspaceId: workspace.id, nodeId: ompNode.id, provider: 'omp', command: 'omp', args: [],
+      cols: 80, rows: 24, cwd: '/tmp', transcriptCwd: '/tmp', runtimeKey: 'native', agentSessionId: 'omp-conv-1',
+      createdAt: new Date().toISOString(), lastActivityAt: new Date().toISOString(),
+      exited: false, exitCode: null, waiting: true, hasOutput: true, ready: true,
+    });
+
+    const pending = bridgeService.ask(workspace.id, {
+      from: piNode.id,
+      to: ompNode.id,
+      message: 'OMP, preciso da definicao de tipos.',
+      timeoutMs: 10_000,
+    });
+
+    await vi.waitFor(() => expect(prompts).toHaveLength(1));
+    expect(prompts[0].nodeId).toBe(ompNode.id);
+    expect(prompts[0].message).toContain('OMP, preciso da definicao de tipos.');
+
+    const messageId = /\[orkestrai:message:([0-9a-f-]+)\]/.exec(prompts[0].message)![1];
+    await bridgeService.reply(workspace.id, { from: ompNode.id, messageId, message: 'Tipos gerados com sucesso.' });
+
+    const result = await pending;
+    expect(result).toMatchObject({
+      replyConfirmed: true,
+      reply: 'Tipos gerados com sucesso.',
+      deliveryState: 'replied',
+    });
+  });
+
   it('hands pending items to a busy agent through any bridge call and never types them afterwards', async () => {
     const { workspace, nodes } = await team();
     session(nodes.Web).ready = false;

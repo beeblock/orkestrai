@@ -541,6 +541,12 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   useCases: [
+    {
+      id: 'pi-omp-collaboration',
+      title: 'Collaborate between Pi and Oh My Pi agents',
+      body: 'Launch terminals with Pi and Oh My Pi providers in the same workspace. Each terminal retains its unique identity via ORKESTRAI_NODE_ID and its configured autonomy policy. Agents use the native orkestrai ask command to delegate tasks, send inquiries, and return confirmed answers on the Canvas, preserving conversation history without leaking credentials.',
+      tags: ['Pi', 'Oh My Pi', 'cross-agent collaboration', 'orkestrai ask'],
+    },
     {"id": "tidy-canvas", "title": "Keep the canvas clean after image workflows", "body": "When an image workflow finishes, its workflow node and the notes that only briefed it leave the canvas into Archived, in the panel rail; its images gather in one arranged group beside the agent that made them. Open Archived to restore anything with one click, to turn the automatic tidy off, or to archive every finished workflow at once on a board that already piled up. Nothing is deleted.", "tags": ["Canvas", "Images"]},
     {"id": "talk-to-team", "title": "Talk to your agents out loud", "body": "Choose an agent in the Canvas message bar and press the microphone. A live waveform and a timer show it is listening; press send to transcribe on this computer and deliver the message, the check mark to edit the text first, or X to discard. The reply to a voice message is read aloud, and the speaker button reads every reply from that agent. Spoken board commands, such as “create 3 claude agents”, work too. Voice runs locally after the one-time download in Settings → Voice.", "tags": ["Voice", "Canvas", "Agents"]},
     {"id": "more-agent-clis", "title": "Bring Gemini, Qwen, Aider, goose or Amp to the team", "body": "Open the Agents menu in the Canvas tool rail and choose Gemini CLI, Qwen Code, Aider, goose or Amp. If the CLI is missing, “Open Provider Center” shows the official install command for your system. They open in a terminal node like any teammate, take messages from the bar and the bridge, and start a fresh conversation each time their terminal starts.", "tags": ["Agents", "Canvas"]},
@@ -1002,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Add Pi and Oh My Pi terminals, headless JSON output, model/thinking controls and native role prompts. Both use the workspace bridge. Automatic session restoration and transcript mirroring are not advertised until their exact conversation readers are implemented.",
       "Busy terminals return without parsing all retained histories together. Viewer queues and WebSocket buffers are bounded; parser acknowledgements share the rendering budget. Hidden or covered viewers stop output streaming while their agents keep running, and restore a current snapshot when shown again.",
       "Closed Canvas graphs and expired workspace snapshots are released; the workspace cache keeps at most four snapshots. Regression tests use real garbage collection and repeated Chat/Canvas navigation.",
       "Intentional terminal shutdown is a disconnect, so closing the app no longer creates misleading code-129 agent failure notices. Unexpected failures still report errors.",

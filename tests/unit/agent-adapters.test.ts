@@ -7,6 +7,8 @@ import { cursorAdapter } from '$lib/modules/agent-room/application/adapters/Curs
 import { antigravityAdapter } from '$lib/modules/agent-room/application/adapters/AntigravityAdapter.js';
 import { clineAdapter } from '$lib/modules/agent-room/application/adapters/ClineAdapter.js';
 import { devinAdapter } from '$lib/modules/agent-room/application/adapters/DevinAdapter.js';
+import { piAdapter } from '$lib/modules/agent-room/application/adapters/PiAdapter.js';
+import { ohMyPiAdapter } from '$lib/modules/agent-room/application/adapters/OhMyPiAdapter.js';
 import { copilotAdapter } from '$lib/modules/agent-room/application/adapters/CopilotAdapter.js';
 import { geminiAdapter } from '$lib/modules/agent-room/application/adapters/GeminiAdapter.js';
 import { qwenAdapter } from '$lib/modules/agent-room/application/adapters/QwenAdapter.js';
@@ -339,5 +341,106 @@ describe('ampAdapter', () => {
     expect(ampAdapter.interactiveCommand()).toEqual({ command: 'amp', args: [] });
     expect(ampAdapter.resumeArgs('x')).toBeNull();
     expect(ampAdapter.setup.installCommands?.windows).toBeUndefined();
+  });
+});
+
+describe('piAdapter', () => {
+  it('monta comando headless com modo json e prompt por stdin', () => {
+    const spec = piAdapter.buildCommand(request({ agent: 'pi', model: 'anthropic/claude-3-7-sonnet', effort: 'high', allowWrites: true }));
+    expect(spec.command).toBe('pi');
+    expect(spec.args).toEqual(['-p', '--mode', 'json', '--no-session', '--model', 'anthropic/claude-3-7-sonnet', '--thinking', 'high']);
+    expect(spec.promptDelivery).toBe('stdin');
+    expect(spec.displayArgs).toEqual([...spec.args, '<prompt-stdin>']);
+  });
+
+  it('monta comando interativo com flags de modelo e esforco', () => {
+    const spec = piAdapter.interactiveCommand({ model: 'anthropic/claude-3-7-sonnet', effort: 'medium' });
+    expect(spec.command).toBe('pi');
+    expect(spec.args).toEqual(['--model', 'anthropic/claude-3-7-sonnet', '--thinking', 'medium']);
+  });
+
+  it('materializa role nativa via --append-system-prompt', () => {
+    expect(piAdapter.initialRoleArgs?.({ name: 'Reviewer', prompt: 'Be thorough', instructionFile: '' })).toEqual([
+      '--append-system-prompt',
+      'Be thorough',
+    ]);
+    expect(piAdapter.initialRoleArgs?.({ name: 'Empty', prompt: '   ', instructionFile: '' })).toEqual([]);
+  });
+
+  it('retoma apenas sessao recente e rejeita id de outro nó', () => {
+    expect(piAdapter.supportsResume).toBe(false);
+    expect(piAdapter.resumeArgs()).toBeNull();
+    expect(piAdapter.resumeArgs('0198db82-7eaf-7000-8b8e-fd721c2db512')).toBeNull();
+  });
+
+  it('parseia output JSONL com texto final e metadata da sessao', () => {
+    const stdout = [
+      '{"type":"session","version":3,"id":"pi-session-1","timestamp":"2026-10-12T10:00:00.000Z"}',
+      '{"type":"agent_start"}',
+      '{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"resultado pi"}],"stopReason":"stop"}}',
+    ].join('\n');
+
+    const parsed = piAdapter.parseOutput(stdout);
+    expect(parsed.content).toBe('resultado pi');
+    expect(parsed.metadata?.sessionId).toBe('pi-session-1');
+    expect(parsed.cliError).toBeUndefined();
+  });
+
+  it('extrai cliError de stopReason de erro no JSONL', () => {
+    const stdout = [
+      '{"type":"session","version":3,"id":"pi-session-2"}',
+      '{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"API rate limit exceeded"}}',
+    ].join('\n');
+
+    const parsed = piAdapter.parseOutput(stdout);
+    expect(parsed.cliError).toBe('API rate limit exceeded');
+  });
+});
+
+describe('ohMyPiAdapter', () => {
+  it('monta comando headless com modo json e prompt por stdin', () => {
+    const spec = ohMyPiAdapter.buildCommand(request({ agent: 'omp', model: 'openai/gpt-5.2', effort: 'max', allowWrites: true }));
+    expect(spec.command).toBe('omp');
+    expect(spec.args).toEqual(['-p', '--mode', 'json', '--no-session', '--approval-mode', 'yolo', '--model', 'openai/gpt-5.2', '--thinking', 'max']);
+    expect(spec.promptDelivery).toBe('stdin');
+    expect(spec.displayArgs).toEqual([...spec.args, '<prompt-stdin>']);
+  });
+
+  it('monta comando interativo com flags de modelo e esforco', () => {
+    const spec = ohMyPiAdapter.interactiveCommand({ model: 'openai/gpt-5.2', effort: 'low' });
+    expect(spec.command).toBe('omp');
+    expect(spec.args).toEqual(['--approval-mode', 'yolo', '--model', 'openai/gpt-5.2', '--thinking', 'low']);
+  });
+
+  it('materializa role nativa via --append-system-prompt', () => {
+    expect(ohMyPiAdapter.initialRoleArgs?.({ name: 'Architect', prompt: 'Plan first', instructionFile: '' })).toEqual([
+      '--append-system-prompt',
+      'Plan first',
+    ]);
+    expect(ohMyPiAdapter.initialRoleArgs?.({ name: 'Empty', prompt: '', instructionFile: '' })).toEqual([]);
+  });
+
+  it('retoma apenas sessao recente e rejeita id de outro nó', () => {
+    expect(ohMyPiAdapter.supportsResume).toBe(false);
+    expect(ohMyPiAdapter.resumeArgs()).toBeNull();
+    expect(ohMyPiAdapter.resumeArgs('0198db82-7eaf-7000-8b8e-fd721c2db512')).toBeNull();
+  });
+
+  it('parseia output JSONL com texto final e sessionId', () => {
+    const stdout = [
+      '{"type":"session","version":3,"id":"omp-session-1"}',
+      '{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"resultado omp"}],"stopReason":"stop"}}',
+    ].join('\n');
+
+    const parsed = ohMyPiAdapter.parseOutput(stdout);
+    expect(parsed.content).toBe('resultado omp');
+    expect(parsed.metadata?.sessionId).toBe('omp-session-1');
+    expect(parsed.cliError).toBeUndefined();
+  });
+
+  it('suporta fallback de saida em texto plano filtrando Working...', () => {
+    const stdout = 'Working...\nlinha 1\nlinha 2';
+    const parsed = ohMyPiAdapter.parseOutput(stdout);
+    expect(parsed.content).toBe('linha 1\nlinha 2');
   });
 });

@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Added
+
+- Add Pi and Oh My Pi providers with interactive terminals, headless JSON execution, model/thinking controls, native role prompts and workspace bridge communication. Keep automatic resume and transcript mirroring disabled until exact conversation readers exist.
+
 ### Fixed
 
 - Keep repeated Portal screenshots working after the Canvas hides or detaches a page. Every capture uses a live hidden compositor, including Portals with saved geometry; serialize its shared surface across Portals, preserve the page/session and protected-field masking, and never display or focus a capture window.

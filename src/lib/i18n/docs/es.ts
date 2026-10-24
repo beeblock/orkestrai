@@ -541,6 +541,12 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   useCases: [
+    {
+      id: 'pi-omp-collaboration',
+      title: 'Colaborar entre agentes Pi y Oh My Pi',
+      body: 'Inicie terminales con proveedores Pi y Oh My Pi en el mismo espacio de trabajo. Cada terminal conserva su identidad única mediante ORKESTRAI_NODE_ID y su política de autonomía. Los agentes usan el comando nativo orkestrai ask para delegar tareas, enviar consultas y devolver respuestas confirmadas en el Canvas, preservando el historial de conversación sin filtrar credenciales.',
+      tags: ['Pi', 'Oh My Pi', 'colaboración entre agentes', 'orkestrai ask'],
+    },
     {"id": "tidy-canvas", "title": "Mantén el canvas limpio después de los flujos de imagen", "body": "Cuando termina un flujo de imagen, el nodo del flujo y las notas que solo sirvieron de briefing salen del canvas hacia Archivados, en la barra de paneles; sus imágenes se reúnen en un grupo ordenado junto al agente que las hizo. Abre Archivados para restaurar cualquier elemento con un clic, apagar el orden automático o archivar de una vez todos los flujos terminados de un board que ya se llenó. No se borra nada.", "tags": ["Canvas", "Imágenes"]},
     {"id": "talk-to-team", "title": "Habla con tus agentes en voz alta", "body": "Elige un agente en el campo de mensaje del Canvas y pulsa el micrófono. Una onda en vivo y un cronómetro muestran que está escuchando; pulsa enviar para transcribir en esta computadora y entregar el mensaje, la marca para editar el texto antes o la X para descartar. La respuesta a un mensaje de voz se lee en voz alta, y el botón de altavoz lee cada respuesta de ese agente. Los comandos hablados para el Canvas, como “crea 3 agentes claude”, también funcionan. La voz corre localmente tras la descarga única en Configuración → Voz.", "tags": ["Voz", "Canvas", "Agentes"]},
     {"id": "more-agent-clis", "title": "Suma Gemini, Qwen, Aider, goose o Amp al equipo", "body": "Abre el menú Agentes en la barra de herramientas del Canvas y elige Gemini CLI, Qwen Code, Aider, goose o Amp. Si la CLI no está instalada, “Abrir Central de Providers” muestra el comando oficial de instalación para tu sistema. Se abren en un nodo de terminal como cualquier compañero, reciben mensajes de la barra y del puente, y empiezan una conversación nueva cada vez que su terminal inicia.", "tags": ["Agents", "Canvas"]},
@@ -1002,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "En desarrollo", title: "Próxima versión", summary: "Correcciones de fiabilidad en validación.", items: [
+      "Añade terminales Pi y Oh My Pi, salida JSON sin interfaz, controles de modelo y razonamiento e instrucciones nativas de rol. Ambos usan el puente del espacio de trabajo. La restauración automática y el espejo de conversación esperan lectores de conversaciones exactas.",
       "Los terminales ocupados vuelven sin procesar todos los historiales a la vez. Las colas de pantalla y los buffers WebSocket tienen límites; las confirmaciones del parser reparten el trabajo de renderizado. Las vistas ocultas o cubiertas dejan de recibir salida mientras sus agentes siguen trabajando y recuperan una imagen actual al mostrarse.",
       "Se liberan los grafos de Canvas cerrados y los snapshots vencidos de espacios de trabajo; la caché conserva como máximo cuatro snapshots. Las pruebas usan recolección real de basura y navegación repetida entre Conversación y Canvas.",
       "Cerrar un terminal intencionalmente cuenta como desconexión: cerrar la app ya no crea avisos engañosos de fallo del agente con código 129. Los fallos inesperados siguen mostrando errores.",
