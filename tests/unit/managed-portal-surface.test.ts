@@ -8,12 +8,14 @@ const require = createRequire(import.meta.url);
 const { createManagedPortalExecutor } = require('../../electron/managed-portal.cjs');
 
 type FakeImage = {
+  toPNG: () => Buffer;
   toDataURL: () => string; getSize: () => { width: number; height: number }; isEmpty: () => boolean;
   resize: (size: { width: number; height: number }) => FakeImage; toJPEG: (quality: number) => Buffer;
 };
 
 function nativeImage(width: number, height: number): FakeImage {
   return {
+    toPNG: () => { const png = Buffer.alloc(24); png.writeUInt32BE(width, 16); png.writeUInt32BE(height, 20); return png; },
     toDataURL: () => 'data:image/png;base64,', getSize: () => ({ width, height }), isEmpty: () => false,
     resize: vi.fn((size: { width: number; height: number }) => nativeImage(size.width, size.height)),
     toJPEG: () => Buffer.from(`jpeg:${width}x${height}`),
@@ -41,7 +43,7 @@ class Contents extends EventEmitter {
     this.emit('dom-ready');
     this.emit('did-finish-load');
   }
-  executeJavaScriptInIsolatedWorld = vi.fn(async (): Promise<any> => ({ x: 0, y: 0, density: 1 }));
+  executeJavaScriptInIsolatedWorld = vi.fn(async (): Promise<any> => ({ x: 0, y: 0, density: 1, width: 800, height: 600 }));
   close() { this.destroyed = true; this.emit('destroyed'); }
 }
 
@@ -115,13 +117,11 @@ describe('embedded Portal surface lifecycle', () => {
       bounds: { x: 0, y: 0, width: 800, height: 600 }, clip: { x: 0, y: 0, width: 800, height: 600 },
       viewport: { width: 800, height: 600 }, zoom: 1, visible: false,
     }, lease);
-    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
     const view = ContentsView.instances[0];
-    contents.debugger.sendCommand.mockImplementation(async method => {
-      if (method !== 'Page.captureScreenshot') return {};
+    contents.capturePage.mockImplementation(async () => {
       expect(CaptureHost.instances[0]?.contentView.children.has(view)).toBe(true);
       expect(view.visible).toBe(true);
-      return { data: png.toString('base64') };
+      return nativeImage(800, 600);
     });
     for (let i = 0; i < 3; i++) {
       expect(await executor.execute({ ...request, profile: { ...request.profile, allowBackground: true }, action: 'screenshot' })).toMatchObject({ ok: true });
@@ -138,20 +138,19 @@ describe('embedded Portal surface lifecycle', () => {
     const background = { ...request, profile: { ...request.profile, allowBackground: true }, action: 'screenshot' };
     const second = { ...background, nodeId: randomUUID() };
     await executor.inspect(second);
-    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
-    let finish!: (value: { data: string }) => void;
+    let finish!: (value: FakeImage) => void;
     let calls = 0;
-    for (const view of ContentsView.instances) view.webContents.debugger.sendCommand.mockImplementation(async method => {
-      if (method !== 'Page.captureScreenshot') return {};
+    for (const view of ContentsView.instances) view.webContents.capturePage.mockImplementation(async () => {
+      if (!CaptureHost.instances[0]?.contentView.children.has(view)) return nativeImage(800, 600);
       expect(CaptureHost.instances[0].contentView.children.size).toBe(1);
       if (++calls === 1) return new Promise(resolve => { finish = resolve; });
-      return { data: png.toString('base64') };
+      return nativeImage(800, 600);
     });
     const firstCapture = executor.execute(background);
     const secondCapture = executor.execute(second);
     await new Promise(resolve => setImmediate(resolve));
     expect(calls).toBe(1);
-    finish({ data: png.toString('base64') });
+    finish(nativeImage(800, 600));
     expect(await Promise.all([firstCapture, secondCapture])).toEqual([
       expect.objectContaining({ ok: true }), expect.objectContaining({ ok: true }),
     ]);

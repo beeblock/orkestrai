@@ -96,5 +96,12 @@ app.whenReady().then(async () => {
     const expected = await executor.userCommand(target, 'inspectScript', { code: 'window.identity' });
     await captureSeries(`parallel-portal-${index}`, target, 4, expected);
   }));
+  await raw("document.body.style.minHeight='3000px';Object.assign(document.querySelector('input').style,{position:'fixed',left:'60px',top:'120px'});scrollTo(0,600)");
+  await captureSeries('scrolled-fixed-private-field');
+  const crop = nativeImage.createFromDataURL(await executor.userCommand(request, 'capture', { rect: { x: 20, y: 30, width: 240, height: 180 } }));
+  const density = await raw('devicePixelRatio');
+  assert.deepEqual(crop.getSize(), { width: 240 * density, height: 180 * density });
+  assert.equal(await raw('scrollY'), 600, 'Cropped capture must preserve page scroll');
+  assert.equal(await raw('window.identity'), identity);
   console.log(JSON.stringify({ portalCaptureLifecycle: 'passed', freshCaptures: count }));
 }).then(() => finish(0), error => finish(1, error));
