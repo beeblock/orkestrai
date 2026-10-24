@@ -190,9 +190,8 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
 
   function withHiddenSurface(tab, operation) {
     // Every detached capture needs a live compositor host, including a Portal
-    // with saved Canvas geometry. A cached surface may satisfy the first shot
-    // after hiding it, then CDP waits forever for the next frame. The host is
-    // shared, so serialize its use across Portals as well as within each tab.
+    // with saved Canvas geometry. Serialize its use across Portals as well as
+    // within each tab so fresh native frames never share a capture surface.
     const next = captureHostFlight.then(async () => {
       requireOpen(tab);
       const host = await hiddenCaptureHost();
@@ -251,7 +250,7 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
     if (managed.disposed || tab.window.isDestroyed()) throw new Error('The Portal tab was closed.');
     if (!tab.documentReady) throw new Error('Portal page is loading or unavailable.');
     const epoch = tab.presentationEpoch;
-    // CDP screenshots temporarily resize the native widget to the logical page.
+    // Full screenshots temporarily resize the native widget to the logical page.
     // Never let that widget participate in the window's visible view hierarchy.
     tab.capturing = true;
     let result;
@@ -291,15 +290,37 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
       // Pump only after attaching to the hidden host, never on an unhosted
       // view or in parallel with CDP's temporary screenshot viewport.
       return withHiddenSurface(tab, async hosted => {
-        if (hosted) await capturePresentedPage(tab);
-        return screenshot();
+        if (!hosted) return screenshot();
+        // CDP's screenshot temporarily resizes a hidden native widget and then
+        // waits for a newly presented surface; Aura can never present it there.
+        // Apply the same logical clip explicitly, then copy a native frame while
+        // capturePage holds its visible-capture lease. The page's layout viewport
+        // stays fixed, including for cropped captures and a zoomed Canvas.
+        await debuggerCommand(tab, 'Emulation.setDeviceMetricsOverride', {
+          width: viewport.width, height: viewport.height, deviceScaleFactor: 0,
+          mobile: false, scale: 1, dontSetVisibleSize: true,
+          viewport: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
+        });
+        tab.view.setBounds({ x: 0, y: 0, width: Math.max(1, Math.ceil(area.width * scale)), height: Math.max(1, Math.ceil(area.height * scale)) });
+        try {
+          // An offscreen node may have changed its logical viewport since the
+          // page last painted. Refresh masks after any responsive reflow.
+          if (protect) await world(tab, 'globalThis.__orkestraiControlledPortal.mask(true)');
+          const image = await capturePresentedPage(tab);
+          if (!image || image.isEmpty()) throw new Error('Portal returned an empty screenshot.');
+          return { data: image.toPNG().toString('base64') };
+        } finally {
+          tab.view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
+          if (tab.managed.geometry) await debuggerCommand(tab, 'Emulation.setDeviceMetricsOverride', portalPresentation(tab.managed.geometry).metrics);
+          else await debuggerCommand(tab, 'Emulation.clearDeviceMetricsOverride');
+        }
       });
     };
     let result;
     if (protect) {
       await world(tab, 'globalThis.__orkestraiControlledPortal.mask(true)');
       try {
-        // CDP captures a newly composited frame after the synchronous mask update.
+        // Capture a newly composited frame after the synchronous mask update.
         // A requestAnimationFrame promise can stall hidden isolated-world scripts.
         result = await capture();
       } finally { await world(tab, 'globalThis.__orkestraiControlledPortal.mask(false)').catch(() => {}); }

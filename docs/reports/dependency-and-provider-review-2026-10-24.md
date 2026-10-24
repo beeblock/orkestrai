@@ -182,3 +182,14 @@ disables host background throttling. Mac checks passed 32 fresh/masked captures,
 checks. Running the old terminal implementation through the new runner exits 1,
 proving that the harness rejects the reproduced regression. Native Linux checks
 now run before the expensive full suite/build so failures surface earlier.
+
+Strict cross-platform fixtures pinpointed the remaining native stall at
+`Page.captureScreenshot`, after native `capturePage` completed. Reasserting widget
+painting alone did not fix it. Hosted captures now apply the logical viewport and
+clip through emulation, then copy the native frame while `capturePage` owns its
+visible-capture lease. They restore the current presentation and retain document
+revision/privacy checks. The Mac fixture passes 36 fresh captures, adding a
+scrolled page with a fixed private field and an exact cropped image; scroll and
+page identity remain unchanged. Linux's terminal fixture now genuinely passes
+168 mounts with zero hidden writes and a maximum first paint of 275 ms. The new
+Portal path still requires Windows/Linux fixture confirmation.
