@@ -173,6 +173,7 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
   // could not capture it while the owner stayed in Chat or Focus. Its first
   // frame is drawn in a hidden window that is never displayed or focused.
   let captureHost = null;
+  let captureHostFlight = Promise.resolve();
   function hiddenCaptureHost() {
     if (!BrowserWindow) return null;
     if (!captureHost || captureHost.isDestroyed()) {
@@ -184,16 +185,25 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
     return captureHost;
   }
 
-  async function withHiddenSurface(tab, operation) {
-    const host = hiddenCaptureHost();
-    if (!host) return operation();
-    host.contentView.addChildView(tab.view);
-    tab.view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
-    tab.view.setVisible(true);
-    try { return await operation(); } finally {
-      tab.view.setVisible(false);
-      if (!host.isDestroyed()) host.contentView.removeChildView(tab.view);
-    }
+  function withHiddenSurface(tab, operation) {
+    // Every detached capture needs a live compositor host, including a Portal
+    // with saved Canvas geometry. A cached surface may satisfy the first shot
+    // after hiding it, then CDP waits forever for the next frame. The host is
+    // shared, so serialize its use across Portals as well as within each tab.
+    const next = captureHostFlight.then(async () => {
+      requireOpen(tab);
+      const host = hiddenCaptureHost();
+      if (!host) return operation(false);
+      host.contentView.addChildView(tab.view);
+      tab.view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
+      tab.view.setVisible(true);
+      try { return await operation(true); } finally {
+        tab.view.setVisible(false);
+        if (!host.isDestroyed()) host.contentView.removeChildView(tab.view);
+      }
+    });
+    captureHostFlight = next.then(() => undefined, () => undefined);
+    return next;
   }
 
   // Motion previews copy the frame already on screen. The logical-page capture
@@ -271,11 +281,12 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
       format: 'png', captureBeyondViewport: true, clip: { ...area, x: area.x + scroll.x, y: area.y + scroll.y, scale },
     });
     const capture = async () => {
-      // CDP produces the new logical frame itself. A parallel capturePage can
-      // target a surface which CDP just resized, and a preceding one can stall
-      // once the view has been detached from its host window.
-      if (!tab.managed.geometry) return withHiddenSurface(tab, async () => { await capturePresentedPage(tab); return screenshot(); });
-      return screenshot();
+      // Pump only after attaching to the hidden host, never on an unhosted
+      // view or in parallel with CDP's temporary screenshot viewport.
+      return withHiddenSurface(tab, async hosted => {
+        if (hosted) await capturePresentedPage(tab);
+        return screenshot();
+      });
     };
     let result;
     if (protect) {

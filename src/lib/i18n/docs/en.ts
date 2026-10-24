@@ -1001,6 +1001,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: "In development", title: "Next release", summary: "Reliability fixes under validation.", items: [
+      "Repeated Portal screenshots keep working outside the Canvas viewport, after detaching the page and during Canvas movement. Captures use a hidden compositor even when saved geometry exists, serialize the shared surface across Portals, preserve the same page and session, and keep private fields masked without opening or focusing a window.",
+    ] },
     { date: "October 23, 2026 · 0.44.1", title: "Orkestrai 0.44.1: local voice and agent messages", summary: "Restore voice on Apple Silicon and recover message delivery after a missing receipt.", items: [
       "Security: Zod 4.6.7 and a verified compatibility fix reject oversized constrained collections before parsing their elements. Existing app schemas, Svelar 0.7.9 and JSON Schema contracts are preserved; every installer tests the actual ESM and CommonJS entry points, and the full dependency audit stays enabled.",
       "Fix Could not find sherpa-onnx-node on Apple Silicon: each installer includes the voice library for its target system and CPU, verified against the lockfile SHA-512 and the actual binary architecture before signing. Downloaded voice models are preserved.",

@@ -1005,6 +1005,9 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
+    { date: "Em desenvolvimento", title: "Próxima versão", summary: "Correções de confiabilidade em validação.", items: [
+      "Capturas seguidas dos Portais continuam funcionando fora da tela, depois de desanexar a página e durante o movimento do Canvas. Uma superfície oculta gera cada imagem mesmo quando há geometria salva; Portais compartilham essa superfície em sequência, mantendo a página, a sessão e a ocultação de campos privados, sem abrir nem focar uma janela.",
+    ] },
     { date: "23 de outubro de 2026 · 0.44.1", title: "Orkestrai 0.44.1: voz local e mensagens dos agentes", summary: "Corrige a voz no Apple Silicon e recupera a entrega de mensagens após uma confirmação ausente.", items: [
       "Segurança: Zod 4.6.7 e uma correção de compatibilidade verificada recusam coleções acima do limite antes de percorrer seus elementos. Os schemas do app, o Svelar 0.7.9 e os contratos JSON Schema são preservados; cada instalador testa os pontos de entrada reais em ESM e CommonJS, e a auditoria completa continua habilitada.",
       "Corrige Could not find sherpa-onnx-node no Apple Silicon: cada instalador inclui a biblioteca de voz do sistema e processador de destino, com verificação do SHA-512 do lockfile e da arquitetura real dos binários antes da assinatura. Os modelos de voz já baixados são preservados.",

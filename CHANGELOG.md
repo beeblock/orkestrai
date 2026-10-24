@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Keep repeated Portal screenshots working after the Canvas hides or detaches a page. Every capture uses a live hidden compositor, including Portals with saved geometry; serialize its shared surface across Portals, preserve the page/session and protected-field masking, and never display or focus a capture window.
+
 ## 0.44.1 - 2026-10-23
 
 ### Security

@@ -63,17 +63,27 @@ class ContentsView extends View {
   }
 }
 
+class CaptureHost {
+  static instances: CaptureHost[] = [];
+  contentView = new View();
+  closed = false;
+  constructor(public options: Record<string, unknown>) { CaptureHost.instances.push(this); }
+  isDestroyed() { return this.closed; }
+  destroy() { this.closed = true; }
+}
+
 const active: Array<ReturnType<typeof createManagedPortalExecutor>> = [];
 afterEach(async () => {
   await Promise.all(active.splice(0).map((executor) => executor.closeAll()));
   ContentsView.instances = [];
+  CaptureHost.instances = [];
 });
 
-async function setup() {
+async function setup(BrowserWindow?: unknown) {
   const cookies = Object.assign(new EventEmitter(), { flushStore: vi.fn(async () => {}) });
   const onOpenRequest = vi.fn();
   const executor = createManagedPortalExecutor({
-    WebContentsView: ContentsView, View,
+    WebContentsView: ContentsView, View, BrowserWindow,
     session: { fromPartition: () => ({ cookies, flushStorageData: vi.fn(), setPermissionRequestHandler: vi.fn() }) },
     onOpenRequest,
   });
@@ -97,6 +107,54 @@ async function setup() {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it('hosts every offscreen capture even when the Portal retains Canvas geometry', async () => {
+    const { executor, request, contents, lease } = await setup(CaptureHost);
+    executor.setGeometry(request.workspaceId, request.nodeId, {
+      bounds: { x: 0, y: 0, width: 800, height: 600 }, clip: { x: 0, y: 0, width: 800, height: 600 },
+      viewport: { width: 800, height: 600 }, zoom: 1, visible: false,
+    }, lease);
+    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
+    const view = ContentsView.instances[0];
+    contents.debugger.sendCommand.mockImplementation(async method => {
+      if (method !== 'Page.captureScreenshot') return {};
+      expect(CaptureHost.instances[0]?.contentView.children.has(view)).toBe(true);
+      expect(view.visible).toBe(true);
+      return { data: png.toString('base64') };
+    });
+    for (let i = 0; i < 3; i++) {
+      expect(await executor.execute({ ...request, profile: { ...request.profile, allowBackground: true }, action: 'screenshot' })).toMatchObject({ ok: true });
+      expect(CaptureHost.instances[0].contentView.children.size).toBe(0);
+    }
+    expect(CaptureHost.instances).toHaveLength(1);
+    expect(CaptureHost.instances[0].options).toMatchObject({ show: false, focusable: false, paintWhenInitiallyHidden: true });
+  });
+
+  it('serializes the shared hidden compositor across different Portals', async () => {
+    const { executor, request } = await setup(CaptureHost);
+    const background = { ...request, profile: { ...request.profile, allowBackground: true }, action: 'screenshot' };
+    const second = { ...background, nodeId: randomUUID() };
+    await executor.inspect(second);
+    const png = Buffer.alloc(24); png.writeUInt32BE(800, 16); png.writeUInt32BE(600, 20);
+    let finish!: (value: { data: string }) => void;
+    let calls = 0;
+    for (const view of ContentsView.instances) view.webContents.debugger.sendCommand.mockImplementation(async method => {
+      if (method !== 'Page.captureScreenshot') return {};
+      expect(CaptureHost.instances[0].contentView.children.size).toBe(1);
+      if (++calls === 1) return new Promise(resolve => { finish = resolve; });
+      return { data: png.toString('base64') };
+    });
+    const firstCapture = executor.execute(background);
+    const secondCapture = executor.execute(second);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(calls).toBe(1);
+    finish({ data: png.toString('base64') });
+    expect(await Promise.all([firstCapture, secondCapture])).toEqual([
+      expect.objectContaining({ ok: true }), expect.objectContaining({ ok: true }),
+    ]);
+    expect(calls).toBe(2);
+    expect(CaptureHost.instances[0].contentView.children.size).toBe(0);
+  });
+
   it('copies motion previews from the presented frame without detaching the page or reducing agent screenshots', async () => {
     const { executor, request, contents, lease } = await setup();
     executor.setGeometry(request.workspaceId, request.nodeId, {
