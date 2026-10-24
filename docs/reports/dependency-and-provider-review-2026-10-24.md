@@ -193,3 +193,10 @@ scrolled page with a fixed private field and an exact cropped image; scroll and
 page identity remain unchanged. Linux's terminal fixture now genuinely passes
 168 mounts with zero hidden writes and a maximum first paint of 275 ms. The new
 Portal path still requires Windows/Linux fixture confirmation.
+
+The native-copy path then passed Linux's strict Portal and terminal steps, and CI
+advanced to the full suite. The final Portal fixture adds an offscreen resize to
+1920×1280 with a responsive private field below the hidden host's original height:
+40 fresh protected captures plus one cropped capture pass locally. Refreshing
+privacy masks after applying the logical viewport covers responsive reflow before
+any image is exported. The final integrated CI remains the acceptance gate.
