@@ -46,9 +46,11 @@ jobs:
         run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/agent-transcript.test.ts tests/unit/zod-size-validation.test.ts
 
       - name: Verify repeated and concurrent native Portal screenshots
+        id: portal_capture
         run: node scripts/run-electron-lifecycle.mjs scripts/test-portal-capture-lifecycle.cjs
 
       - name: Verify terminal renderer backpressure and collection
+        if: ${{ !cancelled() && steps.portal_capture.outcome != 'skipped' }}
         run: node scripts/run-electron-lifecycle.mjs scripts/test-terminal-renderer-lifecycle.cjs
 
   verify:
@@ -81,9 +83,11 @@ jobs:
         run: npm test -- --maxWorkers=1 tests/unit/knowledge-runtime.test.ts
 
       - name: Verify repeated and concurrent native Portal screenshots
+        id: portal_capture
         run: xvfb-run -a node scripts/run-electron-lifecycle.mjs scripts/test-portal-capture-lifecycle.cjs
 
       - name: Verify terminal renderer backpressure and collection
+        if: ${{ !cancelled() && steps.portal_capture.outcome != 'skipped' }}
         run: xvfb-run -a node scripts/run-electron-lifecycle.mjs scripts/test-terminal-renderer-lifecycle.cjs
 
       - name: Run tests
