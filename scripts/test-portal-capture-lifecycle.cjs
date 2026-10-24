@@ -6,6 +6,7 @@ const { mkdtempSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const assert = require('node:assert/strict');
+if (process.argv.includes('--software')) app.disableHardwareAcceleration();
 
 const profile = process.env.ORKESTRAI_TEST_USER_DATA ?? mkdtempSync(join(tmpdir(), 'orkestrai-capture-lifecycle-'));
 app.setPath('userData', profile);
