@@ -200,6 +200,10 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
       host.contentView.addChildView(tab.view);
       tab.view.setBounds({ x: 0, y: 0, width: 1440, height: 1000 });
       tab.view.setVisible(true);
+      // Reparenting can hide the native widget after construction applied its
+      // preferences. Reassert through the live WebContents so Electron updates
+      // the platform view's hidden-but-painting state as well as its scheduler.
+      tab.window.webContents.setBackgroundThrottling(false);
       try { return await operation(true); } finally {
         tab.view.setVisible(false);
         if (!host.isDestroyed()) host.contentView.removeChildView(tab.view);

@@ -29,6 +29,7 @@ class Contents extends EventEmitter {
   getTitle() { return 'Portal fixture'; }
   isDestroyed() { return this.destroyed; }
   setZoomFactor = vi.fn();
+  setBackgroundThrottling = vi.fn();
   getZoomFactor = () => 1;
   capturePage = vi.fn(async (_rect?: unknown, _options?: unknown): Promise<any> => nativeImage(800, 600));
   debugger = { isAttached: () => true, sendCommand: vi.fn(async (_method: string, _parameters?: Record<string, unknown>): Promise<any> => ({})) };
@@ -128,6 +129,7 @@ describe('embedded Portal surface lifecycle', () => {
     }
     expect(CaptureHost.instances).toHaveLength(1);
     expect(CaptureHost.instances[0].loadURL).toHaveBeenCalledExactlyOnceWith('about:blank');
+    expect(contents.setBackgroundThrottling).toHaveBeenCalledWith(false);
     expect(CaptureHost.instances[0].options).toMatchObject({ show: false, focusable: false, paintWhenInitiallyHidden: true, webPreferences: { backgroundThrottling: false } });
   });
 
