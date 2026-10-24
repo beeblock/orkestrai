@@ -1008,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "En desarrollo", title: "Próxima versión", summary: "Correcciones de fiabilidad en validación.", items: [
+      "Integra las actualizaciones revisadas de Drizzle ORM 0.45.4 y Superforms 2.31.0, preservando las transacciones SQLite y los contratos existentes de formularios con Zod v3.",
       "Incluye canvas nativo 1.0.13 y electron-updater 6.8.11, verificando OCR sin conexión, rutas confinadas de caché, metadatos inválidos y SHA-512, manteniendo las políticas de confianza y descarga manual de macOS.",
       "Identifica los selectores de control y agentes autorizados del Portal para tecnologías de asistencia con la nueva semántica de combobox. Las pruebas de pantalla ejercitan esos roles y restauran el idioma tras fallos.",
       "Usa la versión corregida de YAML 2.x de la app también en los paquetes de archivos y scripts de Bruno, eliminando sus copias vulnerables sin cambiar la versión principal del parser.",
