@@ -56,7 +56,7 @@ for (const mode of ['copy', 'move'] as const) {
       await page.getByRole('button', { name: 'Mover ou copiar seleção', exact: true }).click();
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByText('Transfira 59 nós selecionados para outro workspace.')).toBeVisible();
-      await dialog.getByRole('button', { name: 'Workspace de destino', exact: true }).click();
+      await dialog.getByRole('combobox', { name: 'Workspace de destino', exact: true }).click();
       await page.getByRole('option', { name: 'Transfer destination', exact: true }).click();
       if (mode === 'move') await dialog.getByRole('tab', { name: 'Mover', exact: true }).click();
       const responsePromise = page.waitForResponse(response => response.url().endsWith(`/workspaces/${source}/nodes/transfer`) && response.request().method() === 'POST');

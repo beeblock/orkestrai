@@ -4,6 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 
+let settingsBeforeTest: Record<string, unknown> | undefined;
+test.beforeEach(async ({ request }) => {
+  settingsBeforeTest = (await (await request.get('/api/agent-room/settings')).json()).data;
+});
+test.afterEach(async ({ playwright, baseURL }) => {
+  const cleanup = await playwright.request.newContext({ baseURL });
+  try { if (settingsBeforeTest) await cleanup.put('/api/agent-room/settings', { data: settingsBeforeTest }); }
+  finally { await cleanup.dispose(); settingsBeforeTest = undefined; }
+});
+
 const GRAPH_NODE_COLORS = [
   [14, 165, 233],
   [139, 92, 246],
@@ -97,8 +107,9 @@ test.describe('code graph UI', () => {
 
         const graph = page.getByRole('region', { name: 'Code graph' });
         await expect(graph).toBeVisible();
-        await expect(graph.getByRole('button', { name: 'All repositories' })).toBeVisible();
-        await graph.getByRole('button', { name: 'All repositories' }).click();
+        const repositories = graph.getByRole('combobox', { name: 'Repository scope' });
+        await expect(repositories).toContainText('All repositories');
+        await repositories.click();
         await expect(page.getByRole('option', { name: `Main repository · ${workspace.name}` })).toBeVisible();
         await page.keyboard.press('Escape');
 
@@ -239,8 +250,8 @@ test.describe('code graph UI', () => {
       await page.locator('[data-rail-item="workspaces"]').click();
       await page.locator('.workspace-list li.active').getByRole('button', { name: 'Edit workspace' }).click();
       const dialog = page.getByRole('dialog');
-      await expect(dialog.getByRole('button', { name: 'Code Intelligence' })).toHaveText('Manual');
-      await dialog.getByRole('button', { name: 'Code Intelligence' }).click();
+      await expect(dialog.getByRole('combobox', { name: 'Code Intelligence' })).toHaveText('Manual');
+      await dialog.getByRole('combobox', { name: 'Code Intelligence' }).click();
       await expect(page.getByRole('option', { name: 'Assisted (recommended)' })).toBeVisible();
       await expect(page.getByRole('option', { name: 'Disabled' })).toBeVisible();
     } finally {

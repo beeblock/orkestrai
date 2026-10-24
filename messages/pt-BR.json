@@ -4349,6 +4349,8 @@
   "code_graph.search_results": "Resultados da busca",
   "code_graph.overview": "Visão geral dos módulos",
   "code_graph.all_repositories": "Todos os repositórios",
+  "code_graph.repository_scope": "Escopo de repositórios",
+  "code_graph.evidence_type": "Tipo de evidência",
   "code_graph.main_repository": "Repositório principal · {name}",
   "code_graph.files": "arquivos",
   "code_graph.symbols": "símbolos",

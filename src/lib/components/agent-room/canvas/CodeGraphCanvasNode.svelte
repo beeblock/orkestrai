@@ -1374,7 +1374,7 @@
         </HeaderIconButton>
       </form>
       <Select.Root type="single" value={projectId} disabled={intelligenceDisabled} onValueChange={(value: string) => void changeProject(value)}>
-        <Select.Trigger size="sm" class="h-8 max-w-48 min-w-0 shrink text-xs"><span class="truncate">{projectScopeLabel(currentProject)}</span></Select.Trigger>
+        <Select.Trigger size="sm" class="h-8 max-w-48 min-w-0 shrink text-xs" aria-label={m['code_graph.repository_scope']()}><span class="truncate">{projectScopeLabel(currentProject)}</span></Select.Trigger>
         <Select.Content>
           <Select.Item value="all">{m['code_graph.all_repositories']()}</Select.Item>
           {#each snapshot?.projects ?? [] as project (project.id)}
@@ -1739,7 +1739,7 @@
           <form class="cg-card mb-4 space-y-2" onsubmit={(event) => { event.preventDefault(); void importEvidence(); }}>
             <strong class="block text-[12px] font-semibold">{m['code_graph.evidence_import']()}</strong>
             <Select.Root type="single" value={evidenceKind} onValueChange={(value: string) => { evidenceKind = value as typeof evidenceKind; }}>
-              <Select.Trigger size="sm" class="w-full text-xs">{evidenceKindLabel(evidenceKind)}</Select.Trigger>
+              <Select.Trigger size="sm" class="w-full text-xs" aria-label={m['code_graph.evidence_type']()}>{evidenceKindLabel(evidenceKind)}</Select.Trigger>
               <Select.Content>
                 {#each ['auto', 'coverage', 'test', 'trace'] as kind (kind)}
                   <Select.Item value={kind}>{evidenceKindLabel(kind)}</Select.Item>
@@ -1810,11 +1810,11 @@
           {:else}
             <div class="mb-3 space-y-1.5">
               <Select.Root type="single" value={compareFrom} onValueChange={(value: string) => { compareFrom = value; void compareRevisions(projectId); }}>
-                <Select.Trigger size="sm" class="w-full text-xs">{revisionLabel(compareFrom, m['code_graph.compare_from']())}</Select.Trigger>
+                <Select.Trigger size="sm" class="w-full text-xs" aria-label={m['code_graph.compare_from']()}>{revisionLabel(compareFrom, m['code_graph.compare_from']())}</Select.Trigger>
                 <Select.Content>{#each revisions as revision (revision.id)}<Select.Item value={revision.id} disabled={revision.id === compareTo}>#{revision.sequence} · {revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}</Select.Item>{/each}</Select.Content>
               </Select.Root>
               <Select.Root type="single" value={compareTo} onValueChange={(value: string) => { compareTo = value; void compareRevisions(projectId); }}>
-                <Select.Trigger size="sm" class="w-full text-xs">{revisionLabel(compareTo, m['code_graph.compare_to']())}</Select.Trigger>
+                <Select.Trigger size="sm" class="w-full text-xs" aria-label={m['code_graph.compare_to']()}>{revisionLabel(compareTo, m['code_graph.compare_to']())}</Select.Trigger>
                 <Select.Content>{#each revisions as revision (revision.id)}<Select.Item value={revision.id} disabled={revision.id === compareFrom}>#{revision.sequence} · {revision.gitHead?.slice(0, 8) ?? revision.sourceHash.slice(0, 8)}</Select.Item>{/each}</Select.Content>
               </Select.Root>
             </div>
@@ -1980,7 +1980,7 @@
         <div class="space-y-4">
           <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.context_purpose']()}</span>
             <Select.Root type="single" value={contextPurpose} onValueChange={(value: string) => { contextPurpose = value as CodeGraphContextPurpose; void buildContext(); }}>
-              <Select.Trigger class="w-full">{purposeLabel(contextPurpose)}</Select.Trigger>
+              <Select.Trigger class="w-full" aria-label={m['code_graph.context_purpose']()}>{purposeLabel(contextPurpose)}</Select.Trigger>
               <Select.Content>
                 <Select.Item value="investigate">{m['code_graph.purpose_investigate']()}</Select.Item>
                 <Select.Item value="implement">{m['code_graph.purpose_implement']()}</Select.Item>
@@ -2012,7 +2012,7 @@
           {#if contextHandoff === 'agent'}
             <label class="block"><span class="mb-1.5 block text-ui-xs font-medium">{m['code_graph.target_agent']()}</span>
               <Select.Root type="single" value={contextTarget} onValueChange={(value: string) => { contextTarget = value; }}>
-                <Select.Trigger class="w-full">{activeAgents.find((agent) => agent.nodeId === contextTarget)?.title ?? m['code_graph.select_agent']()}</Select.Trigger>
+                <Select.Trigger class="w-full" aria-label={m['code_graph.target_agent']()}>{activeAgents.find((agent) => agent.nodeId === contextTarget)?.title ?? m['code_graph.select_agent']()}</Select.Trigger>
                 <Select.Content>{#each activeAgents as agent (agent.nodeId)}<Select.Item value={agent.nodeId}>{agent.title}</Select.Item>{/each}</Select.Content>
               </Select.Root>
             </label>

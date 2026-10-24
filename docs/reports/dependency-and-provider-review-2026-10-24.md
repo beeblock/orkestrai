@@ -214,3 +214,35 @@ fixture now explicitly selects software rendering (`--software`) to test that
 headless backend independently; Windows and the normal Mac fixture retain their
 default graphics backend. Software rendering also passes all 40 captures on Mac.
 This fixture flag does not change the installed application's graphics settings.
+
+CI run 40109084749 passed 2,506 unit/feature tests (17 platform skips), the native
+Windows checks, Linux/software Portal/terminal checks and the production build
+(6 min 42 s). Its SPA performance case passed 36 switches with eight terminals:
+maximum first paint 1,043 ms and final collected heap 55,273,996 bytes. The full
+browser suite was cancelled after exceeding the previous version's 25-minute
+duration substantially. Partial logs showed repeated failures rather than a
+successful full run. Local reproductions identified more old button-role select
+locators and a Computer authorization form stretching to 1,120 px. Graph selects
+also lacked author-provided accessible names under combobox semantics.
+
+The follow-up uses current combobox roles, adds translated graph/profile labels,
+bounds the authorization form, and restores test settings in afterEach with an
+independent request context. CI now reports each browser case with line/GitHub
+reporters, stops after three unexpected failures (retaining the existing retry
+policy), and collects failure artifacts on cancellation too. Passing a final full
+run still requires executing every browser case; fail-fast does not skip cases
+in a successful run. Local cleanup also removed 207 MB of unused older Playwright
+test distributions after checking open files; current revisions remain available.
+
+The updated production build completed successfully. The local browser pass
+excluding guided-tour audits finished 168 cases successfully, with one platform
+skip and two stale expectations: the Provider Center still expected 14 providers
+instead of the new 16, and Agent Learning still queried a button for its mode
+combobox. Both expectations were corrected; an additional four-case run passed
+Provider Center (including Pi and OMP), document import/search, Agent Learning and
+image-workflow persistence. All 27 focused documentation, tour and production
+contract checks also passed. The broad pass measured 36 SPA switches with eight
+PTYs at maximum first paint 1,211 ms and final collected heap 56,975,840 bytes;
+the 205-node/601-edge keyboard latencies were 156, 69, 126, 68 and 61 ms.
+The final complete CI run, including every guided-tour case, remains the shipping
+gate. These bounded runs do not establish a 24-hour whole-app memory ceiling.

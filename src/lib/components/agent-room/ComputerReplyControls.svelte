@@ -104,7 +104,7 @@
     <label class="flex items-center justify-between gap-3 text-xs"><span>{m['computer.reply_navigation']()}</span><Switch checked={grant.allowConversationNavigation} disabled={busy || !grant.enabled || !grant.allowForegroundSend} onCheckedChange={(allowConversationNavigation: boolean) => update(grant, { allowConversationNavigation })} /></label>
   {/each}
   <details class="text-xs"><summary class="cursor-pointer py-2 font-medium">{text['computer.reply_add']()}</summary>
-    <div class="space-y-3 py-2">
+    <div class="w-full max-w-xl space-y-3 py-2">
       <label class="block space-y-1"><span>{m['computer.capture_target']()}</span><Select.Root type="single" value={windowId} onValueChange={(v: string) => { windowId = v; tree = null; recipientId = ''; composerId = ''; sendId = ''; }}><Select.Trigger class="w-full" disabled={busy}><span class="truncate">{windows.find(w => w.id === windowId)?.title ?? m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each windows as w}<Select.Item value={w.id}>{w.appName} · {w.title}</Select.Item>{/each}</Select.Content></Select.Root></label>
       <Button size="sm" variant="outline" disabled={busy || !windowId || !ready} onclick={readWindow}><RefreshCw size={13} />{text['computer.reply_read']()}</Button>
       <label class="block space-y-1"><span>{m['computer.watch_task']()}</span><Select.Root type="single" bind:value={taskId}><Select.Trigger class="w-full" disabled={busy}><span class="truncate">{task?.title ?? m['computer.choose_target']()}</span></Select.Trigger><Select.Content>{#each tasks as t}<Select.Item value={t.id}>{t.assigneeTitle} · {t.title}</Select.Item>{/each}</Select.Content></Select.Root></label>

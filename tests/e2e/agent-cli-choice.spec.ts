@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // "New agent" lets the owner pick the CLI instead of always opening the first one.
-test('new agent offers a CLI choice and follows it', async ({ page, request }) => {
+test('new agent offers a CLI choice and follows it', async ({ page, request, playwright, baseURL }) => {
   const dir = await mkdtemp(join(tmpdir(), 'orkestrai-cli-choice-'));
   const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `E2E cli choice ${Date.now()}`, workingDir: dir } })).json()).data;
   try {
@@ -25,13 +25,15 @@ test('new agent offers a CLI choice and follows it', async ({ page, request }) =
     await expect(cli).toBeVisible();
     const name = dialog.getByRole('textbox', { name: 'Nome' });
     const before = await name.inputValue();
-    await cli.getByRole('button', { name: 'CLI' }).click();
+    await cli.getByRole('combobox', { name: 'CLI' }).click();
     const other = before === 'Claude' ? 'Codex' : 'Claude';
     await page.getByRole('option', { name: other }).click();
     await expect(name).toHaveValue(other);
     await expect(dialog.getByRole('heading')).toContainText(other);
   } finally {
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+    await page.unrouteAll({ behavior: 'ignoreErrors' }).catch(() => {});
+    const cleanup = await playwright.request.newContext({ baseURL });
+    try { await cleanup.delete(`/api/agent-room/workspaces/${workspace.id}`); }
+    finally { await cleanup.dispose(); await rm(dir, { recursive: true, force: true }); }
   }
 });

@@ -19,6 +19,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Give graph and companion-profile comboboxes explicit translated labels and keep the Computer conversation-authorization form at a readable width. Update browser checks for current select roles and isolate settings cleanup after timeouts. Report CI browser failures immediately and stop after three failing cases instead of retrying stale selectors throughout the suite.
+
 - Copy full Portal screenshots through native visible-capture leases with an explicit logical viewport/clip, avoiding CDP's stalled hidden-surface resize on Windows/Linux. Prime a newly attached widget's frame before resizing its surface. Preserve protected-field masks, pixel dimensions, scroll and page identity; restore the current Canvas presentation afterward.
 
 - Initialize the hidden Portal capture host's blank document without background throttling before attaching pages, and reassert the live native widget's painting state after reparenting. Require explicit native-test completion and clean Chromium profiles after process exit, so Windows cleanup failures cannot report a successful screenshot or terminal check.

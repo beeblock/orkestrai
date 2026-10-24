@@ -100,7 +100,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run end-to-end tests
-        run: npm run test:e2e
+        id: browser_tests
+        timeout-minutes: 45
+        run: npm run test:e2e -- --reporter=line,github --max-failures=3
 
       - name: Stamp tested production bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -118,13 +120,14 @@ jobs:
           include-hidden-files: true
 
       - name: Upload Playwright failure artifacts
-        if: failure()
+        if: always() && steps.browser_tests.outcome != 'success' && steps.browser_tests.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-failures-${{ github.sha }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+          overwrite: true
 
   secrets:
     name: Scan Git history for secrets

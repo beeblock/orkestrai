@@ -6,6 +6,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 
+let settingsBeforeTest: Record<string, unknown> | undefined;
+test.beforeEach(async ({ request }) => {
+  settingsBeforeTest = (await (await request.get('/api/agent-room/settings')).json()).data;
+});
+test.afterEach(async ({ playwright, baseURL }) => {
+  const cleanup = await playwright.request.newContext({ baseURL });
+  try { if (settingsBeforeTest) await cleanup.put('/api/agent-room/settings', { data: settingsBeforeTest }); }
+  finally { await cleanup.dispose(); settingsBeforeTest = undefined; }
+});
+
 test('Computer remains usable in Canvas and Workbench, with honest permissions and live agent evidence', async ({ page, request }) => {
   test.setTimeout(120_000);
   const dir = mkdtempSync(join(tmpdir(), 'orkestrai-computer-ui-'));
@@ -171,9 +181,9 @@ test('calendar routines persist timezone and keep editor controls visible in bot
       await panel.getByRole('button', { name: 'New automation', exact: true }).click();
       const form = panel.locator('form');
       await form.locator('[name="automation-name"]').fill(`Calendar ${theme}`);
-      await form.getByRole('button', { name: 'When this happens', exact: true }).click();
+      await form.getByRole('combobox', { name: 'When this happens', exact: true }).click();
       await page.getByRole('option', { name: 'Schedule', exact: true }).click();
-      await form.getByRole('button', { name: 'Schedule', exact: true }).click();
+      await form.getByRole('combobox', { name: 'Schedule', exact: true }).click();
       await page.getByRole('option', { name: 'Day and time', exact: true }).click();
       const calendar = form.getByTestId('calendar-schedule-fields');
       await expect(calendar).toBeVisible();
@@ -181,7 +191,7 @@ test('calendar routines persist timezone and keep editor controls visible in bot
       await calendar.getByRole('combobox', { name: 'Time zone', exact: true }).click();
       await page.getByPlaceholder('Time zone', { exact: true }).fill('America/Sao_Paulo');
       await page.getByRole('option', { name: 'America/Sao_Paulo', exact: true }).click();
-      await form.getByRole('button', { name: 'Do this', exact: true }).click();
+      await form.getByRole('combobox', { name: 'Do this', exact: true }).click();
       await page.getByRole('option', { name: 'Create task', exact: true }).click();
       await form.getByRole('textbox', { name: 'Task title', exact: true }).fill('Scheduled fixture');
       await form.getByRole('button', { name: 'Save automation', exact: true }).scrollIntoViewIfNeeded();
@@ -280,7 +290,7 @@ test('conversation memory and proactive grants are owner-visible and persist ind
       await profile.locator('summary').click();
       await profile.getByRole('textbox', { name: 'Companion name', exact: true }).fill('Nico');
       await profile.getByRole('textbox', { name: 'Owner instructions', exact: true }).fill('Friendly companion with dry humor. Never impersonate the owner.');
-      await profile.getByRole('button', { name: 'Reply voice', exact: true }).click();
+      await profile.getByRole('combobox', { name: 'Reply voice', exact: true }).click();
       await expect(page.getByRole('option')).toHaveCount(30);
       await page.getByRole('option', { name: 'English (United States) · M4', exact: true }).click();
       await profile.getByRole('button', { name: 'Save persona', exact: true }).click();
@@ -308,7 +318,7 @@ test('conversation memory and proactive grants are owner-visible and persist ind
       expect(recoveryCommands).toEqual(['reply_recovery', 'reply_recovery']);
       extraWindow = true;
       await expect(replyRecovery.getByRole('button', { name: 'Inspect interrupted reply' })).toBeDisabled({ timeout: 15_000 });
-      await replyRecovery.getByRole('button', { name: 'Target', exact: true }).click({ timeout: 10_000 });
+      await replyRecovery.getByRole('combobox', { name: 'Target', exact: true }).click({ timeout: 10_000 });
       await expect(page.getByRole('option')).toHaveCount(2);
       await page.getByRole('option', { name: 'Fixture chat · 42:cg:9', exact: true }).click();
       await replyRecovery.screenshot({ path: `test-results/companion-recovery-windows-${theme}.png` });
@@ -317,7 +327,7 @@ test('conversation memory and proactive grants are owner-visible and persist ind
       await expect(replyConfirmation).toBeVisible();
       await replyConfirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
       extraWindow = false;
-      await expect(replyRecovery.getByRole('button', { name: 'Target', exact: true })).toHaveCount(0, { timeout: 15_000 });
+      await expect(replyRecovery.getByRole('combobox', { name: 'Target', exact: true })).toHaveCount(0, { timeout: 15_000 });
       const attachments = panel.getByTestId('computer-media-controls');
       await attachments.locator('summary').click();
       const mediaEnabled = attachments.getByRole('switch', { name: 'Allow attachments', exact: true });

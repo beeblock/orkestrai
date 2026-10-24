@@ -1008,6 +1008,7 @@ Header: Authorization = Bearer {{accessToken}}`,
   ],
   changelog: [
     { date: "En desarrollo", title: "Próxima versión", summary: "Correcciones de fiabilidad en validación.", items: [
+      "Identifica los comboboxes del grafo y del perfil de conversación con etiquetas explícitas y limita el ancho del formulario de autorización de Computer. Las pruebas usan la semántica actual de los selectores, restauran ajustes tras timeout y detienen CI pronto ante fallos repetidos.",
       "Copia capturas completas del Portal mediante captura nativa con recorte lógico explícito, preparando el frame de la vista adjunta antes de redimensionarla. Evita capturas CDP bloqueadas en Windows/Linux y conserva las máscaras de campos privados, dimensiones, scroll y la misma página/sesión.",
       "Inicializa el host oculto de captura del Portal antes de adjuntar páginas y reafirma el pintado nativo al mover la vista entre hosts. Las verificaciones nativas exigen una confirmación explícita y eliminan perfiles Chromium tras salir del proceso, evitando falsas aprobaciones en Windows.",
       "Desactiva la búsqueda de fuentes del sistema en el parser aislado de PDF, que usa fuentes incluidas o incorporadas, evitando el bloqueo al iniciar Electron sin ventana antes del OCR en Linux.",

@@ -125,12 +125,12 @@ test('persists agent learning modes and owner decisions without starting an AI p
     await expect(view.getByTestId('agent-learning')).toContainText('Needs review');
     await view.getByRole('button', { name: 'Activate', exact: true }).click();
     await expect(view.getByTestId('agent-learning')).toContainText('Active lesson');
-    await view.getByRole('button', { name: 'Learning mode', exact: true }).click(); await page.getByRole('option', { name: 'Off', exact: true }).click();
+    await view.getByRole('combobox', { name: 'Learning mode', exact: true }).click(); await page.getByRole('option', { name: 'Off', exact: true }).click();
     await expect.poll(async () => (await (await request.get(`${root}/learning`)).json()).data.agents[0].mode).toBe('off');
     await view.screenshot({ path: testInfo.outputPath('agent-learning.png') });
     await page.keyboard.press('Escape'); await page.reload(); await page.getByRole('button', { name: 'Second Brain', exact: true }).click();
     await page.getByRole('dialog').getByRole('tab', { name: 'Agent learning', exact: true }).click();
-    await expect(page.getByRole('dialog').getByRole('button', { name: 'Learning mode', exact: true })).toContainText('Off');
+    await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Learning mode', exact: true })).toContainText('Off');
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(async () => (await page.getByRole('dialog').boundingBox())!.width).toBeLessThan(390);
     const mobileDialog = await page.getByRole('dialog').boundingBox();
