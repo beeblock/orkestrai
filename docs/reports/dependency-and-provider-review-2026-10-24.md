@@ -200,3 +200,11 @@ advanced to the full suite. The final Portal fixture adds an offscreen resize to
 40 fresh protected captures plus one cropped capture pass locally. Refreshing
 privacy masks after applying the logical viewport covers responsive reflow before
 any image is exported. The final integrated CI remains the acceptance gate.
+
+Windows then genuinely passed the strict 40-capture fixture (plus crop) and 168
+terminal mounts with zero hidden writes and maximum first paint 265 ms. Linux's
+first native frame hit the unchanged two-second frame deadline in the final
+fixture run, before any PNG was returned. Hosted captures now prime the attached
+widget's original surface before changing emulation/LocalSurfaceId. The 40-capture
+Mac fixture and 34 focused unit/catalog checks pass with that initialization;
+the remaining cross-platform CI result is still required.

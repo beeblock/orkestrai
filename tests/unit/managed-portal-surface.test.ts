@@ -154,7 +154,7 @@ describe('embedded Portal surface lifecycle', () => {
     expect(await Promise.all([firstCapture, secondCapture])).toEqual([
       expect.objectContaining({ ok: true }), expect.objectContaining({ ok: true }),
     ]);
-    expect(calls).toBe(2);
+    expect(calls).toBe(4);
     expect(CaptureHost.instances[0].contentView.children.size).toBe(0);
   });
 
