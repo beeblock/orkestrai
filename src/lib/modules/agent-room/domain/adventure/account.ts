@@ -23,11 +23,17 @@ export type AdventureSettings = {
   autoAdvance: boolean;
   /** Retry a failed stage instead of falling back one stage. */
   autoRetry: boolean;
-  /** Open chests on arrival when the runes allow it. */
+  /** Open chests as they arrive (red ones after an act's first wait for a soulstone). */
   autoOpen: boolean;
+  /** Loot from opened chests that no hero puts on is salvaged up to this rarity. */
+  autoSalvage: SalvageLevel;
 };
 
-export const DEFAULT_SETTINGS: AdventureSettings = { autoAdvance: true, autoRetry: false, autoOpen: true };
+/** How far automatic salvage goes: never past Epic. */
+export type SalvageLevel = 'off' | 'common' | 'uncommon' | 'rare' | 'epic';
+export const SALVAGE_LEVELS: SalvageLevel[] = ['off', 'common', 'uncommon', 'rare', 'epic'];
+
+export const DEFAULT_SETTINGS: AdventureSettings = { autoAdvance: true, autoRetry: false, autoOpen: true, autoSalvage: 'common' };
 
 /** A line of the loot log, newest first. */
 export type JournalEntry =
@@ -38,7 +44,9 @@ export type JournalEntry =
   | { at: string; kind: 'pet'; petId: PetId }
   | { at: string; kind: 'quest'; title: string; heroId: string | null }
   | { at: string; kind: 'recruit'; heroId: string; agentTitle: string; inherited: boolean }
-  | { at: string; kind: 'offline'; minutes: number; gold: number };
+  | { at: string; kind: 'offline'; minutes: number; gold: number }
+  | { at: string; kind: 'equip'; heroId: string; itemId: string; rarity: Rarity }
+  | { at: string; kind: 'salvage'; count: number; gold: number };
 
 export const JOURNAL_SIZE = 60;
 
@@ -146,11 +154,13 @@ export type AdventureHero = {
   actives: string[];
   /** Spend new skill points automatically. */
   autoSkills: boolean;
+  /** Put on clear upgrades from opened chests by itself. */
+  autoGear: boolean;
   kills: number;
 };
 
 export function newHero(id: string, name: string, classId: HeroClassId, leader = false): AdventureHero {
-  return { id, name, classId, chosenClass: null, leader, agentNodeId: null, agentTitle: null, level: 1, paragon: 0, xp: 0, skills: {}, actives: [], autoSkills: true, kills: 0 };
+  return { id, name, classId, chosenClass: null, leader, agentNodeId: null, agentTitle: null, level: 1, paragon: 0, xp: 0, skills: {}, actives: [], autoSkills: true, autoGear: true, kills: 0 };
 }
 
 /** The gear a new hero starts with: a common weapon of its class and a padded tunic. */

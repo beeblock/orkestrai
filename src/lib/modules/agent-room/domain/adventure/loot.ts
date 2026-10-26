@@ -57,6 +57,8 @@ export type ChestContext = {
   magicFind: number;
   goldMultiplier: number;
   partyClasses: HeroClassId[];
+  /** Items added by runes (Unsealing for white chests, Locksmith for blue ones). */
+  bonusItems?: number;
 };
 
 export type ChestContents = {
@@ -111,7 +113,7 @@ function pickMaterial(rng: Rng, kinds: Array<'decoration' | 'engraving' | 'inscr
 
 export function openChest(rng: Rng, context: ChestContext): ChestContents {
   const contents: ChestContents = { items: [], gold: 0, materials: {}, elixirs: {}, soulstones: 0, coins: 0 };
-  const extra = context.tier === 'red' && (context.difficulty === 'hell' || context.difficulty === 'torment') ? 1 : 0;
+  const extra = (context.tier === 'red' && (context.difficulty === 'hell' || context.difficulty === 'torment') ? 1 : 0) + (context.bonusItems ?? 0);
   const itemLevel = () => Math.max(1, Math.min(MAX_REGION_LEVEL, context.level + Math.floor(rng() * 4) - 2));
   for (let index = 0; index < ITEMS_PER_CHEST[context.tier] + extra; index += 1) {
     const rarity = rollRarity(rng, context.tier, context.magicFind, context.difficulty);

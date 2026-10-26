@@ -4,7 +4,7 @@ import { buildHeroes, deployHeroes, visualTier } from '$lib/modules/agent-room/d
 import { craft, synthesisRarity } from '$lib/modules/agent-room/domain/adventure/cube.js';
 import { SETS, SET_PIECES, UNIQUES, elixirStats, setBonuses, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import {
-  AdventureError, applyReport, buyRune, craftItem, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
+  AdventureError, applyReport, autoOpenChests, buyRune, craftItem, settleLoot, updateSettings, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
   synthesizeItems, bindRoster, heroOfAgent, setHeroClass, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
 } from '$lib/modules/agent-room/domain/adventure/engine.js';
 import {
@@ -487,3 +487,105 @@ describe('adventure armory', () => {
   });
 });
 
+describe('adventure automation', () => {
+  function stored(save: AdventureSave, ctx: EngineContext, id: string, data: ReturnType<typeof rollItem>, locked = false): Item {
+    const item: Item = { ...data, id, location: 'inventory', heroId: null, locked, createdAt: ctx.now };
+    save.items.push(item);
+    return item;
+  }
+
+  function chest(items: Item[]) {
+    return { chestId: 'chest', tier: 'white' as const, items, gold: 0, materials: {}, elixirs: {}, soulstones: 0, coins: 0, equipped: {} as Record<string, string>, salvaged: [] as string[] };
+  }
+
+  it('opens every kind of chest as it arrives, keeping red ones that need a soulstone', () => {
+    const ctx = context(21);
+    const save = freshSave(ctx);
+    save.account.chests = [
+      { id: 'white', tier: 'white', level: 3, difficulty: 'normal', act: 1 },
+      { id: 'quest', tier: 'quest', level: 3, difficulty: 'normal', act: 1 },
+      { id: 'boss', tier: 'red', level: 5, difficulty: 'normal', act: 1 },
+      { id: 'boss-again', tier: 'red', level: 5, difficulty: 'normal', act: 1 },
+    ];
+    expect(autoOpenChests(save, ctx).map((opened) => opened.chestId)).toEqual(['white', 'quest', 'boss']);
+    expect(save.account.chests.map((entry) => entry.id)).toEqual(['boss-again']);
+    save.account.soulstones.normal = 1;
+    expect(autoOpenChests(save, ctx).map((opened) => opened.chestId)).toEqual(['boss-again']);
+    save.account.chests = [{ id: 'later', tier: 'white', level: 3, difficulty: 'normal', act: 1 }];
+    updateSettings(save, { autoOpen: false });
+    expect(autoOpenChests(save, ctx)).toEqual([]);
+  });
+
+  it('puts a clear upgrade on the hero with automatic gear and salvages what nobody wears', () => {
+    const ctx = context(22);
+    const save = freshSave(ctx);
+    const ranger = hero(save, 'qa');
+    for (const entry of Object.values(save.heroes)) {
+      entry.level = 20;
+      entry.autoGear = entry.id === ranger.id;
+    }
+    const helm = stored(save, ctx, 'helm', rollItem(seeded(1), { level: 20, rarity: 'epic', slot: 'helmet' }));
+    // Nobody in this guild is a sorceress: her staffs are leftovers.
+    const scrap = stored(save, ctx, 'scrap', rollItem(seeded(2), { level: 5, rarity: 'common', slot: 'weapon', classId: 'sorceress' }));
+    const better = stored(save, ctx, 'better', rollItem(seeded(3), { level: 5, rarity: 'uncommon', slot: 'weapon', classId: 'sorceress' }));
+    const kept = stored(save, ctx, 'kept', rollItem(seeded(4), { level: 5, rarity: 'common', slot: 'weapon', classId: 'sorceress' }), true);
+    const opened = chest([helm, scrap, better, kept]);
+    const goldBefore = save.account.gold;
+    settleLoot(save, ctx, [opened]);
+    expect(opened.equipped).toEqual({ helm: ranger.id });
+    expect(save.items.find((item) => item.id === 'helm')).toMatchObject({ location: 'equipped', heroId: ranger.id });
+    // Salvage stops at Common by default and never takes a locked item.
+    expect(opened.salvaged).toEqual(['scrap']);
+    expect(save.items.map((item) => item.id)).toEqual(expect.arrayContaining(['better', 'kept']));
+    expect(save.items.some((item) => item.id === 'scrap')).toBe(false);
+    expect(save.account.gold).toBeGreaterThan(goldBefore);
+    expect(save.account.journal.slice(0, 2).map((entry) => entry.kind)).toEqual(['salvage', 'equip']);
+  });
+
+  it('never takes off a locked, unique or set piece and leaves loot alone with everything off', () => {
+    const ctx = context(23);
+    const save = freshSave(ctx);
+    const ranger = hero(save, 'qa');
+    for (const entry of Object.values(save.heroes)) {
+      entry.level = 30;
+      entry.autoGear = entry.id === ranger.id;
+    }
+    const worn = stored(save, ctx, 'worn', rollItem(seeded(5), { level: 1, rarity: 'common', slot: 'helmet' }), true);
+    worn.location = 'equipped';
+    worn.heroId = ranger.id;
+    const set = stored(save, ctx, 'set', rollItem(seeded(6), { level: 25, rarity: 'epic', setId: 'windrunner', slot: 'boots' }));
+    set.location = 'equipped';
+    set.heroId = ranger.id;
+    const helm = stored(save, ctx, 'helm', rollItem(seeded(7), { level: 30, rarity: 'legendary', slot: 'helmet' }));
+    const boots = stored(save, ctx, 'boots', rollItem(seeded(8), { level: 30, rarity: 'legendary', slot: 'boots' }));
+    const opened = chest([helm, boots]);
+    settleLoot(save, ctx, [opened]);
+    expect(opened.equipped).toEqual({});
+    expect(save.items.find((item) => item.id === 'worn')?.heroId).toBe(ranger.id);
+    expect(save.items.find((item) => item.id === 'set')?.heroId).toBe(ranger.id);
+    // Legendary leftovers are past the salvage limit.
+    expect(opened.salvaged).toEqual([]);
+
+    // With automatic gear and salvage off, new loot just waits in the bag.
+    ranger.autoGear = false;
+    updateSettings(save, { autoSalvage: 'off' });
+    const spare = stored(save, ctx, 'spare', rollItem(seeded(9), { level: 5, rarity: 'common', slot: 'gloves' }));
+    const quiet = chest([spare]);
+    settleLoot(save, ctx, [quiet]);
+    expect(quiet).toMatchObject({ equipped: {}, salvaged: [] });
+    expect(save.items.find((item) => item.id === 'spare')?.location).toBe('inventory');
+  });
+
+  it('checks the salvage level and gives Unsealing and Locksmith one more item per chest', () => {
+    const ctx = context(24);
+    const save = freshSave(ctx);
+    updateSettings(save, { autoSalvage: 'mythic' as never });
+    expect(save.account.settings.autoSalvage).toBe('common');
+    updateSettings(save, { autoSalvage: 'rare' });
+    expect(save.account.settings.autoSalvage).toBe('rare');
+    const base = { level: 5, difficulty: 'normal' as const, act: 1, magicFind: 0, goldMultiplier: 1, partyClasses: ['knight' as const] };
+    expect(openChest(seeded(10), { ...base, tier: 'white' }).items).toHaveLength(1);
+    expect(openChest(seeded(10), { ...base, tier: 'white', bonusItems: 1 }).items).toHaveLength(2);
+    expect(openChest(seeded(10), { ...base, tier: 'blue', bonusItems: 1 }).items).toHaveLength(3);
+  });
+});

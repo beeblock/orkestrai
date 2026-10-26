@@ -691,8 +691,8 @@ export const ADVENTURE_ES: AdventureCatalog = {
     "alchemy": "+{value}% de oro por alquimia",
     "inventory": "+{value} espacios de inventario",
     "stash": "+{value} pestañas de alijo",
-    "auto-white": "Abre los cofres blancos en cuanto llegan",
-    "auto-blue": "Abre los cofres azules en cuanto llegan",
+    "white-bonus": "+1 objeto en cada cofre blanco",
+    "blue-bonus": "+1 objeto en cada cofre azul",
     "blue-chance": "+{value}% de probabilidad de cofre azul",
     "chest-capacity": "+{value} cofres guardados",
     "mentorship": "+{value}% de experiencia para los héroes por debajo del nivel del más fuerte",
@@ -801,7 +801,9 @@ export const ADVENTURE_ES: AdventureCatalog = {
     "boss": "Jefe derrotado: {monster}",
     "pet": "{pet} se unió al grupo",
     "quest": "Misión completada: {title}",
-    "offline": "Mientras no estabas: {minutes} min de trabajo, {gold} de oro"
+    "offline": "Mientras no estabas: {minutes} min de trabajo, {gold} de oro",
+    "equip": "{hero} se equipó {item}",
+    "salvage": "{count} sobrantes desmontados: +{gold} de oro"
   },
   "itemSources": {
     "white": "cofre blanco",

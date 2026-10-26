@@ -185,6 +185,14 @@
       const best = [...items].sort((a, b) => rarityIndex(b.rarity) - rarityIndex(a.rarity))[0];
       if (rarityIndex(best.rarity) >= 4) stage?.announce(m['adventure.loot_found']({ rarity: catalog.rarities[best.rarity], item: itemName(catalog, best) }), 'loot', RARITY_RULES[best.rarity].color);
     }
+    // A hero putting on an epic piece or better by itself is worth a word.
+    for (const opened of outcome.opened) {
+      for (const [itemId, heroId] of Object.entries(opened.equipped ?? {})) {
+        const item = opened.items.find((entry) => entry.id === itemId);
+        const hero = outcome.snapshot.heroes.find((entry) => entry.id === heroId);
+        if (item && hero && rarityIndex(item.rarity) >= 3) stage?.announce(m['adventure.hero_put_on']({ hero: hero.name, item: itemName(catalog, item) }), 'loot', RARITY_RULES[item.rarity].color);
+      }
+    }
     for (const quest of outcome.quests) stage?.quest(quest.title);
     for (const petId of outcome.pets) stage?.announce(m['adventure.pet_joined']({ pet: catalog.pets[petId] }), 'gold');
   }

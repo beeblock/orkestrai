@@ -691,8 +691,8 @@ export const ADVENTURE_EN: AdventureCatalog = {
     "alchemy": "+{value}% gold from alchemy",
     "inventory": "+{value} inventory slots",
     "stash": "+{value} stash tabs",
-    "auto-white": "Opens white chests as they arrive",
-    "auto-blue": "Opens blue chests as they arrive",
+    "white-bonus": "+1 item in every white chest",
+    "blue-bonus": "+1 item in every blue chest",
     "blue-chance": "+{value}% blue chest chance",
     "chest-capacity": "+{value} chests kept",
     "mentorship": "+{value}% experience for heroes behind the strongest",
@@ -801,7 +801,9 @@ export const ADVENTURE_EN: AdventureCatalog = {
     "boss": "{monster} defeated",
     "pet": "{pet} joined the party",
     "quest": "Quest complete: {title}",
-    "offline": "While away: {minutes} min of work, {gold} gold"
+    "offline": "While away: {minutes} min of work, {gold} gold",
+    "equip": "{hero} put on {item}",
+    "salvage": "Salvaged {count} leftovers: +{gold} gold"
   },
   "itemSources": {
     "white": "white chest",

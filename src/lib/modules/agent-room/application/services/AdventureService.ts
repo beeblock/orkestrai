@@ -175,9 +175,14 @@ export class AdventureService {
         save.account.battleUntil = now;
       }
       const value = change(save, ctx);
+      // Chests that arrived (from battle or quests) open themselves and their loot is settled.
+      const autoOpened = engine.autoOpenChests(save, ctx);
       await adventureRepository.persist(workspaceId, before, save);
       const report = (value && typeof value === 'object' && 'levelUps' in (value as object)) ? (value as unknown as ReportResult) : null;
-      const opened = Array.isArray(value) && value.every((entry) => entry && typeof entry === 'object' && 'chestId' in entry) ? (value as OpenResult[]) : report?.opened ?? [];
+      const opened = [
+        ...(Array.isArray(value) && value.every((entry) => entry && typeof entry === 'object' && 'chestId' in entry) ? (value as OpenResult[]) : report?.opened ?? []),
+        ...autoOpened,
+      ];
       return {
         value,
         outcome: {
@@ -224,6 +229,7 @@ export class AdventureService {
       case 'raise-skill': return engine.raiseSkill(save, action.heroId, action.skillId);
       case 'reset-skills': return engine.resetSkills(save, action.heroId);
       case 'auto-skills': return engine.setAutoSkills(save, action.heroId, action.enabled);
+      case 'auto-gear': return engine.setAutoGear(save, action.heroId, action.enabled);
       case 'set-actives': return engine.setActives(save, action.heroId, action.actives);
       case 'set-class': return engine.setHeroClass(save, ctx, action.heroId, action.classId);
       case 'travel': return engine.travel(save, { difficulty: action.difficulty, act: action.act, stage: action.stage });

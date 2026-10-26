@@ -691,8 +691,8 @@ export const ADVENTURE_PT: AdventureCatalog = {
     "alchemy": "+{value}% de ouro com alquimia",
     "inventory": "+{value} espaços no inventário",
     "stash": "+{value} abas no depósito",
-    "auto-white": "Abre baús brancos assim que chegam",
-    "auto-blue": "Abre baús azuis assim que chegam",
+    "white-bonus": "+1 item em todo baú branco",
+    "blue-bonus": "+1 item em todo baú azul",
     "blue-chance": "+{value}% de chance de baú azul",
     "chest-capacity": "+{value} baús guardados",
     "mentorship": "+{value}% de experiência para heróis abaixo do nível do mais forte",
@@ -801,7 +801,9 @@ export const ADVENTURE_PT: AdventureCatalog = {
     "boss": "Chefe derrotado: {monster}",
     "pet": "{pet} entrou para o grupo",
     "quest": "Missão concluída: {title}",
-    "offline": "Enquanto você estava fora: {minutes} min de trabalho, {gold} de ouro"
+    "offline": "Enquanto você estava fora: {minutes} min de trabalho, {gold} de ouro",
+    "equip": "{hero} vestiu {item}",
+    "salvage": "{count} sobras desmontadas: +{gold} de ouro"
   },
   "itemSources": {
     "white": "baú branco",

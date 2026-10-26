@@ -3,7 +3,7 @@ import { AgentAdventure } from '../../domain/models/AgentAdventure.js';
 import { AgentAdventureHero } from '../../domain/models/AgentAdventureHero.js';
 import { AgentAdventureItem } from '../../domain/models/AgentAdventureItem.js';
 import { ELIXIRS, SETS, UNIQUES, type ElixirId, type SetId, type UniqueId } from '../../domain/adventure/artifacts.js';
-import { DEFAULT_SETTINGS, REPORT_MEMORY, newAccount, type AdventureAccount, type AdventureHero } from '../../domain/adventure/account.js';
+import { DEFAULT_SETTINGS, REPORT_MEMORY, SALVAGE_LEVELS, newAccount, type AdventureAccount, type AdventureHero, type AdventureSettings } from '../../domain/adventure/account.js';
 import { HERO_CLASS_IDS, type HeroClassId } from '../../domain/adventure/catalog.js';
 import type { AdventureSave } from '../../domain/adventure/engine.js';
 import { GEM_QUALITIES, MATERIALS, RARITIES, SLOTS, parseMaterialKey, type BaseVariant, type GemQuality, type Item, type ItemAffix, type ItemSocket, type Rarity, type Slot } from '../../domain/adventure/items.js';
@@ -19,6 +19,12 @@ function parse<T>(raw: unknown, fallback: T): T {
   }
 }
 
+/** Stored settings, each one checked: an unknown salvage level falls back to the default. */
+function readSettings(raw: Partial<AdventureSettings> | undefined): AdventureSettings {
+  const settings = { ...DEFAULT_SETTINGS, ...raw };
+  return { ...settings, autoSalvage: SALVAGE_LEVELS.includes(settings.autoSalvage) ? settings.autoSalvage : DEFAULT_SETTINGS.autoSalvage };
+}
+
 /** A stored account, with every field a newer version added filled in. */
 function readAccount(raw: unknown, now: string): AdventureAccount {
   // `lastReportId` was the single report id kept before `recentReports`.
@@ -31,7 +37,7 @@ function readAccount(raw: unknown, now: string): AdventureAccount {
     position: { ...START_POSITION, ...stored.position },
     cleared: { ...NO_CLEARS, ...stored.cleared },
     soulstones: { ...base.soulstones, ...stored.soulstones },
-    settings: { ...DEFAULT_SETTINGS, ...stored.settings },
+    settings: readSettings(stored.settings),
     cube: { ...base.cube, ...stored.cube },
     chests: Array.isArray(stored.chests) ? stored.chests : [],
     // Only known material keys and elixirs survive a read.
@@ -67,6 +73,7 @@ function readHero(model: AgentAdventureHero): AdventureHero {
     skills: parse<Record<string, number>>(model.getAttribute('skills_json'), {}),
     actives: parse<string[]>(model.getAttribute('actives_json'), []),
     autoSkills: Boolean(model.getAttribute('auto_skills')),
+    autoGear: model.getAttribute('auto_gear') === undefined || model.getAttribute('auto_gear') === null ? true : Boolean(model.getAttribute('auto_gear')),
     kills: Number(model.getAttribute('kills')) || 0,
   };
 }
@@ -119,6 +126,7 @@ function heroRow(hero: AdventureHero) {
     skills_json: JSON.stringify(hero.skills),
     actives_json: JSON.stringify(hero.actives),
     auto_skills: hero.autoSkills,
+    auto_gear: hero.autoGear,
     kills: hero.kills,
   };
 }

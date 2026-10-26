@@ -73,6 +73,7 @@ describe('AdventureService', () => {
   it('records the battle: levels, gold, chests and cleared stages, once per report', async () => {
     const { ws, qa } = await team();
     const ranger = heroOf((await adventureService.state(ws.id)).snapshot, qa.id);
+    await adventureService.act(ws.id, { type: 'settings', settings: { autoOpen: false } });
     const input = report({ xp: { [ranger.id]: xpToNext(1) + 1 }, gold: 40, kills: { 'glitch-slime': 12 }, chests: [{ tier: 'white', level: 1, difficulty: 'normal', act: 1 }] });
     const outcome = await adventureService.report(ws.id, input);
     expect(outcome.levelUps).toEqual([{ heroId: ranger.id, level: 2 }]);
@@ -134,6 +135,9 @@ describe('AdventureService', () => {
   it('opens chests, equips the loot and refuses what the rules forbid', async () => {
     const { ws, qa } = await team();
     const ranger = heroOf((await adventureService.state(ws.id)).snapshot, qa.id);
+    // Everything by hand here: no automatic opening, gear or salvage.
+    await adventureService.act(ws.id, { type: 'settings', settings: { autoOpen: false, autoSalvage: 'off' } });
+    for (const entry of (await adventureService.state(ws.id)).snapshot.heroes) await adventureService.act(ws.id, { type: 'auto-gear', heroId: entry.id, enabled: false });
     await adventureService.report(ws.id, report({ chests: [{ tier: 'blue', level: 3, difficulty: 'normal', act: 1 }] }));
     const opened = await adventureService.act(ws.id, { type: 'open-chests', tier: 'blue' });
     expect(opened.opened[0].items).toHaveLength(2);
@@ -152,6 +156,7 @@ describe('AdventureService', () => {
   it('pays a Kanban card finished after the Adventure began as a quest chest', async () => {
     const { ws, qa } = await team();
     const ranger = heroOf((await adventureService.state(ws.id)).snapshot, qa.id);
+    await adventureService.act(ws.id, { type: 'settings', settings: { autoOpen: false } });
     const now = new Date().toISOString();
     await AgentBoardTask.create({ id: uuidv7(), workspace_id: ws.id, title: 'Ship the login', status: 'done', assignee_node_id: qa.id, created_by: 'user', created_at: now, updated_at: now });
     const outcome = await adventureService.state(ws.id);
@@ -232,6 +237,24 @@ describe('AdventureService', () => {
     const fused = await adventureService.act(ws.id, { type: 'fuse-gems', gem: 'sapphire', quality: 1 });
     expect(fused.snapshot.account.materials).toMatchObject({ 'sapphire:1': 0, 'sapphire:2': 1 });
     await expect(adventureService.act(ws.id, { type: 'drink', elixirId: 'might' })).rejects.toThrow('elixir');
+  });
+
+  it('opens chests by itself after a battle and keeps the automation settings per guild and hero', async () => {
+    const { ws, qa } = await team();
+    const ranger = heroOf((await adventureService.state(ws.id)).snapshot, qa.id);
+    expect(ranger.autoGear).toBe(true);
+    const off = await adventureService.act(ws.id, { type: 'auto-gear', heroId: ranger.id, enabled: false });
+    expect(heroOf(off.snapshot, qa.id).autoGear).toBe(false);
+    const salvage = await adventureService.act(ws.id, { type: 'settings', settings: { autoSalvage: 'uncommon' } });
+    expect(salvage.snapshot.account.settings).toMatchObject({ autoOpen: true, autoSalvage: 'uncommon' });
+
+    const outcome = await adventureService.report(ws.id, report({ kills: { 'bug-beetle': 4 }, chests: [{ tier: 'white', level: 2, difficulty: 'normal', act: 1 }, { tier: 'blue', level: 2, difficulty: 'normal', act: 1 }] }));
+    expect(outcome.opened.map((opened) => opened.tier).sort()).toEqual(['blue', 'white']);
+    expect(outcome.snapshot.account.chests).toEqual([]);
+    expect(Object.values(outcome.opened[0].equipped).every((heroId) => heroId !== ranger.id)).toBe(true);
+    const again = await adventureService.state(ws.id);
+    expect(heroOf(again.snapshot, qa.id).autoGear).toBe(false);
+    expect(again.snapshot.account.settings.autoSalvage).toBe('uncommon');
   });
 
   it('is deleted with its workspace', async () => {

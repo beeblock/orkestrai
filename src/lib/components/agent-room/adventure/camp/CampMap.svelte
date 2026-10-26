@@ -5,7 +5,6 @@
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
   import { BIOMES, type BiomeId, type HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
-  import { runeRule } from '$lib/modules/agent-room/domain/adventure/runes.js';
   import { ACT_COUNT, DIFFICULTIES, STAGES_PER_ACT, difficultyUnlocked, regionLevel, stageIndex, stageUnlocked, type Difficulty } from '$lib/modules/agent-room/domain/adventure/world.js';
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
@@ -27,12 +26,11 @@
   const account = $derived(snapshot.account);
   const cleared = $derived(account.cleared[difficulty]);
   const formation = $derived(account.formation);
-  const canAutoOpen = $derived(runeRule(account.runes, 'auto-white') > 0 || runeRule(account.runes, 'auto-blue') > 0);
 
   const biomeName = (id: BiomeId) => (m as unknown as Record<string, () => string>)[`adventure.biome_${id.replace(/-/g, '_')}`]?.() ?? id;
   const className = (id: HeroClassId) => (m as unknown as Record<string, () => string>)[`adventure.class_${id}`]?.() ?? id;
 
-  function setting(key: 'autoAdvance' | 'autoRetry' | 'autoOpen', value: boolean) {
+  function setting(key: 'autoAdvance' | 'autoRetry', value: boolean) {
     void act({ type: 'settings', settings: { [key]: value } });
   }
 
@@ -99,7 +97,6 @@
       <h3>{m['adventure.camp_settings']()}</h3>
       <label class="toggle"><Switch checked={account.settings.autoAdvance} disabled={busy} onCheckedChange={(value: boolean) => setting('autoAdvance', value)} aria-label={m['adventure.camp_auto_advance']()} /><span><b>{m['adventure.camp_auto_advance']()}</b><small>{m['adventure.camp_auto_advance_hint']()}</small></span></label>
       <label class="toggle"><Switch checked={account.settings.autoRetry} disabled={busy} onCheckedChange={(value: boolean) => setting('autoRetry', value)} aria-label={m['adventure.camp_auto_retry']()} /><span><b>{m['adventure.camp_auto_retry']()}</b><small>{m['adventure.camp_auto_retry_hint']()}</small></span></label>
-      <label class="toggle"><Switch checked={account.settings.autoOpen} disabled={busy || !canAutoOpen} onCheckedChange={(value: boolean) => setting('autoOpen', value)} aria-label={m['adventure.camp_auto_open']()} /><span><b>{m['adventure.camp_auto_open']()}</b><small>{canAutoOpen ? m['adventure.camp_auto_open_hint']() : m['adventure.camp_auto_open_locked']()}</small></span></label>
     </section>
 
     <section>

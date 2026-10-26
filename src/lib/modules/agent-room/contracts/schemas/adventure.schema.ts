@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MONSTERS, TEAMMATE_CLASS_IDS, HERO_CLASS_IDS, type HeroClassId, type MonsterId } from '../../domain/adventure/catalog.js';
+import { SALVAGE_LEVELS, type SalvageLevel } from '../../domain/adventure/account.js';
 import { ELIXIR_IDS, type ElixirId } from '../../domain/adventure/artifacts.js';
 import { MATERIAL_IDS, MATERIALS, SLOTS, type MaterialId, type Slot } from '../../domain/adventure/items.js';
 import { CHEST_TIERS, type ChestTier } from '../../domain/adventure/loot.js';
@@ -57,10 +58,11 @@ export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('raise-skill'), heroId: id, skillId: z.string().min(1).max(80) }),
   z.object({ type: z.literal('reset-skills'), heroId: id }),
   z.object({ type: z.literal('auto-skills'), heroId: id, enabled: z.boolean() }),
+  z.object({ type: z.literal('auto-gear'), heroId: id, enabled: z.boolean() }),
   z.object({ type: z.literal('set-actives'), heroId: id, actives: z.array(z.string().min(1).max(80)).max(4) }),
   z.object({ type: z.literal('set-class'), heroId: id, classId: z.enum(tuple<HeroClassId>(TEAMMATE_CLASS_IDS)).nullable() }),
   z.object({ type: z.literal('travel'), difficulty, act, stage }),
-  z.object({ type: z.literal('settings'), settings: z.object({ autoAdvance: z.boolean().optional(), autoRetry: z.boolean().optional(), autoOpen: z.boolean().optional() }) }),
+  z.object({ type: z.literal('settings'), settings: z.object({ autoAdvance: z.boolean().optional(), autoRetry: z.boolean().optional(), autoOpen: z.boolean().optional(), autoSalvage: z.enum(tuple<SalvageLevel>(SALVAGE_LEVELS)).optional() }) }),
   // Hero ids pinned to the formation, in order.
   z.object({ type: z.literal('formation'), order: z.array(id).max(12) }),
   z.object({ type: z.literal('pet'), petId: z.enum(tuple<PetId>(PETS.map((pet) => pet.id))).nullable() }),

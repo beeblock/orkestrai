@@ -4,14 +4,14 @@ import { addStats, scaleStats, type StatBlock } from './stats.js';
  * The rune tree: account-wide upgrades bought with gold, in six branches
  * (gold, storage, chests, combat, wisdom and command). Some runes add stats
  * to every hero; others change the rules (more formation slots, a second
- * active skill, auto-opening chests, a bigger inventory...).
+ * active skill, richer chests, a bigger inventory...).
  */
 
 export type RuneBranch = 'gold' | 'storage' | 'chests' | 'combat' | 'wisdom' | 'command';
 export const RUNE_BRANCHES: RuneBranch[] = ['gold', 'storage', 'chests', 'combat', 'wisdom', 'command'];
 
 export type RuneRule =
-  | 'alchemy' | 'inventory' | 'stash' | 'auto-white' | 'auto-blue' | 'blue-chance' | 'chest-capacity'
+  | 'alchemy' | 'inventory' | 'stash' | 'white-bonus' | 'blue-bonus' | 'blue-chance' | 'chest-capacity'
   | 'mentorship' | 'offline' | 'formation' | 'active-slot' | 'revive';
 
 export type Rune = {
@@ -31,8 +31,8 @@ export const RUNES: Rune[] = [
   { id: 'fortune', branch: 'gold', costs: [250_000, 600_000, 1_200_000, 2_500_000, 5_000_000], requires: ['greed', 5], stats: { goldFind: 15 } },
   { id: 'pockets', branch: 'storage', costs: [3_000, 10_000, 30_000, 90_000, 250_000], rule: ['inventory', 10] },
   { id: 'vaults', branch: 'storage', costs: [20_000, 150_000, 1_000_000, 5_000_000, 20_000_000], requires: ['pockets', 1], rule: ['stash', 1] },
-  { id: 'unsealing', branch: 'storage', costs: [25_000], requires: ['pockets', 2], rule: ['auto-white', 1] },
-  { id: 'locksmith', branch: 'storage', costs: [200_000], requires: ['unsealing', 1], rule: ['auto-blue', 1] },
+  { id: 'unsealing', branch: 'storage', costs: [25_000], requires: ['pockets', 2], rule: ['white-bonus', 1] },
+  { id: 'locksmith', branch: 'storage', costs: [200_000], requires: ['unsealing', 1], rule: ['blue-bonus', 1] },
   { id: 'haste', branch: 'storage', costs: [40_000, 150_000, 500_000, 1_500_000], requires: ['pockets', 3], stats: { cooldownReduction: 4 } },
   { id: 'discovery', branch: 'chests', costs: [4_000, 12_000, 35_000, 100_000, 300_000], stats: { chestChance: 15 } },
   { id: 'hoarding', branch: 'chests', costs: [10_000, 40_000, 120_000, 400_000, 1_200_000], requires: ['discovery', 1], rule: ['chest-capacity', 10] },

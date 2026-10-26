@@ -149,6 +149,10 @@
           <Button size="sm" variant="outline" class="w-fit" disabled={busy} onclick={() => void act({ type: 'auto-equip', heroId: hero.id })}>
             <Sparkles size={14} aria-hidden="true" />{m['adventure.camp_equip_best']()}
           </Button>
+          <label class="auto-gear" title={m['adventure.camp_auto_gear_hint']()}>
+            <Switch checked={hero.autoGear ?? true} disabled={busy} onCheckedChange={(checked: boolean) => void act({ type: 'auto-gear', heroId: hero.id, enabled: checked })} aria-label={m['adventure.camp_auto_gear']()} data-testid="camp-auto-gear" />
+            <span>{m['adventure.camp_auto_gear']()}</span>
+          </label>
         </div>
         <div class="doll" role="group" aria-label={m['adventure.camp_equipment']()}>
           {#each cells as cell (`${cell.slot}-${cell.index}`)}
@@ -378,6 +382,15 @@
     display: grid;
     gap: 6px;
     align-content: start;
+  }
+
+  .auto-gear {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--app-text-soft);
+    font-size: 12px;
+    cursor: pointer;
   }
 
   h2 {

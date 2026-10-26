@@ -1,5 +1,5 @@
 import { HERO_CLASSES, MONSTERS, heroClassFor, type HeroClassId, type MonsterId } from './catalog.js';
-import { JOURNAL_SIZE, REPORT_MEMORY, newHero, starterKit, type AdventureAccount, type AdventureHero, type AdventureSettings, type ChestEntry, type JournalEntry } from './account.js';
+import { JOURNAL_SIZE, REPORT_MEMORY, SALVAGE_LEVELS, newHero, starterKit, type AdventureAccount, type AdventureHero, type AdventureSettings, type ChestEntry, type JournalEntry } from './account.js';
 import { ELIXIRS, elixirStats, elixirUntil, type ElixirId } from './artifacts.js';
 import { buildHeroes, deployHeroes, type HeroBuild } from './build.js';
 import { heroName } from './names.js';
@@ -327,28 +327,105 @@ export function applyReport(save: AdventureSave, input: ReportInput, ctx: Engine
     journal(save, { at: ctx.now, kind: 'pet', petId });
     account.activePet ??= petId;
   }
-  result.opened.push(...autoOpen(save, ctx));
   account.lastReportAt = ctx.now;
   account.battleUntil = new Date(paidUntil + report.elapsedMs).toISOString();
   account.recentReports = [...account.recentReports, input.reportId].slice(-REPORT_MEMORY);
   return result;
 }
 
-/** Runes of unsealing open chests as they arrive, a few at a time. */
-function autoOpen(save: AdventureSave, ctx: EngineContext): OpenResult[] {
+/** Chests a save opens by itself at a time; the rest wait for the next look. */
+const AUTO_OPEN_BATCH = 6;
+
+/**
+ * Chests open themselves as they arrive, unless the owner turned it off:
+ * a few at a time while the inventory has room. A red chest after an act's
+ * first waits for a soulstone of its difficulty. The loot is then settled
+ * (`settleLoot`).
+ */
+export function autoOpenChests(save: AdventureSave, ctx: EngineContext): OpenResult[] {
   if (!save.account.settings.autoOpen) return [];
-  const tiers: ChestTier[] = [];
-  if (runeRule(save.account.runes, 'auto-white')) tiers.push('white');
-  if (runeRule(save.account.runes, 'auto-blue')) tiers.push('blue');
+  const account = save.account;
   const opened: OpenResult[] = [];
-  for (const chest of [...save.account.chests]) {
-    if (!tiers.includes(chest.tier) || freeInventory(save) < 3 || opened.length >= 4) continue;
+  for (const chest of [...account.chests]) {
+    if (opened.length >= AUTO_OPEN_BATCH || freeInventory(save) < 4) break;
+    if (chest.tier === 'red' && account.firstBossClears.includes(`${chest.difficulty}:${chest.act}`) && account.soulstones[chest.difficulty] <= 0) continue;
     opened.push(openChestEntry(save, ctx, chest));
   }
+  settleLoot(save, ctx, opened);
   return opened;
 }
 
-export type OpenResult = { chestId: string; tier: ChestTier; items: Item[]; gold: number; materials: Record<string, number>; elixirs: Partial<Record<ElixirId, number>>; soulstones: number; coins: number };
+/**
+ * What a chest held. `equipped` says which of its items a hero put on by
+ * itself (item id → hero id) and `salvaged` which ones turned into gold.
+ */
+export type OpenResult = {
+  chestId: string; tier: ChestTier; items: Item[]; gold: number; materials: Record<string, number>; elixirs: Partial<Record<ElixirId, number>>; soulstones: number; coins: number;
+  equipped: Record<string, string>; salvaged: string[];
+};
+
+/** Worn pieces automatic gear never takes off and automatic salvage never touches. */
+function keptByOwner(item: Item): boolean {
+  return item.locked || Boolean(item.uniqueId) || Boolean(item.setId);
+}
+
+/** A hero's power rating with a set of items, built alone (one piece does not change the formation's auras). */
+function soloRating(save: AdventureSave, hero: AdventureHero, items: Item[], now: number): number {
+  const input = { heroId: hero.id, classId: hero.classId, level: hero.level, paragon: hero.paragon, xp: hero.xp, skills: hero.skills, actives: hero.actives, deployed: false };
+  return buildHeroes([input], items, save.account.runes, save.account.killsByMonster, elixirStats(save.account.activeElixirs, now))[hero.id]?.rating ?? 0;
+}
+
+/** A worn piece must lose by this much (1% of the hero's power) for a hero to swap it by itself. */
+const AUTO_GEAR_GAIN = 1.01;
+
+/**
+ * Settles loot from opened chests. Each piece goes to the hero (with
+ * automatic gear on) it improves the most, if it fills an empty slot or
+ * clearly beats the piece it replaces; a piece pushed off is offered to the
+ * others. What nobody puts on is salvaged up to the salvage setting. Locked,
+ * unique and set pieces are never taken off or salvaged.
+ */
+export function settleLoot(save: AdventureSave, ctx: EngineContext, opened: OpenResult[]): void {
+  const now = Date.parse(ctx.now);
+  const chestOf = new Map(opened.flatMap((result) => result.items.map((item) => [item.id, result] as const)));
+  const queue = save.items.filter((item) => chestOf.has(item.id)).sort((a, b) => itemScore(b) - itemScore(a));
+  const heroes = Object.values(save.heroes).filter((hero) => hero.autoGear);
+  const unworn = new Set<string>();
+  for (let index = 0; index < queue.length; index += 1) {
+    const item = queue[index];
+    if (item.location !== 'inventory' || item.locked) continue;
+    let best: { hero: AdventureHero; replaced: Item | null; gain: number } | null = null;
+    for (const hero of heroes) {
+      if (canEquip(item, hero) !== 'ok') continue;
+      const worn = save.items.filter((candidate) => candidate.location === 'equipped' && candidate.heroId === hero.id && candidate.slot === item.slot);
+      const room = worn.length < SLOT_CAPACITY[item.slot];
+      const replaced = room ? null : worn.filter((candidate) => !keptByOwner(candidate)).sort((a, b) => itemScore(a) - itemScore(b))[0] ?? null;
+      if (!room && (!replaced || itemScore(item) <= itemScore(replaced))) continue;
+      const before = soloRating(save, hero, save.items, now);
+      const trial = save.items.map((candidate) => (candidate.id === item.id ? { ...candidate, location: 'equipped' as const, heroId: hero.id }
+        : candidate.id === replaced?.id ? { ...candidate, location: 'inventory' as const, heroId: null } : candidate));
+      const gain = soloRating(save, hero, trial, now) / Math.max(1, before);
+      if ((room ? gain > 1 : gain >= AUTO_GEAR_GAIN) && (!best || gain > best.gain)) best = { hero, replaced, gain };
+    }
+    if (!best) {
+      unworn.add(item.id);
+      continue;
+    }
+    equipItem(save, item.id, best.hero.id, best.replaced?.id);
+    unworn.delete(item.id);
+    const chest = chestOf.get(item.id);
+    if (chest) chest.equipped[item.id] = best.hero.id;
+    journal(save, { at: ctx.now, kind: 'equip', heroId: best.hero.id, itemId: item.id, rarity: item.rarity });
+    if (best.replaced && !queue.includes(best.replaced)) queue.push(best.replaced);
+  }
+  const level = save.account.settings.autoSalvage;
+  if (level === 'off') return;
+  const scrap = save.items.filter((item) => unworn.has(item.id) && item.location === 'inventory' && !keptByOwner(item) && RARITIES.indexOf(item.rarity) <= RARITIES.indexOf(level));
+  if (!scrap.length) return;
+  const gold = salvage(save, scrap.map((item) => item.id));
+  for (const item of scrap) chestOf.get(item.id)?.salvaged.push(item.id);
+  journal(save, { at: ctx.now, kind: 'salvage', count: scrap.length, gold });
+}
 
 function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEntry): OpenResult {
   const account = save.account;
@@ -365,6 +442,7 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
   const contents = openChest(ctx.rng, {
     tier: chest.tier, level: chest.level, difficulty: chest.difficulty, act: chest.act,
     magicFind: luck.magicFind, goldMultiplier: luck.goldMultiplier, partyClasses: partyClasses(save),
+    bonusItems: chest.tier === 'white' ? runeRule(account.runes, 'white-bonus') : chest.tier === 'blue' ? runeRule(account.runes, 'blue-bonus') : 0,
   });
   account.chests = account.chests.filter((entry) => entry.id !== chest.id);
   account.gold += contents.gold;
@@ -377,7 +455,7 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
     journal(save, { at: ctx.now, kind: 'item', itemId: item.id, rarity: item.rarity, source: chest.tier });
     return item;
   });
-  return { chestId: chest.id, tier: chest.tier, items, gold: contents.gold, materials: contents.materials, elixirs: contents.elixirs, soulstones: contents.soulstones, coins: contents.coins };
+  return { chestId: chest.id, tier: chest.tier, items, gold: contents.gold, materials: contents.materials, elixirs: contents.elixirs, soulstones: contents.soulstones, coins: contents.coins, equipped: {}, salvaged: [] };
 }
 
 /** Opens chests by id, or every chest of a tier when no ids are given. */
@@ -397,6 +475,7 @@ export function openChests(save: AdventureSave, ctx: EngineContext, options: { i
       break;
     }
   }
+  settleLoot(save, ctx, opened);
   return opened;
 }
 
@@ -731,6 +810,10 @@ export function resetSkills(save: AdventureSave, heroId: string): void {
   hero.autoSkills = false;
 }
 
+export function setAutoGear(save: AdventureSave, heroId: string, enabled: boolean): void {
+  findHero(save, heroId).autoGear = enabled;
+}
+
 export function setAutoSkills(save: AdventureSave, heroId: string, enabled: boolean): void {
   const hero = findHero(save, heroId);
   hero.autoSkills = enabled;
@@ -765,7 +848,9 @@ export function travel(save: AdventureSave, position: StagePosition): void {
 }
 
 export function updateSettings(save: AdventureSave, patch: Partial<AdventureSettings>): void {
-  save.account.settings = { ...save.account.settings, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => typeof value === 'boolean')) };
+  const flags = Object.fromEntries(Object.entries(patch).filter(([key, value]) => key !== 'autoSalvage' && typeof value === 'boolean'));
+  const salvageLevel = patch.autoSalvage && SALVAGE_LEVELS.includes(patch.autoSalvage) ? { autoSalvage: patch.autoSalvage } : {};
+  save.account.settings = { ...save.account.settings, ...flags, ...salvageLevel };
 }
 
 /** The heroes (ids) the owner pins to the formation, in order. */

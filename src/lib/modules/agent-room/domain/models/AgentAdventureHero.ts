@@ -6,7 +6,7 @@ export class AgentAdventureHero extends Model {
   static primaryKey = 'id';
   static incrementing = false;
   static timestamps = true;
-  static fillable = ['id', 'workspace_id', 'name', 'class_id', 'chosen_class', 'leader', 'agent_node_id', 'agent_title', 'level', 'paragon', 'xp', 'skills_json', 'actives_json', 'auto_skills', 'kills'];
+  static fillable = ['id', 'workspace_id', 'name', 'class_id', 'chosen_class', 'leader', 'agent_node_id', 'agent_title', 'level', 'paragon', 'xp', 'skills_json', 'actives_json', 'auto_skills', 'auto_gear', 'kills'];
 
   static casts = {
     leader: 'boolean' as const,
@@ -15,6 +15,7 @@ export class AgentAdventureHero extends Model {
     xp: 'number' as const,
     kills: 'number' as const,
     auto_skills: 'boolean' as const,
+    auto_gear: 'boolean' as const,
     created_at: 'date' as const,
     updated_at: 'date' as const,
   };
@@ -33,6 +34,7 @@ export class AgentAdventureHero extends Model {
   declare skills_json: string;
   declare actives_json: string;
   declare auto_skills: boolean;
+  declare auto_gear: boolean;
   declare kills: number;
   declare created_at: Date;
   declare updated_at: Date;

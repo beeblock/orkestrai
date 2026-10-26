@@ -28,6 +28,11 @@
       case 'pet': return { text: fill(catalog.journal.pet, { pet: catalog.pets[entry.petId] }), color: 'var(--app-success)' };
       case 'quest': return { text: fill(catalog.journal.quest, { title: entry.title }), color: 'var(--app-accent)' };
       case 'offline': return { text: fill(catalog.journal.offline, { minutes: entry.minutes, gold: formatNumber(entry.gold) }) };
+      case 'equip': {
+        const item = snapshot.items.find((candidate) => candidate.id === entry.itemId);
+        return { text: fill(catalog.journal.equip, { hero: names[entry.heroId] ?? '—', item: item ? itemName(catalog, item) : catalog.rarities[entry.rarity] }), color: rarityInk(entry.rarity) };
+      }
+      case 'salvage': return { text: fill(catalog.journal.salvage, { count: entry.count, gold: formatNumber(entry.gold) }) };
     }
   }
 

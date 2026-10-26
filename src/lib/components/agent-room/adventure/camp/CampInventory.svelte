@@ -3,6 +3,8 @@
   import { Button } from '$lib/components/ui/button';
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import * as NativeSelect from '$lib/components/ui/native-select';
+  import { Switch } from '$lib/components/ui/switch';
+  import { SALVAGE_LEVELS, type SalvageLevel } from '$lib/modules/agent-room/domain/adventure/account.js';
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
   import { ELIXIRS, ELIXIR_ATLAS, ELIXIR_IDS, type ElixirId, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
   import { MATERIAL_IDS, RARITIES, RARITY_RULES, SLOTS, canEquip, itemGoldValue, materialIcon, parseMaterialKey, rarityIndex, type Item, type Rarity, type Slot } from '$lib/modules/agent-room/domain/adventure/items.js';
@@ -34,6 +36,9 @@
   let picking = $state(false);
   let picked = $state<string[]>([]);
   let revealed = $state<Item[]>([]);
+  // What became of each revealed item: put on by a hero (id) or salvaged.
+  let fate = $state<Record<string, { heroId?: string; salvaged?: boolean }>>({});
+  const heroNames = $derived(Object.fromEntries(snapshot.heroes.map((hero) => [hero.id, hero.name])));
   let equipTo = $state<string>('');
 
   const items = $derived(snapshot.items
@@ -70,7 +75,12 @@
 
   async function openChests(tier: ChestTier) {
     const outcome = await act({ type: 'open-chests', tier, limit: 10 });
-    if (outcome) revealed = outcome.opened.flatMap((opened) => opened.items).sort((a, b) => rarityIndex(b.rarity) - rarityIndex(a.rarity));
+    if (!outcome) return;
+    revealed = outcome.opened.flatMap((opened) => opened.items).sort((a, b) => rarityIndex(b.rarity) - rarityIndex(a.rarity));
+    fate = Object.fromEntries(outcome.opened.flatMap((opened) => [
+      ...Object.entries(opened.equipped ?? {}).map(([itemId, heroId]) => [itemId, { heroId }] as const),
+      ...(opened.salvaged ?? []).map((itemId) => [itemId, { salvaged: true }] as const),
+    ]));
   }
 
   function choose(item: Item) {
@@ -90,6 +100,21 @@
 </script>
 
 <div class="inventory">
+  <section class="automation" aria-label={m['adventure.camp_automation']()}>
+    <label class="toggle">
+      <Switch checked={snapshot.account.settings.autoOpen} disabled={busy} onCheckedChange={(value: boolean) => void act({ type: 'settings', settings: { autoOpen: value } })} aria-label={m['adventure.camp_auto_open']()} data-testid="camp-auto-open" />
+      <span><b>{m['adventure.camp_auto_open']()}</b><small>{m['adventure.camp_auto_open_hint']()}</small></span>
+    </label>
+    <div class="toggle">
+      <NativeSelect.Root size="sm" class="w-auto min-w-[170px] shrink-0" value={snapshot.account.settings.autoSalvage ?? 'off'} disabled={busy} onchange={(event: Event) => void act({ type: 'settings', settings: { autoSalvage: (event.currentTarget as HTMLSelectElement).value as SalvageLevel } })} aria-label={m['adventure.camp_auto_salvage']()} data-testid="camp-auto-salvage">
+        {#each SALVAGE_LEVELS as level (level)}
+          <NativeSelect.Option value={level}>{level === 'off' ? m['adventure.camp_salvage_off']() : m['adventure.camp_salvage_up_to']({ rarity: catalog.rarities[level] })}</NativeSelect.Option>
+        {/each}
+      </NativeSelect.Root>
+      <span><b>{m['adventure.camp_auto_salvage']()}</b><small>{m['adventure.camp_auto_salvage_hint']()}</small></span>
+    </div>
+  </section>
+
   <section class="chests" aria-label={m['adventure.camp_chests']()}>
     {#each CHEST_TIERS as tier (tier)}
       <div class="chest" class:none={!chestsByTier[tier]}>
@@ -135,7 +160,14 @@
     <section class="reveal" aria-live="polite">
       <header><b>{m['adventure.camp_found']({ count: revealed.length })}</b><Button size="sm" variant="ghost" onclick={() => (revealed = [])}>{m['adventure.camp_close']()}</Button></header>
       <div class="grid">
-        {#each revealed as item (item.id)}<ItemSlot {item} {catalog} onclick={() => { focused = item.id; revealed = []; }} />{/each}
+        {#each revealed as item (item.id)}
+          {@const outcome = fate[item.id]}
+          <div class="found" class:salvaged={outcome?.salvaged}>
+            <ItemSlot {item} {catalog} onclick={() => { if (outcome?.salvaged) return; focused = item.id; revealed = []; }} />
+            {#if outcome?.heroId}<small>{m['adventure.camp_put_on_by']({ hero: heroNames[outcome.heroId] ?? '—' })}</small>
+            {:else if outcome?.salvaged}<small>{m['adventure.camp_salvaged']()}</small>{/if}
+          </div>
+        {/each}
       </div>
     </section>
   {/if}
@@ -262,6 +294,54 @@
     color: var(--app-text-soft);
     font-size: 11.5px;
     font-variant-numeric: tabular-nums;
+  }
+
+  .automation {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 10px 24px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--app-surface);
+    box-shadow: inset 0 0 0 1px var(--app-border);
+  }
+
+  .toggle {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  label.toggle {
+    cursor: pointer;
+  }
+
+  .toggle span {
+    display: grid;
+    gap: 1px;
+    font-size: 12.5px;
+  }
+
+  .toggle small {
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .found {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    max-width: 96px;
+  }
+
+  .found small {
+    color: var(--app-text-muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .found.salvaged :global(button) {
+    opacity: 0.45;
   }
 
   .reveal {
