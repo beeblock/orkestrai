@@ -103,10 +103,45 @@
 
   const atlases = new Map<string, Atlas | null>();
   type Effect = {
-    kind: 'number' | 'spark' | 'slash' | 'coin' | 'pillar' | 'chest' | 'portal' | 'puff' | 'ring' | 'beam' | 'note' | 'heal';
+    kind: 'number' | 'spark' | 'slash' | 'coin' | 'chest' | 'portal' | 'puff' | 'ring' | 'beam' | 'spell';
     x: number; y: number; t: number; life: number;
     text?: string; critical?: boolean; vx?: number; vy?: number; color?: string; frame?: number; heroId?: string;
+    /** Spells: the VFX sheet, its row of six frames, the drawing scale, a flight's end and a tint. */
+    sheet?: string; row?: number; scale?: number; toX?: number; filter?: string; alpha?: number;
   };
+
+  /**
+   * How each active skill looks: a row of six frames from a VFX sheet, played
+   * where the spell lands — on the monsters it hits (one burst per monster or
+   * one over the whole pack), on the allies it heals, shields or hastens, over
+   * the party, around the caster, or flying from the caster to its target.
+   */
+  type SpellPlace = 'enemies' | 'enemy' | 'pack' | 'allies' | 'party' | 'caster' | 'flight';
+  type SpellLook = { sheet: string; row: number; place: SpellPlace; scale: number; life: number; max?: number; filter?: string; color?: string; alpha?: number };
+  const SPELLS: Partial<Record<ActiveAction, SpellLook>> = {
+    meteor: { sheet: 'vfx-1', row: 0, place: 'enemies', scale: 0.62, life: 950, max: 3, color: '#ff9b4a' },
+    'frost-nova': { sheet: 'vfx-1', row: 1, place: 'enemies', scale: 0.55, life: 850, max: 4, color: '#8fd8ff' },
+    'arcane-storm': { sheet: 'vfx-1', row: 2, place: 'enemies', scale: 0.55, life: 900, max: 4 },
+    heal: { sheet: 'vfx-2', row: 0, place: 'allies', scale: 0.48, life: 950 },
+    sanctuary: { sheet: 'vfx-2', row: 1, place: 'allies', scale: 0.5, life: 1_050, alpha: 0.85 },
+    judgment: { sheet: 'vfx-2', row: 2, place: 'enemies', scale: 0.6, life: 950, max: 4, color: '#fff1a6' },
+    'arrow-rain': { sheet: 'vfx-3', row: 0, place: 'pack', scale: 0.72, life: 950, color: '#b6f07a' },
+    pierce: { sheet: 'vfx-3', row: 1, place: 'flight', scale: 0.5, life: 420 },
+    volley: { sheet: 'vfx-3', row: 1, place: 'flight', scale: 0.3, life: 360 },
+    whirlwind: { sheet: 'vfx-3', row: 2, place: 'caster', scale: 0.55, life: 700 },
+    earthshatter: { sheet: 'vfx-4', row: 0, place: 'enemies', scale: 0.6, life: 850, max: 4, color: '#e8b84b' },
+    // Wards stay see-through so the party shows inside them.
+    bulwark: { sheet: 'vfx-4', row: 1, place: 'party', scale: 0.9, life: 1_150, alpha: 0.75 },
+    overclock: { sheet: 'vfx-5', row: 0, place: 'allies', scale: 0.4, life: 1_000 },
+    anthem: { sheet: 'vfx-5', row: 1, place: 'allies', scale: 0.42, life: 1_100 },
+    // The same song in a crimson key: might instead of haste.
+    crescendo: { sheet: 'vfx-5', row: 1, place: 'allies', scale: 0.42, life: 1_100, filter: 'hue-rotate(-45deg) saturate(1.4)' },
+    finale: { sheet: 'vfx-5', row: 2, place: 'pack', scale: 0.85, life: 1_250, color: '#ffd166' },
+    bash: { sheet: 'vfx-6', row: 0, place: 'enemy', scale: 0.5, life: 450 },
+  };
+  const VFX_SHEETS = ['vfx-1', 'vfx-2', 'vfx-3', 'vfx-4', 'vfx-5', 'vfx-6'];
+  // Rockets in flight, by projectile id, with where they are headed: each bursts when it lands.
+  const rockets = new Map<string, number>();
   let effects: Effect[] = [];
   let bannerId = 0;
 
@@ -148,10 +183,48 @@
     return world.heroes.find((hero) => hero.id === heroId)?.x ?? null;
   }
 
-  const ACTION_COLOR: Partial<Record<ActiveAction, string>> = {
-    meteor: '#ff9b4a', 'frost-nova': '#8fd8ff', 'arcane-storm': '#c08bff', 'arrow-rain': '#b6f07a', earthshatter: '#e8b84b',
-    judgment: '#fff1a6', finale: '#ffd166', whirlwind: '#f4ead2', bulwark: '#e8b84b', sanctuary: '#ffe9b3',
-  };
+  function spell(sheet: string, row: number, x: number, scale: number, life: number, extra: Partial<Effect> = {}) {
+    effects.push({ kind: 'spell', sheet, row, x, y: 0, t: 0, life, scale, ...extra });
+  }
+
+  /** Plays an active skill's look where it lands. */
+  function castLook(action: ActiveAction, casterX: number) {
+    const look = SPELLS[action];
+    if (!look) return;
+    // The spell resolved before the screen hears of it: monsters it just felled still count.
+    const foes = world.enemies.filter((enemy) => enemy.pose !== 'dying' || enemy.poseMs < 120).sort((a, b) => a.x - b.x);
+    const allies = world.heroes.filter((hero) => hero.fallenMs <= 0);
+    const extra: Partial<Effect> = { filter: look.filter, alpha: look.alpha };
+    const middle = (xs: number[], fallback: number) => (xs.length ? xs.reduce((sum, x) => sum + x, 0) / xs.length : fallback);
+    switch (look.place) {
+      case 'enemies':
+        // A burst on each monster, a beat apart.
+        foes.slice(0, look.max ?? 4).forEach((enemy, index) => spell(look.sheet, look.row, enemy.x, look.scale * (enemy.boss ? 1.25 : 1), look.life, { ...extra, t: -index * 90 }));
+        break;
+      case 'enemy':
+        if (foes[0]) spell(look.sheet, look.row, foes[0].x - 8, look.scale, look.life, extra);
+        break;
+      case 'pack':
+        spell(look.sheet, look.row, middle(foes.map((enemy) => enemy.x), casterX + 90), look.scale, look.life, extra);
+        break;
+      case 'allies':
+        allies.forEach((hero, index) => spell(look.sheet, look.row, hero.x, look.scale, look.life, { ...extra, t: -index * 60 }));
+        break;
+      case 'party':
+        spell(look.sheet, look.row, middle(allies.map((hero) => hero.x), casterX), look.scale, look.life, extra);
+        break;
+      case 'caster':
+        spell(look.sheet, look.row, casterX, look.scale, look.life, extra);
+        break;
+      case 'flight': {
+        const targets = action === 'volley' ? foes.slice(0, 3) : foes.slice(0, 1);
+        targets.forEach((enemy, index) => spell(look.sheet, look.row, casterX + 10, look.scale, look.life, { ...extra, toX: enemy.x, y: index * 7, t: -index * 70 }));
+        break;
+      }
+    }
+    // Spells that strike the whole field also send a shockwave along the ground.
+    if (look.color) effects.push({ kind: 'ring', x: middle(foes.map((enemy) => enemy.x), casterX + 90), y: 0, t: 0, life: 700, color: look.color });
+  }
 
   /** What the world tells the screen: effects and sounds. */
   function react(events: AdventureEvent[]) {
@@ -171,19 +244,20 @@
             playSound('slash', soundLevel);
           }
           break;
-        case 'special': {
+        case 'special':
           playSound('special', soundLevel);
-          const color = ACTION_COLOR[event.action];
-          if (event.action === 'heal' || event.action === 'judgment') {
-            for (const hero of world.heroes) effects.push({ kind: 'heal', x: hero.x, y: 0, t: 0, life: 900 });
+          castLook(event.action, event.x);
+          break;
+        case 'heal':
+          // Healing shows as rising green numbers over each ally it reaches.
+          if (event.amount >= 1) {
+            const x = heroX(event.heroId);
+            if (x !== null) effects.push({ kind: 'number', x, y: Math.random() * 10, t: 0, life: 900, text: `+${compact(event.amount)}`, color: '#7ef08a', vx: 0 });
           }
-          if (event.action === 'anthem' || event.action === 'crescendo' || event.action === 'overclock') {
-            for (const hero of world.heroes) effects.push({ kind: 'note', x: hero.x, y: 0, t: 0, life: 1_200, vx: (Math.random() - 0.5) * 20 });
-          }
-          if (color) {
-            const center = event.action === 'bulwark' || event.action === 'sanctuary' ? event.x - HERO_SPACING : (world.enemies[0]?.x ?? event.x + 80);
-            effects.push({ kind: 'ring', x: center, y: 0, t: 0, life: 700, color });
-          }
+          break;
+        case 'hero-up': {
+          const x = heroX(event.heroId);
+          if (x !== null) spell('vfx-6', 2, x, 0.5, 1_000);
           break;
         }
         case 'kill': {
@@ -271,7 +345,7 @@
   export function levelUp(heroId: string) {
     const x = heroX(heroId);
     if (x === null) return;
-    effects.push({ kind: 'pillar', x, y: 0, t: 0, life: 1_400 });
+    spell('vfx-6', 1, x, 0.55, 1_300);
     playSound('level-up', soundLevel);
   }
 
@@ -498,6 +572,14 @@
       if (!enemy.boss && enemy.hp < enemy.maxHp && enemy.pose !== 'dying') drawBar(context, x, top - 6, enemy.elite ? 36 : 24, enemy.hp / enemy.maxHp, '#e8574b');
     }
 
+    // Rockets that landed since the last frame burst where they were headed.
+    const vfxRockets = atlas('vfx-4');
+    for (const [rocketId, targetX] of rockets) {
+      if (world.projectiles.some((projectile) => projectile.id === rocketId)) continue;
+      rockets.delete(rocketId);
+      effects.push({ kind: 'spell', sheet: 'vfx-4', row: 2, x: targetX, y: 0, t: 0, life: 420, scale: 0.42, frame: 3 });
+    }
+
     // Projectiles fly in a slight arc to their target.
     for (const projectile of world.projectiles) {
       const target = world.enemies.find((enemy) => enemy.id === projectile.targetId);
@@ -507,6 +589,11 @@
       const t = Math.min(1, projectile.progress);
       const x = fromX + (toX - fromX) * t;
       const arc = projectile.kind === 'arrow' || projectile.kind === 'note' || projectile.kind === 'rocket' ? Math.sin(t * Math.PI) * (projectile.kind === 'rocket' ? 34 : 14) : 4;
+      if (projectile.kind === 'rocket' && vfxRockets) {
+        rockets.set(projectile.id, target.x);
+        drawFrame(context, vfxRockets, 12 + (Math.floor(now / 90) % 3), x, groundY - 20 - arc, 0.26);
+        continue;
+      }
       const frame = { note: 0, bolt: 1, arrow: 2, cog: 3, smite: 4, turret: 3, rocket: 3, melee: 6 }[projectile.kind] ?? 6;
       drawFrame(context, fx, frame, x, groundY - 26 - arc, ART_SCALE * (projectile.kind === 'turret' ? 0.35 : 0.5));
     }
@@ -545,15 +632,22 @@
           if (fx) { context.globalAlpha = 1 - Math.max(0, life - 0.7) / 0.3; drawFrame(context, fx, 8, cx, cy, ART_SCALE * 0.25); context.globalAlpha = 1; }
           break;
         }
-        case 'pillar':
-          if (camp) { context.globalAlpha = Math.sin(life * Math.PI); drawFrame(context, camp, 8, x, groundY + 2, ART_SCALE * 0.75); context.globalAlpha = 1; }
+        case 'spell': {
+          // Waiting its turn in a staggered burst.
+          if (effect.t < 0) break;
+          const sheet = atlas(effect.sheet ?? '');
+          if (!sheet) break;
+          // Six frames over the effect's life; `frame` starts a row part-way (a rocket's burst).
+          const first = effect.frame ?? 0;
+          const frame = (effect.row ?? 0) * 6 + Math.min(5, first + Math.floor(life * (6 - first)));
+          const flyX = effect.toX === undefined ? x : x + (toScreen(effect.toX) - x) * Math.min(1, life * 1.2);
+          context.globalAlpha = (effect.alpha ?? 1) * (1 - Math.max(0, life - 0.85) / 0.15);
+          if (effect.filter) context.filter = effect.filter;
+          drawFrame(context, sheet, frame, flyX, groundY + 4 - (effect.toX === undefined ? 0 : 14 + effect.y), effect.scale ?? 0.5);
+          context.filter = 'none';
+          context.globalAlpha = 1;
           break;
-        case 'heal':
-          if (camp) { context.globalAlpha = 0.7 * Math.sin(life * Math.PI); drawFrame(context, camp, 8, x, groundY + 2, ART_SCALE * 0.45); context.globalAlpha = 1; }
-          break;
-        case 'note':
-          if (fx) { context.globalAlpha = 1 - life; drawFrame(context, fx, 0, x + (effect.vx ?? 0) * life, groundY - 50 - life * 30, ART_SCALE * 0.3); context.globalAlpha = 1; }
-          break;
+        }
         case 'portal':
           if (camp) { context.globalAlpha = Math.sin(life * Math.PI); drawFrame(context, camp, 9, x, groundY + 2, ART_SCALE * 0.7); context.globalAlpha = 1; }
           break;
@@ -622,7 +716,7 @@
   onMount(() => {
     const context = canvas?.getContext('2d');
     if (!context || !canvas || !host) return;
-    for (const id of ['fx-effects', 'fx-camp', 'icons-misc']) atlas(id);
+    for (const id of ['fx-effects', 'fx-camp', 'icons-misc', ...VFX_SHEETS]) atlas(id);
     const resize = () => {
       if (!canvas || !host) return;
       const ratio = window.devicePixelRatio || 1;

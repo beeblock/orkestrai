@@ -201,7 +201,8 @@ const BODY_HALF = 14;
 const ENGAGED_GAP = MELEE_GAP + 2;
 const ENEMY_SPACING = 30;
 const POSE_MS: Partial<Record<HeroPose, number>> = { attack: 420, special: 700, hurt: 320, victory: 1_800 };
-const PROJECTILE_SPEED = 2.6;
+// Pixels per millisecond: an arrow crosses a typical range in about a third of a second.
+const PROJECTILE_SPEED = 0.35;
 const BUFF_MS = 6_000;
 
 function emptyPending(): PendingReport {
@@ -674,7 +675,7 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     const target = state.enemies.find((enemy) => enemy.id === projectile.targetId);
     if (!target || target.pose === 'dying') { projectile.progress = 2; continue; }
     const distance = Math.max(8, target.x - projectile.fromX);
-    projectile.progress += (PROJECTILE_SPEED * dt) / distance * 60;
+    projectile.progress += (PROJECTILE_SPEED * dt) / distance;
     if (projectile.progress >= 1) {
       const owner = state.heroes.find((hero) => hero.id === projectile.ownerId) ?? null;
       damageEnemy(state, target, projectile.damage, owner, projectile.skill);
