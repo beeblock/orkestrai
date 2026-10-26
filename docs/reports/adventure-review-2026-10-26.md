@@ -132,3 +132,26 @@ Isso é uma preparação pontual desta máquina, **não uma correção de códig
 - A cópia original 0.44.1 foi compactada, o ZIP foi testado e ficou como único rollback fora de Applications. Intermediários do pacote, saída temporária do Vite e runtimes isolados dos testes foram removidos; ficaram aproximadamente **17 GiB livres** ao finalizar.
 
 A instalação é uma prévia para avaliação, com os achados acima ainda presentes; não é aprovação para merge ou release.
+
+## Resolução dos achados — 26/10/2026
+
+Todos os achados acima foram corrigidos em commits separados na `feat/adventure`, cada um com testes e com changelog, docs e catálogos atualizados nos três idiomas.
+
+| Achado | Commit | Como foi resolvido | Cobertura |
+| --- | --- | --- | --- |
+| [P2] Reenvio duplica recompensas | `99ce278d` | Relatos selados com id estável, reenviados sem mudança; o próximo intervalo fica num relato separado. O servidor guarda os últimos 32 ids, então funciona mesmo com outro relato chegando entre duas tentativas. | `adventure-outbox.test.ts` e um teste de serviço que grava, perde a resposta e reenvia com outro relato no meio. |
+| [P2] Fila inválida após interrupção longa | `99ce278d` | Os relatos são divididos dentro dos limites que o servidor aceita e paga por inteiro. Um relógio de batalha paga em sequência os relatos de uma ausência, sem passar do tempo real. O controller responde 4xx para recusa e 500 para falha transitória, e a faixa só tenta de novo nos 500. Depois de 8 h sem servidor o grupo acampa. | Divisão de mais de 1 h de batalha; seis relatos de 5 min após 30 min de ausência pagos por inteiro; recusa final contra falha transitória. |
+| [P2] Mão secundária com a classe errada | `e910179c` | `craft` usa `classSlot` para todo espaço de classe, a mesma regra da tela. | Arma e mão secundária para três classes que a guilda não tem. |
+| [P2] Acampamento preso ao workspace anterior | `91441d01` | O acampamento acompanha os parâmetros de cada navegação, limpa o progresso anterior e ignora respostas do workspace que deixou. Também ganhou um botão Voltar. | Playwright no servidor de desenvolvimento: navegação interna Alpha → Beta com o POST indo para Beta, e o Voltar retornando à conversa. |
+| [P2] Ficha cortada na janela nativa | `91441d01` | A ficha é medida e posicionada acima do herói quando cabe; senão fica ao lado, encostada no topo, com rolagem se for maior que a janela. | Playwright em 1600 × 290, 320 e 360 px (tamanhos pequeno, normal e grande): ficha dentro da janela. |
+| [P2] Equipamentos sobre os atributos em 1024 px | `91441d01` (e a ficha nova em `681f1b1e`) | Container queries com área própria para o armory. | 1024 × 768 no tema claro: sobreposição zero e `scrollWidth` 1024. |
+| [P2] Raridades ilegíveis no tema claro | `91441d01` | Tokens de texto por tema (`--adventure-ink-*`, no mínimo 4,5:1 em todas as superfícies). Bordas e brilhos seguem com as cores decorativas. | Contraste calculado para as 9 raridades, únicos, conjuntos, Paragon e chefes. |
+| [P1] Primeiro boot com banco grande | `c037dc63` | O servidor anuncia cada etapa lenta (backup, migração, compactação) antes de começar. O desktop espera enquanto houver preparação (até 30 min) e depois dá os 30 s normais. A tela inicial avisa que está preparando os dados. | Relógio falso, processo filho real que bloqueia o event loop por 1,8 s, e a fixture empacotada confere as etapas anunciadas. |
+| Paridade com a ponte dos agentes | `e24ebc87` | `orkestrai adventure` e as ferramentas MCP `adventure_read`/`adventure_act` usam o mesmo schema das ações. Especialistas mexem só no próprio herói; o líder, na guilda inteira. | Testes de contrato da CLI, do mapeamento MCP e dos escopos da ponte com banco real. |
+
+Pedidos do dono feitos na mesma rodada:
+
+- `cf382cf7`: baús abrem sozinhos, cada herói veste sozinho as melhorias claras e as sobras viram ouro.
+- `f6f06cd0`: artes empacotadas, com cache permanente e sem blocos provisórios enquanto carregam.
+- `681f1b1e`: acampamento redesenhado como tela de RPG e equilíbrio das classes da guilda.
+- `c3c584e0`: mesa de som por canal, com som próprio para cada arma e habilidade e trilha composta.
