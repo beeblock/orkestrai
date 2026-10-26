@@ -4,10 +4,10 @@
   import AdventureStage from '$lib/components/agent-room/adventure/AdventureStage.svelte';
   import type { HeroLabel } from '$lib/components/agent-room/adventure/AdventureStage.svelte';
   import { Button } from '$lib/components/ui/button';
-  import { lineup } from '$lib/components/agent-room/adventure/adventure-party.js';
+  import { FORMATION_LINGER_MS, lineup } from '$lib/components/agent-room/adventure/adventure-party.js';
   import type { AdventureSoundLevel } from '$lib/components/agent-room/adventure/adventure-audio.js';
   import { adventureAction, loadAdventure, onAdventureChange, reportBattle, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
-  import { itemName } from '$lib/components/agent-room/adventure/adventure-text.js';
+  import { heroLevelText, itemName } from '$lib/components/agent-room/adventure/adventure-text.js';
   import { agentStatus, retainAgentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentDoingLabel, agentStateLabel } from '$lib/components/agent-room/agent-status-labels.js';
@@ -52,28 +52,51 @@
   // Results of battles the server has not acknowledged yet.
   let unsent: Battle | null = null;
   let reporting = false;
+  // When each hero's agent was last seen working, to keep the formation steady between turns.
+  const workedAt = new Map<string, number>();
+  let lingering = $state<ReadonlySet<string>>(new Set());
 
   const catalog = $derived(adventureCatalog(localeState.current));
-  const view = $derived(snapshot ? lineup(snapshot, agentStatus.agents) : null);
+  const view = $derived(snapshot ? lineup(snapshot, agentStatus.agents, { lingering }) : null);
   const members = $derived(view?.members ?? []);
-  const labels = $derived<Record<string, HeroLabel>>(Object.fromEntries((view?.heroes ?? []).map((hero) => [hero.nodeId, {
-    id: hero.nodeId,
-    title: hero.title,
+  const labels = $derived<Record<string, HeroLabel>>(Object.fromEntries((view?.heroes ?? []).map((hero) => [hero.id, {
+    id: hero.id,
+    name: hero.name,
+    agentTitle: hero.agent?.title ?? null,
     classId: hero.classId,
     level: hero.level,
-    asks: attentionFeed.byNode[hero.nodeId]?.length ?? 0,
+    paragon: hero.paragon,
+    asks: asksOf(hero.agent?.nodeId),
     visualTier: hero.build.visualTier,
     weaponRarity: hero.build.weaponRarity,
   }])));
   const rules = $derived<Partial<SimRules>>(snapshot ? simRules(snapshot) : {});
-  const card = $derived(selected && view ? view.heroes.find((hero) => hero.nodeId === selected!.id) ?? null : null);
-  const cardLive = $derived(card ? agentStatus.agents[card.nodeId] ?? null : null);
+  const card = $derived(selected && view ? view.heroes.find((hero) => hero.id === selected!.id) ?? null : null);
+  const cardAgent = $derived(card?.agent ?? null);
+  const cardLive = $derived(cardAgent ? agentStatus.agents[cardAgent.nodeId] ?? null : null);
+  const cardAsks = $derived(asksOf(cardAgent?.nodeId));
   const cardState = $derived(agentStateLabel(cardLive?.sessionAlive ? cardLive.state : 'disconnected'));
   // What the agent is doing, when it says more than its state.
   const cardDoing = $derived.by(() => {
     const doing = cardLive?.sessionAlive ? agentDoingLabel(cardLive) : '';
     return doing && doing !== cardState ? doing : '';
   });
+
+  function asksOf(nodeId: string | undefined): number {
+    return nodeId ? attentionFeed.byNode[nodeId]?.length ?? 0 : 0;
+  }
+
+  /** Notes which heroes' agents work now and which worked within the linger window. */
+  function trackWork() {
+    const now = Date.now();
+    for (const hero of snapshot?.heroes ?? []) {
+      const live = hero.agent ? agentStatus.agents[hero.agent.nodeId] : undefined;
+      if (live?.sessionAlive && (live.state === 'working' || live.state === 'starting')) workedAt.set(hero.id, now);
+    }
+    for (const [heroId, at] of workedAt) if (now - at >= FORMATION_LINGER_MS) workedAt.delete(heroId);
+    const next = new Set(workedAt.keys());
+    if (next.size !== lingering.size || [...next].some((heroId) => !lingering.has(heroId))) lingering = next;
+  }
 
   function simRules(save: AdventureSnapshot): Partial<SimRules> {
     return {
@@ -111,10 +134,10 @@
     snapshot = outcome.snapshot;
     const position = outcome.snapshot.account.position;
     stage?.configure(simRules(outcome.snapshot), travel && previous && !samePosition(previous.account.position, position) ? position : undefined);
-    for (const { nodeId, level } of outcome.levelUps) {
-      stage?.levelUp(nodeId);
-      const hero = outcome.snapshot.heroes.find((entry) => entry.nodeId === nodeId);
-      if (hero) stage?.announce(m['adventure.hero_level_up']({ name: hero.title, level }), 'gold');
+    for (const { heroId, level, paragon } of outcome.levelUps) {
+      stage?.levelUp(heroId);
+      const hero = outcome.snapshot.heroes.find((entry) => entry.id === heroId);
+      if (hero) stage?.announce(paragon ? m['adventure.hero_paragon_up']({ name: hero.name, level: paragon }) : m['adventure.hero_level_up']({ name: hero.name, level }), 'gold');
     }
     const items = outcome.opened.flatMap((opened) => opened.items);
     if (items.length) {
@@ -139,7 +162,7 @@
 
   function merge(a: Battle, b: Battle): Battle {
     const xp = { ...a.xp };
-    for (const [nodeId, value] of Object.entries(b.xp)) xp[nodeId] = (xp[nodeId] ?? 0) + value;
+    for (const [heroId, value] of Object.entries(b.xp)) xp[heroId] = (xp[heroId] ?? 0) + value;
     const kills = { ...a.kills };
     for (const [monster, value] of Object.entries(b.kills) as Array<[keyof typeof kills, number]>) kills[monster] = (kills[monster] ?? 0) + value;
     return { elapsedMs: a.elapsedMs + b.elapsedMs, xp, gold: a.gold + b.gold, kills, chests: [...a.chests, ...b.chests], bosses: [...a.bosses, ...b.bosses], stages: [...a.stages, ...b.stages], position: b.position, wave: b.wave };
@@ -160,7 +183,7 @@
         reportId: uuidv7(),
         ...batch,
         gold: Math.round(batch.gold),
-        xp: Object.fromEntries(Object.entries(batch.xp).map(([nodeId, value]) => [nodeId, Math.round(value)])),
+        xp: Object.fromEntries(Object.entries(batch.xp).map(([heroId, value]) => [heroId, Math.round(value)])),
       });
       if (unsent === batch) unsent = null;
       if (id === workspaceId) apply(outcome, false);
@@ -203,7 +226,7 @@
     });
     const releaseStatus = untrack(() => retainAgentStatus(id));
     const releaseAttention = untrack(() => retainAttentionFeed(id));
-    const reportTimer = setInterval(() => void report(), REPORT_MS);
+    const reportTimer = setInterval(() => { trackWork(); void report(); }, REPORT_MS);
     const refreshTimer = setInterval(() => void refresh(id, true), REFRESH_MS);
     const stopListening = onAdventureChange((changed) => { if (changed === id) void refresh(id, true); });
     return () => {
@@ -219,6 +242,16 @@
   $effect(() => {
     void selected;
     untrack(syncInteractive);
+  });
+
+  // A hero whose agent starts working takes its place right away; leaving waits for the linger window.
+  $effect(() => {
+    for (const hero of snapshot?.heroes ?? []) {
+      const live = hero.agent ? agentStatus.agents[hero.agent.nodeId] : undefined;
+      void live?.state;
+      void live?.sessionAlive;
+    }
+    untrack(trackWork);
   });
 
   onMount(() => {
@@ -285,6 +318,8 @@
       <AdventureStage
         bind:this={stage}
         party={members}
+        teamActive={view?.teamActive ?? false}
+        supporters={view?.supporters ?? []}
         {labels}
         position={snapshot.account.position}
         {rules}
@@ -301,33 +336,41 @@
   {/if}
 
   {#if card && selected}
-    <div class="card" data-adventure-interactive role="dialog" aria-label={card.title} style:left={`${Math.max(12, Math.min(selected.left - 150, window.innerWidth - 312))}px`} style:bottom={`${window.innerHeight - selected.top + 10}px`}>
+    <div class="card" data-adventure-interactive role="dialog" aria-label={card.name} style:left={`${Math.max(12, Math.min(selected.left - 150, window.innerWidth - 312))}px`} style:bottom={`${window.innerHeight - selected.top + 10}px`}>
       <header>
-        <b>{card.title}</b>
-        <span class="class">{card.leader ? `${className(card.classId)} · ${m['adventure.leader']()}` : className(card.classId)} · {m['adventure.level']({ level: card.level })}</span>
+        <b>{card.name}</b>
+        <span class="class">{card.leader ? `${className(card.classId)} · ${m['adventure.leader']()}` : className(card.classId)} · {heroLevelText(card.level, card.paragon)}</span>
+        <span class="played">{cardAgent ? m['adventure.played_by']({ agent: cardAgent.title }) : m['adventure.resting_in_guild']()}</span>
       </header>
       <div class="xp" title={m['adventure.xp']({ into: card.xp, next: card.build.xpToNext })}>
         <span style:width={`${Math.min(100, Math.round((card.xp / Math.max(1, card.build.xpToNext)) * 100))}%`}></span>
       </div>
-      <p class="state">
-        <span class={`dot ${card.activity}`} aria-hidden="true"></span>
-        {cardState}
-        {#if cardDoing}<span class="doing">{`· ${cardDoing}`}</span>{/if}
-      </p>
+      {#if cardAgent}
+        <p class="state">
+          <span class={`dot ${card.activity}`} aria-hidden="true"></span>
+          {cardState}
+          {#if cardDoing}<span class="doing">{`· ${cardDoing}`}</span>{/if}
+        </p>
+        {#if card.activity === 'working'}<p class="inspired">{m['adventure.inspired']()}</p>{/if}
+      {:else}
+        <p class="state rest">{m['adventure.resting_hint']()}</p>
+      {/if}
       <p class="gear">
         {catalog.outfits[String(card.build.visualTier) as '1']} · {m['adventure.power']({ rating: card.build.rating })}
         {#if !card.deployed}<span class="reserve">{`· ${m['adventure.reserve']()}`}</span>{/if}
       </p>
-      {#if (attentionFeed.byNode[card.nodeId]?.length ?? 0) > 0}
-        <p class="asks">{m['adventure.asks']({ count: attentionFeed.byNode[card.nodeId].length })}</p>
+      {#if cardAsks > 0}
+        <p class="asks">{m['adventure.asks']({ count: cardAsks })}</p>
       {/if}
-      <div class="actions">
-        <Button variant="ghost" size="sm" class="flex-1 bg-white/10 text-[#f4ead2] hover:bg-white/20 hover:text-[#f4ead2]" onclick={() => open(`/terminal?workspace=${encodeURIComponent(workspaceId ?? '')}&node=${encodeURIComponent(card!.nodeId)}`)}>{m['adventure.open_focus']()}</Button>
-        <Button size="sm" class="flex-1 bg-[#e8b84b] text-[#1a1405] hover:bg-[#f0c766]" onclick={() => open(`/chat?workspace=${encodeURIComponent(workspaceId ?? '')}&channel=${encodeURIComponent(`dm:${card!.nodeId}`)}`)}>
-          {(attentionFeed.byNode[card.nodeId]?.length ?? 0) > 0 || card.activity === 'attention' ? m['adventure.answer']() : m['adventure.talk']()}
-        </Button>
-      </div>
-      <Button variant="ghost" size="sm" class="w-full bg-white/5 text-[#ffe9b3] hover:bg-white/15 hover:text-[#ffe9b3]" onclick={() => openCamp(card!.nodeId)}>{m['adventure.open_equipment']()}</Button>
+      {#if cardAgent}
+        <div class="actions">
+          <Button variant="ghost" size="sm" class="flex-1 bg-white/10 text-[#f4ead2] hover:bg-white/20 hover:text-[#f4ead2]" onclick={() => open(`/terminal?workspace=${encodeURIComponent(workspaceId ?? '')}&node=${encodeURIComponent(cardAgent!.nodeId)}`)}>{m['adventure.open_focus']()}</Button>
+          <Button size="sm" class="flex-1 bg-[#e8b84b] text-[#1a1405] hover:bg-[#f0c766]" onclick={() => open(`/chat?workspace=${encodeURIComponent(workspaceId ?? '')}&channel=${encodeURIComponent(`dm:${cardAgent!.nodeId}`)}`)}>
+            {cardAsks > 0 || card.activity === 'attention' ? m['adventure.answer']() : m['adventure.talk']()}
+          </Button>
+        </div>
+      {/if}
+      <Button variant="ghost" size="sm" class="w-full bg-white/5 text-[#ffe9b3] hover:bg-white/15 hover:text-[#ffe9b3]" onclick={() => openCamp(card!.id)}>{m['adventure.open_equipment']()}</Button>
       <p class="where">{workspaceName}</p>
     </div>
   {/if}
@@ -385,6 +428,22 @@
   .class,
   .where {
     color: #e8b84b;
+    font-size: 12px;
+  }
+
+  .played {
+    color: rgba(244, 234, 210, 0.65);
+    font-size: 12px;
+  }
+
+  .inspired {
+    margin: 0;
+    color: #ffd877;
+    font-size: 12px;
+  }
+
+  .state.rest {
+    color: rgba(244, 234, 210, 0.7);
     font-size: 12px;
   }
 

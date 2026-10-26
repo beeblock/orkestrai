@@ -1,6 +1,7 @@
 import { HERO_CLASSES, MONSTERS, heroClassFor, type HeroClassId, type MonsterId } from './catalog.js';
 import { JOURNAL_SIZE, newHero, starterKit, type AdventureAccount, type AdventureHero, type AdventureSettings, type ChestEntry, type JournalEntry } from './account.js';
 import { buildHeroes, deployHeroes, type HeroBuild } from './build.js';
+import { heroName } from './names.js';
 import {
   CRAFT_GEMS, CUBE_XP, COINS_PER_OFFERING, SYNTHESIS_INPUTS,
   addCubeXp, alchemyGold, canSocket, craft, craftCost, cubeAllows, offering, removalCost, socketFunction, synthesisCost, synthesize,
@@ -19,11 +20,12 @@ import {
 
 /**
  * The Adventure's rules on the server side, as pure functions over a save:
- * keeping the heroes in step with the team, applying what the battle reported,
+ * keeping the guild in step with the team, applying what the battle reported,
  * paying quests and offline work, and every action of the camp (chests, gear,
  * the cube, runes, skills, travel). The service only loads and stores saves.
  */
 
+/** `heroes` is the guild, by hero id. */
 export type AdventureSave = { account: AdventureAccount; heroes: Record<string, AdventureHero>; items: Item[] };
 
 /** An agent of the workspace, as the Adventure needs it. */
@@ -45,14 +47,19 @@ function journal(save: AdventureSave, entry: JournalEntry): void {
   save.account.journal = [entry, ...save.account.journal].slice(0, JOURNAL_SIZE);
 }
 
-export function heroClass(save: AdventureSave, roster: RosterEntry[], nodeId: string): HeroClassId {
-  const entry = roster.find((candidate) => candidate.nodeId === nodeId);
-  const hero = save.heroes[nodeId];
-  return heroClassFor({ nodeId, title: entry?.title ?? '', role: entry?.role ?? null, leader: entry?.leader ?? false, chosen: hero?.chosenClass ?? null });
+/** The class an agent's role suggests for the hero it plays. */
+export function agentClass(entry: Pick<RosterEntry, 'nodeId' | 'title' | 'role' | 'leader'>): HeroClassId {
+  return heroClassFor({ nodeId: entry.nodeId, title: entry.title, role: entry.role, leader: entry.leader });
 }
 
-function addItem(save: AdventureSave, ctx: EngineContext, data: ItemData, location: ItemLocation = 'inventory', heroNodeId: string | null = null): Item {
-  const item: Item = { ...data, id: ctx.newId(), location, heroNodeId, locked: false, createdAt: ctx.now };
+/** The hero an agent plays right now. */
+export function heroOfAgent(save: AdventureSave, nodeId: string | null): AdventureHero | null {
+  if (!nodeId) return null;
+  return Object.values(save.heroes).find((hero) => hero.agentNodeId === nodeId) ?? null;
+}
+
+function addItem(save: AdventureSave, ctx: EngineContext, data: ItemData, location: ItemLocation = 'inventory', heroId: string | null = null): Item {
+  const item: Item = { ...data, id: ctx.newId(), location, heroId, locked: false, createdAt: ctx.now };
   save.items.push(item);
   return item;
 }
@@ -69,18 +76,24 @@ function freeInventory(save: AdventureSave): number {
   return inventorySlots(save.account.runes) - inventoryCount(save);
 }
 
-function partyClasses(save: AdventureSave, roster: RosterEntry[]): HeroClassId[] {
-  return [...new Set(roster.map((entry) => heroClass(save, roster, entry.nodeId)))];
+function partyClasses(save: AdventureSave): HeroClassId[] {
+  return [...new Set(Object.values(save.heroes).map((hero) => hero.classId))];
 }
 
-/** Every hero's build, with the formation decided from who is working. */
+/** Every guild hero's build, with the formation decided from who is working. */
 export function partyBuilds(save: AdventureSave, roster: RosterEntry[]): { builds: Record<string, HeroBuild>; deployed: string[] } {
-  const deployed = deployHeroes(roster.map((entry) => ({ nodeId: entry.nodeId, leader: entry.leader, working: entry.working })), save.account.formation, formationSlots(save.account.runes));
-  const builds = buildHeroes(
-    roster.filter((entry) => save.heroes[entry.nodeId]).map((entry) => {
-      const hero = save.heroes[entry.nodeId];
-      return { nodeId: entry.nodeId, classId: heroClass(save, roster, entry.nodeId), level: hero.level, xp: hero.xp, skills: hero.skills, actives: hero.actives, deployed: deployed.includes(entry.nodeId) };
+  const live = new Map(roster.map((entry) => [entry.nodeId, entry]));
+  const heroes = Object.values(save.heroes);
+  const deployed = deployHeroes(
+    heroes.map((hero) => {
+      const agent = hero.agentNodeId ? live.get(hero.agentNodeId) : undefined;
+      return { heroId: hero.id, leader: hero.leader, working: Boolean(agent?.working), present: Boolean(agent), level: hero.level };
     }),
+    save.account.formation,
+    formationSlots(save.account.runes),
+  );
+  const builds = buildHeroes(
+    heroes.map((hero) => ({ heroId: hero.id, classId: hero.classId, level: hero.level, paragon: hero.paragon, xp: hero.xp, skills: hero.skills, actives: hero.actives, deployed: deployed.includes(hero.id) })),
     save.items,
     save.account.runes,
     save.account.killsByMonster,
@@ -91,7 +104,7 @@ export function partyBuilds(save: AdventureSave, roster: RosterEntry[]): { build
 /** Luck of the formation, used when opening chests. */
 function partyLuck(save: AdventureSave, roster: RosterEntry[]): { magicFind: number; goldMultiplier: number } {
   const { builds, deployed } = partyBuilds(save, roster);
-  const heroes = deployed.map((nodeId) => builds[nodeId]).filter(Boolean);
+  const heroes = deployed.map((heroId) => builds[heroId]).filter(Boolean);
   if (!heroes.length) return { magicFind: 0, goldMultiplier: 1 };
   return {
     magicFind: heroes.reduce((sum, build) => sum + build.profile.magicFind, 0) / heroes.length,
@@ -99,39 +112,68 @@ function partyLuck(save: AdventureSave, roster: RosterEntry[]): { magicFind: num
   };
 }
 
+/** A hero's skills and gear kept valid for its class and level. */
+function tidyHero(save: AdventureSave, hero: AdventureHero): void {
+  hero.skills = sanitizeRanks(hero.classId, hero.level, hero.skills);
+  if (hero.autoSkills) hero.skills = autoAllocate(hero.classId, hero.level, hero.skills);
+  hero.actives = hero.actives.filter((id) => learnedActives(hero.classId, hero.skills).some((active) => active.id === id));
+  for (const item of save.items) {
+    if (item.heroId === hero.id && item.location === 'equipped' && canEquip(item, { classId: hero.classId, level: MAX_HERO_LEVEL }) === 'class') {
+      item.location = 'inventory';
+      item.heroId = null;
+    }
+  }
+}
+
+function recruitHero(save: AdventureSave, ctx: EngineContext, classId: HeroClassId, leader: boolean): AdventureHero {
+  const name = heroName(classId, Object.values(save.heroes).map((hero) => hero.name), ctx.rng() * 1_000);
+  const hero = newHero(ctx.newId(), name, classId, leader);
+  save.heroes[hero.id] = hero;
+  for (const data of starterKit(classId)) {
+    const item = addItem(save, ctx, data, 'equipped', hero.id);
+    journal(save, { at: ctx.now, kind: 'item', itemId: item.id, rarity: item.rarity, source: 'starter', heroId: hero.id });
+  }
+  return hero;
+}
+
 /**
- * Keeps one hero per agent: newcomers get a record and a starter kit; when an
- * agent leaves the team its gear goes back to the inventory. A hero whose
- * class changed keeps only skills of its new tree and drops a foreign weapon.
+ * Keeps the guild in step with the team. The leader recruits and dismisses
+ * agents on demand, so heroes outlive them: a dismissed agent's hero rests
+ * in the guild with its level, skills and gear; a new agent takes up a
+ * resting hero of the class its role suggests (the one last played under the
+ * same title, else the most experienced) and only when none is free does a
+ * new hero join. The Maestro is always played by whoever leads.
  */
-export function syncRoster(save: AdventureSave, ctx: EngineContext): void {
-  const present = new Set(ctx.roster.map((entry) => entry.nodeId));
-  for (const nodeId of Object.keys(save.heroes)) {
-    if (present.has(nodeId)) continue;
-    for (const item of save.items) if (item.heroNodeId === nodeId) { item.location = 'inventory'; item.heroNodeId = null; }
-    delete save.heroes[nodeId];
+export function bindRoster(save: AdventureSave, ctx: EngineContext): void {
+  const present = new Map(ctx.roster.map((entry) => [entry.nodeId, entry]));
+  const heroes = () => Object.values(save.heroes);
+  for (const hero of heroes()) {
+    const agent = hero.agentNodeId ? present.get(hero.agentNodeId) : undefined;
+    // Gone, or now the leader while playing someone else: back to the guild.
+    if (!agent || (agent.leader && !hero.leader) || (!agent.leader && hero.leader)) hero.agentNodeId = null;
+  }
+  const leader = ctx.roster.find((entry) => entry.leader);
+  const maestro = heroes().find((hero) => hero.leader) ?? (leader ? recruitHero(save, ctx, 'maestro', true) : null);
+  if (maestro && leader && maestro.agentNodeId !== leader.nodeId) {
+    maestro.agentNodeId = leader.nodeId;
+    journal(save, { at: ctx.now, kind: 'recruit', heroId: maestro.id, agentTitle: leader.title, inherited: maestro.level > 1 || maestro.kills > 0 });
   }
   for (const entry of ctx.roster) {
-    let hero = save.heroes[entry.nodeId];
-    const classId = heroClass(save, ctx.roster, entry.nodeId);
+    if (entry.leader) continue;
+    let hero = heroOfAgent(save, entry.nodeId);
     if (!hero) {
-      hero = newHero(entry.nodeId);
-      save.heroes[entry.nodeId] = hero;
-      for (const data of starterKit(classId)) {
-        const item = addItem(save, ctx, data, 'equipped', entry.nodeId);
-        journal(save, { at: ctx.now, kind: 'item', itemId: item.id, rarity: item.rarity, source: 'starter', heroNodeId: entry.nodeId });
-      }
+      const classId = agentClass(entry);
+      const resting = heroes()
+        .filter((candidate) => !candidate.leader && !candidate.agentNodeId && candidate.classId === classId)
+        .sort((a, b) => Number(b.agentTitle === entry.title) - Number(a.agentTitle === entry.title) || b.level - a.level || b.xp - a.xp);
+      hero = resting[0] ?? recruitHero(save, ctx, classId, false);
+      hero.agentNodeId = entry.nodeId;
+      journal(save, { at: ctx.now, kind: 'recruit', heroId: hero.id, agentTitle: entry.title, inherited: Boolean(resting[0]) });
     }
-    hero.skills = sanitizeRanks(classId, hero.level, hero.skills);
-    if (hero.autoSkills) hero.skills = autoAllocate(classId, hero.level, hero.skills);
-    hero.actives = hero.actives.filter((id) => learnedActives(classId, hero.skills).some((active) => active.id === id));
-    for (const item of save.items) {
-      if (item.heroNodeId === entry.nodeId && item.location === 'equipped' && canEquip(item, { classId, level: MAX_HERO_LEVEL }) === 'class') {
-        item.location = 'inventory';
-        item.heroNodeId = null;
-      }
-    }
+    hero.agentTitle = entry.title;
   }
+  if (maestro && leader) maestro.agentTitle = leader.title;
+  for (const hero of heroes()) tidyHero(save, hero);
 }
 
 export type ReportInput = {
@@ -148,10 +190,10 @@ export type ReportInput = {
 };
 
 export type ReportResult = {
-  levelUps: Array<{ nodeId: string; level: number }>;
+  levelUps: Array<{ heroId: string; level: number; paragon?: number }>;
   opened: OpenResult[];
   pets: PetId[];
-  quests: Array<{ title: string; nodeId: string | null }>;
+  quests: Array<{ title: string; heroId: string | null }>;
   duplicate: boolean;
 };
 
@@ -172,7 +214,7 @@ function clampReport(report: ReportInput, sinceLastMs: number): ReportInput {
   const maxXp = (killCount + 1) * monsterStats('outage-kraken', level + 5, 'torment', true).xp;
   const maxGold = (killCount + 1) * monsterStats('outage-kraken', level + 5, 'torment', true).gold * 4;
   const xp: Record<string, number> = {};
-  for (const [nodeId, value] of Object.entries(report.xp)) if (Number.isFinite(value) && value > 0) xp[nodeId] = Math.min(value, maxXp);
+  for (const [heroId, value] of Object.entries(report.xp)) if (Number.isFinite(value) && value > 0) xp[heroId] = Math.min(value, maxXp);
   return {
     ...report,
     elapsedMs: elapsed,
@@ -185,27 +227,37 @@ function clampReport(report: ReportInput, sinceLastMs: number): ReportInput {
   };
 }
 
-function grantXp(save: AdventureSave, ctx: EngineContext, nodeId: string, amount: number, levelUps: ReportResult['levelUps']): void {
-  const hero = save.heroes[nodeId];
+function grantXp(save: AdventureSave, ctx: EngineContext, heroId: string, amount: number, levelUps: ReportResult['levelUps']): void {
+  const hero = save.heroes[heroId];
   if (!hero || amount <= 0) return;
   const before = hero.level;
-  const next = addXp(hero.level, hero.xp, amount);
+  const next = addXp(hero.level, hero.xp, amount, hero.paragon);
   hero.level = next.level;
   hero.xp = next.xp;
+  hero.paragon = next.paragon;
   if (hero.level > before) {
-    const classId = heroClass(save, ctx.roster, nodeId);
-    if (hero.autoSkills) hero.skills = autoAllocate(classId, hero.level, hero.skills);
-    levelUps.push({ nodeId, level: hero.level });
-    journal(save, { at: ctx.now, kind: 'level', heroNodeId: nodeId, level: hero.level });
+    if (hero.autoSkills) hero.skills = autoAllocate(hero.classId, hero.level, hero.skills);
+    levelUps.push({ heroId, level: hero.level });
+    journal(save, { at: ctx.now, kind: 'level', heroId, level: hero.level });
+  }
+  if (next.paragonGained) {
+    levelUps.push({ heroId, level: hero.level, paragon: hero.paragon });
+    journal(save, { at: ctx.now, kind: 'level', heroId, level: hero.level, paragon: hero.paragon });
   }
 }
 
-/** Catch-up: heroes behind the strongest one learn faster with the Mentorship rune. */
-function mentorshipBonus(save: AdventureSave, nodeId: string): number {
-  const bonus = runeRule(save.account.runes, 'mentorship');
-  if (!bonus) return 1;
-  const top = Math.max(...Object.values(save.heroes).map((hero) => hero.level));
-  return save.heroes[nodeId] && save.heroes[nodeId].level < top ? 1 + bonus / 100 : 1;
+/**
+ * Catch-up: new recruits join a guild that may be far ahead, so heroes more
+ * than five levels behind the strongest learn half again as fast, and the
+ * Mentorship rune adds to every hero behind it.
+ */
+export function catchUpBonus(save: AdventureSave, heroId: string): number {
+  const hero = save.heroes[heroId];
+  if (!hero) return 1;
+  const top = Math.max(...Object.values(save.heroes).map((entry) => entry.level));
+  const behind = top - hero.level;
+  const rune = runeRule(save.account.runes, 'mentorship');
+  return (behind > 5 ? 1.5 : 1) + (behind > 0 ? rune / 100 : 0);
 }
 
 function chestCapacity(account: AdventureAccount): number {
@@ -232,10 +284,11 @@ export function applyReport(save: AdventureSave, input: ReportInput, ctx: Engine
     account.killsByMonster[monsterId] = (account.killsByMonster[monsterId] ?? 0) + count;
     account.kills += count;
   }
-  for (const [nodeId, amount] of Object.entries(report.xp)) {
-    if (!save.heroes[nodeId]) continue;
-    save.heroes[nodeId].kills += Math.round(Object.values(report.kills).reduce((sum, count) => sum + (count ?? 0), 0));
-    grantXp(save, ctx, nodeId, amount * mentorshipBonus(save, nodeId), result.levelUps);
+  const fallen = Object.values(report.kills).reduce((sum, count) => sum + (count ?? 0), 0);
+  for (const [heroId, amount] of Object.entries(report.xp)) {
+    if (!save.heroes[heroId]) continue;
+    save.heroes[heroId].kills += fallen;
+    grantXp(save, ctx, heroId, amount * catchUpBonus(save, heroId), result.levelUps);
   }
   for (const drop of report.chests) {
     if (!CHEST_TIERS.includes(drop.tier) || drop.tier === 'quest') continue;
@@ -297,7 +350,7 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
   const luck = partyLuck(save, ctx.roster);
   const contents = openChest(ctx.rng, {
     tier: chest.tier, level: chest.level, difficulty: chest.difficulty, act: chest.act,
-    magicFind: luck.magicFind, goldMultiplier: luck.goldMultiplier, partyClasses: partyClasses(save, ctx.roster),
+    magicFind: luck.magicFind, goldMultiplier: luck.goldMultiplier, partyClasses: partyClasses(save),
   });
   account.chests = account.chests.filter((entry) => entry.id !== chest.id);
   account.gold += contents.gold;
@@ -347,13 +400,11 @@ export function payQuests(save: AdventureSave, ctx: EngineContext, done: Array<{
     account.quests += 1;
     const level = regionLevel(account.position);
     addChest(save, ctx, { tier: 'quest', level, difficulty: account.position.difficulty, act: account.position.act });
-    const nodeId = task.assigneeNodeId && save.heroes[task.assigneeNodeId] ? task.assigneeNodeId : null;
-    if (nodeId) {
-      const hero = save.heroes[nodeId];
-      grantXp(save, ctx, nodeId, monsterStats('bug-beetle', level, account.position.difficulty, true).xp * 3 * xpGapFactor(hero.level, level), []);
-    }
-    journal(save, { at: ctx.now, kind: 'quest', title: task.title.slice(0, 120), heroNodeId: nodeId });
-    paid.push({ title: task.title, nodeId });
+    // The hero whose agent finished the card earns the quest's experience.
+    const hero = heroOfAgent(save, task.assigneeNodeId);
+    if (hero) grantXp(save, ctx, hero.id, monsterStats('bug-beetle', level, account.position.difficulty, true).xp * 3 * xpGapFactor(hero.level, level), []);
+    journal(save, { at: ctx.now, kind: 'quest', title: task.title.slice(0, 120), heroId: hero?.id ?? null });
+    paid.push({ title: task.title, heroId: hero?.id ?? null });
   }
   return paid;
 }
@@ -368,9 +419,10 @@ export function offlineCapMs(account: AdventureAccount): number {
 }
 
 /**
- * Work the agents did while the strip was closed still counts: each hero
- * earns experience and gold for its own working time, at offline efficiency
- * and without chests (those only drop in battle).
+ * Work the agents did while the strip was closed still counts: each agent's
+ * hero earns experience and gold for that agent's working time, at offline
+ * efficiency and without chests (those only drop in battle). `workMs` is by
+ * agent node.
  */
 export function payOffline(save: AdventureSave, ctx: EngineContext, workMs: Record<string, number>): void {
   const account = save.account;
@@ -385,17 +437,17 @@ export function payOffline(save: AdventureSave, ctx: EngineContext, workMs: Reco
   const xp: Record<string, number> = {};
   const levels: Record<string, number> = {};
   for (const [nodeId, rawMs] of Object.entries(workMs)) {
-    const hero = save.heroes[nodeId];
+    const hero = heroOfAgent(save, nodeId);
     if (!hero || rawMs < 60_000) continue;
     const ms = Math.min(rawMs, cap);
     longest = Math.max(longest, ms);
     const kills = ms * killsPerMs * efficiency;
-    const build = builds[nodeId];
-    const amount = kills * typical.xp * xpGapFactor(hero.level, level) * (build?.profile.xpMultiplier ?? 1);
+    const build = builds[hero.id];
+    const amount = kills * typical.xp * xpGapFactor(hero.level, level) * (build?.profile.xpMultiplier ?? 1) * catchUpBonus(save, hero.id);
     const before = hero.level;
-    grantXp(save, ctx, nodeId, amount, []);
-    xp[nodeId] = Math.round(amount);
-    if (hero.level > before) levels[nodeId] = hero.level;
+    grantXp(save, ctx, hero.id, amount, []);
+    xp[hero.id] = Math.round(amount);
+    if (hero.level > before) levels[hero.id] = hero.level;
     gold += kills * typical.gold * (build?.profile.goldMultiplier ?? 1) / Math.max(1, Object.keys(workMs).length);
   }
   if (!longest) return;
@@ -411,27 +463,31 @@ function findItem(save: AdventureSave, itemId: string): Item {
   return save.items.find((item) => item.id === itemId) ?? fail('item');
 }
 
-export function equipItem(save: AdventureSave, ctx: EngineContext, itemId: string, nodeId: string): void {
+function findHero(save: AdventureSave, heroId: string): AdventureHero {
+  return save.heroes[heroId] ?? fail('hero');
+}
+
+export function equipItem(save: AdventureSave, itemId: string, heroId: string): void {
   const item = findItem(save, itemId);
-  const hero = save.heroes[nodeId] ?? fail('hero');
-  const verdict = canEquip(item, { classId: heroClass(save, ctx.roster, nodeId), level: hero.level });
+  const hero = findHero(save, heroId);
+  const verdict = canEquip(item, hero);
   if (verdict !== 'ok') fail(verdict === 'class' ? 'equip-class' : 'equip-level');
-  const current = save.items.find((candidate) => candidate.location === 'equipped' && candidate.heroNodeId === nodeId && candidate.slot === item.slot);
-  const from = { location: item.location, heroNodeId: item.heroNodeId };
+  const current = save.items.find((candidate) => candidate.location === 'equipped' && candidate.heroId === heroId && candidate.slot === item.slot);
+  const from = { location: item.location, heroId: item.heroId };
   if (current && current.id !== item.id) {
     // Swap: the old piece goes where the new one came from.
-    current.location = from.location === 'equipped' ? 'equipped' : from.location;
-    current.heroNodeId = from.location === 'equipped' ? from.heroNodeId : null;
-    if (current.location === 'equipped' && current.heroNodeId) {
-      const other = save.heroes[current.heroNodeId];
-      if (!other || canEquip(current, { classId: heroClass(save, ctx.roster, current.heroNodeId), level: other.level }) !== 'ok') {
+    current.location = from.location;
+    current.heroId = from.location === 'equipped' ? from.heroId : null;
+    if (current.location === 'equipped' && current.heroId) {
+      const other = save.heroes[current.heroId];
+      if (!other || canEquip(current, other) !== 'ok') {
         current.location = 'inventory';
-        current.heroNodeId = null;
+        current.heroId = null;
       }
     }
   }
   item.location = 'equipped';
-  item.heroNodeId = nodeId;
+  item.heroId = heroId;
 }
 
 export function unequipItem(save: AdventureSave, itemId: string): void {
@@ -439,22 +495,20 @@ export function unequipItem(save: AdventureSave, itemId: string): void {
   if (item.location !== 'equipped') return;
   if (freeInventory(save) <= 0) fail('inventory-full');
   item.location = 'inventory';
-  item.heroNodeId = null;
+  item.heroId = null;
 }
 
 /** Equips the best piece for each slot a hero can wear, from the inventory and stash. */
-export function autoEquip(save: AdventureSave, ctx: EngineContext, nodeId: string): number {
-  const hero = save.heroes[nodeId] ?? fail('hero');
-  const classId = heroClass(save, ctx.roster, nodeId);
+export function autoEquip(save: AdventureSave, ctx: EngineContext, heroId: string): number {
+  const hero = findHero(save, heroId);
   let changed = 0;
-  const { builds } = partyBuilds(save, ctx.roster);
-  const ratingOf = () => partyBuilds(save, ctx.roster).builds[nodeId]?.rating ?? builds[nodeId]?.rating ?? 0;
+  const ratingOf = () => partyBuilds(save, ctx.roster).builds[heroId]?.rating ?? 0;
   for (const slot of ['weapon', 'helmet', 'armor', 'gloves', 'boots', 'amulet', 'ring'] as Slot[]) {
-    const candidates = save.items.filter((item) => item.slot === slot && item.location !== 'equipped' && canEquip(item, { classId, level: hero.level }) === 'ok');
+    const candidates = save.items.filter((item) => item.slot === slot && item.location !== 'equipped' && canEquip(item, hero) === 'ok');
     for (const candidate of candidates) {
       const before = ratingOf();
       const snapshot = save.items.map((item) => ({ ...item }));
-      equipItem(save, ctx, candidate.id, nodeId);
+      equipItem(save, candidate.id, heroId);
       if (ratingOf() <= before) save.items = snapshot;
       else changed += 1;
     }
@@ -512,7 +566,7 @@ export function synthesizeItems(save: AdventureSave, ctx: EngineContext, itemIds
   const cost = synthesisCost(rarity, Math.max(...items.map((item) => item.level)));
   if (save.account.gold < cost) fail('gold');
   save.account.gold -= cost;
-  const data = synthesize(ctx.rng, items, save.account.cube.level, partyClasses(save, ctx.roster));
+  const data = synthesize(ctx.rng, items, save.account.cube.level, partyClasses(save));
   removeItems(save, items);
   const item = addItem(save, ctx, data);
   cubeXp(save, CUBE_XP.synthesis * (RARITIES.indexOf(rarity) + 1));
@@ -535,8 +589,8 @@ export function craftItem(save: AdventureSave, ctx: EngineContext, options: { sl
   for (const [gem, count] of Object.entries(needed) as Array<[MaterialId, number]>) save.account.materials[gem]! -= count;
   const luck = partyLuck(save, ctx.roster);
   const data = craft(ctx.rng, {
-    slot: options.slot, level, classId: options.classId ?? heroClass(save, ctx.roster, ctx.roster[0]?.nodeId ?? ''),
-    cubeLevel: save.account.cube.level, magicFind: luck.magicFind, difficulty: save.account.position.difficulty, partyClasses: partyClasses(save, ctx.roster),
+    slot: options.slot, level, classId: options.classId ?? Object.values(save.heroes)[0]?.classId ?? 'knight',
+    cubeLevel: save.account.cube.level, magicFind: luck.magicFind, difficulty: save.account.position.difficulty, partyClasses: partyClasses(save),
   });
   const item = addItem(save, ctx, data);
   cubeXp(save, CUBE_XP.crafting);
@@ -575,7 +629,7 @@ export function makeOffering(save: AdventureSave, ctx: EngineContext): Item {
   if (freeInventory(save) <= 0) fail('inventory-full');
   save.account.coins -= COINS_PER_OFFERING;
   const luck = partyLuck(save, ctx.roster);
-  const data = offering(ctx.rng, { level: highestRegionLevel(save.account.cleared), magicFind: luck.magicFind, difficulty: save.account.position.difficulty, partyClasses: partyClasses(save, ctx.roster) });
+  const data = offering(ctx.rng, { level: highestRegionLevel(save.account.cleared), magicFind: luck.magicFind, difficulty: save.account.position.difficulty, partyClasses: partyClasses(save) });
   const item = addItem(save, ctx, data);
   cubeXp(save, CUBE_XP.offering);
   journal(save, { at: ctx.now, kind: 'item', itemId: item.id, rarity: item.rarity, source: 'offering' });
@@ -591,43 +645,47 @@ export function buyRune(save: AdventureSave, runeId: string): number {
   return cost;
 }
 
-export function raiseSkill(save: AdventureSave, ctx: EngineContext, nodeId: string, skillId: string): void {
-  const hero = save.heroes[nodeId] ?? fail('hero');
-  const classId = heroClass(save, ctx.roster, nodeId);
-  const verdict = canRaise(classId, hero.level, hero.skills, skillId);
+export function raiseSkill(save: AdventureSave, heroId: string, skillId: string): void {
+  const hero = findHero(save, heroId);
+  const verdict = canRaise(hero.classId, hero.level, hero.skills, skillId);
   if (verdict !== 'ok') fail(`skill-${verdict}`);
   hero.skills = { ...hero.skills, [skillId]: (hero.skills[skillId] ?? 0) + 1 };
   hero.autoSkills = false;
 }
 
-export function resetSkills(save: AdventureSave, nodeId: string): void {
-  const hero = save.heroes[nodeId] ?? fail('hero');
+export function resetSkills(save: AdventureSave, heroId: string): void {
+  const hero = findHero(save, heroId);
   hero.skills = {};
   hero.actives = [];
   hero.autoSkills = false;
 }
 
-export function setAutoSkills(save: AdventureSave, ctx: EngineContext, nodeId: string, enabled: boolean): void {
-  const hero = save.heroes[nodeId] ?? fail('hero');
+export function setAutoSkills(save: AdventureSave, heroId: string, enabled: boolean): void {
+  const hero = findHero(save, heroId);
   hero.autoSkills = enabled;
-  if (enabled) hero.skills = autoAllocate(heroClass(save, ctx.roster, nodeId), hero.level, hero.skills);
+  if (enabled) hero.skills = autoAllocate(hero.classId, hero.level, hero.skills);
 }
 
-export function setActives(save: AdventureSave, ctx: EngineContext, nodeId: string, actives: string[]): void {
-  const hero = save.heroes[nodeId] ?? fail('hero');
-  const learned = learnedActives(heroClass(save, ctx.roster, nodeId), hero.skills).map((active) => active.id);
+export function setActives(save: AdventureSave, heroId: string, actives: string[]): void {
+  const hero = findHero(save, heroId);
+  const learned = learnedActives(hero.classId, hero.skills).map((active) => active.id);
   const chosen = [...new Set(actives)].filter((id) => learned.includes(id));
   if (chosen.length > activeSlots(save.account.runes)) fail('active-slots');
   hero.actives = chosen;
 }
 
-export function setHeroClass(save: AdventureSave, ctx: EngineContext, nodeId: string, classId: HeroClassId | null): void {
-  const entry = ctx.roster.find((candidate) => candidate.nodeId === nodeId) ?? fail('hero');
-  if (entry.leader && classId) fail('leader-class');
-  if (classId === 'maestro') fail('leader-class');
-  const hero = save.heroes[nodeId] ?? fail('hero');
+/**
+ * The owner changes a hero's class (never the Maestro's); null returns it to
+ * the class its current agent's role suggests. Skills of the old tree are
+ * refunded and a weapon of the old class comes off.
+ */
+export function setHeroClass(save: AdventureSave, ctx: EngineContext, heroId: string, classId: HeroClassId | null): void {
+  const hero = findHero(save, heroId);
+  if (hero.leader || classId === 'maestro') fail('leader-class');
+  const agent = ctx.roster.find((entry) => entry.nodeId === hero.agentNodeId);
   hero.chosenClass = classId;
-  syncRoster(save, ctx);
+  hero.classId = classId ?? (agent ? agentClass(agent) : hero.classId);
+  tidyHero(save, hero);
 }
 
 export function travel(save: AdventureSave, position: StagePosition): void {
@@ -639,8 +697,9 @@ export function updateSettings(save: AdventureSave, patch: Partial<AdventureSett
   save.account.settings = { ...save.account.settings, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => typeof value === 'boolean')) };
 }
 
-export function setFormation(save: AdventureSave, ctx: EngineContext, order: string[]): void {
-  const known = new Set(ctx.roster.map((entry) => entry.nodeId));
+/** The heroes (ids) the owner pins to the formation, in order. */
+export function setFormation(save: AdventureSave, order: string[]): void {
+  const known = new Set(Object.keys(save.heroes));
   save.account.formation = [...new Set(order)].filter((nodeId) => known.has(nodeId)).slice(0, formationSlots(save.account.runes));
 }
 

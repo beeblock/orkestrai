@@ -441,6 +441,9 @@ export const ADVENTURE_PT: AdventureCatalog = {
   "journal": {
     "item": "Novo item: {item} ({source})",
     "level": "{hero} chegou ao nível {level}",
+    "paragon": "{hero} alcançou Paragon {level}",
+    "recruit": "{hero} entrou para a guilda com {agent}",
+    "inherited": "{agent} assumiu {hero}, que descansava na guilda",
     "stageClear": "Vitória em {stage}",
     "stageFail": "Repelidos em {stage}",
     "boss": "Chefe derrotado: {monster}",

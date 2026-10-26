@@ -37,6 +37,6 @@ export type AdventureCatalog = {
   /** Refusals from the rules, by error code. */
   errors: Record<string, string>;
   /** Loot log lines. Placeholders: {hero}, {item}, {level}, {stage}, {monster}, {pet}, {title}, {minutes}, {gold}. */
-  journal: Record<'item' | 'level' | 'stageClear' | 'stageFail' | 'boss' | 'pet' | 'quest' | 'offline', string>;
+  journal: Record<'item' | 'level' | 'paragon' | 'recruit' | 'inherited' | 'stageClear' | 'stageFail' | 'boss' | 'pet' | 'quest' | 'offline', string>;
   itemSources: Record<'white' | 'blue' | 'red' | 'quest' | 'synthesis' | 'crafting' | 'offering' | 'starter', string>;
 };

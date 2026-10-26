@@ -2,7 +2,6 @@ import { Connection } from '@beeblock/svelar/database';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { newAccount, type AdventureAccount, type AdventureHero } from '../../domain/adventure/account.js';
 import type { HeroBuild } from '../../domain/adventure/build.js';
-import type { HeroClassId } from '../../domain/adventure/catalog.js';
 import * as engine from '../../domain/adventure/engine.js';
 import type { AdventureSave, EngineContext, OpenResult, ReportInput, ReportResult, RosterEntry } from '../../domain/adventure/engine.js';
 import type { Item } from '../../domain/adventure/items.js';
@@ -18,10 +17,13 @@ import { adventureRepository } from '../../infrastructure/repositories/Adventure
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { controlCenterService } from './ControlCenterService.js';
 
+export type AgentPresence = { nodeId: string; title: string; role: string | null; leader: boolean; working: boolean };
+
 /** What the screens get: the save as the owner may see it, plus every hero's build. */
 export type AdventureSnapshot = {
   account: Omit<AdventureAccount, 'rewardedTasks' | 'lastReportId'>;
-  heroes: Array<AdventureHero & { title: string; role: string | null; leader: boolean; working: boolean; classId: HeroClassId; build: HeroBuild | null; deployed: boolean }>;
+  /** The whole guild; `agent` is the agent playing the hero now (null while it rests). */
+  heroes: Array<AdventureHero & { agent: AgentPresence | null; build: HeroBuild | null; deployed: boolean }>;
   items: Item[];
   limits: { inventory: number; stash: number; chests: number; formation: number; activeSlots: number; offlineEfficiency: number; offlineHours: number };
   tamedPets: PetId[];
@@ -119,16 +121,15 @@ export class AdventureService {
     const { rewardedTasks: _rewarded, lastReportId: _reportId, ...account } = save.account;
     return {
       account,
-      heroes: roster.filter((entry) => save.heroes[entry.nodeId]).map((entry) => ({
-        ...save.heroes[entry.nodeId],
-        title: entry.title,
-        role: entry.role,
-        leader: entry.leader,
-        working: entry.working,
-        classId: engine.heroClass(save, roster, entry.nodeId),
-        build: builds[entry.nodeId] ?? null,
-        deployed: deployed.includes(entry.nodeId),
-      })),
+      heroes: Object.values(save.heroes)
+        .map((hero) => ({
+          ...hero,
+          agent: roster.find((entry) => entry.nodeId === hero.agentNodeId) ?? null,
+          build: builds[hero.id] ?? null,
+          deployed: deployed.includes(hero.id),
+        }))
+        // The Maestro first, then heroes played by an agent, then the resting guild by level.
+        .sort((a, b) => Number(b.leader) - Number(a.leader) || Number(Boolean(b.agent)) - Number(Boolean(a.agent)) || b.level - a.level || a.name.localeCompare(b.name)),
       items: save.items,
       limits: {
         inventory: inventorySlots(account.runes),
@@ -165,7 +166,7 @@ export class AdventureService {
     return Connection.transaction(async () => {
       const before = await adventureRepository.load(workspaceId);
       const save: AdventureSave = before ? structuredClone(before) : { account: newAccount(now), heroes: {}, items: [] };
-      engine.syncRoster(save, ctx);
+      engine.bindRoster(save, ctx);
       const quests = engine.payQuests(save, ctx, done);
       if (offlineWork && save.account.lastReportAt === lastReport) {
         engine.payOffline(save, ctx, offlineWork);
@@ -205,9 +206,9 @@ export class AdventureService {
   private dispatch(save: AdventureSave, ctx: EngineContext, action: AdventureAction): unknown {
     switch (action.type) {
       case 'open-chests': return engine.openChests(save, ctx, { ids: action.ids, tier: action.tier, limit: action.limit });
-      case 'equip': return engine.equipItem(save, ctx, action.itemId, action.nodeId);
+      case 'equip': return engine.equipItem(save, action.itemId, action.heroId);
       case 'unequip': return engine.unequipItem(save, action.itemId);
-      case 'auto-equip': return engine.autoEquip(save, ctx, action.nodeId);
+      case 'auto-equip': return engine.autoEquip(save, ctx, action.heroId);
       case 'lock': return engine.setLocked(save, action.itemId, action.locked);
       case 'move': return engine.moveItem(save, action.itemId, action.location);
       case 'salvage': return { gold: engine.salvage(save, action.itemIds) };
@@ -217,14 +218,14 @@ export class AdventureService {
       case 'unsocket': return engine.unsocketItem(save, action.itemId, action.socketIndex);
       case 'offering': return { item: engine.makeOffering(save, ctx) };
       case 'buy-rune': return { cost: engine.buyRune(save, action.runeId) };
-      case 'raise-skill': return engine.raiseSkill(save, ctx, action.nodeId, action.skillId);
-      case 'reset-skills': return engine.resetSkills(save, action.nodeId);
-      case 'auto-skills': return engine.setAutoSkills(save, ctx, action.nodeId, action.enabled);
-      case 'set-actives': return engine.setActives(save, ctx, action.nodeId, action.actives);
-      case 'set-class': return engine.setHeroClass(save, ctx, action.nodeId, action.classId);
+      case 'raise-skill': return engine.raiseSkill(save, action.heroId, action.skillId);
+      case 'reset-skills': return engine.resetSkills(save, action.heroId);
+      case 'auto-skills': return engine.setAutoSkills(save, action.heroId, action.enabled);
+      case 'set-actives': return engine.setActives(save, action.heroId, action.actives);
+      case 'set-class': return engine.setHeroClass(save, ctx, action.heroId, action.classId);
       case 'travel': return engine.travel(save, { difficulty: action.difficulty, act: action.act, stage: action.stage });
       case 'settings': return engine.updateSettings(save, action.settings);
-      case 'formation': return engine.setFormation(save, ctx, action.order);
+      case 'formation': return engine.setFormation(save, action.order);
       case 'pet': return engine.setActivePet(save, action.petId);
       case 'dismiss-offline': save.account.offline = null; return null;
     }

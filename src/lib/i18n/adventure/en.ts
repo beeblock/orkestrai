@@ -441,6 +441,9 @@ export const ADVENTURE_EN: AdventureCatalog = {
   "journal": {
     "item": "{item} found ({source})",
     "level": "{hero} reached level {level}",
+    "paragon": "{hero} reached Paragon {level}",
+    "recruit": "{hero} joined the guild with {agent}",
+    "inherited": "{agent} took over {hero}, who was resting in the guild",
     "stageClear": "Cleared {stage}",
     "stageFail": "Driven back at {stage}",
     "boss": "{monster} defeated",

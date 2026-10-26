@@ -5888,7 +5888,7 @@
   "adventure.camp_auto_open_hint": "Usa las runas de desellado a medida que llegan los cofres.",
   "adventure.camp_auto_open_locked": "Requiere la Runa del Desellado.",
   "adventure.camp_formation": "Formación · {slots} puestos",
-  "adventure.camp_formation_hint": "Fija héroes para mantenerlos en batalla; los puestos libres van a quien esté trabajando.",
+  "adventure.camp_formation_hint": "Fija héroes para mantenerlos en batalla. Los puestos libres van primero a quienes están trabajando, luego al Maestro, a los demás agentes y al gremio que descansa.",
   "adventure.camp_pin": "Fijar en la formación",
   "adventure.camp_unpin": "Soltar",
   "adventure.camp_move_up": "Subir",
@@ -5903,5 +5903,15 @@
   "adventure.offline_back": "Mientras no estabas, tus agentes trabajaron {minutes} min: +{gold} de oro",
   "adventure.region_level": "Región {level}",
   "adventure.region_level_hint": "Nivel de esta fase: define los monstruos y el botín.",
-  "adventure.stage_failed": "Rechazados en la fase {stage}"
+  "adventure.stage_failed": "Rechazados en la fase {stage}",
+  "adventure.paragon_level": "Paragon {level}",
+  "adventure.hero_paragon_up": "{name} alcanzó Paragon {level}",
+  "adventure.played_by": "Jugado por {agent}",
+  "adventure.resting": "Descansando",
+  "adventure.resting_in_guild": "Descansando en el gremio",
+  "adventure.resting_hint": "Sin agente ahora. Lucha cuando queda un puesto libre en la formación y pasa al próximo agente de su clase.",
+  "adventure.inspired": "Inspirado: +20% de daño mientras su agente trabaja",
+  "adventure.supporters": "+{count} apoyando",
+  "adventure.supporters_hint": "Agentes trabajando fuera de la formación: sus héroes ganan el 60% de la experiencia.",
+  "adventure.camp_guild": "Gremio · {count} héroes"
 }

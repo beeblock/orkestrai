@@ -4,7 +4,7 @@ import { buildHeroes, deployHeroes, visualTier } from '$lib/modules/agent-room/d
 import { synthesisRarity } from '$lib/modules/agent-room/domain/adventure/cube.js';
 import {
   AdventureError, applyReport, buyRune, craftItem, equipItem, makeOffering, openChests, payOffline, payQuests, salvage, socketItem,
-  synthesizeItems, syncRoster, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
+  synthesizeItems, bindRoster, heroOfAgent, setHeroClass, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
 } from '$lib/modules/agent-room/domain/adventure/engine.js';
 import { RARITIES, RARITY_RULES, canEquip, itemStats, rollItem, type Item, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
 import { openChest, rollRarity } from '$lib/modules/agent-room/domain/adventure/loot.js';
@@ -29,14 +29,21 @@ const roster: RosterEntry[] = [
   { nodeId: 'api', title: 'API', role: 'Backend', leader: false, working: false },
 ];
 
-function context(seed = 3): EngineContext {
-  let counter = 0;
-  return { rng: seeded(seed), newId: () => `id-${++counter}`, now: '2026-10-26T12:00:00.000Z', roster };
+// Ids stay unique across contexts, like uuids would.
+let counter = 0;
+
+function context(seed = 3, team: RosterEntry[] = roster): EngineContext {
+  return { rng: seeded(seed), newId: () => `id-${++counter}`, now: '2026-10-26T12:00:00.000Z', roster: team };
+}
+
+/** The hero an agent of the test roster plays. */
+function hero(save: AdventureSave, nodeId: string) {
+  return heroOfAgent(save, nodeId)!;
 }
 
 function freshSave(ctx: EngineContext): AdventureSave {
   const save: AdventureSave = { account: newAccount('2026-10-26T00:00:00.000Z'), heroes: {}, items: [] };
-  syncRoster(save, ctx);
+  bindRoster(save, ctx);
   return save;
 }
 
@@ -54,7 +61,7 @@ describe('adventure world', () => {
   it('levels heroes up to 100 on a growing curve', () => {
     expect(xpToNext(50)).toBeGreaterThan(xpToNext(10) * 5);
     const result = addXp(1, 0, xpToNext(1) + xpToNext(2) + 5);
-    expect(result).toEqual({ level: 3, xp: 5, levelsGained: 2 });
+    expect(result).toMatchObject({ level: 3, xp: 5, levelsGained: 2, paragon: 0 });
     expect(addXp(99, 0, Number.MAX_SAFE_INTEGER).level).toBe(MAX_HERO_LEVEL);
   });
 });
@@ -133,12 +140,75 @@ describe('adventure engine', () => {
   it('gives every agent a hero with a starter kit and builds the formation from who works', () => {
     const ctx = context();
     const save = freshSave(ctx);
-    expect(Object.keys(save.heroes).sort()).toEqual(['api', 'lead', 'qa']);
-    expect(save.items.filter((item) => item.heroNodeId === 'qa').map((item) => item.slot).sort()).toEqual(['armor', 'weapon']);
-    expect(save.items.find((item) => item.heroNodeId === 'qa' && item.slot === 'weapon')?.classId).toBe('ranger');
-    expect(deployHeroes(roster.map((entry) => ({ nodeId: entry.nodeId, leader: entry.leader, working: entry.working })), ['api'], 2)).toEqual(['api', 'lead']);
+    expect(Object.values(save.heroes).map((entry) => [entry.agentNodeId, entry.classId, entry.leader]).sort()).toEqual([['api', 'knight', false], ['lead', 'maestro', true], ['qa', 'ranger', false]]);
+    expect(save.items.filter((item) => item.heroId === hero(save, 'qa').id).map((item) => item.slot).sort()).toEqual(['armor', 'weapon']);
+    expect(save.items.find((item) => item.heroId === hero(save, 'qa').id && item.slot === 'weapon')?.classId).toBe('ranger');
+    const candidates = [
+      { heroId: 'lead', leader: true, working: false, present: true, level: 3 },
+      { heroId: 'qa', leader: false, working: true, present: true, level: 2 },
+      { heroId: 'old', leader: false, working: false, present: false, level: 40 },
+      { heroId: 'api', leader: false, working: false, present: true, level: 9 },
+    ];
+    expect(deployHeroes(candidates, ['api'], 3)).toEqual(['api', 'qa', 'lead']);
+    // A lone agent still fields a full party from the resting guild.
+    expect(deployHeroes(candidates.filter((entry) => entry.heroId !== 'api' && entry.heroId !== 'qa'), [], 3)).toEqual(['lead', 'old']);
     // Heroes start skilled: their first point goes to the class's first active.
-    expect(save.heroes.qa.skills['ranger.volley']).toBe(1);
+    expect(hero(save, 'qa').skills['ranger.volley']).toBe(1);
+  });
+
+  it('keeps a dismissed agent\'s hero in the guild and hands it to the next agent of its class', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    const ranger = hero(save, 'qa');
+    ranger.level = 30;
+    // The leader dismisses QA: its hero rests, with its level and gear.
+    bindRoster(save, context(4, roster.filter((entry) => entry.nodeId !== 'qa')));
+    expect(save.heroes[ranger.id].agentNodeId).toBeNull();
+    expect(save.items.filter((item) => item.heroId === ranger.id)).toHaveLength(2);
+    // A new QA agent takes up the resting ranger instead of starting over.
+    bindRoster(save, context(5, [...roster.filter((entry) => entry.nodeId !== 'qa'), { nodeId: 'qa-2', title: 'QA Login', role: 'QA engineer', leader: false, working: true }]));
+    expect(heroOfAgent(save, 'qa-2')?.id).toBe(ranger.id);
+    expect(save.heroes[ranger.id].level).toBe(30);
+    expect(save.heroes[ranger.id].agentTitle).toBe('QA Login');
+    // Two QA agents at once: the second one recruits a new ranger.
+    bindRoster(save, context(6, [...roster, { nodeId: 'qa-3', title: 'QA Upload', role: 'QA', leader: false, working: true }]));
+    expect(Object.values(save.heroes).filter((entry) => entry.classId === 'ranger')).toHaveLength(2);
+  });
+
+  it('gives the Maestro to whoever leads and names every hero', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    const maestro = hero(save, 'lead');
+    bindRoster(save, context(7, roster.map((entry) => ({ ...entry, leader: entry.nodeId === 'api' }))));
+    expect(heroOfAgent(save, 'api')?.id).toBe(maestro.id);
+    expect(new Set(Object.values(save.heroes).map((entry) => entry.name)).size).toBe(Object.keys(save.heroes).length);
+    expect(() => setHeroClass(save, ctx, maestro.id, 'knight')).toThrow('leader-class');
+  });
+
+  it('lets new recruits catch up with a guild far ahead', () => {
+    const earned = (topLevel: number) => {
+      const ctx = context();
+      const save = freshSave(ctx);
+      hero(save, 'lead').level = topLevel;
+      const recruit = hero(save, 'api');
+      applyReport(save, { reportId: `c${topLevel}`, elapsedMs: 60_000, position: positionAt('normal', 0), wave: 0, xp: { [recruit.id]: 300 }, gold: 0, kills: { 'glitch-slime': 30 }, chests: [], bosses: [], stages: [] }, ctx);
+      // Total experience: every level climbed plus the progress into the current one.
+      let total = recruit.xp;
+      for (let level = 1; level < recruit.level; level += 1) total += xpToNext(level);
+      return total;
+    };
+    expect(earned(40)).toBe(earned(1) * 1.5);
+  });
+
+  it('turns experience past level 100 into endless Paragon levels', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    const lead = hero(save, 'lead');
+    lead.level = 100;
+    const result = applyReport(save, { reportId: 'p1', elapsedMs: 600_000, position: positionAt('torment', 49), wave: 0, xp: { [lead.id]: 1e12 }, gold: 0, kills: { 'outage-kraken': 3000 }, chests: [], bosses: [], stages: [] }, ctx);
+    expect(lead.level).toBe(100);
+    expect(lead.paragon).toBeGreaterThan(0);
+    expect(result.levelUps.some((entry) => entry.paragon)).toBe(true);
   });
 
   it('applies a battle report: experience, gold, kills, chests and clears', () => {
@@ -146,12 +216,12 @@ describe('adventure engine', () => {
     const save = freshSave(ctx);
     const result = applyReport(save, {
       reportId: 'r1', elapsedMs: 60_000, position: positionAt('normal', 1), wave: 0,
-      xp: { qa: xpToNext(1) * 3 }, gold: 50, kills: { 'glitch-slime': 20 },
+      xp: { [hero(save, 'qa').id]: xpToNext(1) * 3 }, gold: 50, kills: { 'glitch-slime': 20 },
       chests: [{ tier: 'white', level: 1, difficulty: 'normal', act: 1 }], bosses: [],
       stages: [{ difficulty: 'normal', act: 1, stage: 1, result: 'clear' }],
     }, ctx);
-    expect(result.levelUps[0]).toMatchObject({ nodeId: 'qa' });
-    expect(save.heroes.qa.level).toBeGreaterThan(1);
+    expect(result.levelUps[0]).toMatchObject({ heroId: hero(save, 'qa').id });
+    expect(hero(save, 'qa').level).toBeGreaterThan(1);
     expect(save.account.gold).toBe(50);
     expect(save.account.killsByMonster['glitch-slime']).toBe(20);
     expect(save.account.chests).toHaveLength(1);
@@ -182,11 +252,11 @@ describe('adventure engine', () => {
   it('equips, swaps and refuses gear a hero cannot use', () => {
     const ctx = context();
     const save = freshSave(ctx);
-    const bow = save.items.find((item) => item.heroNodeId === 'qa' && item.slot === 'weapon')!;
-    expect(() => equipItem(save, ctx, bow.id, 'api')).toThrow('equip-class');
-    const better: Item = { ...rollItem(ctx.rng, { level: 1, rarity: 'rare', slot: 'weapon', classId: 'ranger' }), id: 'b2', location: 'inventory', heroNodeId: null, locked: false, createdAt: ctx.now };
+    const bow = save.items.find((item) => item.heroId === hero(save, 'qa').id && item.slot === 'weapon')!;
+    expect(() => equipItem(save, bow.id, hero(save, 'api').id)).toThrow('equip-class');
+    const better: Item = { ...rollItem(ctx.rng, { level: 1, rarity: 'rare', slot: 'weapon', classId: 'ranger' }), id: 'b2', location: 'inventory', heroId: null, locked: false, createdAt: ctx.now };
     save.items.push(better);
-    equipItem(save, ctx, 'b2', 'qa');
+    equipItem(save, 'b2', hero(save, 'qa').id);
     expect(better.location).toBe('equipped');
     expect(bow.location).toBe('inventory');
   });
@@ -195,7 +265,7 @@ describe('adventure engine', () => {
     const ctx = context();
     const save = freshSave(ctx);
     save.account.gold = 1e6;
-    const make = (index: number): Item => ({ ...rollItem(ctx.rng, { level: 10, rarity: 'uncommon' }), id: `s${index}`, location: 'inventory', heroNodeId: null, locked: false, createdAt: ctx.now });
+    const make = (index: number): Item => ({ ...rollItem(ctx.rng, { level: 10, rarity: 'uncommon' }), id: `s${index}`, location: 'inventory', heroId: null, locked: false, createdAt: ctx.now });
     save.items.push(...Array.from({ length: 10 }, (_, index) => make(index)));
     const result = synthesizeItems(save, ctx, Array.from({ length: 9 }, (_, index) => `s${index}`));
     expect(RARITIES.indexOf(result.rarity)).toBeGreaterThan(RARITIES.indexOf('uncommon'));
@@ -211,7 +281,7 @@ describe('adventure engine', () => {
     const save = freshSave(ctx);
     save.account.gold = 1e6;
     save.account.materials = { ruby: 3, sapphire: 2 };
-    const item: Item = { ...rollItem(ctx.rng, { level: 10, rarity: 'rare', slot: 'helmet' }), id: 'h1', location: 'inventory', heroNodeId: null, locked: false, createdAt: ctx.now };
+    const item: Item = { ...rollItem(ctx.rng, { level: 10, rarity: 'rare', slot: 'helmet' }), id: 'h1', location: 'inventory', heroId: null, locked: false, createdAt: ctx.now };
     save.items.push(item);
     socketItem(save, 'h1', 0, 'ruby');
     expect(item.sockets[0].material).toBe('ruby');
@@ -240,8 +310,8 @@ describe('adventure engine', () => {
     const ctx = context();
     const save = freshSave(ctx);
     payOffline(save, ctx, { qa: 2 * 3_600_000, lead: 10_000 });
-    expect(save.heroes.qa.level).toBeGreaterThan(1);
-    expect(save.heroes.lead.level).toBe(1);
+    expect(hero(save, 'qa').level).toBeGreaterThan(1);
+    expect(hero(save, 'lead').level).toBe(1);
     expect(save.account.offline?.minutes).toBe(120);
     expect(save.account.chests).toHaveLength(0);
   });
@@ -261,13 +331,13 @@ describe('adventure engine', () => {
   });
 
   it('dresses heroes by the rarity of their gear', () => {
-    const piece = (slot: Item['slot'], rarity: Rarity): Item => ({ slot, classId: slot === 'weapon' ? 'knight' : null, rarity, level: 1, affixes: [], sockets: [], id: slot, location: 'equipped', heroNodeId: 'k', locked: false, createdAt: '' });
+    const piece = (slot: Item['slot'], rarity: Rarity): Item => ({ slot, classId: slot === 'weapon' ? 'knight' : null, rarity, level: 1, affixes: [], sockets: [], id: slot, location: 'equipped', heroId: 'k', locked: false, createdAt: '' });
     const gear = (rarity: Rarity) => (['weapon', 'helmet', 'armor', 'gloves', 'boots'] as const).map((slot) => piece(slot, rarity));
     expect(visualTier([])).toBe(1);
     expect(visualTier(gear('epic'))).toBe(2);
     expect(visualTier(gear('immortal'))).toBe(3);
     expect(visualTier(gear('cosmic'))).toBe(4);
-    const builds = buildHeroes([{ nodeId: 'k', classId: 'knight', level: 10, xp: 0, skills: {}, actives: [], deployed: true }], gear('legendary'), {}, {});
+    const builds = buildHeroes([{ heroId: 'k', classId: 'knight', level: 10, xp: 0, skills: {}, actives: [], deployed: true }], gear('legendary'), {}, {});
     expect(builds.k.visualTier).toBe(3);
     expect(builds.k.weaponRarity).toBe('legendary');
   });

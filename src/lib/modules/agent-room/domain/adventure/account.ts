@@ -8,8 +8,11 @@ import { NO_CLEARS, START_POSITION, type ClearedStages, type Difficulty, type St
 
 /**
  * What a workspace's Adventure keeps between sessions: the account (map,
- * wallet, chests, runes, cube, settings), one record per hero (agent) and the
- * items. The server owns it; the strip only reports what happened in battle.
+ * wallet, chests, runes, cube, settings), the guild of heroes and the items.
+ * Heroes outlive agents: the leader recruits and dismisses agents on demand,
+ * and a dismissed agent's hero rests in the guild, with its level, skills and
+ * gear, until another agent of its class takes it up. The server owns all of
+ * it; the strip only reports what happened in battle.
  */
 
 export type ChestEntry = { id: string; tier: ChestTier; level: number; difficulty: Difficulty; act: number };
@@ -27,16 +30,18 @@ export const DEFAULT_SETTINGS: AdventureSettings = { autoAdvance: true, autoRetr
 
 /** A line of the loot log, newest first. */
 export type JournalEntry =
-  | { at: string; kind: 'item'; itemId: string; rarity: Rarity; source: ChestTier | 'synthesis' | 'crafting' | 'offering' | 'starter'; heroNodeId?: string | null }
-  | { at: string; kind: 'level'; heroNodeId: string; level: number }
+  | { at: string; kind: 'item'; itemId: string; rarity: Rarity; source: ChestTier | 'synthesis' | 'crafting' | 'offering' | 'starter'; heroId?: string | null }
+  | { at: string; kind: 'level'; heroId: string; level: number; paragon?: number }
   | { at: string; kind: 'stage'; difficulty: Difficulty; act: number; stage: number; result: 'clear' | 'fail' }
   | { at: string; kind: 'boss'; difficulty: Difficulty; act: number; monsterId: MonsterId }
   | { at: string; kind: 'pet'; petId: PetId }
-  | { at: string; kind: 'quest'; title: string; heroNodeId: string | null }
+  | { at: string; kind: 'quest'; title: string; heroId: string | null }
+  | { at: string; kind: 'recruit'; heroId: string; agentTitle: string; inherited: boolean }
   | { at: string; kind: 'offline'; minutes: number; gold: number };
 
 export const JOURNAL_SIZE = 60;
 
+/** Experience and levels by hero id. */
 export type OfflineSummary = { minutes: number; gold: number; xp: Record<string, number>; levels: Record<string, number>; at: string };
 
 export type AdventureAccount = {
@@ -56,7 +61,7 @@ export type AdventureAccount = {
   activePet: PetId | null;
   cube: { level: number; xp: number };
   settings: AdventureSettings;
-  /** Heroes the owner placed in the formation, in order; the rest fill in automatically. */
+  /** Heroes (ids) the owner placed in the formation, in order; the rest fill in automatically. */
   formation: string[];
   /** `difficulty:act` pairs whose boss was beaten once: their first red chest is free. */
   firstBossClears: string[];
@@ -100,10 +105,22 @@ export function newAccount(now: string): AdventureAccount {
 }
 
 export type AdventureHero = {
-  nodeId: string;
-  /** The owner's pick of class; null follows the role. */
+  id: string;
+  /** The hero's own name: agents come and go, the hero stays. */
+  name: string;
+  /** The class it fights as. */
+  classId: HeroClassId;
+  /** The owner's pick of class; null keeps the class its first agent's role suggested. */
   chosenClass: HeroClassId | null;
+  /** The Maestro: always played by whoever leads the team. */
+  leader: boolean;
+  /** The agent playing this hero now; null while it rests in the guild. */
+  agentNodeId: string | null;
+  /** Title of the last agent that played it. */
+  agentTitle: string | null;
   level: number;
+  /** Levels past the maximum: each adds +1% attack and +1% life. */
+  paragon: number;
   xp: number;
   skills: SkillRanks;
   /** Active skills the owner slotted, in order. */
@@ -113,8 +130,8 @@ export type AdventureHero = {
   kills: number;
 };
 
-export function newHero(nodeId: string, chosenClass: HeroClassId | null = null): AdventureHero {
-  return { nodeId, chosenClass, level: 1, xp: 0, skills: {}, actives: [], autoSkills: true, kills: 0 };
+export function newHero(id: string, name: string, classId: HeroClassId, leader = false): AdventureHero {
+  return { id, name, classId, chosenClass: null, leader, agentNodeId: null, agentTitle: null, level: 1, paragon: 0, xp: 0, skills: {}, actives: [], autoSkills: true, kills: 0 };
 }
 
 /** The gear a new hero starts with: a common weapon of its class and a padded tunic. */

@@ -46,7 +46,7 @@ export const RUNES: Rune[] = [
   { id: 'learning', branch: 'wisdom', costs: [3_000, 9_000, 25_000, 70_000, 200_000], stats: { xpBonus: 8 } },
   { id: 'respite', branch: 'wisdom', costs: [15_000, 50_000, 150_000, 450_000, 1_300_000], requires: ['learning', 1], rule: ['offline', 10] },
   { id: 'mentorship', branch: 'wisdom', costs: [40_000, 160_000, 600_000], requires: ['learning', 2], rule: ['mentorship', 20] },
-  { id: 'command', branch: 'command', costs: [20_000, 150_000, 1_500_000], rule: ['formation', 1] },
+  { id: 'command', branch: 'command', costs: [20_000, 150_000, 1_500_000, 5_000_000, 15_000_000], rule: ['formation', 1] },
   { id: 'mastery', branch: 'command', costs: [50_000], requires: ['command', 1], rule: ['active-slot', 1] },
   { id: 'rebirth', branch: 'command', costs: [15_000, 75_000, 300_000], requires: ['command', 1], rule: ['revive', 15] },
 ];

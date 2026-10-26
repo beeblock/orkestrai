@@ -9,7 +9,7 @@
 
   let { snapshot, catalog }: { snapshot: AdventureSnapshot; catalog: AdventureCatalog } = $props();
 
-  const titles = $derived(Object.fromEntries(snapshot.heroes.map((hero) => [hero.nodeId, hero.title])));
+  const names = $derived(Object.fromEntries(snapshot.heroes.map((hero) => [hero.id, hero.name])));
   const monsterName = (id: MonsterId) => (m as unknown as Record<string, () => string>)[`adventure.monster_${id.replace(/-/g, '_')}`]?.() ?? id;
   const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
 
@@ -20,7 +20,10 @@
         const name = item ? itemName(catalog, item) : catalog.rarities[entry.rarity];
         return { text: fill(catalog.journal.item, { item: `${name} (${catalog.rarities[entry.rarity]})`, source: catalog.itemSources[entry.source] }), color: RARITY_RULES[entry.rarity].color };
       }
-      case 'level': return { text: fill(catalog.journal.level, { hero: titles[entry.heroNodeId] ?? '—', level: entry.level }) };
+      case 'level': return entry.paragon
+        ? { text: fill(catalog.journal.paragon, { hero: names[entry.heroId] ?? '—', level: entry.paragon }), color: '#ffd877' }
+        : { text: fill(catalog.journal.level, { hero: names[entry.heroId] ?? '—', level: entry.level }) };
+      case 'recruit': return { text: fill(entry.inherited ? catalog.journal.inherited : catalog.journal.recruit, { hero: names[entry.heroId] ?? '—', agent: entry.agentTitle }), color: 'var(--app-secondary)' };
       case 'stage': return { text: fill(entry.result === 'clear' ? catalog.journal.stageClear : catalog.journal.stageFail, { stage: `${catalog.difficulties[entry.difficulty]} ${entry.act}-${entry.stage}` }) };
       case 'boss': return { text: fill(catalog.journal.boss, { monster: monsterName(entry.monsterId) }), color: '#ffb3a8' };
       case 'pet': return { text: fill(catalog.journal.pet, { pet: catalog.pets[entry.petId] }), color: 'var(--app-success)' };

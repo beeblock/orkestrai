@@ -16,7 +16,7 @@ const stage = z.number().int().min(1).max(STAGES_PER_ACT);
 const monster = z.enum(tuple(Object.keys(MONSTERS) as MonsterId[]));
 const position = z.object({ difficulty, act, stage });
 
-/** What the battle on a screen produced since its last report. */
+/** What the battle on a screen produced since its last report; experience is by hero id. */
 export const adventureReportSchema = z.object({
   reportId: z.string().min(1).max(80),
   elapsedMs: z.number().int().min(0).max(3_600_000),
@@ -36,9 +36,9 @@ const itemIds = z.array(id).max(200);
 /** Everything the camp can do, one action per request. */
 export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('open-chests'), ids: z.array(id).max(50).optional(), tier: z.enum(tuple<ChestTier>(CHEST_TIERS)).optional(), limit: z.number().int().min(1).max(50).optional() }),
-  z.object({ type: z.literal('equip'), itemId: id, nodeId: id }),
+  z.object({ type: z.literal('equip'), itemId: id, heroId: id }),
   z.object({ type: z.literal('unequip'), itemId: id }),
-  z.object({ type: z.literal('auto-equip'), nodeId: id }),
+  z.object({ type: z.literal('auto-equip'), heroId: id }),
   z.object({ type: z.literal('lock'), itemId: id, locked: z.boolean() }),
   z.object({ type: z.literal('move'), itemId: id, location: z.enum(['inventory', 'stash']) }),
   z.object({ type: z.literal('salvage'), itemIds: itemIds.min(1) }),
@@ -48,13 +48,14 @@ export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('unsocket'), itemId: id, socketIndex: z.number().int().min(0).max(8) }),
   z.object({ type: z.literal('offering') }),
   z.object({ type: z.literal('buy-rune'), runeId: z.enum(tuple(RUNES.map((rune) => rune.id))) }),
-  z.object({ type: z.literal('raise-skill'), nodeId: id, skillId: z.string().min(1).max(80) }),
-  z.object({ type: z.literal('reset-skills'), nodeId: id }),
-  z.object({ type: z.literal('auto-skills'), nodeId: id, enabled: z.boolean() }),
-  z.object({ type: z.literal('set-actives'), nodeId: id, actives: z.array(z.string().min(1).max(80)).max(4) }),
-  z.object({ type: z.literal('set-class'), nodeId: id, classId: z.enum(tuple<HeroClassId>(TEAMMATE_CLASS_IDS)).nullable() }),
+  z.object({ type: z.literal('raise-skill'), heroId: id, skillId: z.string().min(1).max(80) }),
+  z.object({ type: z.literal('reset-skills'), heroId: id }),
+  z.object({ type: z.literal('auto-skills'), heroId: id, enabled: z.boolean() }),
+  z.object({ type: z.literal('set-actives'), heroId: id, actives: z.array(z.string().min(1).max(80)).max(4) }),
+  z.object({ type: z.literal('set-class'), heroId: id, classId: z.enum(tuple<HeroClassId>(TEAMMATE_CLASS_IDS)).nullable() }),
   z.object({ type: z.literal('travel'), difficulty, act, stage }),
   z.object({ type: z.literal('settings'), settings: z.object({ autoAdvance: z.boolean().optional(), autoRetry: z.boolean().optional(), autoOpen: z.boolean().optional() }) }),
+  // Hero ids pinned to the formation, in order.
   z.object({ type: z.literal('formation'), order: z.array(id).max(12) }),
   z.object({ type: z.literal('pet'), petId: z.enum(tuple<PetId>(PETS.map((pet) => pet.id))).nullable() }),
   z.object({ type: z.literal('dismiss-offline') }),

@@ -3,6 +3,7 @@ import { itemBaseKey, type ItemData } from '$lib/modules/agent-room/domain/adven
 import type { Rune } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import type { ActiveAction, SkillNode } from '$lib/modules/agent-room/domain/adventure/skills.js';
 import { FLAT_STATS, scaleStats, type StatBlock, type StatId } from '$lib/modules/agent-room/domain/adventure/stats.js';
+import * as m from '$lib/paraglide/messages.js';
 
 /** Words for the Adventure's numbers, in the catalog's language. */
 
@@ -12,6 +13,11 @@ export function formatNumber(value: number): string {
   if (abs >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
   if (abs >= 1e4) return `${(value / 1e3).toFixed(1)}k`;
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+/** "Lv 42", or "Paragon 7" past the level cap. */
+export function heroLevelText(level: number, paragon: number): string {
+  return paragon > 0 ? m['adventure.paragon_level']({ level: paragon }) : m['adventure.level']({ level });
 }
 
 export function itemName(catalog: AdventureCatalog, item: Pick<ItemData, 'slot' | 'classId' | 'level'>): string {

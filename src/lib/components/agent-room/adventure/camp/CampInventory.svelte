@@ -11,7 +11,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
-  import { formatNumber, itemName } from '../adventure-text.js';
+  import { formatNumber, heroLevelText, itemName } from '../adventure-text.js';
   import ItemDetails from './ItemDetails.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import ItemSlot from './ItemSlot.svelte';
@@ -47,8 +47,8 @@
   const focus = $derived(snapshot.items.find((item) => item.id === focused) ?? null);
   const chestsByTier = $derived(Object.fromEntries(CHEST_TIERS.map((tier) => [tier, snapshot.account.chests.filter((chest) => chest.tier === tier).length])) as Record<ChestTier, number>);
   const able = $derived(focus ? heroes.filter((hero) => canEquip(focus, { classId: hero.classId, level: hero.level }) === 'ok') : []);
-  const target = $derived(able.find((hero) => hero.nodeId === equipTo) ?? able[0] ?? null);
-  const worn = $derived(focus && target ? snapshot.items.find((item) => item.location === 'equipped' && item.heroNodeId === target.nodeId && item.slot === focus.slot) ?? null : null);
+  const target = $derived(able.find((hero) => hero.id === equipTo) ?? able[0] ?? null);
+  const worn = $derived(focus && target ? snapshot.items.find((item) => item.location === 'equipped' && item.heroId === target.id && item.slot === focus.slot) ?? null : null);
   const pickedGold = $derived(snapshot.items.filter((item) => picked.includes(item.id)).reduce((sum, item) => sum + itemGoldValue(item, runeRule(snapshot.account.runes, 'alchemy')), 0));
   const junk = $derived(snapshot.items.filter((item) => item.location === 'inventory' && !item.locked && rarityIndex(item.rarity) <= 1));
 
@@ -147,10 +147,10 @@
         <ItemDetails item={focus} {catalog} compare={worn} heroLevel={target?.level ?? null} />
         {#if able.length}
           <div class="equip">
-            <NativeSelect.Root size="sm" class="flex-1" value={target?.nodeId ?? ''} onchange={(event: Event) => (equipTo = (event.currentTarget as HTMLSelectElement).value)} aria-label={m['adventure.camp_equip_on']()}>
-              {#each able as hero (hero.nodeId)}<NativeSelect.Option value={hero.nodeId}>{hero.title} · {m['adventure.level']({ level: hero.level })}</NativeSelect.Option>{/each}
+            <NativeSelect.Root size="sm" class="flex-1" value={target?.id ?? ''} onchange={(event: Event) => (equipTo = (event.currentTarget as HTMLSelectElement).value)} aria-label={m['adventure.camp_equip_on']()}>
+              {#each able as hero (hero.id)}<NativeSelect.Option value={hero.id}>{hero.agent ? `${hero.name} (${hero.agent.title})` : hero.name} · {heroLevelText(hero.level, hero.paragon)}</NativeSelect.Option>{/each}
             </NativeSelect.Root>
-            <Button size="sm" disabled={busy || !target} onclick={() => target && void act({ type: 'equip', itemId: focus.id, nodeId: target.nodeId }).then(() => (focused = null))}>{m['adventure.camp_equip']()}</Button>
+            <Button size="sm" disabled={busy || !target} onclick={() => target && void act({ type: 'equip', itemId: focus.id, heroId: target.id }).then(() => (focused = null))}>{m['adventure.camp_equip']()}</Button>
           </div>
         {:else}
           <p class="hint">{m['adventure.camp_nobody_can_equip']()}</p>

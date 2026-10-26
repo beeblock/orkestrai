@@ -19,16 +19,34 @@ import {
 } from './world.js';
 
 /**
- * The Adventure's battle as a pure, deterministic simulation. The party is
- * the team's agents in the formation, and only their real work moves it: a
- * working agent fights, one waiting for the owner raises its hand, and with
- * nobody working the party camps. Heroes carry the numbers the server built
- * from their level, gear, skills, runes and pets; the battle reports back the
- * experience, gold, kills, chests and stage results it produced. No DOM,
- * timers or Math.random: the same inputs give the same world.
+ * The Adventure's battle as a pure, deterministic simulation. The formation
+ * is drawn from the workspace's guild of heroes, and the team's real work
+ * moves it: while any agent works the whole formation fights, and with nobody
+ * working the party camps. Each hero shows its agent's state — inspired while
+ * its agent works, a "!" while its agent waits for the owner, stunned while
+ * its agent is blocked — and heroes resting without an agent fight too. The
+ * heroes carry the numbers the server built from level, gear, skills, runes
+ * and pets; the battle reports back the experience, gold, kills, chests and
+ * stage results it produced. No DOM, timers or Math.random: the same inputs
+ * give the same world.
  */
 
-export type PartyActivity = 'working' | 'attention' | 'stunned' | 'idle' | 'offline' | 'done';
+/** What a hero's agent is doing; `resting` heroes have no agent right now. */
+export type PartyActivity = 'working' | 'attention' | 'stunned' | 'idle' | 'offline' | 'done' | 'resting';
+
+/** A hero outside the formation whose agent works: it learns from the battle at a reduced rate. */
+export type Supporter = { id: string; level: number; xpMultiplier: number };
+
+export type StepOptions = {
+  /** Whether any agent of the team is working; the battle only moves then. */
+  teamActive?: boolean;
+  supporters?: Supporter[];
+};
+
+/** Bonus damage of a hero whose agent is working right now. */
+export const INSPIRED_DAMAGE = 1.2;
+/** Share of the experience a supporting hero earns. */
+export const SUPPORT_XP = 0.6;
 
 export type PartyMember = {
   id: string;
@@ -169,6 +187,8 @@ export type AdventureState = {
   nextId: number;
   events: AdventureEvent[];
   pending: PendingReport;
+  /** Heroes outside the formation whose agents work, for this step. */
+  supporters: Supporter[];
 };
 
 export const HERO_SPACING = 40;
@@ -207,6 +227,7 @@ export function createAdventure(options: { position?: StagePosition; wave?: numb
     nextId: 1,
     events: [],
     pending: emptyPending(),
+    supporters: [],
   };
 }
 
@@ -246,14 +267,15 @@ function setPose(hero: Hero, pose: HeroPose): void {
 }
 
 const standing = (hero: Hero) => hero.fallenMs <= 0;
-const fighting = (hero: Hero) => hero.activity === 'working' && standing(hero);
+/** Every formation hero fights, except one whose agent is blocked (stunned). */
+const able = (hero: Hero) => hero.activity !== 'stunned';
+const fighting = (hero: Hero) => able(hero) && standing(hero);
 
-/** Working heroes lead in class order; the others trail behind them. */
+/** Fighters lead in class order; stunned heroes trail behind them. */
 function formationOrder(state: AdventureState): Hero[] {
   const rank = (hero: Hero) => HERO_CLASSES[hero.classId].rank;
-  const working = state.heroes.filter((hero) => hero.activity === 'working').sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
-  const others = state.heroes.filter((hero) => hero.activity !== 'working').sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
-  return [...working, ...others];
+  const byRank = (a: Hero, b: Hero) => rank(a) - rank(b) || a.id.localeCompare(b.id);
+  return [...state.heroes.filter(able).sort(byRank), ...state.heroes.filter((hero) => !able(hero)).sort(byRank)];
 }
 
 function formationX(state: AdventureState, hero: Hero, order: Hero[]): number {
@@ -322,7 +344,7 @@ function spawnWave(state: AdventureState): void {
   for (let index = 0; index < count; index += 1) kinds.push(biome.mobs[Math.floor(random(state) * biome.mobs.length)]);
   if (bossWave) kinds.push(biome.boss);
   // Smaller parties meet sturdier-looking but softer monsters: a lone agent can play too.
-  const fighters = Math.min(3, Math.max(1, state.heroes.filter((hero) => hero.activity === 'working').length));
+  const fighters = Math.min(3, Math.max(1, state.heroes.filter(able).length));
   const partyScale = 0.5 + 0.5 * fighters / 3;
   let x = state.frontX + SPAWN_AHEAD;
   kinds.forEach((monsterId, index) => {
@@ -343,13 +365,13 @@ function spawnWave(state: AdventureState): void {
 }
 
 function partyGoldMultiplier(state: AdventureState): number {
-  const fighters = state.heroes.filter((hero) => hero.activity === 'working');
+  const fighters = state.heroes.filter(able);
   if (!fighters.length) return 1;
   return fighters.reduce((sum, hero) => sum + hero.profile.goldMultiplier, 0) / fighters.length;
 }
 
 function partyChestMultiplier(state: AdventureState): number {
-  const fighters = state.heroes.filter((hero) => hero.activity === 'working');
+  const fighters = state.heroes.filter(able);
   if (!fighters.length) return 1;
   return fighters.reduce((sum, hero) => sum + hero.profile.chestMultiplier, 0) / fighters.length;
 }
@@ -382,9 +404,13 @@ function killEnemy(state: AdventureState, enemy: Enemy): void {
   state.pending.gold += gold;
   state.pending.kills[enemy.monsterId] = (state.pending.kills[enemy.monsterId] ?? 0) + 1;
   for (const hero of state.heroes) {
-    if (hero.activity !== 'working') continue;
+    if (!able(hero)) continue;
     const xp = enemy.xp * xpGapFactor(hero.level, enemy.level) * hero.profile.xpMultiplier;
     state.pending.xp[hero.id] = (state.pending.xp[hero.id] ?? 0) + xp;
+  }
+  for (const supporter of state.supporters) {
+    const xp = enemy.xp * xpGapFactor(supporter.level, enemy.level) * supporter.xpMultiplier * SUPPORT_XP;
+    state.pending.xp[supporter.id] = (state.pending.xp[supporter.id] ?? 0) + xp;
   }
   state.events.push({ type: 'kill', monsterId: enemy.monsterId, x: enemy.x, gold, boss: enemy.boss, elite: enemy.elite });
   const { difficulty, act } = state.position;
@@ -417,7 +443,7 @@ function living(state: AdventureState): Enemy[] {
 }
 
 function heroAttack(hero: Hero): number {
-  return hero.profile.attack;
+  return hero.profile.attack * (hero.activity === 'working' ? INSPIRED_DAMAGE : 1);
 }
 
 function castActive(state: AdventureState, hero: Hero, active: LearnedActive, target: Enemy): void {
@@ -544,11 +570,13 @@ function hurtHero(state: AdventureState, hero: Hero, enemy: Enemy): void {
 }
 
 /** Advances the world by `dtMs`; returns the events of this step. */
-export function stepAdventure(state: AdventureState, party: readonly PartyMember[], dtMs: number): AdventureEvent[] {
+export function stepAdventure(state: AdventureState, party: readonly PartyMember[], dtMs: number, options: StepOptions = {}): AdventureEvent[] {
   state.events = [];
   const dt = Math.max(0, Math.min(dtMs, 250));
   state.timeMs += dt;
   syncParty(state, party);
+  state.supporters = options.supporters ?? [];
+  const teamActive = options.teamActive ?? party.some((member) => member.activity === 'working');
   const order = formationOrder(state);
 
   for (const hero of state.heroes) {
@@ -565,8 +593,9 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     hero.hp = Math.min(hero.profile.maxHp, hero.hp + hero.profile.hpRegen * dt / 1000);
   }
 
-  // Nobody working: the party camps, heals by the fire, the monsters hold.
-  if (!state.heroes.some((hero) => hero.activity === 'working')) {
+  // Nobody on the team working (or nobody able to fight): the party camps,
+  // heals by the fire, the monsters hold.
+  if (!teamActive || !state.heroes.some(able)) {
     if (state.mode !== 'camp') { state.mode = 'camp'; state.events.push({ type: 'camp' }); }
     for (const hero of state.heroes) {
       const target = formationX(state, hero, order);
@@ -609,7 +638,7 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     if (!standing(hero)) continue;
     hero.attackCd -= dt * haste;
     for (const active of hero.actives) hero.cooldowns[active.id] = (hero.cooldowns[active.id] ?? 0) - dt * haste;
-    if (hero.activity !== 'working') { settlePose(hero, state.mode); continue; }
+    if (!able(hero)) { settlePose(hero, state.mode); continue; }
     if (POSE_MS[hero.pose] && hero.poseMs < POSE_MS[hero.pose]!) continue;
     const target = frontEnemy(state);
     const heroClass = HERO_CLASSES[hero.classId];
@@ -682,7 +711,7 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
   // The dead linger for their death animation.
   state.enemies = state.enemies.filter((enemy) => enemy.pose !== 'dying' || enemy.poseMs < 600);
 
-  // Every working hero down: the stage is lost.
+  // Every hero able to fight is down: the stage is lost.
   if (!state.heroes.some(fighting)) {
     failStage(state);
     return state.events;
@@ -726,7 +755,8 @@ function settlePose(hero: Hero, mode: AdventureState['mode']): void {
   switch (hero.activity) {
     case 'attention': setPose(hero, 'alert'); break;
     case 'stunned': setPose(hero, 'stunned'); break;
-    case 'offline': setPose(hero, 'rest'); break;
+    case 'offline':
+    case 'resting': setPose(hero, mode === 'camp' ? 'rest' : 'idle'); break;
     case 'done': setPose(hero, mode === 'camp' ? 'rest' : 'victory'); break;
     default: setPose(hero, mode === 'camp' ? 'rest' : mode === 'march' ? 'walk' : 'idle');
   }

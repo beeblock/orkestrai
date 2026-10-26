@@ -49,7 +49,7 @@
       if (id !== workspaceId) return;
       snapshot = outcome.snapshot;
       failed = false;
-      selectedHero ??= outcome.snapshot.heroes[0]?.nodeId ?? null;
+      selectedHero ??= outcome.snapshot.heroes[0]?.id ?? null;
     } catch {
       failed = true;
     }

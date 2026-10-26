@@ -17,18 +17,33 @@
     type PartyMember,
     type PendingReport,
     type SimRules,
+    type Supporter,
   } from '$lib/modules/agent-room/domain/adventure/simulation.js';
   import { biomeOf, regionLevel, WAVES_PER_STAGE, type StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
   import { animationFrame, drawFrame, loadAtlas, type Atlas } from './atlas.js';
   import { playSound, type AdventureSoundLevel } from './adventure-audio.js';
+  import { heroLevelText } from './adventure-text.js';
   import * as m from '$lib/paraglide/messages.js';
 
   /** What the stage shows about a hero besides what the battle knows. */
-  export type HeroLabel = { id: string; title: string; classId: HeroClassId; level: number; asks: number; visualTier: 1 | 2 | 3 | 4; weaponRarity: Rarity | null };
+  export type HeroLabel = {
+    id: string;
+    name: string;
+    /** The agent playing the hero, or null while it rests in the guild. */
+    agentTitle: string | null;
+    classId: HeroClassId;
+    level: number;
+    paragon: number;
+    asks: number;
+    visualTier: 1 | 2 | 3 | 4;
+    weaponRarity: Rarity | null;
+  };
   type HitBox = { id: string; left: number; top: number; width: number; height: number };
 
   let {
     party,
+    teamActive = undefined,
+    supporters = [],
     labels,
     position,
     wave = 0,
@@ -44,6 +59,10 @@
     onOpenCamp,
   }: {
     party: PartyMember[];
+    /** Whether any agent of the team works (the battle only moves then); defaults to the formation's own agents. */
+    teamActive?: boolean;
+    /** Heroes outside the formation whose agents work: they learn at a reduced rate. */
+    supporters?: Supporter[];
     labels: Record<string, HeroLabel>;
     position: StagePosition;
     wave?: number;
@@ -78,6 +97,8 @@
   let banners = $state<Array<{ id: number; tone: 'gold' | 'danger' | 'info' | 'loot'; text: string; color?: string }>>([]);
   let boss = $state<{ name: string; hp: number; max: number } | null>(null);
   let hovered = $state<string | null>(null);
+  // Heroes already announced this session.
+  const greeted = new Set<string>();
   let hitBoxes: HitBox[] = [];
 
   const atlases = new Map<string, Atlas | null>();
@@ -205,8 +226,11 @@
           playSound('quest', soundLevel);
           break;
         case 'join': {
+          // A guild hero swapping back into the formation is not news; its first entrance is.
           const label = labels[event.heroId];
-          if (label && world.timeMs > 500) { announce(m['adventure.joined']({ name: label.title }), 'info'); playSound('join', soundLevel); }
+          const fresh = !greeted.has(event.heroId);
+          greeted.add(event.heroId);
+          if (label && fresh && world.timeMs > 500) { announce(m['adventure.joined']({ name: label.name }), 'info'); playSound('join', soundLevel); }
           break;
         }
         case 'leave':
@@ -412,8 +436,18 @@
         context.beginPath();
         context.arc(x, box.top - 6, 5, -Math.PI / 2, -Math.PI / 2 + share * Math.PI * 2);
         context.stroke();
-      } else if (hero.hp < hero.profile.maxHp && hero.activity === 'working') {
+      } else if (hero.hp < hero.profile.maxHp && world.mode !== 'camp') {
         drawBar(context, x, box.top - 5, 22, hero.hp / hero.profile.maxHp, hero.hp / hero.profile.maxHp > 0.35 ? '#62d26f' : '#e8574b');
+      }
+      // A hero whose agent is at work fights inspired: golden motes rise around it.
+      if (hero.activity === 'working' && world.mode !== 'camp' && !fallen) {
+        context.fillStyle = '#ffd877';
+        for (let mote = 0; mote < 3; mote += 1) {
+          const cycle = ((now / 900 + mote / 3 + hero.x * 0.013) % 1 + 1) % 1;
+          context.globalAlpha = Math.sin(cycle * Math.PI) * 0.85;
+          context.fillRect(Math.round(x - 9 + mote * 9 + Math.sin(now / 400 + mote) * 2), Math.round(box.top + box.height * 0.8 - cycle * box.height * 0.9), 2, 2);
+        }
+        context.globalAlpha = 1;
       }
       // A hero with something for the owner raises a "!" balloon.
       if ((hero.activity === 'attention' || (label?.asks ?? 0) > 0) && camp && !fallen) {
@@ -426,7 +460,7 @@
       hitBoxes.push({ id: hero.id, ...box });
       if (hovered === hero.id && label) {
         context.font = '600 10px ui-sans-serif, system-ui, sans-serif';
-        const text = `${label.title} · ${m['adventure.level']({ level: label.level })}`;
+        const text = `${label.agentTitle ? `${label.name} (${label.agentTitle})` : label.name} · ${heroLevelText(label.level, label.paragon)}`;
         const textWidth = context.measureText(text).width + 10;
         context.fillStyle = 'rgba(23, 20, 15, 0.86)';
         context.beginPath();
@@ -611,7 +645,7 @@
       last = now;
       while (carry >= TICK_MS) {
         carry -= TICK_MS;
-        react(stepAdventure(world, party, TICK_MS));
+        react(stepAdventure(world, party, TICK_MS, { teamActive, supporters }));
       }
       // Preload what the party and the road will need.
       for (const hero of world.heroes) heroAtlas(hero.classId, labels[hero.id]?.visualTier ?? 2);
@@ -658,6 +692,7 @@
         <span>{m['adventure.camp_short']()}</span>
       </button>
     {/if}
+    {#if supporters.length && mode !== 'camp'}<span class="support" title={m['adventure.supporters_hint']()}>{m['adventure.supporters']({ count: supporters.length })}</span>{/if}
     {#if mode === 'camp'}<span class="camp">{m['adventure.camping']()}</span>{/if}
   </div>
   {#if boss}
@@ -722,6 +757,11 @@
   .region,
   .camp {
     color: rgba(244, 234, 210, 0.7);
+    font-weight: 500;
+  }
+
+  .support {
+    color: #ffd877;
     font-weight: 500;
   }
 

@@ -151,16 +151,30 @@ export function xpGapFactor(heroLevel: number, monsterLevel: number): number {
   return Math.max(0.05, 1 + gap * 0.09);
 }
 
-/** Level and progress after adding experience (capped at the max level). */
-export function addXp(level: number, xp: number, gained: number): { level: number; xp: number; levelsGained: number } {
+/**
+ * Past the max level experience keeps counting as Paragon levels: endless,
+ * each a little longer than the last, each worth +1% attack and +1% life.
+ */
+export function paragonXpToNext(paragon: number): number {
+  return Math.round(xpToNext(MAX_HERO_LEVEL - 1) * (1 + 0.04 * Math.max(0, paragon)));
+}
+
+/** Level, Paragon and progress after adding experience. */
+export function addXp(level: number, xp: number, gained: number, paragon = 0): { level: number; xp: number; paragon: number; levelsGained: number; paragonGained: number } {
   let currentLevel = Math.max(1, Math.min(MAX_HERO_LEVEL, Math.floor(level)));
+  let currentParagon = Math.max(0, Math.floor(paragon));
   let current = Math.max(0, xp) + Math.max(0, gained);
   let levelsGained = 0;
+  let paragonGained = 0;
   while (currentLevel < MAX_HERO_LEVEL && current >= xpToNext(currentLevel)) {
     current -= xpToNext(currentLevel);
     currentLevel += 1;
     levelsGained += 1;
   }
-  if (currentLevel >= MAX_HERO_LEVEL) current = 0;
-  return { level: currentLevel, xp: Math.floor(current), levelsGained };
+  while (currentLevel >= MAX_HERO_LEVEL && current >= paragonXpToNext(currentParagon)) {
+    current -= paragonXpToNext(currentParagon);
+    currentParagon += 1;
+    paragonGained += 1;
+  }
+  return { level: currentLevel, xp: Math.floor(current), paragon: currentParagon, levelsGained, paragonGained };
 }

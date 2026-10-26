@@ -5888,7 +5888,7 @@
   "adventure.camp_auto_open_hint": "Usa as runas de deslacre conforme os baús chegam.",
   "adventure.camp_auto_open_locked": "Precisa da Runa do Deslacre.",
   "adventure.camp_formation": "Formação · {slots} vagas",
-  "adventure.camp_formation_hint": "Fixe heróis para mantê-los na batalha; as vagas livres vão para quem está trabalhando.",
+  "adventure.camp_formation_hint": "Fixe heróis para mantê-los na batalha. As vagas livres vão primeiro para quem está trabalhando, depois para o Maestro, os demais agentes e a guilda que descansa.",
   "adventure.camp_pin": "Fixar na formação",
   "adventure.camp_unpin": "Soltar",
   "adventure.camp_move_up": "Subir",
@@ -5903,5 +5903,15 @@
   "adventure.offline_back": "Enquanto você esteve fora, seus agentes trabalharam {minutes} min: +{gold} de ouro",
   "adventure.region_level": "Região {level}",
   "adventure.region_level_hint": "Nível desta fase: define os monstros e o saque.",
-  "adventure.stage_failed": "Repelidos na fase {stage}"
+  "adventure.stage_failed": "Repelidos na fase {stage}",
+  "adventure.paragon_level": "Paragon {level}",
+  "adventure.hero_paragon_up": "{name} alcançou Paragon {level}",
+  "adventure.played_by": "Jogado por {agent}",
+  "adventure.resting": "Descansando",
+  "adventure.resting_in_guild": "Descansando na guilda",
+  "adventure.resting_hint": "Sem agente agora. Luta quando sobra vaga na formação e passa para o próximo agente da mesma classe.",
+  "adventure.inspired": "Inspirado: +20% de dano enquanto o agente trabalha",
+  "adventure.supporters": "+{count} apoiando",
+  "adventure.supporters_hint": "Agentes trabalhando fora da formação: os heróis deles ganham 60% da experiência.",
+  "adventure.camp_guild": "Guilda · {count} heróis"
 }

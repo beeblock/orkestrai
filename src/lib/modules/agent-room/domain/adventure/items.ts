@@ -81,8 +81,8 @@ export type ItemLocation = 'inventory' | 'stash' | 'equipped';
 export type Item = ItemData & {
   id: string;
   location: ItemLocation;
-  /** The hero (agent node) wearing it, when equipped. */
-  heroNodeId: string | null;
+  /** The hero wearing it, when equipped. */
+  heroId: string | null;
   locked: boolean;
   createdAt: string;
 };

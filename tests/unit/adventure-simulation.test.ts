@@ -29,10 +29,10 @@ function party(classes: HeroClassId[], level: number, rarity: Rarity | null, act
   classes.forEach((classId, index) => {
     if (!rarity) return;
     for (const slot of SLOTS) {
-      items.push({ ...rollItem(rng, { level, rarity, slot, classId }), id: `${index}-${slot}`, location: 'equipped', heroNodeId: `h${index}`, locked: false, createdAt: '' });
+      items.push({ ...rollItem(rng, { level, rarity, slot, classId }), id: `${index}-${slot}`, location: 'equipped', heroId: `h${index}`, locked: false, createdAt: '' });
     }
   });
-  const builds = buildHeroes(classes.map((classId, index) => ({ nodeId: `h${index}`, classId, level, xp: 0, skills: autoAllocate(classId, level, {}), actives: [], deployed: true })), items, {}, {});
+  const builds = buildHeroes(classes.map((classId, index) => ({ heroId: `h${index}`, classId, level, xp: 0, skills: autoAllocate(classId, level, {}), actives: [], deployed: true })), items, {}, {});
   return classes.map((classId, index) => ({
     id: `h${index}`, classId, leader: classId === 'maestro', activity, level,
     profile: builds[`h${index}`].profile, actives: builds[`h${index}`].actives,
@@ -89,6 +89,32 @@ describe('adventure battle', () => {
     const events = run(state, members, 60_000);
     const attackers = new Set(events.flatMap((event) => (event.type === 'attack' || event.type === 'special' ? [event.heroId] : [])));
     expect([...attackers].sort()).toEqual(members.map((hero) => hero.id).sort());
+  });
+
+  it('fights with the whole formation while any agent works, and inspires the working ones', () => {
+    const members = party(['knight', 'ranger', 'cleric'], 5, 'rare', 'idle');
+    members[1] = { ...members[1], activity: 'working' };
+    members[2] = { ...members[2], activity: 'resting' };
+    const state = createAdventure({}, 21);
+    const events = run(state, members, 40_000);
+    const attackers = new Set(events.flatMap((event) => (event.type === 'attack' || event.type === 'special' ? [event.heroId] : [])));
+    expect([...attackers].sort()).toEqual(['h0', 'h1', 'h2']);
+    // Every formation hero learns; a hero outside it whose agent works learns less.
+    const supporter = { id: 'bench', level: 5, xpMultiplier: 1 };
+    const more = createAdventure({}, 22);
+    for (let elapsed = 0; elapsed < 40_000; elapsed += 100) stepAdventure(more, members, 100, { supporters: [supporter] });
+    const report = drainReport(more);
+    expect(report.xp.bench).toBeGreaterThan(0);
+    expect(report.xp.bench).toBeLessThan(report.xp.h0);
+  });
+
+  it('leaves a hero whose agent is blocked out of the fight', () => {
+    const members = party(['knight', 'ranger'], 5, 'rare');
+    members[1] = { ...members[1], activity: 'stunned' };
+    const state = createAdventure({}, 23);
+    const events = run(state, members, 30_000);
+    const attackers = new Set(events.flatMap((event) => (event.type === 'attack' ? [event.heroId] : [])));
+    expect([...attackers]).toEqual(['h0']);
   });
 
   it('knocks heroes out against far stronger monsters, revives them and falls back a stage', () => {
@@ -165,20 +191,25 @@ describe('adventure party', () => {
     expect(partyActivity('working', false)).toBe('offline');
   });
 
-  it('fields the owner\'s picks first, then whoever is working, up to the formation slots', () => {
-    const hero = (nodeId: string, leader = false) => ({ nodeId, chosenClass: null, level: 3, xp: 0, skills: {}, actives: [], autoSkills: true, kills: 0, title: nodeId, role: null, leader, working: false, classId: 'knight' as HeroClassId, build: null, deployed: false });
+  it('fields pinned heroes, then working agents, the Maestro, the other agents and the resting guild', () => {
+    const hero = (id: string, agent: string | null, leader = false, level = 3) => ({ id, name: id, classId: 'knight' as HeroClassId, chosenClass: null, leader, agentNodeId: agent, agentTitle: agent, level, paragon: 0, xp: 0, skills: {}, actives: [], autoSkills: true, kills: 0, agent: agent ? { nodeId: agent, title: agent, role: null, leader, working: false } : null, build: null, deployed: false });
     const snapshot = {
       account: { formation: ['bench'], runes: {}, killsByMonster: {} },
-      heroes: [hero('lead', true), hero('qa'), hero('api'), hero('bench')],
+      heroes: [hero('lead', 'n-lead', true), hero('qa', 'n-qa'), hero('api', 'n-api'), hero('bench', null, false, 40), hero('old', null, false, 20)],
       items: [],
-      limits: { formation: 3 },
+      limits: { formation: 4 },
     } as never;
-    const live = { qa: { state: 'working', sessionAlive: true }, api: { state: 'working', sessionAlive: true }, lead: { state: 'idle', sessionAlive: true } } as unknown as Record<string, AgentActivitySnapshot>;
-    const { heroes, members } = lineup(snapshot, live);
-    expect(members.map((member) => member.id)).toEqual(['bench', 'qa', 'api']);
-    expect(heroes.find((entry) => entry.nodeId === 'lead')?.deployed).toBe(false);
+    const live = { 'n-qa': { state: 'working', sessionAlive: true }, 'n-api': { state: 'idle', sessionAlive: true }, 'n-lead': { state: 'idle', sessionAlive: true } } as unknown as Record<string, AgentActivitySnapshot>;
+    const { heroes, members, supporters, teamActive } = lineup(snapshot, live);
+    expect(members.map((member) => member.id)).toEqual(['bench', 'qa', 'lead', 'api']);
+    expect(heroes.find((entry) => entry.id === 'old')?.activity).toBe('resting');
     expect(members.find((member) => member.id === 'qa')?.activity).toBe('working');
-    expect(members.find((member) => member.id === 'bench')?.activity).toBe('offline');
+    expect(supporters).toEqual([]);
+    expect(teamActive).toBe(true);
+    // Twenty agents and four slots: workers outside the formation support it.
+    const crowd = lineup({ ...(snapshot as object), limits: { formation: 1 }, account: { formation: [], runes: {}, killsByMonster: {} } } as never, { ...live, 'n-api': { state: 'working', sessionAlive: true } } as never);
+    expect(crowd.members.map((member) => member.id)).toEqual(['api']);
+    expect(crowd.supporters.map((entry) => entry.id)).toEqual(['qa']);
   });
 
   it('infers a class from the role and honors the owner pick', () => {

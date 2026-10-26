@@ -5888,7 +5888,7 @@
   "adventure.camp_auto_open_hint": "Uses the unsealing runes as chests arrive.",
   "adventure.camp_auto_open_locked": "Needs the Rune of Unsealing.",
   "adventure.camp_formation": "Formation · {slots} slots",
-  "adventure.camp_formation_hint": "Pin heroes to keep them in battle; empty slots go to whoever is working.",
+  "adventure.camp_formation_hint": "Pin heroes to keep them in battle. Free slots go first to heroes whose agents are working, then the Maestro, the other agents and the resting guild.",
   "adventure.camp_pin": "Pin to the formation",
   "adventure.camp_unpin": "Unpin",
   "adventure.camp_move_up": "Move up",
@@ -5903,5 +5903,15 @@
   "adventure.offline_back": "While you were away your agents worked {minutes} min: +{gold} gold",
   "adventure.region_level": "Region {level}",
   "adventure.region_level_hint": "Level of this stage: it sets the monsters and the loot.",
-  "adventure.stage_failed": "Driven back at {stage}"
+  "adventure.stage_failed": "Driven back at {stage}",
+  "adventure.paragon_level": "Paragon {level}",
+  "adventure.hero_paragon_up": "{name} reached Paragon {level}",
+  "adventure.played_by": "Played by {agent}",
+  "adventure.resting": "Resting",
+  "adventure.resting_in_guild": "Resting in the guild",
+  "adventure.resting_hint": "No agent right now. It fights when the formation has a free slot and goes to the next agent of its class.",
+  "adventure.inspired": "Inspired: +20% damage while its agent works",
+  "adventure.supporters": "+{count} supporting",
+  "adventure.supporters_hint": "Agents working outside the formation: their heroes earn 60% of the experience.",
+  "adventure.camp_guild": "Guild · {count} heroes"
 }

@@ -1,15 +1,17 @@
 import { Model } from '@beeblock/svelar/orm';
 
-/** One agent's hero in a workspace's Adventure: level, experience and skills. */
+/** A hero of a workspace's Adventure guild; agents come and go, the hero stays. */
 export class AgentAdventureHero extends Model {
   static table = 'agent_adventure_heroes';
   static primaryKey = 'id';
   static incrementing = false;
   static timestamps = true;
-  static fillable = ['id', 'workspace_id', 'node_id', 'chosen_class', 'level', 'xp', 'skills_json', 'actives_json', 'auto_skills', 'kills'];
+  static fillable = ['id', 'workspace_id', 'name', 'class_id', 'chosen_class', 'leader', 'agent_node_id', 'agent_title', 'level', 'paragon', 'xp', 'skills_json', 'actives_json', 'auto_skills', 'kills'];
 
   static casts = {
+    leader: 'boolean' as const,
     level: 'number' as const,
+    paragon: 'number' as const,
     xp: 'number' as const,
     kills: 'number' as const,
     auto_skills: 'boolean' as const,
@@ -19,9 +21,14 @@ export class AgentAdventureHero extends Model {
 
   declare id: string;
   declare workspace_id: string;
-  declare node_id: string;
+  declare name: string;
+  declare class_id: string;
   declare chosen_class: string | null;
+  declare leader: boolean;
+  declare agent_node_id: string | null;
+  declare agent_title: string | null;
   declare level: number;
+  declare paragon: number;
   declare xp: number;
   declare skills_json: string;
   declare actives_json: string;

@@ -11,7 +11,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
-  import { formatNumber, skillDescription } from '../adventure-text.js';
+  import { formatNumber, heroLevelText, skillDescription } from '../adventure-text.js';
   import ItemSlot from './ItemSlot.svelte';
   import SpriteView from './SpriteView.svelte';
 
@@ -32,8 +32,8 @@
     active: m['adventure.skill_kind_active'],
   };
 
-  const hero = $derived(heroes.find((entry) => entry.nodeId === selected) ?? heroes[0]);
-  const equipped = $derived(snapshot.items.filter((item) => item.location === 'equipped' && item.heroNodeId === hero?.nodeId));
+  const hero = $derived(heroes.find((entry) => entry.id === selected) ?? heroes[0]);
+  const equipped = $derived(snapshot.items.filter((item) => item.location === 'equipped' && item.heroId === hero?.id));
   const candidates = $derived(picking && hero
     ? snapshot.items
       .filter((item) => item.slot === picking && item.location !== 'equipped' && canEquip(item, { classId: hero.classId, level: hero.level }) === 'ok')
@@ -57,7 +57,7 @@
 
   function raise(node: SkillNode) {
     if (!hero || canRaise(hero.classId, hero.level, hero.skills, node.id) !== 'ok') return;
-    void act({ type: 'raise-skill', nodeId: hero.nodeId, skillId: node.id });
+    void act({ type: 'raise-skill', heroId: hero.id, skillId: node.id });
   }
 
   const stats = $derived.by(() => {
@@ -87,12 +87,14 @@
 
 <div class="heroes">
   <nav class="list" aria-label={m['adventure.camp_tab_heroes']()}>
-    {#each heroes as entry (entry.nodeId)}
-      <button type="button" class="row" class:active={entry.nodeId === hero?.nodeId} onclick={() => { selected = entry.nodeId; picking = null; }} data-testid="camp-hero">
+    <p class="guild">{m['adventure.camp_guild']({ count: heroes.length })}</p>
+    {#each heroes as entry (entry.id)}
+      <button type="button" class="row" class:active={entry.id === hero?.id} onclick={() => { selected = entry.id; picking = null; }} data-testid="camp-hero">
         <span class="mini"><SpriteView atlasId={entry.build.visualTier === 2 ? `hero-${entry.classId}` : `hero-${entry.classId}-t${entry.build.visualTier}`} fallbackId={`hero-${entry.classId}`} animation="idle" width={36} height={40} /></span>
         <span class="who">
-          <b>{entry.title}</b>
-          <span>{className(entry.classId)} · {m['adventure.level']({ level: entry.level })}</span>
+          <b>{entry.name}</b>
+          <span>{className(entry.classId)} · {heroLevelText(entry.level, entry.paragon)}</span>
+          <span class="agent" class:resting={!entry.agent}>{entry.agent?.title ?? m['adventure.resting']()}</span>
         </span>
         <span class="side">
           <span class="power">{formatNumber(entry.build.rating)}</span>
@@ -103,34 +105,34 @@
   </nav>
 
   {#if hero}
-    <section class="detail" aria-label={hero.title}>
+    <section class="detail" aria-label={hero.name}>
       <div class="top">
         <div class="portrait">
           <SpriteView atlasId={outfitAtlas} fallbackId={`hero-${hero.classId}`} animation={hero.activity === 'working' ? 'walk' : 'idle'} width={150} height={160} glow={hero.build.weaponRarity ? RARITY_RULES[hero.build.weaponRarity].color : null} />
           <span class="outfit">{catalog.outfits[String(hero.build.visualTier) as '1']}</span>
         </div>
         <div class="identity">
-          <h2>{hero.title}</h2>
-          <p class="sub">{hero.role ?? className(hero.classId)}</p>
+          <h2>{hero.name}</h2>
+          <p class="sub">{hero.agent ? m['adventure.played_by']({ agent: hero.agent.role ? `${hero.agent.title} · ${hero.agent.role}` : hero.agent.title }) : m['adventure.resting_in_guild']()}</p>
           <div class="level">
-            <b>{m['adventure.level']({ level: hero.level })}</b>
+            <b>{hero.paragon > 0 ? `${m['adventure.level']({ level: hero.level })} · ${heroLevelText(hero.level, hero.paragon)}` : m['adventure.level']({ level: hero.level })}</b>
             <span class="xp" title={m['adventure.xp']({ into: formatNumber(hero.xp), next: formatNumber(hero.build.xpToNext) })}>
               <span style:width={`${Math.min(100, (hero.xp / Math.max(1, hero.build.xpToNext)) * 100)}%`}></span>
             </span>
           </div>
-          <p class="sub">{m['adventure.power']({ rating: formatNumber(hero.build.rating) })} · {hero.deployed ? m['adventure.camp_deployed']() : m['adventure.reserve']()}</p>
+          <p class="sub">{m['adventure.power']({ rating: formatNumber(hero.build.rating) })} · {hero.deployed ? m['adventure.camp_deployed']() : m['adventure.reserve']()}{#if hero.activity === 'working'}<span class="inspired">{` · ${m['adventure.inspired']()}`}</span>{/if}</p>
           {#if hero.leader}
             <p class="sub">{className('maestro')} · {m['adventure.leader']()}</p>
           {:else}
             <label class="pick">
               <span>{m['adventure.class_pick']()}</span>
-              <NativeSelect.Root size="sm" class="w-[170px]" value={hero.chosenClass ?? ''} disabled={busy} onchange={(event: Event) => void act({ type: 'set-class', nodeId: hero.nodeId, classId: ((event.currentTarget as HTMLSelectElement).value || null) as HeroClassId | null })} aria-label={m['adventure.class_pick']()}>
+              <NativeSelect.Root size="sm" class="w-[170px]" value={hero.chosenClass ?? ''} disabled={busy} onchange={(event: Event) => void act({ type: 'set-class', heroId: hero.id, classId: ((event.currentTarget as HTMLSelectElement).value || null) as HeroClassId | null })} aria-label={m['adventure.class_pick']()}>
                 <NativeSelect.Option value="">{m['adventure.class_auto']()}</NativeSelect.Option>
                 {#each TEAMMATE_CLASS_IDS as classId (classId)}<NativeSelect.Option value={classId}>{className(classId)}</NativeSelect.Option>{/each}
               </NativeSelect.Root>
             </label>
           {/if}
-          <Button size="sm" variant="outline" class="w-fit" disabled={busy} onclick={() => void act({ type: 'auto-equip', nodeId: hero.nodeId })}>
+          <Button size="sm" variant="outline" class="w-fit" disabled={busy} onclick={() => void act({ type: 'auto-equip', heroId: hero.id })}>
             <Sparkles size={14} aria-hidden="true" />{m['adventure.camp_equip_best']()}
           </Button>
         </div>
@@ -157,7 +159,7 @@
           {#if candidates.length}
             <div class="grid">
               {#each candidates as item (item.id)}
-                <ItemSlot {item} {catalog} heroLevel={hero.level} compare={wornIn(picking)} locked={item.locked} onclick={() => void act({ type: 'equip', itemId: item.id, nodeId: hero.nodeId }).then(() => (picking = null))} />
+                <ItemSlot {item} {catalog} heroLevel={hero.level} compare={wornIn(picking)} locked={item.locked} onclick={() => void act({ type: 'equip', itemId: item.id, heroId: hero.id }).then(() => (picking = null))} />
               {/each}
             </div>
           {:else}
@@ -170,8 +172,8 @@
         <header>
           <h3>{m['adventure.camp_skills']()}</h3>
           <span class="points" class:has={free > 0}>{m['adventure.camp_points']({ count: free })}</span>
-          <label class="auto"><Switch checked={hero.autoSkills} disabled={busy} onCheckedChange={(checked: boolean) => void act({ type: 'auto-skills', nodeId: hero.nodeId, enabled: checked })} aria-label={m['adventure.camp_auto_skills']()} />{m['adventure.camp_auto_skills']()}</label>
-          <Button size="sm" variant="ghost" disabled={busy || hero.build.pointsSpent === 0} onclick={() => void act({ type: 'reset-skills', nodeId: hero.nodeId })}><RotateCcw size={13} aria-hidden="true" />{m['adventure.camp_respec']()}</Button>
+          <label class="auto"><Switch checked={hero.autoSkills} disabled={busy} onCheckedChange={(checked: boolean) => void act({ type: 'auto-skills', heroId: hero.id, enabled: checked })} aria-label={m['adventure.camp_auto_skills']()} />{m['adventure.camp_auto_skills']()}</label>
+          <Button size="sm" variant="ghost" disabled={busy || hero.build.pointsSpent === 0} onclick={() => void act({ type: 'reset-skills', heroId: hero.id })}><RotateCcw size={13} aria-hidden="true" />{m['adventure.camp_respec']()}</Button>
         </header>
         <div class="actives">
           <span>{m['adventure.camp_active_slots']()}</span>
@@ -180,7 +182,7 @@
               const value = (event.currentTarget as HTMLSelectElement).value;
               const next = hero.build.actives.map((active) => active.id);
               next[index] = value;
-              void act({ type: 'set-actives', nodeId: hero.nodeId, actives: next.filter(Boolean) });
+              void act({ type: 'set-actives', heroId: hero.id, actives: next.filter(Boolean) });
             }} aria-label={m['adventure.camp_active_slot']({ index: index + 1 })}>
               {#each hero.build.learned as active (active.id)}<NativeSelect.Option value={active.id}>{catalog.skills[active.id]}</NativeSelect.Option>{/each}
             </NativeSelect.Root>
@@ -342,6 +344,27 @@
     margin: 0;
     color: var(--app-text-muted);
     font-size: 12px;
+  }
+
+  .inspired {
+    color: var(--app-accent);
+  }
+
+  .guild {
+    margin: 0 0 4px;
+    padding: 0 8px;
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .agent {
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .agent.resting {
+    font-style: italic;
   }
 
   .level {

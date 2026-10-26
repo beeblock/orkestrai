@@ -39,12 +39,22 @@ function readAccount(raw: unknown, now: string): AdventureAccount {
   };
 }
 
+function heroClassOf(value: unknown): HeroClassId | null {
+  return typeof value === 'string' && (HERO_CLASS_IDS as string[]).includes(value) ? (value as HeroClassId) : null;
+}
+
 function readHero(model: AgentAdventureHero): AdventureHero {
-  const chosen = model.getAttribute('chosen_class') as string | null;
+  const leader = Boolean(model.getAttribute('leader'));
   return {
-    nodeId: String(model.getAttribute('node_id')),
-    chosenClass: chosen && (HERO_CLASS_IDS as string[]).includes(chosen) ? (chosen as HeroClassId) : null,
+    id: String(model.getAttribute('id')),
+    name: String(model.getAttribute('name') ?? ''),
+    classId: heroClassOf(model.getAttribute('class_id')) ?? (leader ? 'maestro' : 'knight'),
+    chosenClass: heroClassOf(model.getAttribute('chosen_class')),
+    leader,
+    agentNodeId: (model.getAttribute('agent_node_id') as string | null) ?? null,
+    agentTitle: (model.getAttribute('agent_title') as string | null) ?? null,
     level: Math.max(1, Number(model.getAttribute('level')) || 1),
+    paragon: Math.max(0, Number(model.getAttribute('paragon')) || 0),
     xp: Math.max(0, Number(model.getAttribute('xp')) || 0),
     skills: parse<Record<string, number>>(model.getAttribute('skills_json'), {}),
     actives: parse<string[]>(model.getAttribute('actives_json'), []),
@@ -70,7 +80,7 @@ function readItem(model: AgentAdventureItem): Item | null {
     affixes,
     sockets,
     location: location === 'equipped' || location === 'stash' ? location : 'inventory',
-    heroNodeId: (model.getAttribute('hero_node_id') as string | null) ?? null,
+    heroId: (model.getAttribute('hero_id') as string | null) ?? null,
     locked: Boolean(model.getAttribute('locked')),
     createdAt: String(model.getAttribute('created_at') ?? ''),
   };
@@ -78,8 +88,14 @@ function readItem(model: AgentAdventureItem): Item | null {
 
 function heroRow(hero: AdventureHero) {
   return {
+    name: hero.name,
+    class_id: hero.classId,
     chosen_class: hero.chosenClass,
+    leader: hero.leader,
+    agent_node_id: hero.agentNodeId,
+    agent_title: hero.agentTitle,
     level: hero.level,
+    paragon: hero.paragon,
     xp: Math.floor(hero.xp),
     skills_json: JSON.stringify(hero.skills),
     actives_json: JSON.stringify(hero.actives),
@@ -91,7 +107,7 @@ function heroRow(hero: AdventureHero) {
 function itemRow(item: Item) {
   return {
     location: item.location,
-    hero_node_id: item.heroNodeId,
+    hero_id: item.heroId,
     slot: item.slot,
     class_id: item.classId,
     rarity: item.rarity,
@@ -111,7 +127,7 @@ export class AdventureRepository {
     const items = await AgentAdventureItem.query().where('workspace_id', workspaceId).get();
     return {
       account: readAccount(model.getAttribute('account_json'), now),
-      heroes: Object.fromEntries(heroes.map(readHero).map((hero) => [hero.nodeId, hero])),
+      heroes: Object.fromEntries(heroes.map(readHero).map((hero) => [hero.id, hero])),
       items: items.map(readItem).filter((item): item is Item => item !== null),
     };
   }
@@ -126,16 +142,16 @@ export class AdventureRepository {
     }
 
     const oldHeroes = before?.heroes ?? {};
-    for (const [nodeId, hero] of Object.entries(after.heroes)) {
-      const previous = oldHeroes[nodeId];
+    for (const [heroId, hero] of Object.entries(after.heroes)) {
+      const previous = oldHeroes[heroId];
       if (!previous) {
-        await AgentAdventureHero.create({ id: uuidv7(), workspace_id: workspaceId, node_id: nodeId, ...heroRow(hero), created_at: now, updated_at: now });
+        await AgentAdventureHero.create({ id: heroId, workspace_id: workspaceId, ...heroRow(hero), created_at: now, updated_at: now });
       } else if (JSON.stringify(previous) !== JSON.stringify(hero)) {
-        await AgentAdventureHero.query().where('workspace_id', workspaceId).where('node_id', nodeId).update({ ...heroRow(hero), updated_at: now });
+        await AgentAdventureHero.query().where('id', heroId).update({ ...heroRow(hero), updated_at: now });
       }
     }
-    for (const nodeId of Object.keys(oldHeroes)) {
-      if (!after.heroes[nodeId]) await AgentAdventureHero.query().where('workspace_id', workspaceId).where('node_id', nodeId).delete();
+    for (const heroId of Object.keys(oldHeroes)) {
+      if (!after.heroes[heroId]) await AgentAdventureHero.query().where('id', heroId).delete();
     }
 
     const oldItems = new Map((before?.items ?? []).map((item) => [item.id, item]));

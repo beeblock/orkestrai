@@ -4,7 +4,7 @@ import { petStats, type KillCounts } from './pets.js';
 import { activeSlots, runeStats, type RuneRanks } from './runes.js';
 import { auraStats, learnedActives, passiveStats, pointsSpent, skillPointsAt, slottedActives, type LearnedActive, type SkillRanks } from './skills.js';
 import { addStats, combatProfile, heroBaseStats, heroRating, type CombatProfile, type StatBlock } from './stats.js';
-import { xpToNext } from './world.js';
+import { MAX_HERO_LEVEL, paragonXpToNext, xpToNext } from './world.js';
 
 /**
  * A hero's final numbers: its class and level, every equipped item, its own
@@ -15,10 +15,12 @@ import { xpToNext } from './world.js';
 export type VisualTier = 1 | 2 | 3 | 4;
 
 export type HeroBuild = {
-  nodeId: string;
+  heroId: string;
   classId: HeroClassId;
   level: number;
+  paragon: number;
   xp: number;
+  /** Experience to the next level, or to the next Paragon level at the max. */
   xpToNext: number;
   skillPoints: number;
   pointsSpent: number;
@@ -54,9 +56,10 @@ export function visualTier(equipped: Item[]): VisualTier {
 }
 
 export type BuildInput = {
-  nodeId: string;
+  heroId: string;
   classId: HeroClassId;
   level: number;
+  paragon?: number;
   xp: number;
   skills: SkillRanks;
   actives: string[];
@@ -73,9 +76,10 @@ export function buildHeroes(heroes: BuildInput[], items: Item[], runes: RuneRank
   const slots = activeSlots(runes);
   const builds: Record<string, HeroBuild> = {};
   for (const hero of heroes) {
-    const equipped = items.filter((item) => item.location === 'equipped' && item.heroNodeId === hero.nodeId);
+    const equipped = items.filter((item) => item.location === 'equipped' && item.heroId === hero.heroId);
     const stats = addStats(
       heroBaseStats(hero.classId, hero.level),
+      { attackPct: hero.paragon ?? 0, maxHpPct: hero.paragon ?? 0 },
       passiveStats(hero.classId, hero.skills),
       ...equipped.map(itemStats),
       account,
@@ -83,12 +87,13 @@ export function buildHeroes(heroes: BuildInput[], items: Item[], runes: RuneRank
     );
     const profile = combatProfile(hero.classId, stats);
     const weapon = equipped.find((item) => item.slot === 'weapon');
-    builds[hero.nodeId] = {
-      nodeId: hero.nodeId,
+    builds[hero.heroId] = {
+      heroId: hero.heroId,
       classId: hero.classId,
       level: hero.level,
+      paragon: hero.paragon ?? 0,
       xp: hero.xp,
-      xpToNext: xpToNext(hero.level),
+      xpToNext: hero.level >= MAX_HERO_LEVEL ? paragonXpToNext(hero.paragon ?? 0) : xpToNext(hero.level),
       skillPoints: skillPointsAt(hero.level),
       pointsSpent: pointsSpent(hero.skills),
       stats,
@@ -104,16 +109,30 @@ export function buildHeroes(heroes: BuildInput[], items: Item[], runes: RuneRank
   return builds;
 }
 
+export type FormationCandidate = {
+  heroId: string;
+  leader: boolean;
+  /** Its agent is working right now. */
+  working: boolean;
+  /** An agent plays it (otherwise it rests in the guild). */
+  present: boolean;
+  level: number;
+};
+
 /**
- * Who fights: the heroes the owner placed, in order, then the agents that are
- * working, the leader first, up to the formation's slots.
+ * Who fights, up to the formation's slots: the heroes the owner pinned, in
+ * order, then the ones whose agents are working, the Maestro, the other
+ * agents' heroes, and finally the guild's resting heroes, strongest first —
+ * so a lone agent still leads a full party and a team of twenty fields the
+ * ones at work.
  */
-export function deployHeroes(heroes: Array<{ nodeId: string; leader: boolean; working: boolean }>, pinned: string[], slots: number): string[] {
-  const known = new Set(heroes.map((hero) => hero.nodeId));
-  const chosen = pinned.filter((nodeId) => known.has(nodeId)).slice(0, slots);
+export function deployHeroes(heroes: FormationCandidate[], pinned: string[], slots: number): string[] {
+  const known = new Set(heroes.map((hero) => hero.heroId));
+  const chosen = pinned.filter((heroId) => known.has(heroId)).slice(0, slots);
+  const rank = (hero: FormationCandidate) => (hero.working ? 3 : 0) + (hero.leader ? 2 : 0) + (hero.present ? 1 : 0);
   const rest = heroes
-    .filter((hero) => !chosen.includes(hero.nodeId))
-    .sort((a, b) => Number(b.working) - Number(a.working) || Number(b.leader) - Number(a.leader));
-  for (const hero of rest) if (chosen.length < slots) chosen.push(hero.nodeId);
+    .filter((hero) => !chosen.includes(hero.heroId))
+    .sort((a, b) => rank(b) - rank(a) || b.level - a.level || a.heroId.localeCompare(b.heroId));
+  for (const hero of rest) if (chosen.length < slots) chosen.push(hero.heroId);
   return chosen;
 }

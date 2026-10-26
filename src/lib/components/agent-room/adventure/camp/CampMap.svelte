@@ -10,6 +10,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
+  import { heroLevelText } from '../adventure-text.js';
 
   let { snapshot, catalog, heroes, act, busy }: {
     snapshot: AdventureSnapshot;
@@ -35,13 +36,13 @@
     void act({ type: 'settings', settings: { [key]: value } });
   }
 
-  function pin(nodeId: string) {
-    const next = formation.includes(nodeId) ? formation.filter((id) => id !== nodeId) : [...formation, nodeId];
+  function pin(heroId: string) {
+    const next = formation.includes(heroId) ? formation.filter((id) => id !== heroId) : [...formation, heroId];
     void act({ type: 'formation', order: next });
   }
 
-  function move(nodeId: string, step: number) {
-    const index = formation.indexOf(nodeId);
+  function move(heroId: string, step: number) {
+    const index = formation.indexOf(heroId);
     const target = index + step;
     if (index < 0 || target < 0 || target >= formation.length) return;
     const next = [...formation];
@@ -105,15 +106,15 @@
       <h3>{m['adventure.camp_formation']({ slots: snapshot.limits.formation })}</h3>
       <p class="hint">{m['adventure.camp_formation_hint']()}</p>
       <ul class="formation">
-        {#each heroes as hero (hero.nodeId)}
-          {@const pinned = formation.includes(hero.nodeId)}
+        {#each heroes as hero (hero.id)}
+          {@const pinned = formation.includes(hero.id)}
           <li class:deployed={hero.deployed}>
-            <span class="who"><b>{hero.title}</b><small>{className(hero.classId)} · {m['adventure.level']({ level: hero.level })} · {hero.deployed ? m['adventure.camp_deployed']() : m['adventure.reserve']()}</small></span>
+            <span class="who"><b>{hero.name}</b><small>{className(hero.classId)} · {heroLevelText(hero.level, hero.paragon)} · {hero.agent?.title ?? m['adventure.resting']()} · {hero.deployed ? m['adventure.camp_deployed']() : m['adventure.reserve']()}</small></span>
             {#if pinned}
-              <Button size="icon-sm" variant="ghost" disabled={busy} aria-label={m['adventure.camp_move_up']()} onclick={() => move(hero.nodeId, -1)}><ArrowUp size={13} /></Button>
-              <Button size="icon-sm" variant="ghost" disabled={busy} aria-label={m['adventure.camp_move_down']()} onclick={() => move(hero.nodeId, 1)}><ArrowDown size={13} /></Button>
+              <Button size="icon-sm" variant="ghost" disabled={busy} aria-label={m['adventure.camp_move_up']()} onclick={() => move(hero.id, -1)}><ArrowUp size={13} /></Button>
+              <Button size="icon-sm" variant="ghost" disabled={busy} aria-label={m['adventure.camp_move_down']()} onclick={() => move(hero.id, 1)}><ArrowDown size={13} /></Button>
             {/if}
-            <Button size="icon-sm" variant={pinned ? 'default' : 'ghost'} disabled={busy || (!pinned && formation.length >= snapshot.limits.formation)} aria-label={pinned ? m['adventure.camp_unpin']() : m['adventure.camp_pin']()} aria-pressed={pinned} onclick={() => pin(hero.nodeId)}>
+            <Button size="icon-sm" variant={pinned ? 'default' : 'ghost'} disabled={busy || (!pinned && formation.length >= snapshot.limits.formation)} aria-label={pinned ? m['adventure.camp_unpin']() : m['adventure.camp_pin']()} aria-pressed={pinned} onclick={() => pin(hero.id)}>
               {#if pinned}<PinOff size={13} />{:else}<Pin size={13} />{/if}
             </Button>
           </li>
