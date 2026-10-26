@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { page } from '$app/state';
-  import { goto } from '$app/navigation';
-  import { Backpack, BookOpen, Gem, Map as MapIcon, PawPrint, ScrollText, Swords } from '@lucide/svelte';
+  import { afterNavigate, goto } from '$app/navigation';
+  import { ArrowLeft, Backpack, BookOpen, Gem, Map as MapIcon, PawPrint, ScrollText, Swords } from '@lucide/svelte';
+  import { Button } from '$lib/components/ui/button';
   import { toast } from '@beeblock/svelar/ui';
   import * as Tabs from '$lib/components/ui/tabs';
   import { Skeleton } from '$lib/components/ui/skeleton';
@@ -33,12 +34,28 @@
     { id: 'log', icon: ScrollText, label: m['adventure.camp_tab_log'] },
   ];
 
+  function tabOf(value: string | null): Tab {
+    return TABS.some((entry) => entry.id === value) ? (value as Tab) : 'heroes';
+  }
+
   let workspaceId = $state<string | null>(page.url.searchParams.get('workspace'));
   let snapshot = $state<AdventureSnapshot | null>(null);
   let failed = $state(false);
   let busy = $state(false);
-  let tab = $state<Tab>((page.url.searchParams.get('tab') as Tab) || (page.url.searchParams.get('hero') ? 'heroes' : 'heroes'));
+  let tab = $state<Tab>(tabOf(page.url.searchParams.get('tab')));
   let selectedHero = $state<string | null>(page.url.searchParams.get('hero'));
+  // The link's parameters as last followed, so only the ones a new link changes are applied.
+  let followed = { workspace: page.url.searchParams.get('workspace'), hero: page.url.searchParams.get('hero'), tab: page.url.searchParams.get('tab') };
+
+  // Where the owner was before the camp (the canvas, a conversation…), to go back to it.
+  let backTo = $state<string | null>(null);
+  afterNavigate(({ from }) => {
+    if (from?.url && !from.url.pathname.startsWith('/adventure')) backTo = `${from.url.pathname}${from.url.search}${from.url.hash}`;
+  });
+
+  function back() {
+    void goto(backTo ?? (workspaceId ? `/canvas?workspace=${encodeURIComponent(workspaceId)}` : '/canvas'));
+  }
 
   const catalog = $derived(adventureCatalog(localeState.current));
   const view = $derived(snapshot ? lineup(snapshot, agentStatus.agents) : null);
@@ -51,7 +68,7 @@
       failed = false;
       selectedHero ??= outcome.snapshot.heroes[0]?.id ?? null;
     } catch {
-      failed = true;
+      if (id === workspaceId) failed = true;
     }
   }
 
@@ -62,6 +79,8 @@
     busy = true;
     try {
       const outcome = await adventureAction(id, action);
+      // The camp moved to another workspace meanwhile: this answer is not about what is on screen.
+      if (id !== workspaceId) return null;
       snapshot = outcome.snapshot;
       return outcome;
     } catch (error) {
@@ -79,6 +98,24 @@
     url.searchParams.set('tab', next);
     void goto(url, { replaceState: true, keepFocus: true, noScroll: true });
   }
+
+  // Links inside the app reuse this page: a camp opened for another workspace,
+  // hero or tab follows the link and forgets the previous workspace's save.
+  $effect(() => {
+    const params = page.url.searchParams;
+    const next = { workspace: params.get('workspace'), hero: params.get('hero'), tab: params.get('tab') };
+    untrack(() => {
+      if (next.workspace && next.workspace !== followed.workspace && next.workspace !== workspaceId) {
+        workspaceId = next.workspace;
+        snapshot = null;
+        failed = false;
+        selectedHero = null;
+      }
+      if (next.hero && next.hero !== followed.hero) selectedHero = next.hero;
+      if (next.tab !== followed.tab) tab = tabOf(next.tab);
+      followed = next;
+    });
+  });
 
   $effect(() => {
     const id = workspaceId;
@@ -107,6 +144,10 @@
 <main class="camp" data-testid="adventure-camp">
   <header class="camp-header">
     <div class="titles">
+      <Button variant="ghost" size="sm" class="-ml-2 w-fit text-app-text-muted" onclick={back}>
+        <ArrowLeft size={15} aria-hidden="true" />
+        {m['adventure.camp_back']()}
+      </Button>
       <h1>{m['adventure.camp_title']()}</h1>
       <p>{m['adventure.camp_subtitle']()}</p>
     </div>
@@ -192,6 +233,11 @@
     font-size: 20px;
     font-weight: 600;
     letter-spacing: -0.015em;
+  }
+
+  .titles {
+    display: grid;
+    justify-items: start;
   }
 
   .titles p {

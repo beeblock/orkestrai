@@ -1,6 +1,6 @@
 import { fill, type AdventureCatalog } from '$lib/i18n/adventure/index.js';
 import { SETS, UNIQUES } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
-import { NORMAL_GEM_QUALITY, isGem, itemBaseKey, type GemQuality, type ItemData, type MaterialId } from '$lib/modules/agent-room/domain/adventure/items.js';
+import { NORMAL_GEM_QUALITY, isGem, itemBaseKey, type GemQuality, type ItemData, type MaterialId, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
 import type { Rune } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import type { ActiveAction, SkillNode } from '$lib/modules/agent-room/domain/adventure/skills.js';
 import { FLAT_STATS, scaleStats, type StatBlock, type StatId } from '$lib/modules/agent-room/domain/adventure/stats.js';
@@ -64,4 +64,9 @@ export function runeDescription(catalog: AdventureCatalog, rune: Rune, rank: num
 
 export function errorText(catalog: AdventureCatalog, code: string, fallback: string): string {
   return catalog.errors[code] ?? fallback;
+}
+
+/** A rarity's color for text: the bright tone on dark themes, a deeper ink of the same hue on light ones. */
+export function rarityInk(rarity: Rarity): string {
+  return `var(--adventure-ink-${rarity})`;
 }

@@ -222,7 +222,7 @@
   }
 
   .stage.boss {
-    color: #ffb3a8;
+    color: var(--adventure-ink-boss);
   }
 
   .stage.here {

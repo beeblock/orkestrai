@@ -39,6 +39,9 @@
     large: { field: 190, scale: 1.27 },
   };
   const ROOM_ABOVE = 170;
+  const CARD_WIDTH = 300;
+  const CARD_GAP = 10;
+  const CARD_EDGE = 8;
   const desktop = (typeof window !== 'undefined' ? (window as unknown as { orkestraiDesktop?: Desktop }).orkestraiDesktop : undefined);
 
   type StageApi = {
@@ -60,7 +63,12 @@
   let look = $state<StripLook>({ width: 'full', size: 'normal', scenery: 'full', hud: 'always' });
   // Whether the owner dragged the strip away from the Dock.
   let moved = $state(false);
-  let selected = $state<{ id: string; left: number; top: number } | null>(null);
+  // The hero whose card is open, and where it stands: its sides, and its top counted from the window's bottom
+  // (the field hugs the bottom, so that holds when the window changes height).
+  let selected = $state<{ id: string; left: number; right: number; fromBottom: number } | null>(null);
+  let cardHeight = $state(0);
+  let viewWidth = $state(0);
+  let viewHeight = $state(0);
   let stage = $state<StageApi | null>(null);
   let pointerOverHero = false;
   let pointerOverUi = false;
@@ -92,6 +100,21 @@
   const cardAgent = $derived(card?.agent ?? null);
   const cardLive = $derived(cardAgent ? agentStatus.agents[cardAgent.nodeId] ?? null : null);
   const cardAsks = $derived(asksOf(cardAgent?.nodeId));
+  /**
+   * Where the card goes: above the hero when it fits inside the window
+   * (a transparent window cannot draw past its edges), else beside the hero,
+   * against the top. Taller than the whole window, it scrolls.
+   */
+  const cardPlace = $derived.by(() => {
+    if (!selected) return null;
+    const room = { left: CARD_EDGE, right: viewWidth - CARD_WIDTH - CARD_EDGE };
+    const above = selected.fromBottom + CARD_GAP;
+    if (above + cardHeight <= viewHeight - CARD_EDGE) {
+      return { left: Math.max(room.left, Math.min((selected.left + selected.right) / 2 - CARD_WIDTH / 2, room.right)), bottom: above };
+    }
+    const beside = selected.right + CARD_GAP <= room.right ? selected.right + CARD_GAP : Math.max(room.left, selected.left - CARD_GAP - CARD_WIDTH);
+    return { left: beside, bottom: Math.max(CARD_EDGE, viewHeight - CARD_EDGE - cardHeight) };
+  });
   const cardState = $derived(agentStateLabel(cardLive?.sessionAlive ? cardLive.state : 'disconnected'));
   // What the agent is doing, when it says more than its state.
   const cardDoing = $derived.by(() => {
@@ -349,7 +372,7 @@
 </script>
 
 <svelte:head><title>{m['adventure.title']()}</title></svelte:head>
-<svelte:window onpointermove={onPointerMove} onkeydown={(event) => { if (event.key === 'Escape') selected = null; }} />
+<svelte:window bind:innerWidth={viewWidth} bind:innerHeight={viewHeight} onpointermove={onPointerMove} onkeydown={(event) => { if (event.key === 'Escape') selected = null; }} />
 
 <main class="adventure" class:desktop={Boolean(desktop?.setAdventureInteractive)}>
   {#if snapshot && workspaceId}
@@ -374,15 +397,15 @@
         draggable={Boolean(desktop?.setAdventureLayout)}
         {moved}
         onResetPosition={desktop?.resetAdventurePosition ? () => desktop.resetAdventurePosition?.() : undefined}
-        onSelect={(id, box) => { selected = selected?.id === id ? null : { id, left: box.left + box.width / 2, top: box.top }; }}
+        onSelect={(id, box) => { selected = selected?.id === id ? null : { id, left: box.left, right: box.left + box.width, fromBottom: window.innerHeight - box.top }; }}
         onHover={(id) => { pointerOverHero = id !== null; syncInteractive(); }}
         onOpenCamp={() => openCamp()}
       />
     {/key}
   {/if}
 
-  {#if card && selected}
-    <div class="card" data-adventure-interactive role="dialog" aria-label={card.name} style:left={`${Math.max(12, Math.min(selected.left - 150, window.innerWidth - 312))}px`} style:bottom={`${window.innerHeight - selected.top + 10}px`}>
+  {#if card && cardPlace}
+    <div class="card" data-adventure-interactive role="dialog" aria-label={card.name} bind:offsetHeight={cardHeight} style:left={`${cardPlace.left}px`} style:bottom={`${cardPlace.bottom}px`} style:visibility={cardHeight ? 'visible' : 'hidden'}>
       <header>
         <b>{card.name}</b>
         <span class="class">{card.leader ? `${className(card.classId)} · ${m['adventure.leader']()}` : className(card.classId)} · {heroLevelText(card.level, card.paragon)}</span>
@@ -451,6 +474,9 @@
   .card {
     position: fixed;
     width: 300px;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: 8px;

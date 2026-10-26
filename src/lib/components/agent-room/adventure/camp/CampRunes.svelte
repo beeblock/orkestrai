@@ -150,7 +150,7 @@
   }
 
   .done {
-    color: #b46cff;
+    color: var(--adventure-ink-epic);
   }
 
   .rune :global(button) {

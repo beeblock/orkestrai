@@ -5779,6 +5779,7 @@
   "settings.adventure_browser_hint": "La franja sobre el Dock necesita la app de escritorio. Aquí puedes abrirla en una pestaña.",
   "settings.adventure_open": "Abrir Aventura",
   "adventure.camp_title": "Campamento de la Aventura",
+  "adventure.camp_back": "Volver",
   "adventure.camp_subtitle": "Revisa héroes, equipo, cofres, cubo, runas y mascotas.",
   "adventure.camp_short": "Campamento",
   "adventure.open_camp": "Abrir el campamento: héroes, equipo y cofres",

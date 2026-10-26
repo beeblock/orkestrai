@@ -329,17 +329,35 @@
     display: grid;
     gap: 14px;
     min-width: 0;
+    container-type: inline-size;
   }
 
+  /* Portrait, identity, armory and numbers side by side; narrower, the armory keeps its own width. */
   .top {
     display: grid;
     grid-template-columns: 150px minmax(170px, 230px) auto minmax(200px, 1fr);
+    grid-template-areas: 'portrait identity doll numbers';
     gap: 16px;
     align-items: start;
   }
 
-  @media (max-width: 1180px) {
-    .top { grid-template-columns: 150px 1fr; }
+  .portrait { grid-area: portrait; }
+  .identity { grid-area: identity; }
+  .doll { grid-area: doll; }
+  .numbers { grid-area: numbers; min-width: 0; }
+
+  @container (max-width: 900px) {
+    .top {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas: 'portrait identity' 'doll numbers';
+    }
+  }
+
+  @container (max-width: 560px) {
+    .top {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: 'portrait' 'identity' 'doll' 'numbers';
+    }
   }
 
   .portrait {
@@ -457,12 +475,12 @@
     gap: 3px;
     margin: 0;
     padding-left: 16px;
-    color: #ffc27a;
+    color: var(--adventure-ink-unique);
   }
 
   .powers .set-line {
     margin: 0;
-    color: #7af0b8;
+    color: var(--adventure-ink-set);
   }
 
   .powers .none {
@@ -641,6 +659,6 @@
     font-size: 11px;
   }
 
-  .node.active .kind { color: #8fd8ff; }
-  .node.aura .kind { color: #b6f07a; }
+  .node.active .kind { color: var(--adventure-ink-active); }
+  .node.aura .kind { color: var(--adventure-ink-aura); }
 </style>

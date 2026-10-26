@@ -5779,6 +5779,7 @@
   "settings.adventure_browser_hint": "A faixa acima do Dock precisa do app desktop. Aqui você pode abri-la numa aba.",
   "settings.adventure_open": "Abrir Aventura",
   "adventure.camp_title": "Acampamento da Aventura",
+  "adventure.camp_back": "Voltar",
   "adventure.camp_subtitle": "Inspecione heróis, equipamentos, baús, cubo, runas e pets.",
   "adventure.camp_short": "Acampamento",
   "adventure.open_camp": "Abrir o acampamento: heróis, equipamentos e baús",

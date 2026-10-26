@@ -30,6 +30,7 @@ pt-BR, English, and Spanish translations.
 - Generate Adventure battle report identifiers with browser Web Crypto so the desktop production build does not import Node-only cryptography into the renderer.
 - Send Adventure battle results in sealed reports that keep their identity across retries: a report whose answer was lost is sent again unchanged and the server, which remembers recent report ids, never pays it twice, even with another report arriving in between. Battle fought while the server is away is split into reports the server accepts and is paid in full within the time that really passed; refusals are told apart from a busy or absent server, and after eight hours without the server the party camps instead of piling up results.
 - Craft Adventure off hands for the class picked at the cube, like main hands, instead of rolling one of the guild's classes.
+- Fix the Adventure camp and strip layouts: a camp opened from a link for another workspace, hero or tab now follows it and never reads or changes the previous workspace's save; the camp has a Back button to the screen it was opened from; the hero card on the strip stays inside the transparent window at every size, beside the hero when there is no room above; the armory no longer covers the hero's stats in narrow windows; and rarity, unique, set, Paragon and boss text uses deeper inks on light themes (at least 4.5:1).
 
 ## 0.45.0 - 2026-10-24
 

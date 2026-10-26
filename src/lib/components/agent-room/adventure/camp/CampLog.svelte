@@ -2,10 +2,9 @@
   import { fill, type AdventureCatalog } from '$lib/i18n/adventure/index.js';
   import type { JournalEntry } from '$lib/modules/agent-room/domain/adventure/account.js';
   import type { MonsterId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
-  import { RARITY_RULES } from '$lib/modules/agent-room/domain/adventure/items.js';
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureSnapshot } from '../adventure-client.js';
-  import { formatNumber, itemName } from '../adventure-text.js';
+  import { formatNumber, itemName, rarityInk } from '../adventure-text.js';
 
   let { snapshot, catalog }: { snapshot: AdventureSnapshot; catalog: AdventureCatalog } = $props();
 
@@ -18,14 +17,14 @@
       case 'item': {
         const item = snapshot.items.find((candidate) => candidate.id === entry.itemId);
         const name = item ? itemName(catalog, item) : catalog.rarities[entry.rarity];
-        return { text: fill(catalog.journal.item, { item: `${name} (${catalog.rarities[entry.rarity]})`, source: catalog.itemSources[entry.source] }), color: RARITY_RULES[entry.rarity].color };
+        return { text: fill(catalog.journal.item, { item: `${name} (${catalog.rarities[entry.rarity]})`, source: catalog.itemSources[entry.source] }), color: rarityInk(entry.rarity) };
       }
       case 'level': return entry.paragon
-        ? { text: fill(catalog.journal.paragon, { hero: names[entry.heroId] ?? '—', level: entry.paragon }), color: '#ffd877' }
+        ? { text: fill(catalog.journal.paragon, { hero: names[entry.heroId] ?? '—', level: entry.paragon }), color: 'var(--adventure-ink-paragon)' }
         : { text: fill(catalog.journal.level, { hero: names[entry.heroId] ?? '—', level: entry.level }) };
       case 'recruit': return { text: fill(entry.inherited ? catalog.journal.inherited : catalog.journal.recruit, { hero: names[entry.heroId] ?? '—', agent: entry.agentTitle }), color: 'var(--app-secondary)' };
       case 'stage': return { text: fill(entry.result === 'clear' ? catalog.journal.stageClear : catalog.journal.stageFail, { stage: `${catalog.difficulties[entry.difficulty]} ${entry.act}-${entry.stage}` }) };
-      case 'boss': return { text: fill(catalog.journal.boss, { monster: monsterName(entry.monsterId) }), color: '#ffb3a8' };
+      case 'boss': return { text: fill(catalog.journal.boss, { monster: monsterName(entry.monsterId) }), color: 'var(--adventure-ink-boss)' };
       case 'pet': return { text: fill(catalog.journal.pet, { pet: catalog.pets[entry.petId] }), color: 'var(--app-success)' };
       case 'quest': return { text: fill(catalog.journal.quest, { title: entry.title }), color: 'var(--app-accent)' };
       case 'offline': return { text: fill(catalog.journal.offline, { minutes: entry.minutes, gold: formatNumber(entry.gold) }) };

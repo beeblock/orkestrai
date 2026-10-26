@@ -4,7 +4,7 @@
   import { EQUIP_LEVEL_MARGIN, RARITY_RULES, itemGoldValue, itemIcon, itemImplicitStats, itemStats, materialIcon, materialStats, rarityIndex, type ItemData } from '$lib/modules/agent-room/domain/adventure/items.js';
   import { STAT_IDS, type StatBlock, type StatId } from '$lib/modules/agent-room/domain/adventure/stats.js';
   import * as m from '$lib/paraglide/messages.js';
-  import { itemName, materialName, statLines, statText } from '../adventure-text.js';
+  import { itemName, materialName, rarityInk, statLines, statText } from '../adventure-text.js';
   import ItemIcon from './ItemIcon.svelte';
 
   /**
@@ -37,7 +37,7 @@
   const className = (id: string) => (m as unknown as Record<string, () => string>)[`adventure.class_${id}`]?.() ?? id;
 </script>
 
-<div class="details" style:--rarity={rarity.color}>
+<div class="details" style:--rarity={rarity.color} style:--rarity-ink={rarityInk(item.rarity)}>
   <header>
     <span class="frame"><ItemIcon atlasId={icon.atlas} frame={icon.frame} size={44} /></span>
     <div>
@@ -116,7 +116,7 @@
   }
 
   b {
-    color: var(--rarity);
+    color: var(--rarity-ink);
     font-size: 13px;
   }
 
@@ -148,7 +148,7 @@
   }
 
   .affixes {
-    color: #8fb8ff;
+    color: var(--adventure-ink-affix);
   }
 
   .unique,
@@ -163,11 +163,13 @@
 
   .unique {
     --accent-tone: #ff9b30;
-    color: #ffc27a;
+    --tag-ink: var(--adventure-ink-unique);
+    color: var(--adventure-ink-unique);
   }
 
   .set {
     --accent-tone: #3ddc97;
+    --tag-ink: var(--adventure-ink-set);
     color: var(--app-text-muted);
   }
 
@@ -177,12 +179,12 @@
   }
 
   .tag {
-    color: var(--accent-tone);
+    color: var(--tag-ink);
     font-weight: 600;
   }
 
   .set li.on {
-    color: #7af0b8;
+    color: var(--adventure-ink-set);
   }
 
   .sockets li {
