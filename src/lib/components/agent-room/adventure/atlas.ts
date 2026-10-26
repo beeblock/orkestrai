@@ -3,20 +3,36 @@ export type AtlasFrame = { x: number; y: number; w: number; h: number; ax: numbe
 export type AtlasAnimation = { frames: number[]; fps: number; loop: boolean };
 export type Atlas = { id: string; image: HTMLImageElement; height: number; frames: AtlasFrame[]; animations: Record<string, AtlasAnimation> };
 
+// Every sheet ships with the app: its frames are bundled with this code and
+// its image is a fingerprinted asset, cached for good after the first load.
+const IMAGES = import.meta.glob('$lib/assets/adventure/sprites/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const METAS = import.meta.glob('$lib/assets/adventure/sprites/*.json', { eager: true, import: 'default' }) as Record<string, Omit<Atlas, 'image'>>;
+const byId = <T>(entries: Record<string, T>) => Object.fromEntries(Object.entries(entries).map(([path, value]) => [path.slice(path.lastIndexOf('/') + 1).replace(/\.(webp|json)$/, ''), value]));
+const IMAGE_URLS: Record<string, string> = byId(IMAGES);
+const ATLAS_METAS: Record<string, Omit<Atlas, 'image'>> = byId(METAS);
+
 const cache = new Map<string, Promise<Atlas | null>>();
 
-/** Loads `/adventure/sprites/<id>.{json,webp}` once; null when the sprite is missing. */
+/** Every sheet the app ships. */
+export const ATLAS_IDS: string[] = Object.keys(ATLAS_METAS).filter((id) => IMAGE_URLS[id]);
+
+/** Whether a sheet exists (a hero outfit tier, a monster, an icon sheet). */
+export function hasAtlas(id: string): boolean {
+  return Boolean(ATLAS_METAS[id] && IMAGE_URLS[id]);
+}
+
+/** Loads a sheet's image once; null when there is no such sheet. */
 export function loadAtlas(id: string): Promise<Atlas | null> {
   let pending = cache.get(id);
   if (!pending) {
     pending = (async () => {
+      const meta = ATLAS_METAS[id];
+      const url = IMAGE_URLS[id];
+      if (!meta || !url) return null;
       try {
-        const response = await fetch(`/adventure/sprites/${id}.json`);
-        if (!response.ok) return null;
-        const meta = await response.json() as Omit<Atlas, 'image'>;
         const image = new Image();
         image.decoding = 'async';
-        image.src = `/adventure/sprites/${id}.webp`;
+        image.src = url;
         await image.decode();
         return { ...meta, image };
       } catch {
@@ -26,6 +42,11 @@ export function loadAtlas(id: string): Promise<Atlas | null> {
     cache.set(id, pending);
   }
   return pending;
+}
+
+/** Starts loading sheets a screen is about to draw, so they are ready when it does. */
+export function preloadAtlases(ids: Iterable<string>): void {
+  for (const id of ids) if (hasAtlas(id)) void loadAtlas(id);
 }
 
 /** The frame an animation shows `elapsedMs` after it started. */

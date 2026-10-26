@@ -18,7 +18,8 @@
   import { runeRule } from '$lib/modules/agent-room/domain/adventure/runes.js';
   import type { SimRules } from '$lib/modules/agent-room/domain/adventure/simulation.js';
   import type { StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
-  import type { HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
+  import { HERO_CLASS_IDS, type HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
+  import { preloadAtlases } from '$lib/components/agent-room/adventure/atlas.js';
   import type { Workspace } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -315,6 +316,8 @@
   });
 
   onMount(() => {
+    // Start on the art every scene draws while the save is still on its way.
+    preloadAtlases(['fx-effects', 'fx-camp', 'icons-misc', 'vfx-1', 'vfx-2', 'vfx-3', 'vfx-4', 'vfx-5', 'vfx-6', ...HERO_CLASS_IDS.map((classId) => `hero-${classId}`)]);
     const workspaces = () => fetch('/api/agent-room/workspaces').then((response) => response.json()).then((body: { data?: Workspace[] }) => body.data ?? []);
     void workspaces().then((list) => {
       const id = pickWorkspace(list);

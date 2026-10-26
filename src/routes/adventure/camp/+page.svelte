@@ -8,6 +8,7 @@
   import * as Tabs from '$lib/components/ui/tabs';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import { lineup } from '$lib/components/agent-room/adventure/adventure-party.js';
+  import { ATLAS_IDS, preloadAtlases } from '$lib/components/agent-room/adventure/atlas.js';
   import { AdventureRequestError, adventureAction, loadAdventure, onAdventureChange, type AdventureAction, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
   import { errorText, formatNumber } from '$lib/components/agent-room/adventure/adventure-text.js';
   import CampHeroes from '$lib/components/agent-room/adventure/camp/CampHeroes.svelte';
@@ -129,6 +130,8 @@
   });
 
   onMount(() => {
+    // Item icons for every tab, loading while the save does.
+    preloadAtlases(ATLAS_IDS.filter((id) => id.startsWith('icons-')));
     if (workspaceId) return;
     void fetch('/api/agent-room/workspaces').then((response) => response.json()).then((body: { data?: Workspace[] }) => {
       let remembered: string | null = null;

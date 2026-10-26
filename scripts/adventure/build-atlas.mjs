@@ -9,7 +9,8 @@
 //   scaled once so the tallest one has the given height;
 // - ground: the opaque band of a ground strip, cropped and mirrored into one
 //   tile that repeats without a seam.
-// One WebP plus one JSON per sheet go to static/adventure/sprites.
+// One WebP plus one JSON per sheet go to src/lib/assets/adventure/sprites, where the
+// app bundles the frames and fingerprints the images (cached for good once loaded).
 //
 // usage: node scripts/adventure/build-atlas.mjs [id ...]   (all entries by default)
 import { createCanvas, loadImage } from '@napi-rs/canvas';
@@ -19,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RAW = join(ROOT, '.orkestrai', 'adventure', 'raw');
-const OUT = join(ROOT, 'static', 'adventure', 'sprites');
+const OUT = join(ROOT, 'src', 'lib', 'assets', 'adventure', 'sprites');
 const manifest = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'atlas-manifest.json'), 'utf8'));
 const only = new Set(process.argv.slice(2));
 

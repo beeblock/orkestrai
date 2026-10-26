@@ -46,6 +46,15 @@
 
   .icon > span {
     background-repeat: no-repeat;
+    animation: icon-in 180ms ease-out;
+  }
+
+  @keyframes icon-in {
+    from { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .icon > span { animation: none; }
   }
 
   .dim {

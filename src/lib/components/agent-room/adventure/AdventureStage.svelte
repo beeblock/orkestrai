@@ -170,12 +170,24 @@
   let effects: Effect[] = [];
   let bannerId = 0;
 
+  // When each sheet arrived: heroes and monsters fade in instead of popping up.
+  const loadedAt = new Map<string, number>();
+  const FADE_MS = 220;
+
   function atlas(id: string): Atlas | null {
     if (!atlases.has(id)) {
       atlases.set(id, null);
-      void loadAtlas(id).then((loaded) => atlases.set(id, loaded));
+      void loadAtlas(id).then((loaded) => {
+        atlases.set(id, loaded);
+        loadedAt.set(id, performance.now());
+      });
     }
     return atlases.get(id) ?? null;
+  }
+
+  function fadeIn(sheet: Atlas, now: number): number {
+    const at = loadedAt.get(sheet.id);
+    return at === undefined ? 1 : Math.max(0, Math.min(1, (now - at) / FADE_MS));
   }
 
   /** The hero's outfit for its gear tier, falling back to the adept look while it loads. */
@@ -529,10 +541,10 @@
       if (fallen) context.filter = 'grayscale(1) brightness(0.75)';
       let box: { left: number; top: number; width: number; height: number };
       if (sprite) {
+        context.globalAlpha *= fadeIn(sprite, now);
         box = drawFrame(context, sprite, animationFrame(sprite, HERO_ANIMATION[hero.pose] ?? 'idle', hero.pose === 'walk' || hero.pose === 'idle' ? now : hero.poseMs), x, groundY + 2 + bob, ART_SCALE);
       } else {
-        context.fillStyle = '#e8b84b';
-        context.fillRect(x - 10, groundY - 50, 20, 50);
+        // Its sheet is still on the way: nothing to draw yet, but the hero can be pointed at.
         box = { left: x - 10, top: groundY - 50, width: 20, height: 50 };
       }
       context.filter = 'none';
@@ -604,13 +616,11 @@
       if (enemy.stunMs > 0 && enemy.pose !== 'dying') context.filter = 'hue-rotate(180deg) saturate(0.7) brightness(1.15)';
       let top = groundY - 30;
       if (sprite) {
+        context.globalAlpha *= fadeIn(sprite, now);
         const box = drawFrame(context, sprite, animationFrame(sprite, pose, pose === 'move' ? now + enemy.x * 13 : enemy.poseMs, 'move'), x, groundY + 2, scale);
         top = box.top;
       } else {
-        context.fillStyle = enemy.boss ? '#c2413b' : '#b44fd8';
-        const size = enemy.boss ? 60 : 24;
-        context.fillRect(x - size / 2, groundY - size, size, size);
-        top = groundY - size;
+        top = groundY - (enemy.boss ? 60 : 24);
       }
       context.filter = 'none';
       context.globalAlpha = 1;

@@ -16,6 +16,8 @@
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let atlas: Atlas | null = null;
+  // When the sheet arrived: the portrait fades in instead of popping up.
+  let shownAt = 0;
 
   $effect(() => {
     const id = atlasId;
@@ -24,6 +26,7 @@
     void loadAtlas(id).then(async (loaded) => {
       if (id !== atlasId) return;
       atlas = loaded ?? (fallback ? await loadAtlas(fallback) : null);
+      shownAt = performance.now();
     });
   });
 
@@ -45,10 +48,12 @@
         context.fillRect(0, 0, width, height);
       }
       if (atlas) {
+        context.globalAlpha = Math.min(1, (now - shownAt) / 220);
         const tallest = Math.max(...atlas.frames.map((frame) => frame.h));
         const scale = Math.min(1.2, (height * 0.92) / tallest);
         const frame = frames?.length ? frames[Math.floor(now / 130) % frames.length] : animationFrame(atlas, animation, now);
         drawFrame(context, atlas, frame, width / 2, height - 4, scale);
+        context.globalAlpha = 1;
       }
       raf = requestAnimationFrame(loop);
     };
