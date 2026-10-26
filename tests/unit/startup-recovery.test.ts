@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { startupRecoveryCopy } from '../../src/lib/i18n/desktop-messages.js';
 
 const require = createRequire(import.meta.url);
-const { createStartupWatcher, parseStartupPhase, showStartupRecovery, waitForInternalServer } = require('../../electron/startup-recovery.cjs');
+const { createStartupWatcher, isInteractiveLaunch, parseStartupPhase, showStartupRecovery, waitForInternalServer } = require('../../electron/startup-recovery.cjs');
 const { canInstallUpdatesAutomaticallyAsync } = require('../../electron/update-policy.cjs');
 
 function fixture(responses: number[]) {
@@ -138,6 +138,22 @@ describe('server-independent native startup recovery', () => {
       await expect(waitForInternalServer('', { timeoutMs: 600, server: deaf.child, request: deaf.request, pause: (ms: number) => new Promise((done) => setTimeout(done, ms)) })).rejects.toThrow('did not respond');
     } finally { deaf.child.kill(); }
   }, 20_000);
+
+  it('shows the splash before waiting for a preparing server, and tells it about the preparation whenever it is ready', () => {
+    expect(isInteractiveLaunch({ backgroundLaunch: false, loginLaunch: false, invite: null })).toBe(true);
+    expect(isInteractiveLaunch({ backgroundLaunch: true, loginLaunch: false, invite: null })).toBe(false);
+    expect(isInteractiveLaunch({ backgroundLaunch: false, loginLaunch: true, invite: null })).toBe(false);
+    expect(isInteractiveLaunch({ backgroundLaunch: true, loginLaunch: true, invite: 'orkestrai://invite' })).toBe(true);
+    const main = readFileSync('electron/main.cjs', 'utf8');
+    const boot = main.split('app.whenReady().then(async () => {')[1];
+    expect(boot.indexOf('createSplash();')).toBeLessThan(boot.indexOf('await ensureServer();'));
+    const retry = main.split('retry: async () => {')[1];
+    expect(retry.indexOf('createSplash();')).toBeLessThan(retry.indexOf('await ensureServer();'));
+    // A splash that loads during the preparation gets the notice then; nothing marks it shown before it exists.
+    const splash = main.split('function createSplash() {')[1].split('\nfunction ')[0];
+    expect(splash).toContain("once('did-finish-load', () => { if (startupPreparing) showSplashPreparing(); })");
+    expect(main).not.toContain('toldSplash');
+  });
 
   it('reads the preparation steps the server announces and ignores anything else', () => {
     expect(parseStartupPhase('[orkestrai:startup] {"phase":"backup"}')).toBe('backup');

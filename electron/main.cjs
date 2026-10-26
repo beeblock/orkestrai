@@ -22,7 +22,7 @@ const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const { createAdventureWindowController } = require('./adventure-window.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
-const { waitForInternalServer, createStartupWatcher, showStartupRecovery } = require('./startup-recovery.cjs');
+const { waitForInternalServer, createStartupWatcher, isInteractiveLaunch, showStartupRecovery } = require('./startup-recovery.cjs');
 const { openWorkspaceFolder } = require('./workspace-folder.cjs');
 const decodeAudio = createAudioDecoder();
 const { createDesktopCapture } = require('./computer-capture.cjs');
@@ -370,12 +370,20 @@ function createSplash() {
   splashWindow.loadFile(path.join(__dirname, 'splash.html'));
   const createdSplash = splashWindow;
   createdSplash.once('ready-to-show', () => { if (!createdSplash.isDestroyed()) createdSplash.show(); });
+  createdSplash.webContents.once('did-finish-load', () => { if (startupPreparing) showSplashPreparing(); });
   createdSplash.once('closed', () => { if (splashWindow === createdSplash) splashWindow = null; });
 }
 
-/** A large database takes minutes to back up and update: the splash says so instead of looking stuck. */
+/** Whether the server is backing up, migrating or compacting the database right now. */
+let startupPreparing = false;
+
+/**
+ * A large database takes minutes to back up and update: the splash says so
+ * instead of looking stuck. A splash that opens or finishes loading while
+ * the preparation runs gets the notice then (see createSplash).
+ */
 function showSplashPreparing() {
-  if (!splashWindow || splashWindow.isDestroyed()) return;
+  if (!splashWindow || splashWindow.isDestroyed() || splashWindow.webContents.isLoading()) return;
   try {
     const { startupPreparingCopy } = require(path.join(appRoot, 'build/desktop-messages/index.cjs'));
     const copy = startupPreparingCopy(menuLocale);
@@ -694,14 +702,13 @@ async function startServer(port) {
 
   // The database step the server is in (backup, migration, compaction), so a slow preparation is not taken for a hang.
   const startup = createStartupWatcher();
-  let toldSplash = false;
   serverProcess.stdout.on('data', (chunk) => {
     const text = String(chunk);
     process.stdout.write(`[server] ${text}`);
     const lines = startup.feed(text);
-    if (startup.preparing() && !toldSplash) {
-      toldSplash = true;
-      showSplashPreparing();
+    if (startup.preparing() !== startupPreparing) {
+      startupPreparing = startup.preparing();
+      if (startupPreparing) showSplashPreparing();
     }
     for (const line of lines) {
       const structuredMatch = line.match(/\[orkestrai:notify\] (\{.+\})/);
@@ -1440,9 +1447,9 @@ async function recoverStartup(error) {
       onError: (failure) => console.error('Startup recovery action failed:', failure),
       retry: async () => {
         try {
+          createSplash();
           await ensureServer();
           await refreshCorePreferences();
-          createSplash();
           await createWindow();
         } catch (failure) {
           await stopServer();
@@ -1530,11 +1537,14 @@ if (!gotLock) {
     // migrations, or a working renderer.
     void setupAutoUpdater().catch((error) => sendUpdate(updateErrorPayload(error)));
     const initialInvite = findCollaborationInvite(process.argv);
+    const loginLaunch = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
+    // An interactive launch shows the splash before waiting for the server, so a long database
+    // preparation is announced on screen instead of leaving the owner with nothing.
+    if (isInteractiveLaunch({ backgroundLaunch: isBackgroundCoreLaunch(process.argv), loginLaunch, invite: initialInvite })) createSplash();
     await ensureServer();
     await refreshCorePreferences();
     // The strip floats on its own: it comes back at launch even when the app starts in the background.
     if (adventurePreferred) adventureWindow.open();
-    const loginLaunch = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
     const hiddenCoreLaunch = (isBackgroundCoreLaunch(process.argv) || loginLaunch) && corePreferences.runInBackground && !initialInvite;
     if (hiddenCoreLaunch) {
       if (process.platform === 'darwin') app.dock.hide();

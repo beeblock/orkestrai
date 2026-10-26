@@ -40,6 +40,7 @@ pt-BR, English, and Spanish translations.
 - Bind Adventure actions taken through the bridge to the live terminal that makes the call: the session's agent token decides who acts and whether it leads, a declared `from` that is someone else is refused, and the hero-scope check runs inside the same transaction as the action.
 - Pay Adventure battle fought while the server was away before the first report ever reached it: the battle clock of a new Adventure starts when the Adventure began (bounded by the longest paid absence) instead of ten minutes before the report, so queued reports from that first gap are paid in full.
 - Make Listen in Settings → Adventure play with the mixer on screen (saved or being edited) instead of the window's previous defaults, so channels saved as on are heard on the first try; and keep the soundtrack in time after the page falls behind the audio clock by skipping the beats already past instead of scheduling all of them at once.
+- Show the splash before the desktop app waits for its server on an interactive launch (and before a recovery retry), so a long database preparation is announced on screen; the preparing notice is kept and applied whenever the splash finishes loading. Background and login launches still open no window until the owner's preference is known.
 
 ## 0.45.0 - 2026-10-24
 

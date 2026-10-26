@@ -91,4 +91,13 @@ async function showStartupRecovery({ dialog, copy, retry, openDownload, openLogs
   return false;
 }
 
-module.exports = { waitForInternalServer, parseStartupPhase, createStartupWatcher, showStartupRecovery };
+/**
+ * Whether a launch shows windows from the start: anything but a background
+ * or login launch (those may stay hidden, which the owner's preference only
+ * tells once the server answers). An invitation link always shows.
+ */
+function isInteractiveLaunch({ backgroundLaunch, loginLaunch, invite }) {
+  return Boolean(invite) || (!backgroundLaunch && !loginLaunch);
+}
+
+module.exports = { waitForInternalServer, parseStartupPhase, createStartupWatcher, isInteractiveLaunch, showStartupRecovery };
