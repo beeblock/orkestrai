@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { newAccount } from '$lib/modules/agent-room/domain/adventure/account.js';
-import { buildHeroes, deployHeroes, visualTier } from '$lib/modules/agent-room/domain/adventure/build.js';
+import type { HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
+import { newAccount, newHero } from '$lib/modules/agent-room/domain/adventure/account.js';
+import { buildHeroes, deployHeroes, outfitProgress, visualTier } from '$lib/modules/agent-room/domain/adventure/build.js';
 import { craft, synthesisRarity } from '$lib/modules/agent-room/domain/adventure/cube.js';
 import { SETS, SET_PIECES, UNIQUES, elixirStats, setBonuses, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import {
-  AdventureError, applyReport, autoOpenChests, buyRune, craftItem, settleLoot, updateSettings, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
+  AdventureError, applyReport, autoOpenChests, balanceGuild, buyRune, craftItem, settleLoot, updateSettings, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
   synthesizeItems, bindRoster, heroOfAgent, setHeroClass, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
 } from '$lib/modules/agent-room/domain/adventure/engine.js';
 import {
   RARITIES, RARITY_RULES, canEquip, gemQualityFor, itemBaseKey, itemIcon, itemStats, materialKey, materialStats, parseMaterialKey, rollItem,
-  type Item, type Rarity,
+  type Item, type Rarity, type Slot,
 } from '$lib/modules/agent-room/domain/adventure/items.js';
 import { openChest, rollRarity, rollUnique } from '$lib/modules/agent-room/domain/adventure/loot.js';
 import { canBuyRune, formationSlots } from '$lib/modules/agent-room/domain/adventure/runes.js';
@@ -587,5 +588,55 @@ describe('adventure automation', () => {
     expect(openChest(seeded(10), { ...base, tier: 'white' }).items).toHaveLength(1);
     expect(openChest(seeded(10), { ...base, tier: 'white', bonusItems: 1 }).items).toHaveLength(2);
     expect(openChest(seeded(10), { ...base, tier: 'blue', bonusItems: 1 }).items).toHaveLength(3);
+  });
+});
+
+describe('adventure outfits', () => {
+  it('tells how far a hero is from its next outfit and which pieces hold it back', () => {
+    const ctx = context(31);
+    const wear = (slot: Slot, rarity: Rarity): Item => ({ ...rollItem(seeded(slot.length), { level: 10, rarity, slot }), id: slot, location: 'equipped', heroId: 'h', locked: false, createdAt: ctx.now });
+    expect(outfitProgress([])).toMatchObject({ tier: 1, next: 2, average: 0, progress: 0, weakest: ['weapon', 'helmet', 'shoulders'] });
+    const half = [wear('weapon', 'rare'), wear('helmet', 'rare'), wear('armor', 'epic'), wear('legs', 'uncommon')];
+    const progress = outfitProgress(half);
+    expect(progress.tier).toBe(1);
+    expect(progress.progress).toBeCloseTo((2 + 2 + 3 + 1) / 7 / 1.5);
+    expect(progress.weakest).toEqual(['shoulders', 'gloves', 'boots']);
+    const adept = [...half, wear('shoulders', 'rare'), wear('gloves', 'rare'), wear('boots', 'rare')];
+    expect(outfitProgress(adept)).toMatchObject({ tier: 2, next: 3 });
+    expect(visualTier(adept)).toBe(2);
+  });
+});
+
+describe('adventure guild classes', () => {
+  const team = (roles: string[]): RosterEntry[] => [
+    { nodeId: 'lead', title: 'Lead', role: 'Tech lead', leader: true, working: true },
+    ...roles.map((role, index) => ({ nodeId: `agent-${index}`, title: `Agent ${index}`, role, leader: false, working: true })),
+  ];
+
+  it('recruits the class the guild lacks once it has two of the one a role suggests', () => {
+    const ctx = context(41, team(['Backend', 'API', 'Infra', 'Database']));
+    const save = freshSave(ctx);
+    const classes = ['agent-0', 'agent-1', 'agent-2', 'agent-3'].map((nodeId) => hero(save, nodeId).classId);
+    expect(classes).toEqual(['knight', 'knight', 'cleric', 'ranger']);
+    // Chosen on purpose, so the camp shows it instead of "by role".
+    expect(hero(save, 'agent-2').chosenClass).toBe('cleric');
+    expect(hero(save, 'agent-0').chosenClass).toBeNull();
+  });
+
+  it('balances a crowded guild on request, healer first, keeping the Maestro', () => {
+    const ctx = context(42, team(['Backend', 'Frontend', 'QA']));
+    const save = freshSave(ctx);
+    // Five knights, three sorceresses and a ranger, like a guild made before balancing.
+    const extra: Array<[string, HeroClassId, number]> = [['k1', 'knight', 9], ['k2', 'knight', 3], ['k3', 'knight', 12], ['k4', 'knight', 5], ['s1', 'sorceress', 4], ['s2', 'sorceress', 6]];
+    for (const [id, classId, level] of extra) save.heroes[id] = { ...newHero(id, id, classId), level };
+    const changes = balanceGuild(save, ctx);
+    expect(changes.map((change) => change.to)).toEqual(['cleric', 'artificer']);
+    expect(changes.every((change) => change.from === 'knight')).toBe(true);
+    // The lowest-level knights change: the new recruit, then k2.
+    expect(hero(save, 'agent-0').classId).toBe('cleric');
+    expect(save.heroes.k2.classId).toBe('artificer');
+    expect(Object.keys(hero(save, 'agent-0').skills).every((skillId) => skillId.startsWith('cleric.'))).toBe(true);
+    expect(hero(save, 'lead').classId).toBe('maestro');
+    expect(balanceGuild(save, ctx)).toEqual([]);
   });
 });

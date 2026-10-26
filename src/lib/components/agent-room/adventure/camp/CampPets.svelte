@@ -19,25 +19,26 @@
 </script>
 
 <div class="pets">
-  <p class="intro">{m['adventure.camp_pets_intro']()}</p>
+  <p class="intro camp-soft">{m['adventure.camp_pets_intro']()}</p>
   <div class="grid">
     {#each PETS as pet (pet.id)}
       {@const kills = snapshot.account.killsByMonster[pet.monster] ?? 0}
       {@const tamed = snapshot.tamedPets.includes(pet.id)}
       {@const active = snapshot.account.activePet === pet.id}
-      <article class="pet" class:tamed class:active>
-        <div class="art" class:shadow={!tamed}>
-          <SpriteView atlasId={pet.sprite.atlas} frames={Array.from({ length: 6 }, (_, index) => pet.sprite.row * 6 + index)} width={92} height={70} />
+      {@const share = Math.min(100, (kills / pet.kills) * 100)}
+      <article class="pet camp-panel" class:tamed class:active class:ornate={active}>
+        <div class="den camp-well" class:shadow={!tamed}>
+          <SpriteView atlasId={pet.sprite.atlas} frames={Array.from({ length: 6 }, (_, index) => pet.sprite.row * 6 + index)} width={110} height={84} />
+          {#if !tamed}<span class="mystery" aria-hidden="true">?</span>{/if}
         </div>
         <div class="text">
-          <b>{tamed ? catalog.pets[pet.id] : '???'}</b>
+          <b class:unknown={!tamed}>{tamed ? catalog.pets[pet.id] : '???'}</b>
           <span class="bonus">{statLines(catalog, pet.stats).join(' · ')}</span>
-          <span class="progress" title={m['adventure.camp_pet_progress']({ monster: monsterName(pet.monster), kills: formatNumber(kills), needed: formatNumber(pet.kills) })}>
-            <span style:width={`${Math.min(100, (kills / pet.kills) * 100)}%`}></span>
-          </span>
-          <small>{m['adventure.camp_pet_progress']({ monster: monsterName(pet.monster), kills: formatNumber(Math.min(kills, pet.kills)), needed: formatNumber(pet.kills) })}</small>
-          {#if tamed}
-            <Button size="sm" variant={active ? 'default' : 'outline'} disabled={busy} onclick={() => void act({ type: 'pet', petId: active ? null : pet.id })}>
+          {#if !tamed}
+            <span class="camp-bar" role="progressbar" aria-label={m['adventure.camp_pet_progress']({ monster: monsterName(pet.monster), kills: formatNumber(kills), needed: formatNumber(pet.kills) })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share)}><span style:width={`${share}%`}></span></span>
+            <small class="camp-muted">{m['adventure.camp_pet_progress']({ monster: monsterName(pet.monster), kills: formatNumber(Math.min(kills, pet.kills)), needed: formatNumber(pet.kills) })}</small>
+          {:else}
+            <Button size="sm" class={active ? 'camp-gold-button w-fit' : 'w-fit'} variant={active ? 'default' : 'outline'} disabled={busy} onclick={() => void act({ type: 'pet', petId: active ? null : pet.id })}>
               {active ? m['adventure.camp_pet_following']() : m['adventure.camp_pet_follow']()}
             </Button>
           {/if}
@@ -50,81 +51,89 @@
 <style>
   .pets {
     display: grid;
-    gap: 12px;
+    gap: 14px;
   }
 
   .intro {
     margin: 0;
-    color: var(--app-text-soft);
     font-size: 12.5px;
   }
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
   }
 
   .pet {
-    display: flex;
-    gap: 12px;
-    padding: 10px;
-    border-radius: 10px;
-    background: var(--app-surface);
-    box-shadow: inset 0 0 0 1px var(--app-border);
+    display: grid;
+    grid-template-columns: 124px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 12px;
   }
 
   .pet.active {
-    box-shadow: inset 0 0 0 1px var(--app-accent);
+    box-shadow: inset 0 0 0 1px var(--camp-gold), 0 0 22px -8px var(--camp-gold), var(--camp-shadow);
   }
 
-  .art {
+  /* The pet's den: a lit hollow; untamed pets are a silhouette with a question mark. */
+  .den {
+    position: relative;
     display: grid;
     place-items: end center;
-    border-radius: 8px;
-    background: radial-gradient(circle at 50% 80%, var(--app-surface-raised), transparent 75%);
+    width: 124px;
+    height: 96px;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse 60% 18% at 50% 92%, rgba(0, 0, 0, 0.35), transparent 70%),
+      radial-gradient(circle at 50% 45%, var(--camp-raised), var(--camp-inset) 78%);
   }
 
-  .art.shadow {
-    filter: brightness(0) opacity(0.45);
+  .pet.tamed .den {
+    background:
+      radial-gradient(ellipse 60% 18% at 50% 92%, rgba(0, 0, 0, 0.3), transparent 70%),
+      radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--camp-gold) 16%, var(--camp-raised)), var(--camp-inset) 78%);
+  }
+
+  .den.shadow :global(canvas) {
+    filter: brightness(0) opacity(0.55);
+  }
+
+  .mystery {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--camp-gold);
+    font-family: var(--camp-title-font);
+    font-size: 20px;
+    font-weight: 800;
   }
 
   .text {
     display: grid;
-    align-content: start;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
   }
 
-  b {
-    font-size: 13px;
+  .text b {
+    font-family: var(--camp-title-font);
+    font-size: 15px;
+    letter-spacing: 0.03em;
+    color: var(--camp-gold-strong);
+  }
+
+  .text b.unknown {
+    color: var(--camp-ink-muted);
   }
 
   .bonus {
-    color: var(--app-success);
+    color: var(--adventure-ink-uncommon);
     font-size: 12px;
+    font-weight: 600;
   }
 
-  .progress {
-    position: relative;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--app-hover);
-    overflow: hidden;
-  }
-
-  .progress > span {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: var(--app-accent);
-  }
-
-  small {
-    color: var(--app-text-muted);
+  .text small {
     font-size: 11.5px;
-  }
-
-  .text :global(button) {
-    width: fit-content;
   }
 </style>

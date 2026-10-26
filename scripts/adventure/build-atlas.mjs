@@ -280,7 +280,8 @@ async function buildSheet(entry) {
   const source = pixels(await loadImage(master(entry.folder, entry.prefix)));
   let owner, frameCount;
   if (entry.mode === 'props') ({ owner, count: frameCount } = propOwners(source));
-  else { owner = owners(source, entry.rows, entry.cols); frameCount = entry.rows * entry.cols; }
+  // `count`: a grid whose last cells are left empty on purpose.
+  else { owner = owners(source, entry.rows, entry.cols); frameCount = entry.count ?? entry.rows * entry.cols; }
   const boxes = Array.from({ length: frameCount }, (_, frame) => frameBox(source, owner, frame));
   const heights = (entry.mode === 'props' ? boxes.map((_, index) => index) : entry.scaleFrames ?? [0, 1, 2, 3, 4, 5])
     .map((index) => boxes[index]).filter(Boolean).map((box) => box.bottom - box.top + 1).sort((a, b) => a - b);

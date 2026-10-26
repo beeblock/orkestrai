@@ -61,6 +61,7 @@ export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('auto-gear'), heroId: id, enabled: z.boolean() }),
   z.object({ type: z.literal('set-actives'), heroId: id, actives: z.array(z.string().min(1).max(80)).max(4) }),
   z.object({ type: z.literal('set-class'), heroId: id, classId: z.enum(tuple<HeroClassId>(TEAMMATE_CLASS_IDS)).nullable() }),
+  z.object({ type: z.literal('balance-guild') }),
   z.object({ type: z.literal('travel'), difficulty, act, stage }),
   z.object({ type: z.literal('settings'), settings: z.object({ autoAdvance: z.boolean().optional(), autoRetry: z.boolean().optional(), autoOpen: z.boolean().optional(), autoSalvage: z.enum(tuple<SalvageLevel>(SALVAGE_LEVELS)).optional() }) }),
   // Hero ids pinned to the formation, in order.

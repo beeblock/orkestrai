@@ -56,6 +56,9 @@
   const target = $derived(able.find((hero) => hero.id === equipTo) ?? able[0] ?? null);
   const worn = $derived(focus && target ? snapshot.items.find((item) => item.location === 'equipped' && item.heroId === target.id && item.slot === focus.slot) ?? null : null);
   const pickedGold = $derived(snapshot.items.filter((item) => picked.includes(item.id)).reduce((sum, item) => sum + itemGoldValue(item, runeRule(snapshot.account.runes, 'alchemy')), 0));
+  // The bag shows every slot it has: the empty ones wait as wells (filters show only matches).
+  const capacity = $derived(place === 'inventory' ? snapshot.limits.inventory : snapshot.limits.stash);
+  const emptyWells = $derived(slotFilter || rarityFilter ? 0 : Math.max(0, Math.min(capacity, 120) - items.length));
   const junk = $derived(snapshot.items.filter((item) => item.location === 'inventory' && !item.locked && rarityIndex(item.rarity) <= 1));
   /** Materials in the bag, gems by cut, in catalog order. */
   const materials = $derived(Object.entries(snapshot.account.materials)
@@ -100,70 +103,52 @@
 </script>
 
 <div class="inventory">
-  <section class="automation" aria-label={m['adventure.camp_automation']()}>
-    <label class="toggle">
-      <Switch checked={snapshot.account.settings.autoOpen} disabled={busy} onCheckedChange={(value: boolean) => void act({ type: 'settings', settings: { autoOpen: value } })} aria-label={m['adventure.camp_auto_open']()} data-testid="camp-auto-open" />
-      <span><b>{m['adventure.camp_auto_open']()}</b><small>{m['adventure.camp_auto_open_hint']()}</small></span>
-    </label>
-    <div class="toggle">
-      <NativeSelect.Root size="sm" class="w-auto min-w-[170px] shrink-0" value={snapshot.account.settings.autoSalvage ?? 'off'} disabled={busy} onchange={(event: Event) => void act({ type: 'settings', settings: { autoSalvage: (event.currentTarget as HTMLSelectElement).value as SalvageLevel } })} aria-label={m['adventure.camp_auto_salvage']()} data-testid="camp-auto-salvage">
-        {#each SALVAGE_LEVELS as level (level)}
-          <NativeSelect.Option value={level}>{level === 'off' ? m['adventure.camp_salvage_off']() : m['adventure.camp_salvage_up_to']({ rarity: catalog.rarities[level] })}</NativeSelect.Option>
-        {/each}
-      </NativeSelect.Root>
-      <span><b>{m['adventure.camp_auto_salvage']()}</b><small>{m['adventure.camp_auto_salvage_hint']()}</small></span>
+  <section class="automation camp-panel" aria-label={m['adventure.camp_automation']()}>
+    <h3 class="camp-heading">{m['adventure.camp_automation']()}</h3>
+    <div class="orders">
+      <label class="toggle">
+        <Switch checked={snapshot.account.settings.autoOpen} disabled={busy} onCheckedChange={(value: boolean) => void act({ type: 'settings', settings: { autoOpen: value } })} aria-label={m['adventure.camp_auto_open']()} data-testid="camp-auto-open" />
+        <span><b>{m['adventure.camp_auto_open']()}</b><small>{m['adventure.camp_auto_open_hint']()}</small></span>
+      </label>
+      <div class="toggle">
+        <NativeSelect.Root size="sm" class="w-auto min-w-[170px] shrink-0" value={snapshot.account.settings.autoSalvage ?? 'off'} disabled={busy} onchange={(event: Event) => void act({ type: 'settings', settings: { autoSalvage: (event.currentTarget as HTMLSelectElement).value as SalvageLevel } })} aria-label={m['adventure.camp_auto_salvage']()} data-testid="camp-auto-salvage">
+          {#each SALVAGE_LEVELS as level (level)}
+            <NativeSelect.Option value={level}>{level === 'off' ? m['adventure.camp_salvage_off']() : m['adventure.camp_salvage_up_to']({ rarity: catalog.rarities[level] })}</NativeSelect.Option>
+          {/each}
+        </NativeSelect.Root>
+        <span><b>{m['adventure.camp_auto_salvage']()}</b><small>{m['adventure.camp_auto_salvage_hint']()}</small></span>
+      </div>
     </div>
   </section>
 
-  <section class="chests" aria-label={m['adventure.camp_chests']()}>
+  <section class="treasure" aria-label={m['adventure.camp_chests']()}>
     {#each CHEST_TIERS as tier (tier)}
-      <div class="chest" class:none={!chestsByTier[tier]}>
-        <ItemIcon atlasId="icons-misc" frame={CHEST_FRAME[tier]} size={34} dim={!chestsByTier[tier]} />
-        <span class="label"><b>{catalog.chests[tier]}</b><span>{chestsByTier[tier]}</span></span>
-        <Button size="sm" variant={chestsByTier[tier] ? 'default' : 'ghost'} disabled={busy || !chestsByTier[tier]} onclick={() => void openChests(tier)} data-testid={`camp-open-${tier}`}>
+      <div class={`chest camp-panel tier-${tier}`} class:none={!chestsByTier[tier]}>
+        <span class="chest-art"><ItemIcon atlasId="icons-misc" frame={CHEST_FRAME[tier]} size={52} dim={!chestsByTier[tier]} />{#if chestsByTier[tier]}<span class="count">{chestsByTier[tier]}</span>{/if}</span>
+        <b>{catalog.chests[tier]}</b>
+        <Button size="sm" class={chestsByTier[tier] ? 'camp-gold-button' : ''} variant={chestsByTier[tier] ? 'default' : 'ghost'} disabled={busy || !chestsByTier[tier]} onclick={() => void openChests(tier)} data-testid={`camp-open-${tier}`}>
           <PackageOpen size={14} aria-hidden="true" />{m['adventure.camp_open']()}
         </Button>
       </div>
     {/each}
-    <div class="wallet">
-      <span title={m['adventure.camp_soulstones']()}><ItemIcon atlasId="icons-misc" frame={4} size={22} />{#each DIFFICULTIES as difficulty (difficulty)}{#if snapshot.account.soulstones[difficulty]}<small>{catalog.difficulties[difficulty]} {snapshot.account.soulstones[difficulty]}</small>{/if}{/each}{#if !Object.values(snapshot.account.soulstones).some(Boolean)}<small>0</small>{/if}</span>
-      <span title={m['adventure.camp_coins']()}><ItemIcon atlasId="icons-misc" frame={5} size={22} /><small>{snapshot.account.coins}</small></span>
+    <div class="purse camp-panel">
+      <span class="coin" title={m['adventure.camp_soulstones']()}><ItemIcon atlasId="icons-misc" frame={4} size={26} />{#each DIFFICULTIES as difficulty (difficulty)}{#if snapshot.account.soulstones[difficulty]}<small>{catalog.difficulties[difficulty]} {snapshot.account.soulstones[difficulty]}</small>{/if}{/each}{#if !Object.values(snapshot.account.soulstones).some(Boolean)}<small>0</small>{/if}</span>
+      <span class="coin" title={m['adventure.camp_coins']()}><ItemIcon atlasId="icons-misc" frame={5} size={26} /><small>{snapshot.account.coins}</small></span>
       {#each materials as entry (entry.key)}
         {@const icon = materialIcon(entry.parsed.material, entry.parsed.quality)}
-        <span title={materialName(catalog, entry.parsed.material, entry.parsed.quality)}><ItemIcon atlasId={icon.atlas} frame={icon.frame} size={22} /><small>{entry.count}</small></span>
-      {/each}
-    </div>
-  </section>
-
-  <section class="elixirs" aria-label={m['adventure.camp_elixirs']()}>
-    <header><b>{m['adventure.camp_elixirs']()}</b><small>{m['adventure.camp_elixirs_hint']()}</small></header>
-    <div class="elixir-list">
-      {#each ELIXIR_IDS as elixirId (elixirId)}
-        {@const count = snapshot.account.elixirs?.[elixirId] ?? 0}
-        {@const left = minutesLeft(elixirId)}
-        <div class="elixir" class:active={left > 0}>
-          <ItemIcon atlasId={ELIXIR_ATLAS} frame={ELIXIRS[elixirId].frame} size={32} dim={!count && !left} />
-          <span class="label">
-            <b>{catalog.elixirs[elixirId]}</b>
-            <span>{statLines(catalog, ELIXIRS[elixirId].stats).join(', ')}</span>
-            {#if left > 0}<span class="left">{m['adventure.camp_elixir_left']({ minutes: left })}</span>{/if}
-          </span>
-          <Button size="sm" variant={count ? 'default' : 'ghost'} disabled={busy || !count} onclick={() => void act({ type: 'drink', elixirId })} data-testid={`camp-drink-${elixirId}`}>
-            {m['adventure.camp_drink']()} · {count}
-          </Button>
-        </div>
+        <span class="coin" title={materialName(catalog, entry.parsed.material, entry.parsed.quality)}><ItemIcon atlasId={icon.atlas} frame={icon.frame} size={26} /><small>{entry.count}</small></span>
       {/each}
     </div>
   </section>
 
   {#if revealed.length}
-    <section class="reveal" aria-live="polite">
-      <header><b>{m['adventure.camp_found']({ count: revealed.length })}</b><Button size="sm" variant="ghost" onclick={() => (revealed = [])}>{m['adventure.camp_close']()}</Button></header>
-      <div class="grid">
-        {#each revealed as item (item.id)}
+    <section class="reveal camp-panel ornate" aria-live="polite">
+      <header><h3 class="camp-heading plain">{m['adventure.camp_found']({ count: revealed.length })}</h3><Button size="sm" variant="ghost" onclick={() => (revealed = [])}>{m['adventure.camp_close']()}</Button></header>
+      <div class="found-grid">
+        {#each revealed as item, index (item.id)}
           {@const outcome = fate[item.id]}
-          <div class="found" class:salvaged={outcome?.salvaged}>
-            <ItemSlot {item} {catalog} onclick={() => { if (outcome?.salvaged) return; focused = item.id; revealed = []; }} />
+          <div class="found" class:salvaged={outcome?.salvaged} style:--delay={`${Math.min(index, 12) * 45}ms`}>
+            <ItemSlot {item} {catalog} size={56} onclick={() => { if (outcome?.salvaged) return; focused = item.id; revealed = []; }} />
             {#if outcome?.heroId}<small>{m['adventure.camp_put_on_by']({ hero: heroNames[outcome.heroId] ?? '—' })}</small>
             {:else if outcome?.salvaged}<small>{m['adventure.camp_salvaged']()}</small>{/if}
           </div>
@@ -172,8 +157,27 @@
     </section>
   {/if}
 
+  <section class="shelf camp-panel" aria-label={m['adventure.camp_elixirs']()}>
+    <header><h3 class="camp-heading plain">{m['adventure.camp_elixirs']()}</h3><small class="camp-muted">{m['adventure.camp_elixirs_hint']()}</small></header>
+    <div class="potions">
+      {#each ELIXIR_IDS as elixirId (elixirId)}
+        {@const count = snapshot.account.elixirs?.[elixirId] ?? 0}
+        {@const left = minutesLeft(elixirId)}
+        <div class="potion" class:active={left > 0} class:empty={!count && !left}>
+          <span class="flask camp-well"><ItemIcon atlasId={ELIXIR_ATLAS} frame={ELIXIRS[elixirId].frame} size={40} dim={!count && !left} />{#if count}<span class="count stock">{count}</span>{/if}</span>
+          <span class="label">
+            <b>{catalog.elixirs[elixirId]}</b>
+            <span>{statLines(catalog, ELIXIRS[elixirId].stats).join(', ')}</span>
+            {#if left > 0}<span class="left">{m['adventure.camp_elixir_left']({ minutes: left })}</span>{/if}
+          </span>
+          <Button size="sm" variant={count ? 'outline' : 'ghost'} disabled={busy || !count} onclick={() => void act({ type: 'drink', elixirId })} data-testid={`camp-drink-${elixirId}`}>{m['adventure.camp_drink']()}</Button>
+        </div>
+      {/each}
+    </div>
+  </section>
+
   <div class="body">
-    <section class="bag">
+    <section class="bag camp-panel">
       <header class="toolbar">
         <SegmentedControl
           label={m['adventure.camp_place']()}
@@ -199,19 +203,19 @@
           <Button size="sm" variant="ghost" disabled={busy} onclick={() => void salvage(junk.map((item) => item.id))}><Trash2 size={14} aria-hidden="true" />{m['adventure.camp_salvage_junk']({ count: junk.length })}</Button>
         {/if}
       </header>
-      {#if items.length}
+      {#if items.length || emptyWells}
         <div class="grid" role="list">
           {#each items as item (item.id)}
-            <div role="listitem"><ItemSlot {item} {catalog} locked={item.locked} selected={picking ? picked.includes(item.id) : focused === item.id} onclick={() => choose(item)} /></div>
+            <div role="listitem"><ItemSlot {item} {catalog} locked={item.locked} size={54} selected={picking ? picked.includes(item.id) : focused === item.id} onclick={() => choose(item)} /></div>
           {/each}
+          {#each Array.from({ length: emptyWells }, (_, index) => index) as well (well)}<span class="well camp-well" aria-hidden="true"></span>{/each}
         </div>
       {:else}
-        <p class="empty">{place === 'inventory' ? m['adventure.camp_bag_empty']() : m['adventure.camp_stash_empty']()}</p>
+        <p class="empty camp-muted">{place === 'inventory' ? m['adventure.camp_bag_empty']() : m['adventure.camp_stash_empty']()}</p>
       {/if}
     </section>
-
     {#if focus && !picking}
-      <aside class="focus" aria-label={itemName(catalog, focus)} style:--rarity={RARITY_RULES[focus.rarity].color}>
+      <aside class="focus camp-panel ornate" aria-label={itemName(catalog, focus)} style:--rarity={RARITY_RULES[focus.rarity].color}>
         <ItemDetails item={focus} {catalog} compare={worn} heroLevel={target?.level ?? null} wornSets={(target?.build.sets ?? {}) as Partial<Record<SetId, number>>} />
         {#if able.length}
           <div class="equip">
@@ -242,68 +246,19 @@
 <style>
   .inventory {
     display: grid;
-    gap: 14px;
-  }
-
-  .chests {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 18px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: var(--app-surface);
-    box-shadow: inset 0 0 0 1px var(--app-border);
-  }
-
-  .chest {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .chest .label {
-    display: grid;
-    font-size: 12px;
-  }
-
-  .chest .label span {
-    color: var(--app-text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .chest.none .label b {
-    color: var(--app-text-muted);
-    font-weight: 500;
-  }
-
-  .wallet {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 12px;
-    margin-left: auto;
-  }
-
-  .wallet > span {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-  }
-
-  .wallet small {
-    color: var(--app-text-soft);
-    font-size: 11.5px;
-    font-variant-numeric: tabular-nums;
+    gap: 16px;
   }
 
   .automation {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 10px 24px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: var(--app-surface);
-    box-shadow: inset 0 0 0 1px var(--app-border);
+    gap: 10px;
+    padding: 12px 16px 14px;
+  }
+
+  .orders {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px 28px;
   }
 
   .toggle {
@@ -318,40 +273,110 @@
 
   .toggle span {
     display: grid;
-    gap: 1px;
+    gap: 2px;
     font-size: 12.5px;
   }
 
   .toggle small {
-    color: var(--app-text-muted);
+    color: var(--camp-ink-muted);
     font-size: 11.5px;
+    line-height: 1.4;
   }
 
-  .found {
+  /* Chests as treasure: the bigger the haul, the brighter the card. */
+  .treasure {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(130px, 1fr)) minmax(220px, 1.4fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 1100px) {
+    .treasure { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Stock on hand (potions) reads as a tally, not an alert. */
+  .count.stock {
+    background: linear-gradient(180deg, #f2cd72, #d39a32);
+    color: #2a1a05;
+  }
+
+  .purse { grid-column: 1 / -1; }
+  }
+
+  .chest {
     display: grid;
     justify-items: center;
-    gap: 3px;
-    max-width: 96px;
-  }
-
-  .found small {
-    color: var(--app-text-muted);
-    font-size: 11px;
+    gap: 6px;
+    padding: 12px 10px;
     text-align: center;
   }
 
-  .found.salvaged :global(button) {
-    opacity: 0.45;
+  .chest b {
+    font-size: 12.5px;
+  }
+
+  .chest.none b {
+    color: var(--camp-ink-muted);
+    font-weight: 500;
+  }
+
+  .chest:not(.none) {
+    box-shadow: inset 0 0 0 1px var(--camp-edge-strong), 0 0 18px -8px var(--camp-gold), var(--camp-shadow);
+  }
+
+  .chest-art {
+    position: relative;
+    display: grid;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+  }
+
+  .chest:not(.none) .chest-art {
+    animation: bob 3s ease-in-out infinite;
+  }
+
+  @keyframes bob {
+    50% { transform: translateY(-3px); }
+  }
+
+  .count {
+    position: absolute;
+    right: -6px;
+    top: -4px;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #c4372b;
+    box-shadow: 0 0 0 2px var(--camp-panel);
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+  }
+
+  .purse {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    gap: 6px 14px;
+    padding: 10px 14px;
+  }
+
+  .coin {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .coin small {
+    color: var(--camp-ink-soft);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
 
   .reveal {
     display: grid;
-    gap: 8px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 40%, transparent);
-    animation: reveal-in 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    gap: 10px;
+    padding: 12px 16px 14px;
+    box-shadow: inset 0 0 0 1px var(--camp-gold), 0 0 26px -10px var(--camp-gold), var(--camp-shadow);
   }
 
   .reveal header {
@@ -360,12 +385,108 @@
     justify-content: space-between;
   }
 
-  @keyframes reveal-in {
-    from { opacity: 0; transform: translateY(6px); }
+  .found-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .reveal { animation: none; }
+  .found {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    max-width: 96px;
+    animation: found-in 360ms cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+    animation-delay: var(--delay, 0ms);
+  }
+
+  @keyframes found-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.85); }
+  }
+
+  .found small {
+    color: var(--camp-ink-muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .found.salvaged :global(button) {
+    opacity: 0.45;
+  }
+
+  /* The elixir shelf. */
+  .shelf {
+    display: grid;
+    gap: 10px;
+    padding: 12px 16px 14px;
+  }
+
+  .shelf header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 14px;
+  }
+
+  .shelf header small {
+    font-size: 11.5px;
+  }
+
+  .potions {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 8px;
+  }
+
+  .potion {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+
+  .potion.active {
+    background: color-mix(in srgb, var(--camp-teal) 8%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--camp-teal) 45%, transparent);
+  }
+
+  .flask {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+  }
+
+  .potion.active .flask {
+    box-shadow: inset 0 0 0 1px var(--camp-teal), 0 0 14px -4px var(--camp-teal);
+  }
+
+  .potion .label {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    font-size: 11.5px;
+  }
+
+  .potion .label b {
+    font-size: 12.5px;
+  }
+
+  .potion .label span {
+    color: var(--camp-ink-muted);
+  }
+
+  .potion .label .left {
+    color: var(--camp-teal);
+    font-weight: 600;
+  }
+
+  .potion.empty .label b {
+    color: var(--camp-ink-muted);
+    font-weight: 500;
   }
 
   .body {
@@ -375,9 +496,14 @@
     align-items: start;
   }
 
+  @media (max-width: 980px) {
+    .body { grid-template-columns: 1fr; }
+  }
+
   .bag {
     display: grid;
-    gap: 10px;
+    gap: 12px;
+    padding: 12px 16px 16px;
     min-width: 0;
   }
 
@@ -388,29 +514,35 @@
     gap: 8px;
   }
 
+  /* The bag's slots: items first, then the empty wells it still has. */
   .grid {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 54px);
     gap: 6px;
+  }
+
+  .well {
+    width: 54px;
+    height: 54px;
+    opacity: 0.55;
   }
 
   .empty,
   .hint {
     margin: 0;
-    color: var(--app-text-muted);
-    font-size: 12px;
+    font-size: 12.5px;
   }
 
   .focus {
-    position: sticky;
-    top: 12px;
     display: grid;
     gap: 10px;
-    width: 280px;
-    padding: 12px;
-    border-radius: 10px;
-    background: var(--app-surface);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity) 45%, var(--app-border));
+    width: 320px;
+    padding: 14px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity) 60%, var(--camp-edge)), 0 0 22px -10px var(--rarity), var(--camp-shadow);
+  }
+
+  @media (max-width: 980px) {
+    .focus { width: auto; }
   }
 
   .equip,
@@ -420,56 +552,7 @@
     gap: 6px;
   }
 
-  .elixirs {
-    display: grid;
-    gap: 8px;
-  }
-
-  .elixirs header {
-    display: flex;
-    gap: 10px;
-    align-items: baseline;
-    flex-wrap: wrap;
-  }
-
-  .elixirs header small {
-    color: var(--app-text-muted);
-    font-size: 11.5px;
-  }
-
-  .elixir-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 8px;
-  }
-
-  .elixir {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    padding: 6px 8px;
-    border-radius: 8px;
-    background: var(--app-surface-subtle);
-  }
-
-  .elixir.active {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 55%, transparent);
-  }
-
-  .elixir .label {
-    display: grid;
-    flex: 1;
-    min-width: 0;
-    font-size: 11.5px;
-    color: var(--app-text-muted);
-  }
-
-  .elixir .label b {
-    color: var(--app-text);
-    font-size: 12px;
-  }
-
-  .elixir .left {
-    color: var(--app-accent);
+  @media (prefers-reduced-motion: reduce) {
+    .chest:not(.none) .chest-art, .found { animation: none; }
   }
 </style>

@@ -131,6 +131,54 @@ function tidyHero(save: AdventureSave, hero: AdventureHero): void {
   }
 }
 
+/** Teammate classes in the order a guild misses them most: the healer first. */
+const NEEDED_CLASSES: HeroClassId[] = ['cleric', 'ranger', 'artificer', 'sorceress', 'knight'];
+
+type ClassHolder = Pick<AdventureHero, 'id' | 'classId' | 'leader' | 'level' | 'xp' | 'name'>;
+
+function classCounts(heroes: ClassHolder[]): Partial<Record<HeroClassId, number>> {
+  const counts: Partial<Record<HeroClassId, number>> = {};
+  for (const hero of heroes) if (!hero.leader) counts[hero.classId] = (counts[hero.classId] ?? 0) + 1;
+  return counts;
+}
+
+/** A recruit's class: what its role suggests, unless the guild already has two of those and lacks a class. */
+function recruitClass(save: AdventureSave, preferred: HeroClassId): HeroClassId {
+  const counts = classCounts(Object.values(save.heroes));
+  if ((counts[preferred] ?? 0) < 2) return preferred;
+  return NEEDED_CLASSES.find((classId) => !counts[classId]) ?? preferred;
+}
+
+export type ClassChange = { heroId: string; from: HeroClassId; to: HeroClassId };
+
+/**
+ * How to balance the guild's classes: while a class is missing and another
+ * has two heroes or more, the lowest-level hero of the most repeated class
+ * takes the missing one (the healer first). The Maestro never changes.
+ */
+export function planBalance(heroes: ClassHolder[]): ClassChange[] {
+  const guild = heroes.map((hero) => ({ ...hero }));
+  const changes: ClassChange[] = [];
+  for (;;) {
+    const counts = classCounts(guild);
+    const missing = NEEDED_CLASSES.find((classId) => !counts[classId]);
+    const crowded = (Object.entries(counts) as Array<[HeroClassId, number]>).filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!missing || !crowded) return changes;
+    const hero = guild
+      .filter((candidate) => !candidate.leader && candidate.classId === crowded)
+      .sort((a, b) => a.level - b.level || a.xp - b.xp || a.name.localeCompare(b.name))[0];
+    changes.push({ heroId: hero.id, from: hero.classId, to: missing });
+    hero.classId = missing;
+  }
+}
+
+/** Applies `planBalance`: skill points come back in full and gear of an old class goes to the bag. */
+export function balanceGuild(save: AdventureSave, ctx: EngineContext): ClassChange[] {
+  const changes = planBalance(Object.values(save.heroes));
+  for (const change of changes) setHeroClass(save, ctx, change.heroId, change.to);
+  return changes;
+}
+
 function recruitHero(save: AdventureSave, ctx: EngineContext, classId: HeroClassId, leader: boolean): AdventureHero {
   const name = heroName(classId, Object.values(save.heroes).map((hero) => hero.name), ctx.rng() * 1_000);
   const hero = newHero(ctx.newId(), name, classId, leader);
@@ -168,13 +216,18 @@ export function bindRoster(save: AdventureSave, ctx: EngineContext): void {
     if (entry.leader) continue;
     let hero = heroOfAgent(save, entry.nodeId);
     if (!hero) {
-      const classId = agentClass(entry);
-      const resting = heroes()
+      const restingOf = (classId: HeroClassId) => heroes()
         .filter((candidate) => !candidate.leader && !candidate.agentNodeId && candidate.classId === classId)
-        .sort((a, b) => Number(b.agentTitle === entry.title) - Number(a.agentTitle === entry.title) || b.level - a.level || b.xp - a.xp);
-      hero = resting[0] ?? recruitHero(save, ctx, classId, false);
+        .sort((a, b) => Number(b.agentTitle === entry.title) - Number(a.agentTitle === entry.title) || b.level - a.level || b.xp - a.xp)[0];
+      // A resting hero of the class the role suggests comes back first; otherwise the
+      // guild recruits, in the class it lacks when it already has two of that one.
+      const preferred = agentClass(entry);
+      const classId = restingOf(preferred) ? preferred : recruitClass(save, preferred);
+      const resting = restingOf(classId);
+      hero = resting ?? recruitHero(save, ctx, classId, false);
+      if (!resting && classId !== preferred) hero.chosenClass = classId;
       hero.agentNodeId = entry.nodeId;
-      journal(save, { at: ctx.now, kind: 'recruit', heroId: hero.id, agentTitle: entry.title, inherited: Boolean(resting[0]) });
+      journal(save, { at: ctx.now, kind: 'recruit', heroId: hero.id, agentTitle: entry.title, inherited: Boolean(resting) });
     }
     hero.agentTitle = entry.title;
   }

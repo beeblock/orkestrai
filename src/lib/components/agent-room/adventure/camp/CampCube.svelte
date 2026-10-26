@@ -15,6 +15,8 @@
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
   import { formatNumber, itemName, materialName } from '../adventure-text.js';
+  import { campArt } from '../camp-art.js';
+  import { statIcon } from '../skill-icons.js';
   import ItemIcon from './ItemIcon.svelte';
   import ItemSlot from './ItemSlot.svelte';
 
@@ -97,21 +99,45 @@
     created = (outcome?.result as { item?: Item } | undefined)?.item ?? null;
   }
 
+  const cubeArt = campArt('cube');
+  const xpShare = $derived(Number.isFinite(cubeXpToNext(cube.level)) ? Math.min(100, (cube.xp / cubeXpToNext(cube.level)) * 100) : 100);
+  // Every function in the order the cube learns it.
+  const LADDER = (Object.entries(CUBE_UNLOCKS) as Array<[CubeFunction, number]>).sort((a, b) => a[1] - b[1]);
+  // A picture for each recipe card.
+  const ICONS = {
+    synthesis: { atlas: 'icons-misc', frame: 7 },
+    crafting: { atlas: 'icons-misc', frame: 9 },
+    sockets: statIcon('magicFind'),
+    fusion: { atlas: 'icons-skills-stats', frame: 17 },
+    offering: { atlas: 'icons-misc', frame: 5 },
+    alchemy: { atlas: 'icons-misc', frame: 6 },
+  };
+
   const className = (id: HeroClassId) => (m as unknown as Record<string, () => string>)[`adventure.class_${id}`]?.() ?? id;
 </script>
 
 <div class="cube">
-  <header class="level">
-    <ItemIcon atlasId="icons-misc" frame={7} size={40} />
-    <div>
-      <b>{m['adventure.camp_cube_title']()} · {m['adventure.level']({ level: cube.level })}</b>
-      <span class="xp"><span style:width={`${Number.isFinite(cubeXpToNext(cube.level)) ? Math.min(100, (cube.xp / cubeXpToNext(cube.level)) * 100) : 100}%`}></span></span>
-      <small>{m['adventure.camp_cube_hint']()}</small>
+  <header class="altar camp-panel ornate">
+    <div class="artifact">
+      {#if cubeArt}<img src={cubeArt} alt="" width="220" height="147" />{:else}<ItemIcon atlasId="icons-misc" frame={7} size={96} />{/if}
+    </div>
+    <div class="about">
+      <h3 class="camp-title">{m['adventure.camp_cube_title']()}</h3>
+      <div class="level">
+        <span class="seal" aria-label={m['adventure.level']({ level: cube.level })}>{cube.level}</span>
+        <span class="camp-bar teal" role="progressbar" aria-label={m['adventure.camp_cube_title']()} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(xpShare)}><span style:width={`${xpShare}%`}></span></span>
+      </div>
+      <small class="camp-muted">{m['adventure.camp_cube_hint']()}</small>
+      <ol class="ladder" aria-label={m['adventure.camp_cube_title']()}>
+        {#each LADDER as [fn, level] (fn)}
+          <li class:open={cube.level >= level}><span>{level}</span>{catalog.cube[fn].name}</li>
+        {/each}
+      </ol>
     </div>
   </header>
 
   {#if created}
-    <div class="created" aria-live="polite">
+    <div class="created camp-panel" aria-live="polite">
       <ItemSlot item={created} {catalog} />
       <span>{m['adventure.camp_created']({ item: itemName(catalog, created), rarity: catalog.rarities[created.rarity] })}</span>
       <Button size="sm" variant="ghost" onclick={() => (created = null)}>{m['adventure.camp_close']()}</Button>
@@ -119,8 +145,8 @@
   {/if}
 
   <div class="functions">
-    <section class:locked={locked('synthesis')}>
-      <h3>{catalog.cube.synthesis.name}</h3>
+    <section class="recipe camp-panel" class:locked={locked('synthesis')}>
+      <h3><ItemIcon atlasId={ICONS.synthesis.atlas} frame={ICONS.synthesis.frame} size={28} />{catalog.cube.synthesis.name}</h3>
       <p>{catalog.cube.synthesis.description}</p>
       <div class="controls">
         <NativeSelect.Root size="sm" class="w-[150px]" value={synthRarity} onchange={(event: Event) => (synthRarity = (event.currentTarget as HTMLSelectElement).value as Rarity)} aria-label={m['adventure.camp_filter_rarity']()}>
@@ -133,8 +159,8 @@
       <small>{m['adventure.camp_synthesis_have']({ count: synthPool.length, needed: SYNTHESIS_INPUTS })}</small>
     </section>
 
-    <section class:locked={locked('crafting')}>
-      <h3>{catalog.cube.crafting.name}</h3>
+    <section class="recipe camp-panel" class:locked={locked('crafting')}>
+      <h3><ItemIcon atlasId={ICONS.crafting.atlas} frame={ICONS.crafting.frame} size={28} />{catalog.cube.crafting.name}</h3>
       <p>{catalog.cube.crafting.description}</p>
       {#if locked('crafting')}<small>{m['adventure.camp_cube_needs']({ level: CUBE_UNLOCKS.crafting })}</small>{:else}
         <div class="controls">
@@ -162,8 +188,8 @@
       {/if}
     </section>
 
-    <section class="sockets" class:locked={locked('decoration')}>
-      <h3>{m['adventure.camp_sockets']()}</h3>
+    <section class="recipe sockets camp-panel" class:locked={locked('decoration')}>
+      <h3><ItemIcon atlasId={ICONS.sockets.atlas} frame={ICONS.sockets.frame} size={28} />{m['adventure.camp_sockets']()}</h3>
       <p>{catalog.cube.decoration.description} {catalog.cube.engraving.description} {catalog.cube.inscription.description}</p>
       <div class="grid">
         {#each socketable as item (item.id)}<ItemSlot {item} {catalog} size={42} selected={socketItemId === item.id} onclick={() => (socketItemId = socketItemId === item.id ? null : item.id)} />{/each}
@@ -199,8 +225,8 @@
       {/if}
     </section>
 
-    <section class:locked={locked('fusion')}>
-      <h3>{catalog.cube.fusion.name}</h3>
+    <section class="recipe camp-panel" class:locked={locked('fusion')}>
+      <h3><ItemIcon atlasId={ICONS.fusion.atlas} frame={ICONS.fusion.frame} size={28} />{catalog.cube.fusion.name}</h3>
       <p>{catalog.cube.fusion.description}</p>
       {#if locked('fusion')}<small>{m['adventure.camp_cube_needs']({ level: CUBE_UNLOCKS.fusion })}</small>{:else if !fusable.length}<small>{m['adventure.camp_fusion_none']()}</small>{:else}
         <ul class="fusion">
@@ -221,8 +247,8 @@
       {/if}
     </section>
 
-    <section class:locked={locked('offering')}>
-      <h3>{catalog.cube.offering.name}</h3>
+    <section class="recipe camp-panel" class:locked={locked('offering')}>
+      <h3><ItemIcon atlasId={ICONS.offering.atlas} frame={ICONS.offering.frame} size={28} />{catalog.cube.offering.name}</h3>
       <p>{catalog.cube.offering.description}</p>
       {#if locked('offering')}<small>{m['adventure.camp_cube_needs']({ level: CUBE_UNLOCKS.offering })}</small>{:else}
         <Button size="sm" class="w-fit" disabled={busy || snapshot.account.coins < COINS_PER_OFFERING} onclick={() => void offer()}>
@@ -231,8 +257,8 @@
       {/if}
     </section>
 
-    <section>
-      <h3>{catalog.cube.alchemy.name}</h3>
+    <section class="recipe camp-panel">
+      <h3><ItemIcon atlasId={ICONS.alchemy.atlas} frame={ICONS.alchemy.frame} size={28} />{catalog.cube.alchemy.name}</h3>
       <p>{catalog.cube.alchemy.description}</p>
       <small>{m['adventure.camp_alchemy_hint']()}</small>
     </section>
@@ -242,86 +268,185 @@
 <style>
   .cube {
     display: grid;
-    gap: 14px;
+    gap: 16px;
+  }
+
+  /* The cube on its altar: art, level, and the ladder of what it learns. */
+  .altar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 18px 28px;
+    align-items: center;
+    padding: 16px 22px;
+    background:
+      radial-gradient(60% 120% at 12% 50%, color-mix(in srgb, var(--camp-teal) 14%, transparent), transparent 70%),
+      linear-gradient(180deg, var(--camp-raised), var(--camp-panel) 60%);
+  }
+
+  @media (max-width: 760px) {
+    .altar { grid-template-columns: 1fr; justify-items: center; }
+  }
+
+  .artifact {
+    display: grid;
+    place-items: center;
+    width: 220px;
+  }
+
+  .artifact img {
+    width: 220px;
+    height: auto;
+    filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.45));
+    animation: hover 5s ease-in-out infinite;
+  }
+
+  @keyframes hover {
+    50% { transform: translateY(-6px) rotate(-1deg); }
+  }
+
+  .about {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .about h3 {
+    font-size: 22px;
   }
 
   .level {
     display: flex;
     align-items: center;
     gap: 10px;
+    max-width: 420px;
   }
 
-  .level > div {
+  .level .camp-bar {
+    flex: 1;
+  }
+
+  .camp-bar.teal > span {
+    background: linear-gradient(90deg, #1f8f86, #62d6c6);
+  }
+
+  .seal {
     display: grid;
-    gap: 4px;
-    min-width: 260px;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, #8af0e2, #1f8f86 72%);
+    box-shadow: 0 0 0 2px var(--camp-panel), 0 0 0 3px var(--camp-teal), 0 0 14px -3px var(--camp-teal);
+    color: #062a26;
+    font-family: var(--camp-title-font);
+    font-weight: 800;
   }
 
-  .level small,
-  section small {
-    color: var(--app-text-muted);
+  .about small {
     font-size: 11.5px;
   }
 
-  .xp {
-    position: relative;
-    height: 5px;
-    border-radius: 3px;
-    background: var(--app-hover);
-    overflow: hidden;
+  .ladder {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
   }
 
-  .xp > span {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: linear-gradient(90deg, #2fa7a0, #38e2d9);
+  .ladder li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px 2px 3px;
+    border-radius: 999px;
+    background: var(--camp-inset);
+    box-shadow: inset 0 0 0 1px var(--camp-edge);
+    color: var(--camp-ink-muted);
+    font-size: 11.5px;
+  }
+
+  .ladder li span {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--camp-raised);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .ladder li.open {
+    color: var(--camp-ink);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--camp-teal) 60%, transparent);
+  }
+
+  .ladder li.open span {
+    background: var(--camp-teal);
+    color: #062a26;
   }
 
   .created {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 40%, transparent);
+    gap: 12px;
+    padding: 10px 14px;
+    box-shadow: inset 0 0 0 1px var(--camp-gold), 0 0 22px -8px var(--camp-gold), var(--camp-shadow);
     font-size: 13px;
+    animation: created-in 360ms cubic-bezier(0.2, 0.9, 0.3, 1.25);
+  }
+
+  @keyframes created-in {
+    from { opacity: 0; transform: scale(0.96); }
   }
 
   .functions {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 12px;
+    gap: 14px;
   }
 
-  section {
+  .recipe {
     display: grid;
     align-content: start;
-    gap: 8px;
-    padding: 12px;
-    border-radius: 10px;
-    background: var(--app-surface);
-    box-shadow: inset 0 0 0 1px var(--app-border);
+    gap: 9px;
+    padding: 14px 16px;
   }
 
-  section.locked {
+  .recipe.locked {
     opacity: 0.6;
+    filter: saturate(0.7);
   }
 
-  section.sockets {
+  .recipe.sockets {
     grid-column: 1 / -1;
   }
 
   h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin: 0;
-    font-size: 13.5px;
-    font-weight: 600;
+    font-family: var(--camp-title-font);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--camp-gold-strong);
   }
 
-  section > p {
+  .recipe > p {
     margin: 0;
-    color: var(--app-text-soft);
+    color: var(--camp-ink-soft);
     font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .recipe small {
+    color: var(--camp-ink-muted);
+    font-size: 11.5px;
   }
 
   .controls,
@@ -337,7 +462,7 @@
     display: grid;
     gap: 6px;
     max-width: 300px;
-    color: var(--app-text-soft);
+    color: var(--camp-ink-soft);
     font-size: 12px;
   }
 
@@ -345,7 +470,10 @@
     display: grid;
     gap: 6px;
     margin: 0;
-    padding: 0;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--camp-inset);
+    box-shadow: inset 0 0 0 1px var(--camp-edge);
     list-style: none;
   }
 
@@ -359,7 +487,7 @@
 
   .kind {
     min-width: 90px;
-    color: var(--app-text-muted);
+    color: var(--camp-ink-muted);
   }
 
   .fusion {
@@ -377,5 +505,9 @@
     gap: 6px;
     align-items: center;
     font-size: 12px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .artifact img, .created { animation: none; }
   }
 </style>

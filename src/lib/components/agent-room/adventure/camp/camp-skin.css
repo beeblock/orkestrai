@@ -1,0 +1,202 @@
+@import "@fontsource-variable/cinzel/wght.css";
+
+/*
+ * The camp's look: a fantasy RPG screen inside the app. Dark themes get a
+ * night camp of leather, bronze and gold; light themes a parchment page with
+ * bronze ink. Every text color here keeps 4.5:1 or more on the camp's
+ * surfaces. Rarity text uses the --adventure-ink-* tokens from app.css.
+ */
+.camp,
+.camp-popover {
+  --camp-bg: #0e0b08;
+  --camp-panel: #18130d;
+  --camp-raised: #211a12;
+  --camp-inset: #0b0906;
+  --camp-edge: #4a3820;
+  --camp-edge-strong: #a07a32;
+  --camp-glow: rgba(232, 184, 75, 0.16);
+  --camp-ink: #f3e7c9;
+  --camp-ink-soft: #d9c8a2;
+  --camp-ink-muted: #a99877;
+  --camp-gold: #e8b84b;
+  --camp-gold-strong: #f5d07a;
+  --camp-teal: #62d6c6;
+  --camp-danger: #f0806f;
+  --camp-success: #8ddb9c;
+  --camp-shadow: 0 1px 0 rgba(255, 228, 170, 0.06) inset, 0 10px 28px rgba(0, 0, 0, 0.35);
+  --camp-title-font: 'Cinzel Variable', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  color: var(--camp-ink);
+}
+
+.camp {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(232, 184, 75, 0.07), transparent 60%),
+    var(--camp-bg);
+}
+
+:root.light .camp,
+:root.light .camp-popover {
+  --camp-bg: #efe3c6;
+  --camp-panel: #f8eed6;
+  --camp-raised: #fff8e8;
+  --camp-inset: #e5d4ad;
+  --camp-edge: #cdb27a;
+  --camp-edge-strong: #9c7424;
+  --camp-glow: rgba(156, 116, 36, 0.14);
+  --camp-ink: #2a2015;
+  --camp-ink-soft: #4a3b28;
+  --camp-ink-muted: #6a573d;
+  --camp-gold: #6e4f00;
+  --camp-gold-strong: #5c4100;
+  --camp-teal: #0a6158;
+  --camp-danger: #a3301f;
+  --camp-success: #1d6b32;
+  --camp-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 8px 22px rgba(90, 60, 20, 0.12);
+}
+
+:root.light .camp {
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.55), transparent 60%),
+    var(--camp-bg);
+}
+
+/* Tooltips and popovers float outside the camp, so they carry its colors themselves. */
+.camp-popover {
+  --app-text: var(--camp-ink);
+  --app-text-soft: var(--camp-ink-soft);
+  --app-text-muted: var(--camp-ink-muted);
+  --app-border: var(--camp-edge);
+  --app-border-strong: var(--camp-edge-strong);
+  --app-accent: var(--camp-gold);
+  border: 0 !important;
+  background: linear-gradient(180deg, var(--camp-raised), var(--camp-panel)) !important;
+  box-shadow: inset 0 0 0 1px var(--camp-edge-strong), 0 14px 34px rgba(0, 0, 0, 0.45) !important;
+  color: var(--camp-ink) !important;
+}
+
+/* A framed panel: bronze edge, a faint inner light and gilded corners. */
+.camp .camp-panel {
+  position: relative;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--camp-raised), var(--camp-panel) 60%);
+  box-shadow: inset 0 0 0 1px var(--camp-edge), var(--camp-shadow);
+}
+
+.camp .camp-panel.ornate::before,
+.camp .camp-panel.ornate::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  /* Only the corner and its gem: the ends of the scrollwork are cropped away. */
+  width: 34px;
+  height: 30px;
+  background: var(--camp-corner, none) no-repeat left top / 56px auto;
+  pointer-events: none;
+}
+
+.camp .camp-panel.ornate::before { left: -12px; }
+.camp .camp-panel.ornate::after { right: -12px; transform: scaleX(-1); }
+
+.camp .camp-title {
+  margin: 0;
+  font-family: var(--camp-title-font);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--camp-gold-strong);
+}
+
+.camp .camp-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--camp-title-font);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--camp-gold);
+}
+
+/* A thin gilded rule after a heading. */
+.camp .camp-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--camp-edge-strong), transparent);
+  opacity: 0.6;
+}
+
+.camp .camp-heading.plain::after { display: none; }
+
+.camp .camp-muted { color: var(--camp-ink-muted); }
+.camp .camp-soft { color: var(--camp-ink-soft); }
+
+/* A recessed well for an item, a skill or a pet. */
+.camp .camp-well {
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 40%, var(--camp-raised), var(--camp-inset) 75%);
+  box-shadow: inset 0 0 0 1px var(--camp-edge), inset 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+:root.light .camp .camp-well {
+  box-shadow: inset 0 0 0 1px var(--camp-edge), inset 0 2px 5px rgba(90, 60, 20, 0.12);
+}
+
+/* A small labelled value: gold, chests, power. */
+.camp .camp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--camp-inset) 70%, transparent);
+  box-shadow: inset 0 0 0 1px var(--camp-edge);
+  color: var(--camp-ink);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A gold progress bar: experience, the outfit, the cube. */
+.camp .camp-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--camp-inset);
+  box-shadow: inset 0 0 0 1px var(--camp-edge);
+  overflow: hidden;
+}
+
+.camp .camp-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9c6d1e, var(--camp-gold-strong));
+  box-shadow: 0 0 8px var(--camp-glow);
+  transition: width 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root.light .camp .camp-bar > span {
+  background: linear-gradient(90deg, #b8862c, #d9a441);
+}
+
+/* Buttons the camp paints gold (the main action of a panel). */
+.camp .camp-gold-button {
+  background: linear-gradient(180deg, #f2cd72, #d39a32);
+  color: #2a1a05;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 0 0 1px #8a5d14;
+}
+
+.camp .camp-gold-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f7d986, #dca63f);
+}
+
+.camp :focus-visible {
+  outline: 2px solid var(--camp-gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .camp .camp-bar > span { transition: none; }
+}

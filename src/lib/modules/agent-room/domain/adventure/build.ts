@@ -41,7 +41,16 @@ export type HeroBuild = {
   sets: Partial<Record<SetId, number>>;
 };
 
-const OUTFIT_SLOTS: Slot[] = ['weapon', 'helmet', 'shoulders', 'armor', 'gloves', 'legs', 'boots'];
+export const OUTFIT_SLOTS: Slot[] = ['weapon', 'helmet', 'shoulders', 'armor', 'gloves', 'legs', 'boots'];
+/** The average rarity (Common 0 … Cosmic 8) each outfit needs: novice, adept, heroic, celestial. */
+export const OUTFIT_THRESHOLDS: Record<VisualTier, number> = { 1: 0, 2: 1.5, 3: 3.5, 4: 5.5 };
+
+function outfitAverage(equipped: Item[]): number {
+  return OUTFIT_SLOTS.reduce((sum, slot) => {
+    const item = equipped.find((candidate) => candidate.slot === slot);
+    return sum + (item ? rarityIndex(item.rarity) : 0);
+  }, 0) / OUTFIT_SLOTS.length;
+}
 
 /**
  * The outfit follows the gear: the average rarity over the weapon and the
@@ -50,14 +59,30 @@ const OUTFIT_SLOTS: Slot[] = ['weapon', 'helmet', 'shoulders', 'armor', 'gloves'
  * arcana and beyond celestial.
  */
 export function visualTier(equipped: Item[]): VisualTier {
-  const average = OUTFIT_SLOTS.reduce((sum, slot) => {
-    const item = equipped.find((candidate) => candidate.slot === slot);
-    return sum + (item ? rarityIndex(item.rarity) : 0);
-  }, 0) / OUTFIT_SLOTS.length;
-  if (average >= 5.5) return 4;
-  if (average >= 3.5) return 3;
-  if (average >= 1.5) return 2;
+  const average = outfitAverage(equipped);
+  if (average >= OUTFIT_THRESHOLDS[4]) return 4;
+  if (average >= OUTFIT_THRESHOLDS[3]) return 3;
+  if (average >= OUTFIT_THRESHOLDS[2]) return 2;
   return 1;
+}
+
+/**
+ * How far a hero is from its next outfit: the average rarity, the share of
+ * the way from this outfit's threshold to the next, and the outfit pieces
+ * pulling the average down (empty slots first, then the lowest rarities).
+ */
+export function outfitProgress(equipped: Item[]): { tier: VisualTier; next: VisualTier | null; average: number; progress: number; weakest: Slot[] } {
+  const average = outfitAverage(equipped);
+  const tier = visualTier(equipped);
+  const next = tier < 4 ? ((tier + 1) as VisualTier) : null;
+  const from = OUTFIT_THRESHOLDS[tier];
+  const progress = next ? Math.max(0, Math.min(1, (average - from) / (OUTFIT_THRESHOLDS[next] - from))) : 1;
+  const rank = (slot: Slot) => {
+    const item = equipped.find((candidate) => candidate.slot === slot);
+    return item ? rarityIndex(item.rarity) : -1;
+  };
+  const weakest = [...OUTFIT_SLOTS].sort((a, b) => rank(a) - rank(b)).filter((slot) => next && rank(slot) < Math.ceil(OUTFIT_THRESHOLDS[next])).slice(0, 3);
+  return { tier, next, average, progress, weakest };
 }
 
 export type BuildInput = {

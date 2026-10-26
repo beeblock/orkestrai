@@ -257,6 +257,22 @@ describe('AdventureService', () => {
     expect(again.snapshot.account.settings.autoSalvage).toBe('uncommon');
   });
 
+  it('balances a guild of repeated classes on request and keeps it balanced for new recruits', async () => {
+    const { ws } = await team();
+    for (const title of ['API', 'Infra']) await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title, payload: { provider: 'claude', command: 'true', args: [], role: 'Backend' } as never });
+    const before = (await adventureService.state(ws.id)).snapshot;
+    expect(before.heroes.filter((hero) => hero.classId === 'knight')).toHaveLength(2);
+    const outcome = await adventureService.act(ws.id, { type: 'balance-guild' });
+    expect((outcome.result as { changes: Array<{ to: string }> }).changes.map((change) => change.to)).toEqual(['cleric']);
+    expect(outcome.snapshot.heroes.map((hero) => hero.classId).sort()).toEqual(['cleric', 'knight', 'maestro', 'ranger']);
+    // A third backend agent joins in the class still missing.
+    await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'DB', payload: { provider: 'codex', command: 'true', args: [], role: 'Database' } as never });
+    await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'Auth', payload: { provider: 'codex', command: 'true', args: [], role: 'Security' } as never });
+    const after = (await adventureService.state(ws.id)).snapshot;
+    expect(after.heroes.filter((hero) => hero.classId === 'knight')).toHaveLength(2);
+    expect(after.heroes.map((hero) => hero.classId)).toContain('artificer');
+  });
+
   it('is deleted with its workspace', async () => {
     const { ws } = await team();
     await adventureService.state(ws.id);

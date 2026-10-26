@@ -93,6 +93,10 @@
   {"id": "icons-offhands-2", "folder": "items", "prefix": "offhands-2-", "rows": 2, "cols": 6, "height": 112, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
   {"id": "icons-offhands-3", "folder": "items", "prefix": "offhands-3-", "rows": 2, "cols": 6, "height": 112, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
   {"id": "pets-1", "folder": "pets", "prefix": "pets-1", "rows": 4, "cols": 6, "height": 48, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]},
-  {"id": "pets-2", "folder": "pets", "prefix": "pets-2", "rows": 4, "cols": 6, "height": 48, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]}
+  {"id": "pets-2", "folder": "pets", "prefix": "pets-2", "rows": 4, "cols": 6, "height": 48, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]},
+  {"id": "icons-skills-actives", "folder": "items", "prefix": "skills-actives", "rows": 4, "cols": 5, "count": 19, "height": 112, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]},
+  {"id": "icons-skills-stats", "folder": "items", "prefix": "skills-stats", "rows": 3, "cols": 6, "height": 112, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]},
+  {"id": "icons-camp-tabs", "folder": "items", "prefix": "camp-tabs", "rows": 2, "cols": 4, "height": 112, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7]},
+  {"id": "icons-runes", "folder": "items", "prefix": "runes", "rows": 6, "cols": 5, "height": 112, "scaleFrames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]}
  ]
 }

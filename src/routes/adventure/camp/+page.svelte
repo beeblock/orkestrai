@@ -18,6 +18,10 @@
   import CampPets from '$lib/components/agent-room/adventure/camp/CampPets.svelte';
   import CampMap from '$lib/components/agent-room/adventure/camp/CampMap.svelte';
   import CampLog from '$lib/components/agent-room/adventure/camp/CampLog.svelte';
+  import ItemIcon from '$lib/components/agent-room/adventure/camp/ItemIcon.svelte';
+  import '$lib/components/agent-room/adventure/camp/camp-skin.css';
+  import { campArt } from '$lib/components/agent-room/adventure/camp-art.js';
+  import { hasAtlas } from '$lib/components/agent-room/adventure/atlas.js';
   import { agentStatus, retainAgentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import { adventureCatalog } from '$lib/i18n/adventure/index.js';
   import { localeState } from '$lib/i18n/locale.svelte.js';
@@ -25,15 +29,19 @@
   import * as m from '$lib/paraglide/messages.js';
 
   type Tab = 'heroes' | 'inventory' | 'cube' | 'runes' | 'pets' | 'map' | 'log';
-  const TABS: Array<{ id: Tab; icon: typeof Swords; label: () => string }> = [
-    { id: 'heroes', icon: Swords, label: m['adventure.camp_tab_heroes'] },
-    { id: 'inventory', icon: Backpack, label: m['adventure.camp_tab_inventory'] },
-    { id: 'cube', icon: Gem, label: m['adventure.camp_tab_cube'] },
-    { id: 'runes', icon: BookOpen, label: m['adventure.camp_tab_runes'] },
-    { id: 'pets', icon: PawPrint, label: m['adventure.camp_tab_pets'] },
-    { id: 'map', icon: MapIcon, label: m['adventure.camp_tab_map'] },
-    { id: 'log', icon: ScrollText, label: m['adventure.camp_tab_log'] },
+  // `frame`: the tab's picture in the camp icon sheet; the line icon stands in until it exists.
+  const TABS: Array<{ id: Tab; icon: typeof Swords; frame: number; label: () => string }> = [
+    { id: 'heroes', icon: Swords, frame: 0, label: m['adventure.camp_tab_heroes'] },
+    { id: 'inventory', icon: Backpack, frame: 1, label: m['adventure.camp_tab_inventory'] },
+    { id: 'cube', icon: Gem, frame: 2, label: m['adventure.camp_tab_cube'] },
+    { id: 'runes', icon: BookOpen, frame: 3, label: m['adventure.camp_tab_runes'] },
+    { id: 'pets', icon: PawPrint, frame: 4, label: m['adventure.camp_tab_pets'] },
+    { id: 'map', icon: MapIcon, frame: 5, label: m['adventure.camp_tab_map'] },
+    { id: 'log', icon: ScrollText, frame: 6, label: m['adventure.camp_tab_log'] },
   ];
+  const TAB_ICONS = 'icons-camp-tabs';
+  const banner = campArt('camp-banner');
+  const corner = campArt('corner');
 
   function tabOf(value: string | null): Tab {
     return TABS.some((entry) => entry.id === value) ? (value as Tab) : 'heroes';
@@ -144,25 +152,27 @@
 
 <svelte:head><title>{m['adventure.camp_title']()}</title></svelte:head>
 
-<main class="camp" data-testid="adventure-camp">
-  <header class="camp-header">
-    <div class="titles">
-      <Button variant="ghost" size="sm" class="-ml-2 w-fit text-app-text-muted" onclick={back}>
-        <ArrowLeft size={15} aria-hidden="true" />
-        {m['adventure.camp_back']()}
-      </Button>
-      <h1>{m['adventure.camp_title']()}</h1>
-      <p>{m['adventure.camp_subtitle']()}</p>
+<main class="camp" data-testid="adventure-camp" style:--camp-corner={corner ? `url(${corner})` : undefined}>
+  <header class="banner" style:--banner={banner ? `url(${banner})` : undefined}>
+    <Button variant="ghost" size="sm" class="back -ml-1 w-fit" onclick={back}>
+      <ArrowLeft size={15} aria-hidden="true" />
+      {m['adventure.camp_back']()}
+    </Button>
+    <div class="banner-row">
+      <div class="titles">
+        <h1 class="camp-title">{m['adventure.camp_title']()}</h1>
+        <p>{m['adventure.camp_subtitle']()}</p>
+      </div>
+      {#if snapshot}
+        <dl class="treasury" aria-label={m['adventure.camp_wallet']()}>
+          <div class="camp-chip gold" title={m['adventure.gold']()}><ItemIcon atlasId="icons-misc" frame={6} size={22} /><dt class="sr-only">{m['adventure.gold']()}</dt><dd>{formatNumber(snapshot.account.gold)}</dd></div>
+          <div class="camp-chip" title={m['adventure.camp_chests']()}><ItemIcon atlasId="icons-misc" frame={0} size={22} /><dt class="sr-only">{m['adventure.camp_chests']()}</dt><dd>{snapshot.account.chests.length}/{snapshot.limits.chests}</dd></div>
+          <div class="camp-chip" title={m['adventure.camp_soulstones']()}><ItemIcon atlasId="icons-misc" frame={4} size={22} /><dt class="sr-only">{m['adventure.camp_soulstones']()}</dt><dd>{Object.values(snapshot.account.soulstones).reduce((sum, count) => sum + count, 0)}</dd></div>
+          <div class="camp-chip" title={m['adventure.camp_coins']()}><ItemIcon atlasId="icons-misc" frame={5} size={22} /><dt class="sr-only">{m['adventure.camp_coins']()}</dt><dd>{snapshot.account.coins}</dd></div>
+          <div class="camp-chip" title={m['adventure.camp_region']()}><ItemIcon atlasId="icons-misc" frame={8} size={22} /><dt class="sr-only">{m['adventure.camp_region']()}</dt><dd>{catalog.difficulties[snapshot.account.position.difficulty]} · {snapshot.account.position.act}-{snapshot.account.position.stage}</dd></div>
+        </dl>
+      {/if}
     </div>
-    {#if snapshot}
-      <dl class="wallet" aria-label={m['adventure.camp_wallet']()}>
-        <div><dt>{m['adventure.gold']()}</dt><dd class="gold">{formatNumber(snapshot.account.gold)}</dd></div>
-        <div><dt>{m['adventure.camp_chests']()}</dt><dd>{snapshot.account.chests.length}/{snapshot.limits.chests}</dd></div>
-        <div><dt>{m['adventure.camp_soulstones']()}</dt><dd>{Object.values(snapshot.account.soulstones).reduce((sum, count) => sum + count, 0)}</dd></div>
-        <div><dt>{m['adventure.camp_coins']()}</dt><dd>{snapshot.account.coins}</dd></div>
-        <div><dt>{m['adventure.camp_region']()}</dt><dd>{catalog.difficulties[snapshot.account.position.difficulty]} · {snapshot.account.position.act}-{snapshot.account.position.stage}</dd></div>
-      </dl>
-    {/if}
   </header>
 
   {#if !snapshot}
@@ -178,10 +188,11 @@
     <p class="empty">{m['adventure.camp_no_heroes']()}</p>
   {:else if view}
     <Tabs.Root value={tab} onValueChange={selectTab} class="flex min-h-0 flex-1 flex-col gap-3">
-      <Tabs.List class="w-fit max-w-full gap-0.5 overflow-x-auto rounded-lg bg-app-hover p-0.5">
+      <Tabs.List class="camp-tabs h-auto w-full max-w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0">
         {#each TABS as entry (entry.id)}
-          <Tabs.Trigger value={entry.id} class="flex-none gap-1.5 rounded-md px-3 text-ui-md font-medium text-app-text-muted hover:text-app-text data-active:bg-app-surface-raised data-active:text-app-text data-active:shadow-border dark:data-active:border-transparent dark:data-active:bg-app-surface-raised dark:data-active:text-app-text [&[data-state=active]_svg]:text-app-accent" data-testid={`camp-tab-${entry.id}`}>
-            <entry.icon size={14} aria-hidden="true" />{entry.label()}
+          <Tabs.Trigger value={entry.id} class="camp-tab h-auto flex-none gap-2 rounded-t-lg rounded-b-none border-0 px-3.5 py-2 text-ui-md font-semibold" data-testid={`camp-tab-${entry.id}`}>
+            {#if hasAtlas(TAB_ICONS)}<ItemIcon atlasId={TAB_ICONS} frame={entry.frame} size={24} />{:else}<entry.icon size={15} aria-hidden="true" />{/if}
+            <span>{entry.label()}</span>
             {#if entry.id === 'inventory' && snapshot.account.chests.length}<span class="pip">{snapshot.account.chests.length}</span>{/if}
           </Tabs.Trigger>
         {/each}
@@ -213,78 +224,120 @@
 
 <style>
   .camp {
+    /* The shared app controls (buttons, selects, switches) take the camp's colors. */
+    --app-text: var(--camp-ink);
+    --app-text-soft: var(--camp-ink-soft);
+    --app-text-muted: var(--camp-ink-muted);
+    --app-border: var(--camp-edge);
+    --app-border-strong: var(--camp-edge-strong);
+    --app-surface: var(--camp-panel);
+    --app-surface-raised: var(--camp-raised);
+    --app-surface-subtle: var(--camp-inset);
+    --app-accent: var(--camp-gold);
+    --app-hover: color-mix(in srgb, var(--camp-gold) 10%, transparent);
     display: flex;
     flex-direction: column;
     gap: 14px;
     min-height: 100%;
-    padding: 18px 22px 28px;
-    background: var(--app-page);
-    color: var(--app-text);
+    padding: 14px 22px 32px;
   }
 
-  .camp-header {
+  /* The banner: the camp at dusk, fading into the page under the title. */
+  .banner {
+    position: relative;
+    display: grid;
+    align-content: space-between;
+    gap: 18px;
+    min-height: 168px;
+    margin: 0 -22px;
+    padding: 6px 22px 16px;
+    background:
+      linear-gradient(90deg, var(--camp-bg) 0%, color-mix(in srgb, var(--camp-bg) 82%, transparent) 30%, color-mix(in srgb, var(--camp-bg) 20%, transparent) 62%, transparent 100%),
+      linear-gradient(0deg, var(--camp-bg) 0%, transparent 45%),
+      var(--banner, radial-gradient(80% 140% at 85% 100%, rgba(232, 184, 75, 0.22), transparent 60%)) center 62% / cover no-repeat;
+  }
+
+  .banner :global(.back) {
+    color: var(--camp-ink-soft);
+  }
+
+  .banner-row {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px 24px;
+    gap: 14px 24px;
   }
 
   h1 {
-    margin: 0;
-    font-family: var(--font-display, inherit);
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: -0.015em;
+    font-size: 28px;
+    line-height: 1.15;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  }
+
+  :global(:root.light) h1 {
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
   }
 
   .titles {
     display: grid;
     justify-items: start;
+    max-width: 520px;
   }
 
   .titles p {
-    margin: 3px 0 0;
-    color: var(--app-text-muted);
-    font-size: 12px;
+    margin: 4px 0 0;
+    color: var(--camp-ink-soft);
+    font-size: 12.5px;
   }
 
-  .wallet {
+  .treasury {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 18px;
+    gap: 6px;
     margin: 0;
   }
 
-  .wallet div {
-    display: grid;
-    gap: 1px;
-  }
-
-  .wallet dt {
-    color: var(--app-text-muted);
-    font-size: 11px;
-  }
-
-  .wallet dd {
+  .treasury dd {
     margin: 0;
-    font-size: 13px;
     font-weight: 600;
-    font-variant-numeric: tabular-nums;
   }
 
-  .gold {
-    color: var(--app-accent);
+  .treasury .gold dd {
+    color: var(--camp-gold-strong);
+  }
+
+  /* Tabs: plates on a gilded rule; the open one rises and glows. */
+  .camp :global(.camp-tabs) {
+    border-bottom: 1px solid var(--camp-edge-strong);
+    box-shadow: 0 1px 0 var(--camp-glow);
+  }
+
+  .camp :global(.camp-tab) {
+    color: var(--camp-ink-muted);
+    background: transparent;
+    transition: color 150ms ease, background-color 150ms ease;
+  }
+
+  .camp :global(.camp-tab:hover) {
+    color: var(--camp-ink);
+    background: color-mix(in srgb, var(--camp-gold) 7%, transparent);
+  }
+
+  .camp :global(.camp-tab[data-state='active']) {
+    color: var(--camp-gold-strong);
+    background: linear-gradient(180deg, var(--camp-raised), var(--camp-panel));
+    box-shadow: inset 0 0 0 1px var(--camp-edge), inset 0 2px 0 var(--camp-gold), 0 -6px 16px var(--camp-glow);
   }
 
   .pip {
-    min-width: 16px;
+    min-width: 17px;
     padding: 0 5px;
     border-radius: 999px;
-    background: var(--app-danger);
+    background: #c4372b;
     color: #fff;
     font-size: 11px;
-    line-height: 16px;
+    line-height: 17px;
     text-align: center;
   }
 
@@ -294,7 +347,7 @@
   }
 
   .empty {
-    color: var(--app-text-muted);
+    color: var(--camp-ink-muted);
     font-size: 13px;
   }
 </style>

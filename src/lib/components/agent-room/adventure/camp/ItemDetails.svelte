@@ -117,7 +117,9 @@
 
   b {
     color: var(--rarity-ink);
-    font-size: 13px;
+    font-family: var(--camp-title-font, inherit);
+    font-size: 14px;
+    letter-spacing: 0.02em;
   }
 
   .frame {

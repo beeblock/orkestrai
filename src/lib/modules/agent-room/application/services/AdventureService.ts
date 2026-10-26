@@ -232,6 +232,7 @@ export class AdventureService {
       case 'auto-gear': return engine.setAutoGear(save, action.heroId, action.enabled);
       case 'set-actives': return engine.setActives(save, action.heroId, action.actives);
       case 'set-class': return engine.setHeroClass(save, ctx, action.heroId, action.classId);
+      case 'balance-guild': return { changes: engine.balanceGuild(save, ctx) };
       case 'travel': return engine.travel(save, { difficulty: action.difficulty, act: action.act, stage: action.stage });
       case 'settings': return engine.updateSettings(save, action.settings);
       case 'formation': return engine.setFormation(save, action.order);
