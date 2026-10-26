@@ -35,6 +35,8 @@ const DEFAULTS: Record<string, string> = {
   coreRunInBackground: 'false',
   coreLaunchAtLogin: 'false',
   tidyFinishedWork: 'true',
+  adventureStrip: 'false',
+  adventureSound: 'alerts',
 };
 
 /** Configuracoes globais do app (chave/valor, com defaults). */

@@ -5,6 +5,14 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Added
+
+- Add the Adventure: a transparent strip above the macOS Dock or the Windows/Linux taskbar where the open workspace's agents fight as a pixel-art party. The leader is the Maestro; teammates get one of five classes from their role (Artificer, Sorceress, Knight, Ranger, Cleric) and can be reassigned per hero. Clicks pass through the strip except on heroes and the HUD.
+- The party fights while agents work and camps when nobody works, across five regions with fifteen monsters that are software bugs and five bosses. Waves, stages, levels and gold are saved per workspace and merged so a second window never rolls progress back.
+- Every Kanban card that is done becomes a quest with a chest and a reward. A hero that needs you raises a "!", and clicking it opens its terminal or Chat in the main window. Chiptune sounds are synthesized in the app (alerts only, all or none). All art is original and was made with Orkestrai's image workflows.
+
 ## 0.45.0 - 2026-10-24
 
 ### Security

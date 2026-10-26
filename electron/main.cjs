@@ -19,6 +19,7 @@ const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
+const { createAdventureWindowController } = require('./adventure-window.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
 const { waitForInternalServer, showStartupRecovery } = require('./startup-recovery.cjs');
@@ -53,6 +54,7 @@ let pendingCollaborationInvite = null;
 let portalStorageFlushTimer = null;
 let diagnostics = null;
 let isQuitting = false;
+let adventureWindow = null;
 let recoveringStartup = false;
 let serverRestartTimer = null;
 let corePreferences = normalizeCorePreferences();
@@ -747,6 +749,7 @@ async function recoverServer() {
       const current = new URL(mainWindow.webContents.getURL());
       await mainWindow.loadURL(`http://127.0.0.1:${port}${current.pathname}${current.search}${current.hash}`);
     }
+    if (previousPort !== port) adventureWindow?.reload();
   } catch (error) {
     diagnostics?.write('error', 'core', 'Core recovery failed', error);
     scheduleServerRecovery(Math.min(30_000, 1_000 * 2 ** Math.min(serverRestartCount, 5)));
@@ -1220,6 +1223,31 @@ ipcMain.handle('orkestrai:clipboard-has-image', (event) => {
   return !clipboard.readImage().isEmpty();
 });
 
+// The Adventure strip: the app's own windows turn it on or off; the strip
+// itself says where the pointer may click and asks the app to open a screen.
+const ADVENTURE_ROUTES = /^\/(terminal|chat|canvas)(\?[^#\s]*)?$/;
+ipcMain.handle('orkestrai:adventure-strip', (event, enabled) => {
+  if (!adventureWindow || !mainWindow || event.sender !== mainWindow.webContents) return false;
+  if (enabled) adventureWindow.open();
+  else adventureWindow.close();
+  return adventureWindow.isOpen();
+});
+
+ipcMain.on('orkestrai:adventure-interactive', (event, interactive) => {
+  adventureWindow?.setInteractive(interactive, event.sender);
+});
+
+ipcMain.on('orkestrai:adventure-open', async (event, route) => {
+  if (!adventureWindow?.isSender(event.sender) || typeof route !== 'string' || !ADVENTURE_ROUTES.test(route)) return;
+  if (!mainWindow) await createWindow();
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (process.platform === 'darwin') app.dock.show();
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('orkestrai:navigate', route);
+});
+
 ipcMain.handle('orkestrai:collaboration-invite-consume', () => {
   const invite = pendingCollaborationInvite;
   pendingCollaborationInvite = null;
@@ -1452,6 +1480,11 @@ if (!gotLock) {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('orkestrai:portal-state', { workspaceId, nodeId, state });
       },
     });
+    adventureWindow = createAdventureWindowController({
+      BrowserWindow, screen: electronScreen, diagnostics,
+      preloadPath: path.join(__dirname, 'preload.cjs'),
+      urlFor: (route) => (serverPort === null ? null : `http://127.0.0.1:${serverPort}${route}`),
+    });
     buildApplicationMenu();
     createTray();
     // Update discovery and the native recovery dialog do not depend on HTTP,
@@ -1490,6 +1523,7 @@ if (!gotLock) {
   let quitCleanup;
   app.on('before-quit', (event) => {
     isQuitting = true;
+    adventureWindow?.close();
     if (quitReady) return;
     event.preventDefault();
     quitCleanup ??= Promise.allSettled([

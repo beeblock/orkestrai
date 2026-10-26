@@ -34,6 +34,18 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   writeClipboardText: (value) => ipcRenderer.invoke('orkestrai:clipboard-write', value),
   /** Cola texto no elemento focado sem expor o conteudo do clipboard ao renderer. */
   pasteClipboardText: () => ipcRenderer.invoke('orkestrai:clipboard-paste-text'),
+  /** Liga ou desliga a faixa da Aventura acima do Dock/barra de tarefas. */
+  setAdventureStrip: (enabled) => ipcRenderer.invoke('orkestrai:adventure-strip', Boolean(enabled)),
+  /** Na faixa: o ponteiro esta sobre algo clicavel (heroi, HUD, cartao). */
+  setAdventureInteractive: (interactive) => ipcRenderer.send('orkestrai:adventure-interactive', Boolean(interactive)),
+  /** Na faixa: abre uma tela do app na janela principal. */
+  openInMainWindow: (route) => ipcRenderer.send('orkestrai:adventure-open', String(route)),
+  /** Na janela principal: navega para uma rota pedida por outra janela do app. */
+  onNavigate: (callback) => {
+    const listener = (_event, route) => callback(route);
+    ipcRenderer.on('orkestrai:navigate', listener);
+    return () => ipcRenderer.removeListener('orkestrai:navigate', listener);
+  },
   /** Diz se o clipboard tem uma imagem, sem expor o conteudo ao renderer. */
   clipboardHasImage: () => ipcRenderer.invoke('orkestrai:clipboard-has-image'),
   openFigmaPluginFolder: () => ipcRenderer.invoke('orkestrai:figma-plugin-folder'),

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import { onDestroy, onMount } from 'svelte';
-  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, Smartphone, RotateCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
+  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, Smartphone, RotateCw, SquareTerminal, Swords, Trash2, Volume2 } from '@lucide/svelte';
   import { isMacPlatform } from '$lib/components/agent-room/platform.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -65,6 +65,7 @@
     { id: 'phone', icon: Smartphone, label: m['settings.section_phone'] },
     { id: 'terminal', icon: SquareTerminal, label: m['settings.section_terminal'] },
     { id: 'appearance', icon: Palette, label: m['settings.section_appearance'] },
+    { id: 'adventure', icon: Swords, label: m['settings.section_adventure'] },
     { id: 'dictation', icon: Mic, label: m['settings.section_dictation'] },
     { id: 'voice', icon: Volume2, label: m['settings.section_voice'] },
     { id: 'shortcuts', icon: Keyboard, label: m['settings.section_shortcuts'] },
@@ -313,6 +314,7 @@
     coreStatus?: () => Promise<CoreStatus | null>;
     configureCore?: (preferences: { runInBackground: boolean; launchAtLogin: boolean }) => Promise<CoreStatus | null>;
     restartCore?: () => Promise<CoreStatus | null>;
+    setAdventureStrip?: (enabled: boolean) => Promise<boolean>;
   };
   type CoreStatus = {
     running: boolean;
@@ -773,6 +775,51 @@
       </div>
     </div>
     <AppThemeSettings {settings} onChange={(next) => (settings = next)} />
+  </section>
+
+  <section class={settingsSectionClasses} id="adventure">
+    <header class="section-head">
+      <span class="icon-chip"><Swords size={15} aria-hidden="true" /></span>
+      <div class="section-titles">
+        <h2>{m['settings.section_adventure']()}</h2>
+        <p>{m['settings.section_adventure_desc']()}</p>
+      </div>
+    </header>
+    <div class="grid">
+      {#if desktop?.setAdventureStrip}
+        <div class="flex min-h-14 items-center justify-between gap-4 border-t border-[var(--app-border)] py-3 first:border-t-0 first:pt-0">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="field-label">{m['settings.adventure_strip']()}</span>
+            <p class="field-hint">{m['settings.adventure_strip_desc']()}</p>
+          </div>
+          <Switch
+            checked={settings.adventureStrip === 'true'}
+            aria-label={m['settings.adventure_strip']()}
+            onCheckedChange={(checked: boolean) => (settings = { ...settings, adventureStrip: String(checked) })}
+          />
+        </div>
+      {:else}
+        <div class="flex min-h-14 flex-wrap items-center justify-between gap-4 border-t border-[var(--app-border)] py-3 first:border-t-0 first:pt-0">
+          <p class="field-hint">{m['settings.adventure_browser_hint']()}</p>
+          <Button variant="outline" size="sm" href="/adventure" target="_blank">{m['settings.adventure_open']()}</Button>
+        </div>
+      {/if}
+      <div class="grid gap-2 border-t border-[var(--app-border)] py-3">
+        <span class="field-label">{m['settings.adventure_sound']()}</span>
+        <p class="field-hint">{m['settings.adventure_sound_desc']()}</p>
+        <SegmentedControl
+          class="w-fit max-w-full"
+          label={m['settings.adventure_sound']()}
+          value={settings.adventureSound ?? 'alerts'}
+          onValueChange={(value: string) => (settings = { ...settings, adventureSound: value })}
+          options={[
+            { value: 'off', label: m['settings.adventure_sound_off']() },
+            { value: 'alerts', label: m['settings.adventure_sound_alerts']() },
+            { value: 'all', label: m['settings.adventure_sound_all']() },
+          ]}
+        />
+      </div>
+    </div>
   </section>
 
   <section class={settingsSectionClasses} id="dictation">
