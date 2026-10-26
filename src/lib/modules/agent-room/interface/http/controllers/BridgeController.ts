@@ -750,9 +750,11 @@ export class BridgeController extends Controller {
   async adventureRead(event: any) {
     try {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      // Reading changes nothing: the live terminal marks its own hero, else the declared agent does.
+      const authenticated = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
       const from = event.url.searchParams.get('from');
-      const caller = from ? await bridgeService.callerAgent(workspace.id, from) : null;
-      return this.json({ data: await adventureService.agentView(workspace.id, caller?.nodeId ?? null) });
+      const caller = authenticated ?? (from ? (await bridgeService.callerAgent(workspace.id, from)).nodeId : null);
+      return this.json({ data: await adventureService.agentView(workspace.id, caller) });
     } catch (error) {
       return this.errorResponse(error, 'Could not read the Adventure.');
     }
@@ -763,7 +765,13 @@ export class BridgeController extends Controller {
     try {
       const input = bridgeAdventureActionSchema.parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      const caller = await bridgeService.callerAgent(workspace.id, input.from);
+      // Who acts is the live terminal the call comes from, never just the name it declares.
+      const authenticated = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!authenticated) return this.json({ error: 'Adventure actions require the active terminal identity.', code: 'agent-identity' }, 403);
+      const caller = await bridgeService.callerAgent(workspace.id, authenticated);
+      if (input.from !== caller.nodeId && (await bridgeService.callerAgent(workspace.id, input.from)).nodeId !== caller.nodeId) {
+        return this.json({ error: 'The declared agent is not the terminal making the call.', code: 'agent-identity' }, 403);
+      }
       return this.json({ data: await adventureService.actAs(workspace.id, { nodeId: caller.nodeId, leader: caller.maestro }, input.action) });
     } catch (error) {
       if (error instanceof AdventureError) return this.json({ error: error.code, code: error.code }, error.code === 'workspace' ? 404 : 403);

@@ -244,15 +244,14 @@ export class AdventureService {
    * settings and balancing the guild are the leader's.
    */
   async actAs(workspaceId: string, caller: AdventureCaller, action: AdventureAction): Promise<{ result: unknown; view: AdventureAgentView }> {
-    if (!caller.leader) {
+    // The scope is checked on the same save the action changes, inside its transaction.
+    const outcome = await this.act(workspaceId, action, (save) => {
+      if (caller.leader) return;
       if (!HERO_ACTIONS.has(action.type)) throw new engine.AdventureError('leader-only');
-      const { snapshot } = await this.state(workspaceId, { offline: false });
-      const own = snapshot.heroes.find((hero) => hero.agentNodeId === caller.nodeId);
-      if (!own) throw new engine.AdventureError('agent-scope');
-      const heroId = 'heroId' in action ? action.heroId : snapshot.items.find((item) => 'itemId' in action && item.id === action.itemId)?.heroId ?? null;
-      if (heroId !== own.id) throw new engine.AdventureError('agent-scope');
-    }
-    const outcome = await this.act(workspaceId, action);
+      const own = Object.values(save.heroes).find((hero) => hero.agentNodeId === caller.nodeId);
+      const heroId = 'heroId' in action ? action.heroId : save.items.find((item) => 'itemId' in action && item.id === action.itemId)?.heroId ?? null;
+      if (!own || heroId !== own.id) throw new engine.AdventureError('agent-scope');
+    });
     return { result: outcome.result ?? null, view: this.viewOf(outcome.snapshot, caller.nodeId) };
   }
 
@@ -287,8 +286,12 @@ export class AdventureService {
     };
   }
 
-  async act(workspaceId: string, action: AdventureAction): Promise<AdventureOutcome> {
-    const { outcome, value } = await this.withSave(workspaceId, { offline: false }, (save, ctx) => this.dispatch(save, ctx, action));
+  /** Runs a camp action; `guard` may refuse it after the save is loaded and before it changes. */
+  async act(workspaceId: string, action: AdventureAction, guard?: (save: AdventureSave) => void): Promise<AdventureOutcome> {
+    const { outcome, value } = await this.withSave(workspaceId, { offline: false }, (save, ctx) => {
+      guard?.(save);
+      return this.dispatch(save, ctx, action);
+    });
     return { ...outcome, result: value && typeof value === 'object' && 'chestId' in (value as object) ? undefined : value };
   }
 
