@@ -346,8 +346,15 @@ export function playSpell(action: ActiveAction): void {
   }
 }
 
-/** What each mixer channel sounds like, for the buttons that try it in Settings. */
-export function previewChannel(channel: MixerChannel): void {
+/**
+ * What a mixer channel sounds like, for the buttons that try it in Settings:
+ * it plays with the mixer on screen (saved or being edited), whatever this
+ * window's sound was set to before.
+ */
+export function previewChannel(channel: MixerChannel, onScreen: Mixer): void {
+  configureSound(onScreen);
+  // A preview always plays, even right after the same sound.
+  lastPlayed.clear();
   switch (channel) {
     case 'music': setMusic('march'); setTimeout(() => setMusic(wantedMood === 'march' ? null : wantedMood), 6_000); break;
     case 'combat': playAttack('melee'); setTimeout(() => playSound('hit'), 120); break;
@@ -492,6 +499,14 @@ function schedule(g: Graph, state: Playing): void {
   const { song } = state;
   const eighth = 60 / song.bpm / 2;
   const loop = 32;
+  // The page fell behind the audio clock (a busy or sleeping renderer): the beats that are
+  // already past are skipped, not all played at once, and the song carries on in time.
+  const behind = g.ctx.currentTime - state.nextTime;
+  if (behind > eighth) {
+    const missed = Math.ceil(behind / eighth);
+    state.nextStep += missed;
+    state.nextTime += missed * eighth;
+  }
   while (state.nextTime < g.ctx.currentTime + LOOKAHEAD_S) {
     const step = state.nextStep % loop;
     const t = state.nextTime;

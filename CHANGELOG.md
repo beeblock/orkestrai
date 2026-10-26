@@ -39,6 +39,7 @@ pt-BR, English, and Spanish translations.
 - Load Adventure art without placeholder shapes: sheet frames ship inside the app code and sheet images are fingerprinted assets cached for good, so each sheet takes one request the first time and none after; the strip and the camp start loading the art they need before the save arrives, and heroes, monsters, portraits and icons fade in instead of showing colored blocks while they load.
 - Bind Adventure actions taken through the bridge to the live terminal that makes the call: the session's agent token decides who acts and whether it leads, a declared `from` that is someone else is refused, and the hero-scope check runs inside the same transaction as the action.
 - Pay Adventure battle fought while the server was away before the first report ever reached it: the battle clock of a new Adventure starts when the Adventure began (bounded by the longest paid absence) instead of ten minutes before the report, so queued reports from that first gap are paid in full.
+- Make Listen in Settings → Adventure play with the mixer on screen (saved or being edited) instead of the window's previous defaults, so channels saved as on are heard on the first try; and keep the soundtrack in time after the page falls behind the audio clock by skipping the beats already past instead of scheduling all of them at once.
 
 ## 0.45.0 - 2026-10-24
 

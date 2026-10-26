@@ -31,7 +31,10 @@ class FakeNode {
   stop() {}
 }
 
+let context: FakeAudioContext | null = null;
+
 class FakeAudioContext {
+  constructor() { context = this; }
   currentTime = 0;
   sampleRate = 8000;
   state = 'running';
@@ -109,6 +112,15 @@ describe('adventure sound', () => {
     expect(started).toBeGreaterThan(0);
   });
 
+  it('previews a channel with the mixer on screen, even before anything configured this window', () => {
+    // A window that has only the old defaults (attacks off) previews a saved mixer with attacks on.
+    audio.configureSound(readMixer(undefined, 'alerts'));
+    const saved = readMixer(JSON.stringify({ enabled: true, volume: 70, channels: { combat: { on: true, volume: 60 } } }));
+    started = 0;
+    audio.previewChannel('combat', saved);
+    expect(started).toBeGreaterThan(0);
+  });
+
   it('plays the soundtrack only with its channel on and stops it on request', () => {
     vi.useFakeTimers();
     audio.configureSound(readMixer(JSON.stringify({ enabled: true, volume: 80, channels: { music: { on: true, volume: 50 } } })));
@@ -123,5 +135,17 @@ describe('adventure sound', () => {
     audio.setMusic('boss');
     vi.advanceTimersByTime(200);
     expect(started).toBe(0);
+  });
+
+  it('skips the beats a late page missed instead of playing them all at once', () => {
+    vi.useFakeTimers();
+    audio.configureSound(readMixer(JSON.stringify({ enabled: true, volume: 80, channels: { music: { on: true, volume: 50 } } })));
+    audio.setMusic('battle');
+    // Ten minutes pass on the audio clock while the page's timers are held up.
+    context!.currentTime += 600;
+    started = 0;
+    vi.advanceTimersByTime(40);
+    expect(started).toBeGreaterThan(0);
+    expect(started).toBeLessThan(40);
   });
 });

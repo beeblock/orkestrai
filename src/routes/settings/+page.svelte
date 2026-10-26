@@ -852,7 +852,7 @@
                 <span class="field-hint">{channelHint(channel)}</span>
               </span>
               <Slider type="single" class="col-span-2 sm:col-span-1" value={entry.volume} min={0} max={100} step={5} disabled={!mixer.enabled || !entry.on} onValueChange={(value: number) => setChannel(channel, { volume: value })} aria-label={m['settings.adventure_channel_volume']({ channel: channelLabel(channel), volume: entry.volume })} />
-              <Button variant="ghost" size="sm" class="col-span-2 w-fit sm:col-span-1" disabled={!mixer.enabled || !entry.on} onclick={() => previewChannel(channel)}><Play size={13} aria-hidden="true" />{m['settings.adventure_channel_try']()}</Button>
+              <Button variant="ghost" size="sm" class="col-span-2 w-fit sm:col-span-1" disabled={!mixer.enabled || !entry.on} onclick={() => previewChannel(channel, mixer)}><Play size={13} aria-hidden="true" />{m['settings.adventure_channel_try']()}</Button>
             </li>
           {/each}
         </ul>
