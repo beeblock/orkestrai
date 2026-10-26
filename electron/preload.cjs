@@ -40,6 +40,16 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   setAdventureInteractive: (interactive) => ipcRenderer.send('orkestrai:adventure-interactive', Boolean(interactive)),
   /** Na faixa: abre uma tela do app na janela principal. */
   openInMainWindow: (route) => ipcRenderer.send('orkestrai:adventure-open', String(route)),
+  /** Na faixa: largura (cheia ou compacta) e altura da janela, pelo tamanho escolhido. */
+  setAdventureLayout: (layout) => ipcRenderer.send('orkestrai:adventure-layout', { width: layout?.width === 'compact' ? 'compact' : 'full', height: Number(layout?.height) || 0 }),
+  /** Na faixa ou nas configuracoes: volta a faixa para cima do Dock. */
+  resetAdventurePosition: () => ipcRenderer.send('orkestrai:adventure-reset'),
+  /** Na faixa: avisa quando o dono a arrastou para outro lugar (ou a trouxe de volta). */
+  onAdventurePlacement: (callback) => {
+    const listener = (_event, placement) => callback({ moved: Boolean(placement?.moved) });
+    ipcRenderer.on('orkestrai:adventure-placement', listener);
+    return () => ipcRenderer.removeListener('orkestrai:adventure-placement', listener);
+  },
   /** Na janela principal: navega para uma rota pedida por outra janela do app. */
   onNavigate: (callback) => {
     const listener = (_event, route) => callback(route);

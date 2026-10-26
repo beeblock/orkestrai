@@ -6,7 +6,7 @@
   import { Button } from '$lib/components/ui/button';
   import { FORMATION_LINGER_MS, lineup } from '$lib/components/agent-room/adventure/adventure-party.js';
   import type { AdventureSoundLevel } from '$lib/components/agent-room/adventure/adventure-audio.js';
-  import { adventureAction, loadAdventure, onAdventureChange, reportBattle, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
+  import { adventureAction, loadAdventure, onAdventureChange, onAdventureSettings, reportBattle, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
   import { heroLevelText, itemName } from '$lib/components/agent-room/adventure/adventure-text.js';
   import { agentStatus, retainAgentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
@@ -25,7 +25,20 @@
   type Desktop = {
     setAdventureInteractive?: (interactive: boolean) => void;
     openInMainWindow?: (path: string) => void;
+    setAdventureLayout?: (layout: { width: 'full' | 'compact'; height: number }) => void;
+    resetAdventurePosition?: () => void;
+    onAdventurePlacement?: (callback: (placement: { moved: boolean }) => void) => () => void;
   };
+
+  /** How the strip looks, from Settings → Adventure. */
+  type StripLook = { width: 'full' | 'compact'; size: 'small' | 'normal' | 'large'; scenery: 'full' | 'minimal'; hud: 'always' | 'hover' };
+  // Field height and drawing scale per size; the window keeps room above for cards and banners.
+  const SIZES: Record<StripLook['size'], { field: number; scale: number }> = {
+    small: { field: 120, scale: 0.8 },
+    normal: { field: 150, scale: 1 },
+    large: { field: 190, scale: 1.27 },
+  };
+  const ROOM_ABOVE = 170;
   const desktop = (typeof window !== 'undefined' ? (window as unknown as { orkestraiDesktop?: Desktop }).orkestraiDesktop : undefined);
 
   type Battle = PendingReport & { position: StagePosition; wave: number };
@@ -45,6 +58,9 @@
   let workspaceName = $state('');
   let snapshot = $state<AdventureSnapshot | null>(null);
   let soundLevel = $state<AdventureSoundLevel>('alerts');
+  let look = $state<StripLook>({ width: 'full', size: 'normal', scenery: 'full', hud: 'always' });
+  // Whether the owner dragged the strip away from the Dock.
+  let moved = $state(false);
   let selected = $state<{ id: string; left: number; top: number } | null>(null);
   let stage = $state<StageApi | null>(null);
   let pointerOverHero = false;
@@ -244,6 +260,11 @@
     untrack(syncInteractive);
   });
 
+  // The window follows the strip's width and size.
+  $effect(() => {
+    desktop?.setAdventureLayout?.({ width: look.width, height: SIZES[look.size].field + ROOM_ABOVE });
+  });
+
   // A hero whose agent starts working takes its place right away; leaving waits for the linger window.
   $effect(() => {
     for (const hero of snapshot?.heroes ?? []) {
@@ -261,13 +282,21 @@
       workspaceName = list.find((entry) => entry.id === id)?.name ?? '';
       workspaceId = id;
     }).catch(() => undefined);
-    // The strip never takes focus, so it re-reads the sound setting on a timer.
-    const readSound = () => void getAppSettings().then((settings) => {
+    // The strip never takes focus, so it re-reads its settings on a timer, and at once when Settings says so.
+    const readSettings = () => void getAppSettings(true).then((settings) => {
       const level = settings.adventureSound;
       if (level === 'off' || level === 'alerts' || level === 'all') soundLevel = level;
-    });
-    readSound();
-    const soundTimer = setInterval(readSound, 30_000);
+      look = {
+        width: settings.adventureWidth === 'compact' ? 'compact' : 'full',
+        size: settings.adventureSize === 'small' || settings.adventureSize === 'large' ? settings.adventureSize : 'normal',
+        scenery: settings.adventureScenery === 'minimal' ? 'minimal' : 'full',
+        hud: settings.adventureHud === 'hover' ? 'hover' : 'always',
+      };
+    }).catch(() => undefined);
+    readSettings();
+    const soundTimer = setInterval(readSettings, 30_000);
+    const stopSettings = onAdventureSettings(readSettings);
+    const stopPlacement = desktop?.onAdventurePlacement?.((placement) => (moved = placement.moved));
     // The party follows the workspace opened in the app.
     const onStorage = (event: StorageEvent) => {
       if (event.key !== 'orkestrai.activeWorkspaceId' || !event.newValue || event.newValue === workspaceId) return;
@@ -302,6 +331,8 @@
     return () => {
       disposed = true;
       clearInterval(soundTimer);
+      stopSettings();
+      stopPlacement?.();
       if (reconnect) clearTimeout(reconnect);
       socket?.close();
       window.removeEventListener('storage', onStorage);
@@ -328,6 +359,13 @@
         chests={snapshot.account.chests.length}
         difficultyName={catalog.difficulties[snapshot.account.position.difficulty]}
         {soundLevel}
+        height={SIZES[look.size].field}
+        scale={SIZES[look.size].scale}
+        scenery={look.scenery}
+        hudMode={look.hud}
+        draggable={Boolean(desktop?.setAdventureLayout)}
+        {moved}
+        onResetPosition={desktop?.resetAdventurePosition ? () => desktop.resetAdventurePosition?.() : undefined}
         onSelect={(id, box) => { selected = selected?.id === id ? null : { id, left: box.left + box.width / 2, top: box.top }; }}
         onHover={(id) => { pointerOverHero = id !== null; syncInteractive(); }}
         onOpenCamp={() => openCamp()}

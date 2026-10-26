@@ -55,6 +55,8 @@ let portalStorageFlushTimer = null;
 let diagnostics = null;
 let isQuitting = false;
 let adventureWindow = null;
+// Whether the owner keeps the Adventure strip on (read with the core preferences).
+let adventurePreferred = false;
 let recoveringStartup = false;
 let serverRestartTimer = null;
 let corePreferences = normalizeCorePreferences();
@@ -491,6 +493,7 @@ async function refreshCorePreferences() {
     });
     if (!response.ok) return corePreferences;
     const settings = (await response.json())?.data ?? {};
+    adventurePreferred = settings.adventureStrip === 'true';
     return applyCorePreferences({
       runInBackground: settings.coreRunInBackground,
       launchAtLogin: settings.coreLaunchAtLogin,
@@ -857,6 +860,9 @@ async function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // On Windows and Linux closing the app's window quits it (unless it runs in the
+    // background): the floating strip must not keep the app alive on its own.
+    if (process.platform !== 'darwin' && !shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) adventureWindow?.close();
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1237,6 +1243,18 @@ ipcMain.on('orkestrai:adventure-interactive', (event, interactive) => {
   adventureWindow?.setInteractive(interactive, event.sender);
 });
 
+// The strip's own size and width settings decide its window's height and width.
+ipcMain.on('orkestrai:adventure-layout', (event, layout) => {
+  adventureWindow?.setLayout(layout && typeof layout === 'object' ? { width: layout.width, height: Number(layout.height) } : null, event.sender);
+});
+
+// Back to the Dock, from the strip or from the app's settings.
+ipcMain.on('orkestrai:adventure-reset', (event) => {
+  if (!adventureWindow) return;
+  if (!adventureWindow.isSender(event.sender) && (!mainWindow || event.sender !== mainWindow.webContents)) return;
+  adventureWindow.resetPosition();
+});
+
 ipcMain.on('orkestrai:adventure-open', async (event, route) => {
   if (!adventureWindow?.isSender(event.sender) || typeof route !== 'string' || !ADVENTURE_ROUTES.test(route)) return;
   if (!mainWindow) await createWindow();
@@ -1482,6 +1500,7 @@ if (!gotLock) {
     });
     adventureWindow = createAdventureWindowController({
       BrowserWindow, screen: electronScreen, diagnostics,
+      userDataPath: app.getPath('userData'),
       preloadPath: path.join(__dirname, 'preload.cjs'),
       urlFor: (route) => (serverPort === null ? null : `http://127.0.0.1:${serverPort}${route}`),
     });
@@ -1493,6 +1512,8 @@ if (!gotLock) {
     const initialInvite = findCollaborationInvite(process.argv);
     await ensureServer();
     await refreshCorePreferences();
+    // The strip floats on its own: it comes back at launch even when the app starts in the background.
+    if (adventurePreferred) adventureWindow.open();
     const loginLaunch = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
     const hiddenCoreLaunch = (isBackgroundCoreLaunch(process.argv) || loginLaunch) && corePreferences.runInBackground && !initialInvite;
     if (hiddenCoreLaunch) {

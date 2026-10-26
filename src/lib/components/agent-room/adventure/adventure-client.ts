@@ -55,6 +55,27 @@ export function announceChange(workspaceId: string): void {
   }
 }
 
+/** The strip's look changed in Settings: the strip (another window) re-reads it now. */
+export function notifyAdventureSettings(): void {
+  try {
+    const channel = new BroadcastChannel(CHANNEL);
+    channel.postMessage({ settings: true, at: Date.now() });
+    channel.close();
+  } catch {
+    // The strip re-reads its settings on a timer anyway.
+  }
+}
+
+export function onAdventureSettings(callback: () => void): () => void {
+  try {
+    const channel = new BroadcastChannel(CHANNEL);
+    channel.onmessage = (event) => { if (event.data?.settings === true) callback(); };
+    return () => channel.close();
+  } catch {
+    return () => {};
+  }
+}
+
 export function onAdventureChange(callback: (workspaceId: string) => void): () => void {
   try {
     const channel = new BroadcastChannel(CHANNEL);

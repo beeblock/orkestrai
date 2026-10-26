@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { ArrowDownToLine, GripVertical } from '@lucide/svelte';
   import type { BiomeId, HeroClassId, MonsterId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
   import { RARITY_RULES, rarityIndex, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
   import type { ChestTier } from '$lib/modules/agent-room/domain/adventure/loot.js';
@@ -54,6 +55,12 @@
     difficultyName = '',
     soundLevel = 'alerts',
     height = 150,
+    scale = 1,
+    scenery = 'full',
+    hudMode = 'always',
+    draggable = false,
+    moved = false,
+    onResetPosition,
     onSelect,
     onHover,
     onOpenCamp,
@@ -75,6 +82,17 @@
     soundLevel?: AdventureSoundLevel;
     /** Height of the playing field, in CSS pixels. */
     height?: number;
+    /** Drawing scale (the strip's size): the world is drawn this much larger, crisp at any size. */
+    scale?: number;
+    /** `minimal` keeps the party and the monsters on a thin line, without the landscape. */
+    scenery?: 'full' | 'minimal';
+    /** `hover` hides the panel until the pointer comes near. */
+    hudMode?: 'always' | 'hover';
+    /** The desktop strip shows a grip to drag it around... */
+    draggable?: boolean;
+    /** ...and, once moved, a way back to the Dock. */
+    moved?: boolean;
+    onResetPosition?: () => void;
     onSelect?: (heroId: string, box: { left: number; top: number; width: number; height: number }) => void;
     onHover?: (heroId: string | null) => void;
     onOpenCamp?: () => void;
@@ -97,6 +115,13 @@
   let banners = $state<Array<{ id: number; tone: 'gold' | 'danger' | 'info' | 'loot'; text: string; color?: string }>>([]);
   let boss = $state<{ name: string; hp: number; max: number } | null>(null);
   let hovered = $state<string | null>(null);
+  // The world's own size: the canvas's CSS size divided by the drawing scale.
+  let viewWidth = 0;
+  let viewHeight = 0;
+  let resizeCanvas: (() => void) | null = null;
+  // The panel peeks in while the pointer moves over the strip (hudMode = hover).
+  let peek = $state(false);
+  let peekTimer: ReturnType<typeof setTimeout> | null = null;
   // Heroes already announced this session.
   const greeted = new Set<string>();
   let hitBoxes: HitBox[] = [];
@@ -389,7 +414,7 @@
       context.save();
       context.globalAlpha = 0.85;
       context.filter = 'brightness(0.78) saturate(0.85)';
-      for (let slot = Math.floor(backOffset / backSlot) - 2; slot <= Math.floor((backOffset + width) / backSlot) + 2; slot += 1) {
+      for (let slot = Math.floor(backOffset / backSlot) - 2; slot <= Math.floor((backOffset + viewWidth) / backSlot) + 2; slot += 1) {
         if (slotHash(slot, 11) < 0.35) continue;
         const frame = tall[Math.floor(slotHash(slot, 23) * tall.length)];
         const x = slot * backSlot - backOffset + slotHash(slot, 37) * 60;
@@ -400,7 +425,7 @@
       drawGround(context, cameraX, groundY, biome);
       // Front layer: small props at the party's pace.
       const frontSlot = 96;
-      for (let slot = Math.floor(cameraX / frontSlot) - 2; slot <= Math.floor((cameraX + width) / frontSlot) + 2; slot += 1) {
+      for (let slot = Math.floor(cameraX / frontSlot) - 2; slot <= Math.floor((cameraX + viewWidth) / frontSlot) + 2; slot += 1) {
         if (slotHash(slot, 53) < 0.45) continue;
         const frame = small[Math.floor(slotHash(slot, 67) * small.length)];
         const x = slot * frontSlot - cameraX + slotHash(slot, 71) * 40;
@@ -416,13 +441,13 @@
     const frame = ground?.frames[0];
     if (!ground || !frame) {
       context.fillStyle = '#2d2a20';
-      context.fillRect(0, groundY, width, GROUND + 4);
+      context.fillRect(0, groundY, viewWidth, GROUND + 4);
       return;
     }
     const tileWidth = frame.w * ART_SCALE;
     const tileHeight = frame.h * ART_SCALE;
     const top = groundY - Math.round(tileHeight * 0.18);
-    for (let x = -((cameraX % tileWidth) + tileWidth) % tileWidth; x < width; x += tileWidth) {
+    for (let x = -((cameraX % tileWidth) + tileWidth) % tileWidth; x < viewWidth; x += tileWidth) {
       context.drawImage(ground.image, frame.x, frame.y, frame.w, frame.h, Math.floor(x), top, Math.ceil(tileWidth) + 1, tileHeight);
     }
   }
@@ -437,14 +462,21 @@
   }
 
   function render(context: CanvasRenderingContext2D, now: number) {
-    const groundY = height - GROUND;
-    const anchor = Math.round(width * 0.36);
+    const groundY = viewHeight - GROUND;
+    const anchor = Math.round(viewWidth * 0.36);
     const cameraX = world.frontX - anchor;
     const toScreen = (x: number) => x - cameraX;
-    context.clearRect(0, 0, width, height);
+    context.clearRect(0, 0, viewWidth, viewHeight);
     context.imageSmoothingEnabled = true;
     const biome = biomeOf(world.position).id;
-    drawScenery(context, cameraX, groundY, biome);
+    if (scenery === 'full') drawScenery(context, cameraX, groundY, biome);
+    else {
+      // Minimal: a thin gilded line to stand on, the desktop showing through.
+      context.fillStyle = 'rgba(23, 20, 15, 0.35)';
+      context.fillRect(0, groundY + 1, viewWidth, 3);
+      context.fillStyle = 'rgba(232, 184, 75, 0.6)';
+      context.fillRect(0, groundY, viewWidth, 1);
+    }
 
     const fx = atlas('fx-effects');
     const camp = atlas('fx-camp');
@@ -563,7 +595,7 @@
     for (const enemy of enemies) {
       const sprite = atlas(`monster-${enemy.monsterId}`);
       const x = toScreen(enemy.x);
-      if (x < -120 || x > width + 160) continue;
+      if (x < -120 || x > viewWidth + 160) continue;
       const pose = enemy.stunMs > 0 ? 'hurt' : enemy.pose;
       context.globalAlpha = enemy.pose === 'dying' ? Math.max(0, 1 - enemy.poseMs / 600) : 1;
       // Elites are bigger and tinted; frozen monsters turn blue.
@@ -709,8 +741,14 @@
   function pointer(event: PointerEvent) {
     const rect = canvas?.getBoundingClientRect();
     if (!rect) return;
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    if (hudMode === 'hover') {
+      peek = true;
+      if (peekTimer) clearTimeout(peekTimer);
+      peekTimer = setTimeout(() => (peek = false), 2_500);
+    }
+    // Hit boxes live in the world's coordinates; the pointer comes in CSS pixels.
+    const x = (event.clientX - rect.left) / scale;
+    const y = (event.clientY - rect.top) / scale;
     const hit = [...hitBoxes].reverse().find((box) => x >= box.left && x <= box.left + box.width && y >= box.top && y <= box.top + box.height);
     const id = hit?.id ?? null;
     if (id !== hovered) {
@@ -718,7 +756,7 @@
       onHover?.(id);
     }
     if (event.type === 'pointerdown' && hit) {
-      onSelect?.(hit.id, { left: hit.left + rect.left, top: hit.top + rect.top, width: hit.width, height: hit.height });
+      onSelect?.(hit.id, { left: hit.left * scale + rect.left, top: hit.top * scale + rect.top, width: hit.width * scale, height: hit.height * scale });
     }
   }
 
@@ -738,8 +776,12 @@
       canvas.height = Math.round(height * ratio);
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      // Drawn at the device's resolution times the strip's size: larger, never blurrier.
+      context.setTransform(ratio * scale, 0, 0, ratio * scale, 0, 0);
+      viewWidth = width / scale;
+      viewHeight = height / scale;
     };
+    resizeCanvas = resize;
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(host);
@@ -778,15 +820,25 @@
     };
   });
 
+  // A new size: the canvas follows.
+  $effect(() => {
+    void height;
+    void scale;
+    resizeCanvas?.();
+  });
+
   const place = $derived(biomeOf(hud.position));
   const region = $derived(regionLevel(hud.position));
   const shownGold = $derived(gold + pendingGold);
   const shownChests = $derived(chests + pendingChests);
 </script>
 
-<div class="stage" bind:this={host} style:height={`${height}px`} data-mode={mode} data-testid="adventure-stage">
+<div class="stage" bind:this={host} style:height={`${height}px`} data-mode={mode} data-hud={hudMode} class:peek data-testid="adventure-stage">
   <canvas bind:this={canvas} onpointermove={pointer} onpointerdown={pointer} onpointerleave={leave} class:pointing={hovered !== null}></canvas>
   <div class="hud" data-adventure-interactive>
+    {#if draggable}
+      <span class="grip" title={m['adventure.drag_strip']()} aria-label={m['adventure.drag_strip']()} role="img"><GripVertical size={13} aria-hidden="true" /></span>
+    {/if}
     <span class="place">{biomeName(place.id)} · {stageLabel(hud.position)}</span>
     {#if difficultyName && hud.position.difficulty !== 'normal'}<span class="difficulty">{difficultyName}</span>{/if}
     <span class="wave">{m['adventure.wave']({ wave: Math.min(hud.wave + 1, WAVES_PER_STAGE), total: WAVES_PER_STAGE })}</span>
@@ -801,6 +853,11 @@
     {/if}
     {#if supporters.length && mode !== 'camp'}<span class="support" title={m['adventure.supporters_hint']()}>{m['adventure.supporters']({ count: supporters.length })}</span>{/if}
     {#if mode === 'camp'}<span class="camp">{m['adventure.camping']()}</span>{/if}
+    {#if moved && onResetPosition}
+      <button type="button" class="dock-button" onclick={onResetPosition} title={m['adventure.back_to_dock']()} aria-label={m['adventure.back_to_dock']()} data-testid="adventure-back-to-dock">
+        <ArrowDownToLine size={13} aria-hidden="true" />
+      </button>
+    {/if}
   </div>
   {#if boss}
     <div class="boss" role="status">
@@ -847,6 +904,45 @@
     font: 600 11px/1.2 ui-sans-serif, system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    transition: opacity 180ms ease-out;
+  }
+
+  /* Panel on hover: out of the way (and out of reach) until the pointer comes near. */
+  .stage[data-hud='hover']:not(.peek) .hud {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The grip drags the whole strip window (desktop only). */
+  .grip {
+    display: inline-flex;
+    margin-left: -4px;
+    color: rgba(244, 234, 210, 0.6);
+    cursor: grab;
+    -webkit-app-region: drag;
+  }
+
+  .dock-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(244, 234, 210, 0.1);
+    color: #f4ead2;
+    cursor: pointer;
+  }
+
+  .dock-button:hover {
+    background: rgba(244, 234, 210, 0.22);
+  }
+
+  .dock-button:focus-visible {
+    outline: 2px solid #e8b84b;
+    outline-offset: 1px;
   }
 
   .place {

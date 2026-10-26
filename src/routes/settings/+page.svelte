@@ -17,6 +17,7 @@
   import { normalizeTerminalTheme, TERMINAL_THEMES, TERMINAL_THEME_ORDER } from '$lib/components/agent-room/terminal-themes.js';
   import { DEFAULT_DICTATION_HOTKEY, comboFromEvent, comboLabel } from '$lib/components/agent-room/dictation-hotkey.js';
   import { appSettingsStore, getAppSettings, invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
+  import { notifyAdventureSettings } from '$lib/components/agent-room/adventure/adventure-client.js';
   import VoiceConfirmDialog from '$lib/components/agent-room/VoiceConfirmDialog.svelte';
   import { localVoiceLabel } from '$lib/components/agent-room/voice-label.js';
   import {
@@ -183,6 +184,8 @@
     // Invalida a store reativa: terminais aplicam o novo atalho na hora.
     invalidateAppSettings();
     await getAppSettings(true);
+    // A faixa da Aventura vive em outra janela: avisa para ela reler a aparência agora.
+    notifyAdventureSettings();
     if (desktop?.configureCore) {
       coreStatus = await desktop.configureCore({
         runInBackground: settings.coreRunInBackground === 'true',
@@ -315,6 +318,7 @@
     configureCore?: (preferences: { runInBackground: boolean; launchAtLogin: boolean }) => Promise<CoreStatus | null>;
     restartCore?: () => Promise<CoreStatus | null>;
     setAdventureStrip?: (enabled: boolean) => Promise<boolean>;
+    resetAdventurePosition?: () => void;
   };
   type CoreStatus = {
     running: boolean;
@@ -819,6 +823,76 @@
           ]}
         />
       </div>
+      <div class="grid gap-3 border-t border-[var(--app-border)] py-3">
+        <span class="field-label">{m['settings.adventure_look']()}</span>
+        <p class="field-hint">{m['settings.adventure_look_desc']()}</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-3">
+          {#if desktop?.setAdventureStrip}
+            <div class="grid gap-1">
+              <span class="field-hint">{m['settings.adventure_width']()}</span>
+              <SegmentedControl
+                class="w-fit max-w-full"
+                label={m['settings.adventure_width']()}
+                value={settings.adventureWidth ?? 'full'}
+                onValueChange={(value: string) => (settings = { ...settings, adventureWidth: value })}
+                options={[
+                  { value: 'full', label: m['settings.adventure_width_full']() },
+                  { value: 'compact', label: m['settings.adventure_width_compact']() },
+                ]}
+              />
+            </div>
+          {/if}
+          <div class="grid gap-1">
+            <span class="field-hint">{m['settings.adventure_size']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['settings.adventure_size']()}
+              value={settings.adventureSize ?? 'normal'}
+              onValueChange={(value: string) => (settings = { ...settings, adventureSize: value })}
+              options={[
+                { value: 'small', label: m['settings.adventure_size_small']() },
+                { value: 'normal', label: m['settings.adventure_size_normal']() },
+                { value: 'large', label: m['settings.adventure_size_large']() },
+              ]}
+            />
+          </div>
+          <div class="grid gap-1">
+            <span class="field-hint">{m['settings.adventure_scenery']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['settings.adventure_scenery']()}
+              value={settings.adventureScenery ?? 'full'}
+              onValueChange={(value: string) => (settings = { ...settings, adventureScenery: value })}
+              options={[
+                { value: 'full', label: m['settings.adventure_scenery_full']() },
+                { value: 'minimal', label: m['settings.adventure_scenery_minimal']() },
+              ]}
+            />
+          </div>
+          <div class="grid gap-1">
+            <span class="field-hint">{m['settings.adventure_hud']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['settings.adventure_hud']()}
+              value={settings.adventureHud ?? 'always'}
+              onValueChange={(value: string) => (settings = { ...settings, adventureHud: value })}
+              options={[
+                { value: 'always', label: m['settings.adventure_hud_always']() },
+                { value: 'hover', label: m['settings.adventure_hud_hover']() },
+              ]}
+            />
+          </div>
+        </div>
+      </div>
+      {#if desktop?.resetAdventurePosition}
+        <div class="flex min-h-14 flex-wrap items-center justify-between gap-4 border-t border-[var(--app-border)] py-3">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="field-label">{m['settings.adventure_position']()}</span>
+            <p class="field-hint">{m['settings.adventure_position_desc']()}</p>
+          </div>
+          <Button variant="outline" size="sm" onclick={() => desktop?.resetAdventurePosition?.()}>{m['settings.adventure_back_to_dock']()}</Button>
+        </div>
+      {/if}
     </div>
   </section>
 
