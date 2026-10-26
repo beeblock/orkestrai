@@ -233,7 +233,10 @@ describe('atomic desktop startup migrations', () => {
     await new Schema().createTable('agent_workspaces', (table) => { table.uuid('id').primary(); table.string('name'); });
     await Connection.raw('INSERT INTO agent_workspaces (id, name) VALUES (?, ?)', ['wal-row', 'Committed in WAL']);
     await client.backup(join(directory, 'database.db.bak-2020-01-01T00-00-00'));
-    await runStartupMigrations(migrations, { databasePath, existingDatabase: true });
+    const phases: string[] = [];
+    await runStartupMigrations(migrations, { databasePath, existingDatabase: true, onPhase: (phase: string) => { phases.push(phase); } });
+    // Announced before each slow step, so the desktop waits for it instead of stopping the server.
+    expect(phases).toEqual(['backup', 'migrating']);
     const backups = (await readdir(directory)).filter((name) => name.startsWith('database.db.bak-'));
     expect(backups).toHaveLength(1);
     const backup = new Database(join(directory, backups[0]), { readonly: true });
@@ -241,7 +244,8 @@ describe('atomic desktop startup migrations', () => {
       expect(backup.prepare('SELECT name FROM agent_workspaces').all()).toEqual([{ name: 'Committed in WAL' }]);
       expect(backup.prepare("SELECT name FROM sqlite_master WHERE name = 'agent_workspace_groups'").all()).toEqual([]);
     } finally { backup.close(); }
-    expect(await runStartupMigrations(migrations, { databasePath, existingDatabase: true })).toEqual([]);
+    expect(await runStartupMigrations(migrations, { databasePath, existingDatabase: true, onPhase: (phase: string) => { phases.push(phase); } })).toEqual([]);
+    expect(phases).toEqual(['backup', 'migrating']);
     expect((await readdir(directory)).filter((name) => name.startsWith('database.db.bak-'))).toEqual(backups);
   });
 });

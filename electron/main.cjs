@@ -22,7 +22,7 @@ const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const { createAdventureWindowController } = require('./adventure-window.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
-const { waitForInternalServer, showStartupRecovery } = require('./startup-recovery.cjs');
+const { waitForInternalServer, createStartupWatcher, showStartupRecovery } = require('./startup-recovery.cjs');
 const { openWorkspaceFolder } = require('./workspace-folder.cjs');
 const decodeAudio = createAudioDecoder();
 const { createDesktopCapture } = require('./computer-capture.cjs');
@@ -373,6 +373,18 @@ function createSplash() {
   createdSplash.once('closed', () => { if (splashWindow === createdSplash) splashWindow = null; });
 }
 
+/** A large database takes minutes to back up and update: the splash says so instead of looking stuck. */
+function showSplashPreparing() {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  try {
+    const { startupPreparingCopy } = require(path.join(appRoot, 'build/desktop-messages/index.cjs'));
+    const copy = startupPreparingCopy(menuLocale);
+    void splashWindow.webContents.executeJavaScript(`window.showPreparing?.(${JSON.stringify(copy.title)}, ${JSON.stringify(copy.detail)})`).catch(() => undefined);
+  } catch (error) {
+    diagnostics?.write('warn', 'core', 'Startup preparation notice failed.', error);
+  }
+}
+
 function closeSplash() {
   const closingSplash = splashWindow;
   splashWindow = null;
@@ -680,10 +692,18 @@ async function startServer(port) {
     }
   });
 
+  // The database step the server is in (backup, migration, compaction), so a slow preparation is not taken for a hang.
+  const startup = createStartupWatcher();
+  let toldSplash = false;
   serverProcess.stdout.on('data', (chunk) => {
     const text = String(chunk);
     process.stdout.write(`[server] ${text}`);
-    for (const line of text.split(/\r?\n/)) {
+    const lines = startup.feed(text);
+    if (startup.preparing() && !toldSplash) {
+      toldSplash = true;
+      showSplashPreparing();
+    }
+    for (const line of lines) {
       const structuredMatch = line.match(/\[orkestrai:notify\] (\{.+\})/);
       if (structuredMatch) {
         try {
@@ -719,7 +739,7 @@ async function startServer(port) {
 
   await waitForInternalServer(
     `http://127.0.0.1:${port}/api/agent-room/core/health`,
-    { timeoutMs: 30_000, headers: { 'x-orkestrai-core-token': coreToken }, server: startedServerProcess },
+    { timeoutMs: 30_000, preparing: startup.preparing, headers: { 'x-orkestrai-core-token': coreToken }, server: startedServerProcess },
   );
   return port;
 }

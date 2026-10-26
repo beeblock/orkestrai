@@ -6,6 +6,8 @@
   "startup.recovery_retry": "Try again",
   "startup.recovery_logs": "Open logs folder",
   "startup.recovery_quit": "Quit",
+  "startup.preparing_title": "Preparing your data",
+  "startup.preparing_detail": "Backing up and updating the database. Large workspaces can take a few minutes; Orkestrai opens on its own when it is done.",
   "floor.error_remove": "Could not remove the Floor. Review its blockers and try again.",
   "floor.remove_confirm_title": "Remove Floor {name}?",
   "floor.remove_confirm_description": "Only an integrated, clean and unused worktree can be removed. Local files, ignored files other than test reports, caches and logs, pending tasks, live terminals and running processes block deletion. The selected action determines whether the merged branch is kept.",

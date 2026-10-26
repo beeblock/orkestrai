@@ -6,6 +6,8 @@
   "startup.recovery_retry": "Tentar novamente",
   "startup.recovery_logs": "Abrir pasta de logs",
   "startup.recovery_quit": "Sair",
+  "startup.preparing_title": "Preparando seus dados",
+  "startup.preparing_detail": "Fazendo backup e atualizando o banco de dados. Workspaces grandes podem levar alguns minutos; o Orkestrai abre sozinho quando terminar.",
   "floor.error_remove": "Não foi possível remover o andar. Revise os bloqueios e tente novamente.",
   "floor.remove_confirm_title": "Remover o andar {name}?",
   "floor.remove_confirm_description": "Somente uma worktree integrada, limpa e sem uso pode ser removida. Arquivos locais, arquivos ignorados que não sejam relatórios de teste, caches ou logs, tarefas pendentes, terminais vivos e processos em execução bloqueiam a exclusão. A ação selecionada determina se a branch integrada será mantida.",

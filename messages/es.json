@@ -6,6 +6,8 @@
   "startup.recovery_retry": "Reintentar",
   "startup.recovery_logs": "Abrir carpeta de logs",
   "startup.recovery_quit": "Salir",
+  "startup.preparing_title": "Preparando tus datos",
+  "startup.preparing_detail": "Haciendo una copia de seguridad y actualizando la base de datos. Los workspaces grandes pueden tardar unos minutos; Orkestrai se abre solo al terminar.",
   "floor.error_remove": "No se pudo eliminar el piso. Revisa los bloqueos e inténtalo de nuevo.",
   "floor.remove_confirm_title": "¿Eliminar el piso {name}?",
   "floor.remove_confirm_description": "Solo se puede eliminar una worktree integrada, limpia y sin uso. Los archivos locales, los archivos ignorados que no sean informes de prueba, cachés o logs, las tareas pendientes, los terminales activos y los procesos en ejecución bloquean la eliminación. La acción seleccionada determina si se conserva la rama integrada.",
