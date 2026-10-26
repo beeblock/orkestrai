@@ -1,0 +1,23 @@
+[
+  {
+    "size": "small",
+    "bottom": 269,
+    "fits": true,
+    "top": 7.921875,
+    "viewport": 290
+  },
+  {
+    "size": "large",
+    "bottom": 269,
+    "fits": true,
+    "top": 7.921875,
+    "viewport": 360
+  },
+  {
+    "size": "normal",
+    "bottom": 269,
+    "fits": true,
+    "top": 7.921875,
+    "viewport": 320
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "firstReportAfterThirtyMinuteOutage": {
+    "expectedKills": 600,
+    "actualKills": 330,
+    "expectedGold": 1200,
+    "actualGold": 1200,
+    "totals": [
+      {
+        "kills": 100,
+        "gold": 200,
+        "battleUntil": "2026-10-26T12:25:00.000Z"
+      },
+      {
+        "kills": 200,
+        "gold": 400,
+        "battleUntil": "2026-10-26T12:30:00.000Z"
+      },
+      {
+        "kills": 300,
+        "gold": 600,
+        "battleUntil": "2026-10-26T12:31:00.000Z"
+      },
+      {
+        "kills": 310,
+        "gold": 800,
+        "battleUntil": "2026-10-26T12:31:00.000Z"
+      },
+      {
+        "kills": 320,
+        "gold": 1000,
+        "battleUntil": "2026-10-26T12:31:00.000Z"
+      },
+      {
+        "kills": 330,
+        "gold": 1200,
+        "battleUntil": "2026-10-26T12:31:00.000Z"
+      }
+    ]
+  },
+  "previewState": {
+    "savedCombatEnabled": true,
+    "voicesBeforeConfigure": 0,
+    "voicesAfterConfigure": 2
+  },
+  "musicCatchup": {
+    "missedSeconds": 600,
+    "voicesCreated": 10710,
+    "scriptMs": 11.535374999999988
+  }
+}
