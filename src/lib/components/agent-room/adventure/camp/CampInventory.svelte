@@ -4,14 +4,15 @@
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import * as NativeSelect from '$lib/components/ui/native-select';
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
-  import { MATERIALS, MATERIAL_IDS, RARITIES, RARITY_RULES, SLOTS, canEquip, itemGoldValue, rarityIndex, type Item, type Rarity, type Slot } from '$lib/modules/agent-room/domain/adventure/items.js';
+  import { ELIXIRS, ELIXIR_ATLAS, ELIXIR_IDS, type ElixirId, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
+  import { MATERIAL_IDS, RARITIES, RARITY_RULES, SLOTS, canEquip, itemGoldValue, materialIcon, parseMaterialKey, rarityIndex, type Item, type Rarity, type Slot } from '$lib/modules/agent-room/domain/adventure/items.js';
   import { CHEST_TIERS, type ChestTier } from '$lib/modules/agent-room/domain/adventure/loot.js';
   import { runeRule } from '$lib/modules/agent-room/domain/adventure/runes.js';
   import { DIFFICULTIES } from '$lib/modules/agent-room/domain/adventure/world.js';
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
-  import { formatNumber, heroLevelText, itemName } from '../adventure-text.js';
+  import { formatNumber, heroLevelText, itemName, materialName, statLines } from '../adventure-text.js';
   import ItemDetails from './ItemDetails.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import ItemSlot from './ItemSlot.svelte';
@@ -51,6 +52,21 @@
   const worn = $derived(focus && target ? snapshot.items.find((item) => item.location === 'equipped' && item.heroId === target.id && item.slot === focus.slot) ?? null : null);
   const pickedGold = $derived(snapshot.items.filter((item) => picked.includes(item.id)).reduce((sum, item) => sum + itemGoldValue(item, runeRule(snapshot.account.runes, 'alchemy')), 0));
   const junk = $derived(snapshot.items.filter((item) => item.location === 'inventory' && !item.locked && rarityIndex(item.rarity) <= 1));
+  /** Materials in the bag, gems by cut, in catalog order. */
+  const materials = $derived(Object.entries(snapshot.account.materials)
+    .map(([key, count]) => ({ key, count, parsed: parseMaterialKey(key) }))
+    .filter((entry): entry is { key: string; count: number; parsed: NonNullable<ReturnType<typeof parseMaterialKey>> } => Boolean(entry.parsed) && entry.count > 0)
+    .sort((a, b) => MATERIAL_IDS.indexOf(a.parsed.material) - MATERIAL_IDS.indexOf(b.parsed.material) || a.parsed.quality - b.parsed.quality));
+  // Ticks so the elixirs' time left counts down while the camp is open.
+  let clock = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => (clock = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+  function minutesLeft(elixirId: ElixirId): number {
+    const until = snapshot.account.activeElixirs?.[elixirId];
+    return until ? Math.max(0, Math.ceil((Date.parse(until) - clock) / 60_000)) : 0;
+  }
 
   async function openChests(tier: ChestTier) {
     const outcome = await act({ type: 'open-chests', tier, limit: 10 });
@@ -87,10 +103,30 @@
     <div class="wallet">
       <span title={m['adventure.camp_soulstones']()}><ItemIcon atlasId="icons-misc" frame={4} size={22} />{#each DIFFICULTIES as difficulty (difficulty)}{#if snapshot.account.soulstones[difficulty]}<small>{catalog.difficulties[difficulty]} {snapshot.account.soulstones[difficulty]}</small>{/if}{/each}{#if !Object.values(snapshot.account.soulstones).some(Boolean)}<small>0</small>{/if}</span>
       <span title={m['adventure.camp_coins']()}><ItemIcon atlasId="icons-misc" frame={5} size={22} /><small>{snapshot.account.coins}</small></span>
-      {#each MATERIAL_IDS as material (material)}
-        {#if snapshot.account.materials[material]}
-          <span title={catalog.materials[material]}><ItemIcon atlasId="icons-materials" frame={MATERIALS[material].icon} size={22} /><small>{snapshot.account.materials[material]}</small></span>
-        {/if}
+      {#each materials as entry (entry.key)}
+        {@const icon = materialIcon(entry.parsed.material, entry.parsed.quality)}
+        <span title={materialName(catalog, entry.parsed.material, entry.parsed.quality)}><ItemIcon atlasId={icon.atlas} frame={icon.frame} size={22} /><small>{entry.count}</small></span>
+      {/each}
+    </div>
+  </section>
+
+  <section class="elixirs" aria-label={m['adventure.camp_elixirs']()}>
+    <header><b>{m['adventure.camp_elixirs']()}</b><small>{m['adventure.camp_elixirs_hint']()}</small></header>
+    <div class="elixir-list">
+      {#each ELIXIR_IDS as elixirId (elixirId)}
+        {@const count = snapshot.account.elixirs?.[elixirId] ?? 0}
+        {@const left = minutesLeft(elixirId)}
+        <div class="elixir" class:active={left > 0}>
+          <ItemIcon atlasId={ELIXIR_ATLAS} frame={ELIXIRS[elixirId].frame} size={32} dim={!count && !left} />
+          <span class="label">
+            <b>{catalog.elixirs[elixirId]}</b>
+            <span>{statLines(catalog, ELIXIRS[elixirId].stats).join(', ')}</span>
+            {#if left > 0}<span class="left">{m['adventure.camp_elixir_left']({ minutes: left })}</span>{/if}
+          </span>
+          <Button size="sm" variant={count ? 'default' : 'ghost'} disabled={busy || !count} onclick={() => void act({ type: 'drink', elixirId })} data-testid={`camp-drink-${elixirId}`}>
+            {m['adventure.camp_drink']()} · {count}
+          </Button>
+        </div>
       {/each}
     </div>
   </section>
@@ -144,7 +180,7 @@
 
     {#if focus && !picking}
       <aside class="focus" aria-label={itemName(catalog, focus)} style:--rarity={RARITY_RULES[focus.rarity].color}>
-        <ItemDetails item={focus} {catalog} compare={worn} heroLevel={target?.level ?? null} />
+        <ItemDetails item={focus} {catalog} compare={worn} heroLevel={target?.level ?? null} wornSets={(target?.build.sets ?? {}) as Partial<Record<SetId, number>>} />
         {#if able.length}
           <div class="equip">
             <NativeSelect.Root size="sm" class="flex-1" value={target?.id ?? ''} onchange={(event: Event) => (equipTo = (event.currentTarget as HTMLSelectElement).value)} aria-label={m['adventure.camp_equip_on']()}>
@@ -302,5 +338,58 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+
+  .elixirs {
+    display: grid;
+    gap: 8px;
+  }
+
+  .elixirs header {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .elixirs header small {
+    color: var(--app-text-muted);
+    font-size: 11.5px;
+  }
+
+  .elixir-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 8px;
+  }
+
+  .elixir {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--app-surface-subtle);
+  }
+
+  .elixir.active {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 55%, transparent);
+  }
+
+  .elixir .label {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    font-size: 11.5px;
+    color: var(--app-text-muted);
+  }
+
+  .elixir .label b {
+    color: var(--app-text);
+    font-size: 12px;
+  }
+
+  .elixir .left {
+    color: var(--app-accent);
   }
 </style>

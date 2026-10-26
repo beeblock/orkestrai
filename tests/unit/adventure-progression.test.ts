@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { newAccount } from '$lib/modules/agent-room/domain/adventure/account.js';
 import { buildHeroes, deployHeroes, visualTier } from '$lib/modules/agent-room/domain/adventure/build.js';
 import { synthesisRarity } from '$lib/modules/agent-room/domain/adventure/cube.js';
+import { SETS, SET_PIECES, UNIQUES, elixirStats, setBonuses, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import {
-  AdventureError, applyReport, buyRune, craftItem, equipItem, makeOffering, openChests, payOffline, payQuests, salvage, socketItem,
+  AdventureError, applyReport, buyRune, craftItem, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
   synthesizeItems, bindRoster, heroOfAgent, setHeroClass, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
 } from '$lib/modules/agent-room/domain/adventure/engine.js';
-import { RARITIES, RARITY_RULES, canEquip, itemStats, rollItem, type Item, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
-import { openChest, rollRarity } from '$lib/modules/agent-room/domain/adventure/loot.js';
+import {
+  RARITIES, RARITY_RULES, canEquip, gemQualityFor, itemBaseKey, itemIcon, itemStats, materialKey, materialStats, parseMaterialKey, rollItem,
+  type Item, type Rarity,
+} from '$lib/modules/agent-room/domain/adventure/items.js';
+import { openChest, rollRarity, rollUnique } from '$lib/modules/agent-room/domain/adventure/loot.js';
 import { canBuyRune, formationSlots } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import { SKILL_TREES, autoAllocate, canRaise, pointsSpent, sanitizeRanks } from '$lib/modules/agent-room/domain/adventure/skills.js';
 import { NO_CLEARS, addXp, positionAt, regionLevel, stageUnlocked, xpToNext, difficultyUnlocked, MAX_HERO_LEVEL } from '$lib/modules/agent-room/domain/adventure/world.js';
@@ -105,7 +109,8 @@ describe('adventure items and loot', () => {
 
   it('fills red chests with three items and a coin', () => {
     const contents = openChest(seeded(2), { tier: 'red', level: 20, difficulty: 'normal', act: 2, magicFind: 0, goldMultiplier: 1, partyClasses: ['knight'] });
-    expect(contents.items).toHaveLength(3);
+    // Three items, plus the act boss's unique when luck strikes.
+    expect(contents.items.filter((item) => !item.uniqueId)).toHaveLength(3);
     expect(contents.items.every((item) => RARITIES.indexOf(item.rarity) >= 2)).toBe(true);
     expect(contents.coins).toBe(1);
     expect(contents.gold).toBeGreaterThan(0);
@@ -332,7 +337,7 @@ describe('adventure engine', () => {
 
   it('dresses heroes by the rarity of their gear', () => {
     const piece = (slot: Item['slot'], rarity: Rarity): Item => ({ slot, classId: slot === 'weapon' ? 'knight' : null, rarity, level: 1, affixes: [], sockets: [], id: slot, location: 'equipped', heroId: 'k', locked: false, createdAt: '' });
-    const gear = (rarity: Rarity) => (['weapon', 'helmet', 'armor', 'gloves', 'boots'] as const).map((slot) => piece(slot, rarity));
+    const gear = (rarity: Rarity) => (['weapon', 'helmet', 'shoulders', 'armor', 'gloves', 'legs', 'boots'] as const).map((slot) => piece(slot, rarity));
     expect(visualTier([])).toBe(1);
     expect(visualTier(gear('epic'))).toBe(2);
     expect(visualTier(gear('immortal'))).toBe(3);
@@ -342,3 +347,133 @@ describe('adventure engine', () => {
     expect(builds.k.weaponRarity).toBe('legendary');
   });
 });
+
+describe('adventure armory', () => {
+  const owned = (data: ReturnType<typeof rollItem>, id: string, heroId: string | null = null): Item => ({ ...data, id, location: heroId ? 'equipped' : 'inventory', heroId, locked: false, createdAt: '' });
+
+  it('rolls three variants per base, each with its own focus, name and icon', () => {
+    const rng = seeded(11);
+    const seen = new Set<number>();
+    for (let index = 0; index < 60; index += 1) seen.add(rollItem(rng, { level: 30, rarity: 'rare', slot: 'boots' }).variant ?? 0);
+    expect([...seen].sort()).toEqual([0, 1, 2]);
+    const swift = rollItem(rng, { level: 30, rarity: 'common', slot: 'weapon', classId: 'ranger', variant: 1 });
+    expect(itemStats(swift).attackSpeed).toBeGreaterThan(0);
+    expect(itemBaseKey(swift)).toBe('weapon-ranger.1.1');
+    expect(itemIcon(swift)).toEqual({ atlas: 'icons-weapons-v-ranger', frame: 1 });
+    // Off hands belong to a class and have one look per tier.
+    const shield = rollItem(rng, { level: 45, rarity: 'rare', slot: 'offhand', classId: 'knight' });
+    expect(shield.variant ?? 0).toBe(0);
+    expect(itemBaseKey(shield)).toBe('offhand-knight.2');
+    expect(canEquip(shield, { classId: 'ranger', level: 50 })).toBe('class');
+  });
+
+  it('wears two rings and two trinkets, replacing the chosen or the weaker one', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    const qa = hero(save, 'qa');
+    const ring = (id: string, rarity: Rarity) => owned(rollItem(ctx.rng, { level: 1, rarity, slot: 'ring' }), id);
+    save.items.push(ring('r1', 'common'), ring('r2', 'epic'), ring('r3', 'rare'), ring('r4', 'rare'));
+    equipItem(save, 'r1', qa.id);
+    equipItem(save, 'r2', qa.id);
+    const worn = () => save.items.filter((item) => item.slot === 'ring' && item.location === 'equipped' && item.heroId === qa.id).map((item) => item.id).sort();
+    expect(worn()).toEqual(['r1', 'r2']);
+    equipItem(save, 'r3', qa.id);
+    expect(worn()).toEqual(['r2', 'r3']);
+    equipItem(save, 'r4', qa.id, 'r2');
+    expect(worn()).toEqual(['r3', 'r4']);
+  });
+
+  it('adds up set pieces into two-, four- and six-piece bonuses, for the set\'s class only', () => {
+    const rng = seeded(5);
+    const pieces = SET_PIECES.map((slot, index) => owned(rollItem(rng, { level: 30, rarity: 'epic', setId: 'oathkeeper', slot }), `p${index}`, 'k'));
+    expect(pieces.map((item) => item.slot)).toEqual(SET_PIECES);
+    expect(canEquip(pieces[0], { classId: 'ranger', level: 40 })).toBe('class');
+    expect(setBonuses({ oathkeeper: 3 }).stats).toEqual(SETS.oathkeeper.bonuses[2]);
+    expect(setBonuses({ oathkeeper: 6 }).powers).toEqual(['bastion']);
+    const build = (count: number) => buildHeroes([{ heroId: 'k', classId: 'knight', level: 30, xp: 0, skills: {}, actives: [], deployed: true }], pieces.slice(0, count), {}, {}).k;
+    expect(build(1).sets).toEqual({ oathkeeper: 1 });
+    expect(build(4).stats.damageReduction).toBeGreaterThan(build(3).stats.damageReduction ?? 0);
+    expect(build(5).powers).toEqual([]);
+    expect(build(6).powers).toEqual(['bastion']);
+  });
+
+  it('drops each act boss\'s uniques from its red chests, and the wandering ones only on Hell and Torment', () => {
+    const rng = seeded(21);
+    const found = (act: number, difficulty: 'normal' | 'hell') => {
+      const ids = new Set<string>();
+      for (let index = 0; index < 2_000; index += 1) {
+        const uniqueId = rollUnique(rng, { act, difficulty, magicFind: 200 });
+        if (uniqueId) ids.add(uniqueId);
+      }
+      return [...ids].sort();
+    };
+    const act1 = Object.values(UNIQUES).filter((unique) => unique.act === 1).map((unique) => unique.id).sort();
+    const wandering = Object.values(UNIQUES).filter((unique) => unique.act === null).map((unique) => unique.id);
+    expect(found(1, 'normal')).toEqual(act1);
+    expect(found(1, 'hell')).toEqual([...act1, ...wandering].sort());
+    const item = rollItem(rng, { level: 40, rarity: 'legendary', uniqueId: 'hydra-merge' });
+    expect(item).toMatchObject({ slot: 'weapon', classId: 'knight', uniqueId: 'hydra-merge' });
+    expect(itemIcon(item)).toEqual(UNIQUES['hydra-merge'].icon);
+    expect(buildHeroes([{ heroId: 'k', classId: 'knight', level: 40, xp: 0, skills: {}, actives: [], deployed: true }], [owned(item, 'u', 'k')], {}, {}).k.powers).toEqual(['cleave']);
+  });
+
+  it('keeps gems by cut, scales what they grant and fuses three into the next cut', () => {
+    expect(materialKey('ruby')).toBe('ruby');
+    expect(materialKey('ruby', 1)).toBe('ruby:1');
+    expect(materialKey('fury-rune', 1)).toBe('fury-rune');
+    expect(parseMaterialKey('sapphire:5')).toEqual({ material: 'sapphire', quality: 5 });
+    expect(parseMaterialKey('fury-rune:2')).toBeNull();
+    expect(materialStats('ruby', 5, 'weapon').attackPct).toBeGreaterThan(materialStats('ruby', 1, 'weapon').attackPct!);
+    expect(gemQualityFor(() => 0, 1)).toBe(1);
+    expect(gemQualityFor(() => 0.99, 110)).toBe(3);
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.gold = 1e6;
+    save.account.materials = { 'ruby:1': 4 };
+    expect(() => fuseGems(save, 'ruby', 1)).toThrow('cube-level');
+    save.account.cube.level = 2;
+    expect(fuseGems(save, 'ruby', 1)).toBe(2);
+    expect(save.account.materials).toEqual({ 'ruby:1': 1, 'ruby:2': 1 });
+    expect(() => fuseGems(save, 'ruby', 1)).toThrow('fusion-gems');
+    expect(() => fuseGems(save, 'ruby', 5)).toThrow('fusion-max');
+    // A socketed gem keeps its cut.
+    const helm = owned(rollItem(ctx.rng, { level: 10, rarity: 'rare', slot: 'helmet' }), 'h');
+    save.items.push(helm);
+    socketItem(save, 'h', 0, 'ruby', 2);
+    expect(helm.sockets[0]).toEqual({ kind: 'decoration', material: 'ruby', quality: 2 });
+    expect(save.account.materials['ruby:2']).toBe(0);
+  });
+
+  it('drinks elixirs for half an hour that every hero feels, stacking up to four hours', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    expect(() => drinkElixir(save, ctx, 'wisdom')).toThrow('elixir');
+    save.account.elixirs = { wisdom: 10 };
+    const before = partyBuilds(save, roster, Date.parse(ctx.now)).builds[hero(save, 'qa').id].profile.xpMultiplier;
+    const until = drinkElixir(save, ctx, 'wisdom');
+    expect(Date.parse(until) - Date.parse(ctx.now)).toBe(30 * 60_000);
+    const during = partyBuilds(save, roster, Date.parse(ctx.now) + 60_000).builds[hero(save, 'qa').id].profile.xpMultiplier;
+    expect(during).toBeCloseTo(before + 0.5);
+    for (let index = 0; index < 9; index += 1) drinkElixir(save, ctx, 'wisdom');
+    expect(Date.parse(save.account.activeElixirs.wisdom!) - Date.parse(ctx.now)).toBe(4 * 3_600_000);
+    expect(elixirStats(save.account.activeElixirs, Date.parse(ctx.now) + 5 * 3_600_000)).toEqual({});
+  });
+
+  it('opens chests into elixirs and cut gems as well', () => {
+    let elixirs = 0;
+    const cuts = new Set<string>();
+    for (let seed = 0; seed < 40; seed += 1) {
+      const contents = openChest(seeded(seed), { tier: 'quest', level: 30, difficulty: 'normal', act: 3, magicFind: 0, goldMultiplier: 1, partyClasses: ['knight'] });
+      elixirs += Object.values(contents.elixirs).reduce((sum, count) => sum + (count ?? 0), 0);
+      for (const key of Object.keys(contents.materials)) cuts.add(key.includes(':') ? key.split(':')[1] : '3');
+    }
+    expect(elixirs).toBe(40);
+    expect(cuts.size).toBeGreaterThan(1);
+    const sets = new Set<SetId>();
+    for (let seed = 0; seed < 300; seed += 1) {
+      for (const item of openChest(seeded(seed), { tier: 'red', level: 40, difficulty: 'hell', act: 4, magicFind: 0, goldMultiplier: 1, partyClasses: ['ranger'] }).items) if (item.setId) sets.add(item.setId);
+    }
+    expect(sets.has('windrunner')).toBe(true);
+  });
+});
+

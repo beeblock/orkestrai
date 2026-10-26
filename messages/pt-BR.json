@@ -5913,5 +5913,16 @@
   "adventure.inspired": "Inspirado: +20% de dano enquanto o agente trabalha",
   "adventure.supporters": "+{count} apoiando",
   "adventure.supporters_hint": "Agentes trabalhando fora da formação: os heróis deles ganham 60% da experiência.",
-  "adventure.camp_guild": "Guilda · {count} heróis"
+  "adventure.camp_guild": "Guilda · {count} heróis",
+  "adventure.item_unique": "Único",
+  "adventure.item_set": "{set} · {count}/{total}",
+  "adventure.camp_slot_pair": "{slot} {index}",
+  "adventure.camp_powers": "Poderes",
+  "adventure.camp_powers_none": "Sem poderes ainda: equipe um item único ou vista as 6 peças de um conjunto.",
+  "adventure.camp_elixirs": "Elixires",
+  "adventure.camp_elixirs_hint": "Cada dose vale 30 min para todos os heróis e doses iguais somam até 4 h. Vêm de baús de missão, vermelhos e às vezes azuis.",
+  "adventure.camp_elixir_left": "{minutes} min restantes",
+  "adventure.camp_drink": "Beber",
+  "adventure.camp_fuse": "Fundir 3 em 1 · {gold}",
+  "adventure.camp_fusion_none": "Junte três gemas iguais da mesma lapidação para fundi-las em uma melhor."
 }

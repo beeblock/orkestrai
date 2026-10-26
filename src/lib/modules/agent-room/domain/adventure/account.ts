@@ -1,5 +1,6 @@
 import type { HeroClassId, MonsterId } from './catalog.js';
-import type { ItemData, MaterialId, Rarity } from './items.js';
+import type { ElixirId } from './artifacts.js';
+import type { ItemData, Rarity } from './items.js';
 import type { ChestTier } from './loot.js';
 import type { PetId } from './pets.js';
 import type { RuneRanks } from './runes.js';
@@ -56,7 +57,11 @@ export type AdventureAccount = {
   chests: ChestEntry[];
   soulstones: Record<Difficulty, number>;
   coins: number;
-  materials: Partial<Record<MaterialId, number>>;
+  /** By material key: the id for runes, glyphs and Normal gems, `gem:quality` for the other cuts. */
+  materials: Record<string, number>;
+  /** Elixirs in the bag, and when the ones drunk run out. */
+  elixirs: Partial<Record<ElixirId, number>>;
+  activeElixirs: Partial<Record<ElixirId, string>>;
   runes: RuneRanks;
   activePet: PetId | null;
   cube: { level: number; xp: number };
@@ -89,6 +94,8 @@ export function newAccount(now: string): AdventureAccount {
     soulstones: { normal: 0, nightmare: 0, hell: 0, torment: 0 },
     coins: 0,
     materials: {},
+    elixirs: {},
+    activeElixirs: {},
     runes: {},
     activePet: null,
     cube: { level: 1, xp: 0 },

@@ -5913,5 +5913,16 @@
   "adventure.inspired": "Inspirado: +20% de daño mientras su agente trabaja",
   "adventure.supporters": "+{count} apoyando",
   "adventure.supporters_hint": "Agentes trabajando fuera de la formación: sus héroes ganan el 60% de la experiencia.",
-  "adventure.camp_guild": "Gremio · {count} héroes"
+  "adventure.camp_guild": "Gremio · {count} héroes",
+  "adventure.item_unique": "Único",
+  "adventure.item_set": "{set} · {count}/{total}",
+  "adventure.camp_slot_pair": "{slot} {index}",
+  "adventure.camp_powers": "Poderes",
+  "adventure.camp_powers_none": "Aún sin poderes: equipa un objeto único o viste las 6 piezas de un conjunto.",
+  "adventure.camp_elixirs": "Elixires",
+  "adventure.camp_elixirs_hint": "Cada dosis dura 30 min para todos los héroes y las dosis del mismo elixir suman hasta 4 h. Salen de cofres de misión, rojos y a veces azules.",
+  "adventure.camp_elixir_left": "quedan {minutes} min",
+  "adventure.camp_drink": "Beber",
+  "adventure.camp_fuse": "Fusionar 3 en 1 · {gold}",
+  "adventure.camp_fusion_none": "Reúne tres gemas iguales de la misma talla para fusionarlas en una mejor."
 }

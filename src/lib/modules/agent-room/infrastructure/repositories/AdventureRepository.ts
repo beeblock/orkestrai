@@ -2,10 +2,11 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentAdventure } from '../../domain/models/AgentAdventure.js';
 import { AgentAdventureHero } from '../../domain/models/AgentAdventureHero.js';
 import { AgentAdventureItem } from '../../domain/models/AgentAdventureItem.js';
+import { ELIXIRS, SETS, UNIQUES, type ElixirId, type SetId, type UniqueId } from '../../domain/adventure/artifacts.js';
 import { DEFAULT_SETTINGS, newAccount, type AdventureAccount, type AdventureHero } from '../../domain/adventure/account.js';
 import { HERO_CLASS_IDS, type HeroClassId } from '../../domain/adventure/catalog.js';
 import type { AdventureSave } from '../../domain/adventure/engine.js';
-import { MATERIALS, RARITIES, SLOTS, type Item, type ItemAffix, type ItemSocket, type Rarity, type Slot } from '../../domain/adventure/items.js';
+import { GEM_QUALITIES, MATERIALS, RARITIES, SLOTS, parseMaterialKey, type BaseVariant, type GemQuality, type Item, type ItemAffix, type ItemSocket, type Rarity, type Slot } from '../../domain/adventure/items.js';
 import { STAT_IDS } from '../../domain/adventure/stats.js';
 import { NO_CLEARS, START_POSITION } from '../../domain/adventure/world.js';
 
@@ -32,6 +33,10 @@ function readAccount(raw: unknown, now: string): AdventureAccount {
     settings: { ...DEFAULT_SETTINGS, ...stored.settings },
     cube: { ...base.cube, ...stored.cube },
     chests: Array.isArray(stored.chests) ? stored.chests : [],
+    // Only known material keys and elixirs survive a read.
+    materials: Object.fromEntries(Object.entries(stored.materials ?? {}).filter(([key, count]) => parseMaterialKey(key) && Number.isFinite(count) && count > 0)),
+    elixirs: Object.fromEntries(Object.entries(stored.elixirs ?? {}).filter(([elixirId, count]) => ELIXIRS[elixirId as ElixirId] && Number.isFinite(count) && (count as number) > 0)),
+    activeElixirs: Object.fromEntries(Object.entries(stored.activeElixirs ?? {}).filter(([elixirId, until]) => ELIXIRS[elixirId as ElixirId] && typeof until === 'string' && !Number.isNaN(Date.parse(until)))),
     journal: Array.isArray(stored.journal) ? stored.journal : [],
     formation: Array.isArray(stored.formation) ? stored.formation : [],
     firstBossClears: Array.isArray(stored.firstBossClears) ? stored.firstBossClears : [],
@@ -70,8 +75,15 @@ function readItem(model: AgentAdventureItem): Item | null {
   const classId = model.getAttribute('class_id') as string | null;
   const location = String(model.getAttribute('location'));
   const affixes = parse<ItemAffix[]>(model.getAttribute('affixes_json'), []).filter((affix) => STAT_IDS.includes(affix?.stat) && Number.isFinite(affix?.value));
-  const sockets = parse<ItemSocket[]>(model.getAttribute('sockets_json'), []).map((socket) => ({ kind: socket.kind, material: socket.material && MATERIALS[socket.material] ? socket.material : null }));
-  return {
+  const sockets = parse<ItemSocket[]>(model.getAttribute('sockets_json'), []).map((socket) => {
+    const read: ItemSocket = { kind: socket.kind, material: socket.material && MATERIALS[socket.material] ? socket.material : null };
+    if (read.material && socket.quality && GEM_QUALITIES.includes(socket.quality as GemQuality) && socket.quality !== 3) read.quality = socket.quality;
+    return read;
+  });
+  const variant = Number(model.getAttribute('variant')) || 0;
+  const uniqueId = model.getAttribute('unique_id') as string | null;
+  const setId = model.getAttribute('set_id') as string | null;
+  const item: Item = {
     id: String(model.getAttribute('id')),
     slot,
     classId: classId && (HERO_CLASS_IDS as string[]).includes(classId) ? (classId as HeroClassId) : null,
@@ -84,6 +96,10 @@ function readItem(model: AgentAdventureItem): Item | null {
     locked: Boolean(model.getAttribute('locked')),
     createdAt: String(model.getAttribute('created_at') ?? ''),
   };
+  if (variant === 1 || variant === 2) item.variant = variant as BaseVariant;
+  if (uniqueId && UNIQUES[uniqueId as UniqueId]) item.uniqueId = uniqueId as UniqueId;
+  if (setId && SETS[setId as SetId]) item.setId = setId as SetId;
+  return item;
 }
 
 function heroRow(hero: AdventureHero) {
@@ -112,6 +128,9 @@ function itemRow(item: Item) {
     class_id: item.classId,
     rarity: item.rarity,
     level: item.level,
+    variant: item.variant ?? 0,
+    unique_id: item.uniqueId ?? null,
+    set_id: item.setId ?? null,
     affixes_json: JSON.stringify(item.affixes),
     sockets_json: JSON.stringify(item.sockets),
     locked: item.locked,

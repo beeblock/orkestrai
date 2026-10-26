@@ -1,12 +1,17 @@
 import { HERO_CLASSES, MONSTERS, heroClassFor, type HeroClassId, type MonsterId } from './catalog.js';
 import { JOURNAL_SIZE, newHero, starterKit, type AdventureAccount, type AdventureHero, type AdventureSettings, type ChestEntry, type JournalEntry } from './account.js';
+import { ELIXIRS, elixirStats, elixirUntil, type ElixirId } from './artifacts.js';
 import { buildHeroes, deployHeroes, type HeroBuild } from './build.js';
 import { heroName } from './names.js';
 import {
   CRAFT_GEMS, CUBE_XP, COINS_PER_OFFERING, SYNTHESIS_INPUTS,
   addCubeXp, alchemyGold, canSocket, craft, craftCost, cubeAllows, offering, removalCost, socketFunction, synthesisCost, synthesize,
 } from './cube.js';
-import { MATERIALS, RARITIES, canEquip, type Item, type ItemData, type ItemLocation, type MaterialId, type Rng, type Slot } from './items.js';
+import {
+  GEM_FUSION_INPUTS, GEM_QUALITIES, MATERIALS, NORMAL_GEM_QUALITY, RARITIES, SLOTS, SLOT_CAPACITY,
+  canEquip, gemFusionCost, isGem, itemScore, materialKey,
+  type GemQuality, type Item, type ItemData, type ItemLocation, type MaterialId, type Rng, type Slot,
+} from './items.js';
 import { BASE_CHEST_CAPACITY, CHEST_TIERS, openChest, type ChestTier } from './loot.js';
 import { PETS, tamedPets, type PetId } from './pets.js';
 import { activeSlots, canBuyRune, formationSlots, inventorySlots, runeCost, runeRule, stashSlots } from './runes.js';
@@ -81,7 +86,7 @@ function partyClasses(save: AdventureSave): HeroClassId[] {
 }
 
 /** Every guild hero's build, with the formation decided from who is working. */
-export function partyBuilds(save: AdventureSave, roster: RosterEntry[]): { builds: Record<string, HeroBuild>; deployed: string[] } {
+export function partyBuilds(save: AdventureSave, roster: RosterEntry[], now = Date.now()): { builds: Record<string, HeroBuild>; deployed: string[] } {
   const live = new Map(roster.map((entry) => [entry.nodeId, entry]));
   const heroes = Object.values(save.heroes);
   const deployed = deployHeroes(
@@ -97,13 +102,14 @@ export function partyBuilds(save: AdventureSave, roster: RosterEntry[]): { build
     save.items,
     save.account.runes,
     save.account.killsByMonster,
+    elixirStats(save.account.activeElixirs, now),
   );
   return { builds, deployed };
 }
 
 /** Luck of the formation, used when opening chests. */
-function partyLuck(save: AdventureSave, roster: RosterEntry[]): { magicFind: number; goldMultiplier: number } {
-  const { builds, deployed } = partyBuilds(save, roster);
+function partyLuck(save: AdventureSave, roster: RosterEntry[], now: string): { magicFind: number; goldMultiplier: number } {
+  const { builds, deployed } = partyBuilds(save, roster, Date.parse(now));
   const heroes = deployed.map((heroId) => builds[heroId]).filter(Boolean);
   if (!heroes.length) return { magicFind: 0, goldMultiplier: 1 };
   return {
@@ -334,7 +340,7 @@ function autoOpen(save: AdventureSave, ctx: EngineContext): OpenResult[] {
   return opened;
 }
 
-export type OpenResult = { chestId: string; tier: ChestTier; items: Item[]; gold: number; materials: Partial<Record<MaterialId, number>>; soulstones: number; coins: number };
+export type OpenResult = { chestId: string; tier: ChestTier; items: Item[]; gold: number; materials: Record<string, number>; elixirs: Partial<Record<ElixirId, number>>; soulstones: number; coins: number };
 
 function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEntry): OpenResult {
   const account = save.account;
@@ -347,7 +353,7 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
       account.firstBossClears.push(key);
     }
   }
-  const luck = partyLuck(save, ctx.roster);
+  const luck = partyLuck(save, ctx.roster, ctx.now);
   const contents = openChest(ctx.rng, {
     tier: chest.tier, level: chest.level, difficulty: chest.difficulty, act: chest.act,
     magicFind: luck.magicFind, goldMultiplier: luck.goldMultiplier, partyClasses: partyClasses(save),
@@ -356,13 +362,14 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
   account.gold += contents.gold;
   account.coins += contents.coins;
   account.soulstones[chest.difficulty] += contents.soulstones;
-  for (const [material, count] of Object.entries(contents.materials) as Array<[MaterialId, number]>) account.materials[material] = (account.materials[material] ?? 0) + count;
+  for (const [key, count] of Object.entries(contents.materials)) account.materials[key] = (account.materials[key] ?? 0) + count;
+  for (const [elixirId, count] of Object.entries(contents.elixirs) as Array<[ElixirId, number]>) account.elixirs[elixirId] = (account.elixirs[elixirId] ?? 0) + count;
   const items = contents.items.map((data) => {
     const item = addItem(save, ctx, data);
     journal(save, { at: ctx.now, kind: 'item', itemId: item.id, rarity: item.rarity, source: chest.tier });
     return item;
   });
-  return { chestId: chest.id, tier: chest.tier, items, gold: contents.gold, materials: contents.materials, soulstones: contents.soulstones, coins: contents.coins };
+  return { chestId: chest.id, tier: chest.tier, items, gold: contents.gold, materials: contents.materials, elixirs: contents.elixirs, soulstones: contents.soulstones, coins: contents.coins };
 }
 
 /** Opens chests by id, or every chest of a tier when no ids are given. */
@@ -467,12 +474,20 @@ function findHero(save: AdventureSave, heroId: string): AdventureHero {
   return save.heroes[heroId] ?? fail('hero');
 }
 
-export function equipItem(save: AdventureSave, itemId: string, heroId: string): void {
+/**
+ * Puts an item on a hero. Rings and trinkets come in pairs: with both worn,
+ * `replaceId` says which one makes room (the weaker one otherwise).
+ */
+export function equipItem(save: AdventureSave, itemId: string, heroId: string, replaceId?: string): void {
   const item = findItem(save, itemId);
   const hero = findHero(save, heroId);
   const verdict = canEquip(item, hero);
   if (verdict !== 'ok') fail(verdict === 'class' ? 'equip-class' : 'equip-level');
-  const current = save.items.find((candidate) => candidate.location === 'equipped' && candidate.heroId === heroId && candidate.slot === item.slot);
+  if (item.location === 'equipped' && item.heroId === heroId) return;
+  const worn = save.items
+    .filter((candidate) => candidate.location === 'equipped' && candidate.heroId === heroId && candidate.slot === item.slot && candidate.id !== item.id)
+    .sort((a, b) => itemScore(a) - itemScore(b));
+  const current = worn.length < SLOT_CAPACITY[item.slot] ? null : worn.find((candidate) => candidate.id === replaceId) ?? worn[0];
   const from = { location: item.location, heroId: item.heroId };
   if (current && current.id !== item.id) {
     // Swap: the old piece goes where the new one came from.
@@ -503,7 +518,7 @@ export function autoEquip(save: AdventureSave, ctx: EngineContext, heroId: strin
   const hero = findHero(save, heroId);
   let changed = 0;
   const ratingOf = () => partyBuilds(save, ctx.roster).builds[heroId]?.rating ?? 0;
-  for (const slot of ['weapon', 'helmet', 'armor', 'gloves', 'boots', 'amulet', 'ring'] as Slot[]) {
+  for (const slot of SLOTS) {
     const candidates = save.items.filter((item) => item.slot === slot && item.location !== 'equipped' && canEquip(item, hero) === 'ok');
     for (const candidate of candidates) {
       const before = ratingOf();
@@ -582,12 +597,12 @@ export function craftItem(save: AdventureSave, ctx: EngineContext, options: { sl
   if (gems.length !== CRAFT_GEMS || gems.some((gem) => MATERIALS[gem]?.socket !== 'decoration')) fail('gems');
   const needed: Partial<Record<MaterialId, number>> = {};
   for (const gem of gems) needed[gem] = (needed[gem] ?? 0) + 1;
-  for (const [gem, count] of Object.entries(needed) as Array<[MaterialId, number]>) if ((save.account.materials[gem] ?? 0) < count) fail('gems');
+  for (const [gem, count] of Object.entries(needed) as Array<[MaterialId, number]>) if (gemCount(save, gem) < count) fail('gems');
   const cost = craftCost(level);
   if (save.account.gold < cost) fail('gold');
   save.account.gold -= cost;
-  for (const [gem, count] of Object.entries(needed) as Array<[MaterialId, number]>) save.account.materials[gem]! -= count;
-  const luck = partyLuck(save, ctx.roster);
+  for (const [gem, count] of Object.entries(needed) as Array<[MaterialId, number]>) takeGems(save, gem, count);
+  const luck = partyLuck(save, ctx.roster, ctx.now);
   const data = craft(ctx.rng, {
     slot: options.slot, level, classId: options.classId ?? Object.values(save.heroes)[0]?.classId ?? 'knight',
     cubeLevel: save.account.cube.level, magicFind: luck.magicFind, difficulty: save.account.position.difficulty, partyClasses: partyClasses(save),
@@ -598,16 +613,64 @@ export function craftItem(save: AdventureSave, ctx: EngineContext, options: { sl
   return item;
 }
 
-export function socketItem(save: AdventureSave, itemId: string, socketIndex: number, material: MaterialId): void {
+/** Gems of a kind in the bag, any cut. */
+function gemCount(save: AdventureSave, gem: MaterialId): number {
+  return GEM_QUALITIES.reduce((sum, quality) => sum + (save.account.materials[materialKey(gem, quality)] ?? 0), 0);
+}
+
+/** Takes gems of a kind for crafting, the roughest cuts first. */
+function takeGems(save: AdventureSave, gem: MaterialId, count: number): void {
+  let left = count;
+  for (const quality of GEM_QUALITIES) {
+    const key = materialKey(gem, quality);
+    const taken = Math.min(left, save.account.materials[key] ?? 0);
+    if (taken) save.account.materials[key] -= taken;
+    left -= taken;
+  }
+}
+
+export function socketItem(save: AdventureSave, itemId: string, socketIndex: number, material: MaterialId, quality: GemQuality = NORMAL_GEM_QUALITY): void {
   const item = findItem(save, itemId);
   if (!MATERIALS[material]) fail('material');
   if (!cubeAllows(save.account.cube.level, socketFunction(MATERIALS[material].socket))) fail('cube-level');
   const verdict = canSocket(item, socketIndex, material);
   if (verdict !== 'ok') fail(`socket-${verdict}`);
-  if ((save.account.materials[material] ?? 0) <= 0) fail('material');
-  save.account.materials[material]! -= 1;
-  item.sockets[socketIndex] = { ...item.sockets[socketIndex], material };
+  const key = materialKey(material, quality);
+  if ((save.account.materials[key] ?? 0) <= 0) fail('material');
+  save.account.materials[key] -= 1;
+  const socket = { kind: item.sockets[socketIndex].kind, material } as Item['sockets'][number];
+  if (isGem(material) && quality !== NORMAL_GEM_QUALITY) socket.quality = quality;
+  item.sockets[socketIndex] = socket;
   cubeXp(save, CUBE_XP.socket);
+}
+
+/** The cube fuses three gems of one kind and cut into one of the next cut. */
+export function fuseGems(save: AdventureSave, gem: MaterialId, quality: GemQuality): GemQuality {
+  if (!cubeAllows(save.account.cube.level, 'fusion')) fail('cube-level');
+  if (!MATERIALS[gem] || !isGem(gem)) fail('material');
+  if (quality >= 5) fail('fusion-max');
+  const from = materialKey(gem, quality);
+  if ((save.account.materials[from] ?? 0) < GEM_FUSION_INPUTS) fail('fusion-gems');
+  const cost = gemFusionCost(quality);
+  if (save.account.gold < cost) fail('gold');
+  save.account.gold -= cost;
+  save.account.materials[from] -= GEM_FUSION_INPUTS;
+  const next = (quality + 1) as GemQuality;
+  const to = materialKey(gem, next);
+  save.account.materials[to] = (save.account.materials[to] ?? 0) + 1;
+  cubeXp(save, CUBE_XP.fusion * quality);
+  return next;
+}
+
+/** Drinks an elixir: every hero feels it for half an hour (stacking up to four hours). */
+export function drinkElixir(save: AdventureSave, ctx: EngineContext, elixirId: ElixirId): string {
+  if (!ELIXIRS[elixirId] || (save.account.elixirs[elixirId] ?? 0) <= 0) fail('elixir');
+  save.account.elixirs[elixirId]! -= 1;
+  const now = Date.parse(ctx.now);
+  for (const [id, until] of Object.entries(save.account.activeElixirs) as Array<[ElixirId, string]>) if (Date.parse(until) <= now) delete save.account.activeElixirs[id];
+  const until = elixirUntil(save.account.activeElixirs[elixirId], now);
+  save.account.activeElixirs[elixirId] = until;
+  return until;
 }
 
 /** Removal destroys the material; the item must be taken off first. */
@@ -628,7 +691,7 @@ export function makeOffering(save: AdventureSave, ctx: EngineContext): Item {
   if (save.account.coins < COINS_PER_OFFERING) fail('coins');
   if (freeInventory(save) <= 0) fail('inventory-full');
   save.account.coins -= COINS_PER_OFFERING;
-  const luck = partyLuck(save, ctx.roster);
+  const luck = partyLuck(save, ctx.roster, ctx.now);
   const data = offering(ctx.rng, { level: highestRegionLevel(save.account.cleared), magicFind: luck.magicFind, difficulty: save.account.position.difficulty, partyClasses: partyClasses(save) });
   const item = addItem(save, ctx, data);
   cubeXp(save, CUBE_XP.offering);

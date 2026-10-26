@@ -1,3 +1,4 @@
+import type { ElixirId, PowerId, SetId, UniqueId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import type { CubeFunction } from '$lib/modules/agent-room/domain/adventure/cube.js';
 import type { MaterialId, Rarity, Slot, SocketKind } from '$lib/modules/agent-room/domain/adventure/items.js';
 import type { ChestTier } from '$lib/modules/agent-room/domain/adventure/loot.js';
@@ -17,9 +18,18 @@ export type AdventureCatalog = {
   slots: Record<Slot, string>;
   /** Stat names; percentages and flat values share a name. */
   stats: Record<StatId, string>;
-  /** `slot.tier` or `weapon-class.tier`, tiers 0..5. */
+  /** `slot.tier`, `weapon-class.tier` or `offhand-class.tier` (tiers 0..5), plus `.1` and `.2` for the extra variants. */
   bases: Record<string, string>;
+  uniques: Record<UniqueId, string>;
+  sets: Record<SetId, string>;
+  /** Set piece names by `set.slot`. */
+  setPieces: Record<string, string>;
+  /** What each unique or set power does in battle. */
+  powers: Record<PowerId, string>;
   materials: Record<MaterialId, string>;
+  /** A gem's name at each quality; {gem} is the gem. */
+  gemQualities: Record<'1' | '2' | '3' | '4' | '5', string>;
+  elixirs: Record<ElixirId, string>;
   sockets: Record<SocketKind, string>;
   chests: Record<ChestTier, string>;
   difficulties: Record<Difficulty, string>;

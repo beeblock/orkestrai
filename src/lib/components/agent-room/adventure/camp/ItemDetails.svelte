@@ -1,13 +1,28 @@
 <script lang="ts">
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
-  import { EQUIP_LEVEL_MARGIN, MATERIALS, RARITY_RULES, itemGoldValue, itemIcon, itemImplicitStats, itemStats, slotGroup, type ItemData } from '$lib/modules/agent-room/domain/adventure/items.js';
+  import { SETS, SET_PIECES, UNIQUES, uniqueStats, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
+  import { EQUIP_LEVEL_MARGIN, RARITY_RULES, itemGoldValue, itemIcon, itemImplicitStats, itemStats, materialIcon, materialStats, rarityIndex, type ItemData } from '$lib/modules/agent-room/domain/adventure/items.js';
   import { STAT_IDS, type StatBlock, type StatId } from '$lib/modules/agent-room/domain/adventure/stats.js';
   import * as m from '$lib/paraglide/messages.js';
-  import { itemName, statText } from '../adventure-text.js';
+  import { itemName, materialName, statLines, statText } from '../adventure-text.js';
   import ItemIcon from './ItemIcon.svelte';
 
-  /** Everything about an item, and how it compares with the one worn in its slot. */
-  let { item, catalog, compare = null, heroLevel = null }: { item: ItemData; catalog: AdventureCatalog; compare?: ItemData | null; heroLevel?: number | null } = $props();
+  /**
+   * Everything about an item, and how it compares with the one worn in its
+   * slot. `wornSets` (pieces the hero in question wears of each set) lights
+   * up the set bonuses already active.
+   */
+  let { item, catalog, compare = null, heroLevel = null, wornSets = {} }: {
+    item: ItemData;
+    catalog: AdventureCatalog;
+    compare?: ItemData | null;
+    heroLevel?: number | null;
+    wornSets?: Partial<Record<SetId, number>>;
+  } = $props();
+
+  const unique = $derived(item.uniqueId ? UNIQUES[item.uniqueId] ?? null : null);
+  const set = $derived(item.setId ? SETS[item.setId] ?? null : null);
+  const setWorn = $derived(set ? wornSets[set.id] ?? 0 : 0);
 
   const rarity = $derived(RARITY_RULES[item.rarity]);
   const implicit = $derived(itemImplicitStats(item));
@@ -34,6 +49,23 @@
   <ul class="stats">
     {#each Object.entries(implicit) as [stat, value] (stat)}<li>{statText(catalog, stat as StatId, value)}</li>{/each}
   </ul>
+  {#if unique}
+    <div class="unique">
+      <span class="tag">{m['adventure.item_unique']()}</span>
+      <ul>{#each statLines(catalog, uniqueStats(unique.id, rarityIndex(item.rarity))) as line (line)}<li>{line}</li>{/each}</ul>
+      <p>{catalog.powers[unique.power]}</p>
+    </div>
+  {/if}
+  {#if set}
+    <div class="set">
+      <span class="tag">{m['adventure.item_set']({ set: catalog.sets[set.id], count: setWorn, total: SET_PIECES.length })}</span>
+      <ul>
+        <li class:on={setWorn >= 2}>(2) {statLines(catalog, set.bonuses[2]).join(', ')}</li>
+        <li class:on={setWorn >= 4}>(4) {statLines(catalog, set.bonuses[4]).join(', ')}</li>
+        <li class:on={setWorn >= 6}>(6) {catalog.powers[set.power]}</li>
+      </ul>
+    </div>
+  {/if}
   {#if item.affixes.length}
     <ul class="affixes">
       {#each item.affixes as affix (affix.stat)}<li>{statText(catalog, affix.stat, affix.value)}</li>{/each}
@@ -44,8 +76,9 @@
       {#each item.sockets as socket, index (index)}
         <li class:empty={!socket.material}>
           {#if socket.material}
-            <ItemIcon atlasId="icons-materials" frame={MATERIALS[socket.material].icon} size={16} />
-            {catalog.materials[socket.material]}: {Object.entries(MATERIALS[socket.material].effects[slotGroup(item.slot)]).map(([stat, value]) => statText(catalog, stat as StatId, value)).join(', ')}
+            {@const gem = materialIcon(socket.material, socket.quality)}
+            <ItemIcon atlasId={gem.atlas} frame={gem.frame} size={16} />
+            {materialName(catalog, socket.material, socket.quality)}: {statLines(catalog, materialStats(socket.material, socket.quality, item.slot)).join(', ')}
           {:else}
             <span class="hole" aria-hidden="true"></span>{m['adventure.empty_socket']({ kind: catalog.sockets[socket.kind] })}
           {/if}
@@ -116,6 +149,40 @@
 
   .affixes {
     color: #8fb8ff;
+  }
+
+  .unique,
+  .set {
+    display: grid;
+    gap: 3px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--accent-tone) 10%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-tone) 35%, transparent);
+  }
+
+  .unique {
+    --accent-tone: #ff9b30;
+    color: #ffc27a;
+  }
+
+  .set {
+    --accent-tone: #3ddc97;
+    color: var(--app-text-muted);
+  }
+
+  .unique p {
+    margin: 0;
+    color: var(--app-text);
+  }
+
+  .tag {
+    color: var(--accent-tone);
+    font-weight: 600;
+  }
+
+  .set li.on {
+    color: #7af0b8;
   }
 
   .sockets li {

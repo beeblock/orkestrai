@@ -11,6 +11,9 @@ export default class CreateAgentAdventureItemsTable extends Migration {
       table.string('class_id').nullable();
       table.string('rarity');
       table.integer('level');
+      table.integer('variant').default(0);
+      table.string('unique_id').nullable();
+      table.string('set_id').nullable();
       table.text('affixes_json');
       table.text('sockets_json');
       table.boolean('locked').default(false);

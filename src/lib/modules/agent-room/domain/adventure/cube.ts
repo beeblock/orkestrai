@@ -20,14 +20,14 @@ import { power, type Difficulty } from './world.js';
  * The Orchestrion Cube: the party's crafting table. It levels up with use
  * and each level opens another function — synthesis (nine items of one
  * rarity become one of a higher rarity), alchemy (gear into gold), crafting
- * (a new item of a chosen slot), socketing materials, removing them and the
- * offering of commemorative coins.
+ * (a new item of a chosen slot), socketing materials, fusing gems into a
+ * finer cut, removing them and the offering of commemorative coins.
  */
 
-export type CubeFunction = 'synthesis' | 'alchemy' | 'decoration' | 'crafting' | 'removal' | 'engraving' | 'offering' | 'inscription';
+export type CubeFunction = 'synthesis' | 'alchemy' | 'decoration' | 'fusion' | 'crafting' | 'removal' | 'engraving' | 'offering' | 'inscription';
 
 export const CUBE_UNLOCKS: Record<CubeFunction, number> = {
-  synthesis: 1, alchemy: 1, decoration: 1, crafting: 2, removal: 3, engraving: 4, offering: 5, inscription: 6,
+  synthesis: 1, alchemy: 1, decoration: 1, fusion: 2, crafting: 2, removal: 3, engraving: 4, offering: 5, inscription: 6,
 };
 
 export const CUBE_MAX_LEVEL = 10;
@@ -114,4 +114,4 @@ export function canSocket(item: ItemData, socketIndex: number, material: Materia
   return 'ok';
 }
 
-export const CUBE_XP = { synthesis: 40, alchemy: 2, crafting: 35, socket: 15, removal: 10, offering: 60 } as const;
+export const CUBE_XP = { synthesis: 40, alchemy: 2, crafting: 35, socket: 15, removal: 10, offering: 60, fusion: 20 } as const;

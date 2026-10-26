@@ -14,6 +14,8 @@ import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoard
 import { xpToNext } from '$lib/modules/agent-room/domain/adventure/world.js';
 import type { AdventureReportInput } from '$lib/modules/agent-room/contracts/schemas/adventure.schema.js';
 import type { AdventureSnapshot } from '$lib/modules/agent-room/application/services/AdventureService.js';
+import { adventureRepository } from '$lib/modules/agent-room/infrastructure/repositories/AdventureRepository.js';
+import { canEquip, rollItem } from '$lib/modules/agent-room/domain/adventure/items.js';
 
 const roots: string[] = [];
 
@@ -89,7 +91,8 @@ describe('AdventureService', () => {
     expect(opened.opened[0].items).toHaveLength(2);
     const loot = opened.opened[0].items[0];
     expect(opened.snapshot.items.find((item) => item.id === loot.id)?.location).toBe('inventory');
-    const helmet = opened.snapshot.items.find((item) => item.slot !== 'weapon' && item.location === 'inventory');
+    // Any piece the ranger can wear (off hands and set pieces belong to a class).
+    const helmet = opened.snapshot.items.find((item) => item.location === 'inventory' && canEquip(item, { classId: 'ranger', level: 1 }) === 'ok');
     if (helmet) {
       const equipped = await adventureService.act(ws.id, { type: 'equip', itemId: helmet.id, heroId: ranger.id });
       expect(equipped.snapshot.items.find((item) => item.id === helmet.id)?.heroId).toBe(ranger.id);
@@ -144,6 +147,41 @@ describe('AdventureService', () => {
     expect(snapshot.heroes).toHaveLength(2);
     expect(heroOf(snapshot, tester.id)).toMatchObject({ id: ranger.id, level: 3, agentTitle: 'Tester' });
     expect(snapshot.items.filter((item) => item.heroId === ranger.id && item.location === 'equipped')).toHaveLength(2);
+  });
+
+  it('stores variants, uniques, set pieces, gem cuts and elixirs, and runs the new camp actions', async () => {
+    const { ws, qa } = await team();
+    const ranger = heroOf((await adventureService.state(ws.id)).snapshot, qa.id);
+    const before = (await adventureRepository.load(ws.id))!;
+    const after = structuredClone(before);
+    const rng = () => 0.42;
+    const bow = { ...rollItem(rng, { level: 5, rarity: 'legendary', uniqueId: 'canopy-whisper' }), id: uuidv7(), location: 'inventory' as const, heroId: null, locked: false, createdAt: new Date().toISOString() };
+    const hood = { ...rollItem(rng, { level: 30, rarity: 'epic', setId: 'windrunner', slot: 'helmet' }), id: uuidv7(), location: 'inventory' as const, heroId: null, locked: false, createdAt: new Date().toISOString() };
+    const quiver = { ...rollItem(rng, { level: 30, rarity: 'rare', slot: 'offhand', classId: 'ranger' }), id: uuidv7(), location: 'inventory' as const, heroId: null, locked: false, createdAt: new Date().toISOString() };
+    const boots = { ...rollItem(rng, { level: 30, rarity: 'rare', slot: 'boots', variant: 2 }), id: uuidv7(), location: 'inventory' as const, heroId: null, locked: false, createdAt: new Date().toISOString() };
+    hood.sockets = [{ kind: 'decoration', material: 'ruby', quality: 4 }];
+    after.items.push(bow, hood, quiver, boots);
+    after.account.materials = { 'sapphire:1': 3 };
+    after.account.elixirs = { might: 1 };
+    after.account.cube = { level: 2, xp: 0 };
+    after.account.gold = 10_000;
+    await adventureRepository.persist(ws.id, before, after);
+
+    const { snapshot } = await adventureService.state(ws.id);
+    const stored = (id: string) => snapshot.items.find((item) => item.id === id);
+    expect(stored(bow.id)).toMatchObject({ uniqueId: 'canopy-whisper', slot: 'weapon', classId: 'ranger' });
+    expect(stored(hood.id)).toMatchObject({ setId: 'windrunner', sockets: [{ kind: 'decoration', material: 'ruby', quality: 4 }] });
+    expect(stored(quiver.id)).toMatchObject({ slot: 'offhand', classId: 'ranger' });
+    expect(stored(boots.id)?.variant).toBe(2);
+
+    await adventureService.act(ws.id, { type: 'equip', itemId: bow.id, heroId: ranger.id });
+    const drunk = await adventureService.act(ws.id, { type: 'drink', elixirId: 'might' });
+    expect(drunk.snapshot.account.elixirs.might).toBe(0);
+    expect(drunk.snapshot.account.activeElixirs.might).toBeTruthy();
+    expect(heroOf(drunk.snapshot, qa.id).build?.powers).toEqual(['chain']);
+    const fused = await adventureService.act(ws.id, { type: 'fuse-gems', gem: 'sapphire', quality: 1 });
+    expect(fused.snapshot.account.materials).toMatchObject({ 'sapphire:1': 0, 'sapphire:2': 1 });
+    await expect(adventureService.act(ws.id, { type: 'drink', elixirId: 'might' })).rejects.toThrow('elixir');
   });
 
   it('is deleted with its workspace', async () => {

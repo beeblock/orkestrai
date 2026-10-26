@@ -2,6 +2,7 @@
   import { Lock } from '@lucide/svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
+  import type { SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
   import { RARITY_RULES, itemIcon, type ItemData } from '$lib/modules/agent-room/domain/adventure/items.js';
   import ItemDetails from './ItemDetails.svelte';
   import ItemIcon from './ItemIcon.svelte';
@@ -17,6 +18,7 @@
     locked = false,
     size = 48,
     placeholder = null,
+    wornSets = {},
     onclick,
   }: {
     item: ItemData | null;
@@ -28,6 +30,8 @@
     size?: number;
     /** What an empty cell shows (an equipment slot's name). */
     placeholder?: string | null;
+    /** Pieces of each set the hero in question wears (for the details). */
+    wornSets?: Partial<Record<SetId, number>>;
     onclick?: (event: MouseEvent) => void;
   } = $props();
 
@@ -43,6 +47,8 @@
           type="button"
           class="slot"
           class:selected
+          class:unique={Boolean(item.uniqueId)}
+          class:set={Boolean(item.setId)}
           style:--rarity={RARITY_RULES[item.rarity].color}
           style:width={`${size}px`}
           style:height={`${size}px`}
@@ -58,7 +64,7 @@
       {/snippet}
     </Tooltip.Trigger>
     <Tooltip.Content side="right" class="max-w-none border border-[var(--app-border-strong)] bg-[var(--app-surface-raised)] p-3 text-[var(--app-text)]">
-      <ItemDetails {item} {catalog} {compare} {heroLevel} />
+      <ItemDetails {item} {catalog} {compare} {heroLevel} {wornSets} />
     </Tooltip.Content>
   </Tooltip.Root>
 {:else}
@@ -92,6 +98,20 @@
   }
 
   .slot.selected {
+    box-shadow: inset 0 0 0 2px var(--app-accent), 0 0 0 2px color-mix(in srgb, var(--app-accent) 35%, transparent);
+  }
+
+  /* Uniques and set pieces wear a second ring: orange for uniques, green for sets. */
+  .slot.unique {
+    box-shadow: inset 0 0 0 1px var(--rarity), inset 0 0 0 3px color-mix(in srgb, #ff9b30 55%, transparent);
+  }
+
+  .slot.set {
+    box-shadow: inset 0 0 0 1px var(--rarity), inset 0 0 0 3px color-mix(in srgb, #3ddc97 50%, transparent);
+  }
+
+  .slot.selected.unique,
+  .slot.selected.set {
     box-shadow: inset 0 0 0 2px var(--app-accent), 0 0 0 2px color-mix(in srgb, var(--app-accent) 35%, transparent);
   }
 

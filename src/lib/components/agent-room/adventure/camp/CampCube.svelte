@@ -7,11 +7,14 @@
   import {
     COINS_PER_OFFERING, CRAFT_GEMS, CUBE_UNLOCKS, SYNTHESIS_INPUTS, craftCost, cubeAllows, cubeXpToNext, removalCost, socketFunction, synthesisCost, type CubeFunction,
   } from '$lib/modules/agent-room/domain/adventure/cube.js';
-  import { MATERIALS, MATERIAL_IDS, RARITIES, SLOTS, rarityIndex, type Item, type MaterialId, type Rarity, type Slot } from '$lib/modules/agent-room/domain/adventure/items.js';
+  import {
+    GEM_FUSION_INPUTS, GEM_QUALITIES, MATERIALS, MATERIAL_IDS, RARITIES, SLOTS, classSlot, gemFusionCost, materialIcon, materialKey, rarityIndex,
+    type GemQuality, type Item, type MaterialId, type Rarity, type Slot,
+  } from '$lib/modules/agent-room/domain/adventure/items.js';
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
-  import { formatNumber, itemName } from '../adventure-text.js';
+  import { formatNumber, itemName, materialName } from '../adventure-text.js';
   import ItemIcon from './ItemIcon.svelte';
   import ItemSlot from './ItemSlot.svelte';
 
@@ -44,8 +47,27 @@
   const haveGems = $derived.by(() => {
     const need: Partial<Record<MaterialId, number>> = {};
     for (const gem of [gemA, gemB]) need[gem] = (need[gem] ?? 0) + 1;
-    return (Object.entries(need) as Array<[MaterialId, number]>).every(([gem, count]) => (snapshot.account.materials[gem] ?? 0) >= count);
+    return (Object.entries(need) as Array<[MaterialId, number]>).every(([gem, count]) => gemsOf(gem) >= count);
   });
+
+  /** Gems of a kind in the bag, every cut. */
+  function gemsOf(gem: MaterialId): number {
+    return GEM_QUALITIES.reduce((sum, quality) => sum + (snapshot.account.materials[materialKey(gem, quality)] ?? 0), 0);
+  }
+
+  function owned(material: MaterialId, quality: GemQuality): number {
+    return snapshot.account.materials[materialKey(material, quality)] ?? 0;
+  }
+
+  /** What can go into a socket of a kind: gems by cut, runestones and glyphs as they are. */
+  function socketChoices(kind: Item['sockets'][number]['kind']): Array<{ material: MaterialId; quality: GemQuality }> {
+    return MATERIAL_IDS.filter((id) => MATERIALS[id].socket === kind)
+      .flatMap((material) => (kind === 'decoration' ? GEM_QUALITIES : ([3] as GemQuality[])).map((quality) => ({ material, quality })))
+      .filter((choice) => owned(choice.material, choice.quality) > 0 || (kind !== 'decoration' && choice.quality === 3));
+  }
+
+  // Gem fusion: every gem and cut below Imperial the bag holds.
+  const fusable = $derived(gems.flatMap((gem) => GEM_QUALITIES.filter((quality) => quality < 5 && owned(gem, quality) > 0).map((quality) => ({ gem, quality }))));
 
   // Sockets.
   let socketItemId = $state<string | null>(null);
@@ -66,7 +88,7 @@
   }
 
   async function craftNow() {
-    const outcome = await act({ type: 'craft', slot: craftSlot, level: craftLevel, classId: craftSlot === 'weapon' ? craftClass : null, gems: [gemA, gemB] });
+    const outcome = await act({ type: 'craft', slot: craftSlot, level: craftLevel, classId: classSlot(craftSlot) ? craftClass : null, gems: [gemA, gemB] });
     created = (outcome?.result as { item?: Item } | undefined)?.item ?? null;
   }
 
@@ -119,14 +141,14 @@
           <NativeSelect.Root size="sm" class="w-[120px]" value={craftSlot} onchange={(event: Event) => (craftSlot = (event.currentTarget as HTMLSelectElement).value as Slot)} aria-label={m['adventure.camp_filter_slot']()}>
             {#each SLOTS as slot (slot)}<NativeSelect.Option value={slot}>{catalog.slots[slot]}</NativeSelect.Option>{/each}
           </NativeSelect.Root>
-          {#if craftSlot === 'weapon'}
+          {#if classSlot(craftSlot)}
             <NativeSelect.Root size="sm" class="w-[130px]" value={craftClass} onchange={(event: Event) => (craftClass = (event.currentTarget as HTMLSelectElement).value as HeroClassId)} aria-label={m['adventure.class_pick']()}>
               {#each HERO_CLASS_IDS as classId (classId)}<NativeSelect.Option value={classId}>{className(classId)}</NativeSelect.Option>{/each}
             </NativeSelect.Root>
           {/if}
           {#each [0, 1] as index (index)}
             <NativeSelect.Root size="sm" class="w-[130px]" value={index ? gemB : gemA} onchange={(event: Event) => { const value = (event.currentTarget as HTMLSelectElement).value as MaterialId; if (index) gemB = value; else gemA = value; }} aria-label={m['adventure.camp_gem']({ index: index + 1 })}>
-              {#each gems as gem (gem)}<NativeSelect.Option value={gem}>{catalog.materials[gem]} ({snapshot.account.materials[gem] ?? 0})</NativeSelect.Option>{/each}
+              {#each gems as gem (gem)}<NativeSelect.Option value={gem}>{catalog.materials[gem]} ({gemsOf(gem)})</NativeSelect.Option>{/each}
             </NativeSelect.Root>
           {/each}
         </div>
@@ -153,8 +175,9 @@
             <li>
               <span class="kind">{catalog.sockets[socket.kind]}</span>
               {#if socket.material}
-                <ItemIcon atlasId="icons-materials" frame={MATERIALS[socket.material].icon} size={22} />
-                <span>{catalog.materials[socket.material]}</span>
+                {@const icon = materialIcon(socket.material, socket.quality)}
+                <ItemIcon atlasId={icon.atlas} frame={icon.frame} size={22} />
+                <span>{materialName(catalog, socket.material, socket.quality)}</span>
                 <Button size="sm" variant="ghost" disabled={busy || locked('removal') || socketItem.location === 'equipped'} title={socketItem.location === 'equipped' ? catalog.errors.equipped : ''} onclick={() => void act({ type: 'unsocket', itemId: socketItem.id, socketIndex: index })}>
                   {m['adventure.camp_remove']({ gold: formatNumber(removalCost(socketItem)) })}
                 </Button>
@@ -162,13 +185,36 @@
                 <small>{m['adventure.camp_cube_needs']({ level: CUBE_UNLOCKS[socketFunction(socket.kind)] })}</small>
               {:else}
                 <div class="materials">
-                  {#each MATERIAL_IDS.filter((id) => MATERIALS[id].socket === socket.kind) as material (material)}
-                    <Button size="sm" variant="outline" disabled={busy || !(snapshot.account.materials[material] ?? 0)} onclick={() => void act({ type: 'socket', itemId: socketItem.id, socketIndex: index, material })} title={catalog.materials[material]}>
-                      <ItemIcon atlasId="icons-materials" frame={MATERIALS[material].icon} size={18} />{snapshot.account.materials[material] ?? 0}
+                  {#each socketChoices(socket.kind) as choice (`${choice.material}:${choice.quality}`)}
+                    {@const icon = materialIcon(choice.material, choice.quality)}
+                    <Button size="sm" variant="outline" disabled={busy || !owned(choice.material, choice.quality)} onclick={() => void act({ type: 'socket', itemId: socketItem.id, socketIndex: index, material: choice.material, quality: choice.quality })} title={materialName(catalog, choice.material, choice.quality)} aria-label={materialName(catalog, choice.material, choice.quality)}>
+                      <ItemIcon atlasId={icon.atlas} frame={icon.frame} size={18} />{owned(choice.material, choice.quality)}
                     </Button>
                   {/each}
                 </div>
               {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
+    <section class:locked={locked('fusion')}>
+      <h3>{catalog.cube.fusion.name}</h3>
+      <p>{catalog.cube.fusion.description}</p>
+      {#if locked('fusion')}<small>{m['adventure.camp_cube_needs']({ level: CUBE_UNLOCKS.fusion })}</small>{:else if !fusable.length}<small>{m['adventure.camp_fusion_none']()}</small>{:else}
+        <ul class="fusion">
+          {#each fusable as entry (`${entry.gem}:${entry.quality}`)}
+            {@const from = materialIcon(entry.gem, entry.quality)}
+            {@const to = materialIcon(entry.gem, (entry.quality + 1) as GemQuality)}
+            <li>
+              <ItemIcon atlasId={from.atlas} frame={from.frame} size={22} />
+              <span>{materialName(catalog, entry.gem, entry.quality)} · {owned(entry.gem, entry.quality)}</span>
+              <span aria-hidden="true">→</span>
+              <ItemIcon atlasId={to.atlas} frame={to.frame} size={22} />
+              <Button size="sm" variant="outline" disabled={busy || owned(entry.gem, entry.quality) < GEM_FUSION_INPUTS || snapshot.account.gold < gemFusionCost(entry.quality)} onclick={() => void act({ type: 'fuse-gems', gem: entry.gem, quality: entry.quality })}>
+                {m['adventure.camp_fuse']({ gold: formatNumber(gemFusionCost(entry.quality)) })}
+              </Button>
             </li>
           {/each}
         </ul>
@@ -314,5 +360,22 @@
   .kind {
     min-width: 90px;
     color: var(--app-text-muted);
+  }
+
+  .fusion {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Icon, name and count, arrow, next cut, button: the same columns on every row. */
+  .fusion li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 12px 22px auto;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
   }
 </style>

@@ -6,7 +6,8 @@
   import * as Tooltip from '$lib/components/ui/tooltip';
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
   import { TEAMMATE_CLASS_IDS, type HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
-  import { RARITY_RULES, SLOTS, canEquip, itemScore, type Item, type Slot } from '$lib/modules/agent-room/domain/adventure/items.js';
+  import { SETS, SET_PIECES, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
+  import { RARITY_RULES, SLOTS, SLOT_CAPACITY, canEquip, itemScore, type Item, type Slot } from '$lib/modules/agent-room/domain/adventure/items.js';
   import { SKILL_TREES, canRaise, tierRequirement, type SkillNode } from '$lib/modules/agent-room/domain/adventure/skills.js';
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
@@ -24,7 +25,8 @@
     selected: string | null;
   } = $props();
 
-  let picking = $state<Slot | null>(null);
+  /** The armory cell being filled: its slot and, for rings and trinkets, which of the two. */
+  let picking = $state<{ slot: Slot; index: number } | null>(null);
 
   const KIND_LABEL: Record<SkillNode['kind'], () => string> = {
     passive: m['adventure.skill_kind_passive'],
@@ -36,9 +38,12 @@
   const equipped = $derived(snapshot.items.filter((item) => item.location === 'equipped' && item.heroId === hero?.id));
   const candidates = $derived(picking && hero
     ? snapshot.items
-      .filter((item) => item.slot === picking && item.location !== 'equipped' && canEquip(item, { classId: hero.classId, level: hero.level }) === 'ok')
+      .filter((item) => item.slot === picking!.slot && item.location !== 'equipped' && canEquip(item, { classId: hero.classId, level: hero.level }) === 'ok')
       .sort((a, b) => itemScore(b) - itemScore(a))
     : []);
+  /** Every cell of the armory: one per slot, two for rings and trinkets. */
+  const cells = $derived(SLOTS.flatMap((slot) => Array.from({ length: SLOT_CAPACITY[slot] }, (_, index) => ({ slot, index }))));
+  const wornSets = $derived((hero?.build.sets ?? {}) as Partial<Record<SetId, number>>);
   const tree = $derived(hero ? SKILL_TREES[hero.classId] : []);
   const free = $derived(hero ? hero.build.skillPoints - hero.build.pointsSpent : 0);
   const outfitAtlas = $derived(hero ? (hero.build.visualTier === 2 ? `hero-${hero.classId}` : `hero-${hero.classId}-t${hero.build.visualTier}`) : '');
@@ -47,8 +52,17 @@
     return (m as unknown as Record<string, () => string>)[`adventure.class_${id}`]?.() ?? id;
   }
 
-  function wornIn(slot: Slot): Item | null {
-    return equipped.find((item) => item.slot === slot) ?? null;
+  /** What a cell holds: the slot's items in a steady order, one per cell. */
+  function wornIn(slot: Slot, index = 0): Item | null {
+    return equipped.filter((item) => item.slot === slot).sort((a, b) => a.id.localeCompare(b.id))[index] ?? null;
+  }
+
+  function cellLabel(slot: Slot, index: number): string {
+    return SLOT_CAPACITY[slot] > 1 ? m['adventure.camp_slot_pair']({ slot: catalog.slots[slot], index: index + 1 }) : catalog.slots[slot];
+  }
+
+  function samePick(slot: Slot, index: number): boolean {
+    return picking?.slot === slot && picking.index === index;
   }
 
   function pointsBelow(tier: number): number {
@@ -137,29 +151,43 @@
           </Button>
         </div>
         <div class="doll" role="group" aria-label={m['adventure.camp_equipment']()}>
-          {#each SLOTS as slot (slot)}
-            <div class="cell" class:open={picking === slot}>
-              <ItemSlot item={wornIn(slot)} {catalog} heroLevel={hero.level} placeholder={catalog.slots[slot]} selected={picking === slot} onclick={() => { picking = picking === slot ? null : slot; }} />
-              <span>{catalog.slots[slot]}</span>
+          {#each cells as cell (`${cell.slot}-${cell.index}`)}
+            <div class={`cell slot-${cell.slot}`} class:open={samePick(cell.slot, cell.index)}>
+              <ItemSlot item={wornIn(cell.slot, cell.index)} {catalog} heroLevel={hero.level} {wornSets} placeholder={cellLabel(cell.slot, cell.index)} selected={samePick(cell.slot, cell.index)} onclick={() => { picking = samePick(cell.slot, cell.index) ? null : cell; }} />
+              <span>{cellLabel(cell.slot, cell.index)}</span>
             </div>
           {/each}
         </div>
-        <dl class="stats">
-          {#each stats as [label, value] (label)}<div><dt>{label}</dt><dd>{value}</dd></div>{/each}
-        </dl>
+        <div class="numbers">
+          <dl class="stats">
+            {#each stats as [label, value] (label)}<div><dt>{label}</dt><dd>{value}</dd></div>{/each}
+          </dl>
+          <section class="powers" aria-label={m['adventure.camp_powers']()}>
+            <h3>{m['adventure.camp_powers']()}</h3>
+            {#each Object.entries(wornSets) as [setId, count] (setId)}
+              <p class="set-line">{m['adventure.item_set']({ set: catalog.sets[setId as SetId], count: count ?? 0, total: SET_PIECES.length })}</p>
+            {/each}
+            {#if hero.build.powers.length}
+              <ul>{#each hero.build.powers as power (power)}<li>{catalog.powers[power]}</li>{/each}</ul>
+            {:else}
+              <p class="none">{m['adventure.camp_powers_none']()}</p>
+            {/if}
+          </section>
+        </div>
       </div>
 
       {#if picking}
-        <div class="picker" aria-label={m['adventure.camp_pick_for']({ slot: catalog.slots[picking] })}>
+        {@const current = wornIn(picking.slot, picking.index)}
+        <div class="picker" aria-label={m['adventure.camp_pick_for']({ slot: cellLabel(picking.slot, picking.index) })}>
           <header>
-            <b>{m['adventure.camp_pick_for']({ slot: catalog.slots[picking] })}</b>
-            {#if wornIn(picking)}<Button size="sm" variant="ghost" disabled={busy} onclick={() => void act({ type: 'unequip', itemId: wornIn(picking!)!.id })}>{m['adventure.camp_unequip']()}</Button>{/if}
+            <b>{m['adventure.camp_pick_for']({ slot: cellLabel(picking.slot, picking.index) })}</b>
+            {#if current}<Button size="sm" variant="ghost" disabled={busy} onclick={() => void act({ type: 'unequip', itemId: current.id })}>{m['adventure.camp_unequip']()}</Button>{/if}
             <Button size="icon-sm" variant="ghost" aria-label={m['adventure.camp_close']()} onclick={() => (picking = null)}><X size={14} /></Button>
           </header>
           {#if candidates.length}
             <div class="grid">
               {#each candidates as item (item.id)}
-                <ItemSlot {item} {catalog} heroLevel={hero.level} compare={wornIn(picking)} locked={item.locked} onclick={() => void act({ type: 'equip', itemId: item.id, heroId: hero.id }).then(() => (picking = null))} />
+                <ItemSlot {item} {catalog} heroLevel={hero.level} {wornSets} compare={current} locked={item.locked} onclick={() => void act({ type: 'equip', itemId: item.id, heroId: hero.id, replaceId: current?.id }).then(() => (picking = null))} />
               {/each}
             </div>
           {:else}
@@ -395,10 +423,51 @@
     font-size: 11.5px;
   }
 
+  /* The armory, read like a body: main and off hand, then head to feet, then jewelry. */
   .doll {
     display: grid;
     grid-template-columns: repeat(4, 56px);
     gap: 8px 6px;
+    align-content: start;
+  }
+
+  .numbers {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+  }
+
+  .powers {
+    display: grid;
+    gap: 4px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--app-surface-subtle);
+    font-size: 12px;
+  }
+
+  .powers h3 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .powers ul {
+    display: grid;
+    gap: 3px;
+    margin: 0;
+    padding-left: 16px;
+    color: #ffc27a;
+  }
+
+  .powers .set-line {
+    margin: 0;
+    color: #7af0b8;
+  }
+
+  .powers .none {
+    margin: 0;
+    color: var(--app-text-muted);
   }
 
   .cell {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MONSTERS, TEAMMATE_CLASS_IDS, HERO_CLASS_IDS, type HeroClassId, type MonsterId } from '../../domain/adventure/catalog.js';
-import { MATERIAL_IDS, SLOTS, type MaterialId, type Slot } from '../../domain/adventure/items.js';
+import { ELIXIR_IDS, type ElixirId } from '../../domain/adventure/artifacts.js';
+import { MATERIAL_IDS, MATERIALS, SLOTS, type MaterialId, type Slot } from '../../domain/adventure/items.js';
 import { CHEST_TIERS, type ChestTier } from '../../domain/adventure/loot.js';
 import { PETS, type PetId } from '../../domain/adventure/pets.js';
 import { RUNES } from '../../domain/adventure/runes.js';
@@ -32,11 +33,14 @@ export const adventureReportSchema = z.object({
 });
 
 const itemIds = z.array(id).max(200);
+const gems = MATERIAL_IDS.filter((material) => MATERIALS[material].socket === 'decoration');
+const gemQuality = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]);
 
 /** Everything the camp can do, one action per request. */
 export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('open-chests'), ids: z.array(id).max(50).optional(), tier: z.enum(tuple<ChestTier>(CHEST_TIERS)).optional(), limit: z.number().int().min(1).max(50).optional() }),
-  z.object({ type: z.literal('equip'), itemId: id, heroId: id }),
+  // `replaceId`: which of two worn rings or trinkets makes room.
+  z.object({ type: z.literal('equip'), itemId: id, heroId: id, replaceId: id.optional() }),
   z.object({ type: z.literal('unequip'), itemId: id }),
   z.object({ type: z.literal('auto-equip'), heroId: id }),
   z.object({ type: z.literal('lock'), itemId: id, locked: z.boolean() }),
@@ -44,7 +48,9 @@ export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('salvage'), itemIds: itemIds.min(1) }),
   z.object({ type: z.literal('synthesize'), itemIds: z.array(id).length(9) }),
   z.object({ type: z.literal('craft'), slot: z.enum(tuple<Slot>(SLOTS)), level: z.number().int().min(1).max(MAX_REGION_LEVEL), classId: z.enum(tuple<HeroClassId>(HERO_CLASS_IDS)).nullable().optional(), gems: z.array(z.enum(tuple<MaterialId>(MATERIAL_IDS))).length(2) }),
-  z.object({ type: z.literal('socket'), itemId: id, socketIndex: z.number().int().min(0).max(8), material: z.enum(tuple<MaterialId>(MATERIAL_IDS)) }),
+  z.object({ type: z.literal('socket'), itemId: id, socketIndex: z.number().int().min(0).max(8), material: z.enum(tuple<MaterialId>(MATERIAL_IDS)), quality: gemQuality.optional() }),
+  z.object({ type: z.literal('fuse-gems'), gem: z.enum(tuple<MaterialId>(gems)), quality: gemQuality }),
+  z.object({ type: z.literal('drink'), elixirId: z.enum(tuple<ElixirId>(ELIXIR_IDS)) }),
   z.object({ type: z.literal('unsocket'), itemId: id, socketIndex: z.number().int().min(0).max(8) }),
   z.object({ type: z.literal('offering') }),
   z.object({ type: z.literal('buy-rune'), runeId: z.enum(tuple(RUNES.map((rune) => rune.id))) }),

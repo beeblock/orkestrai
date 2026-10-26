@@ -117,7 +117,7 @@ export class AdventureService {
   }
 
   private snapshot(save: AdventureSave, roster: RosterEntry[], now: string): AdventureSnapshot {
-    const { builds, deployed } = engine.partyBuilds(save, roster);
+    const { builds, deployed } = engine.partyBuilds(save, roster, Date.parse(now));
     const { rewardedTasks: _rewarded, lastReportId: _reportId, ...account } = save.account;
     return {
       account,
@@ -206,7 +206,7 @@ export class AdventureService {
   private dispatch(save: AdventureSave, ctx: EngineContext, action: AdventureAction): unknown {
     switch (action.type) {
       case 'open-chests': return engine.openChests(save, ctx, { ids: action.ids, tier: action.tier, limit: action.limit });
-      case 'equip': return engine.equipItem(save, action.itemId, action.heroId);
+      case 'equip': return engine.equipItem(save, action.itemId, action.heroId, action.replaceId);
       case 'unequip': return engine.unequipItem(save, action.itemId);
       case 'auto-equip': return engine.autoEquip(save, ctx, action.heroId);
       case 'lock': return engine.setLocked(save, action.itemId, action.locked);
@@ -214,7 +214,9 @@ export class AdventureService {
       case 'salvage': return { gold: engine.salvage(save, action.itemIds) };
       case 'synthesize': return { item: engine.synthesizeItems(save, ctx, action.itemIds) };
       case 'craft': return { item: engine.craftItem(save, ctx, { slot: action.slot, level: action.level, classId: action.classId ?? null, gems: action.gems }) };
-      case 'socket': return engine.socketItem(save, action.itemId, action.socketIndex, action.material);
+      case 'socket': return engine.socketItem(save, action.itemId, action.socketIndex, action.material, action.quality);
+      case 'fuse-gems': return { quality: engine.fuseGems(save, action.gem, action.quality) };
+      case 'drink': return { until: engine.drinkElixir(save, ctx, action.elixirId) };
       case 'unsocket': return engine.unsocketItem(save, action.itemId, action.socketIndex);
       case 'offering': return { item: engine.makeOffering(save, ctx) };
       case 'buy-rune': return { cost: engine.buyRune(save, action.runeId) };

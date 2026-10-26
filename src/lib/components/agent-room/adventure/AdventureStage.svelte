@@ -260,6 +260,19 @@
           if (x !== null) spell('vfx-6', 2, x, 0.5, 1_000);
           break;
         }
+        case 'power':
+          // Item powers, smaller than the skills they echo.
+          switch (event.power) {
+            case 'starfall': spell('vfx-1', 0, event.x, 0.36, 750); break;
+            case 'frostbite': spell('vfx-1', 1, event.x, 0.28, 600); break;
+            case 'cleave': effects.push({ kind: 'slash', x: event.x + 12, y: 0, t: 0, life: 220 }); break;
+            case 'chain':
+            case 'thorns': effects.push({ kind: 'spark', x: event.x, y: 0, t: 0, life: 260 }); break;
+            case 'aegis': spell('vfx-4', 1, event.x, 0.32, 700, { alpha: 0.7 }); break;
+            case 'arcane-surge': spell('vfx-1', 2, event.x, 0.24, 500); break;
+            case 'dawn': spell('vfx-6', 1, event.x, 0.4, 900); break;
+          }
+          break;
         case 'kill': {
           for (let index = 0; index < Math.min(6, 1 + Math.floor(Math.log2(event.gold + 1))); index += 1) {
             effects.push({ kind: 'coin', x: event.x, y: 0, t: 0, life: 900, vx: (Math.random() - 0.3) * 60, vy: -60 - Math.random() * 50 });

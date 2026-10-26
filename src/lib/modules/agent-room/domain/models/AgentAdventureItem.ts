@@ -6,10 +6,11 @@ export class AgentAdventureItem extends Model {
   static primaryKey = 'id';
   static incrementing = false;
   static timestamps = true;
-  static fillable = ['id', 'workspace_id', 'location', 'hero_id', 'slot', 'class_id', 'rarity', 'level', 'affixes_json', 'sockets_json', 'locked'];
+  static fillable = ['id', 'workspace_id', 'location', 'hero_id', 'slot', 'class_id', 'rarity', 'level', 'variant', 'unique_id', 'set_id', 'affixes_json', 'sockets_json', 'locked'];
 
   static casts = {
     level: 'number' as const,
+    variant: 'number' as const,
     locked: 'boolean' as const,
     created_at: 'date' as const,
     updated_at: 'date' as const,
@@ -23,6 +24,9 @@ export class AgentAdventureItem extends Model {
   declare class_id: string | null;
   declare rarity: string;
   declare level: number;
+  declare variant: number;
+  declare unique_id: string | null;
+  declare set_id: string | null;
   declare affixes_json: string;
   declare sockets_json: string;
   declare locked: boolean;

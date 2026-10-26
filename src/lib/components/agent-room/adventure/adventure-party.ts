@@ -1,4 +1,5 @@
 import type { AgentActivitySnapshot, AgentActivityState } from '$lib/modules/agent-room/domain/types.js';
+import { elixirStats } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import { buildHeroes, deployHeroes, type HeroBuild } from '$lib/modules/agent-room/domain/adventure/build.js';
 import type { PartyActivity, PartyMember, Supporter } from '$lib/modules/agent-room/domain/adventure/simulation.js';
 import type { AdventureSnapshot, SnapshotHero } from './adventure-client.js';
@@ -68,12 +69,13 @@ export function lineup(snapshot: AdventureSnapshot, live: Record<string, AgentAc
     snapshot.items,
     snapshot.account.runes,
     snapshot.account.killsByMonster,
+    elixirStats(snapshot.account.activeElixirs, Date.now()),
   );
   const heroes = snapshot.heroes.map((hero) => ({ ...hero, activity: states.get(hero.id)!, deployed: deployed.includes(hero.id), build: builds[hero.id] }));
   const members = deployed
     .map((heroId) => heroes.find((hero) => hero.id === heroId))
     .filter((hero): hero is HeroView => Boolean(hero))
-    .map((hero) => ({ id: hero.id, classId: hero.classId, leader: hero.leader, activity: hero.activity, level: hero.level, profile: hero.build.profile, actives: hero.build.actives }));
+    .map((hero) => ({ id: hero.id, classId: hero.classId, leader: hero.leader, activity: hero.activity, level: hero.level, profile: hero.build.profile, actives: hero.build.actives, powers: hero.build.powers }));
   const supporters = heroes
     .filter((hero) => !hero.deployed && hero.activity === 'working')
     .map((hero) => ({ id: hero.id, level: hero.level, xpMultiplier: hero.build.profile.xpMultiplier }));

@@ -1,3 +1,4 @@
+import type { PowerId } from './artifacts.js';
 import { HERO_CLASSES, MONSTERS, type HeroAttack, type HeroClassId, type MonsterId } from './catalog.js';
 import { BLUE_CHEST_CHANCE, WHITE_CHEST_CHANCE, type ChestTier } from './loot.js';
 import type { ActiveAction, LearnedActive } from './skills.js';
@@ -56,6 +57,8 @@ export type PartyMember = {
   level: number;
   profile: CombatProfile;
   actives: LearnedActive[];
+  /** Powers of its uniques and complete sets. */
+  powers?: PowerId[];
 };
 
 export type HeroPose = 'walk' | 'idle' | 'attack' | 'special' | 'hurt' | 'rest' | 'alert' | 'victory' | 'stunned' | 'fallen';
@@ -76,9 +79,17 @@ export type Hero = {
   fallenMs: number;
   attackCd: number;
   cooldowns: Record<string, number>;
-  /** Hits absorbed by the Cleric's sanctuary. */
+  /** Hits absorbed by the Cleric's sanctuary (and some powers' wards). */
   shield: number;
   joinedMs: number;
+  powers: PowerId[];
+  /** Basic attacks so far, for powers that fire every few attacks. */
+  attacks: number;
+  /** Stacks of Momentum and how long they last. */
+  momentum: number;
+  momentumMs: number;
+  /** A cast waiting to echo (Echo power). */
+  echo: { active: LearnedActive; ms: number } | null;
 };
 
 export type EnemyPose = 'move' | 'attack' | 'hurt' | 'dying';
@@ -154,6 +165,8 @@ export type AdventureEvent =
   | { type: 'hit'; targetId: string; amount: number; x: number; critical: boolean; skill: boolean }
   | { type: 'kill'; monsterId: MonsterId; x: number; gold: number; boss: boolean; elite: boolean }
   | { type: 'special'; heroId: string; action: ActiveAction; x: number }
+  /** A power went off where the screen should show it. */
+  | { type: 'power'; heroId: string; power: PowerId; x: number }
   | { type: 'hero-hit'; heroId: string; amount: number; blocked: boolean }
   | { type: 'hero-down'; heroId: string; x: number }
   | { type: 'hero-up'; heroId: string }
@@ -301,6 +314,7 @@ function syncParty(state: AdventureState, party: readonly PartyMember[]): void {
       existing.leader = member.leader;
       existing.level = member.level;
       existing.actives = member.actives;
+      existing.powers = member.powers ?? [];
       if (existing.profile !== member.profile) {
         existing.profile = member.profile;
         existing.hp = Math.min(member.profile.maxHp, Math.max(standing(existing) ? 1 : 0, ratio * member.profile.maxHp));
@@ -314,6 +328,7 @@ function syncParty(state: AdventureState, party: readonly PartyMember[]): void {
       profile: member.profile, actives: member.actives,
       x: state.frontX - (state.heroes.length + 2) * HERO_SPACING, pose: 'walk', poseMs: 0,
       hp: member.profile.maxHp, fallenMs: 0, attackCd: 400, cooldowns, shield: 0, joinedMs: state.timeMs,
+      powers: member.powers ?? [], attacks: 0, momentum: 0, momentumMs: 0, echo: null,
     };
     state.heroes.push(hero);
     state.events.push({ type: 'join', heroId: hero.id });
@@ -334,7 +349,22 @@ function restartStage(state: AdventureState): void {
   }
 }
 
+function has(hero: Hero | null | undefined, power: PowerId): boolean {
+  return Boolean(hero?.powers.includes(power));
+}
+
+/** Whether a standing hero of the formation carries a party-wide power. */
+function partyHas(state: AdventureState, power: PowerId): boolean {
+  return state.heroes.some((hero) => standing(hero) && able(hero) && hero.powers.includes(power));
+}
+
 function spawnWave(state: AdventureState): void {
+  // Aegis: every wave starts behind a ward.
+  for (const hero of state.heroes) {
+    if (!has(hero, 'aegis') || !standing(hero)) continue;
+    hero.shield = Math.max(hero.shield, 2);
+    state.events.push({ type: 'power', heroId: hero.id, power: 'aegis', x: hero.x });
+  }
   const position = state.position;
   const biome = biomeOf(position);
   const level = regionLevel(position);
@@ -380,9 +410,15 @@ function partyChestMultiplier(state: AdventureState): number {
 function damageEnemy(state: AdventureState, enemy: Enemy, amount: number, source: Hero | null, skill: boolean): void {
   if (enemy.pose === 'dying') return;
   const profile = source?.profile;
-  const critical = profile ? random(state) < profile.critChance : false;
+  // First Strike: a monster still untouched always takes a critical hit.
+  const critical = profile ? (has(source, 'first-strike') && enemy.hp >= enemy.maxHp) || random(state) < profile.critChance : false;
   let dealt = amount * (critical && profile ? profile.critMultiplier : 1);
   if (profile && (enemy.boss || enemy.elite)) dealt *= profile.bossMultiplier;
+  if (has(source, 'executioner') && enemy.hp < enemy.maxHp * 0.25) dealt *= 2;
+  if (has(source, 'frostbite') && random(state) < 0.1) {
+    enemy.stunMs = Math.max(enemy.stunMs, 1_000);
+    state.events.push({ type: 'power', heroId: source!.id, power: 'frostbite', x: enemy.x });
+  }
   if (state.buffs.mightMs > 0) dealt *= 1 + state.buffs.might;
   dealt = Math.max(1, Math.round(dealt));
   enemy.hp -= dealt;
@@ -394,14 +430,22 @@ function damageEnemy(state: AdventureState, enemy: Enemy, amount: number, source
     if (enemy.pose !== 'attack') { enemy.pose = 'hurt'; enemy.poseMs = 0; }
     return;
   }
-  killEnemy(state, enemy);
+  killEnemy(state, enemy, source);
 }
 
-function killEnemy(state: AdventureState, enemy: Enemy): void {
+function killEnemy(state: AdventureState, enemy: Enemy, killer: Hero | null = null): void {
   enemy.hp = 0;
   enemy.pose = 'dying';
   enemy.poseMs = 0;
-  const gold = Math.round(enemy.gold * partyGoldMultiplier(state) * (state.buffs.fortuneMs > 0 ? 2 : 1));
+  const gold = Math.round(enemy.gold * partyGoldMultiplier(state) * (state.buffs.fortuneMs > 0 ? 2 : 1) * (has(killer, 'midas') ? 1.6 : 1));
+  if (killer && standing(killer)) {
+    if (has(killer, 'feast')) {
+      const amount = killer.profile.maxHp * 0.06;
+      killer.hp = Math.min(killer.profile.maxHp, killer.hp + amount);
+      state.events.push({ type: 'heal', heroId: killer.id, amount: Math.round(amount) });
+    }
+    if (has(killer, 'momentum')) { killer.momentum = Math.min(10, killer.momentum + 1); killer.momentumMs = 6_000; }
+  }
   state.pending.gold += gold;
   state.pending.kills[enemy.monsterId] = (state.pending.kills[enemy.monsterId] ?? 0) + 1;
   for (const hero of state.heroes) {
@@ -423,8 +467,8 @@ function killEnemy(state: AdventureState, enemy: Enemy): void {
     state.pending.bosses.push({ difficulty, act, monsterId: enemy.monsterId });
     drop('red');
   } else if (enemy.elite) {
-    if (random(state) < BLUE_CHEST_CHANCE * (1 + state.rules.blueChestBonus / 100)) drop('blue');
-  } else if (random(state) < WHITE_CHEST_CHANCE * partyChestMultiplier(state)) {
+    if (random(state) < BLUE_CHEST_CHANCE * (1 + state.rules.blueChestBonus / 100) * (partyHas(state, 'bounty') ? 2 : 1)) drop('blue');
+  } else if (random(state) < WHITE_CHEST_CHANCE * partyChestMultiplier(state) * (partyHas(state, 'bounty') ? 1.3 : 1)) {
     drop('white');
   }
 }
@@ -444,13 +488,24 @@ function living(state: AdventureState): Enemy[] {
 }
 
 function heroAttack(hero: Hero): number {
-  return hero.profile.attack * (hero.activity === 'working' ? INSPIRED_DAMAGE : 1);
+  const lastStand = has(hero, 'last-stand') && hero.hp < hero.profile.maxHp * 0.3 ? 1.5 : 1;
+  return hero.profile.attack * (hero.activity === 'working' ? INSPIRED_DAMAGE : 1) * lastStand;
 }
 
-function castActive(state: AdventureState, hero: Hero, active: LearnedActive, target: Enemy): void {
+function buffMs(hero: Hero): number {
+  return BUFF_MS * (has(hero, 'encore') ? 2 : 1);
+}
+
+function castActive(state: AdventureState, hero: Hero, active: LearnedActive, target: Enemy, echoed = false): void {
   const damage = heroAttack(hero) * active.power * hero.profile.skillMultiplier;
   setPose(hero, 'special');
   state.events.push({ type: 'special', heroId: hero.id, action: active.action, x: hero.x });
+  // Echo: the same skill again in a moment, at half power.
+  if (has(hero, 'echo') && !echoed) hero.echo = { active, ms: 350 };
+  // Automaton: every skill also sets down a turret.
+  if (has(hero, 'automaton') && active.action !== 'turret') {
+    state.turrets.push({ id: id(state, 't'), ownerId: hero.id, x: hero.x + 18, ttlMs: 8_000 * (has(hero, 'overdrive') ? 1.5 : 1), cooldown: 0, damage: heroAttack(hero) * 0.6 });
+  }
   switch (active.action) {
     case 'bash':
       damageEnemy(state, target, damage, hero, true);
@@ -462,7 +517,7 @@ function castActive(state: AdventureState, hero: Hero, active: LearnedActive, ta
       break;
     case 'bulwark':
       state.buffs.guard = Math.max(state.buffs.guard, Math.min(0.6, active.power));
-      state.buffs.guardMs = BUFF_MS;
+      state.buffs.guardMs = buffMs(hero);
       break;
     case 'earthshatter':
       for (const enemy of living(state)) { damageEnemy(state, enemy, damage, hero, true); enemy.stunMs = Math.max(enemy.stunMs, 1_200); }
@@ -496,14 +551,19 @@ function castActive(state: AdventureState, hero: Hero, active: LearnedActive, ta
         ally.shield = Math.max(ally.shield, Math.round(active.power));
         if (ally.pose === 'stunned' || ally.pose === 'hurt') setPose(ally, 'idle');
       }
+      dawn(state, hero);
       break;
     case 'heal':
       for (const ally of state.heroes) {
         if (!standing(ally)) continue;
         const amount = ally.profile.maxHp * active.power * hero.profile.skillMultiplier;
+        // Overflow: what the heal cannot fill becomes a ward, one hit per tenth of life.
+        const excess = ally.hp + amount - ally.profile.maxHp;
+        if (has(hero, 'overflow') && excess > 0) ally.shield = Math.min(3, ally.shield + Math.floor(excess / (ally.profile.maxHp * 0.1)));
         ally.hp = Math.min(ally.profile.maxHp, ally.hp + amount);
         state.events.push({ type: 'heal', heroId: ally.id, amount: Math.round(amount) });
       }
+      dawn(state, hero);
       break;
     case 'judgment':
       for (const ally of state.heroes) {
@@ -516,19 +576,19 @@ function castActive(state: AdventureState, hero: Hero, active: LearnedActive, ta
       for (const enemy of living(state)) damageEnemy(state, enemy, damage, hero, true);
       break;
     case 'turret':
-      state.turrets.push({ id: id(state, 't'), ownerId: hero.id, x: hero.x + 18, ttlMs: 8_000, cooldown: 0, damage });
+      state.turrets.push({ id: id(state, 't'), ownerId: hero.id, x: hero.x + 18, ttlMs: 8_000 * (has(hero, 'overdrive') ? 1.5 : 1), cooldown: 0, damage });
       break;
     case 'overclock':
     case 'anthem':
       state.buffs.haste = Math.max(state.buffs.haste, active.power);
-      state.buffs.hasteMs = BUFF_MS;
+      state.buffs.hasteMs = buffMs(hero);
       break;
     case 'crescendo':
       state.buffs.might = Math.max(state.buffs.might, active.power);
-      state.buffs.mightMs = BUFF_MS;
+      state.buffs.mightMs = buffMs(hero);
       break;
     case 'barrage':
-      for (let index = 0; index < 8; index += 1) {
+      for (let index = 0; index < (has(hero, 'overdrive') ? 11 : 8); index += 1) {
         const pool = living(state);
         if (!pool.length) break;
         state.projectiles.push({ id: id(state, 'p'), kind: 'rocket', ownerId: hero.id, fromX: hero.x, targetId: pool[Math.floor(random(state) * pool.length)].id, progress: -index * 0.12, damage, skill: true });
@@ -541,15 +601,47 @@ function castActive(state: AdventureState, hero: Hero, active: LearnedActive, ta
   }
 }
 
+/** Dawn: a heal or sanctuary from this hero also lifts the party's damage for a while. */
+function dawn(state: AdventureState, hero: Hero): void {
+  if (!has(hero, 'dawn')) return;
+  state.buffs.might = Math.max(state.buffs.might, 0.2);
+  state.buffs.mightMs = Math.max(state.buffs.mightMs, 5_000);
+  state.events.push({ type: 'power', heroId: hero.id, power: 'dawn', x: hero.x });
+}
+
 function strike(state: AdventureState, hero: Hero, target: Enemy): void {
   const attack = HERO_CLASSES[hero.classId].attack;
   setPose(hero, 'attack');
+  hero.attacks += 1;
   state.events.push({ type: 'attack', heroId: hero.id, attack, targetId: target.id });
-  if (attack === 'melee') damageEnemy(state, target, heroAttack(hero), hero, false);
-  else state.projectiles.push({ id: id(state, 'p'), kind: attack, ownerId: hero.id, fromX: hero.x + 10, targetId: target.id, progress: 0, damage: heroAttack(hero), skill: false });
+  if (attack === 'melee') {
+    // Cleave: the swing carries into whatever stands close behind.
+    const others = has(hero, 'cleave') ? living(state).filter((enemy) => enemy !== target && Math.abs(enemy.x - target.x) <= 50) : [];
+    damageEnemy(state, target, heroAttack(hero), hero, false);
+    for (const enemy of others) damageEnemy(state, enemy, heroAttack(hero) * 0.4, hero, false);
+    if (others.length) state.events.push({ type: 'power', heroId: hero.id, power: 'cleave', x: target.x });
+  } else {
+    state.projectiles.push({ id: id(state, 'p'), kind: attack, ownerId: hero.id, fromX: hero.x + 10, targetId: target.id, progress: 0, damage: heroAttack(hero), skill: false });
+    // Gale: every fourth shot also flies at the next two monsters.
+    if (has(hero, 'gale') && hero.attacks % 4 === 0) {
+      for (const enemy of living(state).filter((enemy) => enemy !== target).slice(0, 2)) {
+        state.projectiles.push({ id: id(state, 'p'), kind: attack, ownerId: hero.id, fromX: hero.x + 10, targetId: enemy.id, progress: -0.1, damage: heroAttack(hero) * 0.5, skill: false });
+      }
+    }
+  }
+  // Starfall: every eighth attack a star drops on the target.
+  if (has(hero, 'starfall') && hero.attacks % 8 === 0) {
+    damageEnemy(state, target, heroAttack(hero) * 1.5, hero, true);
+    state.events.push({ type: 'power', heroId: hero.id, power: 'starfall', x: target.x });
+  }
 }
 
 function hurtHero(state: AdventureState, hero: Hero, enemy: Enemy): void {
+  // Thorns: whoever strikes this hero gets hurt back, ward or not.
+  if (has(hero, 'thorns')) {
+    damageEnemy(state, enemy, heroAttack(hero) * 0.5, hero, false);
+    state.events.push({ type: 'power', heroId: hero.id, power: 'thorns', x: enemy.x });
+  }
   if (hero.shield > 0) {
     hero.shield -= 1;
     state.events.push({ type: 'hero-hit', heroId: hero.id, amount: 0, blocked: true });
@@ -557,7 +649,9 @@ function hurtHero(state: AdventureState, hero: Hero, enemy: Enemy): void {
   }
   const mitigation = armorMitigation(hero.profile.armor, power(enemy.level));
   const reduction = Math.min(0.9, mitigation + hero.profile.damageReduction + (state.buffs.guardMs > 0 ? state.buffs.guard : 0));
-  const amount = Math.max(1, Math.round(enemy.damage * (1 - reduction)));
+  const lastStand = has(hero, 'last-stand') && hero.hp < hero.profile.maxHp * 0.3 ? 0.7 : 1;
+  const bastion = partyHas(state, 'bastion') ? 0.85 : 1;
+  const amount = Math.max(1, Math.round(enemy.damage * (1 - reduction) * lastStand * bastion));
   hero.hp -= amount;
   state.events.push({ type: 'hero-hit', heroId: hero.id, amount, blocked: false });
   if (hero.hp > 0) {
@@ -565,7 +659,7 @@ function hurtHero(state: AdventureState, hero: Hero, enemy: Enemy): void {
     return;
   }
   hero.hp = 0;
-  hero.fallenMs = state.rules.reviveMs;
+  hero.fallenMs = state.rules.reviveMs * (has(hero, 'phoenix') ? 0.5 : 1);
   setPose(hero, 'fallen');
   state.events.push({ type: 'hero-down', heroId: hero.id, x: hero.x });
 }
@@ -631,7 +725,7 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
   // Heroes. Ranged heroes cover the whole line from behind: their reach counts
   // from the front. While a working knight holds the front they wait for the
   // monster to engage it, so the knight fights too.
-  const haste = 1 + (state.buffs.hasteMs > 0 ? state.buffs.haste : 0);
+  const haste = 1 + (state.buffs.hasteMs > 0 ? state.buffs.haste : 0) + (partyHas(state, 'harmony') ? 0.12 : 0);
   const fighters = state.heroes.filter(fighting);
   const frontLine = fighters.length ? Math.max(...fighters.map((hero) => hero.x)) : state.frontX;
   const tank = fighters.some((hero) => HERO_CLASSES[hero.classId].attack === 'melee');
@@ -639,7 +733,20 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     if (!standing(hero)) continue;
     hero.attackCd -= dt * haste;
     for (const active of hero.actives) hero.cooldowns[active.id] = (hero.cooldowns[active.id] ?? 0) - dt * haste;
+    if (hero.momentumMs > 0) { hero.momentumMs -= dt; if (hero.momentumMs <= 0) hero.momentum = 0; }
     if (!able(hero)) { settlePose(hero, state.mode); continue; }
+    if (hero.echo) {
+      hero.echo.ms -= dt;
+      const echoTarget = frontEnemy(state);
+      if (hero.echo.ms <= 0) {
+        if (echoTarget) {
+          castActive(state, hero, { ...hero.echo.active, power: hero.echo.active.power * 0.5 }, echoTarget, true);
+          state.events.push({ type: 'power', heroId: hero.id, power: 'echo', x: hero.x });
+        }
+        hero.echo = null;
+        continue;
+      }
+    }
     if (POSE_MS[hero.pose] && hero.poseMs < POSE_MS[hero.pose]!) continue;
     const target = frontEnemy(state);
     const heroClass = HERO_CLASSES[hero.classId];
@@ -648,11 +755,14 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     const ready = hero.actives.find((active) => (hero.cooldowns[active.id] ?? 0) <= 0);
     if (target && inRange && ready) {
       castActive(state, hero, ready, target);
-      hero.cooldowns[ready.id] = ready.cooldownMs * hero.profile.cooldownMultiplier;
+      // Arcane Surge: now and then the skill is ready again at once.
+      const surge = has(hero, 'arcane-surge') && random(state) < 0.25;
+      hero.cooldowns[ready.id] = surge ? 0 : ready.cooldownMs * hero.profile.cooldownMultiplier;
+      if (surge) state.events.push({ type: 'power', heroId: hero.id, power: 'arcane-surge', x: hero.x });
       hero.attackCd = Math.max(hero.attackCd, 300);
     } else if (target && inRange && hero.attackCd <= 0) {
       strike(state, hero, target);
-      hero.attackCd = hero.profile.attackMs;
+      hero.attackCd = hero.profile.attackMs / (1 + 0.04 * hero.momentum);
     } else {
       setPose(hero, engaged ? 'idle' : 'walk');
     }
@@ -665,7 +775,7 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     const target = frontEnemy(state);
     if (target && turret.cooldown <= 0 && target.x - turret.x < 140) {
       state.projectiles.push({ id: id(state, 'p'), kind: 'turret', ownerId: turret.ownerId, fromX: turret.x, targetId: target.id, progress: 0, damage: turret.damage, skill: true });
-      turret.cooldown = 700;
+      turret.cooldown = has(state.heroes.find((hero) => hero.id === turret.ownerId), 'automaton') ? 350 : 700;
     }
   }
   state.turrets = state.turrets.filter((turret) => turret.ttlMs > 0);
@@ -679,6 +789,14 @@ export function stepAdventure(state: AdventureState, party: readonly PartyMember
     if (projectile.progress >= 1) {
       const owner = state.heroes.find((hero) => hero.id === projectile.ownerId) ?? null;
       damageEnemy(state, target, projectile.damage, owner, projectile.skill);
+      // Chain: a basic arrow ricochets into the next monster.
+      if (projectile.kind === 'arrow' && !projectile.skill && has(owner, 'chain')) {
+        const next = living(state).find((enemy) => enemy !== target && enemy.x > target.x);
+        if (next) {
+          damageEnemy(state, next, projectile.damage * 0.5, owner, false);
+          state.events.push({ type: 'power', heroId: owner!.id, power: 'chain', x: next.x });
+        }
+      }
     }
   }
   state.projectiles = state.projectiles.filter((projectile) => projectile.progress < 1);

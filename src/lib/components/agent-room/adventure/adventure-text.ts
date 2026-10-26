@@ -1,5 +1,6 @@
 import { fill, type AdventureCatalog } from '$lib/i18n/adventure/index.js';
-import { itemBaseKey, type ItemData } from '$lib/modules/agent-room/domain/adventure/items.js';
+import { SETS, UNIQUES } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
+import { NORMAL_GEM_QUALITY, isGem, itemBaseKey, type GemQuality, type ItemData, type MaterialId } from '$lib/modules/agent-room/domain/adventure/items.js';
 import type { Rune } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import type { ActiveAction, SkillNode } from '$lib/modules/agent-room/domain/adventure/skills.js';
 import { FLAT_STATS, scaleStats, type StatBlock, type StatId } from '$lib/modules/agent-room/domain/adventure/stats.js';
@@ -20,8 +21,17 @@ export function heroLevelText(level: number, paragon: number): string {
   return paragon > 0 ? m['adventure.paragon_level']({ level: paragon }) : m['adventure.level']({ level });
 }
 
-export function itemName(catalog: AdventureCatalog, item: Pick<ItemData, 'slot' | 'classId' | 'level'>): string {
+/** An item's name: a unique's own, a set piece's, or its base's (variant included). */
+export function itemName(catalog: AdventureCatalog, item: Pick<ItemData, 'slot' | 'classId' | 'level' | 'variant' | 'uniqueId' | 'setId'>): string {
+  if (item.uniqueId && UNIQUES[item.uniqueId]) return catalog.uniques[item.uniqueId];
+  if (item.setId && SETS[item.setId]) return catalog.setPieces[`${item.setId}.${item.slot}`] ?? catalog.sets[item.setId];
   return catalog.bases[itemBaseKey(item)] ?? catalog.slots[item.slot];
+}
+
+/** A material's name, with a gem's cut. */
+export function materialName(catalog: AdventureCatalog, material: MaterialId, quality: GemQuality = NORMAL_GEM_QUALITY): string {
+  const name = catalog.materials[material];
+  return isGem(material) ? fill(catalog.gemQualities[String(quality) as '3'], { gem: name }) : name;
 }
 
 export function statText(catalog: AdventureCatalog, stat: StatId, value: number): string {

@@ -4,7 +4,8 @@ import { ADVENTURE_ES } from '$lib/i18n/adventure/es.js';
 import { ADVENTURE_PT } from '$lib/i18n/adventure/pt-BR.js';
 import type { AdventureCatalog } from '$lib/i18n/adventure/types.js';
 import { HERO_CLASS_IDS } from '$lib/modules/agent-room/domain/adventure/catalog.js';
-import { SLOTS } from '$lib/modules/agent-room/domain/adventure/items.js';
+import { ELIXIR_IDS, POWER_IDS, SET_IDS, SET_PIECES, UNIQUE_IDS } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
+import { SLOTS, classSlot } from '$lib/modules/agent-room/domain/adventure/items.js';
 import { RUNES } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import { SKILL_NODES } from '$lib/modules/agent-room/domain/adventure/skills.js';
 
@@ -55,12 +56,23 @@ describe('adventure catalog (i18n integrity)', () => {
     expect(RUNES.map((rune) => rune.id).filter((id) => !catalog.runes[id])).toEqual([]);
   });
 
-  it.each(Object.entries(CATALOGS))('%s names every base item for tiers 0..5', (_locale, catalog) => {
+  it.each(Object.entries(CATALOGS))('%s names every base item: tiers 0..5, three variants (off hands have one per class)', (_locale, catalog) => {
+    const variants = (key: string) => [key, `${key}.1`, `${key}.2`];
     const expected = [
-      ...SLOTS.filter((slot) => slot !== 'weapon').flatMap((slot) => TIERS.map((tier) => `${slot}.${tier}`)),
-      ...HERO_CLASS_IDS.flatMap((classId) => TIERS.map((tier) => `weapon-${classId}.${tier}`)),
+      ...SLOTS.filter((slot) => !classSlot(slot)).flatMap((slot) => TIERS.flatMap((tier) => variants(`${slot}.${tier}`))),
+      ...HERO_CLASS_IDS.flatMap((classId) => TIERS.flatMap((tier) => variants(`weapon-${classId}.${tier}`))),
+      ...HERO_CLASS_IDS.flatMap((classId) => TIERS.map((tier) => `offhand-${classId}.${tier}`)),
     ];
     expect(HERO_CLASS_IDS).toEqual(expect.arrayContaining(['knight', 'ranger', 'sorceress', 'cleric', 'artificer', 'maestro']));
     expect(expected.filter((key) => !catalog.bases[key])).toEqual([]);
+  });
+
+  it.each(Object.entries(CATALOGS))('%s names every unique, set piece, power and elixir', (_locale, catalog) => {
+    expect(UNIQUE_IDS.filter((id) => !catalog.uniques[id])).toEqual([]);
+    expect(SET_IDS.filter((id) => !catalog.sets[id])).toEqual([]);
+    expect(SET_IDS.flatMap((id) => SET_PIECES.map((slot) => `${id}.${slot}`)).filter((key) => !catalog.setPieces[key])).toEqual([]);
+    expect(POWER_IDS.filter((id) => !catalog.powers[id])).toEqual([]);
+    expect(ELIXIR_IDS.filter((id) => !catalog.elixirs[id])).toEqual([]);
+    expect(SLOTS.filter((slot) => !catalog.slots[slot])).toEqual([]);
   });
 });

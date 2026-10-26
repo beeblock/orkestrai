@@ -5913,5 +5913,16 @@
   "adventure.inspired": "Inspired: +20% damage while its agent works",
   "adventure.supporters": "+{count} supporting",
   "adventure.supporters_hint": "Agents working outside the formation: their heroes earn 60% of the experience.",
-  "adventure.camp_guild": "Guild · {count} heroes"
+  "adventure.camp_guild": "Guild · {count} heroes",
+  "adventure.item_unique": "Unique",
+  "adventure.item_set": "{set} · {count}/{total}",
+  "adventure.camp_slot_pair": "{slot} {index}",
+  "adventure.camp_powers": "Powers",
+  "adventure.camp_powers_none": "No powers yet: equip a unique item or wear all 6 pieces of a set.",
+  "adventure.camp_elixirs": "Elixirs",
+  "adventure.camp_elixirs_hint": "Each dose lasts 30 min for every hero, and doses of the same elixir add up to 4 h. They come from quest and red chests, and sometimes blue ones.",
+  "adventure.camp_elixir_left": "{minutes} min left",
+  "adventure.camp_drink": "Drink",
+  "adventure.camp_fuse": "Fuse 3 into 1 · {gold}",
+  "adventure.camp_fusion_none": "Collect three matching gems of the same cut to fuse them into a finer one."
 }

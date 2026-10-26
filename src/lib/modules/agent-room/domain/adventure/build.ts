@@ -1,3 +1,4 @@
+import { UNIQUES, setBonuses, setCounts, type PowerId, type SetId } from './artifacts.js';
 import type { HeroClassId } from './catalog.js';
 import { itemStats, rarityIndex, type Item, type Rarity, type Slot } from './items.js';
 import { petStats, type KillCounts } from './pets.js';
@@ -34,13 +35,17 @@ export type HeroBuild = {
   actives: LearnedActive[];
   learned: LearnedActive[];
   deployed: boolean;
+  /** Powers of the uniques it wears and of its complete sets. */
+  powers: PowerId[];
+  /** Pieces worn of each set. */
+  sets: Partial<Record<SetId, number>>;
 };
 
-const OUTFIT_SLOTS: Slot[] = ['weapon', 'helmet', 'armor', 'gloves', 'boots'];
+const OUTFIT_SLOTS: Slot[] = ['weapon', 'helmet', 'shoulders', 'armor', 'gloves', 'legs', 'boots'];
 
 /**
- * The outfit follows the gear: the average rarity over weapon and the four
- * armor pieces (an empty slot counts as common). Commons and uncommons look
+ * The outfit follows the gear: the average rarity over the weapon and the
+ * six armor pieces (an empty slot counts as common). Commons and uncommons look
  * novice, rares and epics adept, legendaries and immortals heroic, and
  * arcana and beyond celestial.
  */
@@ -68,20 +73,25 @@ export type BuildInput = {
 
 /**
  * Builds every hero at once, since auras from the deployed heroes reach
- * the whole formation.
+ * the whole formation. `extra` is what reaches every hero besides runes and
+ * pets (the elixirs being drunk).
  */
-export function buildHeroes(heroes: BuildInput[], items: Item[], runes: RuneRanks, kills: KillCounts): Record<string, HeroBuild> {
-  const account = addStats(runeStats(runes), petStats(kills));
+export function buildHeroes(heroes: BuildInput[], items: Item[], runes: RuneRanks, kills: KillCounts, extra: StatBlock = {}): Record<string, HeroBuild> {
+  const account = addStats(runeStats(runes), petStats(kills), extra);
   const auras = addStats(...heroes.filter((hero) => hero.deployed).map((hero) => auraStats(hero.classId, hero.skills)));
   const slots = activeSlots(runes);
   const builds: Record<string, HeroBuild> = {};
   for (const hero of heroes) {
     const equipped = items.filter((item) => item.location === 'equipped' && item.heroId === hero.heroId);
+    const sets = setCounts(equipped);
+    const bonus = setBonuses(sets);
+    const powers = [...new Set([...equipped.flatMap((item) => (item.uniqueId && UNIQUES[item.uniqueId] ? [UNIQUES[item.uniqueId].power] : [])), ...bonus.powers])];
     const stats = addStats(
       heroBaseStats(hero.classId, hero.level),
       { attackPct: hero.paragon ?? 0, maxHpPct: hero.paragon ?? 0 },
       passiveStats(hero.classId, hero.skills),
       ...equipped.map(itemStats),
+      bonus.stats,
       account,
       hero.deployed ? auras : auraStats(hero.classId, hero.skills),
     );
@@ -104,6 +114,8 @@ export function buildHeroes(heroes: BuildInput[], items: Item[], runes: RuneRank
       actives: slottedActives(hero.classId, hero.skills, hero.actives, slots),
       learned: learnedActives(hero.classId, hero.skills),
       deployed: hero.deployed,
+      powers,
+      sets,
     };
   }
   return builds;

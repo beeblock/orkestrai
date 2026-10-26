@@ -1,6 +1,7 @@
 import type { HeroClassId } from './catalog.js';
-import { MATERIAL_IDS, MATERIALS, RARITIES, rollItem, type ItemData, type MaterialId, type Rarity, type Rng } from './items.js';
-import { DIFFICULTY_RULES, MAX_REGION_LEVEL, power, type Difficulty } from './world.js';
+import { ELIXIR_IDS, SET_IDS, SETS, UNIQUE_IDS, UNIQUES, type ElixirId, type SetId, type UniqueId } from './artifacts.js';
+import { MATERIAL_IDS, MATERIALS, RARITIES, gemQualityFor, isGem, materialKey, rarityIndex, rollItem, type ItemData, type MaterialId, type Rarity, type Rng } from './items.js';
+import { DIFFICULTIES, DIFFICULTY_RULES, MAX_REGION_LEVEL, power, type Difficulty } from './world.js';
 
 /**
  * Chests are where gear comes from. White ones drop from any monster, blue
@@ -61,10 +62,47 @@ export type ChestContext = {
 export type ChestContents = {
   items: ItemData[];
   gold: number;
-  materials: Partial<Record<MaterialId, number>>;
+  /** By material key (see `materialKey`): gems carry their quality. */
+  materials: Record<string, number>;
+  elixirs: Partial<Record<ElixirId, number>>;
   soulstones: number;
   coins: number;
 };
+
+/** Chance a red chest holds its act boss's unique (one of three), by difficulty. */
+export const UNIQUE_CHANCE: Record<Difficulty, number> = { normal: 0.06, nightmare: 0.09, hell: 0.12, torment: 0.16 };
+/** Chance a red chest on Hell or Torment holds one of the wandering uniques. */
+export const WORLD_UNIQUE_CHANCE = 0.04;
+/** Chance per item of a set piece, by chest, from region level 25. */
+export const SET_CHANCE: Record<ChestTier, number> = { white: 0, blue: 0.015, quest: 0.03, red: 0.05 };
+export const SET_MIN_LEVEL = 25;
+
+function pick<T>(rng: Rng, list: readonly T[]): T {
+  return list[Math.floor(rng() * list.length)];
+}
+
+/** Uniques and set pieces are at least Legendary and Epic. */
+function atLeast(rarity: Rarity, floor: Rarity): Rarity {
+  return rarityIndex(rarity) >= rarityIndex(floor) ? rarity : floor;
+}
+
+/** The unique a red chest holds, if any: the act boss's own, or on Hell and Torment a wandering one. */
+export function rollUnique(rng: Rng, context: Pick<ChestContext, 'act' | 'difficulty' | 'magicFind'>): UniqueId | null {
+  const luck = 1 + Math.max(0, context.magicFind) / 400;
+  if (rng() < UNIQUE_CHANCE[context.difficulty] * luck) {
+    const own = UNIQUE_IDS.filter((uniqueId) => UNIQUES[uniqueId].act === context.act);
+    if (own.length) return pick(rng, own);
+  }
+  const late = DIFFICULTIES.indexOf(context.difficulty) >= DIFFICULTIES.indexOf('hell');
+  if (late && rng() < WORLD_UNIQUE_CHANCE * luck) return pick(rng, UNIQUE_IDS.filter((uniqueId) => UNIQUES[uniqueId].act === null));
+  return null;
+}
+
+/** A set for a drop: three times in four one of the party's classes. */
+function pickSet(rng: Rng, partyClasses: HeroClassId[]): SetId {
+  const own = SET_IDS.filter((setId) => partyClasses.includes(SETS[setId].classId));
+  return own.length && rng() < 0.75 ? pick(rng, own) : pick(rng, SET_IDS);
+}
 
 function pickMaterial(rng: Rng, kinds: Array<'decoration' | 'engraving' | 'inscription'>): MaterialId {
   const pool = MATERIAL_IDS.filter((id) => kinds.includes(MATERIALS[id].socket));
@@ -72,18 +110,33 @@ function pickMaterial(rng: Rng, kinds: Array<'decoration' | 'engraving' | 'inscr
 }
 
 export function openChest(rng: Rng, context: ChestContext): ChestContents {
-  const contents: ChestContents = { items: [], gold: 0, materials: {}, soulstones: 0, coins: 0 };
+  const contents: ChestContents = { items: [], gold: 0, materials: {}, elixirs: {}, soulstones: 0, coins: 0 };
   const extra = context.tier === 'red' && (context.difficulty === 'hell' || context.difficulty === 'torment') ? 1 : 0;
+  const itemLevel = () => Math.max(1, Math.min(MAX_REGION_LEVEL, context.level + Math.floor(rng() * 4) - 2));
   for (let index = 0; index < ITEMS_PER_CHEST[context.tier] + extra; index += 1) {
     const rarity = rollRarity(rng, context.tier, context.magicFind, context.difficulty);
-    const level = Math.max(1, Math.min(MAX_REGION_LEVEL, context.level + Math.floor(rng() * 4) - 2));
-    contents.items.push(rollItem(rng, { level, rarity, partyClasses: context.partyClasses }));
+    const level = itemLevel();
+    if (context.level >= SET_MIN_LEVEL && rng() < SET_CHANCE[context.tier]) {
+      contents.items.push(rollItem(rng, { level, rarity: atLeast(rarity, 'epic'), setId: pickSet(rng, context.partyClasses), partyClasses: context.partyClasses }));
+    } else {
+      contents.items.push(rollItem(rng, { level, rarity, partyClasses: context.partyClasses }));
+    }
+  }
+  if (context.tier === 'red') {
+    const uniqueId = rollUnique(rng, context);
+    if (uniqueId) contents.items.push(rollItem(rng, { level: itemLevel(), rarity: atLeast(rollRarity(rng, 'red', context.magicFind, context.difficulty), 'legendary'), uniqueId }));
   }
   const goldBase = { white: 25, blue: 90, quest: 120, red: 400 }[context.tier];
   if (context.tier !== 'white' || rng() < 0.35) {
     contents.gold = Math.round(goldBase * power(context.level) ** 0.7 * DIFFICULTY_RULES[context.difficulty].gold * context.goldMultiplier * (0.7 + rng() * 0.6));
   }
-  const addMaterial = (id: MaterialId) => { contents.materials[id] = (contents.materials[id] ?? 0) + 1; };
+  const addMaterial = (id: MaterialId) => {
+    const key = isGem(id) ? materialKey(id, gemQualityFor(rng, context.level)) : materialKey(id);
+    contents.materials[key] = (contents.materials[key] ?? 0) + 1;
+  };
+  const addElixir = () => { const elixirId = pick(rng, ELIXIR_IDS); contents.elixirs[elixirId] = (contents.elixirs[elixirId] ?? 0) + 1; };
+  // Elixirs: one in every quest chest, often in red ones, now and then elsewhere.
+  if (context.tier === 'quest' || (context.tier === 'red' && rng() < 0.6) || (context.tier === 'blue' && rng() < 0.12) || (context.tier === 'white' && rng() < 0.01)) addElixir();
   if (context.tier === 'white' && rng() < 0.08) addMaterial(pickMaterial(rng, ['decoration']));
   if (context.tier === 'blue' || context.tier === 'quest') {
     if (rng() < 0.45) addMaterial(pickMaterial(rng, ['decoration']));

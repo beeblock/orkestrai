@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { POWER_IDS, type PowerId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import { heroClassFor, type HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
 import { buildHeroes } from '$lib/modules/agent-room/domain/adventure/build.js';
 import { rollItem, SLOTS, type Item, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
@@ -220,3 +221,46 @@ describe('adventure party', () => {
     expect(heroClassFor({ nodeId: 'g', title: 'Zé', leader: false, chosen: 'maestro' })).not.toBe('maestro');
   });
 });
+
+describe('adventure powers', () => {
+  const powered = (members: PartyMember[], power: PowerId, who = 0) => members.map((member, index) => (index === who ? { ...member, powers: [power] } : member));
+  const powerEvents = (events: AdventureEvent[], power: PowerId) => events.filter((event) => event.type === 'power' && event.power === power).length;
+
+  it.each(POWER_IDS)('%s plays through a battle without breaking it', (power) => {
+    const state = createAdventure({ position: positionAt('normal', 9), rules: { autoAdvance: false, autoRetry: true, cleared: 9 } }, 5);
+    const members = party(['knight', 'ranger', 'sorceress', 'cleric', 'artificer', 'maestro'], 12, 'rare').map((member) => ({ ...member, powers: [power] }));
+    const events = run(state, members, 40_000);
+    expect(events.filter((event) => event.type === 'kill').length).toBeGreaterThan(0);
+  });
+
+  it('cleaves, chains, calls down stars and echoes skills where the screen can show them', () => {
+    const run30 = (members: PartyMember[]) => run(createAdventure({ position: positionAt('normal', 4), rules: { autoAdvance: false, cleared: 4 } }, 9), members, 30_000);
+    expect(powerEvents(run30(powered(party(['knight'], 8, 'rare'), 'cleave')), 'cleave')).toBeGreaterThan(0);
+    expect(powerEvents(run30(powered(party(['ranger'], 8, 'rare'), 'chain')), 'chain')).toBeGreaterThan(0);
+    expect(powerEvents(run30(powered(party(['ranger'], 8, 'rare'), 'starfall')), 'starfall')).toBeGreaterThan(0);
+    const echoes = run30(powered(party(['sorceress'], 30, 'rare'), 'echo'));
+    expect(powerEvents(echoes, 'echo')).toBeGreaterThan(0);
+  });
+
+  it('wards the hero at each wave (Aegis) and gets a fallen hero up twice as fast (Phoenix)', () => {
+    const state = createAdventure({ position: positionAt('normal', 0), rules: { reviveMs: 10_000 } }, 4);
+    run(state, powered(party(['knight'], 5, 'rare'), 'aegis'), 3_000);
+    expect(state.heroes[0].shield).toBeGreaterThanOrEqual(1);
+    const fragile = party(['knight'], 1, null).map((member) => ({ ...member, powers: ['phoenix' as PowerId], profile: { ...member.profile, maxHp: 1, armor: 0 } }));
+    const doomed = createAdventure({ position: positionAt('torment', 49), rules: { reviveMs: 10_000, autoRetry: true } }, 4);
+    const events: AdventureEvent[] = [];
+    for (let elapsed = 0; elapsed < 30_000 && !events.some((event) => event.type === 'hero-down'); elapsed += 100) events.push(...stepAdventure(doomed, fragile, 100));
+    expect(doomed.heroes[0].fallenMs).toBeLessThanOrEqual(5_000);
+  });
+
+  it('shares Bastion and Harmony with the whole party', () => {
+    const plain = party(['knight', 'ranger', 'cleric'], 25, 'rare');
+    const damageTaken = (members: PartyMember[]) => run(createAdventure({ position: positionAt('normal', 30), rules: { autoAdvance: false, autoRetry: true, cleared: 30 } }, 13), members, 60_000)
+      .reduce((sum, event) => sum + (event.type === 'hero-hit' ? event.amount : 0), 0);
+    expect(damageTaken(powered(plain, 'bastion'))).toBeLessThan(damageTaken(plain));
+    // Harmony swings the whole party faster: waves fall sooner.
+    const kills = (members: PartyMember[]) => run(createAdventure({ position: positionAt('normal', 14), rules: { autoAdvance: false, autoRetry: true, cleared: 14 } }, 13), members, 180_000).filter((event) => event.type === 'kill').length;
+    expect(kills(powered(party(['knight', 'ranger', 'cleric'], 12, 'rare'), 'harmony'))).toBeGreaterThan(kills(party(['knight', 'ranger', 'cleric'], 12, 'rare')));
+  });
+});
+
