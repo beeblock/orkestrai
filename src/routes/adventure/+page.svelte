@@ -4,7 +4,8 @@
   import type { HeroLabel } from '$lib/components/agent-room/adventure/AdventureStage.svelte';
   import { Button } from '$lib/components/ui/button';
   import { FORMATION_LINGER_MS, lineup } from '$lib/components/agent-room/adventure/adventure-party.js';
-  import type { AdventureSoundLevel } from '$lib/components/agent-room/adventure/adventure-audio.js';
+  import { configureSound } from '$lib/components/agent-room/adventure/adventure-audio.js';
+  import { readMixer } from '$lib/components/agent-room/adventure/adventure-mixer.js';
   import { AdventureRequestError, adventureAction, loadAdventure, onAdventureChange, onAdventureSettings, reportBattle, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
   import { ReportOutbox, retryable, type Battle } from '$lib/components/agent-room/adventure/adventure-outbox.js';
   import { heroLevelText, itemName } from '$lib/components/agent-room/adventure/adventure-text.js';
@@ -60,7 +61,6 @@
   let workspaceId = $state<string | null>(null);
   let workspaceName = $state('');
   let snapshot = $state<AdventureSnapshot | null>(null);
-  let soundLevel = $state<AdventureSoundLevel>('alerts');
   let look = $state<StripLook>({ width: 'full', size: 'normal', scenery: 'full', hud: 'always' });
   // Whether the owner dragged the strip away from the Dock.
   let moved = $state(false);
@@ -326,8 +326,7 @@
     }).catch(() => undefined);
     // The strip never takes focus, so it re-reads its settings on a timer, and at once when Settings says so.
     const readSettings = () => void getAppSettings(true).then((settings) => {
-      const level = settings.adventureSound;
-      if (level === 'off' || level === 'alerts' || level === 'all') soundLevel = level;
+      configureSound(readMixer(settings.adventureMixer, settings.adventureSound));
       look = {
         width: settings.adventureWidth === 'compact' ? 'compact' : 'full',
         size: settings.adventureSize === 'small' || settings.adventureSize === 'large' ? settings.adventureSize : 'normal',
@@ -400,7 +399,6 @@
         gold={snapshot.account.gold}
         chests={snapshot.account.chests.length}
         difficultyName={catalog.difficulties[snapshot.account.position.difficulty]}
-        {soundLevel}
         height={SIZES[look.size].field}
         scale={SIZES[look.size].scale}
         scenery={look.scenery}

@@ -22,7 +22,7 @@
   } from '$lib/modules/agent-room/domain/adventure/simulation.js';
   import { biomeOf, regionLevel, WAVES_PER_STAGE, type StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
   import { animationFrame, drawFrame, loadAtlas, type Atlas } from './atlas.js';
-  import { playSound, type AdventureSoundLevel } from './adventure-audio.js';
+  import { playAttack, playSound, playSpell, setMusic, type MusicMood } from './adventure-audio.js';
   import { heroLevelText } from './adventure-text.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -53,7 +53,6 @@
     gold = 0,
     chests = 0,
     difficultyName = '',
-    soundLevel = 'alerts',
     height = 150,
     scale = 1,
     scenery = 'full',
@@ -79,7 +78,6 @@
     /** Unopened chests on the server. */
     chests?: number;
     difficultyName?: string;
-    soundLevel?: AdventureSoundLevel;
     /** Height of the playing field, in CSS pixels. */
     height?: number;
     /** Drawing scale (the strip's size): the world is drawn this much larger, crisp at any size. */
@@ -110,6 +108,8 @@
   const world: AdventureState = createAdventure({ position, wave, rules }, Date.now() & 0xffff);
   let hud = $state({ position: { ...world.position }, wave: world.wave });
   let mode = $state<AdventureState['mode']>('camp');
+  // What the soundtrack plays now.
+  let musicMood: MusicMood | null = null;
   let pendingChests = $state(0);
   let pendingGold = $state(0);
   let banners = $state<Array<{ id: number; tone: 'gold' | 'danger' | 'info' | 'loot'; text: string; color?: string }>>([]);
@@ -271,18 +271,18 @@
           // Spread so a burst of hits stays readable instead of stacking digits.
           effects.push({ kind: 'number', x: event.x, y: Math.random() * 14, t: 0, life: 800, text: compact(event.amount), critical: event.critical, vx: (Math.random() - 0.5) * 48, color: event.skill ? '#9fe3ff' : undefined });
           effects.push({ kind: 'spark', x: event.x, y: 0, t: 0, life: 220 });
-          playSound('hit', soundLevel);
+          playSound(event.critical ? 'critical' : 'hit');
           break;
         }
         case 'attack':
           if (event.attack === 'melee') {
             const target = world.enemies.find((enemy) => enemy.id === event.targetId);
             if (target) effects.push({ kind: 'slash', x: target.x - 6, y: 0, t: 0, life: 200 });
-            playSound('slash', soundLevel);
           }
+          playAttack(event.attack);
           break;
         case 'special':
-          playSound('special', soundLevel);
+          playSpell(event.action);
           castLook(event.action, event.x);
           break;
         case 'heal':
@@ -295,9 +295,11 @@
         case 'hero-up': {
           const x = heroX(event.heroId);
           if (x !== null) spell('vfx-6', 2, x, 0.5, 1_000);
+          playSound('revive');
           break;
         }
         case 'power':
+          playSound('power');
           // Item powers, smaller than the skills they echo.
           switch (event.power) {
             case 'starfall': spell('vfx-1', 0, event.x, 0.36, 750); break;
@@ -315,20 +317,20 @@
             effects.push({ kind: 'coin', x: event.x, y: 0, t: 0, life: 900, vx: (Math.random() - 0.3) * 60, vy: -60 - Math.random() * 50 });
           }
           pendingGold += event.gold;
-          playSound(event.boss ? 'quest' : 'kill', soundLevel);
+          playSound(event.boss ? 'quest' : 'kill');
           if (event.boss) announce(m['adventure.boss_down']({ name: monsterName(event.monsterId) }), 'gold');
           break;
         }
         case 'chest':
           pendingChests += 1;
           effects.push({ kind: 'chest', x: event.x, y: 0, t: 0, life: 1_900, frame: CHEST_FRAME[event.tier] });
-          playSound('chest', soundLevel);
+          playSound('chest');
           break;
         case 'wave':
           if (event.boss) {
             const bossEnemy = world.enemies.find((enemy) => enemy.boss);
             if (bossEnemy) announce(m['adventure.boss_appears']({ name: monsterName(bossEnemy.monsterId) }), 'danger');
-            playSound('boss', soundLevel);
+            playSound('boss');
           }
           break;
         case 'stage-clear':
@@ -337,24 +339,24 @@
           break;
         case 'stage-fail':
           announce(m['adventure.stage_failed']({ stage: stageLabel(event.position) }), 'danger');
-          playSound('fail', soundLevel);
+          playSound('fail');
           break;
         case 'hero-down': {
           effects.push({ kind: 'puff', x: event.x, y: 0, t: 0, life: 500 });
-          playSound('down', soundLevel);
+          playSound('down');
           break;
         }
         case 'quest':
           effects.push({ kind: 'chest', x: world.frontX + 30, y: 0, t: 0, life: 2_600, frame: CHEST_FRAME.quest });
           announce(event.title ? m['adventure.quest_named']({ title: event.title.slice(0, 60) }) : m['adventure.quest'](), 'gold');
-          playSound('quest', soundLevel);
+          playSound('quest');
           break;
         case 'join': {
           // A guild hero swapping back into the formation is not news; its first entrance is.
           const label = labels[event.heroId];
           const fresh = !greeted.has(event.heroId);
           greeted.add(event.heroId);
-          if (label && fresh && world.timeMs > 500) { announce(m['adventure.joined']({ name: label.name }), 'info'); playSound('join', soundLevel); }
+          if (label && fresh && world.timeMs > 500) { announce(m['adventure.joined']({ name: label.name }), 'info'); playSound('join'); }
           break;
         }
         case 'leave':
@@ -396,7 +398,7 @@
     const x = heroX(heroId);
     if (x === null) return;
     spell('vfx-6', 1, x, 0.55, 1_300);
-    playSound('level-up', soundLevel);
+    playSound('level-up');
   }
 
   /** Items arrived (auto-opened chests, quests): a beam of their rarity's color. */
@@ -404,7 +406,7 @@
     const best = [...rarities].sort((a, b) => rarityIndex(b) - rarityIndex(a))[0];
     if (!best || rarityIndex(best) < 2) return;
     effects.push({ kind: 'beam', x: world.frontX + 20, y: 0, t: 0, life: 2_200, color: RARITY_RULES[best].color });
-    playSound('loot', soundLevel);
+    playSound('loot');
   }
 
   // Scenery: props placed by a seeded hash of each slot of road, per biome.
@@ -816,6 +818,9 @@
       render(context, now);
       mode = world.mode;
       const bossEnemy = world.enemies.find((enemy) => enemy.boss && enemy.pose !== 'dying');
+      // The soundtrack follows the party: by the fire, on the road, against an elite wave or a boss.
+      const mood: MusicMood = world.mode === 'camp' ? 'camp' : bossEnemy ? 'boss' : world.enemies.some((enemy) => enemy.elite && enemy.pose !== 'dying') ? 'battle' : 'march';
+      if (mood !== musicMood) { musicMood = mood; setMusic(mood); }
       boss = bossEnemy ? { name: monsterName(bossEnemy.monsterId), hp: bossEnemy.hp, max: bossEnemy.maxHp } : null;
       if (now - lastHud > 500) {
         lastHud = now;
@@ -827,6 +832,7 @@
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      setMusic(null);
     };
   });
 

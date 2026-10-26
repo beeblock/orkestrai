@@ -18,6 +18,8 @@
   import { DEFAULT_DICTATION_HOTKEY, comboFromEvent, comboLabel } from '$lib/components/agent-room/dictation-hotkey.js';
   import { appSettingsStore, getAppSettings, invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
   import { notifyAdventureSettings } from '$lib/components/agent-room/adventure/adventure-client.js';
+  import { configureSound, previewChannel } from '$lib/components/agent-room/adventure/adventure-audio.js';
+  import { MIXER_CHANNELS, readMixer, writeMixer, type Mixer, type MixerChannel } from '$lib/components/agent-room/adventure/adventure-mixer.js';
   import VoiceConfirmDialog from '$lib/components/agent-room/VoiceConfirmDialog.svelte';
   import { localVoiceLabel } from '$lib/components/agent-room/voice-label.js';
   import {
@@ -37,6 +39,26 @@
   import PhoneAccessSettings from '$lib/components/agent-room/PhoneAccessSettings.svelte';
 
   let settings = $state<Record<string, string>>({});
+  // The Adventure's sound mixer, kept in settings as JSON; this window plays the previews with it.
+  const mixer = $derived(readMixer(settings.adventureMixer, settings.adventureSound));
+  const CHANNEL_TEXT: Record<MixerChannel, [() => string, () => string]> = {
+    music: [m['settings.adventure_channel_music'], m['settings.adventure_channel_music_hint']],
+    combat: [m['settings.adventure_channel_combat'], m['settings.adventure_channel_combat_hint']],
+    spells: [m['settings.adventure_channel_spells'], m['settings.adventure_channel_spells_hint']],
+    loot: [m['settings.adventure_channel_loot'], m['settings.adventure_channel_loot_hint']],
+    alerts: [m['settings.adventure_channel_alerts'], m['settings.adventure_channel_alerts_hint']],
+  };
+  const channelLabel = (channel: MixerChannel) => CHANNEL_TEXT[channel][0]();
+  const channelHint = (channel: MixerChannel) => CHANNEL_TEXT[channel][1]();
+
+  function setMixer(next: Mixer) {
+    settings = { ...settings, adventureMixer: writeMixer(next) };
+    configureSound(next);
+  }
+
+  function setChannel(channel: MixerChannel, patch: Partial<Mixer['channels'][MixerChannel]>) {
+    setMixer({ ...mixer, channels: { ...mixer.channels, [channel]: { ...mixer.channels[channel], ...patch } } });
+  }
   let loaded = $state(false);
   let saved = $state(false);
   let capturingHotkey = $state(false);
@@ -808,20 +830,32 @@
           <Button variant="outline" size="sm" href="/adventure" target="_blank">{m['settings.adventure_open']()}</Button>
         </div>
       {/if}
-      <div class="grid gap-2 border-t border-[var(--app-border)] py-3">
-        <span class="field-label">{m['settings.adventure_sound']()}</span>
-        <p class="field-hint">{m['settings.adventure_sound_desc']()}</p>
-        <SegmentedControl
-          class="w-fit max-w-full"
-          label={m['settings.adventure_sound']()}
-          value={settings.adventureSound ?? 'alerts'}
-          onValueChange={(value: string) => (settings = { ...settings, adventureSound: value })}
-          options={[
-            { value: 'off', label: m['settings.adventure_sound_off']() },
-            { value: 'alerts', label: m['settings.adventure_sound_alerts']() },
-            { value: 'all', label: m['settings.adventure_sound_all']() },
-          ]}
-        />
+      <div class="grid gap-3 border-t border-[var(--app-border)] py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="grid gap-1">
+            <span class="field-label">{m['settings.adventure_sound']()}</span>
+            <p class="field-hint">{m['settings.adventure_sound_desc']()}</p>
+          </div>
+          <Switch checked={mixer.enabled} aria-label={m['settings.adventure_sound']()} onCheckedChange={(checked: boolean) => setMixer({ ...mixer, enabled: checked })} />
+        </div>
+        <div class="grid gap-1" class:opacity-50={!mixer.enabled}>
+          <span class="field-hint">{m['settings.adventure_volume']({ volume: mixer.volume })}</span>
+          <Slider type="single" class="max-w-[360px]" value={mixer.volume} min={0} max={100} step={5} disabled={!mixer.enabled} onValueChange={(value: number) => setMixer({ ...mixer, volume: value })} aria-label={m['settings.adventure_volume']({ volume: mixer.volume })} />
+        </div>
+        <ul class="grid gap-2" class:opacity-50={!mixer.enabled}>
+          {#each MIXER_CHANNELS as channel (channel)}
+            {@const entry = mixer.channels[channel]}
+            <li class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-md bg-[var(--app-surface-subtle)] px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_200px_auto]">
+              <Switch checked={entry.on} disabled={!mixer.enabled} aria-label={channelLabel(channel)} onCheckedChange={(checked: boolean) => setChannel(channel, { on: checked })} />
+              <span class="grid">
+                <span class="text-ui-md font-medium text-[var(--app-text)]">{channelLabel(channel)}</span>
+                <span class="field-hint">{channelHint(channel)}</span>
+              </span>
+              <Slider type="single" class="col-span-2 sm:col-span-1" value={entry.volume} min={0} max={100} step={5} disabled={!mixer.enabled || !entry.on} onValueChange={(value: number) => setChannel(channel, { volume: value })} aria-label={m['settings.adventure_channel_volume']({ channel: channelLabel(channel), volume: entry.volume })} />
+              <Button variant="ghost" size="sm" class="col-span-2 w-fit sm:col-span-1" disabled={!mixer.enabled || !entry.on} onclick={() => previewChannel(channel)}><Play size={13} aria-hidden="true" />{m['settings.adventure_channel_try']()}</Button>
+            </li>
+          {/each}
+        </ul>
       </div>
       <div class="grid gap-3 border-t border-[var(--app-border)] py-3">
         <span class="field-label">{m['settings.adventure_look']()}</span>
