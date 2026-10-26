@@ -640,3 +640,23 @@ describe('adventure guild classes', () => {
     expect(balanceGuild(save, ctx)).toEqual([]);
   });
 });
+
+describe('adventure battle clock', () => {
+  const fight = (kills: number, at: string) => ({
+    reportId: `r-${at}-${kills}-${Math.random()}`, elapsedMs: 5 * 60_000, position: { difficulty: 'normal' as const, act: 1, stage: 1 }, wave: 0,
+    xp: {}, gold: 0, kills: { 'bug-beetle': kills }, chests: [], bosses: [], stages: [],
+  });
+
+  it('pays battle fought before the first report reached the server, from when the Adventure began', () => {
+    const begun = { ...context(51), now: '2026-10-26T12:00:00.000Z' };
+    const save: AdventureSave = { account: newAccount(begun.now), heroes: {}, items: [] };
+    bindRoster(save, begun);
+    // The server was away from the start: half an hour of battle arrives at once.
+    const later = { ...context(52), now: '2026-10-26T12:30:00.000Z' };
+    for (let index = 0; index < 6; index += 1) applyReport(save, fight(100, `${index}`), later);
+    expect(save.account.kills).toBe(600);
+    // Time that never passed is not paid: past the half hour, only the timers' minute of slack.
+    applyReport(save, fight(1_000, 'extra'), later);
+    expect(save.account.kills).toBe(600 + 310);
+  });
+});

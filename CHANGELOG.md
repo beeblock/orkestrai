@@ -38,6 +38,7 @@ pt-BR, English, and Spanish translations.
 - Keep the desktop app from stopping its server while a large database is being backed up, migrated or compacted at startup: the server announces each slow step before it starts, the app waits for it (up to 30 minutes, then 30 more seconds for the server to answer) instead of giving up after 30 seconds, and the splash says the data is being prepared. A server that exits still fails at once, and one that never answers after preparing still reaches the recovery dialog.
 - Load Adventure art without placeholder shapes: sheet frames ship inside the app code and sheet images are fingerprinted assets cached for good, so each sheet takes one request the first time and none after; the strip and the camp start loading the art they need before the save arrives, and heroes, monsters, portraits and icons fade in instead of showing colored blocks while they load.
 - Bind Adventure actions taken through the bridge to the live terminal that makes the call: the session's agent token decides who acts and whether it leads, a declared `from` that is someone else is refused, and the hero-scope check runs inside the same transaction as the action.
+- Pay Adventure battle fought while the server was away before the first report ever reached it: the battle clock of a new Adventure starts when the Adventure began (bounded by the longest paid absence) instead of ten minutes before the report, so queued reports from that first gap are paid in full.
 
 ## 0.45.0 - 2026-10-24
 

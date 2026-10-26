@@ -339,9 +339,11 @@ export function applyReport(save: AdventureSave, input: ReportInput, ctx: Engine
   const result: ReportResult = { levelUps: [], opened: [], pets: [], quests: [], duplicate: false };
   const account = save.account;
   if (account.recentReports.includes(input.reportId)) return { ...result, duplicate: true };
-  // Battle time not paid yet, up to the longest absence the game pays for.
+  // Battle time not paid yet, up to the longest absence the game pays for. Before the first
+  // paid report it counts from when the Adventure began (`questsSince`), never from earlier.
   const now = Date.parse(ctx.now);
-  const paidUntil = Math.max(account.battleUntil ? Date.parse(account.battleUntil) : now - REPORT_MAX_MS, now - offlineCapMs(account));
+  const began = Date.parse(account.questsSince);
+  const paidUntil = Math.max(account.battleUntil ? Date.parse(account.battleUntil) : Number.isFinite(began) ? Math.min(began, now) : now - REPORT_MAX_MS, now - offlineCapMs(account));
   const report = clampReport(input, now - paidUntil);
   const petsBefore = tamedPets(account.killsByMonster);
 
