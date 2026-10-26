@@ -1216,6 +1216,11 @@ export class BridgeService {
   }
 
   /** Garante que o agente `from` tem permissao de maestro no workspace. */
+  /** The agent behind a bridge call (node id or exact title), with whether it leads the team. */
+  async callerAgent(workspaceId: string, from: string): Promise<BridgeAgent> {
+    return this.findAgent(await this.listAgents(workspaceId), from);
+  }
+
   private async requireMaestro(workspaceId: string, from: string): Promise<BridgeAgent> {
     const agents = await this.listAgents(workspaceId);
     const origin = this.findAgent(agents, from);
@@ -1618,6 +1623,7 @@ Se as tools \`orkestrai\` (list/usage/ask/huddle_*/memory_*/code_graph_*/git_*/n
 - \`orkestrai note edit <nodeId> "<trecho antigo>" "<trecho novo>"\` — edição pontual.
 - \`orkestrai notes\` — lista \`nodeId\`, título e prévia das notas acessíveis. Rode antes de criar; se a nota já existe, use \`note read\` e \`note write/edit\` em vez de duplicar.
 - \`orkestrai checklist read|add|check|uncheck|edit|remove <nó> ...\` (tools MCP \`checklist_read/checklist_update\`) e \`orkestrai calendar read|add|edit|remove <nó> ...\` (\`calendar_read/calendar_update\`) — checklists e calendários do Canvas, pelo id ou título exato do nó. Cada mudança vale sobre o conteúdo mais recente, então não apaga o que o dono ou outro agente mudou ao mesmo tempo.
+- \`orkestrai adventure [status] | equip-best | act '<json>'\` (tools MCP \`adventure_read/adventure_act\`) — a Aventura do time (o jogo em pixel art acima do Dock): veja a guilda e o seu herói; cada especialista cuida só do próprio herói (equipar, habilidades, classe, ativas) e o líder também abre baús, usa o cubo, compra runas, viaja, monta a formação e equilibra a guilda. Use quando o dono pedir; não gaste turnos jogando por conta própria.
 - Project destination: before writing creative work, read orkestrai list or video_workflow_list and use workspace.workingDir (host) / workspace.wslWorkingDir (WSL), not a guessed cwd, another workspace, cache or old test folder. Save ALL briefs, prompts, source assets, montage projects, renders and final deliverables inside that project root, unless the user explicitly chooses another destination. generated/ and renders/ are project-relative folders, not a global Orkestrai location. Changing shell cwd or opening a file from another folder does NOT rebind this terminal's authenticated workspace. If the user's named project differs from the returned workspace, report the mismatch before generating; do not silently switch or write into the old project.
 - Existing edited videos: video_workflow_import({taskId,input:{path:"renders/final.mp4",title:"Final video"}}) / orkestrai video import --task <id> --input '<json>' attaches the existing project file as a native Video node without another paid generation. It preserves original bytes and path and reuses an existing node on retries. Use this for local montages, not the owner-only upload route or desktop automation. Verify the returned node id and project root before claiming delivery.
 - Creative asset scope: refresh the live Canvas inventory before selecting images, clips or notes, including after an owner deletion. Files remaining on disk, old conversation messages and generation history are not current Canvas assets. Do not scan folders to recover, recreate or reuse removed media unless the user explicitly requests historical/off-Canvas files. image_workflow_list/read includeHistory (CLI --include-history) and video_workflow_read input.includeHistory are explicit history queries, not reuse permission. This does not restrict normal source-code work or owner-selected character/brand library versions.
@@ -1837,6 +1843,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `git_status/preview/execute` / `orkestrai git ...` — opera o mesmo cliente Git nativo visível no Canvas e Foco. Leia o status, gere uma prévia e só execute com a revisão retornada e uma tarefa Kanban ativa atribuída a você. Operações destrutivas exigem confirmação explícita; conflito de revisão exige nova leitura. Use Floors para worktrees isolados e Review Center para a decisão final. Nunca contorne o contrato chamando shell Git para mutações orquestradas.',
       '- `orkestrai note read/write/edit/create` — notas compartilhadas no canvas.',
       '- `orkestrai checklist ...` / `orkestrai calendar ...` (MCP `checklist_read/update`, `calendar_read/update`) — checklists e calendários do canvas, alterados item a item sobre o conteúdo mais recente.',
+      '- `orkestrai adventure ...` (MCP `adventure_read/adventure_act`) — a Aventura do time: a guilda, o seu herói e as ações do acampamento (especialistas no próprio herói; o líder na guilda inteira), quando o dono pedir.',
       '- `orkestrai design list/read/reference/apply` — documentos visuais nativos. Em exploração, produza primeiro 1 desktop + 1 mobile com design_import_code ou lote pequeno, entregue a primeira revisão em até 5 minutos e espere o gate visual humano. Só expanda a direção aprovada com blueprint completo. design list sinaliza stalled e o reviewStatus da revisão atual.',
       '- `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.',
       `- Leader execution: ${LEADER_EXECUTION_CONTRACT}`,

@@ -7,6 +7,8 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import { adventureService } from '$lib/modules/agent-room/application/services/AdventureService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { AdventureController } from '$lib/modules/agent-room/interface/http/controllers/AdventureController.js';
+import { BridgeController } from '$lib/modules/agent-room/interface/http/controllers/BridgeController.js';
+import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { AgentAdventure } from '$lib/modules/agent-room/domain/models/AgentAdventure.js';
 import { AgentAdventureHero } from '$lib/modules/agent-room/domain/models/AgentAdventureHero.js';
 import { AgentAdventureItem } from '$lib/modules/agent-room/domain/models/AgentAdventureItem.js';
@@ -271,6 +273,35 @@ describe('AdventureService', () => {
     const after = (await adventureService.state(ws.id)).snapshot;
     expect(after.heroes.filter((hero) => hero.classId === 'knight')).toHaveLength(2);
     expect(after.heroes.map((hero) => hero.classId)).toContain('artificer');
+  });
+
+  it('lets agents read the guild and act through the bridge within their scope', async () => {
+    const { ws, lead, qa } = await team();
+    const token = await bridgeService.getOrCreateToken(ws.id);
+    const controller = new BridgeController();
+    const read = (from: string, withToken = token) => controller.adventureRead({ params: {}, request: new Request('http://localhost/api', { headers: { authorization: `Bearer ${withToken}` } }), url: new URL(`http://localhost/api/agent-room/bridge/adventure?from=${from}`), locals: {} } as never) as Promise<Response>;
+    const act = (from: string, action: unknown) => controller.adventureAct({ params: {}, request: new Request('http://localhost/api', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ action, from }) }), url: new URL('http://localhost/api'), locals: {} } as never) as Promise<Response>;
+
+    const view = (await (await read(qa.id)).json()).data;
+    const ranger = view.heroes.find((hero: { yours: boolean }) => hero.yours);
+    expect(ranger).toMatchObject({ classId: 'ranger', agent: 'QA' });
+    expect(view.you.heroId).toBe(ranger.id);
+    expect(view.you.gear.map((item: { slot: string }) => item.slot).sort()).toEqual(['armor', 'weapon']);
+    const maestro = view.heroes.find((hero: { leader: boolean }) => hero.leader);
+
+    // A specialist changes its own hero, not another one, and not the guild.
+    const own = await act(qa.id, { type: 'auto-gear', heroId: ranger.id, enabled: false });
+    expect(own.status).toBe(200);
+    expect((await own.json()).data.view.heroes.find((hero: { id: string }) => hero.id === ranger.id).autoGear).toBe(false);
+    expect(await (await act(qa.id, { type: 'auto-gear', heroId: maestro.id, enabled: false })).json()).toMatchObject({ code: 'agent-scope' });
+    const guild = await act(qa.id, { type: 'settings', settings: { autoOpen: false } });
+    expect(guild.status).toBe(403);
+    expect(await guild.json()).toMatchObject({ code: 'leader-only' });
+
+    // The leader acts on the whole guild; malformed actions and a wrong token are refused.
+    expect((await act(lead.id, { type: 'settings', settings: { autoOpen: false } })).status).toBe(200);
+    expect((await act(lead.id, { type: 'teleport' })).status).toBe(400);
+    expect((await read(qa.id, 'wrong')).status).toBe(400);
   });
 
   it('is deleted with its workspace', async () => {

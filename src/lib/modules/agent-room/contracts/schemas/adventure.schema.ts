@@ -70,5 +70,12 @@ export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('dismiss-offline') }),
 ]);
 
+/** A camp action an agent takes through the bridge; `from` is the agent (node id or title). */
+export const bridgeAdventureActionSchema = z.object({
+  action: adventureActionSchema,
+  from: z.string().trim().min(1).max(120),
+  token: z.string().trim().min(1).nullish(),
+});
+
 export type AdventureReportInput = z.infer<typeof adventureReportSchema>;
 export type AdventureAction = z.infer<typeof adventureActionSchema>;

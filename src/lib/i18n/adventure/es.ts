@@ -788,7 +788,9 @@ export const ADVENTURE_ES: AdventureCatalog = {
     "soulstone": "A partir del segundo, cada cofre de jefe de acto requiere una piedra de alma de la misma dificultad.",
     "elixir": "No tienes elixir de ese tipo.",
     "fusion-max": "Las gemas imperiales ya tienen la mejor talla.",
-    "fusion-gems": "La fusión requiere tres gemas del mismo tipo y calidad."
+    "fusion-gems": "La fusión requiere tres gemas del mismo tipo y calidad.",
+    "leader-only": "Solo el líder del equipo puede hacer eso en la Aventura.",
+    "agent-scope": "Un agente solo puede cambiar su propio héroe."
   },
   "journal": {
     "item": "Nuevo objeto: {item} ({source})",

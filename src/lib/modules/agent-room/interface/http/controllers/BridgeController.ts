@@ -1,3 +1,6 @@
+import { adventureService } from '../../../application/services/AdventureService.js';
+import { AdventureError } from '../../../domain/adventure/engine.js';
+import { bridgeAdventureActionSchema } from '../../../contracts/schemas/adventure.schema.js';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { TOOL_DRAFT_ATTENTION_SOURCE } from '$lib/modules/agent-room/application/services/AgentWorkspaceToolService.js';
 import { BridgeChannelPostRequest } from '../requests/BridgeChannelPostRequest.js';
@@ -740,6 +743,31 @@ export class BridgeController extends Controller {
       return this.json({ data: await planNodeService.checklist(workspace.id, String(event.params.nodeId)) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao ler o checklist.');
+    }
+  }
+
+  /** The workspace's Adventure as the calling agent sees it (`?from=` marks its own hero). */
+  async adventureRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const from = event.url.searchParams.get('from');
+      const caller = from ? await bridgeService.callerAgent(workspace.id, from) : null;
+      return this.json({ data: await adventureService.agentView(workspace.id, caller?.nodeId ?? null) });
+    } catch (error) {
+      return this.errorResponse(error, 'Could not read the Adventure.');
+    }
+  }
+
+  /** A camp action by an agent: its own hero, or the whole guild for the leader. */
+  async adventureAct(event: any) {
+    try {
+      const input = bridgeAdventureActionSchema.parse(await event.request.json());
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const caller = await bridgeService.callerAgent(workspace.id, input.from);
+      return this.json({ data: await adventureService.actAs(workspace.id, { nodeId: caller.nodeId, leader: caller.maestro }, input.action) });
+    } catch (error) {
+      if (error instanceof AdventureError) return this.json({ error: error.code, code: error.code }, error.code === 'workspace' ? 404 : 403);
+      return this.errorResponse(error, 'Could not complete the Adventure action.');
     }
   }
 

@@ -41,6 +41,32 @@ export type AdventureOutcome = {
 };
 
 const OFFLINE_AFTER_MS = 2 * 60_000;
+
+/** Actions on one hero: a specialist may take them for its own hero; the rest are the leader's. */
+const HERO_ACTIONS = new Set<AdventureAction['type']>(['equip', 'unequip', 'auto-equip', 'raise-skill', 'reset-skills', 'auto-skills', 'set-actives', 'set-class', 'auto-gear']);
+
+/** An agent calling through the bridge. */
+export type AdventureCaller = { nodeId: string; leader: boolean };
+
+/** What an agent sees of the Adventure: compact, with its own hero in full. */
+export type AdventureAgentView = {
+  position: AdventureAccount['position'];
+  gold: number;
+  chests: Record<string, number>;
+  soulstones: number;
+  coins: number;
+  cubeLevel: number;
+  settings: AdventureAccount['settings'];
+  inventory: { items: number; capacity: number };
+  heroes: Array<{ id: string; name: string; classId: string; level: number; paragon: number; agent: string | null; yours: boolean; leader: boolean; deployed: boolean; power: number; outfit: number; freeSkillPoints: number; autoGear: boolean; autoSkills: boolean }>;
+  you: null | {
+    heroId: string;
+    gear: Array<{ itemId: string; slot: string; rarity: string; level: number; uniqueId: string | null; setId: string | null }>;
+    actives: string[];
+    learnedActives: string[];
+    skills: Record<string, number>;
+  };
+};
 const WORKING = new Set(['working', 'starting']);
 
 /** A stored timestamp as ISO text, keeping its milliseconds. */
@@ -202,6 +228,63 @@ export class AdventureService {
 
   async report(workspaceId: string, input: AdventureReportInput): Promise<AdventureOutcome> {
     return (await this.withSave(workspaceId, { offline: false }, (save, ctx) => engine.applyReport(save, input as ReportInput, ctx))).outcome;
+  }
+
+  /** The Adventure as an agent sees it through the bridge; `agentNodeId` marks its own hero. */
+  async agentView(workspaceId: string, agentNodeId: string | null): Promise<AdventureAgentView> {
+    // An agent looking does not pay offline work: that happens when the owner's screens look.
+    const { snapshot } = await this.state(workspaceId, { offline: false });
+    return this.viewOf(snapshot, agentNodeId);
+  }
+
+  /**
+   * A camp action taken by an agent: the same rules as the camp, scoped to
+   * the caller. A specialist acts on its own hero only (gear, skills, class);
+   * opening chests, the cube, runes, travel, the formation, the pet,
+   * settings and balancing the guild are the leader's.
+   */
+  async actAs(workspaceId: string, caller: AdventureCaller, action: AdventureAction): Promise<{ result: unknown; view: AdventureAgentView }> {
+    if (!caller.leader) {
+      if (!HERO_ACTIONS.has(action.type)) throw new engine.AdventureError('leader-only');
+      const { snapshot } = await this.state(workspaceId, { offline: false });
+      const own = snapshot.heroes.find((hero) => hero.agentNodeId === caller.nodeId);
+      if (!own) throw new engine.AdventureError('agent-scope');
+      const heroId = 'heroId' in action ? action.heroId : snapshot.items.find((item) => 'itemId' in action && item.id === action.itemId)?.heroId ?? null;
+      if (heroId !== own.id) throw new engine.AdventureError('agent-scope');
+    }
+    const outcome = await this.act(workspaceId, action);
+    return { result: outcome.result ?? null, view: this.viewOf(outcome.snapshot, caller.nodeId) };
+  }
+
+  private viewOf(snapshot: AdventureSnapshot, agentNodeId: string | null): AdventureAgentView {
+    const chests: Record<string, number> = {};
+    for (const chest of snapshot.account.chests) chests[chest.tier] = (chests[chest.tier] ?? 0) + 1;
+    const own = agentNodeId ? snapshot.heroes.find((hero) => hero.agentNodeId === agentNodeId) ?? null : null;
+    return {
+      position: snapshot.account.position,
+      gold: snapshot.account.gold,
+      chests,
+      soulstones: Object.values(snapshot.account.soulstones).reduce((sum, count) => sum + count, 0),
+      coins: snapshot.account.coins,
+      cubeLevel: snapshot.account.cube.level,
+      settings: snapshot.account.settings,
+      inventory: { items: snapshot.items.filter((item) => item.location === 'inventory').length, capacity: snapshot.limits.inventory },
+      heroes: snapshot.heroes.map((hero) => ({
+        id: hero.id, name: hero.name, classId: hero.classId, level: hero.level, paragon: hero.paragon,
+        agent: hero.agent?.title ?? null, yours: hero.id === own?.id, leader: hero.leader, deployed: hero.deployed,
+        power: hero.build?.rating ?? 0, outfit: hero.build?.visualTier ?? 1,
+        freeSkillPoints: hero.build ? hero.build.skillPoints - hero.build.pointsSpent : 0,
+        autoGear: hero.autoGear, autoSkills: hero.autoSkills,
+      })),
+      you: own ? {
+        heroId: own.id,
+        gear: snapshot.items.filter((item) => item.location === 'equipped' && item.heroId === own.id)
+          .map((item) => ({ itemId: item.id, slot: item.slot, rarity: item.rarity, level: item.level, uniqueId: item.uniqueId ?? null, setId: item.setId ?? null })),
+        actives: own.actives,
+        learnedActives: own.build?.learned.map((active) => active.id) ?? [],
+        skills: own.skills,
+      } : null,
+    };
   }
 
   async act(workspaceId: string, action: AdventureAction): Promise<AdventureOutcome> {

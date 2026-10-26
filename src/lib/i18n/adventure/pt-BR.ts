@@ -788,7 +788,9 @@ export const ADVENTURE_PT: AdventureCatalog = {
     "soulstone": "A partir do segundo, cada baú de chefe de ato exige uma pedra da alma da mesma dificuldade.",
     "elixir": "Você não tem elixir desse tipo.",
     "fusion-max": "Gemas imperiais já são a melhor lapidação.",
-    "fusion-gems": "A fusão pede três gemas do mesmo tipo e qualidade."
+    "fusion-gems": "A fusão pede três gemas do mesmo tipo e qualidade.",
+    "leader-only": "Só o líder do time pode fazer isso na Aventura.",
+    "agent-scope": "Um agente só pode mexer no próprio herói."
   },
   "journal": {
     "item": "Novo item: {item} ({source})",

@@ -788,7 +788,9 @@ export const ADVENTURE_EN: AdventureCatalog = {
     "soulstone": "An act boss chest after the first takes a soulstone of its difficulty.",
     "elixir": "You have no elixir of that kind.",
     "fusion-max": "Imperial gems are already the finest cut.",
-    "fusion-gems": "Fusing takes three gems of the same kind and quality."
+    "fusion-gems": "Fusing takes three gems of the same kind and quality.",
+    "leader-only": "Only the team leader can do that in the Adventure.",
+    "agent-scope": "An agent can only change its own hero."
   },
   "journal": {
     "item": "{item} found ({source})",
