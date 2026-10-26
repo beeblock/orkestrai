@@ -95,3 +95,13 @@ Esta é uma prévia local, **não aprovação de merge/release**: os cinco P2 ac
 - Botão da faixa abriu o acampamento na janela principal pelo IPC real. Conferidos título em português, sete abas, zero imagens quebradas e ausência de overflow horizontal. A captura do workspace real foi mantida somente no temporário local; as evidências versionadas usam fixtures.
 - Limpeza após o handoff: **1,99 GiB** de caches npm/Electron/node-gyp, caches HTTP/código/gráficos com o app fechado, saída intermediária do Svelte, dados dos testes isolados e `release/mac-arm64`. O instalador também retirou o bundle e o ZIP de recuperação anteriores. **Aproximadamente 15 GiB livres ao concluir**; o espaço disponível também varia com os demais processos do computador.
 - Preservados banco, backup de banco mais recente, rollback mais recente, modelos de voz, browser usado pelos testes, projetos e `.orkestrai/adventure/raw`. O `build/` testado continua disponível.
+
+## Resolução — 26/10/2026
+
+| Achado | Commit | Correção | Cobertura |
+| --- | --- | --- | --- |
+| Identidade autodeclarada nas ações | `16a83558` | O chamador vem do token da sessão viva (`x-orkestrai-agent-token`). Chamada sem token é recusada, e um `from` diferente do terminal também (403 `agent-identity`). A checagem de escopo roda dentro da mesma transação da ação. | Teste de contrato com sessões PTY reais: sem token, especialista declarando o líder, próprio herói, herói alheio, ação da guilda e líder autenticado. |
+| Abates perdidos antes do primeiro envio | `0ab73b7b` | O primeiro crédito parte do início da Aventura (`questsSince`), limitado à ausência máxima e nunca posterior a agora. | O cenário do relatório (conta às 12:00, seis relatos de 100 abates às 12:30) agora soma 600; o tempo que não passou continua cortado. |
+| "Ouvir" com o mixer padrão | `babe1222` | `previewChannel` recebe e aplica o mixer da tela (salvo ou em edição) antes de tocar, e a prévia ignora o espaçamento entre repetições. | Janela com o padrão antigo prevendo um mixer salvo com ataques ligados: inicia vozes. |
+| Splash ausente durante a preparação | `e78f39f6` | Lançamento interativo (e a recuperação manual) cria a splash antes de esperar o servidor. O estado de preparação é guardado e aplicado quando a splash termina de carregar. Lançamentos em segundo plano e no login seguem sem janela. | Regra do lançamento interativo, ordem no `main.cjs` e aviso adiado. |
+| Música acumulando batidas | `babe1222` | O agendador pula as batidas vencidas e retoma no tempo certo. | Relógio de áudio dez minutos à frente: uma chamada agenda só algumas notas. |
