@@ -9,9 +9,14 @@ pt-BR, English, and Spanish translations.
 
 ### Added
 
-- Add the Adventure: a transparent strip above the macOS Dock or the Windows/Linux taskbar where the open workspace's agents fight as a pixel-art party. The leader is the Maestro; teammates get one of five classes from their role (Artificer, Sorceress, Knight, Ranger, Cleric) and can be reassigned per hero. Clicks pass through the strip except on heroes and the HUD.
-- The party fights while agents work and camps when nobody works, across five regions with fifteen monsters that are software bugs and five bosses. Waves, stages, levels and gold are saved per workspace and merged so a second window never rolls progress back.
-- Every Kanban card that is done becomes a quest with a chest and a reward. A hero that needs you raises a "!", and clicking it opens its terminal or Chat in the main window. Chiptune sounds are synthesized in the app (alerts only, all or none). All art is original and was made with Orkestrai's image workflows.
+- Add the Adventure: a transparent strip above the macOS Dock or the Windows/Linux taskbar where the open workspace's agents fight as a pixel-art party. The leader is the Maestro; teammates get one of five classes from their role (Artificer, Sorceress, Knight, Ranger, Cleric) and can be reassigned per hero. Clicks pass through the strip except on heroes and the HUD. Only working agents fight; with nobody working the party camps.
+- Every hero levels from 1 to 100 on its own, earning the most experience from monsters near its level, and spends one skill point per level in an eight-tier tree per class (passives, formation-wide auras and active skills; the capstone tier needs 70 points; respec is free and spending can be automatic).
+- Gear drops as the party advances: seven slots, nine rarities from Common to Cosmic, item levels, random affixes and decoration, engraving and inscription sockets for gems, runestones and glyphs. A hero's outfit on screen follows its gear, from novice to adept, heroic and celestial, and its weapon glows with its rarity.
+- Chests: white ones from any monster, blue ones from the elite closing each stage, red ones from act bosses (repeat red chests take a soulstone of their difficulty) and a golden quest chest for every Kanban card the team finishes, paid to the hero whose agent finished it, even with the strip closed.
+- Five acts of ten stages on four difficulties (Normal, Nightmare, Hell, Torment) with region levels up to 110. Heroes can fall and get back up; losing a stage falls back one stage or retries it. A portal returns to any cleared stage to farm it.
+- The camp, in the main window, inspects and manages everything: heroes with their equipment, stats and skills; inventory, stash and chests; the Orchestrion Cube (synthesis of nine items into a rarer one, alchemy, crafting, sockets, removal and offerings) that levels up with use; a rune tree of 23 gold-bought upgrades (formation slots, a second active skill, auto-opening chests, more storage and more); eight pets tamed by defeating bugs; the map with travel and battle settings; and the loot log.
+- Work done while the strip is closed still counts: each hero earns experience and gold for its agent's recorded working time, at offline efficiency and without chests.
+- Chiptune sounds are synthesized in the app (alerts only, all or none). All art is original and was made with Orkestrai's image workflows.
 
 ## 0.45.0 - 2026-10-24
 

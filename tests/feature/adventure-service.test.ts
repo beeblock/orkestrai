@@ -3,54 +3,128 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
+import { uuidv7 } from '@beeblock/svelar/support';
 import { adventureService } from '$lib/modules/agent-room/application/services/AdventureService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { AdventureController } from '$lib/modules/agent-room/interface/http/controllers/AdventureController.js';
-import { AgentAdventureProgress } from '$lib/modules/agent-room/domain/models/AgentAdventureProgress.js';
+import { AgentAdventure } from '$lib/modules/agent-room/domain/models/AgentAdventure.js';
+import { AgentAdventureHero } from '$lib/modules/agent-room/domain/models/AgentAdventureHero.js';
+import { AgentAdventureItem } from '$lib/modules/agent-room/domain/models/AgentAdventureItem.js';
+import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
+import { xpToNext } from '$lib/modules/agent-room/domain/adventure/world.js';
+import type { AdventureReportInput } from '$lib/modules/agent-room/contracts/schemas/adventure.schema.js';
 
 const roots: string[] = [];
 
-async function workspace() {
+async function team() {
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-adventure-'));
   roots.push(root);
-  return workspaceRepository.createWorkspace({ name: 'Aventura', workingDir: root });
+  const ws = await workspaceRepository.createWorkspace({ name: 'Aventura', workingDir: root });
+  const lead = await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'Lead', payload: { provider: 'claude', command: 'true', args: [], maestro: true } as never });
+  const qa = await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'QA', payload: { provider: 'codex', command: 'true', args: [], role: 'QA engineer' } as never });
+  await workspaceRepository.createNode({ workspaceId: ws.id, type: 'note', title: 'Briefing', payload: {} as never });
+  return { ws, lead, qa };
+}
+
+function report(overrides: Record<string, unknown> = {}): AdventureReportInput {
+  return {
+    reportId: uuidv7(), elapsedMs: 60_000, position: { difficulty: 'normal' as const, act: 1, stage: 2 }, wave: 0,
+    xp: {}, gold: 0, kills: {}, chests: [], bosses: [], stages: [{ difficulty: 'normal' as const, act: 1, stage: 1, result: 'clear' as const }],
+    ...overrides,
+  } as unknown as AdventureReportInput;
+}
+
+function request(body: unknown, id: string) {
+  return {
+    params: { id },
+    request: new Request('http://localhost/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    url: new URL('http://localhost/api'),
+    locals: {},
+  } as never;
 }
 
 describe('AdventureService', () => {
   useSvelarTest({ refreshDatabase: true });
   afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
-  it('starts a new party at the beginning of the road', async () => {
-    const ws = await workspace();
-    expect(await adventureService.read(ws.id)).toEqual({ progress: { stageIndex: 0, wave: 0, xp: 0, gold: 0, kills: 0, bosses: 0, quests: 0 }, heroClasses: {} });
+  it('turns every agent into a hero with a starter kit, leader first as the Maestro', async () => {
+    const { ws, lead, qa } = await team();
+    const { snapshot } = await adventureService.state(ws.id);
+    expect(snapshot.heroes.map((hero) => [hero.nodeId, hero.classId])).toEqual([[lead.id, 'maestro'], [qa.id, 'ranger']]);
+    expect(snapshot.items.filter((item) => item.heroNodeId === qa.id).map((item) => item.slot).sort()).toEqual(['armor', 'weapon']);
+    expect(snapshot.heroes[1].build?.visualTier).toBe(1);
+    expect(snapshot.account.position).toEqual({ difficulty: 'normal', act: 1, stage: 1 });
+    expect(snapshot.limits.formation).toBe(3);
   });
 
-  it('keeps the furthest progress two screens report, never moving it back', async () => {
-    const ws = await workspace();
-    await adventureService.saveProgress(ws.id, { stageIndex: 3, wave: 2, xp: 900, gold: 120, kills: 80, bosses: 1, quests: 4 });
-    const merged = await adventureService.saveProgress(ws.id, { stageIndex: 2, wave: 4, xp: 950, gold: 100, kills: 70, bosses: 1, quests: 5 });
-    expect(merged).toEqual({ stageIndex: 3, wave: 2, xp: 950, gold: 120, kills: 80, bosses: 1, quests: 5 });
-    expect((await adventureService.read(ws.id)).progress).toEqual(merged);
+  it('records the battle: levels, gold, chests and cleared stages, once per report', async () => {
+    const { ws, qa } = await team();
+    await adventureService.state(ws.id);
+    const input = report({ xp: { [qa.id]: xpToNext(1) + 1 }, gold: 40, kills: { 'glitch-slime': 12 }, chests: [{ tier: 'white', level: 1, difficulty: 'normal', act: 1 }] });
+    const outcome = await adventureService.report(ws.id, input);
+    expect(outcome.levelUps).toEqual([{ nodeId: qa.id, level: 2 }]);
+    expect(outcome.snapshot.account.gold).toBe(40);
+    expect(outcome.snapshot.account.chests).toHaveLength(1);
+    expect(outcome.snapshot.account.cleared.normal).toBe(0);
+    expect(outcome.snapshot.account.position).toEqual({ difficulty: 'normal', act: 1, stage: 2 });
+    const again = await adventureService.report(ws.id, input);
+    expect(again.snapshot.account.gold).toBe(40);
   });
 
-  it('stores the class the owner picks for a teammate and validates it over HTTP', async () => {
-    const ws = await workspace();
-    const agent = await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'QA', payload: { provider: 'claude' } as never });
-    expect(await adventureService.setHeroClass(ws.id, agent.id, 'cleric')).toEqual({ [agent.id]: 'cleric' });
+  it('opens chests, equips the loot and refuses what the rules forbid', async () => {
+    const { ws, qa } = await team();
+    await adventureService.state(ws.id);
+    await adventureService.report(ws.id, report({ chests: [{ tier: 'blue', level: 3, difficulty: 'normal', act: 1 }] }));
+    const opened = await adventureService.act(ws.id, { type: 'open-chests', tier: 'blue' });
+    expect(opened.opened[0].items).toHaveLength(2);
+    const loot = opened.opened[0].items[0];
+    expect(opened.snapshot.items.find((item) => item.id === loot.id)?.location).toBe('inventory');
+    const helmet = opened.snapshot.items.find((item) => item.slot !== 'weapon' && item.location === 'inventory');
+    if (helmet) {
+      const equipped = await adventureService.act(ws.id, { type: 'equip', itemId: helmet.id, nodeId: qa.id });
+      expect(equipped.snapshot.items.find((item) => item.id === helmet.id)?.heroNodeId).toBe(qa.id);
+    }
+    await expect(adventureService.act(ws.id, { type: 'buy-rune', runeId: 'fortune' })).rejects.toThrow('rune-locked');
+    await expect(adventureService.act(ws.id, { type: 'travel', difficulty: 'hell', act: 1, stage: 1 })).rejects.toThrow('locked-stage');
+  });
+
+  it('pays a Kanban card finished after the Adventure began as a quest chest', async () => {
+    const { ws, qa } = await team();
+    await adventureService.state(ws.id);
+    const now = new Date().toISOString();
+    await AgentBoardTask.create({ id: uuidv7(), workspace_id: ws.id, title: 'Ship the login', status: 'done', assignee_node_id: qa.id, created_by: 'user', created_at: now, updated_at: now });
+    const outcome = await adventureService.state(ws.id);
+    expect(outcome.quests).toEqual([{ title: 'Ship the login', nodeId: qa.id }]);
+    expect(outcome.snapshot.account.chests.map((chest) => chest.tier)).toEqual(['quest']);
+    expect((await adventureService.state(ws.id)).quests).toEqual([]);
+  });
+
+  it('accepts a battle report over HTTP with only the monsters that fell', async () => {
+    const { ws, qa } = await team();
     const controller = new AdventureController();
-    const put = (body: unknown) => controller.heroClass({ url: new URL('http://localhost/api'), params: { id: ws.id, nodeId: agent.id },
-      request: new Request('http://localhost/api', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) } as never);
-    // The leader's class is not a teammate's to take.
-    expect((await put({ classId: 'maestro' })).status).toBe(400);
-    expect((await put({ classId: null })).status).toBe(200);
-    expect((await adventureService.read(ws.id)).heroClasses).toEqual({});
-    await expect(adventureService.setHeroClass(ws.id, 'not-a-node', 'knight')).rejects.toThrow();
+    const response = await controller.report(request(report({ xp: { [qa.id]: 25 }, gold: 9, kills: { 'bug-beetle': 3 } }), ws.id));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.snapshot.account.killsByMonster).toEqual({ 'bug-beetle': 3 });
   });
 
-  it('is removed with its workspace', async () => {
-    const ws = await workspace();
-    await adventureService.saveProgress(ws.id, { stageIndex: 1, wave: 0, xp: 10, gold: 1, kills: 1, bosses: 0, quests: 0 });
+  it('answers rule refusals over HTTP with a code and rejects malformed actions', async () => {
+    const { ws } = await team();
+    const controller = new AdventureController();
+    const refused = await controller.act(request({ type: 'offering' }, ws.id));
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: 'cube-level' });
+    const malformed = await controller.act(request({ type: 'teleport' }, ws.id));
+    expect(malformed.status).toBe(400);
+  });
+
+  it('is deleted with its workspace', async () => {
+    const { ws } = await team();
+    await adventureService.state(ws.id);
+    expect(await AgentAdventureHero.query().where('workspace_id', ws.id).count()).toBe(2);
     await workspaceRepository.deleteWorkspace(ws.id);
-    expect(await AgentAdventureProgress.query().where('workspace_id', ws.id).first()).toBeFalsy();
+    expect(await AgentAdventure.query().where('workspace_id', ws.id).count()).toBe(0);
+    expect(await AgentAdventureHero.query().where('workspace_id', ws.id).count()).toBe(0);
+    expect(await AgentAdventureItem.query().where('workspace_id', ws.id).count()).toBe(0);
   });
 });

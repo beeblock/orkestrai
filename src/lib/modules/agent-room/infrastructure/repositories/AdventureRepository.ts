@@ -1,77 +1,157 @@
 import { uuidv7 } from '@beeblock/svelar/support';
-import { AgentAdventureProgress } from '../../domain/models/AgentAdventureProgress.js';
-import { EMPTY_PROGRESS, type AdventureProgress } from '../../domain/adventure/simulation.js';
-import { TEAMMATE_CLASS_IDS, type HeroClassId } from '../../domain/adventure/catalog.js';
+import { AgentAdventure } from '../../domain/models/AgentAdventure.js';
+import { AgentAdventureHero } from '../../domain/models/AgentAdventureHero.js';
+import { AgentAdventureItem } from '../../domain/models/AgentAdventureItem.js';
+import { DEFAULT_SETTINGS, newAccount, type AdventureAccount, type AdventureHero } from '../../domain/adventure/account.js';
+import { HERO_CLASS_IDS, type HeroClassId } from '../../domain/adventure/catalog.js';
+import type { AdventureSave } from '../../domain/adventure/engine.js';
+import { MATERIALS, RARITIES, SLOTS, type Item, type ItemAffix, type ItemSocket, type Rarity, type Slot } from '../../domain/adventure/items.js';
+import { STAT_IDS } from '../../domain/adventure/stats.js';
+import { NO_CLEARS, START_POSITION } from '../../domain/adventure/world.js';
 
-export type AdventureRecord = { progress: AdventureProgress; heroClasses: Record<string, HeroClassId> };
-
-function heroClasses(raw: unknown): Record<string, HeroClassId> {
-  if (typeof raw !== 'string' || !raw) return {};
+function parse<T>(raw: unknown, fallback: T): T {
+  if (typeof raw !== 'string' || !raw) return fallback;
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, HeroClassId] => (TEAMMATE_CLASS_IDS as string[]).includes(String(entry[1]))));
+    return JSON.parse(raw) as T;
   } catch {
-    return {};
+    return fallback;
   }
 }
 
-function progressOf(model: AgentAdventureProgress): AdventureProgress {
-  const number = (key: string) => Number(model.getAttribute(key)) || 0;
-  return { stageIndex: number('stage_index'), wave: number('wave'), xp: number('xp'), gold: number('gold'), kills: number('kills'), bosses: number('bosses'), quests: number('quests') };
+/** A stored account, with every field a newer version added filled in. */
+function readAccount(raw: unknown, now: string): AdventureAccount {
+  const stored = parse<Partial<AdventureAccount>>(raw, {});
+  const base = newAccount(stored.questsSince ?? now);
+  return {
+    ...base,
+    ...stored,
+    version: 2,
+    position: { ...START_POSITION, ...stored.position },
+    cleared: { ...NO_CLEARS, ...stored.cleared },
+    soulstones: { ...base.soulstones, ...stored.soulstones },
+    settings: { ...DEFAULT_SETTINGS, ...stored.settings },
+    cube: { ...base.cube, ...stored.cube },
+    chests: Array.isArray(stored.chests) ? stored.chests : [],
+    journal: Array.isArray(stored.journal) ? stored.journal : [],
+    formation: Array.isArray(stored.formation) ? stored.formation : [],
+    firstBossClears: Array.isArray(stored.firstBossClears) ? stored.firstBossClears : [],
+    rewardedTasks: Array.isArray(stored.rewardedTasks) ? stored.rewardedTasks : [],
+  };
 }
 
-/** Whether `next` is further along the road than `current`. */
-function ahead(next: AdventureProgress, current: AdventureProgress): boolean {
-  return next.stageIndex > current.stageIndex || (next.stageIndex === current.stageIndex && next.wave > current.wave);
+function readHero(model: AgentAdventureHero): AdventureHero {
+  const chosen = model.getAttribute('chosen_class') as string | null;
+  return {
+    nodeId: String(model.getAttribute('node_id')),
+    chosenClass: chosen && (HERO_CLASS_IDS as string[]).includes(chosen) ? (chosen as HeroClassId) : null,
+    level: Math.max(1, Number(model.getAttribute('level')) || 1),
+    xp: Math.max(0, Number(model.getAttribute('xp')) || 0),
+    skills: parse<Record<string, number>>(model.getAttribute('skills_json'), {}),
+    actives: parse<string[]>(model.getAttribute('actives_json'), []),
+    autoSkills: Boolean(model.getAttribute('auto_skills')),
+    kills: Number(model.getAttribute('kills')) || 0,
+  };
+}
+
+function readItem(model: AgentAdventureItem): Item | null {
+  const slot = String(model.getAttribute('slot')) as Slot;
+  const rarity = String(model.getAttribute('rarity')) as Rarity;
+  if (!SLOTS.includes(slot) || !RARITIES.includes(rarity)) return null;
+  const classId = model.getAttribute('class_id') as string | null;
+  const location = String(model.getAttribute('location'));
+  const affixes = parse<ItemAffix[]>(model.getAttribute('affixes_json'), []).filter((affix) => STAT_IDS.includes(affix?.stat) && Number.isFinite(affix?.value));
+  const sockets = parse<ItemSocket[]>(model.getAttribute('sockets_json'), []).map((socket) => ({ kind: socket.kind, material: socket.material && MATERIALS[socket.material] ? socket.material : null }));
+  return {
+    id: String(model.getAttribute('id')),
+    slot,
+    classId: classId && (HERO_CLASS_IDS as string[]).includes(classId) ? (classId as HeroClassId) : null,
+    rarity,
+    level: Math.max(1, Number(model.getAttribute('level')) || 1),
+    affixes,
+    sockets,
+    location: location === 'equipped' || location === 'stash' ? location : 'inventory',
+    heroNodeId: (model.getAttribute('hero_node_id') as string | null) ?? null,
+    locked: Boolean(model.getAttribute('locked')),
+    createdAt: String(model.getAttribute('created_at') ?? ''),
+  };
+}
+
+function heroRow(hero: AdventureHero) {
+  return {
+    chosen_class: hero.chosenClass,
+    level: hero.level,
+    xp: Math.floor(hero.xp),
+    skills_json: JSON.stringify(hero.skills),
+    actives_json: JSON.stringify(hero.actives),
+    auto_skills: hero.autoSkills,
+    kills: hero.kills,
+  };
+}
+
+function itemRow(item: Item) {
+  return {
+    location: item.location,
+    hero_node_id: item.heroNodeId,
+    slot: item.slot,
+    class_id: item.classId,
+    rarity: item.rarity,
+    level: item.level,
+    affixes_json: JSON.stringify(item.affixes),
+    sockets_json: JSON.stringify(item.sockets),
+    locked: item.locked,
+  };
 }
 
 export class AdventureRepository {
-  async find(workspaceId: string): Promise<AdventureRecord> {
-    const model = await AgentAdventureProgress.query().where('workspace_id', workspaceId).first();
-    if (!model) return { progress: { ...EMPTY_PROGRESS }, heroClasses: {} };
-    return { progress: progressOf(model), heroClasses: heroClasses(model.getAttribute('hero_classes_json')) };
-  }
-
-  /**
-   * Keeps the furthest progress any screen reported: two screens running the
-   * same party (the desktop strip and a window) never move it backwards.
-   */
-  async saveProgress(workspaceId: string, next: AdventureProgress): Promise<AdventureProgress> {
+  async load(workspaceId: string): Promise<AdventureSave | null> {
+    const model = await AgentAdventure.query().where('workspace_id', workspaceId).first();
+    if (!model) return null;
     const now = new Date().toISOString();
-    const model = await AgentAdventureProgress.query().where('workspace_id', workspaceId).first();
-    if (!model) {
-      await AgentAdventureProgress.create({
-        id: uuidv7(), workspace_id: workspaceId, stage_index: next.stageIndex, wave: next.wave, xp: next.xp, gold: next.gold,
-        kills: next.kills, bosses: next.bosses, quests: next.quests, hero_classes_json: null, created_at: now, updated_at: now,
-      });
-      return next;
-    }
-    const current = progressOf(model);
-    const position = ahead(next, current) ? next : current;
-    const merged: AdventureProgress = {
-      stageIndex: position.stageIndex,
-      wave: position.wave,
-      xp: Math.max(current.xp, next.xp),
-      gold: Math.max(current.gold, next.gold),
-      kills: Math.max(current.kills, next.kills),
-      bosses: Math.max(current.bosses, next.bosses),
-      quests: Math.max(current.quests, next.quests),
+    const heroes = await AgentAdventureHero.query().where('workspace_id', workspaceId).get();
+    const items = await AgentAdventureItem.query().where('workspace_id', workspaceId).get();
+    return {
+      account: readAccount(model.getAttribute('account_json'), now),
+      heroes: Object.fromEntries(heroes.map(readHero).map((hero) => [hero.nodeId, hero])),
+      items: items.map(readItem).filter((item): item is Item => item !== null),
     };
-    await AgentAdventureProgress.query().where('workspace_id', workspaceId).update({
-      stage_index: merged.stageIndex, wave: merged.wave, xp: merged.xp, gold: merged.gold,
-      kills: merged.kills, bosses: merged.bosses, quests: merged.quests, updated_at: now,
-    });
-    return merged;
   }
 
-  async setHeroClass(workspaceId: string, nodeId: string, classId: HeroClassId | null): Promise<Record<string, HeroClassId>> {
-    const record = await this.find(workspaceId);
-    if (!(await AgentAdventureProgress.query().where('workspace_id', workspaceId).first())) await this.saveProgress(workspaceId, record.progress);
-    const next = { ...record.heroClasses };
-    if (classId) next[nodeId] = classId;
-    else delete next[nodeId];
-    await AgentAdventureProgress.query().where('workspace_id', workspaceId).update({ hero_classes_json: JSON.stringify(next), updated_at: new Date().toISOString() });
-    return next;
+  /** Stores a save, writing only the heroes and items that changed since `before`. */
+  async persist(workspaceId: string, before: AdventureSave | null, after: AdventureSave): Promise<void> {
+    const now = new Date().toISOString();
+    if (!before) {
+      await AgentAdventure.create({ id: uuidv7(), workspace_id: workspaceId, account_json: JSON.stringify(after.account), created_at: now, updated_at: now });
+    } else if (JSON.stringify(before.account) !== JSON.stringify(after.account)) {
+      await AgentAdventure.query().where('workspace_id', workspaceId).update({ account_json: JSON.stringify(after.account), updated_at: now });
+    }
+
+    const oldHeroes = before?.heroes ?? {};
+    for (const [nodeId, hero] of Object.entries(after.heroes)) {
+      const previous = oldHeroes[nodeId];
+      if (!previous) {
+        await AgentAdventureHero.create({ id: uuidv7(), workspace_id: workspaceId, node_id: nodeId, ...heroRow(hero), created_at: now, updated_at: now });
+      } else if (JSON.stringify(previous) !== JSON.stringify(hero)) {
+        await AgentAdventureHero.query().where('workspace_id', workspaceId).where('node_id', nodeId).update({ ...heroRow(hero), updated_at: now });
+      }
+    }
+    for (const nodeId of Object.keys(oldHeroes)) {
+      if (!after.heroes[nodeId]) await AgentAdventureHero.query().where('workspace_id', workspaceId).where('node_id', nodeId).delete();
+    }
+
+    const oldItems = new Map((before?.items ?? []).map((item) => [item.id, item]));
+    const kept = new Set<string>();
+    for (const item of after.items) {
+      kept.add(item.id);
+      const previous = oldItems.get(item.id);
+      if (!previous) {
+        await AgentAdventureItem.create({ id: item.id, workspace_id: workspaceId, ...itemRow(item), created_at: item.createdAt || now, updated_at: now });
+      } else if (JSON.stringify(previous) !== JSON.stringify(item)) {
+        await AgentAdventureItem.query().where('id', item.id).update({ ...itemRow(item), updated_at: now });
+      }
+    }
+    for (const id of oldItems.keys()) {
+      if (!kept.has(id)) await AgentAdventureItem.query().where('id', id).delete();
+    }
   }
 }
 

@@ -2,4 +2,3 @@ import { AdventureController } from '$lib/modules/agent-room/interface/http/cont
 
 const controller = new AdventureController();
 export const GET = controller.handle('show');
-export const PUT = controller.handle('save');

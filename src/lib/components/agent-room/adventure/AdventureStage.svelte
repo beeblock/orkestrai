@@ -1,44 +1,64 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { MONSTERS, stageOf, WAVES_PER_STAGE, levelFromXp, type BiomeId, type HeroClassId, type MonsterId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
+  import type { BiomeId, HeroClassId, MonsterId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
+  import { RARITY_RULES, rarityIndex, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
+  import type { ChestTier } from '$lib/modules/agent-room/domain/adventure/loot.js';
+  import { PETS_BY_ID, type PetId } from '$lib/modules/agent-room/domain/adventure/pets.js';
+  import type { ActiveAction } from '$lib/modules/agent-room/domain/adventure/skills.js';
   import {
     completeQuest,
+    configureAdventure,
     createAdventure,
+    drainReport,
     HERO_SPACING,
-    progressOf,
     stepAdventure,
     type AdventureEvent,
-    type AdventureProgress,
     type AdventureState,
     type PartyMember,
+    type PendingReport,
+    type SimRules,
   } from '$lib/modules/agent-room/domain/adventure/simulation.js';
+  import { biomeOf, regionLevel, WAVES_PER_STAGE, type StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
   import { animationFrame, drawFrame, loadAtlas, type Atlas } from './atlas.js';
   import { playSound, type AdventureSoundLevel } from './adventure-audio.js';
   import * as m from '$lib/paraglide/messages.js';
 
-  type HeroLabel = { id: string; title: string; classId: HeroClassId; asks: number };
+  /** What the stage shows about a hero besides what the battle knows. */
+  export type HeroLabel = { id: string; title: string; classId: HeroClassId; level: number; asks: number; visualTier: 1 | 2 | 3 | 4; weaponRarity: Rarity | null };
   type HitBox = { id: string; left: number; top: number; width: number; height: number };
 
   let {
     party,
     labels,
-    progress,
+    position,
+    wave = 0,
+    rules,
+    activePet = null,
+    gold = 0,
+    chests = 0,
+    difficultyName = '',
     soundLevel = 'alerts',
     height = 150,
-    onProgress,
     onSelect,
     onHover,
+    onOpenCamp,
   }: {
     party: PartyMember[];
-    /** Names and pending requests of each hero, for tags and the "!" balloon. */
     labels: Record<string, HeroLabel>;
-    progress: AdventureProgress;
+    position: StagePosition;
+    wave?: number;
+    rules: Partial<SimRules>;
+    activePet?: PetId | null;
+    gold?: number;
+    /** Unopened chests on the server. */
+    chests?: number;
+    difficultyName?: string;
     soundLevel?: AdventureSoundLevel;
     /** Height of the playing field, in CSS pixels. */
     height?: number;
-    onProgress?: (progress: AdventureProgress, reason: 'tick' | 'stage') => void;
     onSelect?: (heroId: string, box: { left: number; top: number; width: number; height: number }) => void;
     onHover?: (heroId: string | null) => void;
+    onOpenCamp?: () => void;
   } = $props();
 
   const TICK_MS = 50;
@@ -50,22 +70,24 @@
   let canvas = $state<HTMLCanvasElement | null>(null);
   let width = $state(0);
   // svelte-ignore state_referenced_locally
-  const world: AdventureState = createAdventure(progress, Date.now() & 0xffff);
-  let hud = $state(progressOf(world));
+  const world: AdventureState = createAdventure({ position, wave, rules }, Date.now() & 0xffff);
+  let hud = $state({ position: { ...world.position }, wave: world.wave });
   let mode = $state<AdventureState['mode']>('camp');
-  let banners = $state<Array<{ id: number; tone: 'gold' | 'danger' | 'info'; text: string }>>([]);
+  let pendingChests = $state(0);
+  let pendingGold = $state(0);
+  let banners = $state<Array<{ id: number; tone: 'gold' | 'danger' | 'info' | 'loot'; text: string; color?: string }>>([]);
   let boss = $state<{ name: string; hp: number; max: number } | null>(null);
   let hovered = $state<string | null>(null);
   let hitBoxes: HitBox[] = [];
 
   const atlases = new Map<string, Atlas | null>();
-  type Effect = { kind: 'number' | 'spark' | 'slash' | 'coin' | 'gem' | 'pillar' | 'chest' | 'portal' | 'puff'; x: number; y: number; t: number; life: number; text?: string; critical?: boolean; vx?: number; vy?: number };
+  type Effect = {
+    kind: 'number' | 'spark' | 'slash' | 'coin' | 'pillar' | 'chest' | 'portal' | 'puff' | 'ring' | 'beam' | 'note' | 'heal';
+    x: number; y: number; t: number; life: number;
+    text?: string; critical?: boolean; vx?: number; vy?: number; color?: string; frame?: number; heroId?: string;
+  };
   let effects: Effect[] = [];
   let bannerId = 0;
-  let lastSave = 0;
-
-  const level = $derived(levelFromXp(hud.xp));
-  const place = $derived(stageOf(hud.stageIndex));
 
   function atlas(id: string): Atlas | null {
     if (!atlases.has(id)) {
@@ -73,6 +95,13 @@
       void loadAtlas(id).then((loaded) => atlases.set(id, loaded));
     }
     return atlases.get(id) ?? null;
+  }
+
+  /** The hero's outfit for its gear tier, falling back to the adept look while it loads. */
+  function heroAtlas(classId: HeroClassId, tier: number): Atlas | null {
+    const base = atlas(`hero-${classId}`);
+    if (tier === 2) return base;
+    return atlas(`hero-${classId}-t${tier}`) ?? base;
   }
 
   function monsterName(id: MonsterId): string {
@@ -83,19 +112,33 @@
     return (m as unknown as Record<string, () => string>)[`adventure.biome_${id.replace(/-/g, '_')}`]?.() ?? id;
   }
 
-  function banner(text: string, tone: 'gold' | 'danger' | 'info' = 'info') {
-    const id = ++bannerId;
-    banners = [...banners.slice(-2), { id, tone, text }];
-    setTimeout(() => { banners = banners.filter((entry) => entry.id !== id); }, 3_600);
+  function stageLabel(target: StagePosition): string {
+    return `${target.act}-${target.stage}`;
   }
 
-  /** What the world tells the screen: effects, sounds and the save. */
+  /** Shows a short line over the strip; the page uses it too (loot, levels, pets). */
+  export function announce(text: string, tone: 'gold' | 'danger' | 'info' | 'loot' = 'info', color?: string) {
+    const id = ++bannerId;
+    banners = [...banners.slice(-3), { id, tone, text, color }];
+    setTimeout(() => { banners = banners.filter((entry) => entry.id !== id); }, tone === 'loot' ? 4_800 : 3_600);
+  }
+
+  function heroX(heroId: string): number | null {
+    return world.heroes.find((hero) => hero.id === heroId)?.x ?? null;
+  }
+
+  const ACTION_COLOR: Partial<Record<ActiveAction, string>> = {
+    meteor: '#ff9b4a', 'frost-nova': '#8fd8ff', 'arcane-storm': '#c08bff', 'arrow-rain': '#b6f07a', earthshatter: '#e8b84b',
+    judgment: '#fff1a6', finale: '#ffd166', whirlwind: '#f4ead2', bulwark: '#e8b84b', sanctuary: '#ffe9b3',
+  };
+
+  /** What the world tells the screen: effects and sounds. */
   function react(events: AdventureEvent[]) {
     for (const event of events) {
       switch (event.type) {
         case 'hit': {
           // Spread so a burst of hits stays readable instead of stacking digits.
-          effects.push({ kind: 'number', x: event.x, y: Math.random() * 14, t: 0, life: 800, text: String(event.amount), critical: event.critical, vx: (Math.random() - 0.5) * 48 });
+          effects.push({ kind: 'number', x: event.x, y: Math.random() * 14, t: 0, life: 800, text: compact(event.amount), critical: event.critical, vx: (Math.random() - 0.5) * 48, color: event.skill ? '#9fe3ff' : undefined });
           effects.push({ kind: 'spark', x: event.x, y: 0, t: 0, life: 220 });
           playSound('hit', soundLevel);
           break;
@@ -107,43 +150,63 @@
             playSound('slash', soundLevel);
           }
           break;
-        case 'special':
+        case 'special': {
           playSound('special', soundLevel);
-          break;
-        case 'kill': {
-          for (let index = 0; index < Math.min(6, 1 + Math.floor(event.gold / 3)); index += 1) {
-            effects.push({ kind: 'coin', x: event.x, y: 0, t: 0, life: 900, vx: (Math.random() - 0.3) * 60, vy: -60 - Math.random() * 50 });
+          const color = ACTION_COLOR[event.action];
+          if (event.action === 'heal' || event.action === 'judgment') {
+            for (const hero of world.heroes) effects.push({ kind: 'heal', x: hero.x, y: 0, t: 0, life: 900 });
           }
-          effects.push({ kind: 'gem', x: event.x, y: 0, t: 0, life: 700 });
-          playSound(event.boss ? 'quest' : 'kill', soundLevel);
-          if (event.boss) banner(m['adventure.boss_down']({ name: monsterName(event.monsterId) }), 'gold');
+          if (event.action === 'anthem' || event.action === 'crescendo' || event.action === 'overclock') {
+            for (const hero of world.heroes) effects.push({ kind: 'note', x: hero.x, y: 0, t: 0, life: 1_200, vx: (Math.random() - 0.5) * 20 });
+          }
+          if (color) {
+            const center = event.action === 'bulwark' || event.action === 'sanctuary' ? event.x - HERO_SPACING : (world.enemies[0]?.x ?? event.x + 80);
+            effects.push({ kind: 'ring', x: center, y: 0, t: 0, life: 700, color });
+          }
           break;
         }
+        case 'kill': {
+          for (let index = 0; index < Math.min(6, 1 + Math.floor(Math.log2(event.gold + 1))); index += 1) {
+            effects.push({ kind: 'coin', x: event.x, y: 0, t: 0, life: 900, vx: (Math.random() - 0.3) * 60, vy: -60 - Math.random() * 50 });
+          }
+          pendingGold += event.gold;
+          playSound(event.boss ? 'quest' : 'kill', soundLevel);
+          if (event.boss) announce(m['adventure.boss_down']({ name: monsterName(event.monsterId) }), 'gold');
+          break;
+        }
+        case 'chest':
+          pendingChests += 1;
+          effects.push({ kind: 'chest', x: event.x, y: 0, t: 0, life: 1_900, frame: CHEST_FRAME[event.tier] });
+          playSound('chest', soundLevel);
+          break;
         case 'wave':
           if (event.boss) {
             const bossEnemy = world.enemies.find((enemy) => enemy.boss);
-            if (bossEnemy) banner(m['adventure.boss_appears']({ name: monsterName(bossEnemy.monsterId) }), 'danger');
+            if (bossEnemy) announce(m['adventure.boss_appears']({ name: monsterName(bossEnemy.monsterId) }), 'danger');
             playSound('boss', soundLevel);
           }
           break;
         case 'stage-clear':
           effects.push({ kind: 'portal', x: world.frontX + 120, y: 0, t: 0, life: 2_400 });
-          banner(event.chapterClear ? m['adventure.chapter_clear']({ place: biomeName(stageOf(event.stageIndex).biome.id) }) : m['adventure.stage_clear']({ stage: stageLabel(event.stageIndex) }), 'gold');
-          onProgress?.(progressOf(world), 'stage');
+          announce(event.actClear ? m['adventure.chapter_clear']({ place: biomeName(biomeOf(event.position).id) }) : m['adventure.stage_clear']({ stage: stageLabel(event.position) }), 'gold');
           break;
-        case 'level-up':
-          effects.push({ kind: 'pillar', x: world.frontX - HERO_SPACING, y: 0, t: 0, life: 1_400 });
-          banner(m['adventure.level_up']({ level: event.level }), 'gold');
-          playSound('level-up', soundLevel);
+        case 'stage-fail':
+          announce(m['adventure.stage_failed']({ stage: stageLabel(event.position) }), 'danger');
+          playSound('fail', soundLevel);
           break;
+        case 'hero-down': {
+          effects.push({ kind: 'puff', x: event.x, y: 0, t: 0, life: 500 });
+          playSound('down', soundLevel);
+          break;
+        }
         case 'quest':
-          effects.push({ kind: 'chest', x: world.frontX + 30, y: 0, t: 0, life: 2_600 });
-          banner(event.title ? m['adventure.quest_named']({ title: event.title.slice(0, 60) }) : m['adventure.quest'](), 'gold');
+          effects.push({ kind: 'chest', x: world.frontX + 30, y: 0, t: 0, life: 2_600, frame: CHEST_FRAME.quest });
+          announce(event.title ? m['adventure.quest_named']({ title: event.title.slice(0, 60) }) : m['adventure.quest'](), 'gold');
           playSound('quest', soundLevel);
           break;
         case 'join': {
           const label = labels[event.heroId];
-          if (label && world.timeMs > 500) { banner(m['adventure.joined']({ name: label.title }), 'info'); playSound('join', soundLevel); }
+          if (label && world.timeMs > 500) { announce(m['adventure.joined']({ name: label.title }), 'info'); playSound('join', soundLevel); }
           break;
         }
         case 'leave':
@@ -153,15 +216,47 @@
     }
   }
 
-  function stageLabel(stageIndex: number): string {
-    const { chapter, stage, lap } = stageOf(stageIndex);
-    return `${lap ? `${lap + 1}·` : ''}${chapter}-${stage}`;
+  const CHEST_FRAME: Record<ChestTier, number> = { white: 0, blue: 1, red: 2, quest: 3 };
+
+  function compact(value: number): string {
+    if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+    if (value >= 1e4) return `${Math.round(value / 1e3)}k`;
+    return String(value);
   }
 
-  /** A finished task, from the page: the quest pays and strikes every monster. */
+  /** A finished task, from the page: a strike from above on every monster. */
   export function quest(title: string | null) {
     react(completeQuest(world, title));
-    hud = progressOf(world);
+  }
+
+  /** Hands the battle's results to the page for the server, and forgets them locally. */
+  export function drain(): PendingReport & { position: StagePosition; wave: number } {
+    const report = drainReport(world);
+    pendingChests = 0;
+    pendingGold = 0;
+    return { ...report, position: { ...world.position }, wave: world.wave };
+  }
+
+  /** New rules from the server, or a trip through the portal. */
+  export function configure(next: Partial<SimRules>, travelTo?: StagePosition) {
+    configureAdventure(world, next, travelTo);
+    hud = { position: { ...world.position }, wave: world.wave };
+  }
+
+  /** A hero levelled up (the server said so). */
+  export function levelUp(heroId: string) {
+    const x = heroX(heroId);
+    if (x === null) return;
+    effects.push({ kind: 'pillar', x, y: 0, t: 0, life: 1_400 });
+    playSound('level-up', soundLevel);
+  }
+
+  /** Items arrived (auto-opened chests, quests): a beam of their rarity's color. */
+  export function loot(rarities: Rarity[]) {
+    const best = [...rarities].sort((a, b) => rarityIndex(b) - rarityIndex(a))[0];
+    if (!best || rarityIndex(best) < 2) return;
+    effects.push({ kind: 'beam', x: world.frontX + 20, y: 0, t: 0, life: 2_200, color: RARITY_RULES[best].color });
+    playSound('loot', soundLevel);
   }
 
   // Scenery: props placed by a seeded hash of each slot of road, per biome.
@@ -221,7 +316,14 @@
     }
   }
 
-  const HERO_ANIMATION: Record<string, string> = { walk: 'walk', idle: 'idle', attack: 'attack', special: 'special', hurt: 'hurt', rest: 'rest', alert: 'alert', victory: 'victory', stunned: 'stunned' };
+  const HERO_ANIMATION: Record<string, string> = { walk: 'walk', idle: 'idle', attack: 'attack', special: 'special', hurt: 'hurt', rest: 'rest', alert: 'alert', victory: 'victory', stunned: 'stunned', fallen: 'rest' };
+
+  function drawBar(context: CanvasRenderingContext2D, x: number, y: number, width: number, ratio: number, color: string) {
+    context.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    context.fillRect(x - width / 2, y, width, 3);
+    context.fillStyle = color;
+    context.fillRect(x - width / 2, y, width * Math.max(0, Math.min(1, ratio)), 3);
+  }
 
   function render(context: CanvasRenderingContext2D, now: number) {
     const groundY = height - GROUND;
@@ -230,11 +332,12 @@
     const toScreen = (x: number) => x - cameraX;
     context.clearRect(0, 0, width, height);
     context.imageSmoothingEnabled = true;
-    const biome = stageOf(world.stageIndex).biome.id;
+    const biome = biomeOf(world.position).id;
     drawScenery(context, cameraX, groundY, biome);
 
     const fx = atlas('fx-effects');
     const camp = atlas('fx-camp');
+    const misc = atlas('icons-misc');
 
     // Camp: the party gathers around a fire when nobody is working.
     if (world.mode === 'camp' && world.heroes.length) {
@@ -247,15 +350,40 @@
     }
     for (const turret of world.turrets) if (fx) drawFrame(context, fx, 5, toScreen(turret.x), groundY + 1, ART_SCALE * 0.75);
 
+    // The active pet trots behind the last hero.
+    if (activePet && world.heroes.length) {
+      const pet = PETS_BY_ID[activePet];
+      const sheet = atlas(pet.sprite.atlas);
+      if (sheet) {
+        const last = Math.min(...world.heroes.map((hero) => hero.x));
+        const moving = world.mode === 'march';
+        const frame = pet.sprite.row * 6 + (moving ? Math.floor(now / 110) % 6 : Math.floor(now / 400) % 2);
+        drawFrame(context, sheet, frame, toScreen(last - 30), groundY + 2 + (moving ? 0 : Math.round(Math.sin(now / 300))), ART_SCALE);
+      }
+    }
+
     // Characters, back to front.
     hitBoxes = [];
     const heroes = [...world.heroes].sort((a, b) => a.x - b.x);
     for (const hero of heroes) {
-      const sprite = atlas(`hero-${hero.classId}`);
+      const label = labels[hero.id];
+      const sprite = heroAtlas(hero.classId, label?.visualTier ?? 2);
       const x = toScreen(hero.x);
+      const fallen = hero.fallenMs > 0;
       const bob = hero.pose === 'idle' || hero.pose === 'alert' ? Math.round(Math.sin(now / 320 + hero.x) * 0.8) : 0;
       const joining = Math.min(1, (world.timeMs - hero.joinedMs) / 400);
-      context.globalAlpha = (hero.activity === 'offline' ? 0.6 : 1) * joining;
+      // The weapon's rarity shows as a glow around the hero (rare and above).
+      const glow = label?.weaponRarity && rarityIndex(label.weaponRarity) >= 2 && !fallen ? RARITY_RULES[label.weaponRarity].color : null;
+      if (glow) {
+        const pulse = 0.18 + 0.08 * Math.sin(now / 420 + hero.x) + rarityIndex(label!.weaponRarity!) * 0.02;
+        const gradient = context.createRadialGradient(x, groundY - 28, 2, x, groundY - 28, 30);
+        gradient.addColorStop(0, `${glow}${Math.round(pulse * 255).toString(16).padStart(2, '0')}`);
+        gradient.addColorStop(1, `${glow}00`);
+        context.fillStyle = gradient;
+        context.fillRect(x - 32, groundY - 60, 64, 64);
+      }
+      context.globalAlpha = (hero.activity === 'offline' ? 0.6 : 1) * joining * (fallen ? 0.75 : 1);
+      if (fallen) context.filter = 'grayscale(1) brightness(0.75)';
       let box: { left: number; top: number; width: number; height: number };
       if (sprite) {
         box = drawFrame(context, sprite, animationFrame(sprite, HERO_ANIMATION[hero.pose] ?? 'idle', hero.pose === 'walk' || hero.pose === 'idle' ? now : hero.poseMs), x, groundY + 2 + bob, ART_SCALE);
@@ -264,6 +392,7 @@
         context.fillRect(x - 10, groundY - 50, 20, 50);
         box = { left: x - 10, top: groundY - 50, width: 20, height: 50 };
       }
+      context.filter = 'none';
       context.globalAlpha = 1;
       if (hero.shield > 0) {
         // A faint, breathing ward: visible without boxing the hero in.
@@ -275,9 +404,19 @@
         context.fill();
         context.stroke();
       }
-      const label = labels[hero.id];
+      if (fallen) {
+        // How long until it gets back up.
+        const share = 1 - hero.fallenMs / Math.max(1, world.rules.reviveMs);
+        context.strokeStyle = 'rgba(244, 234, 210, 0.85)';
+        context.lineWidth = 2;
+        context.beginPath();
+        context.arc(x, box.top - 6, 5, -Math.PI / 2, -Math.PI / 2 + share * Math.PI * 2);
+        context.stroke();
+      } else if (hero.hp < hero.profile.maxHp && hero.activity === 'working') {
+        drawBar(context, x, box.top - 5, 22, hero.hp / hero.profile.maxHp, hero.hp / hero.profile.maxHp > 0.35 ? '#62d26f' : '#e8574b');
+      }
       // A hero with something for the owner raises a "!" balloon.
-      if ((hero.activity === 'attention' || (label?.asks ?? 0) > 0) && camp) {
+      if ((hero.activity === 'attention' || (label?.asks ?? 0) > 0) && camp && !fallen) {
         drawFrame(context, camp, 6, x + 4, box.top + 2 + Math.round(Math.sin(now / 200) * 2), ART_SCALE * 0.45);
       } else if (hero.pose === 'rest' && camp) {
         context.globalAlpha = 0.5 + 0.5 * Math.sin(now / 600 + hero.x);
@@ -287,15 +426,15 @@
       hitBoxes.push({ id: hero.id, ...box });
       if (hovered === hero.id && label) {
         context.font = '600 10px ui-sans-serif, system-ui, sans-serif';
-        const text = label.title;
+        const text = `${label.title} · ${m['adventure.level']({ level: label.level })}`;
         const textWidth = context.measureText(text).width + 10;
         context.fillStyle = 'rgba(23, 20, 15, 0.86)';
         context.beginPath();
-        context.roundRect(x - textWidth / 2, box.top - 18, textWidth, 14, 4);
+        context.roundRect(x - textWidth / 2, box.top - 22, textWidth, 14, 4);
         context.fill();
         context.fillStyle = '#f4ead2';
         context.textAlign = 'center';
-        context.fillText(text, x, box.top - 8);
+        context.fillText(text, x, box.top - 12);
       }
     }
 
@@ -306,9 +445,13 @@
       if (x < -120 || x > width + 160) continue;
       const pose = enemy.stunMs > 0 ? 'hurt' : enemy.pose;
       context.globalAlpha = enemy.pose === 'dying' ? Math.max(0, 1 - enemy.poseMs / 600) : 1;
+      // Elites are bigger and tinted; frozen monsters turn blue.
+      const scale = ART_SCALE * (enemy.elite ? 1.3 : 1);
+      if (enemy.elite) context.filter = 'saturate(1.6) hue-rotate(-20deg) drop-shadow(0 0 3px rgba(255, 120, 60, 0.8))';
+      if (enemy.stunMs > 0 && enemy.pose !== 'dying') context.filter = 'hue-rotate(180deg) saturate(0.7) brightness(1.15)';
       let top = groundY - 30;
       if (sprite) {
-        const box = drawFrame(context, sprite, animationFrame(sprite, pose, pose === 'move' ? now + enemy.x * 13 : enemy.poseMs, 'move'), x, groundY + 2, ART_SCALE);
+        const box = drawFrame(context, sprite, animationFrame(sprite, pose, pose === 'move' ? now + enemy.x * 13 : enemy.poseMs, 'move'), x, groundY + 2, scale);
         top = box.top;
       } else {
         context.fillStyle = enemy.boss ? '#c2413b' : '#b44fd8';
@@ -316,25 +459,21 @@
         context.fillRect(x - size / 2, groundY - size, size, size);
         top = groundY - size;
       }
+      context.filter = 'none';
       context.globalAlpha = 1;
-      if (!enemy.boss && enemy.hp < enemy.maxHp && enemy.pose !== 'dying') {
-        context.fillStyle = 'rgba(0, 0, 0, 0.55)';
-        context.fillRect(x - 12, top - 6, 24, 3);
-        context.fillStyle = '#e8574b';
-        context.fillRect(x - 12, top - 6, 24 * (enemy.hp / enemy.maxHp), 3);
-      }
+      if (!enemy.boss && enemy.hp < enemy.maxHp && enemy.pose !== 'dying') drawBar(context, x, top - 6, enemy.elite ? 36 : 24, enemy.hp / enemy.maxHp, '#e8574b');
     }
 
     // Projectiles fly in a slight arc to their target.
     for (const projectile of world.projectiles) {
       const target = world.enemies.find((enemy) => enemy.id === projectile.targetId);
-      if (!target || !fx) continue;
+      if (!target || !fx || projectile.progress < 0) continue;
       const fromX = toScreen(projectile.fromX);
       const toX = toScreen(target.x);
       const t = Math.min(1, projectile.progress);
       const x = fromX + (toX - fromX) * t;
-      const arc = projectile.kind === 'arrow' || projectile.kind === 'note' ? Math.sin(t * Math.PI) * 14 : 4;
-      const frame = { note: 0, bolt: 1, arrow: 2, cog: 3, smite: 4, turret: 3, melee: 6 }[projectile.kind] ?? 6;
+      const arc = projectile.kind === 'arrow' || projectile.kind === 'note' || projectile.kind === 'rocket' ? Math.sin(t * Math.PI) * (projectile.kind === 'rocket' ? 34 : 14) : 4;
+      const frame = { note: 0, bolt: 1, arrow: 2, cog: 3, smite: 4, turret: 3, rocket: 3, melee: 6 }[projectile.kind] ?? 6;
       drawFrame(context, fx, frame, x, groundY - 26 - arc, ART_SCALE * (projectile.kind === 'turret' ? 0.35 : 0.5));
     }
 
@@ -351,7 +490,7 @@
           context.textAlign = 'center';
           context.lineWidth = 3;
           context.strokeStyle = 'rgba(23, 20, 15, 0.9)';
-          context.fillStyle = effect.critical ? '#ffd166' : '#fff6e0';
+          context.fillStyle = effect.critical ? '#ffd166' : effect.color ?? '#fff6e0';
           const y = groundY - 44 - effect.y - life * 26;
           context.globalAlpha = 1 - Math.max(0, life - 0.6) / 0.4;
           context.strokeText(effect.text ?? '', x + (effect.vx ?? 0) * life, y);
@@ -372,21 +511,50 @@
           if (fx) { context.globalAlpha = 1 - Math.max(0, life - 0.7) / 0.3; drawFrame(context, fx, 8, cx, cy, ART_SCALE * 0.25); context.globalAlpha = 1; }
           break;
         }
-        case 'gem':
-          if (fx) { context.globalAlpha = 1 - life; drawFrame(context, fx, 9, x, groundY - 30 - life * 40, ART_SCALE * 0.28); context.globalAlpha = 1; }
-          break;
         case 'pillar':
           if (camp) { context.globalAlpha = Math.sin(life * Math.PI); drawFrame(context, camp, 8, x, groundY + 2, ART_SCALE * 0.75); context.globalAlpha = 1; }
+          break;
+        case 'heal':
+          if (camp) { context.globalAlpha = 0.7 * Math.sin(life * Math.PI); drawFrame(context, camp, 8, x, groundY + 2, ART_SCALE * 0.45); context.globalAlpha = 1; }
+          break;
+        case 'note':
+          if (fx) { context.globalAlpha = 1 - life; drawFrame(context, fx, 0, x + (effect.vx ?? 0) * life, groundY - 50 - life * 30, ART_SCALE * 0.3); context.globalAlpha = 1; }
           break;
         case 'portal':
           if (camp) { context.globalAlpha = Math.sin(life * Math.PI); drawFrame(context, camp, 9, x, groundY + 2, ART_SCALE * 0.7); context.globalAlpha = 1; }
           break;
-        case 'chest':
-          if (fx) {
-            const drop = Math.min(1, effect.t / 300);
-            drawFrame(context, fx, effect.t < 700 ? 10 : 11, x, groundY + 2 - (1 - drop) * 40, ART_SCALE * 0.45);
-          }
+        case 'ring': {
+          context.strokeStyle = effect.color ?? '#ffffff';
+          context.globalAlpha = 0.8 * (1 - life);
+          context.lineWidth = 3 * (1 - life) + 1;
+          context.beginPath();
+          context.ellipse(x, groundY - 10, 20 + life * 90, 6 + life * 22, 0, 0, Math.PI * 2);
+          context.stroke();
+          context.globalAlpha = 1;
           break;
+        }
+        case 'beam': {
+          // A pillar of the loot's rarity color where the drop landed.
+          const alpha = Math.sin(Math.min(1, life * 1.4) * Math.PI);
+          const gradient = context.createLinearGradient(0, 0, 0, groundY);
+          gradient.addColorStop(0, `${effect.color}00`);
+          gradient.addColorStop(1, `${effect.color}cc`);
+          context.globalAlpha = alpha;
+          context.fillStyle = gradient;
+          context.fillRect(x - 5, 0, 10, groundY);
+          context.globalAlpha = 1;
+          break;
+        }
+        case 'chest': {
+          const icon = misc;
+          const drop = Math.min(1, effect.t / 350);
+          const bounce = drop < 1 ? (1 - drop) * 40 : Math.abs(Math.sin((effect.t - 350) / 90)) * Math.max(0, 6 - (effect.t - 350) / 60);
+          context.globalAlpha = 1 - Math.max(0, life - 0.75) / 0.25;
+          if (icon) drawFrame(context, icon, effect.frame ?? 0, x, groundY + 2 - bounce, ART_SCALE * 0.42);
+          else if (fx) drawFrame(context, fx, 10, x, groundY + 2 - bounce, ART_SCALE * 0.45);
+          context.globalAlpha = 1;
+          break;
+        }
         case 'puff':
           context.fillStyle = `rgba(244, 234, 210, ${0.5 * (1 - life)})`;
           context.beginPath();
@@ -420,7 +588,7 @@
   onMount(() => {
     const context = canvas?.getContext('2d');
     if (!context || !canvas || !host) return;
-    for (const id of ['fx-effects', 'fx-camp']) atlas(id);
+    for (const id of ['fx-effects', 'fx-camp', 'icons-misc']) atlas(id);
     const resize = () => {
       if (!canvas || !host) return;
       const ratio = window.devicePixelRatio || 1;
@@ -437,6 +605,7 @@
     let frame = 0;
     let last = performance.now();
     let carry = 0;
+    let lastHud = 0;
     const loop = (now: number) => {
       carry += Math.min(1_000, now - last);
       last = now;
@@ -445,18 +614,19 @@
         react(stepAdventure(world, party, TICK_MS));
       }
       // Preload what the party and the road will need.
-      for (const hero of world.heroes) atlas(`hero-${hero.classId}`);
+      for (const hero of world.heroes) heroAtlas(hero.classId, labels[hero.id]?.visualTier ?? 2);
       for (const enemy of world.enemies) atlas(`monster-${enemy.monsterId}`);
-      const biome = stageOf(world.stageIndex).biome.id;
+      if (activePet) atlas(PETS_BY_ID[activePet].sprite.atlas);
+      const biome = biomeOf(world.position).id;
       atlas(`biome-${biome}-props`);
       atlas(`biome-${biome}-ground`);
       render(context, now);
       mode = world.mode;
       const bossEnemy = world.enemies.find((enemy) => enemy.boss && enemy.pose !== 'dying');
       boss = bossEnemy ? { name: monsterName(bossEnemy.monsterId), hp: bossEnemy.hp, max: bossEnemy.maxHp } : null;
-      if (now - lastSave > 1_000) {
-        hud = progressOf(world);
-        if (now - lastSave > 15_000) { lastSave = now; onProgress?.(hud, 'tick'); }
+      if (now - lastHud > 500) {
+        lastHud = now;
+        hud = { position: { ...world.position }, wave: world.wave };
       }
       frame = requestAnimationFrame(loop);
     };
@@ -464,21 +634,30 @@
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      onProgress?.(progressOf(world), 'tick');
     };
   });
+
+  const place = $derived(biomeOf(hud.position));
+  const region = $derived(regionLevel(hud.position));
+  const shownGold = $derived(gold + pendingGold);
+  const shownChests = $derived(chests + pendingChests);
 </script>
 
 <div class="stage" bind:this={host} style:height={`${height}px`} data-mode={mode} data-testid="adventure-stage">
   <canvas bind:this={canvas} onpointermove={pointer} onpointerdown={pointer} onpointerleave={leave} class:pointing={hovered !== null}></canvas>
   <div class="hud" data-adventure-interactive>
-    <span class="place">{biomeName(place.biome.id)} · {stageLabel(hud.stageIndex)}</span>
+    <span class="place">{biomeName(place.id)} · {stageLabel(hud.position)}</span>
+    {#if difficultyName && hud.position.difficulty !== 'normal'}<span class="difficulty">{difficultyName}</span>{/if}
     <span class="wave">{m['adventure.wave']({ wave: Math.min(hud.wave + 1, WAVES_PER_STAGE), total: WAVES_PER_STAGE })}</span>
-    <span class="level" title={m['adventure.xp']({ into: level.into, next: level.next })}>
-      <b>{m['adventure.level']({ level: level.level })}</b>
-      <span class="bar"><span style:width={`${Math.round((level.into / level.next) * 100)}%`}></span></span>
-    </span>
-    <span class="gold" title={m['adventure.gold']()}><span class="coin" aria-hidden="true"></span>{hud.gold}</span>
+    <span class="region" title={m['adventure.region_level_hint']()}>{m['adventure.region_level']({ level: region })}</span>
+    <span class="gold" title={m['adventure.gold']()}><span class="coin" aria-hidden="true"></span>{compact(shownGold)}</span>
+    {#if onOpenCamp}
+      <button type="button" class="camp-button" onclick={onOpenCamp} title={m['adventure.open_camp']()} aria-label={m['adventure.open_camp']()} data-testid="adventure-open-camp">
+        <span class="chest-icon" aria-hidden="true"></span>
+        {#if shownChests > 0}<span class="badge">{shownChests}</span>{/if}
+        <span>{m['adventure.camp_short']()}</span>
+      </button>
+    {/if}
     {#if mode === 'camp'}<span class="camp">{m['adventure.camping']()}</span>{/if}
   </div>
   {#if boss}
@@ -488,7 +667,7 @@
     </div>
   {/if}
   <div class="banners" aria-live="polite">
-    {#each banners as entry (entry.id)}<div class={`banner ${entry.tone}`}>{entry.text}</div>{/each}
+    {#each banners as entry (entry.id)}<div class={`banner ${entry.tone}`} style:--loot={entry.color}>{entry.text}</div>{/each}
   </div>
 </div>
 
@@ -518,7 +697,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 3px 10px;
+    padding: 3px 4px 3px 10px;
     border-radius: 999px;
     background: rgba(23, 20, 15, 0.78);
     box-shadow: 0 0 0 1px rgba(232, 184, 75, 0.35);
@@ -532,35 +711,18 @@
     color: #e8b84b;
   }
 
+  .difficulty {
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(232, 87, 75, 0.25);
+    color: #ffb3a8;
+  }
+
   .wave,
+  .region,
   .camp {
     color: rgba(244, 234, 210, 0.7);
     font-weight: 500;
-  }
-
-  .level {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  .bar,
-  .boss-bar {
-    position: relative;
-    display: inline-block;
-    width: 48px;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(244, 234, 210, 0.18);
-    overflow: hidden;
-  }
-
-  .bar > span,
-  .boss-bar > span {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: linear-gradient(90deg, #b98a2e, #e8b84b);
-    transition: width 300ms ease-out;
   }
 
   .gold {
@@ -575,6 +737,51 @@
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #fff2b0, #e8b84b 55%, #8a6418);
     box-shadow: 0 0 0 1px #5e4410;
+  }
+
+  .camp-button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px 2px 6px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(232, 184, 75, 0.18);
+    color: #ffe9b3;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .camp-button:hover {
+    background: rgba(232, 184, 75, 0.32);
+  }
+
+  .camp-button:focus-visible {
+    outline: 2px solid #e8b84b;
+    outline-offset: 2px;
+  }
+
+  .chest-icon {
+    width: 11px;
+    height: 9px;
+    border-radius: 2px 2px 1px 1px;
+    background: linear-gradient(180deg, #c98b3c 0 45%, #8a5a22 45% 100%);
+    box-shadow: inset 0 0 0 1px #4a2f10;
+  }
+
+  .badge {
+    position: absolute;
+    top: -6px;
+    left: 10px;
+    min-width: 14px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #e8574b;
+    color: #fff;
+    font-size: 11px;
+    line-height: 14px;
+    text-align: center;
   }
 
   .boss {
@@ -594,11 +801,20 @@
   }
 
   .boss-bar {
+    position: relative;
+    display: inline-block;
     width: 120px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(244, 234, 210, 0.18);
+    overflow: hidden;
   }
 
   .boss-bar > span {
+    position: absolute;
+    inset: 0 auto 0 0;
     background: linear-gradient(90deg, #a1291f, #e8574b);
+    transition: width 300ms ease-out;
   }
 
   .banners {
@@ -630,6 +846,11 @@
   .banner.danger {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(232, 87, 75, 0.6);
     color: #ffd2cc;
+  }
+
+  .banner.loot {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--loot, #e8b84b);
+    color: var(--loot, #ffe9b3);
   }
 
   @keyframes banner-in {

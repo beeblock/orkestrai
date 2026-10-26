@@ -4,9 +4,9 @@
  * done, a boss); `all` adds the battle; `off` is silent.
  */
 export type AdventureSoundLevel = 'off' | 'alerts' | 'all';
-export type AdventureSound = 'hit' | 'slash' | 'coin' | 'kill' | 'level-up' | 'alert' | 'quest' | 'boss' | 'join' | 'special';
+export type AdventureSound = 'hit' | 'slash' | 'coin' | 'kill' | 'level-up' | 'alert' | 'quest' | 'boss' | 'join' | 'special' | 'chest' | 'loot' | 'down' | 'fail';
 
-const ALERT_SOUNDS = new Set<AdventureSound>(['alert', 'quest', 'boss', 'level-up', 'join']);
+const ALERT_SOUNDS = new Set<AdventureSound>(['alert', 'quest', 'boss', 'level-up', 'join', 'loot', 'fail']);
 
 let context: AudioContext | null = null;
 const lastPlayed = new Map<AdventureSound, number>();
@@ -73,5 +73,9 @@ export function playSound(sound: AdventureSound, level: AdventureSoundLevel): vo
     case 'quest': [784, 988, 1175, 1568].forEach((note, index) => tone(ctx, t + index * 0.09, note, 0.2, 'square', 0.045)); tone(ctx, t + 0.36, 392, 0.4, 'triangle', 0.05); break;
     case 'boss': tone(ctx, t, 110, 0.5, 'sawtooth', 0.04, 82); tone(ctx, t + 0.25, 147, 0.5, 'sawtooth', 0.035, 98); break;
     case 'join': tone(ctx, t, 659, 0.1, 'triangle', 0.05); tone(ctx, t + 0.1, 988, 0.18, 'triangle', 0.05); break;
+    case 'chest': tone(ctx, t, 523, 0.07, 'square', 0.03); tone(ctx, t + 0.07, 659, 0.07, 'square', 0.03); tone(ctx, t + 0.14, 784, 0.12, 'square', 0.03); break;
+    case 'loot': [1047, 1319, 1568, 2093].forEach((note, index) => tone(ctx, t + index * 0.07, note, 0.22, 'triangle', 0.045)); break;
+    case 'down': tone(ctx, t, 330, 0.25, 'triangle', 0.04, 110); break;
+    case 'fail': tone(ctx, t, 262, 0.25, 'sawtooth', 0.03, 196); tone(ctx, t + 0.22, 196, 0.4, 'sawtooth', 0.03, 131); break;
   }
 }

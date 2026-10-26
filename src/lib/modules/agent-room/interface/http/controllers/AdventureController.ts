@@ -1,37 +1,39 @@
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
 import { adventureService } from '../../../application/services/AdventureService.js';
-import type { HeroClassId } from '../../../domain/adventure/catalog.js';
-import { SaveAdventureProgressRequest } from '../requests/SaveAdventureProgressRequest.js';
-import { SetAdventureHeroClassRequest } from '../requests/SetAdventureHeroClassRequest.js';
+import { AdventureError } from '../../../domain/adventure/engine.js';
+import { AdventureActionRequest } from '../requests/AdventureActionRequest.js';
+import { ReportAdventureRequest } from '../requests/ReportAdventureRequest.js';
 
 export class AdventureController extends Controller {
   async show(event: RequestEvent) {
     try {
-      return this.json({ data: await adventureService.read(event.params.id) });
+      return this.json({ data: await adventureService.state(event.params.id) });
     } catch (error) {
       return this.failure(error, 'Could not load the Adventure.');
     }
   }
 
-  async save(event: RequestEvent) {
+  async report(event: RequestEvent) {
     try {
-      const input = await SaveAdventureProgressRequest.validate(event);
-      return this.json({ data: await adventureService.saveProgress(event.params.id, input) });
+      const input = await ReportAdventureRequest.validate(event);
+      return this.json({ data: await adventureService.report(event.params.id, input) });
     } catch (error) {
-      return this.failure(error, 'Could not save the Adventure.');
+      return this.failure(error, 'Could not record the battle.');
     }
   }
 
-  async heroClass(event: RequestEvent) {
+  async act(event: RequestEvent) {
     try {
-      const input = await SetAdventureHeroClassRequest.validate(event);
-      return this.json({ data: await adventureService.setHeroClass(event.params.id, event.params.nodeId, input.classId as HeroClassId | null) });
+      const input = await AdventureActionRequest.validate(event);
+      return this.json({ data: await adventureService.act(event.params.id, input) });
     } catch (error) {
-      return this.failure(error, 'Could not change the hero class.');
+      return this.failure(error, 'Could not complete the action.');
     }
   }
 
+  /** Rule refusals carry a stable code the screens translate. */
   private failure(error: unknown, fallback: string) {
+    if (error instanceof AdventureError) return this.json({ error: error.code, code: error.code }, 400);
     return this.json({ error: error instanceof Error ? error.message : fallback }, 400);
   }
 }

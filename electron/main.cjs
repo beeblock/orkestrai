@@ -1225,7 +1225,7 @@ ipcMain.handle('orkestrai:clipboard-has-image', (event) => {
 
 // The Adventure strip: the app's own windows turn it on or off; the strip
 // itself says where the pointer may click and asks the app to open a screen.
-const ADVENTURE_ROUTES = /^\/(terminal|chat|canvas)(\?[^#\s]*)?$/;
+const ADVENTURE_ROUTES = /^\/(terminal|chat|canvas|adventure\/camp)(\?[^#\s]*)?$/;
 ipcMain.handle('orkestrai:adventure-strip', (event, enabled) => {
   if (!adventureWindow || !mainWindow || event.sender !== mainWindow.webContents) return false;
   if (enabled) adventureWindow.open();

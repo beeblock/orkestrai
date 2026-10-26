@@ -1,26 +1,12 @@
 /**
- * The Adventure's fixed content: hero classes, the bestiary of software bugs,
- * biomes and their stages. Pure data shared by the simulation, the renderer
+ * The Adventure's fixed content: hero classes, the bestiary of software bugs
+ * and the biomes they live in. Pure data shared by the simulation, the renderer
  * and the server; display names live in the i18n catalogs under the same ids.
  */
 
 export type HeroClassId = 'maestro' | 'artificer' | 'sorceress' | 'knight' | 'ranger' | 'cleric';
 
 export type HeroAttack = 'melee' | 'arrow' | 'bolt' | 'note' | 'cog' | 'smite';
-
-export type HeroSpecial =
-  /** The leader conducts: working teammates attack faster for a while. */
-  | 'anthem'
-  /** Drops a turret that keeps shooting the front enemy. */
-  | 'turret'
-  /** Strikes every enemy on screen. */
-  | 'meteor'
-  /** Stuns the front enemy and pushes it back. */
-  | 'shield-bash'
-  /** Fires a fan of arrows at the three front enemies. */
-  | 'volley'
-  /** Clears the party's debuffs and grants a shield that absorbs hits. */
-  | 'sanctuary';
 
 export type HeroClass = {
   id: HeroClassId;
@@ -29,19 +15,17 @@ export type HeroClass = {
   range: number;
   attackMs: number;
   damage: number;
-  special: HeroSpecial;
-  specialMs: number;
   /** Marching order, front to back. */
   rank: number;
 };
 
 export const HERO_CLASSES: Record<HeroClassId, HeroClass> = {
-  knight: { id: 'knight', attack: 'melee', range: 18, attackMs: 900, damage: 14, special: 'shield-bash', specialMs: 7_000, rank: 0 },
-  artificer: { id: 'artificer', attack: 'cog', range: 70, attackMs: 1_000, damage: 10, special: 'turret', specialMs: 12_000, rank: 1 },
-  ranger: { id: 'ranger', attack: 'arrow', range: 110, attackMs: 800, damage: 9, special: 'volley', specialMs: 8_000, rank: 2 },
-  sorceress: { id: 'sorceress', attack: 'bolt', range: 95, attackMs: 1_250, damage: 15, special: 'meteor', specialMs: 11_000, rank: 3 },
-  cleric: { id: 'cleric', attack: 'smite', range: 80, attackMs: 1_100, damage: 8, special: 'sanctuary', specialMs: 10_000, rank: 4 },
-  maestro: { id: 'maestro', attack: 'note', range: 90, attackMs: 1_000, damage: 10, special: 'anthem', specialMs: 9_000, rank: 5 },
+  knight: { id: 'knight', attack: 'melee', range: 18, attackMs: 900, damage: 14, rank: 0 },
+  artificer: { id: 'artificer', attack: 'cog', range: 70, attackMs: 1_000, damage: 10, rank: 1 },
+  ranger: { id: 'ranger', attack: 'arrow', range: 110, attackMs: 800, damage: 9, rank: 2 },
+  sorceress: { id: 'sorceress', attack: 'bolt', range: 95, attackMs: 1_250, damage: 15, rank: 3 },
+  cleric: { id: 'cleric', attack: 'smite', range: 80, attackMs: 1_100, damage: 8, rank: 4 },
+  maestro: { id: 'maestro', attack: 'note', range: 90, attackMs: 1_000, damage: 10, rank: 5 },
 };
 
 export const HERO_CLASS_IDS = Object.keys(HERO_CLASSES) as HeroClassId[];
@@ -103,27 +87,29 @@ export type Monster = {
   gold: number;
 };
 
+// Base numbers at level 1: the region level scales them, so later acts are
+// not stronger by nature, only by level. They differ in speed, bulk and reach.
 export const MONSTERS: Record<MonsterId, Monster> = {
   'glitch-slime': { id: 'glitch-slime', hp: 40, damage: 4, speed: 16, attackMs: 1_400, boss: false, size: 1, xp: 4, gold: 1 },
-  'bug-beetle': { id: 'bug-beetle', hp: 55, damage: 5, speed: 20, attackMs: 1_300, boss: false, size: 1, xp: 5, gold: 2 },
+  'bug-beetle': { id: 'bug-beetle', hp: 50, damage: 5, speed: 20, attackMs: 1_300, boss: false, size: 1, xp: 5, gold: 2 },
   'conflict-hydra': { id: 'conflict-hydra', hp: 900, damage: 12, speed: 8, attackMs: 1_600, boss: true, size: 2.6, xp: 120, gold: 60 },
-  'null-wisp': { id: 'null-wisp', hp: 50, damage: 6, speed: 24, attackMs: 1_200, boss: false, size: 1, xp: 6, gold: 2 },
-  'flaky-gremlin': { id: 'flaky-gremlin', hp: 65, damage: 6, speed: 26, attackMs: 1_000, boss: false, size: 1, xp: 7, gold: 3 },
-  'loop-serpent': { id: 'loop-serpent', hp: 1_300, damage: 14, speed: 9, attackMs: 1_500, boss: true, size: 2.8, xp: 170, gold: 85 },
-  'stale-imp': { id: 'stale-imp', hp: 75, damage: 7, speed: 22, attackMs: 1_100, boss: false, size: 1, xp: 8, gold: 3 },
-  'leak-ooze': { id: 'leak-ooze', hp: 110, damage: 6, speed: 12, attackMs: 1_500, boss: false, size: 1.3, xp: 10, gold: 4 },
-  'deadlock-golem': { id: 'deadlock-golem', hp: 1_800, damage: 16, speed: 7, attackMs: 1_800, boss: true, size: 2.8, xp: 230, gold: 115 },
-  'race-imps': { id: 'race-imps', hp: 85, damage: 8, speed: 30, attackMs: 900, boss: false, size: 1.1, xp: 10, gold: 4 },
-  'dependency-spider': { id: 'dependency-spider', hp: 120, damage: 9, speed: 18, attackMs: 1_300, boss: false, size: 1.3, xp: 12, gold: 5 },
-  'legacy-dragon': { id: 'legacy-dragon', hp: 2_500, damage: 19, speed: 8, attackMs: 1_700, boss: true, size: 3.2, xp: 320, gold: 160 },
-  'timeout-harpy': { id: 'timeout-harpy', hp: 115, damage: 10, speed: 28, attackMs: 1_100, boss: false, size: 1.1, xp: 13, gold: 5 },
-  'regression-knight': { id: 'regression-knight', hp: 170, damage: 11, speed: 15, attackMs: 1_400, boss: false, size: 1.2, xp: 15, gold: 6 },
-  'outage-kraken': { id: 'outage-kraken', hp: 3_400, damage: 22, speed: 7, attackMs: 1_600, boss: true, size: 3.4, xp: 450, gold: 220 },
+  'null-wisp': { id: 'null-wisp', hp: 38, damage: 5, speed: 24, attackMs: 1_200, boss: false, size: 1, xp: 4, gold: 1 },
+  'flaky-gremlin': { id: 'flaky-gremlin', hp: 45, damage: 5, speed: 26, attackMs: 1_000, boss: false, size: 1, xp: 5, gold: 2 },
+  'loop-serpent': { id: 'loop-serpent', hp: 950, damage: 12, speed: 9, attackMs: 1_500, boss: true, size: 2.8, xp: 125, gold: 62 },
+  'stale-imp': { id: 'stale-imp', hp: 44, damage: 5, speed: 22, attackMs: 1_100, boss: false, size: 1, xp: 5, gold: 2 },
+  'leak-ooze': { id: 'leak-ooze', hp: 60, damage: 4, speed: 12, attackMs: 1_500, boss: false, size: 1.3, xp: 6, gold: 2 },
+  'deadlock-golem': { id: 'deadlock-golem', hp: 1100, damage: 13, speed: 7, attackMs: 1_800, boss: true, size: 2.8, xp: 130, gold: 65 },
+  'race-imps': { id: 'race-imps', hp: 42, damage: 5, speed: 30, attackMs: 900, boss: false, size: 1.1, xp: 5, gold: 2 },
+  'dependency-spider': { id: 'dependency-spider', hp: 55, damage: 5, speed: 18, attackMs: 1_300, boss: false, size: 1.3, xp: 6, gold: 2 },
+  'legacy-dragon': { id: 'legacy-dragon', hp: 1000, damage: 14, speed: 8, attackMs: 1_700, boss: true, size: 3.2, xp: 135, gold: 68 },
+  'timeout-harpy': { id: 'timeout-harpy', hp: 46, damage: 5, speed: 28, attackMs: 1_100, boss: false, size: 1.1, xp: 5, gold: 2 },
+  'regression-knight': { id: 'regression-knight', hp: 62, damage: 6, speed: 15, attackMs: 1_400, boss: false, size: 1.2, xp: 6, gold: 3 },
+  'outage-kraken': { id: 'outage-kraken', hp: 1050, damage: 14, speed: 7, attackMs: 1_600, boss: true, size: 3.4, xp: 140, gold: 70 },
 };
 
 export type Biome = { id: BiomeId; mobs: MonsterId[]; boss: MonsterId };
 
-/** The road, in order: each biome is a chapter of three stages ending with its boss. */
+/** The road, in order: each biome is an act whose last stage holds its boss. */
 export const BIOMES: Biome[] = [
   { id: 'repo-forest', mobs: ['glitch-slime', 'bug-beetle'], boss: 'conflict-hydra' },
   { id: 'deploy-desert', mobs: ['null-wisp', 'flaky-gremlin'], boss: 'loop-serpent' },
@@ -131,36 +117,3 @@ export const BIOMES: Biome[] = [
   { id: 'build-forge', mobs: ['race-imps', 'dependency-spider'], boss: 'legacy-dragon' },
   { id: 'cloud-citadel', mobs: ['timeout-harpy', 'regression-knight'], boss: 'outage-kraken' },
 ];
-
-export const STAGES_PER_BIOME = 3;
-export const WAVES_PER_STAGE = 5;
-
-/** Chapter and stage of a 0-based stage index, wrapping into harder laps after the last biome. */
-export function stageOf(stageIndex: number): { biome: Biome; chapter: number; stage: number; lap: number } {
-  const perLap = BIOMES.length * STAGES_PER_BIOME;
-  const lap = Math.floor(stageIndex / perLap);
-  const inLap = stageIndex % perLap;
-  const chapter = Math.floor(inLap / STAGES_PER_BIOME);
-  return { biome: BIOMES[chapter], chapter: chapter + 1, stage: (inLap % STAGES_PER_BIOME) + 1, lap };
-}
-
-/** Monsters get tougher with each stage and each lap of the road. */
-export function stageScale(stageIndex: number): number {
-  return 1 + stageIndex * 0.12;
-}
-
-/** Experience to go from `level` to the next one. */
-export function xpForLevel(level: number): number {
-  return Math.round(40 * level ** 1.6);
-}
-
-/** Level reached with `totalXp`, and the progress towards the next one. */
-export function levelFromXp(totalXp: number): { level: number; into: number; next: number } {
-  let level = 1;
-  let remaining = Math.max(0, Math.floor(totalXp));
-  while (remaining >= xpForLevel(level)) {
-    remaining -= xpForLevel(level);
-    level += 1;
-  }
-  return { level, into: remaining, next: xpForLevel(level) };
-}
