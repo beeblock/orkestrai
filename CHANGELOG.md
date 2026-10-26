@@ -25,6 +25,10 @@ pt-BR, English, and Spanish translations.
 - Work done while the strip is closed still counts: each hero earns experience and gold for its agent's recorded working time, at offline efficiency and without chests.
 - Chiptune sounds are synthesized in the app (alerts only, all or none). All art is original and was made with Orkestrai's image workflows.
 
+### Fixed
+
+- Generate Adventure battle report identifiers with browser Web Crypto so the desktop production build does not import Node-only cryptography into the renderer.
+
 ## 0.45.0 - 2026-10-24
 
 ### Security

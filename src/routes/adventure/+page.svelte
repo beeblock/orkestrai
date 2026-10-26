@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { uuidv7 } from '@beeblock/svelar/support';
   import AdventureStage from '$lib/components/agent-room/adventure/AdventureStage.svelte';
   import type { HeroLabel } from '$lib/components/agent-room/adventure/AdventureStage.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -196,7 +195,7 @@
     reporting = true;
     try {
       const outcome = await reportBattle(id, {
-        reportId: uuidv7(),
+        reportId: crypto.randomUUID(),
         ...batch,
         gold: Math.round(batch.gold),
         xp: Object.fromEntries(Object.entries(batch.xp).map(([heroId, value]) => [heroId, Math.round(value)])),
