@@ -1,5 +1,5 @@
 import { HERO_CLASSES, MONSTERS, heroClassFor, type HeroClassId, type MonsterId } from './catalog.js';
-import { JOURNAL_SIZE, newHero, starterKit, type AdventureAccount, type AdventureHero, type AdventureSettings, type ChestEntry, type JournalEntry } from './account.js';
+import { JOURNAL_SIZE, REPORT_MEMORY, newHero, starterKit, type AdventureAccount, type AdventureHero, type AdventureSettings, type ChestEntry, type JournalEntry } from './account.js';
 import { ELIXIRS, elixirStats, elixirUntil, type ElixirId } from './artifacts.js';
 import { buildHeroes, deployHeroes, type HeroBuild } from './build.js';
 import { heroName } from './names.js';
@@ -203,9 +203,14 @@ export type ReportResult = {
   duplicate: boolean;
 };
 
-/** The most a report may claim, so a broken client cannot flood the save. */
-function clampReport(report: ReportInput, sinceLastMs: number): ReportInput {
-  const elapsed = Math.max(0, Math.min(report.elapsedMs, sinceLastMs + 60_000, 10 * 60_000));
+/** Slack for timers: a report may run this far ahead of the clock. */
+const REPORT_SLACK_MS = 60_000;
+/** The longest battle one report may claim. */
+const REPORT_MAX_MS = 10 * 60_000;
+
+/** The most a report may claim, so a broken client cannot flood the save. `creditMs` is the unpaid battle time. */
+function clampReport(report: ReportInput, creditMs: number): ReportInput {
+  const elapsed = Math.max(0, Math.min(report.elapsedMs, creditMs + REPORT_SLACK_MS, REPORT_MAX_MS));
   const maxKills = Math.ceil(elapsed / 200) + 10;
   let killCount = 0;
   const kills: Partial<Record<MonsterId, number>> = {};
@@ -280,9 +285,11 @@ function addChest(save: AdventureSave, ctx: EngineContext, drop: ChestDrop): Che
 export function applyReport(save: AdventureSave, input: ReportInput, ctx: EngineContext): ReportResult {
   const result: ReportResult = { levelUps: [], opened: [], pets: [], quests: [], duplicate: false };
   const account = save.account;
-  if (input.reportId && input.reportId === account.lastReportId) return { ...result, duplicate: true };
-  const sinceLast = account.lastReportAt ? Date.parse(ctx.now) - Date.parse(account.lastReportAt) : 10 * 60_000;
-  const report = clampReport(input, Math.max(0, sinceLast));
+  if (account.recentReports.includes(input.reportId)) return { ...result, duplicate: true };
+  // Battle time not paid yet, up to the longest absence the game pays for.
+  const now = Date.parse(ctx.now);
+  const paidUntil = Math.max(account.battleUntil ? Date.parse(account.battleUntil) : now - REPORT_MAX_MS, now - offlineCapMs(account));
+  const report = clampReport(input, now - paidUntil);
   const petsBefore = tamedPets(account.killsByMonster);
 
   account.gold += Math.round(report.gold);
@@ -322,7 +329,8 @@ export function applyReport(save: AdventureSave, input: ReportInput, ctx: Engine
   }
   result.opened.push(...autoOpen(save, ctx));
   account.lastReportAt = ctx.now;
-  account.lastReportId = input.reportId;
+  account.battleUntil = new Date(paidUntil + report.elapsedMs).toISOString();
+  account.recentReports = [...account.recentReports, input.reportId].slice(-REPORT_MEMORY);
   return result;
 }
 

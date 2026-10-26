@@ -3,7 +3,7 @@ import { AgentAdventure } from '../../domain/models/AgentAdventure.js';
 import { AgentAdventureHero } from '../../domain/models/AgentAdventureHero.js';
 import { AgentAdventureItem } from '../../domain/models/AgentAdventureItem.js';
 import { ELIXIRS, SETS, UNIQUES, type ElixirId, type SetId, type UniqueId } from '../../domain/adventure/artifacts.js';
-import { DEFAULT_SETTINGS, newAccount, type AdventureAccount, type AdventureHero } from '../../domain/adventure/account.js';
+import { DEFAULT_SETTINGS, REPORT_MEMORY, newAccount, type AdventureAccount, type AdventureHero } from '../../domain/adventure/account.js';
 import { HERO_CLASS_IDS, type HeroClassId } from '../../domain/adventure/catalog.js';
 import type { AdventureSave } from '../../domain/adventure/engine.js';
 import { GEM_QUALITIES, MATERIALS, RARITIES, SLOTS, parseMaterialKey, type BaseVariant, type GemQuality, type Item, type ItemAffix, type ItemSocket, type Rarity, type Slot } from '../../domain/adventure/items.js';
@@ -21,7 +21,8 @@ function parse<T>(raw: unknown, fallback: T): T {
 
 /** A stored account, with every field a newer version added filled in. */
 function readAccount(raw: unknown, now: string): AdventureAccount {
-  const stored = parse<Partial<AdventureAccount>>(raw, {});
+  // `lastReportId` was the single report id kept before `recentReports`.
+  const { lastReportId: _lastReportId, ...stored } = parse<Partial<AdventureAccount> & { lastReportId?: unknown }>(raw, {});
   const base = newAccount(stored.questsSince ?? now);
   return {
     ...base,
@@ -41,6 +42,8 @@ function readAccount(raw: unknown, now: string): AdventureAccount {
     formation: Array.isArray(stored.formation) ? stored.formation : [],
     firstBossClears: Array.isArray(stored.firstBossClears) ? stored.firstBossClears : [],
     rewardedTasks: Array.isArray(stored.rewardedTasks) ? stored.rewardedTasks : [],
+    battleUntil: typeof stored.battleUntil === 'string' && !Number.isNaN(Date.parse(stored.battleUntil)) ? stored.battleUntil : null,
+    recentReports: Array.isArray(stored.recentReports) ? stored.recentReports.filter((id): id is string => typeof id === 'string').slice(-REPORT_MEMORY) : [],
   };
 }
 

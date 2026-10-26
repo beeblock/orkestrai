@@ -5,7 +5,8 @@
   import { Button } from '$lib/components/ui/button';
   import { FORMATION_LINGER_MS, lineup } from '$lib/components/agent-room/adventure/adventure-party.js';
   import type { AdventureSoundLevel } from '$lib/components/agent-room/adventure/adventure-audio.js';
-  import { adventureAction, loadAdventure, onAdventureChange, onAdventureSettings, reportBattle, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
+  import { AdventureRequestError, adventureAction, loadAdventure, onAdventureChange, onAdventureSettings, reportBattle, type AdventureOutcome, type AdventureSnapshot } from '$lib/components/agent-room/adventure/adventure-client.js';
+  import { ReportOutbox, retryable, type Battle } from '$lib/components/agent-room/adventure/adventure-outbox.js';
   import { heroLevelText, itemName } from '$lib/components/agent-room/adventure/adventure-text.js';
   import { agentStatus, retainAgentStatus } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
@@ -15,7 +16,7 @@
   import { localeState } from '$lib/i18n/locale.svelte.js';
   import { RARITY_RULES, rarityIndex, type Rarity } from '$lib/modules/agent-room/domain/adventure/items.js';
   import { runeRule } from '$lib/modules/agent-room/domain/adventure/runes.js';
-  import type { PendingReport, SimRules } from '$lib/modules/agent-room/domain/adventure/simulation.js';
+  import type { SimRules } from '$lib/modules/agent-room/domain/adventure/simulation.js';
   import type { StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
   import type { HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
   import type { Workspace } from '$lib/modules/agent-room/domain/types.js';
@@ -40,7 +41,6 @@
   const ROOM_ABOVE = 170;
   const desktop = (typeof window !== 'undefined' ? (window as unknown as { orkestraiDesktop?: Desktop }).orkestraiDesktop : undefined);
 
-  type Battle = PendingReport & { position: StagePosition; wave: number };
   type StageApi = {
     quest: (title: string | null) => void;
     drain: () => Battle;
@@ -64,9 +64,11 @@
   let stage = $state<StageApi | null>(null);
   let pointerOverHero = false;
   let pointerOverUi = false;
-  // Results of battles the server has not acknowledged yet.
-  let unsent: Battle | null = null;
+  // Results of battles the server has not acknowledged yet, by workspace.
+  const outbox = new ReportOutbox();
   let reporting = false;
+  // So much battle waits for an absent server that the party camps until it answers.
+  let holding = $state(false);
   // When each hero's agent was last seen working, to keep the formation steady between turns.
   const workedAt = new Map<string, number>();
   let lingering = $state<ReadonlySet<string>>(new Set());
@@ -165,7 +167,7 @@
   }
 
   async function refresh(id: string, travel: boolean) {
-    const outcome = await loadAdventure(id).catch(() => null);
+    const outcome = await loadAdventure(id, { offline: outbox.size(id) === 0 }).catch(() => null);
     if (!outcome || id !== workspaceId) return;
     apply(outcome, travel);
     const offline = outcome.snapshot.account.offline;
@@ -175,37 +177,43 @@
     }
   }
 
-  function merge(a: Battle, b: Battle): Battle {
-    const xp = { ...a.xp };
-    for (const [heroId, value] of Object.entries(b.xp)) xp[heroId] = (xp[heroId] ?? 0) + value;
-    const kills = { ...a.kills };
-    for (const [monster, value] of Object.entries(b.kills) as Array<[keyof typeof kills, number]>) kills[monster] = (kills[monster] ?? 0) + value;
-    return { elapsedMs: a.elapsedMs + b.elapsedMs, xp, gold: a.gold + b.gold, kills, chests: [...a.chests, ...b.chests], bosses: [...a.bosses, ...b.bosses], stages: [...a.stages, ...b.stages], position: b.position, wave: b.wave };
+  /** Takes what the battle on the stage produced since the last look. */
+  function collect(id: string) {
+    if (stage) outbox.add(id, stage.drain());
   }
 
-  /** Sends the battle's results; a failed send keeps them for the next one. */
+  /**
+   * Sends the battle's results, oldest first. A report whose answer never
+   * came goes again exactly as it was; one the server refused for good is
+   * dropped, with a word on the strip.
+   */
   async function report() {
-    const id = workspaceId;
-    if (!id || !stage || reporting) return;
-    const fresh = stage.drain();
-    unsent = unsent ? merge(unsent, fresh) : fresh;
-    const batch = unsent;
-    const empty = batch.elapsedMs === 0 && !batch.chests.length && !batch.stages.length && !Object.keys(batch.xp).length;
-    if (empty) { unsent = null; return; }
+    if (reporting) return;
     reporting = true;
     try {
-      const outcome = await reportBattle(id, {
-        reportId: crypto.randomUUID(),
-        ...batch,
-        gold: Math.round(batch.gold),
-        xp: Object.fromEntries(Object.entries(batch.xp).map(([heroId, value]) => [heroId, Math.round(value)])),
-      });
-      if (unsent === batch) unsent = null;
-      if (id === workspaceId) apply(outcome, false);
-    } catch {
-      // Kept in `unsent`; the next tick tries again with everything.
+      for (let next = outbox.next(); next; next = outbox.next()) {
+        const { workspaceId: id, reportId, battle } = next;
+        try {
+          const outcome = await reportBattle(id, {
+            reportId,
+            ...battle,
+            gold: Math.round(battle.gold),
+            xp: Object.fromEntries(Object.entries(battle.xp).map(([heroId, value]) => [heroId, Math.round(value)])),
+          });
+          outbox.settle(reportId);
+          if (id === workspaceId) apply(outcome, false);
+        } catch (error) {
+          const status = error instanceof AdventureRequestError ? error.status : null;
+          // The server is away or busy: the same report goes again on the next tick.
+          if (retryable(status)) break;
+          if (status === 404) outbox.drop(id);
+          else outbox.settle(reportId);
+          if (id === workspaceId) stage?.announce(m['adventure.report_refused'](), 'danger');
+        }
+      }
     } finally {
       reporting = false;
+      holding = outbox.full();
     }
   }
 
@@ -236,15 +244,16 @@
     if (!id) return;
     untrack(() => {
       snapshot = null;
-      unsent = null;
       void refresh(id, true);
     });
     const releaseStatus = untrack(() => retainAgentStatus(id));
     const releaseAttention = untrack(() => retainAttentionFeed(id));
-    const reportTimer = setInterval(() => { trackWork(); void report(); }, REPORT_MS);
+    const reportTimer = setInterval(() => { trackWork(); collect(id); void report(); }, REPORT_MS);
     const refreshTimer = setInterval(() => void refresh(id, true), REFRESH_MS);
     const stopListening = onAdventureChange((changed) => { if (changed === id) void refresh(id, true); });
     return () => {
+      // Whatever this workspace fought goes to this workspace, even as the strip moves on.
+      collect(id);
       void report();
       clearInterval(reportTimer);
       clearInterval(refreshTimer);
@@ -348,7 +357,7 @@
       <AdventureStage
         bind:this={stage}
         party={members}
-        teamActive={view?.teamActive ?? false}
+        teamActive={(view?.teamActive ?? false) && !holding}
         supporters={view?.supporters ?? []}
         {labels}
         position={snapshot.account.position}

@@ -16,6 +16,7 @@ import type { AdventureReportInput } from '$lib/modules/agent-room/contracts/sch
 import type { AdventureSnapshot } from '$lib/modules/agent-room/application/services/AdventureService.js';
 import { adventureRepository } from '$lib/modules/agent-room/infrastructure/repositories/AdventureRepository.js';
 import { canEquip, rollItem } from '$lib/modules/agent-room/domain/adventure/items.js';
+import { ReportOutbox, type Battle } from '$lib/components/agent-room/adventure/adventure-outbox.js';
 
 const roots: string[] = [];
 
@@ -83,6 +84,53 @@ describe('AdventureService', () => {
     expect(again.snapshot.account.gold).toBe(40);
   });
 
+  it('pays a report whose answer was lost only once, even with another report in between', async () => {
+    const { ws } = await team();
+    await adventureService.state(ws.id);
+    const outbox = new ReportOutbox();
+    const send = async () => {
+      const next = outbox.next()!;
+      return adventureService.report(next.workspaceId, { reportId: next.reportId, ...next.battle } as AdventureReportInput);
+    };
+    const fought = (gold: number): Battle => ({ elapsedMs: 5_000, xp: {}, gold, kills: { 'bug-beetle': 2 }, chests: [], bosses: [], stages: [], position: { difficulty: 'normal', act: 1, stage: 1 }, wave: 0 });
+
+    outbox.add(ws.id, fought(5));
+    const first = outbox.next()!;
+    // The server stores the report, then the answer is lost on the way back.
+    await send();
+    // Meanwhile the battle goes on: the next interval waits in a report of its own.
+    outbox.add(ws.id, fought(7));
+    expect(outbox.next()).toEqual(first);
+    // Another screen's report lands between the two attempts.
+    await adventureService.report(ws.id, report({ stages: [], gold: 100, kills: { 'bug-beetle': 1 } }));
+    const retried = await send();
+    expect(retried.snapshot.account.gold).toBe(105);
+    outbox.settle(first.reportId);
+    const second = outbox.next()!;
+    expect(second.reportId).not.toBe(first.reportId);
+    expect(second.battle.gold).toBe(7);
+    expect((await send()).snapshot.account.gold).toBe(112);
+  });
+
+  it('pays every report of battle fought while the server was away, within the time that passed', async () => {
+    const { ws } = await team();
+    await adventureService.state(ws.id);
+    // The last report came half an hour ago.
+    const before = (await adventureRepository.load(ws.id))!;
+    const after = structuredClone(before);
+    const away = new Date(Date.now() - 30 * 60_000).toISOString();
+    after.account.lastReportAt = away;
+    after.account.battleUntil = away;
+    await adventureRepository.persist(ws.id, before, after);
+
+    const fiveMinutes = () => report({ elapsedMs: 5 * 60_000, stages: [], kills: { 'bug-beetle': 1_000 } });
+    for (let index = 0; index < 6; index++) await adventureService.report(ws.id, fiveMinutes());
+    expect((await adventureService.state(ws.id)).snapshot.account.kills).toBe(6_000);
+    // Time that never passed is not paid: a seventh report is cut to the timers' slack.
+    const extra = await adventureService.report(ws.id, fiveMinutes());
+    expect(extra.snapshot.account.kills).toBeLessThan(6_000 + 400);
+  });
+
   it('opens chests, equips the loot and refuses what the rules forbid', async () => {
     const { ws, qa } = await team();
     const ranger = heroOf((await adventureService.state(ws.id)).snapshot, qa.id);
@@ -130,6 +178,8 @@ describe('AdventureService', () => {
     expect(await refused.json()).toMatchObject({ code: 'cube-level' });
     const malformed = await controller.act(request({ type: 'teleport' }, ws.id));
     expect(malformed.status).toBe(400);
+    const gone = await controller.report(request(report(), uuidv7()));
+    expect(gone.status).toBe(404);
   });
 
   it('keeps a dismissed agent\'s hero resting in the guild and hands it to the next agent of its class', async () => {

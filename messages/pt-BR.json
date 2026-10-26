@@ -5901,6 +5901,7 @@
   "adventure.loot_found": "{rarity}: {item}",
   "adventure.pet_joined": "{pet} entrou no grupo",
   "adventure.offline_back": "Enquanto você esteve fora, seus agentes trabalharam {minutes} min: +{gold} de ouro",
+  "adventure.report_refused": "Parte da batalha não pôde ser salva",
   "adventure.region_level": "Região {level}",
   "adventure.region_level_hint": "Nível desta fase: define os monstros e o saque.",
   "adventure.stage_failed": "Repelidos na fase {stage}",

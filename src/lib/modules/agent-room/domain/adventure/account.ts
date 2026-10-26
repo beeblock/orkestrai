@@ -74,11 +74,22 @@ export type AdventureAccount = {
   rewardedTasks: string[];
   /** Cards finished before this moment are history, not quests. */
   questsSince: string;
+  /** The last time a screen reported a battle. */
   lastReportAt: string | null;
-  lastReportId: string | null;
+  /**
+   * Battle time is paid up to this moment. A screen that lost the server
+   * sends what was fought meanwhile in several reports; each one is paid in
+   * full while the total stays within the time that really passed.
+   */
+  battleUntil: string | null;
+  /** Ids of the latest reports, so a report sent again is never paid twice. */
+  recentReports: string[];
   offline: OfflineSummary | null;
   journal: JournalEntry[];
 };
+
+/** How many report ids the save remembers: enough for every retry a screen may still send. */
+export const REPORT_MEMORY = 32;
 
 export function newAccount(now: string): AdventureAccount {
   return {
@@ -105,7 +116,8 @@ export function newAccount(now: string): AdventureAccount {
     rewardedTasks: [],
     questsSince: now,
     lastReportAt: null,
-    lastReportId: null,
+    battleUntil: null,
+    recentReports: [],
     offline: null,
     journal: [],
   };

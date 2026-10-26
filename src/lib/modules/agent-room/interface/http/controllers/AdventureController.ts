@@ -1,3 +1,4 @@
+import { FormAuthorizationError, FormValidationError } from '@beeblock/svelar/forms';
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
 import { adventureService } from '../../../application/services/AdventureService.js';
 import { AdventureError } from '../../../domain/adventure/engine.js';
@@ -7,7 +8,9 @@ import { ReportAdventureRequest } from '../requests/ReportAdventureRequest.js';
 export class AdventureController extends Controller {
   async show(event: RequestEvent) {
     try {
-      return this.json({ data: await adventureService.state(event.params.id) });
+      // A screen still sending battle it fought while the server was away asks not to be paid offline for it.
+      const offline = event.url.searchParams.get('offline') !== '0';
+      return this.json({ data: await adventureService.state(event.params.id, { offline }) });
     } catch (error) {
       return this.failure(error, 'Could not load the Adventure.');
     }
@@ -31,9 +34,14 @@ export class AdventureController extends Controller {
     }
   }
 
-  /** Rule refusals carry a stable code the screens translate. */
+  /**
+   * Rule refusals carry a stable code the screens translate. Refusals are
+   * final (4xx); anything else (a busy database, say) is a 500 the screens
+   * try again.
+   */
   private failure(error: unknown, fallback: string) {
-    if (error instanceof AdventureError) return this.json({ error: error.code, code: error.code }, 400);
-    return this.json({ error: error instanceof Error ? error.message : fallback }, 400);
+    if (error instanceof AdventureError) return this.json({ error: error.code, code: error.code }, error.code === 'workspace' ? 404 : 400);
+    if (error instanceof FormValidationError || error instanceof FormAuthorizationError || error instanceof SyntaxError) return this.json({ error: 'invalid', code: 'invalid' }, 400);
+    return this.json({ error: error instanceof Error ? error.message : fallback }, 500);
   }
 }

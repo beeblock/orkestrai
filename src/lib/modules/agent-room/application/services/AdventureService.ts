@@ -21,7 +21,7 @@ export type AgentPresence = { nodeId: string; title: string; role: string | null
 
 /** What the screens get: the save as the owner may see it, plus every hero's build. */
 export type AdventureSnapshot = {
-  account: Omit<AdventureAccount, 'rewardedTasks' | 'lastReportId'>;
+  account: Omit<AdventureAccount, 'rewardedTasks' | 'recentReports' | 'battleUntil'>;
   /** The whole guild; `agent` is the agent playing the hero now (null while it rests). */
   heroes: Array<AdventureHero & { agent: AgentPresence | null; build: HeroBuild | null; deployed: boolean }>;
   items: Item[];
@@ -118,7 +118,7 @@ export class AdventureService {
 
   private snapshot(save: AdventureSave, roster: RosterEntry[], now: string): AdventureSnapshot {
     const { builds, deployed } = engine.partyBuilds(save, roster, Date.parse(now));
-    const { rewardedTasks: _rewarded, lastReportId: _reportId, ...account } = save.account;
+    const { rewardedTasks: _rewarded, recentReports: _reports, battleUntil: _paid, ...account } = save.account;
     return {
       account,
       heroes: Object.values(save.heroes)
@@ -170,8 +170,9 @@ export class AdventureService {
       const quests = engine.payQuests(save, ctx, done);
       if (offlineWork && save.account.lastReportAt === lastReport) {
         engine.payOffline(save, ctx, offlineWork);
-        // Offline time is paid once: the next look starts counting from now.
+        // Offline time is paid once: the next look starts counting from now, and no battle report claims it again.
         save.account.lastReportAt = now;
+        save.account.battleUntil = now;
       }
       const value = change(save, ctx);
       await adventureRepository.persist(workspaceId, before, save);
@@ -190,8 +191,8 @@ export class AdventureService {
     });
   }
 
-  async state(workspaceId: string): Promise<AdventureOutcome> {
-    return (await this.withSave(workspaceId, { offline: true }, () => null)).outcome;
+  async state(workspaceId: string, options: { offline?: boolean } = {}): Promise<AdventureOutcome> {
+    return (await this.withSave(workspaceId, { offline: options.offline ?? true }, () => null)).outcome;
   }
 
   async report(workspaceId: string, input: AdventureReportInput): Promise<AdventureOutcome> {

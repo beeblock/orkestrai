@@ -5901,6 +5901,7 @@
   "adventure.loot_found": "{rarity}: {item}",
   "adventure.pet_joined": "{pet} se unió al grupo",
   "adventure.offline_back": "Mientras no estabas, tus agentes trabajaron {minutes} min: +{gold} de oro",
+  "adventure.report_refused": "No se pudo guardar parte de la batalla",
   "adventure.region_level": "Región {level}",
   "adventure.region_level_hint": "Nivel de esta fase: define los monstruos y el botín.",
   "adventure.stage_failed": "Rechazados en la fase {stage}",

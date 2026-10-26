@@ -5,9 +5,9 @@ import type { AdventureAction, AdventureReportInput } from '$lib/modules/agent-r
 export type { AdventureOutcome, AdventureSnapshot, AdventureAction };
 export type SnapshotHero = AdventureSnapshot['heroes'][number];
 
-/** A refusal from the Adventure's rules, with the code the catalogs translate. */
+/** A refusal from the Adventure's rules, with the code the catalogs translate and the HTTP status. */
 export class AdventureRequestError extends Error {
-  constructor(readonly code: string) {
+  constructor(readonly code: string, readonly status: number | null = null) {
     super(code);
   }
 }
@@ -23,12 +23,13 @@ async function call(url: string, init?: RequestInit): Promise<AdventureOutcome> 
     headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...(init?.headers ?? {}) },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new AdventureRequestError(String(body.code ?? body.error ?? 'request'));
+  if (!response.ok) throw new AdventureRequestError(String(body.code ?? body.error ?? 'request'), response.status);
   return body.data as AdventureOutcome;
 }
 
-export function loadAdventure(workspaceId: string): Promise<AdventureOutcome> {
-  return call(base(workspaceId));
+/** `offline: false` while the screen still holds battle fought during the gap: it reports that instead. */
+export function loadAdventure(workspaceId: string, options: { offline?: boolean } = {}): Promise<AdventureOutcome> {
+  return call(options.offline === false ? `${base(workspaceId)}?offline=0` : base(workspaceId));
 }
 
 export function reportBattle(workspaceId: string, report: AdventureReportInput): Promise<AdventureOutcome> {

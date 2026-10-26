@@ -5901,6 +5901,7 @@
   "adventure.loot_found": "{rarity}: {item}",
   "adventure.pet_joined": "{pet} joined the party",
   "adventure.offline_back": "While you were away your agents worked {minutes} min: +{gold} gold",
+  "adventure.report_refused": "Part of the battle could not be saved",
   "adventure.region_level": "Region {level}",
   "adventure.region_level_hint": "Level of this stage: it sets the monsters and the loot.",
   "adventure.stage_failed": "Driven back at {stage}",

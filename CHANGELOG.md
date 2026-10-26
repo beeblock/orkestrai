@@ -28,6 +28,7 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Generate Adventure battle report identifiers with browser Web Crypto so the desktop production build does not import Node-only cryptography into the renderer.
+- Send Adventure battle results in sealed reports that keep their identity across retries: a report whose answer was lost is sent again unchanged and the server, which remembers recent report ids, never pays it twice, even with another report arriving in between. Battle fought while the server is away is split into reports the server accepts and is paid in full within the time that really passed; refusals are told apart from a busy or absent server, and after eight hours without the server the party camps instead of piling up results.
 
 ## 0.45.0 - 2026-10-24
 
