@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newAccount } from '$lib/modules/agent-room/domain/adventure/account.js';
 import { buildHeroes, deployHeroes, visualTier } from '$lib/modules/agent-room/domain/adventure/build.js';
-import { synthesisRarity } from '$lib/modules/agent-room/domain/adventure/cube.js';
+import { craft, synthesisRarity } from '$lib/modules/agent-room/domain/adventure/cube.js';
 import { SETS, SET_PIECES, UNIQUES, elixirStats, setBonuses, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import {
   AdventureError, applyReport, buyRune, craftItem, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
@@ -71,6 +71,16 @@ describe('adventure world', () => {
 });
 
 describe('adventure items and loot', () => {
+  it('crafts main and off hands for the class picked, whatever classes the guild has', () => {
+    for (const slot of ['weapon', 'offhand'] as const) {
+      for (const classId of ['sorceress', 'cleric', 'artificer'] as const) {
+        const item = craft(() => 0.42, { slot, level: 1, classId, cubeLevel: 2, magicFind: 0, difficulty: 'normal', partyClasses: ['knight'] });
+        expect(item).toMatchObject({ slot, classId });
+      }
+    }
+    expect(craft(() => 0.42, { slot: 'boots', level: 1, classId: 'sorceress', cubeLevel: 2, magicFind: 0, difficulty: 'normal', partyClasses: ['knight'] }).classId).toBeNull();
+  });
+
   it('rolls affixes and sockets by rarity', () => {
     const rng = seeded(11);
     for (const rarity of RARITIES) {

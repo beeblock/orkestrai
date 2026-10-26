@@ -3,6 +3,7 @@ import {
   MATERIALS,
   RARITIES,
   RARITY_RULES,
+  classSlot,
   itemGoldValue,
   rarityIndex,
   rollItem,
@@ -88,10 +89,13 @@ export function craftCost(level: number): number {
   return Math.round(150 * power(level) ** 0.6);
 }
 
-/** Crafting picks the slot; rarity is rolled like a blue chest, nudged by the cube's level. */
+/**
+ * Crafting picks the slot, and the class for the slots that belong to one
+ * (main and off hand); rarity is rolled like a blue chest, nudged by the cube's level.
+ */
 export function craft(rng: Rng, options: { slot: Slot; level: number; classId: HeroClassId | null; cubeLevel: number; magicFind: number; difficulty: Difficulty; partyClasses: HeroClassId[] }): ItemData {
   const rarity = rollRarity(rng, 'blue', options.magicFind + options.cubeLevel * 5, options.difficulty);
-  return rollItem(rng, { level: options.level, rarity, slot: options.slot, classId: options.slot === 'weapon' ? options.classId : null, partyClasses: options.partyClasses });
+  return rollItem(rng, { level: options.level, rarity, slot: options.slot, classId: classSlot(options.slot) ? options.classId : null, partyClasses: options.partyClasses });
 }
 
 export function removalCost(item: Pick<ItemData, 'level'>): number {
