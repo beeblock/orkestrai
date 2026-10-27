@@ -203,6 +203,15 @@ device access.
 
 <p align="center"><img src="docs/media/readme/remote.webp" alt="The host shares the workspace with a QR code, approves a phone with terminal access and the phone runs a command in an agent terminal" width="880"></p>
 
+### Play an RPG while your agents work
+
+Turn on Adventure and the workspace's agents become a pixel-art party in a
+strip above the Dock or the taskbar. While they work, the party fights bug
+monsters, levels up and gears up by itself. The Camp shows each hero's gear,
+skill tree and the five-act map.
+
+<p align="center"><img src="docs/media/readme/adventure.webp" alt="The party fights on the Adventure strip while the agents work, and the Maestro's card opens the Camp with gear, the skill tree and the map" width="880"></p>
+
 ## All features
 
 <details>
