@@ -5727,6 +5727,8 @@
   "adventure.boss_appears": "{name} apareceu!",
   "adventure.chapter_clear": "{place} concluído!",
   "adventure.stage_clear": "Fase {stage} concluída",
+  "adventure.difficulty_onward": "{difficulty} liberado! O grupo parte para o Ato 1",
+  "adventure.difficulty_open": "{difficulty} liberado: viaje pelo mapa do Acampamento",
   "adventure.level_up": "Grupo no nível {level}!",
   "adventure.quest": "Missão cumprida!",
   "adventure.quest_named": "Missão cumprida: {title}",
